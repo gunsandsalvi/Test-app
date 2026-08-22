@@ -21,6 +21,7 @@ import {
   getInitialRegions,
 } from './macroEngine';
 import { generateInitialCompanies } from './companyGenerator';
+import { calculateExpectedCarry } from './carryCalculator';
 import { DEALERS, getUnifiedInitialMarginRate } from './dealers';
 import { calculateBlackScholesGreeks } from './blackScholes';
 import {
@@ -169,7 +170,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const totalCapex = prevActiveFirms.reduce((sum, c) => sum + c.capex, 0);
   const avgMargin = prevActiveFirms.reduce((sum, c) => sum + (c.ebitda / Math.max(1, c.annualRevenue)), 0) / Math.max(1, prevActiveFirms.length);
   const marginCompression = avgMargin < 0.22 ? 0.22 - avgMargin : 0.0;
-  const recentDefaultsCount = state.companies.filter((c) => c.isDefaulted).length;
+  const recentDefaultsCount = state.companies.filter((c) => c.isDefaulted || c.creditRating === 'CCC').length;
   const creditContagionBps = recentDefaultsCount * 12;
 
   // 2. Evolve Multi-Region Macro States
@@ -298,8 +299,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newNetIncome = Math.max(-50, (newEbit - annualInterest) * (1 - taxRate));
     let newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
 
+    // CapEx scales with revenue (capital intensity ~constant) and responds modestly to financing
+    // cost (higher rates discourage investment) and cash health (distressed firms cut CapEx).
+    const capexToRevenueRatio = comp.capex / Math.max(1, comp.annualRevenue); // preserves firm-specific intensity
+    const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 1.5; // capex pulls back when funding costs rise above ~4%
+    const cashHealthFactor = comp.cash < 0 ? 0.6 : 1.0; // firms in cash distress cut capex materially
+    const targetCapex = newRevenue * capexToRevenueRatio * (1 - rateDrag) * cashHealthFactor;
+    const newCapex = Math.max(0, comp.capex * 0.92 + targetCapex * 0.08); // smoothed transition, avoid whipsaws
+
     // Weekly Cash flow and debt amortization / prepayment
-    const weeklyFreeCashFlow = newEbitda / 52 - comp.capex / 52 - weeklyInterest;
+    const weeklyFreeCashFlow = newEbitda / 52 - newCapex / 52 - weeklyInterest;
     let newCash = comp.cash + weeklyFreeCashFlow;
     let newTotalDebt = comp.totalDebt;
 
@@ -447,6 +456,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     return {
       ...comp,
+      capex: Number(newCapex.toFixed(1)),
       annualRevenue: Number(newRevenue.toFixed(1)),
       ebitda: Number(newEbitda.toFixed(1)),
       ebit: Number(newEbit.toFixed(1)),
@@ -544,20 +554,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const posValueUSD = pos.quantity * currentPrice * fxRateToUsd;
           const entryValueUSD = pos.quantity * pos.entryPrice * fxRateToUsd;
 
-          const divYield = comp.dividendYield || 0.018;
-          const weeklyDiv = (posValueUSD * divYield) / 52;
+          unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
+          delta = pos.direction === 'LONG' ? posValueUSD : -posValueUSD;
 
-          if (pos.direction === 'LONG') {
-            unrealizedPnL = posValueUSD - entryValueUSD;
-            delta = posValueUSD;
-            weeklyFinancing = (posValueUSD * (updatedRegions[pos.region].policyRate + 0.005)) / 52;
-            attributionCarry += weeklyDiv - weeklyFinancing;
-          } else {
-            unrealizedPnL = entryValueUSD - posValueUSD;
-            delta = -posValueUSD;
-            weeklyFinancing = (posValueUSD * (divYield + 0.015)) / 52;
-            attributionCarry -= weeklyFinancing;
-          }
+          const carryEst = calculateExpectedCarry('EQUITY', pos.direction, posValueUSD, {
+            policyRate: updatedRegions[pos.region].policyRate,
+            dividendYield: comp.dividendYield || 0.018
+          });
+          
+          weeklyFinancing = carryEst.components.financingCostUSD;
+          attributionCarry += carryEst.weeklyCarryUSD;
 
           marginReq = posValueUSD * marginRate;
           maintMargin = marginReq * 0.65;
@@ -576,11 +582,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
 
           unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
-          const loanRate = updatedRegions[pos.region].policyRate + comp.leveragedLoan.quotedMarginBps / 10000;
-          const couponAccrual = (pos.notional * loanRate) / 52 * fxRateToUsd;
-          const fundingCost = (posValueUSD * (updatedRegions[pos.region].policyRate + 0.005)) / 52;
-          weeklyFinancing = fundingCost;
-          attributionCarry += pos.direction === 'LONG' ? couponAccrual - fundingCost : -couponAccrual - fundingCost;
+          const carryEst = calculateExpectedCarry('LEVERAGED_LOAN', pos.direction, posValueUSD, {
+            policyRate: updatedRegions[pos.region].policyRate,
+            cdsSpreadBps: comp.leveragedLoan.quotedMarginBps
+          });
+          weeklyFinancing = carryEst.components.financingCostUSD;
+          attributionCarry += carryEst.weeklyCarryUSD;
 
           const pnlMove = unrealizedPnL - prevPnL;
           attributionCreditSpread += pnlMove * 0.8;
@@ -611,10 +618,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
           unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
           dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
-          const couponAccrual = (pos.notional * (pos.fixedRate || 0.05)) / 52 * fxRateToUsd;
-          const fundingCost = (posValueUSD * (updatedRegions[pos.region].policyRate + 0.004)) / 52;
-          weeklyFinancing = fundingCost;
-          attributionCarry += pos.direction === 'LONG' ? couponAccrual - fundingCost : -couponAccrual - fundingCost;
+          const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueUSD, {
+            policyRate: updatedRegions[pos.region].policyRate,
+            couponRate: pos.fixedRate || 0.05,
+            cdsSpreadBps: comp.oasSpreadBps
+          });
+          weeklyFinancing = carryEst.components.financingCostUSD;
+          attributionCarry += carryEst.weeklyCarryUSD;
 
           const pnlMove = unrealizedPnL - prevPnL;
           attributionCreditSpread += pnlMove * 0.7;
@@ -636,10 +646,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
         unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
         dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
-        const couponAccrual = (pos.notional * (pos.fixedRate || 0.04)) / 52 * fxRateToUsd;
-        const fundingCost = (posValueUSD * (updatedRegions[pos.region].policyRate + 0.002)) / 52;
-        weeklyFinancing = fundingCost;
-        attributionCarry += pos.direction === 'LONG' ? couponAccrual - fundingCost : -couponAccrual - fundingCost;
+        const carryEst = calculateExpectedCarry('SOV_BOND', pos.direction, posValueUSD, {
+          policyRate: updatedRegions[pos.region].policyRate,
+          couponRate: pos.fixedRate || 0.04
+        });
+        weeklyFinancing = carryEst.components.financingCostUSD;
+        attributionCarry += carryEst.weeklyCarryUSD;
 
         const pnlMove = unrealizedPnL - prevPnL;
         attributionMacroRates += pnlMove;
@@ -662,13 +674,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         unrealizedPnL = irsPricing.npv * fxRateToUsd;
         dv01 = irsPricing.dv01 * fxRateToUsd;
 
-        const fltRate = updatedRegions[pos.region].policyRate;
-        const fixRate = pos.fixedRate || 0.04;
-        const weeklyNetIrsCarry =
-          pos.direction === 'PAY_FIXED'
-            ? (pos.notional * (fltRate - fixRate) * fxRateToUsd) / 52
-            : (pos.notional * (fixRate - fltRate) * fxRateToUsd) / 52;
-        attributionCarry += weeklyNetIrsCarry;
+        const carryEst = calculateExpectedCarry('IRS', pos.direction as any, pos.notional * fxRateToUsd, {
+          policyRate: updatedRegions[pos.region].policyRate,
+          fixedRate: pos.fixedRate || 0.04,
+          floatingRate: updatedRegions[pos.region].policyRate
+        });
+        weeklyFinancing = carryEst.components.financingCostUSD;
+        attributionCarry += carryEst.weeklyCarryUSD;
 
         const pnlMove = unrealizedPnL - prevPnL;
         attributionMacroRates += pnlMove;
@@ -695,8 +707,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
           currentPrice = cdsPricing.currentCdsSpreadBps;
           unrealizedPnL = cdsPricing.npv * fxRateToUsd;
 
-          const weeklyCdsCarry = (pos.notional * (pos.entryPrice / 10000) * fxRateToUsd) / 52;
-          attributionCarry += pos.direction === 'BUY_PROTECTION' ? -weeklyCdsCarry : weeklyCdsCarry;
+          const carryEst = calculateExpectedCarry('CDS', pos.direction as any, pos.notional * fxRateToUsd, {
+            policyRate: updatedRegions[pos.region].policyRate,
+            cdsSpreadBps: pos.entryPrice
+          });
+          weeklyFinancing = carryEst.components.financingCostUSD;
+          attributionCarry += carryEst.weeklyCarryUSD;
 
           const pnlMove = unrealizedPnL - prevPnL;
           attributionCreditSpread += pnlMove;
@@ -716,13 +732,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
           const notionalUSD = pos.notional * fxRateToUsd;
           const priceReturnUSD = notionalUSD * assetReturn;
-          weeklyFinancing = notionalUSD * financingRate;
 
-          unrealizedPnL =
-            pos.direction === 'LONG' ? priceReturnUSD - weeklyFinancing : -priceReturnUSD - weeklyFinancing;
+          const carryEst = calculateExpectedCarry('TRS', pos.direction, notionalUSD, {
+            policyRate: regPolicyRate,
+            dividendYield: comp.dividendYield || 0.02
+          });
+          weeklyFinancing = carryEst.components.financingCostUSD;
+          attributionCarry += carryEst.weeklyCarryUSD;
+
+          unrealizedPnL = (pos.direction === 'LONG' ? priceReturnUSD : -priceReturnUSD) + carryEst.weeklyCarryUSD;
           delta = pos.direction === 'LONG' ? notionalUSD : -notionalUSD;
-
-          attributionCarry -= weeklyFinancing;
           const pnlMove = unrealizedPnL - prevPnL;
           attributionEquityDelta += pnlMove;
 
@@ -742,10 +761,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
           unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
           delta = pos.direction === 'LONG' ? posValueUSD : -posValueUSD;
 
-          const fundingCost = (posValueUSD * (updatedRegions.USA.policyRate + 0.003)) / 52;
-          const weeklyConvenienceYield = (posValueUSD * comm.convenienceYield) / 52;
-          weeklyFinancing = fundingCost;
-          attributionCarry += pos.direction === 'LONG' ? weeklyConvenienceYield - fundingCost : -weeklyConvenienceYield - fundingCost;
+          const carryEst = calculateExpectedCarry('COMMODITY', pos.direction, posValueUSD, {
+            policyRate: updatedRegions.USA.policyRate,
+            convenienceYield: comm.convenienceYield
+          });
+          weeklyFinancing = carryEst.components.financingCostUSD;
+          attributionCarry += carryEst.weeklyCarryUSD;
 
           const pnlMove = unrealizedPnL - prevPnL;
           attributionEquityDelta += pnlMove;
@@ -787,8 +808,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         vega = mult * greeks.vega * contracts * fxRateToUsd;
         theta = mult * greeks.theta * contracts * fxRateToUsd;
 
-        const weeklyThetaDecay = (theta * 7) / 365;
-        attributionCarry += weeklyThetaDecay;
+        const carryEst = calculateExpectedCarry('OPTION', pos.direction, posValueUSD, {
+          policyRate: r,
+          thetaPerContractUSD: greeks.theta * fxRateToUsd,
+          quantity: contracts
+        });
+        weeklyFinancing = carryEst.components.financingCostUSD;
+        attributionCarry += carryEst.weeklyCarryUSD;
 
         const pnlMove = unrealizedPnL - prevPnL;
         attributionVolTheta += pnlMove * 0.4;
@@ -821,6 +847,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
           const pnlMove = unrealizedPnL - prevPnL;
           attributionMacroRates += pnlMove;
+
+          const carryEst = calculateExpectedCarry('XCS', pos.direction, pos.notional * fxPair.rate, {
+            policyRate: updatedRegions[pos.region].policyRate,
+            basisSpreadBps: fxPair.basisSpreadBps
+          });
+          weeklyFinancing = carryEst.components.financingCostUSD;
+          attributionCarry += carryEst.weeklyCarryUSD;
 
           marginReq = pos.notional * fxPair.rate * marginRate;
           maintMargin = marginReq * 0.6;
@@ -890,7 +923,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const nextCashHurdle = prevBenchmark.cashHurdle * (1 + 0.05 / 52);
 
   const updatedBenchmarks = [
-    ...state.portfolio.historicalBenchmarks.slice(-25),
+    ...state.portfolio.historicalBenchmarks.slice(-51),
     {
       week: nextWeek,
       nav: currentNavUSD,
@@ -920,7 +953,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     startingCapitalUSD: state.portfolio.startingCapitalUSD,
     navUSD: currentNavUSD,
     previousNavUSD: state.portfolio.navUSD,
-    historicalNav: [...state.portfolio.historicalNav.slice(-25), currentNavUSD],
+    historicalNav: [...state.portfolio.historicalNav.slice(-51), currentNavUSD],
     historicalBenchmarks: updatedBenchmarks,
     positions: updatedPositions,
     closedPositionsCount: state.portfolio.closedPositionsCount,

@@ -10,7 +10,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     severity: 'Moderate',
     tempDeltaC: +2.8,
     economicImpact: 'Crop yields compressed across Great Plains. Agricultural supply chains face elevated price pressure.',
-    affectedCommodityId: 'COPPER',
+    affectedCommodityId: 'CORN',
     commodityImpactPct: 0.04,
     gdpImpactPct: -0.001,
     inflationImpactPct: 0.002,
@@ -82,7 +82,7 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         severity: 'Severe',
         tempDeltaC: +3.5,
         economicImpact: 'Precipitation shortfalls constrain hydro capacity and inland transport waterways.',
-        affectedCommodityId: 'COPPER',
+        affectedCommodityId: 'CORN',
         commodityImpactPct: 0.06,
         gdpImpactPct: -0.003,
         inflationImpactPct: 0.004,
@@ -173,7 +173,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       coreInflation: 0.0240,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0220,
-      potentialGdpGrowth: 0.0200,
+      potentialGdpGrowth: 0.0210,
       unemploymentRate: 0.040,
       wageGrowth: 0.0360,
       tradeBalance: -62.0,
@@ -567,14 +567,7 @@ export function evolveRegionMacro(
   const infNoise = (Math.random() - 0.49) * 0.0008 + globalShock.inflationShock + weatherInfShock * 0.20 - laborCooling * 0.0008;
 
   // --- GDP CALCULATION REWRITE ---
-  const POTENTIAL_GDP: Record<string, number> = {
-    USA: 0.021, // 2.1% long-run potential
-    EUR: 0.014, // 1.4% long-run potential
-    UK: 0.015,  // 1.5% long-run potential
-    JPN: 0.008  // 0.8% long-run potential
-  };
-
-  const potentialGdp = POTENTIAL_GDP[region.id] || region.potentialGdpGrowth;
+  const potentialGdp = region.potentialGdpGrowth;
   
   // 1. Autoregressive AR(1) base with mean-reversion to potential GDP
   const gdpPersistence = 0.85; // Strong gravity pulling back to potential
@@ -617,8 +610,8 @@ export function evolveRegionMacro(
   const rStar = region.neutralRate; // US: 1.00%, UK: 0.75%, EU: 0.50%, JP: -0.25%
   const piStar = region.targetInflation; // 2.00% across all central banks
   
-  const output_gap = Math.max(-0.03, Math.min(0.03, newGdpGrowth - 0.02));
-  const inflation_gap = Math.max(-0.02, Math.min(0.04, newInflation - 0.02));
+  const output_gap = Math.max(-0.03, Math.min(0.03, newGdpGrowth - potentialGdp));
+  const inflation_gap = Math.max(-0.02, Math.min(0.04, newInflation - piStar));
   const taylorTarget = rStar + newInflation + 0.5 * inflation_gap + 0.5 * output_gap;
 
   let rateChanged = false;
@@ -679,12 +672,16 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   const newZeroRates = calculateTenorZeroRates(newCurveParams);
 
+  const nominalGdpGrowthWeekly = (newGdpGrowth + newInflation) / 52; // real growth + inflation ≈ nominal growth
+  const weeklyDebtToGdpChange = (region.fiscalDeficitPctGdp / 52) - (nominalGdpGrowthWeekly * region.debtToGdpPct);
+  const newDebtToGdpPct = Number((region.debtToGdpPct + weeklyDebtToGdpChange).toFixed(4));
+
   const histPolicy = [...region.historicalPolicyRates.slice(-51), newPolicyRate];
   const histInf = [...region.historicalInflation.slice(-51), newInflation];
   const histCore = [...(region.historicalCoreInflation || region.historicalInflation).slice(-51), newCoreInflation];
   const histGdp = [...region.historicalGdpGrowth.slice(-51), newGdpGrowth];
   const histWage = [...(region.historicalWageGrowth || region.historicalInflation).slice(-51), Number((newWageGrowth).toFixed(4))];
-  const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), Number((region.debtToGdpPct + (region.fiscalDeficitPctGdp / 52)).toFixed(4))];
+  const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
   const updatedRegion: Region = {
@@ -694,7 +691,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     coreInflation: newCoreInflation,
     gdpGrowth: newGdpGrowth,
     wageGrowth: Number(newWageGrowth.toFixed(4)),
-    debtToGdpPct: Number((region.debtToGdpPct + (region.fiscalDeficitPctGdp / 52)).toFixed(4)),
+    debtToGdpPct: newDebtToGdpPct,
     unemploymentRate: newUnemployment,
     householdState: {
       consumerConfidence: newCCI,

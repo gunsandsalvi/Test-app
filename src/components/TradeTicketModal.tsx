@@ -63,7 +63,15 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
     return notionalUSD * initialMarginRate;
   }, [instrument.assetType, notionalUSD, initialMarginRate, instrument.price, direction]);
 
-  const canAfford = state.portfolio.cashUSD >= initialMarginUSD + spreadCostUSD;
+  const freeCashUSD = state.portfolio.cashUSD - state.portfolio.totalRequiredMarginUSD;
+  const hasCash = freeCashUSD >= initialMarginUSD + spreadCostUSD;
+  
+  const dealerExposure = state.portfolio.positions
+    .filter(p => p.dealerId === dealer.id)
+    .reduce((sum, p) => sum + p.notional, 0);
+  const hasDealerLimit = (dealerExposure + notionalUSD) <= dealer.creditLimitUSD;
+  
+  const canAfford = hasCash && hasDealerLimit;
 
   // Compute Expected 1-Week Carry
   const carryEstimate = useMemo(() => {
@@ -458,10 +466,17 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
           </div>
         </div>
 
-        {!canAfford && (
+        {!hasCash && (
           <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>Insufficient cash for required initial margin + spread cost.</span>
+          </div>
+        )}
+        
+        {hasCash && !hasDealerLimit && (
+          <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Trade exceeds available counterparty credit limit with {dealer.name}.</span>
           </div>
         )}
 
