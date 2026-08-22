@@ -174,11 +174,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const creditContagionBps = recentDefaultsCount * 12;
 
   // 2. Evolve Multi-Region Macro States
-  const globalInflationShock = (Math.random() - 0.49) * 0.0008;
-  const globalGdpShock = (Math.random() - 0.49) * 0.001;
+  const globalInflationShock = (Math.random() - 0.5) * 0.0008;
+  const globalGdpShock = (Math.random() - 0.5) * 0.001;
 
   const rateChanges: { region: RegionId; deltaBps: number }[] = [];
-  const diagnosticLogs: NewsItem[] = [];
+  const diagnosticLogs: any[] = [];
   const updatedRegions: Record<RegionId, any> = { ...state.regions };
 
   (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
@@ -216,15 +216,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
     
     // Add Macro Diagnostic Telemetry to Log
     diagnosticLogs.push({
-      id: `diag-macro-${regionId}-${nextWeek}`,
       week: nextWeek,
+      timestamp: new Date().toISOString(),
       category: 'MACRO',
-      title: `[MACRO] ${regionId} GDP Breakdown:`,
-      description: diagnosticString,
-      impactBadge: '[DIAGNOSTIC]',
-      impactRegion: regionId,
-      sentimentDelta: 0,
-      urgent: false
+      message: `[MACRO] ${regionId} GDP Breakdown:`,
+      deltaText: diagnosticString,
+      data: { regionId, isMeeting, rateDeltaBps }
     });
   });
 
@@ -273,7 +270,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     else consumerRevBoost = reg.householdState.realConsumptionGrowth * 0.4;
 
     // Weekly revenue transition
-    const noise = (Math.random() - 0.49) * 0.015;
+    const noise = (Math.random() - 0.5) * 0.015;
     const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
     const sectorGdpBeta = comp.beta;
     
@@ -740,7 +737,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           weeklyFinancing = carryEst.components.financingCostUSD;
           attributionCarry += carryEst.weeklyCarryUSD;
 
-          unrealizedPnL = (pos.direction === 'LONG' ? priceReturnUSD : -priceReturnUSD) + carryEst.weeklyCarryUSD;
+          unrealizedPnL = pos.direction === 'LONG' ? priceReturnUSD : -priceReturnUSD;
           delta = pos.direction === 'LONG' ? notionalUSD : -notionalUSD;
           const pnlMove = unrealizedPnL - prevPnL;
           attributionEquityDelta += pnlMove;
@@ -918,7 +915,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     benchmark6040: state.portfolio.startingCapitalUSD,
     cashHurdle: state.portfolio.startingCapitalUSD,
   };
-  const b6040WeeklyReturn = 0.07 / 52 + (Math.random() - 0.48) * 0.012;
+  const b6040WeeklyReturn = 0.07 / 52 + (Math.random() - 0.5) * 0.012;
   const nextBenchmark6040 = prevBenchmark.benchmark6040 * (1 + b6040WeeklyReturn);
   const nextCashHurdle = prevBenchmark.cashHurdle * (1 + 0.05 / 52);
 
@@ -1055,10 +1052,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     },
   });
 
-  const updatedDiagnosticsLogs = [...(state.diagnosticsLogs || []), ...newStepLogs].slice(-100);
+  const updatedDiagnosticsLogs = [...(state.diagnosticsLogs || []), ...diagnosticLogs, ...newStepLogs].slice(-100);
 
   // News feed strictly displays headlines generated during the current active weekly step
-  const updatedNewsFeed = [...diagnosticLogs, ...newsItems];
+  const updatedNewsFeed = [...newsItems];
 
   return {
     ...state,

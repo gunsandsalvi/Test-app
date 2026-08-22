@@ -564,7 +564,7 @@ export function evolveRegionMacro(
   // 3. Fiscal deficit > 6% injects supply-side term premium
   const fiscalDeficitTermPremium = region.fiscalDeficitPctGdp > 0.06 ? (region.fiscalDeficitPctGdp - 0.06) * 0.4 : 0;
 
-  const infNoise = (Math.random() - 0.49) * 0.0008 + globalShock.inflationShock + weatherInfShock * 0.20 - laborCooling * 0.0008;
+  const infNoise = (Math.random() - 0.5) * 0.0008 + globalShock.inflationShock + weatherInfShock * 0.20 - laborCooling * 0.0008;
 
   // --- GDP CALCULATION REWRITE ---
   const potentialGdp = region.potentialGdpGrowth;
@@ -579,18 +579,22 @@ export function evolveRegionMacro(
   const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02 };
   const consumerContribAnnual = Math.max(-0.002, Math.min(0.002, (prevHS.consumerConfidence - 100) * 0.0001)); // Max +/- 20 bps
 
+  // Real Rate Demand Channel
+  const realRateGap = (region.policyRate - region.inflation) - region.neutralRate;
+  const monetaryDrag = Math.max(-0.008, Math.min(0.008, -realRateGap * 0.25));
+
   // 3. Set new GDP Growth: Must be absolute rate, NOT compounded
-  const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual;
+  const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag;
 
   // 4. Absolute hard clamp to prevent runaway simulation
   const newGdpGrowth = Math.max(-0.02, Math.min(0.045, updatedGdpGrowth)); // Bounded between -2.0% and +4.5%
 
-  let newInflation = Math.max(0.0050, Number((region.inflation + infNoise).toFixed(4)));
+  let newInflation = Math.max(0.0050, Math.min(0.20, Number((region.inflation + infNoise).toFixed(4))));
   const newUnemployment = Math.max(0.020, Math.min(0.100, Number((region.unemploymentRate + (potentialGdp - newGdpGrowth) * 0.25 + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002)).toFixed(3))));
 
   // Consumer & Household Sector Simulation
   const nairu = 0.045; 
-  const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.4 * (nairu - newUnemployment) + 0.3 * region.inflation));
+  const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.8 * (nairu - newUnemployment) + 0.1 * region.inflation));
   
   const unempDelta = newUnemployment - region.unemploymentRate;
   const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - 0.5 * unempDelta * 100));
@@ -598,12 +602,11 @@ export function evolveRegionMacro(
   const newSavingsRate = Math.max(0.02, Math.min(0.18, 0.06 + 0.2 * (region.policyRate - 0.02) - 0.1 * ((newCCI - 100) / 100)));
   const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100);
 
-  const wagePushInflation = Math.max(0, newWageGrowth - 0.015) * 0.40;
+  const wagePushInflation = (newWageGrowth - 0.015) * 2.0;
   
   // Wage-push inflation adds to CPI (scaled for weekly turn)
-  newInflation = Math.max(0.0050, Number((newInflation + wagePushInflation * 0.02).toFixed(4)));
+  newInflation = Math.max(0.0050, Math.min(0.20, Number((newInflation + wagePushInflation * 0.02).toFixed(4))));
   const newCoreInflation = Number((newInflation * 0.92 + wagePushInflation * 0.1).toFixed(4));
-
 
   // Calibrated Inertial Taylor Rule:
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
@@ -624,12 +627,16 @@ export function evolveRegionMacro(
     let meetingDecisionBps = 0;
     
     // Clamp the quarterly policy move to standard discrete steps
-    if (rawQuarterlyDelta >= 0.0035) meetingDecisionBps = 0.0050;       // +50 bps
+    if (rawQuarterlyDelta >= 0.0200) meetingDecisionBps = 0.0150;       // +150 bps
+    else if (rawQuarterlyDelta >= 0.0100) meetingDecisionBps = 0.0100;  // +100 bps
+    else if (rawQuarterlyDelta >= 0.0035) meetingDecisionBps = 0.0050;       // +50 bps
     else if (rawQuarterlyDelta >= 0.0010) meetingDecisionBps = 0.0025;  // +25 bps
+    else if (rawQuarterlyDelta <= -0.0200) meetingDecisionBps = -0.0150;// -150 bps
+    else if (rawQuarterlyDelta <= -0.0100) meetingDecisionBps = -0.0100;// -100 bps
     else if (rawQuarterlyDelta <= -0.0035) meetingDecisionBps = -0.0050;// -50 bps
     else if (rawQuarterlyDelta <= -0.0010) meetingDecisionBps = -0.0025;// -25 bps
 
-    newPolicyRate = Math.max(0.00, Math.min(0.065, region.policyRate + meetingDecisionBps));
+    newPolicyRate = Math.max(0.00, Math.min(0.25, region.policyRate + meetingDecisionBps));
     if (region.id === 'JPN') newPolicyRate = Math.max(-0.001, Math.min(0.025, newPolicyRate));
 
     if (newPolicyRate !== region.policyRate) {
@@ -763,7 +770,7 @@ export function evolveCommodity(
 ): Commodity {
   const dt = 1 / 52;
   const demandShock = globalGrowth * 0.8;
-  const randomEps = (Math.random() - 0.48) * comm.volatility * Math.sqrt(dt);
+  const randomEps = (Math.random() - 0.5) * comm.volatility * Math.sqrt(dt);
 
   let weatherBoost = 0;
   Object.values(regions).forEach((r) => {
