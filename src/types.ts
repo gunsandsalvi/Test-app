@@ -15,6 +15,7 @@ export interface WeatherAnomaly {
   commodityImpactPct: number; // e.g. +0.08
   gdpImpactPct: number; // e.g. -0.002
   inflationImpactPct: number; // e.g. +0.003
+  weeksActive: number;
 }
 
 export interface HouseholdState {
@@ -30,11 +31,15 @@ export interface Region {
   currency: string;
   symbol: string;
   centralBank: string;
+  cycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery';
+  inversionWeeksCount: number;
+  recessionShockQueue: { week: number; shock: number }[];
   // Macro fundamentals
   policyRate: number; // e.g. 0.045 = 4.50%
   neutralRate: number; // r* (e.g. 0.025)
   inflation: number; // pi_t headline (e.g. 0.029)
   coreInflation: number; // core CPI (e.g. 0.026)
+  expectedInflation: number;
   targetInflation: number; // pi* (e.g. 0.020)
   gdpGrowth: number; // y_t (annualized, e.g. 0.022)
   potentialGdpGrowth: number; // y* (e.g. 0.020)

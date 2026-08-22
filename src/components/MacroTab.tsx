@@ -121,8 +121,11 @@ export const MacroTab: React.FC<MacroTabProps> = ({ state, onOpenTrade, onOpenCh
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-emerald-300 font-mono font-bold border border-slate-700">
                   {region.sovereignRating || 'AAA'} Stable
                 </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold border ${region.cycleRegime === 'Expansion' ? 'bg-emerald-900/50 text-emerald-400 border-emerald-800' : region.cycleRegime === 'Recession' ? 'bg-red-900/50 text-red-400 border-red-800' : 'bg-amber-900/50 text-amber-400 border-amber-800'}`}>
+                  {region.cycleRegime}
+                </span>
               </div>
-              <p className="text-[11px] text-slate-400">{region.centralBank} • {region.currency}</p>
+              <p className="text-[11px] text-slate-400 mt-1">{region.centralBank} • {region.currency}</p>
             </div>
           </div>
 

@@ -57,8 +57,12 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
  */
 export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomaly, week: number): WeatherAnomaly {
   if (Math.random() < 0.28) {
-    const weatherTypes: WeatherAnomaly['type'][] = ['Normal', 'Heatwave', 'Drought', 'Polar Vortex', 'Monsoon'];
-    const pick = weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
+    const r = Math.random();
+    let pick: WeatherAnomaly['type'] = 'Normal';
+    if (r > 0.55) {
+      const remaining: WeatherAnomaly['type'][] = ['Heatwave', 'Drought', 'Polar Vortex', 'Monsoon'];
+      pick = remaining[Math.floor(Math.random() * remaining.length)];
+    }
 
     if (pick === 'Normal') {
       return {
@@ -71,6 +75,7 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         commodityImpactPct: 0.0,
         gdpImpactPct: 0.0,
         inflationImpactPct: 0.0,
+        weeksActive: 1,
       };
     }
 
@@ -86,6 +91,7 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         commodityImpactPct: 0.06,
         gdpImpactPct: -0.003,
         inflationImpactPct: 0.004,
+        weeksActive: 1,
       };
     }
 
@@ -101,6 +107,7 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         commodityImpactPct: 0.05,
         gdpImpactPct: -0.002,
         inflationImpactPct: 0.003,
+        weeksActive: 1,
       };
     }
 
@@ -116,6 +123,7 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         commodityImpactPct: 0.12,
         gdpImpactPct: -0.004,
         inflationImpactPct: 0.005,
+        weeksActive: 1,
       };
     }
 
@@ -130,11 +138,15 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         commodityImpactPct: 0.02,
         gdpImpactPct: -0.002,
         inflationImpactPct: 0.001,
+        weeksActive: 1,
       };
     }
   }
 
-  return current;
+  return {
+    ...current,
+    weeksActive: (current.weeksActive || 0) + 1
+  };
 }
 
 /**
@@ -167,10 +179,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       currency: 'USD',
       symbol: '$',
       centralBank: 'Federal Reserve',
+      cycleRegime: 'Expansion',
+      inversionWeeksCount: 0,
+      recessionShockQueue: [],
       policyRate: 0.0450,
       neutralRate: 0.0100, // r* = 1.00%
       inflation: 0.0260,
       coreInflation: 0.0240,
+      expectedInflation: 0.0240,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0220,
       potentialGdpGrowth: 0.0210,
@@ -207,10 +223,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       currency: 'GBP',
       symbol: '£',
       centralBank: 'Bank of England',
+      cycleRegime: 'Expansion',
+      inversionWeeksCount: 0,
+      recessionShockQueue: [],
       policyRate: 0.0475,
       neutralRate: 0.0075, // r* = 0.75%
       inflation: 0.0280,
       coreInflation: 0.0260,
+      expectedInflation: 0.0260,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0130,
       potentialGdpGrowth: 0.0150,
@@ -247,10 +267,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       currency: 'JPY',
       symbol: '¥',
       centralBank: 'Bank of Japan',
+      cycleRegime: 'Expansion',
+      inversionWeeksCount: 0,
+      recessionShockQueue: [],
       policyRate: 0.0025,
       neutralRate: -0.0025, // r* = -0.25%
       inflation: 0.0180,
       coreInflation: 0.0160,
+      expectedInflation: 0.0160,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0100,
       potentialGdpGrowth: 0.0080,
@@ -287,10 +311,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       currency: 'EUR',
       symbol: '€',
       centralBank: 'European Central Bank',
+      cycleRegime: 'Expansion',
+      inversionWeeksCount: 0,
+      recessionShockQueue: [],
       policyRate: 0.0325,
       neutralRate: 0.0050, // r* = 0.50%
       inflation: 0.0230,
       coreInflation: 0.0220,
+      expectedInflation: 0.0220,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0120,
       potentialGdpGrowth: 0.0140,
@@ -541,7 +569,8 @@ export function evolveRegionMacro(
   globalShock: { gdpShock: number; inflationShock: number },
   microFeedback: { capexGdpContribution: number; marginCompression: number; creditContagionBps: number },
   week: number,
-  equityReturn: number = 0
+  equityReturn: number = 0,
+  prevCommodities: Commodity[] = []
 ): {
   updatedRegion: Region;
   rateChanged: boolean;
@@ -551,8 +580,21 @@ export function evolveRegionMacro(
 } {
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week);
 
-  const weatherInfShock = updatedWeather.inflationImpactPct;
-  const weatherGdpShock = updatedWeather.gdpImpactPct;
+  const weatherDecay = Math.pow(0.55, Math.max(0, updatedWeather.weeksActive - 1));
+  let weatherInfShock = updatedWeather.inflationImpactPct * weatherDecay;
+  
+  if (updatedWeather.affectedCommodityId && prevCommodities.length > 0) {
+    const affectedComm = prevCommodities.find(c => c.id === updatedWeather.affectedCommodityId || c.symbol === updatedWeather.affectedCommodityId);
+    if (affectedComm && affectedComm.historicalPrices.length >= 2) {
+      const lastPrice = affectedComm.historicalPrices[affectedComm.historicalPrices.length - 1];
+      const prevPrice = affectedComm.historicalPrices[affectedComm.historicalPrices.length - 2];
+      const realizedCommodityChangePct = (lastPrice - prevPrice) / prevPrice;
+      const consumptionBasketWeight = 0.03; // Assumed share of CPI basket
+      weatherInfShock = (realizedCommodityChangePct * consumptionBasketWeight) * weatherDecay;
+    }
+  }
+
+  const weatherGdpShock = updatedWeather.gdpImpactPct * weatherDecay;
 
   // Micro-to-Macro Transmission:
   // 1. Aggregate Corporate CapEx produces realistic incremental additions to national GDP (bounded -0.5% to +0.5%)
@@ -570,8 +612,9 @@ export function evolveRegionMacro(
   const potentialGdp = region.potentialGdpGrowth;
   
   // 1. Autoregressive AR(1) base with mean-reversion to potential GDP
-  const gdpPersistence = 0.85; // Strong gravity pulling back to potential
-  const stochasticNoise = (Math.random() - 0.5) * 0.001; // +/- 5 bps random variation
+  const gdpPersistence = region.cycleRegime === 'Recession' ? 0.75 : 0.85; // Strong gravity pulling back to potential
+  const noiseMultiplier = region.cycleRegime === 'Recession' ? 1.5 : 1.0;
+  const stochasticNoise = (Math.random() - 0.5) * 0.001 * noiseMultiplier; // +/- 5 bps random variation (increased in recession)
   const baseGdp = (region.gdpGrowth * gdpPersistence) + (potentialGdp * (1 - gdpPersistence)) + stochasticNoise + globalShock.gdpShock + weatherGdpShock * 0.20;
 
   // 2. Incremental bounded shocks (Annualized bps)
@@ -581,32 +624,49 @@ export function evolveRegionMacro(
 
   // Real Rate Demand Channel
   const realRateGap = (region.policyRate - region.inflation) - region.neutralRate;
-  const monetaryDrag = Math.max(-0.008, Math.min(0.008, -realRateGap * 0.25));
+  const monetaryDrag = Math.max(-0.025, Math.min(0.025, -realRateGap * 0.35));
+
+  // Process recession shocks
+  let scheduledShock = 0;
+  const remainingShocks = region.recessionShockQueue.filter(s => {
+    if (s.week === week) {
+      scheduledShock += s.shock;
+      return false;
+    }
+    return true;
+  });
 
   // 3. Set new GDP Growth: Must be absolute rate, NOT compounded
-  const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag;
+  const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag + scheduledShock;
 
   // 4. Absolute hard clamp to prevent runaway simulation
   const newGdpGrowth = Math.max(-0.02, Math.min(0.045, updatedGdpGrowth)); // Bounded between -2.0% and +4.5%
 
   let newInflation = Math.max(0.0050, Math.min(0.20, Number((region.inflation + infNoise).toFixed(4))));
   const newUnemployment = Math.max(0.020, Math.min(0.100, Number((region.unemploymentRate + (potentialGdp - newGdpGrowth) * 0.25 + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002)).toFixed(3))));
+  const unempDelta = newUnemployment - region.unemploymentRate;
 
+  let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
+  if (newGdpGrowth < 0 && unempDelta > 0) newCycleRegime = 'Recession';
+  else if (newGdpGrowth > potentialGdp && unempDelta < 0) newCycleRegime = 'Expansion';
+  else if (region.cycleRegime === 'Recession' && newGdpGrowth > 0) newCycleRegime = 'Recovery';
+  
   // Consumer & Household Sector Simulation
   const nairu = 0.045; 
-  const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.8 * (nairu - newUnemployment) + 0.1 * region.inflation));
+  const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.8 * (nairu - newUnemployment) + 0.1 * region.expectedInflation));
   
-  const unempDelta = newUnemployment - region.unemploymentRate;
-  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - 0.5 * unempDelta * 100));
+  const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
+  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100));
 
   const newSavingsRate = Math.max(0.02, Math.min(0.18, 0.06 + 0.2 * (region.policyRate - 0.02) - 0.1 * ((newCCI - 100) / 100)));
   const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100);
 
-  const wagePushInflation = (newWageGrowth - 0.015) * 2.0;
+  const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   
   // Wage-push inflation adds to CPI (scaled for weekly turn)
   newInflation = Math.max(0.0050, Math.min(0.20, Number((newInflation + wagePushInflation * 0.02).toFixed(4))));
   const newCoreInflation = Number((newInflation * 0.92 + wagePushInflation * 0.1).toFixed(4));
+  const newExpectedInflation = region.expectedInflation * 0.9 + newInflation * 0.1;
 
   // Calibrated Inertial Taylor Rule:
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
@@ -614,15 +674,16 @@ export function evolveRegionMacro(
   const piStar = region.targetInflation; // 2.00% across all central banks
   
   const output_gap = Math.max(-0.03, Math.min(0.03, newGdpGrowth - potentialGdp));
-  const inflation_gap = Math.max(-0.02, Math.min(0.04, newInflation - piStar));
-  const taylorTarget = rStar + newInflation + 0.5 * inflation_gap + 0.5 * output_gap;
+  const inflation_gap = Math.max(-0.02, Math.min(0.04, newExpectedInflation - piStar));
+  const taylorTarget = rStar + newExpectedInflation + 0.5 * inflation_gap + 0.5 * output_gap;
 
   let rateChanged = false;
   let newPolicyRate = region.policyRate;
   let rateDeltaBps = 0;
 
-  // Central banks evaluate policy rates strictly once per quarter (every 13 weeks)
-  if (week % 13 === 0) {
+  // Central banks evaluate policy rates strictly once per quarter (every 13 weeks) or off-cycle if drastically behind curve
+  const isMeeting = (week % 13 === 0) || Math.abs(taylorTarget - region.policyRate) > 0.03;
+  if (isMeeting) {
     const rawQuarterlyDelta = taylorTarget - region.policyRate;
     let meetingDecisionBps = 0;
     
@@ -679,6 +740,17 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   const newZeroRates = calculateTenorZeroRates(newCurveParams);
 
+  let newInversionCount = region.inversionWeeksCount;
+  if (newZeroRates['2Y'] > newZeroRates['10Y']) {
+    newInversionCount++;
+    if (newInversionCount === 8) {
+      // Push shock 13 weeks out
+      remainingShocks.push({ week: week + 13, shock: -0.015 });
+    }
+  } else {
+    newInversionCount = 0;
+  }
+
   const nominalGdpGrowthWeekly = (newGdpGrowth + newInflation) / 52; // real growth + inflation ≈ nominal growth
   const weeklyDebtToGdpChange = (region.fiscalDeficitPctGdp / 52) - (nominalGdpGrowthWeekly * region.debtToGdpPct);
   const newDebtToGdpPct = Number((region.debtToGdpPct + weeklyDebtToGdpChange).toFixed(4));
@@ -693,9 +765,13 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   const updatedRegion: Region = {
     ...region,
+    cycleRegime: newCycleRegime,
+    inversionWeeksCount: newInversionCount,
+    recessionShockQueue: remainingShocks,
     policyRate: newPolicyRate,
     inflation: newInflation,
     coreInflation: newCoreInflation,
+    expectedInflation: newExpectedInflation,
     gdpGrowth: newGdpGrowth,
     wageGrowth: Number(newWageGrowth.toFixed(4)),
     debtToGdpPct: newDebtToGdpPct,
@@ -721,7 +797,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     historicalZeroCurves: histCurves,
   };
 
-  return { updatedRegion, rateChanged, rateDeltaBps, isMeeting: week % 13 === 0, diagnosticString };
+  return { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString };
 }
 
 /**
@@ -775,7 +851,8 @@ export function evolveCommodity(
   let weatherBoost = 0;
   Object.values(regions).forEach((r) => {
     if (r.weather.affectedCommodityId === comm.id || r.weather.affectedCommodityId === comm.symbol) {
-      weatherBoost += r.weather.commodityImpactPct;
+      const decay = Math.pow(0.55, Math.max(0, (r.weather.weeksActive || 0) - 1));
+      weatherBoost += r.weather.commodityImpactPct * decay;
     }
   });
 

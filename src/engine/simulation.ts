@@ -52,6 +52,16 @@ export function determineCreditRating(leverage: number, interestCoverage: number
   return 'AAA';
 }
 
+const SECTOR_PRICING_POWER: Record<string, number> = {
+  Tech: 0.55,
+  Financials: 0.85,
+  Industrials: 0.70,
+  Energy: 0.90,
+  Consumer: 0.50,
+  Healthcare: 0.65,
+  Utilities: 0.95,
+};
+
 /**
  * Create initial Game State
  */
@@ -207,7 +217,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
       { capexGdpContribution: boundedGdpContribution, marginCompression, creditContagionBps },
       nextWeek,
-      equityRet
+      equityRet,
+      state.commodities
     );
     updatedRegions[regionId] = updatedRegion;
     if (isMeeting) {
@@ -275,7 +286,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const sectorGdpBeta = comp.beta;
     
     // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
-    const targetAnnualRevenue = baseRev * (1 + (reg.gdpGrowth * sectorGdpBeta) + consumerRevBoost + noise);
+    const pricingPowerBeta = SECTOR_PRICING_POWER[comp.sector] ?? 0.65;
+    const targetAnnualRevenue = baseRev * (1 + (reg.gdpGrowth * sectorGdpBeta) + consumerRevBoost + noise + reg.inflation * pricingPowerBeta);
     
     // Smooth transition to target revenue (no exponential weekly compounding)
     const newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
