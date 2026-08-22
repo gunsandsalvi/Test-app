@@ -62,6 +62,16 @@ const SECTOR_PRICING_POWER: Record<string, number> = {
   Utilities: 0.95,
 };
 
+const SECTOR_WAGE_SENSITIVITY: Record<string, number> = {
+  Tech: 0.6,
+  Financials: 0.5,
+  Industrials: 1.3,
+  Energy: 0.9,
+  Consumer: 1.4,
+  Healthcare: 1.0,
+  Utilities: 0.7,
+};
+
 /**
  * Create initial Game State
  */
@@ -182,6 +192,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const marginCompression = avgMargin < 0.22 ? 0.22 - avgMargin : 0.0;
   const recentDefaultsCount = state.companies.filter((c) => c.isDefaulted || c.creditRating === 'CCC').length;
   const creditContagionBps = recentDefaultsCount * 12;
+  const systemicStressFactor = Math.min(0.3, creditContagionBps / 500);
 
   // 2. Evolve Multi-Region Macro States
   const globalInflationShock = (Math.random() - 0.5) * 0.0008;
@@ -236,6 +247,20 @@ export function advanceWeeklyStep(state: GameState): GameState {
     });
   });
 
+  function computeRealizedVol(historicalValues: number[], window: number): number {
+    const recent = historicalValues.slice(-window);
+    if (recent.length < 2) return 0.15;
+    const returns = recent.slice(1).map((v, i) => Math.log(v / recent[i]));
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length;
+    return Math.sqrt(variance * 52);
+  }
+  const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);
+  const baselineVol = 0.16;
+  const usaRegime = updatedRegions.USA.cycleRegime;
+  const regimeVolPremium = usaRegime === 'Recession' ? 0.08 : usaRegime === 'Slowdown' ? 0.03 : 0;
+  const marketVolComponent = Math.max(0, realizedIndexVol - baselineVol) * 0.5 + regimeVolPremium;
+
   // 3. Evolve FX Pairs
   const updatedFxPairs = state.fxPairs.map((fx) => evolveFxPair(fx, updatedRegions));
 
@@ -263,6 +288,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   // 5. Evolve 200 Company Fundamentals + Asynchronous Earnings + Debt Prepayment + M&A
   const ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[] = [];
+  const refinanceNews: NewsItem[] = [];
   const defaultedTickers: string[] = [];
   const earningsReportedThisTurn: EarningsReportEvent[] = [];
 
@@ -285,15 +311,29 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
     const sectorGdpBeta = comp.beta;
     
+    const SECTOR_REGIME_TILT: Record<string, Partial<Record<'Expansion' | 'Slowdown' | 'Recession' | 'Recovery', number>>> = {
+      Industrials: { Expansion: 0.0015, Recovery: 0.002, Recession: -0.0015 },
+      Energy:      { Expansion: 0.0012, Recovery: 0.0018, Recession: -0.001 },
+      Tech:        { Expansion: 0.0015, Recovery: 0.0025, Recession: -0.002 },
+      Consumer:    { Recession: 0.0008, Slowdown: 0.0005 }, // defensive tailwind
+      Healthcare:  { Recession: 0.0008, Slowdown: 0.0005 }, // defensive tailwind
+      Utilities:   { Recession: 0.0006, Slowdown: 0.0004 },
+    };
+
+    const curveSlope = (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.['10Y'] ?? 0) - (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.['2Y'] ?? 0);
+    const financialsTilt = comp.sector === 'Financials' ? Math.max(-0.001, Math.min(0.001, curveSlope * 0.02)) : 0;
+    const regimeTilt = SECTOR_REGIME_TILT[comp.sector]?.[reg.cycleRegime] ?? 0;
+
     // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
     const pricingPowerBeta = SECTOR_PRICING_POWER[comp.sector] ?? 0.65;
-    const targetAnnualRevenue = baseRev * (1 + (reg.gdpGrowth * sectorGdpBeta) + consumerRevBoost + noise + reg.inflation * pricingPowerBeta);
+    const targetAnnualRevenue = baseRev * (1 + (reg.gdpGrowth * sectorGdpBeta) + consumerRevBoost + noise + reg.inflation * pricingPowerBeta + regimeTilt + financialsTilt);
     
     // Smooth transition to target revenue (no exponential weekly compounding)
     const newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
 
     // Operating margins update (Wage-Push compression)
-    const wageCompression = Math.max(0, reg.householdState.wageGrowth - 0.025) * 0.15;
+    const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
+    const wageCompression = Math.max(0, reg.householdState.wageGrowth - 0.025) * 0.15 * wageSensitivity;
     const baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     const newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52)));
     const newEbitda = newRevenue * newEbitdaMargin;
@@ -320,6 +360,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const weeklyFreeCashFlow = newEbitda / 52 - newCapex / 52 - weeklyInterest;
     let newCash = comp.cash + weeklyFreeCashFlow;
     let newTotalDebt = comp.totalDebt;
+
+    const targetDivYield = comp.baselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0));
+    const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
 
     // Debt Prepayment Rule: When Cash > 2.5x Current Liabilities, retire debt principal
     if (newCash > 2.5 * comp.currentLiabilities && newTotalDebt > 50) {
@@ -356,8 +399,27 @@ export function advanceWeeklyStep(state: GameState): GameState {
     // Dynamic OAS credit spread & Leveraged Loan pricing
     const ratingSpreadConfig = RATING_OAS_SPREADS[newRating];
     const targetOasBps = ratingSpreadConfig.baseBps + (newLeverage > 4 ? (newLeverage - 4) * 50 : 0);
+    let refinancingSpreadShockBps = 0;
+    const maturingTranche = comp.debtMaturitySchedule?.find(t => t.weekDue === nextWeek);
+    if (maturingTranche) {
+      refinancingSpreadShockBps = Math.max(0, (effectiveDebtRate - comp.debtInterestRate) * 10000 * 0.5);
+      if (refinancingSpreadShockBps > 100) {
+        refinanceNews.push({
+          id: `refinance-${comp.ticker}-${nextWeek}`,
+          date: `Week ${nextWeek}`,
+          timestampMs: Date.now(),
+          category: 'Corporate',
+          severity: 'High',
+          headline: `${comp.ticker} Hits Maturity Wall, Refinances Debt in Higher Rate Environment`,
+          content: `${comp.name} faced a maturity wall this week and was forced to refinance existing obligations. The effective financing rate has jumped, contributing an estimated +${Math.round(refinancingSpreadShockBps)} bps to their ongoing credit spread as market participants digest the increased debt service burden.`,
+          relatedEntities: [comp.ticker],
+        });
+      }
+    }
+    const updatedMaturitySchedule = comp.debtMaturitySchedule?.filter(t => t.weekDue !== nextWeek);
+
     const newOasBps = Math.round(
-      comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35 + (Math.random() - 0.5) * 5
+      comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35 + refinancingSpreadShockBps + (Math.random() - 0.5) * 5
     );
     const newCdsSpreadBps = newOasBps + Math.floor(Math.random() * 8 - 4);
 
@@ -463,8 +525,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? [...(comp.historicalFundamentals || []).slice(-3), currentSnapshot]
       : comp.historicalFundamentals || [];
 
+    const effectiveRecoveryRate = Math.max(0.10, (comp.baselineRecoveryRate ?? 0.40) * (1 - systemicStressFactor));
+
     return {
       ...comp,
+      recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
+      debtMaturitySchedule: updatedMaturitySchedule,
+      dividendYield: Number(newDividendYield.toFixed(4)),
       capex: Number(newCapex.toFixed(1)),
       annualRevenue: Number(newRevenue.toFixed(1)),
       ebitda: Number(newEbitda.toFixed(1)),
@@ -792,7 +859,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const strike = pos.strike || underlyingPrice;
         const remainingWeeks = Math.max(0.1, (pos.expiryWeek || nextWeek + 4) - nextWeek);
         const tYears = remainingWeeks / 52;
-        const vol = pos.impliedVol || 0.3;
+        const vol = (pos.impliedVol || 0.3) + marketVolComponent;
         const r = updatedRegions[pos.region].policyRate;
 
         const greeks = calculateBlackScholesGreeks(
@@ -1067,7 +1134,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const updatedDiagnosticsLogs = [...(state.diagnosticsLogs || []), ...diagnosticLogs, ...newStepLogs].slice(-100);
 
   // News feed strictly displays headlines generated during the current active weekly step
-  const updatedNewsFeed = [...newsItems];
+  const updatedNewsFeed = [...newsItems, ...refinanceNews];
 
   return {
     ...state,
@@ -1078,6 +1145,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     companies: updatedCompanies,
     commodities: updatedCommodities,
     compositeIndices: updatedCompositeIndices,
+    marketVolPremium: Number(marketVolComponent.toFixed(4)),
     portfolio: updatedPortfolio,
     newsFeed: updatedNewsFeed,
     diagnosticsLogs: updatedDiagnosticsLogs,

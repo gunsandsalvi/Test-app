@@ -294,6 +294,12 @@ export function generateInitialCompanies(): Company[] {
       const netIncome = Math.max(5, (ebit - interestExpense) * (1 - taxRate));
       const eps = Number((netIncome / tmpl.shares).toFixed(2));
       
+      const debtMaturitySchedule = [
+        { amount: tmpl.debtBase * 0.35, weekDue: 260 },
+        { amount: tmpl.debtBase * 0.35, weekDue: 520 },
+        { amount: tmpl.debtBase * 0.30, weekDue: 780 },
+      ];
+
       const leverage = Number((tmpl.debtBase / Math.max(1, ebitda)).toFixed(2));
       const interestCoverage = Number((ebit / interestExpense).toFixed(2));
       
@@ -405,6 +411,7 @@ export function generateInitialCompanies(): Company[] {
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtInterestRate: interestRate,
         capex: Math.round(tmpl.revBase * 0.06),
+        debtMaturitySchedule,
         historicalFundamentals,
         
         earningsWeekModulo,
@@ -436,12 +443,14 @@ export function generateInitialCompanies(): Company[] {
         ratingHistory: [tmpl.initialRating],
         isDefaulted: false,
         recoveryRate: 0.40,
+        baselineRecoveryRate: 0.40,
         
         stockPrice,
         historicalPrices,
         forwardPE: sectorConfig.basePE,
         marketCap: Number((stockPrice * tmpl.shares).toFixed(0)),
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
+        baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         beta: tmpl.beta,
         
         seniorBondYield: 0.05 + oasSpreadBps / 10000,

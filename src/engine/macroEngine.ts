@@ -182,6 +182,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      centralBankBalanceSheet: 8.5e12,
       policyRate: 0.0450,
       neutralRate: 0.0100, // r* = 1.00%
       inflation: 0.0260,
@@ -226,6 +227,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      centralBankBalanceSheet: 1.2e12,
       policyRate: 0.0475,
       neutralRate: 0.0075, // r* = 0.75%
       inflation: 0.0280,
@@ -270,6 +272,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      centralBankBalanceSheet: 4.8e12,
       policyRate: 0.0025,
       neutralRate: -0.0025, // r* = -0.25%
       inflation: 0.0180,
@@ -314,6 +317,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      centralBankBalanceSheet: 7.2e12,
       policyRate: 0.0325,
       neutralRate: 0.0050, // r* = 0.50%
       inflation: 0.0230,
@@ -643,20 +647,23 @@ export function evolveRegionMacro(
   const newGdpGrowth = Math.max(-0.02, Math.min(0.045, updatedGdpGrowth)); // Bounded between -2.0% and +4.5%
 
   let newInflation = Math.max(0.0050, Math.min(0.20, Number((region.inflation + infNoise).toFixed(4))));
-  const newUnemployment = Math.max(0.020, Math.min(0.100, Number((region.unemploymentRate + (potentialGdp - newGdpGrowth) * 0.25 + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002)).toFixed(3))));
+  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + (potentialGdp - newGdpGrowth) * 0.25 + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002)).toFixed(3))));
   const unempDelta = newUnemployment - region.unemploymentRate;
 
   let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
-  if (newGdpGrowth < 0 && unempDelta > 0) newCycleRegime = 'Recession';
-  else if (newGdpGrowth > potentialGdp && unempDelta < 0) newCycleRegime = 'Expansion';
-  else if (region.cycleRegime === 'Recession' && newGdpGrowth > 0) newCycleRegime = 'Recovery';
+  if (newGdpGrowth < 0) newCycleRegime = 'Recession';
+  else if (newGdpGrowth > potentialGdp + 0.005) newCycleRegime = region.cycleRegime === 'Recession' ? 'Recovery' : 'Expansion';
+  else if (region.cycleRegime === 'Recession' && newGdpGrowth >= 0) newCycleRegime = 'Recovery';
   
   // Consumer & Household Sector Simulation
   const nairu = 0.045; 
-  const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.8 * (nairu - newUnemployment) + 0.1 * region.expectedInflation));
+  const slackGap = nairu - newUnemployment;
+  const taperedSlackEffect = slackGap > 0.01 ? 0.01 + (slackGap - 0.01) * 0.3 : slackGap;
+  const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.8 * taperedSlackEffect + 0.1 * region.expectedInflation));
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
-  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100));
+  const contagionHit = microFeedback.creditContagionBps > 50 ? (microFeedback.creditContagionBps / 100) * 0.5 : 0;
+  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100 - contagionHit));
 
   const newSavingsRate = Math.max(0.02, Math.min(0.18, 0.06 + 0.2 * (region.policyRate - 0.02) - 0.1 * ((newCCI - 100) / 100)));
   const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100);
@@ -722,10 +729,15 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const dotPlot1Y = Number((newPolicyRate * 0.4 + smoothedTargetRate * 0.6).toFixed(4));
   const dotPlot2Y = Number((smoothedTargetRate * 0.35 + (rStar + piStar) * 0.65).toFixed(4));
 
+  const qePace = newCycleRegime === 'Recession' ? 50e9 : (newCycleRegime === 'Expansion' ? -15e9 : 0);
+  const newCbBalance = Math.max(0, region.centralBankBalanceSheet + qePace);
+  const cbChangePct = (newCbBalance - region.centralBankBalanceSheet) / Math.max(1, region.centralBankBalanceSheet);
+  const qePremium = cbChangePct * -0.5;
+
   // Update Nelson-Siegel yield curve parameters
   const newBeta0 = Math.max(
     0.012,
-    region.yieldCurveParams.beta0 + (newInflation - piStar) * 0.04 + fiscalDeficitTermPremium * 0.02 + (microFeedback.creditContagionBps / 10000) * 0.04 + (Math.random() - 0.5) * 0.0003
+    region.yieldCurveParams.beta0 + (newInflation - piStar) * 0.04 + fiscalDeficitTermPremium * 0.02 + (microFeedback.creditContagionBps / 10000) * 0.04 + qePremium + (Math.random() - 0.5) * 0.0003
   );
   const newBeta1 = newPolicyRate - newBeta0 + (Math.random() - 0.5) * 0.0002;
   const newBeta2 =
@@ -768,6 +780,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     cycleRegime: newCycleRegime,
     inversionWeeksCount: newInversionCount,
     recessionShockQueue: remainingShocks,
+    centralBankBalanceSheet: newCbBalance,
     policyRate: newPolicyRate,
     inflation: newInflation,
     coreInflation: newCoreInflation,

@@ -43,7 +43,8 @@ export const DerivativesTab: React.FC<DerivativesTabProps> = ({
   const selectedCompany = state.companies.find((c) => c.ticker === selectedOptionTicker) || state.companies[0];
   const spotS = selectedCompany.stockPrice;
   const rf = state.regions[selectedCompany.region].policyRate;
-  const vol = 0.30;
+  const marketVol = state.marketVolPremium || 0;
+  const vol = 0.30 + marketVol;
   const expiryWeek = state.currentWeek + 8; // 8 weeks (~2 months)
   const timeToExpiryYears = 8 / 52;
 
@@ -306,7 +307,7 @@ export const DerivativesTab: React.FC<DerivativesTabProps> = ({
               <div>
                 <h3 className="text-xs font-bold text-white">{selectedOptionTicker} 8-Week Options Chain</h3>
                 <p className="text-[10px] text-slate-400">
-                  Spot: ${spotS.toFixed(2)} • Vol: 30% • Risk-Free: {(rf * 100).toFixed(2)}%
+                  Spot: ${spotS.toFixed(2)} • Vol: {(vol * 100).toFixed(1)}% {marketVol > 0 ? `(Market Vol Premium: +${(marketVol * 100).toFixed(1)}%)` : ''} • Risk-Free: {(rf * 100).toFixed(2)}%
                 </p>
               </div>
             </div>

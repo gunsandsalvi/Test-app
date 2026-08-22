@@ -40,6 +40,7 @@ export interface Region {
   inflation: number; // pi_t headline (e.g. 0.029)
   coreInflation: number; // core CPI (e.g. 0.026)
   expectedInflation: number;
+  centralBankBalanceSheet: number;
   targetInflation: number; // pi* (e.g. 0.020)
   gdpGrowth: number; // y_t (annualized, e.g. 0.022)
   potentialGdpGrowth: number; // y* (e.g. 0.020)
@@ -186,6 +187,7 @@ export interface Company {
   ratingHistory: CreditRating[];
   isDefaulted: boolean;
   recoveryRate: number; // 0.40 for bonds, 0.65 for senior secured loans
+  baselineRecoveryRate: number;
   
   // Market & Pricing
   stockPrice: number;
@@ -193,7 +195,9 @@ export interface Company {
   forwardPE: number;
   marketCap: number;
   dividendYield: number;
+  baselineDividendYield: number;
   beta: number;
+  debtMaturitySchedule?: { amount: number; weekDue: number }[];
   
   // Debt & CDS Pricing
   seniorBondYield: number; // Sovereign benchmark + OAS
@@ -412,6 +416,7 @@ export interface GameState {
   companies: Company[];
   commodities: Commodity[];
   compositeIndices: CompositeBenchmarkIndices;
+  marketVolPremium?: number;
   dealers: Dealer[];
   portfolio: Portfolio;
   newsFeed: NewsItem[];
