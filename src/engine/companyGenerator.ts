@@ -553,7 +553,7 @@ export function generateInitialCompanies(): Company[] {
         let lines: any[] = [];
         const isTop = idx < 2;
         
-        if (sector === 'Tech' || sector === 'Financials') {
+        if (sector === 'Tech') {
           if (isTop) {
             lines = [
               { category: 'CorporateTech', revenueShare: 0.6, competitiveness: 0 },
@@ -567,8 +567,9 @@ export function generateInitialCompanies(): Company[] {
         } else if (sector === 'Energy' || sector === 'Industrials') {
           if (isTop) {
             lines = [
-              { category: 'CorporateIndustrial', revenueShare: 0.7, competitiveness: 0 },
-              { category: 'GovernmentInfrastructure', revenueShare: 0.3, competitiveness: 0 }
+              { category: 'CorporateIndustrial', revenueShare: 0.55, competitiveness: 0 },
+              { category: 'GovernmentInfrastructure', revenueShare: 0.25, competitiveness: 0 },
+              { category: 'GovernmentDefense', revenueShare: 0.20, competitiveness: 0 }
             ];
           } else {
             lines = [
@@ -589,6 +590,18 @@ export function generateInitialCompanies(): Company[] {
             if (mgn > 0.25) lines = [{ category: 'LuxuryHousehold', revenueShare: 1.0, competitiveness: 0 }];
             else if (mgn < 0.15) lines = [{ category: 'StapleHousehold', revenueShare: 1.0, competitiveness: 0 }];
             else lines = [{ category: 'StandardHousehold', revenueShare: 1.0, competitiveness: 0 }];
+          }
+        } else if (sector === 'Financials') {
+          if (isTop) {
+            lines = [
+              { category: 'CorporateTech', revenueShare: 0.6, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: 0.25, competitiveness: 0 },
+              { category: 'GovernmentHealthcare', revenueShare: 0.15, competitiveness: 0 }
+            ];
+          } else {
+            lines = [
+              { category: c.ebitda / Math.max(1, c.annualRevenue) > 0.3 ? 'CorporateTech' : 'StandardHousehold', revenueShare: 1.0, competitiveness: 0 }
+            ];
           }
         } else if (sector === 'Banks') {
           lines = [{ category: 'CorporateTech', revenueShare: 1.0, competitiveness: 0 }];
@@ -667,7 +680,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     'CorporateIndustrial': 'Industrials',
     'GovernmentInfrastructure': 'Industrials',
     'GovernmentDefense': 'Industrials',
-    'GovernmentHealthcare': 'Healthcare'
+    'GovernmentHealthcare': 'Consumer'
   };
   
   const sector = sectorMap[category] ?? 'Tech';
@@ -687,11 +700,38 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     previousEmployeeCount: employeeCount, employeeCount,
     ebitda, ebit, netIncome: ebitda * 0.5, eps: 1.0,
     sharesOutstanding: shares, currentLiabilities: Math.round(debtBase * 0.25 + revBase * 0.08),
-    totalDebt: debtBase, cashAndEquivalents: revBase * 0.5, capex: Math.round(revBase * 0.06),
+    totalDebt: debtBase, cash: revBase * 0.5, capex: Math.round(revBase * 0.06),
     creditRating: initialRating, isDefaulted: false, oasSpreadBps: 300, cdsSpreadBps: 300,
     seniorBondYield: 0.08, stockPrice: 20, historicalPrices: Array(52).fill(20), forwardPE: 15,
     marketCap: shares * 20, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,
     baselineRecoveryRate: 0.40, debtTranches,
-    productLines: [{ category: category as any, revenueShare: 1.0, competitiveness: 0.3, categoryMarketShare: 0.02 }]
+    productLines: [{ category: category as any, revenueShare: 1.0, competitiveness: 0.3, categoryMarketShare: 0.02 }],
+    leverage: debtBase / Math.max(1, ebitda),
+    interestCoverage: ebit / Math.max(0.5, debtBase * 0.06),
+    earningsWeekModulo: week % 13,
+    lastEarningsReportWeek: week,
+    reportedThisWeek: false,
+    historicalFundamentals: [],
+    baselineEmployeeCount: employeeCount,
+    dealerConsensus: {
+      alpha: { eps: 1.0, revenue: revBase },
+      beta: { eps: 1.0, revenue: revBase },
+      gamma: { eps: 1.0, revenue: revBase },
+      consensusEps: 1.0,
+      consensusRevenue: revBase,
+    },
+    lastEarningsSurprisePct: 0,
+    lastManagementCommentary: 'Newly public company; management outlined initial growth strategy at IPO.',
+    leveragedLoan: {
+      quotedMarginBps: 300,
+      referenceBenchmark: 'SOFR',
+      pricePar: 99.0,
+      discountMarginBps: 300,
+      tenorYears: 5,
+      seniority: 'Senior Secured First Lien',
+      recoveryRate: 0.40,
+    },
+    ratingHistory: [initialRating],
+    sentiment: 0.0,
   };
 }

@@ -221,7 +221,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
         wageGrowth: 0.0360,
         savingsRate: 0.055,
         realConsumptionGrowth: 0.02,
-        householdDebtToIncomeRatio: 1.0,
+        householdDebtToIncomeRatio: 0.1167, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15,
       },
       dotPlot1Y: 0.0400,
       dotPlot2Y: 0.0325,
@@ -285,7 +285,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
         wageGrowth: 0.0420,
         savingsRate: 0.060,
         realConsumptionGrowth: 0.015,
-        householdDebtToIncomeRatio: 0.95,
+        householdDebtToIncomeRatio: 0.1300, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15,
       },
       dotPlot1Y: 0.0425,
       dotPlot2Y: 0.0350,
@@ -349,7 +349,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
         wageGrowth: 0.0250,
         savingsRate: 0.080,
         realConsumptionGrowth: 0.01,
-        householdDebtToIncomeRatio: 1.1,
+        householdDebtToIncomeRatio: 0.1200, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15,
       },
       dotPlot1Y: 0.0050,
       dotPlot2Y: 0.0075,
@@ -413,7 +413,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
         wageGrowth: 0.0320,
         savingsRate: 0.070,
         realConsumptionGrowth: 0.008,
-        householdDebtToIncomeRatio: 0.8,
+        householdDebtToIncomeRatio: 0.1111, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15,
       },
       dotPlot1Y: 0.0275,
       dotPlot2Y: 0.0225,
@@ -698,7 +698,7 @@ export function evolveRegionMacro(
 
   // 2. Incremental bounded shocks (Annualized bps)
   const capexContribAnnual = capexGdpFeedback; // Already bounded and annualized in simulation.ts
-  const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02, householdDebtToIncomeRatio: 1.0 };
+  const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02, householdDebtToIncomeRatio: 0.1167, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15 };
   const consumerContribAnnual = Math.max(-0.002, Math.min(0.002, (prevHS.consumerConfidence - 100) * 0.0001)); // Max +/- 20 bps
 
   // Real Rate Demand Channel
@@ -861,13 +861,15 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const qePremium = cbChangePct * -0.5;
 
   // Update Nelson-Siegel yield curve parameters
+  const targetBeta0 = 0.035 + (newInflation - piStar) * 0.4 + fiscalDeficitTermPremium * 0.4 + (microFeedback.creditContagionBps / 10000) * 0.2 + qePremium * 2;
   const newBeta0 = Math.max(
     0.012,
-    region.yieldCurveParams.beta0 + (newInflation - piStar) * 0.04 + fiscalDeficitTermPremium * 0.02 + (microFeedback.creditContagionBps / 10000) * 0.04 + qePremium + (Math.random() - 0.5) * 0.0003
+    region.yieldCurveParams.beta0 * 0.98 + targetBeta0 * 0.02 + (Math.random() - 0.5) * 0.0003
   );
   const newBeta1 = newPolicyRate - newBeta0 + (Math.random() - 0.5) * 0.0002;
+  const targetBeta2 = (newGdpGrowth - region.potentialGdpGrowth) * 2.0;
   const newBeta2 =
-    region.yieldCurveParams.beta2 + (newGdpGrowth - region.potentialGdpGrowth) * 0.06 + (Math.random() - 0.5) * 0.0003;
+    region.yieldCurveParams.beta2 * 0.95 + targetBeta2 * 0.05 + (Math.random() - 0.5) * 0.0003;
 
   const newCurveParams: NelsonSiegelParams = {
     beta0: newBeta0,
@@ -918,7 +920,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
   const newBalanceSheetStance = -cbChangePct;
-  const newBankingSector = evolveBankingSector(region.bankingSector, microFeedback.businessLoanBookInputUSD, prevHS.householdDebtToIncomeRatio, region.estimatedHouseholdIncomeUSD, newSavingsRate, newPolicyRate, microFeedback.creditContagionBps, newUnemployment, newZeroRates.tenor10Y, newBalanceSheetStance);
+  const newBankingSector = evolveBankingSector(region.bankingSector, microFeedback.businessLoanBookInputUSD, prevHS.householdDebtToIncomeRatio, region.estimatedHouseholdIncomeUSD, newSavingsRate, newPolicyRate, microFeedback.creditContagionBps, newUnemployment, newZeroRates.tenor10Y, newBalanceSheetStance, newGdpGrowth);
   const newEstimatedHouseholdIncomeUSD = Number((region.estimatedHouseholdIncomeUSD * (1 + newGdpGrowth / 52)).toFixed(0));
 
   const updatedRegion: Region = {
@@ -951,6 +953,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       savingsRate: newSavingsRate,
       realConsumptionGrowth: newRealConsumptionGrowth,
       householdDebtToIncomeRatio: prevHS.householdDebtToIncomeRatio,
+        stapleSpendShare: newStapleShare, standardSpendShare: newStandardShare, luxurySpendShare: newLuxuryShare,
     },
     bankingSector: newBankingSector,
     estimatedHouseholdIncomeUSD: newEstimatedHouseholdIncomeUSD,
@@ -1183,22 +1186,26 @@ export function evolveBankingSector(
   creditContagionBps: number,
   unemploymentRate: number,
   sovereign10YYield: number,
-  balanceSheetStance: number
+  balanceSheetStance: number,
+  gdpGrowth: number
 ): BankingSector {
   const newBusinessLoanBook = businessLoanBookInputUSD;
   const newConsumerLoanBook = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD;
   const weeklySavingsInflow = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
-  const newDeposits = prevBanking.depositsUSD * 0.999 + weeklySavingsInflow * 0.5;
+  const newDeposits = prevBanking.depositsUSD * (1 + gdpGrowth / 52) * 0.998 + weeklySavingsInflow * 0.3;
   const totalAssetsProxy = newBusinessLoanBook + newConsumerLoanBook + prevBanking.sovereignBondHoldingsUSD + prevBanking.cashReservesUSD;
   const targetSovHoldings = totalAssetsProxy * 0.15;
   const newSovHoldings = prevBanking.sovereignBondHoldingsUSD * 0.98 + targetSovHoldings * 0.02;
   const newCashReserves = Math.max(0, newDeposits * 0.10 + Math.max(0, -balanceSheetStance) * totalAssetsProxy * 0.01);
   const depositBeta = 0.45;
   const depositRate = policyRate * depositBeta;
-  const businessLoanYield = policyRate + 0.025;
-  const consumerLoanYield = policyRate + 0.035;
+  const priorNim = prevBanking.netInterestMarginPct;
+  const nimDampingFactor = priorNim > 0.05 ? Math.max(0.85, 1 - (priorNim - 0.05) * 2) : 1.0;
+  const businessLoanYield = (policyRate + 0.025) * nimDampingFactor;
+  const consumerLoanYield = (policyRate + 0.035) * nimDampingFactor;
   const weeklyInterestIncome = (newBusinessLoanBook * businessLoanYield + newConsumerLoanBook * consumerLoanYield + newSovHoldings * sovereign10YYield) / 52;
   const weeklyInterestExpense = (newDeposits * depositRate) / 52;
+    if (weeklyInterestIncome * 52 / totalAssetsProxy > 0.4) console.log(`DEBUG: policy=${policyRate} busYield=${businessLoanYield} consYield=${consumerLoanYield} sovYield=${sovereign10YYield} nimDamping=${nimDampingFactor} prevNIM=${priorNim} totalAst=${totalAssetsProxy} newCons=${newConsumerLoanBook} weeklyInc=${weeklyInterestIncome} weeklyExp=${weeklyInterestExpense} deposits=${newDeposits} depRate=${depositRate}`);
   const netInterestMarginPct = totalAssetsProxy > 0 ? ((weeklyInterestIncome - weeklyInterestExpense) * 52) / totalAssetsProxy : 0;
   const businessLossRateAnnual = Math.min(0.08, (creditContagionBps / 10000) * 1.2);
   const consumerLossRateAnnual = Math.min(0.06, Math.max(0, unemploymentRate - 0.045) * 0.8);
