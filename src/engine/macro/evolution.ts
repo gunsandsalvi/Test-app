@@ -111,6 +111,18 @@ export function evolveRegionMacro(
 
   let newInflation = Math.max(0.0050, Math.min(0.20, Number((region.inflation + infNoise).toFixed(4))));
 
+  const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
+  const newFiscalDeficitPctGdp = Math.max(-0.02, Math.min(0.15, newStructuralDeficitPctGdp + cyclicalDeficitComponent));
+
+  const newEstimatedNominalGdpUSD = region.estimatedNominalGdpUSD * (1 + (newGdpGrowth + newInflation) / 52); // nominal = real + inflation
+
+  // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
+  const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
+  const newEffectiveTaxRate = Math.max(0.15, Math.min(0.45, region.effectiveTaxRate + taxRateDrift));
+
+  const newGovernmentRevenueUSD = newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52; // weekly flow
+  const newGovernmentSpendingUSD = newGovernmentRevenueUSD + (newEstimatedNominalGdpUSD * newFiscalDeficitPctGdp) / 52; // spending = revenue + deficit, by definition
+
   let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
   if (newGdpGrowth < 0) newCycleRegime = 'Recession';
   else if (newGdpGrowth > potentialGdp + 0.005) newCycleRegime = region.cycleRegime === 'Recession' ? 'Recovery' : 'Expansion';
@@ -124,8 +136,9 @@ export function evolveRegionMacro(
   const newNonEmployablePct = Math.max(0.28, Math.min(0.45, region.nonEmployablePct + nonEmployableDrift));
   const totalLaborForce = region.totalPopulation * (1 - newNonEmployablePct) * newParticipation;
 
-  // Government employment responds to fiscal stance, same mechanism already driving discretionary stimulus
-  const govEmploymentGrowthRate = newFiscalStanceScore * 0.0008; // weekly rate; positive stance hires, negative sheds
+  // Government employment responds to real spending growth
+  const spendingGrowthRate = region.governmentSpendingUSD > 0 ? (newGovernmentSpendingUSD - region.governmentSpendingUSD) / region.governmentSpendingUSD : 0;
+  const govEmploymentGrowthRate = Math.max(-0.001, Math.min(0.001, spendingGrowthRate * 0.3));
   const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
   // SME sector breathes in sync with the tracked-company health signal, scaled down (SMEs are less volatile than large-cap panel)
@@ -286,9 +299,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     newInversionCount = 0;
   }
 
-  const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
-  const newFiscalDeficitPctGdp = Math.max(-0.02, Math.min(0.15, newStructuralDeficitPctGdp + cyclicalDeficitComponent));
-
   const nominalGdpGrowthWeekly = (newGdpGrowth + newInflation) / 52; // real growth + inflation ≈ nominal growth
   const weeklyDebtToGdpChange = (newFiscalDeficitPctGdp / 52) - (nominalGdpGrowthWeekly * region.debtToGdpPct);
   const newDebtToGdpPct = Number((region.debtToGdpPct + weeklyDebtToGdpChange).toFixed(4));
@@ -348,6 +358,10 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     governmentEmployment: newGovernmentEmployment,
     untrackedPrivateEmployment: newUntrackedPrivateEmployment,
     unemploymentRateBottomUp: Number(newUnemploymentRateBottomUp.toFixed(4)),
+    estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
+    effectiveTaxRate: newEffectiveTaxRate,
+    governmentRevenueUSD: newGovernmentRevenueUSD,
+    governmentSpendingUSD: newGovernmentSpendingUSD,
     householdState: {
       consumerConfidence: newCCI,
       wageGrowth: newWageGrowth,

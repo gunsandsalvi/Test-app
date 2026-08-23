@@ -132,7 +132,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     };
 
     // Government demand (G3), tied to fiscalStanceScore
-    const govProcurementBase = reg.estimatedHouseholdIncomeUSD * 0.18;
+    const govProcurementBase = reg.governmentSpendingUSD * 52 * 0.35; // annualized spending, ~35% of which is procurement-style (vs. transfers/employee comp)
     const fiscalMultiplier = 1 + Math.max(-0.3, Math.min(0.3, reg.fiscalStanceScore * 0.25));
     const govTargets: Partial<Record<string, number>> = {
       GovernmentDefense: govProcurementBase * 0.30 * fiscalMultiplier,
@@ -276,11 +276,23 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
       // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
       const pricingPowerBeta = SECTOR_PRICING_POWER[comp.sector] ?? 0.65;
-      // Operating margins update (Wage-Push compression)
+      // Operating margins update (Wage-Push compression and capacity decay)
+      const capacityDecayPenalty = Math.min(0.08, (comp.maintenanceShortfallStreak ?? 0) * 0.003); // up to 8% margin erosion after ~27 consecutive underfunded weeks
       const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
       const wageCompression = Math.max(0, reg.householdState.wageGrowth - 0.025) * 0.15 * wageSensitivity;
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
-      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52)));
+      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52) - capacityDecayPenalty));
+
+      const growthCapexToRev = (comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue);
+      const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
+      const estCashHealth = comp.cash < 0 ? 0.4 : 1.0;
+      const estTobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
+      const estQCapexEffect = Math.max(-0.15, Math.min(0.15, (estTobinsQ - 1) * 0.2));
+      const estAvgComp = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
+      const estCompEffect = Math.max(-0.1, Math.min(0.1, estAvgComp * 0.15));
+      const estTargetGrowthCapex = baseRev * growthCapexToRev * (1 - estRateDrag) * estCashHealth * (1 + estQCapexEffect + estCompEffect);
+      const estNewGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + estTargetGrowthCapex * 0.10);
+      const growthInvestmentSignal = Math.max(-0.5, Math.min(0.5, (estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))));
 
       let categoryDrivenGrowth = 0;
       updatedProductLines = (comp.productLines || []).map((line) => {
@@ -290,7 +302,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
         // Mean reversion drag on competitiveness for outsized market share to prevent permanent monopolies (BUG-07)
         const highShareDrag = Math.max(0, (line.categoryMarketShare - 0.15) * 2.0);
-        const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 10 - highShareDrag));
+        const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 10 + growthInvestmentSignal * 0.3 - highShareDrag));
         const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
         const shareGainRate = Math.max(-0.01, Math.min(0.01, newCompetitiveness * 0.02 - dominanceDrag));
@@ -320,15 +332,56 @@ export function advanceWeeklyStep(state: GameState): GameState {
       newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
     }
 
-    // CapEx scales with revenue (capital intensity ~constant) and responds modestly to financing
-    // cost (higher rates discourage investment) and cash health (distressed firms cut CapEx).
-    const capexToRevenueRatio = comp.capex / Math.max(1, comp.annualRevenue); // preserves firm-specific intensity
-    const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 1.5; // capex pulls back when funding costs rise above ~4%
-    const cashHealthFactor = comp.cash < 0 ? 0.6 : 1.0; // firms in cash distress cut capex materially
-    const tobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5); // rough proxy
+    // Maintenance — funded, not assumed:
+    // 1. What maintenance WOULD cost if fully funded (capacity-based target)
+    const maintenanceCapexToRevenueRatio = (comp.maintenanceCapex ?? (comp.capex * 0.6)) / Math.max(1, comp.annualRevenue);
+    const targetMaintenanceCapex = newRevenue * maintenanceCapexToRevenueRatio;
+    const weeklyDesiredMaintenanceCapex = targetMaintenanceCapex / 52;
+
+    // 2. What the company can actually fund this week — operating cash + a small cash draw + limited new borrowing (IG only), never unlimited
+    const weeklyOperatingCashFlow = newEbitda / 52 - weeklyInterest;
+    const isInvestmentGrade = ['AAA', 'AA', 'A', 'BBB'].includes(comp.creditRating);
+    const maintenanceBorrowingCapacity = isInvestmentGrade ? weeklyDesiredMaintenanceCapex * 0.5 : 0; // a distressed company cannot borrow its way out of deferred upkeep
+    const availableFundingForMaintenance = Math.max(0, weeklyOperatingCashFlow) + Math.max(0, comp.cash) * 0.05 + maintenanceBorrowingCapacity;
+
+    // 3. Fund what's affordable, defer the rest
+    const fundedMaintenanceCapex = Math.min(weeklyDesiredMaintenanceCapex, availableFundingForMaintenance) * 52;
+    const maintenanceShortfallThisWeek = Math.max(0, targetMaintenanceCapex - fundedMaintenanceCapex);
+    const debtFundedPortion = Math.max(0, Math.min(fundedMaintenanceCapex, maintenanceBorrowingCapacity * 52) - Math.max(0, weeklyOperatingCashFlow * 52));
+    const newMaintenanceCapex = Math.max(0, (comp.maintenanceCapex ?? (comp.capex * 0.6)) * 0.95 + fundedMaintenanceCapex * 0.05);
+
+    // 4. Debt-funded maintenance becomes a real new floating tranche — genuinely raises leverage and next week's interest, not a free lunch
+    let maintenanceFundingTranches: DebtTranche[] = [];
+    if (debtFundedPortion > 1000) {
+      const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
+      maintenanceFundingTranches = [{
+        id: `${comp.ticker}-MAINT-${nextWeek}`,
+        principalUSD: debtFundedPortion,
+        rateType: 'FLOATING',
+        floatingMarginBps: Math.round(currentBaseSpreadBps * 1.1), // priced wide — bridge/revolver-style, not term financing
+        originationWeek: nextWeek,
+        maturityWeek: nextWeek + 260,
+        seniority: 'SENIOR',
+      }];
+    }
+
+    // 5. Deferred maintenance compounds into real operational decay
+    const newMaintenanceShortfallStreak = maintenanceShortfallThisWeek > 0
+      ? (comp.maintenanceShortfallStreak ?? 0) + 1
+      : Math.max(0, (comp.maintenanceShortfallStreak ?? 0) - 2); // recovers twice as fast as it accumulates
+
+    // Growth — fully discretionary, now also tied to competitiveness:
+    const growthCapexToRevenueRatio = (comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue);
+    const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
+    const cashHealthFactor = comp.cash < 0 ? 0.4 : 1.0;
+    const tobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
     const qCapexEffect = Math.max(-0.15, Math.min(0.15, (tobinsQ - 1) * 0.2));
-    const targetCapex = newRevenue * capexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect);
-    const newCapex = Math.max(0, comp.capex * 0.92 + targetCapex * 0.08); // smoothed transition, avoid whipsaws
+    const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
+    const competitivenessCapexEffect = Math.max(-0.1, Math.min(0.1, avgCompetitiveness * 0.15));
+    const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect);
+    const newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
+
+    const newCapex = newMaintenanceCapex + newGrowthCapex;
 
     // Weekly Cash flow and debt amortization / prepayment
     const weeklyFreeCashFlow = newEbitda / 52 - newCapex / 52 - weeklyInterest;
@@ -427,6 +480,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
         urgent: true,
       };
       refinanceNews.push(refinancingNewsItem);
+    }
+
+    if (maintenanceFundingTranches.length > 0) {
+      updatedTranches = [...updatedTranches, ...maintenanceFundingTranches];
     }
 
     const newOasBps = Math.round(
@@ -556,6 +613,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
       baselineDividendYield: newBaselineDividendYield,
       previousEmployeeCount: comp.employeeCount,
       previousCapex: comp.capex,
+      maintenanceCapex: Number(newMaintenanceCapex.toFixed(1)),
+      growthCapex: Number(newGrowthCapex.toFixed(1)),
+      maintenanceShortfallStreak: newMaintenanceShortfallStreak,
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,

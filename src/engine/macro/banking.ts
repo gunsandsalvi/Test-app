@@ -36,11 +36,12 @@ export function evolveBankingSector(
   const consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
   const weeklyLoanLossProvision = (newBusinessLoanBook * businessLossRateAnnual + newConsumerLoanBook * consumerLossRateAnnual) / 52;
   const weeklyNetIncome = weeklyInterestIncome - weeklyInterestExpense - weeklyLoanLossProvision;
-  const priorCapitalRatioForPayout = prevBanking.bankCapitalRatio;
-  const targetPayoutRatio = priorCapitalRatioForPayout > 0.14 ? 0.6 : priorCapitalRatioForPayout < 0.09 ? 0 : 0.3;
-  const weeklyPayout = Math.max(0, weeklyNetIncome) * targetPayoutRatio;
-  const newBankEquity = Math.max(0, prevBanking.bankEquityUSD + weeklyNetIncome - weeklyPayout);
   const riskWeightedAssets = newBusinessLoanBook * 1.0 + newConsumerLoanBook * 0.75 + newSovHoldings * 0.0;
+  const priorCapitalRatioForPayout = prevBanking.bankCapitalRatio;
+  const targetPayoutRatio = priorCapitalRatioForPayout > 0.14 ? 0.6 : priorCapitalRatioForPayout < 0.11 ? 0 : 0.25;
+  const weeklyPayout = Math.max(0, weeklyNetIncome) * targetPayoutRatio;
+  const recapitalization = priorCapitalRatioForPayout < 0.08 ? (0.10 * riskWeightedAssets - prevBanking.bankEquityUSD) * 0.02 : 0;
+  const newBankEquity = Math.max(0, prevBanking.bankEquityUSD + weeklyNetIncome - weeklyPayout + recapitalization);
   const newBankCapitalRatio = riskWeightedAssets > 0 ? newBankEquity / riskWeightedAssets : 0.15;
   const capitalGap = 0.12 - newBankCapitalRatio;
   const newCreditConditionsIndex = Math.max(-1, Math.min(1, capitalGap * 8 + Math.max(0, -netInterestMarginPct) * 5));

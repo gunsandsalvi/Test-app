@@ -67,6 +67,10 @@ export function getInitialRegions(): Record<RegionId, Region> {
       governmentEmployment: 9_000_000,
       untrackedPrivateEmployment: 42_600_000,
       unemploymentRateBottomUp: 0.040,
+      estimatedNominalGdpUSD: 19_500_000_000_000,
+      effectiveTaxRate: 0.30,
+      governmentRevenueUSD: 0,
+      governmentSpendingUSD: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0360,
@@ -138,6 +142,10 @@ export function getInitialRegions(): Record<RegionId, Region> {
       governmentEmployment: 2_800_000,
       untrackedPrivateEmployment: 8_100_000,
       unemploymentRateBottomUp: 0.042,
+      estimatedNominalGdpUSD: 3_200_000_000_000,
+      effectiveTaxRate: 0.32,
+      governmentRevenueUSD: 0,
+      governmentSpendingUSD: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0420,
@@ -209,6 +217,10 @@ export function getInitialRegions(): Record<RegionId, Region> {
       governmentEmployment: 3_200_000,
       untrackedPrivateEmployment: 16_200_000,
       unemploymentRateBottomUp: 0.024,
+      estimatedNominalGdpUSD: 5_500_000_000_000,
+      effectiveTaxRate: 0.29,
+      governmentRevenueUSD: 0,
+      governmentSpendingUSD: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0250,
@@ -280,6 +292,10 @@ export function getInitialRegions(): Record<RegionId, Region> {
       governmentEmployment: 14_000_000,
       untrackedPrivateEmployment: 48_600_000,
       unemploymentRateBottomUp: 0.063,
+      estimatedNominalGdpUSD: 14_500_000_000_000,
+      effectiveTaxRate: 0.34,
+      governmentRevenueUSD: 0,
+      governmentSpendingUSD: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0320,

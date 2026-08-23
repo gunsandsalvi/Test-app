@@ -455,6 +455,10 @@ export function generateInitialCompanies(): Company[] {
       const gammaRev = Number((tmpl.revBase * 1.05).toFixed(1));
       const consensusRev = Number(((alphaRev + betaRev + gammaRev) / 3).toFixed(1));
 
+      const capex = Math.round(tmpl.revBase * 0.06);
+      const maintenanceCapex = Math.round(capex * 0.6); // maintenance is the majority baseline for a mature company at generation
+      const growthCapex = capex - maintenanceCapex;
+
       const company: Company = {
         id: `${region}_${tmpl.ticker}`,
         ticker: tmpl.ticker,
@@ -473,7 +477,10 @@ export function generateInitialCompanies(): Company[] {
         totalDebt: tmpl.debtBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
         debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating),
-        capex: Math.round(tmpl.revBase * 0.06),
+        capex,
+        maintenanceCapex,
+        growthCapex,
+        maintenanceShortfallStreak: 0,
         historicalFundamentals,
         
         earningsWeekModulo,
@@ -692,6 +699,9 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const ebit = Math.max(10, ebitda - da);
   const employeeCount = Math.max(100, Math.round(revBase / 500_000));
   const debtTranches = generateDebtTranches(ticker, debtBase, initialRating);
+  const capex = Math.round(revBase * 0.06);
+  const maintenanceCapex = Math.round(capex * 0.3); // newly-public growth-stage company spends more on expansion than upkeep
+  const growthCapex = capex - maintenanceCapex;
   
   return {
     id: `comp_${ticker}_${Date.now()}_${week}`,
@@ -700,7 +710,11 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     previousEmployeeCount: employeeCount, employeeCount,
     ebitda, ebit, netIncome: ebitda * 0.5, eps: 1.0,
     sharesOutstanding: shares, currentLiabilities: Math.round(debtBase * 0.25 + revBase * 0.08),
-    totalDebt: debtBase, cash: revBase * 0.5, capex: Math.round(revBase * 0.06),
+    totalDebt: debtBase, cash: revBase * 0.5,
+    capex,
+    maintenanceCapex,
+    growthCapex,
+    maintenanceShortfallStreak: 0,
     creditRating: initialRating, isDefaulted: false, oasSpreadBps: 300, cdsSpreadBps: 300,
     seniorBondYield: 0.08, stockPrice: 20, historicalPrices: Array(52).fill(20), forwardPE: 15,
     marketCap: shares * 20, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,

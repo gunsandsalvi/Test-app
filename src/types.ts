@@ -120,6 +120,12 @@ export interface Region {
   untrackedPrivateEmployment: number;   // raw headcount employed by private businesses outside the tracked public-company panel
   unemploymentRateBottomUp: number;     // diagnostic only this phase — residual of the labor-force identity, not yet driving anything
 
+  // Government & Nominal GDP (Phase 2)
+  estimatedNominalGdpUSD: number;    // proxy until Phase 4 — replaced by the true C+I+G+NX sum then
+  effectiveTaxRate: number;          // 0.28-0.35 typical; can drift with fiscal stance
+  governmentRevenueUSD: number;
+  governmentSpendingUSD: number;
+
   householdState: HouseholdState;
 
   // Central Banking Dot Plot Projections (1Y & 2Y terminal target rates)
@@ -237,6 +243,9 @@ export interface Company {
   debtTranches: DebtTranche[];
   capex: number;
   previousCapex?: number;
+  maintenanceCapex: number;
+  growthCapex: number;
+  maintenanceShortfallStreak: number;
   
   // Asynchronous Quarterly Earnings Cycles (13-week staggered schedule)
   earningsWeekModulo: number; // 1 to 13
