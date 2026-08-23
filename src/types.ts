@@ -7,10 +7,6 @@ export interface DebtTranche {
   principalUSD: number;
   rateType: 'FIXED' | 'FLOATING';
   couponRate?: number;         // FIXED only — locked annual rate, paid on principalUSD, never changes until maturity
-    trancheId?: string;
-    rateType?: "FIXED" | "FLOATING";
-    fixedRate?: number;
-    floatingMarginBps?: number;
   floatingMarginBps?: number;  // FLOATING only — locked spread over policyRate, never changes until maturity
   originationWeek: number;
   maturityWeek: number;
@@ -72,9 +68,11 @@ export interface Region {
   coreInflation: number; // core CPI (e.g. 0.026)
   expectedInflation: number;
   centralBankBalanceSheet: number;
+  balanceSheetStance: number;
   targetInflation: number; // pi* (e.g. 0.020)
   gdpGrowth: number; // y_t (annualized, e.g. 0.022)
   potentialGdpGrowth: number; // y* (e.g. 0.020)
+  nairu: number;
   unemploymentRate: number; // e.g. 0.041 = 4.1%
   wageGrowth: number; // e.g. 0.038 = 3.8%
   tradeBalance: number; // in billions USD equivalent

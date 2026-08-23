@@ -1,4 +1,4 @@
-import { Commodity, CompositeBenchmarkIndices, Company, CreditRating, FxPair, IndexMetric, Region, RegionId, WeatherAnomaly } from '../types';
+import { Commodity, CompositeBenchmarkIndices, Company, CreditRating, FxPair, IndexMetric, BankingSector, Region, RegionId, WeatherAnomaly } from '../types';
 import { calculateTenorZeroRates, NelsonSiegelParams } from './nelsonSiegel';
 import { priceCommodityFutures } from './pricing';
 
@@ -184,6 +184,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedHouseholdIncomeUSD: 12_000_000,
       bankingSector: { businessLoanBookUSD: 800_000, consumerLoanBookUSD: 1_400_000, depositsUSD: 2_100_000, sovereignBondHoldingsUSD: 400_000, cashReservesUSD: 210_000, bankEquityUSD: 280_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.028, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 8.5e12,
+      balanceSheetStance: 0,
       policyRate: 0.0450,
       neutralRate: 0.0100, // r* = 1.00%
       inflation: 0.0260,
@@ -192,6 +193,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0220,
       potentialGdpGrowth: 0.0210,
+      nairu: 0.045,
       unemploymentRate: 0.040,
       wageGrowth: 0.0360,
       tradeBalance: -62.0,
@@ -236,6 +238,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedHouseholdIncomeUSD: 2_000_000,
       bankingSector: { businessLoanBookUSD: 150_000, consumerLoanBookUSD: 260_000, depositsUSD: 400_000, sovereignBondHoldingsUSD: 80_000, cashReservesUSD: 40_000, bankEquityUSD: 55_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.025, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 1.2e12,
+      balanceSheetStance: 0,
       policyRate: 0.0475,
       neutralRate: 0.0075, // r* = 0.75%
       inflation: 0.0280,
@@ -244,6 +247,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0130,
       potentialGdpGrowth: 0.0150,
+      nairu: 0.050,
       unemploymentRate: 0.042,
       wageGrowth: 0.0420,
       tradeBalance: -20.0,
@@ -288,6 +292,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedHouseholdIncomeUSD: 3_500_000,
       bankingSector: { businessLoanBookUSD: 300_000, consumerLoanBookUSD: 420_000, depositsUSD: 900_000, sovereignBondHoldingsUSD: 260_000, cashReservesUSD: 90_000, bankEquityUSD: 90_000, bankCapitalRatio: 0.11, netInterestMarginPct: 0.012, loanLossProvisionRateAnnualPct: 0.004, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 4.8e12,
+      balanceSheetStance: 0,
       policyRate: 0.0025,
       neutralRate: -0.0025, // r* = -0.25%
       inflation: 0.0180,
@@ -296,6 +301,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0100,
       potentialGdpGrowth: 0.0080,
+      nairu: 0.028,
       unemploymentRate: 0.024,
       wageGrowth: 0.0250,
       tradeBalance: 14.0,
@@ -340,6 +346,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedHouseholdIncomeUSD: 9_000_000,
       bankingSector: { businessLoanBookUSD: 650_000, consumerLoanBookUSD: 1_000_000, depositsUSD: 1_600_000, sovereignBondHoldingsUSD: 350_000, cashReservesUSD: 160_000, bankEquityUSD: 200_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.022, loanLossProvisionRateAnnualPct: 0.007, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 7.2e12,
+      balanceSheetStance: 0,
       policyRate: 0.0325,
       neutralRate: 0.0050, // r* = 0.50%
       inflation: 0.0230,
@@ -348,6 +355,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0120,
       potentialGdpGrowth: 0.0140,
+      nairu: 0.070,
       unemploymentRate: 0.063,
       wageGrowth: 0.0320,
       tradeBalance: 26.0,
@@ -598,7 +606,7 @@ export function getInitialCommodities(): Commodity[] {
 export function evolveRegionMacro(
   region: Region,
   globalShock: { gdpShock: number; inflationShock: number },
-  microFeedback: { capexGdpContribution: number; marginCompression: number; creditContagionBps: number; bottomUpUnemploymentDelta: number },
+  microFeedback: { capexGdpContribution: number; marginCompression: number; creditContagionBps: number; bottomUpUnemploymentDelta: number; businessLoanBookInputUSD: number },
   week: number,
   equityReturn: number = 0,
   prevCommodities: Commodity[] = []
@@ -701,23 +709,40 @@ export function evolveRegionMacro(
   const participationDrift = newCycleRegime === 'Recession' ? -0.0003 : (newCycleRegime === 'Recovery' ? 0.0002 : 0);
   const newParticipation = Math.max(0.55, Math.min(0.68, region.laborForceParticipation + participationDrift));
 
+  let newPotentialGdpGrowth = region.potentialGdpGrowth;
+  if (week % 52 === 0) {
+    const laborForceTrend = (newParticipation - region.laborForceParticipation) * 52;
+    const capexIntensityTrend = Math.max(-0.002, Math.min(0.002, microFeedback.capexGdpContribution * 0.3));
+    const potentialGdpDrift = laborForceTrend * 0.3 + capexIntensityTrend;
+    newPotentialGdpGrowth = Math.max(0.003, Math.min(0.035, Number((region.potentialGdpGrowth + potentialGdpDrift).toFixed(4))));
+  }
+
+  const potentialGdpDelta = newPotentialGdpGrowth - region.potentialGdpGrowth;
+  const newNeutralRate = Number((region.neutralRate + potentialGdpDelta).toFixed(4));
+
+  const newNairu = week % 52 === 0
+    ? Math.max(0.02, Math.min(0.09, Number((region.nairu + (newParticipation - region.laborForceParticipation) * 0.15).toFixed(4))))
+    : region.nairu;
+
   const baseUnempChange = (potentialGdp - newGdpGrowth) * 0.25 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002);
   const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
   const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + baseUnempChange + participationEffect).toFixed(3))));
   const unempDelta = newUnemployment - region.unemploymentRate;
 
   // Consumer & Household Sector Simulation
-  const nairu = 0.045; 
+  const nairu = newNairu; 
   const slackGap = nairu - newUnemployment;
   const taperedSlackEffect = slackGap > 0.01 ? 0.01 + (slackGap - 0.01) * 0.3 : slackGap;
   const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.8 * taperedSlackEffect + 0.1 * region.expectedInflation));
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
   const contagionHit = microFeedback.creditContagionBps > 50 ? (microFeedback.creditContagionBps / 100) * 0.5 : 0;
-  const cciMeanReversion = (100 - prevHS.consumerConfidence) * 0.015;
-  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + cciMeanReversion + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100 - contagionHit));
+  const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 300 - Math.max(0, region.expectedInflation - piStar) * 100;
+  const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.05;
+  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + cciReversion + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100 - contagionHit));
 
-  const newSavingsRate = Math.max(0.02, Math.min(0.18, 0.06 + 0.2 * (region.policyRate - 0.02) - 0.1 * ((newCCI - 100) / 100)));
+  const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5;
+  const newSavingsRate = Math.max(0.02, Math.min(0.18, savingsBaseline + 0.2 * (region.policyRate - newNeutralRate) - 0.1 * ((newCCI - 100) / 100)));
   const debtServiceBurden = prevHS.householdDebtToIncomeRatio * region.laggedPolicyRateEMA * 0.04;
   const equityWealthEffect = equityReturn * 0.02;
   const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100) + equityWealthEffect - debtServiceBurden;
@@ -806,7 +831,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const newZeroRates = calculateTenorZeroRates(newCurveParams);
 
   let newInversionCount = region.inversionWeeksCount;
-  if (newZeroRates['2Y'] > newZeroRates['10Y']) {
+  if (newZeroRates.tenor2Y > newZeroRates.tenor10Y) {
     newInversionCount++;
     if (newInversionCount === 8) {
       // Push shock 13 weeks out
@@ -844,18 +869,26 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
+  const newBalanceSheetStance = -cbChangePct;
+  const newBankingSector = evolveBankingSector(region.bankingSector, microFeedback.businessLoanBookInputUSD, prevHS.householdDebtToIncomeRatio, region.estimatedHouseholdIncomeUSD, newSavingsRate, newPolicyRate, microFeedback.creditContagionBps, newUnemployment, newZeroRates.tenor10Y, newBalanceSheetStance);
+  const newEstimatedHouseholdIncomeUSD = Number((region.estimatedHouseholdIncomeUSD * (1 + newGdpGrowth / 52)).toFixed(0));
+
   const updatedRegion: Region = {
     ...region,
     cycleRegime: newCycleRegime,
     inversionWeeksCount: newInversionCount,
     recessionShockQueue: remainingShocks,
     centralBankBalanceSheet: newCbBalance,
+    balanceSheetStance: newBalanceSheetStance,
     structuralDeficitPctGdp: newStructuralDeficitPctGdp,
     fiscalDeficitPctGdp: newFiscalDeficitPctGdp,
     fiscalStanceScore: newFiscalStanceScore,
     sovereignRating: newSovereignRating,
     laggedPolicyRateEMA: region.laggedPolicyRateEMA * 0.96 + newPolicyRate * 0.04,
     laborForceParticipation: newParticipation,
+    potentialGdpGrowth: newPotentialGdpGrowth,
+    neutralRate: newNeutralRate,
+    nairu: newNairu,
     policyRate: newPolicyRate,
     inflation: newInflation,
     coreInflation: newCoreInflation,
@@ -871,6 +904,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       realConsumptionGrowth: newRealConsumptionGrowth,
       householdDebtToIncomeRatio: prevHS.householdDebtToIncomeRatio,
     },
+    bankingSector: newBankingSector,
+    estimatedHouseholdIncomeUSD: newEstimatedHouseholdIncomeUSD,
     dotPlot1Y,
     dotPlot2Y,
     tradeBalance: Number((region.tradeBalance + (Math.random() - 0.5) * 1.0).toFixed(1)),
@@ -1087,5 +1122,55 @@ export function calculateCompositeIndices(
 
     global10YBenchmark: makeIndexMetric('Global 10Y Benchmark Yield', 'G10Y Yield', global10Y, prevIndices?.global10YBenchmark, '%'),
     gsciCommodity: makeIndexMetric('S&P GSCI Commodity Index', 'GSCI Index', newGsci, prevIndices?.gsciCommodity, 'pts'),
+  };
+}
+
+export function evolveBankingSector(
+  prevBanking: BankingSector,
+  businessLoanBookInputUSD: number,
+  householdDebtToIncomeRatio: number,
+  estimatedHouseholdIncomeUSD: number,
+  savingsRate: number,
+  policyRate: number,
+  creditContagionBps: number,
+  unemploymentRate: number,
+  sovereign10YYield: number,
+  balanceSheetStance: number
+): BankingSector {
+  const newBusinessLoanBook = businessLoanBookInputUSD;
+  const newConsumerLoanBook = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD;
+  const weeklySavingsInflow = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
+  const newDeposits = prevBanking.depositsUSD * 0.999 + weeklySavingsInflow * 0.5;
+  const totalAssetsProxy = newBusinessLoanBook + newConsumerLoanBook + prevBanking.sovereignBondHoldingsUSD + prevBanking.cashReservesUSD;
+  const targetSovHoldings = totalAssetsProxy * 0.15;
+  const newSovHoldings = prevBanking.sovereignBondHoldingsUSD * 0.98 + targetSovHoldings * 0.02;
+  const newCashReserves = Math.max(0, newDeposits * 0.10) + Math.max(0, -balanceSheetStance) * totalAssetsProxy * 0.01;
+  const depositBeta = 0.45;
+  const depositRate = policyRate * depositBeta;
+  const businessLoanYield = policyRate + 0.025;
+  const consumerLoanYield = policyRate + 0.035;
+  const weeklyInterestIncome = (newBusinessLoanBook * businessLoanYield + newConsumerLoanBook * consumerLoanYield + newSovHoldings * sovereign10YYield) / 52;
+  const weeklyInterestExpense = (newDeposits * depositRate) / 52;
+  const netInterestMarginPct = totalAssetsProxy > 0 ? ((weeklyInterestIncome - weeklyInterestExpense) * 52) / totalAssetsProxy : 0;
+  const businessLossRateAnnual = Math.min(0.08, (creditContagionBps / 10000) * 1.2);
+  const consumerLossRateAnnual = Math.min(0.06, Math.max(0, unemploymentRate - 0.045) * 0.8);
+  const weeklyLoanLossProvision = (newBusinessLoanBook * businessLossRateAnnual + newConsumerLoanBook * consumerLossRateAnnual) / 52;
+  const weeklyNetIncome = weeklyInterestIncome - weeklyInterestExpense - weeklyLoanLossProvision;
+  const newBankEquity = Math.max(0, prevBanking.bankEquityUSD + weeklyNetIncome);
+  const riskWeightedAssets = newBusinessLoanBook * 1.0 + newConsumerLoanBook * 0.75 + newSovHoldings * 0.0;
+  const newBankCapitalRatio = riskWeightedAssets > 0 ? newBankEquity / riskWeightedAssets : 0.15;
+  const capitalGap = 0.12 - newBankCapitalRatio;
+  const newCreditConditionsIndex = Math.max(-1, Math.min(1, capitalGap * 8 + Math.max(0, -netInterestMarginPct) * 5));
+  return {
+    businessLoanBookUSD: Number(newBusinessLoanBook.toFixed(0)),
+    consumerLoanBookUSD: Number(newConsumerLoanBook.toFixed(0)),
+    depositsUSD: Number(newDeposits.toFixed(0)),
+    sovereignBondHoldingsUSD: Number(newSovHoldings.toFixed(0)),
+    cashReservesUSD: Number(newCashReserves.toFixed(0)),
+    bankEquityUSD: Number(newBankEquity.toFixed(0)),
+    bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
+    netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
+    loanLossProvisionRateAnnualPct: Number(businessLossRateAnnual.toFixed(4)),
+    creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
   };
 }

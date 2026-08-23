@@ -188,6 +188,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
   const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted);
+  
+  const regionFloatingPrincipal: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
+  prevActiveFirms.forEach(f => {
+    const floatingSum = (f.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
+    regionFloatingPrincipal[f.region] += floatingSum;
+  });
+
   const totalCapex = prevActiveFirms.reduce((sum, c) => sum + c.capex, 0);
   const avgMargin = prevActiveFirms.reduce((sum, c) => sum + (c.ebitda / Math.max(1, c.annualRevenue)), 0) / Math.max(1, prevActiveFirms.length);
   const marginCompression = avgMargin < 0.22 ? 0.22 - avgMargin : 0.0;
@@ -233,7 +240,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
-      { capexGdpContribution: boundedGdpContribution, marginCompression, creditContagionBps, bottomUpUnemploymentDelta },
+      { capexGdpContribution: boundedGdpContribution, marginCompression, creditContagionBps, bottomUpUnemploymentDelta, businessLoanBookInputUSD: regionFloatingPrincipal[regionId] },
       nextWeek,
       equityRet,
       state.commodities
@@ -308,10 +315,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const sec = SECTOR_BENCHMARKS[comp.sector];
 
     // Consumer Revenue Beta
+    const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
+    const effectiveConsumptionGrowth = reg.householdState.realConsumptionGrowth - creditTighteningPenalty;
     let consumerRevBoost = 0;
-    if (comp.sector === 'Consumer') consumerRevBoost = reg.householdState.realConsumptionGrowth * 1.6;
-    else if (comp.sector === 'Tech') consumerRevBoost = reg.householdState.realConsumptionGrowth * 1.1;
-    else consumerRevBoost = reg.householdState.realConsumptionGrowth * 0.4;
+    if (comp.sector === 'Consumer') consumerRevBoost = effectiveConsumptionGrowth * 1.6;
+    else if (comp.sector === 'Tech') consumerRevBoost = effectiveConsumptionGrowth * 1.1;
+    else consumerRevBoost = effectiveConsumptionGrowth * 0.4;
 
     // Weekly revenue transition
     const noise = (Math.random() - 0.5) * 0.015;
@@ -327,7 +336,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       Utilities:   { Recession: 0.0006, Slowdown: 0.0004 },
     };
 
-    const curveSlope = (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.['10Y'] ?? 0) - (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.['2Y'] ?? 0);
+    const curveSlope = (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.tenor10Y ?? 0) - (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.tenor2Y ?? 0);
     const financialsTilt = comp.sector === 'Financials' ? Math.max(-0.001, Math.min(0.001, curveSlope * 0.02)) : 0;
     const regimeTilt = SECTOR_REGIME_TILT[comp.sector]?.[reg.cycleRegime] ?? 0;
 
@@ -374,7 +383,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let newCash = comp.cash + weeklyFreeCashFlow;
     let newTotalDebt = comp.totalDebt;
 
-    const targetDivYield = comp.baselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0));
+    const newBaselineDividendYield = Number((comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002).toFixed(4));
+    const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0));
     const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
 
     const headcountPressure = newCash < 0 ? -0.015 : (newEbitdaMargin < baseEbitdaMargin - 0.01 ? -0.002 : (reg.cycleRegime === 'Expansion' ? 0.001 : (reg.cycleRegime === 'Recession' ? -0.002 : 0)));
@@ -413,8 +423,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     }
 
     // Dynamic OAS credit spread & Leveraged Loan pricing
+    const systemicCreditSpreadBps = Math.max(0, reg.bankingSector.creditConditionsIndex) * 150;
     const ratingSpreadConfig = RATING_OAS_SPREADS[newRating];
-    const targetOasBps = ratingSpreadConfig.baseBps + (newLeverage > 4 ? (newLeverage - 4) * 50 : 0);
+    const targetOasBps = ratingSpreadConfig.baseBps + (newLeverage > 4 ? (newLeverage - 4) * 50 : 0) + systemicCreditSpreadBps;
     const maturingTranche = comp.debtTranches.find(t => t.maturityWeek === nextWeek);
     let updatedTranches = comp.debtTranches.filter(t => t.maturityWeek !== nextWeek);
     let refinancingNewsItem: NewsItem | null = null;
@@ -547,8 +558,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
       };
     }
 
+    const sectorPE = SECTOR_BENCHMARKS[comp.sector]?.basePE ?? 15;
+    const realRate = reg.policyRate - reg.inflation;
+    const rateEffect = -(realRate - reg.neutralRate) * 8;
+    const growthEffect = (reg.gdpGrowth - reg.potentialGdpGrowth) * 4;
+    const targetPE = sectorPE * (1 + Math.max(-0.5, Math.min(0.5, rateEffect + growthEffect)));
+    const newForwardPE = Number((comp.forwardPE * 0.97 + Math.max(sectorPE * 0.5, Math.min(sectorPE * 1.6, targetPE)) * 0.03).toFixed(2));
+
     const newSentiment = Math.max(-1.0, Math.min(1.0, comp.sentiment * 0.85 + sentimentDelta));
-    const newStockPrice = isDefaulted ? 0.0 : Number(priceEquity(newEps, comp.forwardPE, newSentiment, false).toFixed(2));
+    const newStockPrice = isDefaulted ? 0.0 : Number(priceEquity(newEps, newForwardPE, newSentiment, false).toFixed(2));
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
     const newMarketCap = Number((newStockPrice * comp.sharesOutstanding).toFixed(0));
     const newSeniorBondYield = reg.zeroRates.tenor5Y + newOasBps / 10000;
@@ -573,10 +591,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? [...(comp.historicalFundamentals || []).slice(-3), currentSnapshot]
       : comp.historicalFundamentals || [];
 
-    const effectiveRecoveryRate = Math.max(0.10, (comp.baselineRecoveryRate ?? 0.40) * (1 - systemicStressFactor));
+    const newBaselineRecoveryRate = Number(((comp.baselineRecoveryRate ?? 0.40) * 0.998 + comp.recoveryRate * 0.002).toFixed(4));
+    const effectiveRecoveryRate = Math.max(0.10, newBaselineRecoveryRate * (1 - systemicStressFactor));
 
     return {
       ...comp,
+      forwardPE: newForwardPE,
+      baselineRecoveryRate: newBaselineRecoveryRate,
+      baselineDividendYield: newBaselineDividendYield,
       previousEmployeeCount: comp.employeeCount,
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
