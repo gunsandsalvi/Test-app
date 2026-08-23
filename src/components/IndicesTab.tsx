@@ -176,6 +176,147 @@ export const IndicesTab: React.FC<IndicesTabProps> = ({ state, onOpenChart }) =>
         </div>
       </div>
 
+      {/* 0. Macro Composite & Survey Indices */}
+      <section className="space-y-2.5">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+          <div className="flex items-center gap-1.5">
+            <BarChart2 className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              Macro Composite & Survey Indicators
+            </h3>
+          </div>
+          <span className="text-[10px] text-slate-400 font-mono">Macro / Sentiment</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* US PMI Composite Card */}
+          {compositeIndices.pmiComposite && (
+            <div id="pmi-composite-card" className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold font-mono text-sm text-white">US PMI</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-cyan-500/20 text-cyan-300 border-cyan-500/40">
+                    Survey Composite
+                  </span>
+                </div>
+                <span className="text-[9px] text-slate-400 font-mono">&gt;50 Expansion | &lt;50 Contraction</span>
+              </div>
+
+              <div className="flex items-baseline justify-between mt-2 pt-2 border-t border-slate-800/80">
+                <div>
+                  <div className={`text-2xl font-extrabold font-mono tracking-tight ${
+                    compositeIndices.pmiComposite.headline >= 50 ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {compositeIndices.pmiComposite.headline.toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-medium">
+                    {compositeIndices.pmiComposite.headline >= 50 ? 'Economic Expansion' : 'Economic Contraction'}
+                  </div>
+                </div>
+
+                <div className="space-y-1 text-[10px] font-mono min-w-[150px]">
+                  <div className="flex justify-between items-center bg-slate-950/60 px-2 py-0.5 rounded border border-slate-850">
+                    <span className="text-slate-400">Demand</span>
+                    <span className={compositeIndices.pmiComposite.demandComponent >= 50 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      {compositeIndices.pmiComposite.demandComponent.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-slate-950/60 px-2 py-0.5 rounded border border-slate-850">
+                    <span className="text-slate-400">CapEx</span>
+                    <span className={compositeIndices.pmiComposite.capexComponent >= 50 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      {compositeIndices.pmiComposite.capexComponent.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-slate-950/60 px-2 py-0.5 rounded border border-slate-850">
+                    <span className="text-slate-400">Employment</span>
+                    <span className={compositeIndices.pmiComposite.employmentComponent >= 50 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      {compositeIndices.pmiComposite.employmentComponent.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Market Breadth & Global Credit */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 block uppercase">Market Breadth</span>
+                <span className="text-[9px] text-slate-500">% advancing issues</span>
+              </div>
+              <div className="text-xl font-extrabold font-mono text-emerald-400 mt-2">
+                {formatPercent(compositeIndices.marketBreadth, { isDecimal: false })}
+              </div>
+            </div>
+            <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 block uppercase">Global Credit Index</span>
+                <span className="text-[9px] text-slate-500">GCI benchmark</span>
+              </div>
+              <div className="text-xl font-extrabold font-mono text-white mt-2">
+                {compositeIndices.globalCreditComposite.value.toFixed(1)}
+                <span className={`text-[10px] ml-1.5 font-normal ${compositeIndices.globalCreditComposite.change1W >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {compositeIndices.globalCreditComposite.change1W >= 0 ? '+' : ''}{compositeIndices.globalCreditComposite.change1W.toFixed(1)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Sector Composites */}
+      <section className="space-y-2.5">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+          <div className="flex items-center gap-1.5">
+            <Layers className="w-4 h-4 text-purple-400" />
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              Global Sector Composites
+            </h3>
+          </div>
+          <span className="text-[10px] text-slate-400 font-mono">Sector Baskets</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: 'Technology', metric: compositeIndices.techIndex, badge: 'TECH' },
+            { label: 'Financials', metric: compositeIndices.financialsIndex, badge: 'FIN' },
+            { label: 'Energy', metric: compositeIndices.energyIndex, badge: 'NRG' },
+            { label: 'Industrials', metric: compositeIndices.industrialsIndex, badge: 'IND' },
+          ].map(s => (
+            <div
+              key={s.badge}
+              id={`sector-card-${s.badge}`}
+              onClick={() =>
+                onOpenChart({
+                  id: s.badge,
+                  title: s.metric.name,
+                  subtitle: `${s.badge} • Sector Benchmark (Non-Tradable)`,
+                  currentValue: s.metric.value,
+                  unit: 'pts',
+                  historicalSeries: s.metric.historical,
+                })
+              }
+              className="bg-slate-900/90 hover:bg-slate-850 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 cursor-pointer transition-all shadow-sm group"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  {s.badge}
+                </span>
+                <ChevronRight className="w-3 h-3 text-slate-500 group-hover:text-purple-400" />
+              </div>
+              <span className="text-[11px] font-semibold text-slate-300 block mt-1 truncate">{s.label}</span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="font-extrabold font-mono text-sm text-white">{s.metric.value.toFixed(1)}</span>
+                <span className={`text-[9px] font-mono font-bold ${s.metric.change1W >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {s.metric.change1W >= 0 ? '+' : ''}{s.metric.change1W.toFixed(1)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* 1. Global Equity Indices */}
       <section className="space-y-2.5">
         <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">

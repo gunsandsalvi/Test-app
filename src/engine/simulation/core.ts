@@ -265,22 +265,28 @@ export function advanceWeeklyStep(state: GameState): GameState {
       let categoryDrivenGrowth = 0;
       updatedProductLines = (comp.productLines || []).map((line) => {
         const catDemand = reg.categoryDemand[line.category as any];
-        const categoryGrowth = catDemand?.demandGrowthAnnual ?? reg.gdpGrowth;
+        const isHouseholdFacing = ['StapleHousehold', 'StandardHousehold', 'LuxuryHousehold'].includes(line.category);
+        const categoryGrowth = (catDemand?.demandGrowthAnnual ?? reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
         // Mean reversion drag on competitiveness for outsized market share to prevent permanent monopolies (BUG-07)
         const highShareDrag = Math.max(0, (line.categoryMarketShare - 0.15) * 2.0);
         const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 10 - highShareDrag));
         const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
-        const shareGainRate = Math.max(-0.01, Math.min(0.01, newCompetitiveness * 0.02));
+        const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
+        const shareGainRate = Math.max(-0.01, Math.min(0.01, newCompetitiveness * 0.02 - dominanceDrag));
         const newCategoryMarketShare = Math.max(0.001, Math.min(0.50, line.categoryMarketShare * (1 + shareGainRate / 52)));
         
-        // Subtract credit tightening penalty for consumer-facing product lines (BUG-06)
-        const isHouseholdFacing = line.category === 'StandardHousehold' || line.category === 'LuxuryHousehold' || line.category === 'StapleHousehold';
-        const linePenalty = isHouseholdFacing ? creditTighteningPenalty : 0;
-        const lineGrowth = categoryGrowth + shareGainRate - linePenalty;
+        const lineGrowth = categoryGrowth + shareGainRate;
         
         categoryDrivenGrowth += lineGrowth * line.revenueShare;
-        return { ...line, previousCategoryMarketShare: line.categoryMarketShare, competitiveness: newCompetitiveness, categoryMarketShare: newCategoryMarketShare };
+        const shouldSnapshot = nextWeek % 13 === 0;
+        return {
+          ...line,
+          previousCategoryMarketShare: line.categoryMarketShare,
+          categoryMarketShare13WeeksAgo: shouldSnapshot ? line.categoryMarketShare : (line.categoryMarketShare13WeeksAgo ?? line.categoryMarketShare),
+          competitiveness: newCompetitiveness,
+          categoryMarketShare: newCategoryMarketShare,
+        };
       });
     const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + noise + reg.inflation * pricingPowerBeta);
       
@@ -432,8 +438,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const consensusEps = Number(((alphaEps + betaEps + gammaEps) / 3).toFixed(2));
       const actualEps = newEps;
       const epsDiff = actualEps - consensusEps;
-      const rawSurprise = epsDiff / Math.max(0.01, Math.abs(consensusEps));
-      lastEarningsSurprisePct = Number(Math.max(-0.50, Math.min(0.50, rawSurprise)).toFixed(3));
+      const rawSurprise = epsDiff / Math.max(Math.abs(consensusEps), Math.abs(actualEps), 1.0);
+      lastEarningsSurprisePct = Number(Math.max(-2.0, Math.min(2.0, rawSurprise)).toFixed(3));
 
       // Management commentary & guidance snippet generation
       let guidanceSnippet = '';
@@ -527,6 +533,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       baselineRecoveryRate: newBaselineRecoveryRate,
       baselineDividendYield: newBaselineDividendYield,
       previousEmployeeCount: comp.employeeCount,
+      previousCapex: comp.capex,
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,

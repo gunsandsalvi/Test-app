@@ -53,8 +53,7 @@ export default function App() {
   const [isStatusBarExpanded, setIsStatusBarExpanded] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const [riskView, setRiskView] = useState<'portfolio' | 'intel'>('portfolio');
-  const [lastMarketsTab, setLastMarketsTab] = useState<'indices' | 'equities' | 'commodities'>('indices');
-  const [lastCreditTab, setLastCreditTab] = useState<'bonds_cds' | 'derivatives'>('bonds_cds');
+  const [lastTradableMarketsTab, setLastTradableMarketsTab] = useState<'equities' | 'commodities' | 'bonds_cds' | 'derivatives'>('equities');
   const [showTurnSummary, setShowTurnSummary] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -277,29 +276,29 @@ export default function App() {
           </button>
           
           <button
-            id="nav-tab-markets"
-            onClick={() => setState((prev) => ({ ...prev, selectedTab: lastMarketsTab }))}
+            id="nav-tab-indices"
+            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'indices' }))}
             className={`flex-1 py-2 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              ['indices', 'equities', 'commodities'].includes(state.selectedTab)
+              state.selectedTab === 'indices'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Indices</span>
+          </button>
+          
+          <button
+            id="nav-tab-markets"
+            onClick={() => setState((prev) => ({ ...prev, selectedTab: lastTradableMarketsTab }))}
+            className={`flex-1 py-2 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              ['equities', 'commodities', 'bonds_cds', 'derivatives'].includes(state.selectedTab)
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
             <LineChart className="w-3.5 h-3.5" />
             <span>Markets</span>
-          </button>
-          
-          <button
-            id="nav-tab-credit"
-            onClick={() => setState((prev) => ({ ...prev, selectedTab: lastCreditTab }))}
-            className={`flex-1 py-2 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              ['bonds_cds', 'derivatives'].includes(state.selectedTab)
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Credit</span>
           </button>
           
           <button
@@ -316,28 +315,13 @@ export default function App() {
           </button>
         </nav>
 
-        {/* Markets Sub-Navigation Pill Row */}
-        {['indices', 'equities', 'commodities'].includes(state.selectedTab) && (
+        {/* Tradable Markets Sub-Navigation Pill Row */}
+        {['equities', 'commodities', 'bonds_cds', 'derivatives'].includes(state.selectedTab) && (
           <div className="flex items-center gap-1 px-3 py-1.5 bg-slate-950/80 border-b border-slate-800/70 text-[10px] font-semibold">
-            <button
-              id="subnav-indices"
-              onClick={() => {
-                setLastMarketsTab('indices');
-                setState((prev) => ({ ...prev, selectedTab: 'indices' }));
-              }}
-              className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
-                state.selectedTab === 'indices'
-                  ? 'bg-slate-800 text-white shadow-inner font-bold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
-            >
-              <BarChart3 className="w-3 h-3 text-cyan-400" />
-              <span>Indices</span>
-            </button>
             <button
               id="subnav-equities"
               onClick={() => {
-                setLastMarketsTab('equities');
+                setLastTradableMarketsTab('equities');
                 setState((prev) => ({ ...prev, selectedTab: 'equities' }));
               }}
               className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
@@ -352,7 +336,7 @@ export default function App() {
             <button
               id="subnav-commodities"
               onClick={() => {
-                setLastMarketsTab('commodities');
+                setLastTradableMarketsTab('commodities');
                 setState((prev) => ({ ...prev, selectedTab: 'commodities' }));
               }}
               className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
@@ -364,16 +348,10 @@ export default function App() {
               <Flame className="w-3 h-3 text-amber-400" />
               <span>Commodities</span>
             </button>
-          </div>
-        )}
-
-        {/* Credit Sub-Navigation Pill Row */}
-        {['bonds_cds', 'derivatives'].includes(state.selectedTab) && (
-          <div className="flex items-center gap-1 px-3 py-1.5 bg-slate-950/80 border-b border-slate-800/70 text-[10px] font-semibold">
             <button
               id="subnav-bonds_cds"
               onClick={() => {
-                setLastCreditTab('bonds_cds');
+                setLastTradableMarketsTab('bonds_cds');
                 setState((prev) => ({ ...prev, selectedTab: 'bonds_cds' }));
               }}
               className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
@@ -388,7 +366,7 @@ export default function App() {
             <button
               id="subnav-derivatives"
               onClick={() => {
-                setLastCreditTab('derivatives');
+                setLastTradableMarketsTab('derivatives');
                 setState((prev) => ({ ...prev, selectedTab: 'derivatives' }));
               }}
               className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
@@ -398,7 +376,7 @@ export default function App() {
               }`}
             >
               <Zap className="w-3 h-3 text-violet-400" />
-              <span>Derivatives & Swaps</span>
+              <span>Derivatives</span>
             </button>
           </div>
         )}

@@ -61,6 +61,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'AA',
       laggedPolicyRateEMA: 0.0550,
       laborForceParticipation: 0.63,
+      inflationDeviationStreak: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0360,
@@ -126,6 +127,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'AA',
       laggedPolicyRateEMA: 0.0450,
       laborForceParticipation: 0.65,
+      inflationDeviationStreak: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0420,
@@ -191,6 +193,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'A',
       laggedPolicyRateEMA: 0.0525,
       laborForceParticipation: 0.64,
+      inflationDeviationStreak: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0250,
@@ -256,6 +259,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'AAA',
       laggedPolicyRateEMA: 0.0010,
       laborForceParticipation: 0.62,
+      inflationDeviationStreak: 0,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0320,

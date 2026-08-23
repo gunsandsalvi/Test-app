@@ -175,24 +175,29 @@ export function evolveRegionMacro(
   let rateChanged = false;
   let newPolicyRate = region.policyRate;
   let rateDeltaBps = 0;
+  let newInflationDeviationStreak = region.inflationDeviationStreak || 0;
 
   // Central banks evaluate policy rates strictly once per quarter (every 13 weeks) or off-cycle if drastically behind curve
   const isMeeting = (week % 13 === 0) || Math.abs(taylorTarget - region.policyRate) > 0.03;
   if (isMeeting) {
+    const isAboveTarget = region.inflation > piStar + 0.01; // meaningfully above target, not just noise
+    newInflationDeviationStreak = isAboveTarget ? (region.inflationDeviationStreak || 0) + 1 : Math.max(0, (region.inflationDeviationStreak || 0) - 2);
+    const escalationMultiplier = 1 + Math.min(1.0, newInflationDeviationStreak * 0.08); // up to 2x step size after ~12-13 quarters (3 years) persistently above target
+
     const rawQuarterlyDelta = taylorTarget - region.policyRate;
     let meetingDecisionBps = 0;
     
     // Clamp the quarterly policy move to standard discrete steps
-    if (rawQuarterlyDelta >= 0.0200) meetingDecisionBps = 0.0150;       // +150 bps
-    else if (rawQuarterlyDelta >= 0.0100) meetingDecisionBps = 0.0100;  // +100 bps
-    else if (rawQuarterlyDelta >= 0.0035) meetingDecisionBps = 0.0050;       // +50 bps
-    else if (rawQuarterlyDelta >= 0.0010) meetingDecisionBps = 0.0025;  // +25 bps
+    if (rawQuarterlyDelta >= 0.0200) meetingDecisionBps = 0.0150 * escalationMultiplier;       // +150 bps
+    else if (rawQuarterlyDelta >= 0.0100) meetingDecisionBps = 0.0100 * escalationMultiplier;  // +100 bps
+    else if (rawQuarterlyDelta >= 0.0035) meetingDecisionBps = 0.0050 * escalationMultiplier;       // +50 bps
+    else if (rawQuarterlyDelta >= 0.0010) meetingDecisionBps = 0.0025 * escalationMultiplier;  // +25 bps
     else if (rawQuarterlyDelta <= -0.0200) meetingDecisionBps = -0.0150;// -150 bps
     else if (rawQuarterlyDelta <= -0.0100) meetingDecisionBps = -0.0100;// -100 bps
     else if (rawQuarterlyDelta <= -0.0035) meetingDecisionBps = -0.0050;// -50 bps
     else if (rawQuarterlyDelta <= -0.0010) meetingDecisionBps = -0.0025;// -25 bps
 
-    newPolicyRate = Math.max(0.00, Math.min(0.25, region.policyRate + meetingDecisionBps));
+    newPolicyRate = Math.max(0.00, Math.min(0.30, region.policyRate + meetingDecisionBps));
     if (region.id === 'JPN') newPolicyRate = Math.max(-0.001, Math.min(0.025, newPolicyRate));
 
     if (newPolicyRate !== region.policyRate) {
@@ -298,6 +303,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     sovereignRating: newSovereignRating,
     laggedPolicyRateEMA: region.laggedPolicyRateEMA * 0.96 + newPolicyRate * 0.04,
     laborForceParticipation: newParticipation,
+    inflationDeviationStreak: newInflationDeviationStreak,
     potentialGdpGrowth: newPotentialGdpGrowth,
     neutralRate: newNeutralRate,
     nairu: newNairu,

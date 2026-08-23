@@ -35,42 +35,14 @@ export const CorporateIntelligenceTab: React.FC<CorporateIntelligenceTabProps> =
   const biggestShareMovers = [...state.companies]
     .filter(c => !c.isDefaulted && c.productLines && c.productLines.length > 0)
     .sort((a, b) => {
-      const aMaxShareMove = Math.max(...(a.productLines || []).map(l => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare))));
-      const bMaxShareMove = Math.max(...(b.productLines || []).map(l => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare))));
+      const aMaxShareMove = Math.max(...(a.productLines || []).map(l => Math.abs(l.categoryMarketShare - (l.categoryMarketShare13WeeksAgo ?? l.categoryMarketShare))));
+      const bMaxShareMove = Math.max(...(b.productLines || []).map(l => Math.abs(l.categoryMarketShare - (l.categoryMarketShare13WeeksAgo ?? l.categoryMarketShare))));
       return bMaxShareMove - aMaxShareMove;
     })
     .slice(0, 5);
 
   return (
     <div className="flex flex-col gap-4 text-white overflow-y-auto pb-20 no-scrollbar">
-      <div className="grid grid-cols-2 gap-2 text-[10px]">
-        <div className="bg-slate-950 p-2 rounded border border-slate-800">
-          <span className="text-slate-500">Share-gaining</span>
-          <div className="font-bold text-emerald-400">{formatPercent(state.compositeIndices.marketBreadth, { isDecimal: false })}</div>
-        </div>
-        <div className="bg-slate-950 p-2 rounded border border-slate-800">
-          <span className="text-slate-500">Global credit</span>
-          <div className="font-bold">{state.compositeIndices.globalCreditComposite.value.toFixed(1)}</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-2 text-[10px]">
-        {[
-          { label: 'Tech', i: state.compositeIndices.techIndex },
-          { label: 'Fin', i: state.compositeIndices.financialsIndex },
-          { label: 'Energy', i: state.compositeIndices.energyIndex },
-          { label: 'Ind', i: state.compositeIndices.industrialsIndex },
-        ].map(s => (
-          <div key={s.label} className="bg-slate-950 p-1.5 rounded border border-slate-800 text-center">
-            <span className="text-slate-500 block">{s.label}</span>
-            <span className="font-bold block">{s.i.value.toFixed(1)}</span>
-            <span className={s.i.change1W >= 0 ? 'text-emerald-400 text-[8px]' : 'text-rose-400 text-[8px]'}>
-              {s.i.change1W >= 0 ? '+' : ''}{s.i.change1W.toFixed(1)}
-            </span>
-          </div>
-        ))}
-      </div>
-
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
         <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Category Leaderboards</h3>
         <div className="flex flex-wrap gap-1 mb-3">
@@ -126,10 +98,10 @@ export const CorporateIntelligenceTab: React.FC<CorporateIntelligenceTabProps> =
             ))}
           </div>
           <div className="space-y-1">
-            <h4 className="text-[10px] text-slate-500 font-bold mb-1">Top Share Movers</h4>
+            <h4 className="text-[10px] text-slate-500 font-bold mb-1">Top Share Movers (13W)</h4>
             {biggestShareMovers.map(c => {
-              const line = (c.productLines || []).reduce((max, l) => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare)) > Math.abs(max.categoryMarketShare - (max.previousCategoryMarketShare || max.categoryMarketShare)) ? l : max, (c.productLines || [])[0]);
-              const move = line.categoryMarketShare - (line.previousCategoryMarketShare || line.categoryMarketShare);
+              const line = (c.productLines || []).reduce((max, l) => Math.abs(l.categoryMarketShare - (l.categoryMarketShare13WeeksAgo ?? l.categoryMarketShare)) > Math.abs(max.categoryMarketShare - (max.categoryMarketShare13WeeksAgo ?? max.categoryMarketShare)) ? l : max, (c.productLines || [])[0]);
+              const move = line.categoryMarketShare - (line.categoryMarketShare13WeeksAgo ?? line.categoryMarketShare);
               return (
                 <div key={c.ticker} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-850 text-[10px]">
                   <span className="font-bold">{c.ticker}</span>

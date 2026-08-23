@@ -10,6 +10,7 @@ export interface ProductLine {
   revenueShare: number;
   categoryMarketShare: number;
   previousCategoryMarketShare: number;
+  categoryMarketShare13WeeksAgo?: number;
   competitiveness: number;
 }
 
@@ -110,6 +111,7 @@ export interface Region {
   sovereignRating: CreditRating; // e.g. 'AAA', 'AA'
   laggedPolicyRateEMA: number;
   laborForceParticipation: number;
+  inflationDeviationStreak: number;
 
   householdState: HouseholdState;
 
@@ -227,6 +229,7 @@ export interface Company {
   currentLiabilities: number; // in millions (for debt prepayment check)
   debtTranches: DebtTranche[];
   capex: number;
+  previousCapex?: number;
   
   // Asynchronous Quarterly Earnings Cycles (13-week staggered schedule)
   earningsWeekModulo: number; // 1 to 13
@@ -445,6 +448,12 @@ export interface CompositeBenchmarkIndices {
   
   globalCreditComposite: IndexMetric;
   marketBreadth: number;
+  pmiComposite: {
+    headline: number;
+    demandComponent: number;
+    capexComponent: number;
+    employmentComponent: number;
+  };
 }
 
 export interface NewsItem {
