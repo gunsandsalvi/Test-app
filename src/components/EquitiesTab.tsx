@@ -17,6 +17,7 @@ interface EquitiesTabProps {
   state: GameState;
   onOpenTrade: (instrument: TradeableInstrument) => void;
   onSelectCompany: (company: Company) => void;
+  onOpenChart?: (chartData: any) => void;
 }
 
 export const EquitiesTab: React.FC<EquitiesTabProps> = ({

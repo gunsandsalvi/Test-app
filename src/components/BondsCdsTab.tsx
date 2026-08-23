@@ -21,6 +21,7 @@ interface BondsCdsTabProps {
   state: GameState;
   onOpenTrade: (instrument: TradeableInstrument) => void;
   onSelectCompany: (company: Company) => void;
+  onOpenChart?: (chartData: any) => void;
 }
 
 export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
@@ -45,7 +46,7 @@ export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
         return true;
       })
       .sort((a, b) => {
-        if (viewMode === 'LEVERAGED_LOANS') {
+        if (false /* Removed LEVERAGED_LOANS */) {
           return b.leveragedLoan.quotedMarginBps - a.leveragedLoan.quotedMarginBps;
         }
         return b.cdsSpreadBps - a.cdsSpreadBps;
@@ -138,7 +139,7 @@ export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
             <span>Avg Rec: 40%</span>
           </div>
         </div>
-        <CreditConditionsMeter index={state.regions[selectedRegion]?.bankingSector?.creditConditionsIndex || 0} width={120} />
+        <CreditConditionsMeter index={(selectedRegion === 'ALL' ? undefined : state.regions[selectedRegion])?.bankingSector?.creditConditionsIndex || 0} width={120} />
       </div>
 
       {/* List of Credit Names */}
@@ -247,7 +248,7 @@ export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
               {viewMode === 'CASH_DEBT' && (
                 <div className="mt-3 space-y-1.5">
                   {comp.debtTranches?.map((tranche) => {
-                    const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - state.week) / 52);
+                    const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - state.currentWeek) / 52);
                     const isFixed = tranche.rateType === 'FIXED';
                     const rateDesc = isFixed 
                       ? `${((tranche.couponRate ?? 0) * 100).toFixed(1)}% Fixed`

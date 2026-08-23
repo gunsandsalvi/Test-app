@@ -319,13 +319,13 @@ export default function App() {
             <MacroTab
               state={state}
               onOpenTrade={handleOpenTrade}
-              onOpenChart={(c) => setActiveChartData(c)}
+              onOpenChart={(chartData) => setActiveChartData(chartData)}
             />
           )}
           {state.selectedTab === 'markets' && (
             <div className="flex flex-col gap-4">
-              <EquitiesTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c) => setSelectedCompany(c)} onOpenChart={(c) => setActiveChartData(c)} />
-              <BondsCdsTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c) => setSelectedCompany(c)} onOpenChart={(c) => setActiveChartData(c)} />
+              <EquitiesTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c: Company) => setSelectedCompany(c)} onOpenChart={(chartData) => setActiveChartData(chartData)} />
+              <BondsCdsTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c: Company) => setSelectedCompany(c)} onOpenChart={(chartData) => setActiveChartData(chartData)} />
             </div>
           )}
           {state.selectedTab === 'credit' && (
@@ -399,10 +399,10 @@ export default function App() {
         {selectedCompany && (
           <CompanyDetailModal
             company={selectedCompany}
-            currentWeek={state.week}
+            currentWeek={state.currentWeek}
             onClose={() => setSelectedCompany(null)}
             onOpenTrade={handleOpenTrade}
-            onOpenChart={(c) => setActiveChartData(c)}
+            onOpenChart={(chartData) => setActiveChartData(chartData)}
           />
         )}
 

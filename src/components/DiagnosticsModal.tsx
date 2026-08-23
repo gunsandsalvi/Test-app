@@ -39,7 +39,7 @@ export const DiagnosticsModal: React.FC<DiagnosticsModalProps> = ({ state, onClo
     const companiesInRegion = state.companies.filter((c) => c.region === rId);
     const totalCapex = companiesInRegion.reduce((sum, c) => sum + (c.capex || c.ebitda * 0.3), 0);
     const avgMarkup =
-      companiesInRegion.reduce((sum, c) => sum + (c.pricingPowerMarkupPct || 0.12), 0) /
+      companiesInRegion.reduce((sum, c) => sum + ((c as any).pricingPowerMarkupPct || 0.12), 0) /
       Math.max(1, companiesInRegion.length);
     const totalDebt = companiesInRegion.reduce((sum, c) => sum + c.totalDebt, 0);
     const regionObj = state.regions[rId];

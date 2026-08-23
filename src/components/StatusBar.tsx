@@ -85,8 +85,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       {/* Expanded Content */}
       {isExpanded && (
         <div className="flex flex-col border-t border-slate-800/50 bg-slate-900/50">
-          <PortfolioKpiStrip state={state} />
-          <TopStatusBar state={state} />
+          <PortfolioKpiStrip portfolio={state.portfolio} compositeIndices={state.compositeIndices} onOpenPortfolioTab={() => {}} />
+          <TopStatusBar state={state} onAdvanceWeek={() => onAdvanceWeek(1)} isAutoAdvancing={isAutoAdvancing} onToggleAutoAdvance={onToggleAutoAdvance} />
           
           <div className="flex items-center gap-6 px-4 py-2 border-t border-slate-800/30 bg-slate-900/30 overflow-x-auto">
             {regions.map(id => {

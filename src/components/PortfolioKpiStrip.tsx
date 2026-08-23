@@ -50,7 +50,7 @@ export const PortfolioKpiStrip: React.FC<PortfolioKpiStripProps> = ({
         compositeIndices.euStoxx,
         compositeIndices.uk100,
         compositeIndices.jp225,
-        compositeIndices.usHighYieldOAS,
+        compositeIndices.usHyOas,
         compositeIndices.global10YBenchmark,
       ].filter(Boolean)
     : [];

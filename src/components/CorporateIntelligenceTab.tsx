@@ -18,8 +18,8 @@ export const CorporateIntelligenceTab: React.FC<CorporateIntelligenceTabProps> =
   const companiesInCategory = state.companies.filter(c => !c.isDefaulted && c.productLines?.some(l => l.category === selectedCategory));
 
   const sortedByCategoryShare = [...companiesInCategory].sort((a, b) => {
-    const shareA = a.productLines.find(l => l.category === selectedCategory)?.categoryMarketShare ?? 0;
-    const shareB = b.productLines.find(l => l.category === selectedCategory)?.categoryMarketShare ?? 0;
+    const shareA = (a.productLines || []).find(l => l.category === selectedCategory)?.categoryMarketShare ?? 0;
+    const shareB = (b.productLines || []).find(l => l.category === selectedCategory)?.categoryMarketShare ?? 0;
     return shareB - shareA;
   });
 
@@ -35,8 +35,8 @@ export const CorporateIntelligenceTab: React.FC<CorporateIntelligenceTabProps> =
   const biggestShareMovers = [...state.companies]
     .filter(c => !c.isDefaulted && c.productLines && c.productLines.length > 0)
     .sort((a, b) => {
-      const aMaxShareMove = Math.max(...a.productLines.map(l => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare))));
-      const bMaxShareMove = Math.max(...b.productLines.map(l => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare))));
+      const aMaxShareMove = Math.max(...(a.productLines || []).map(l => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare))));
+      const bMaxShareMove = Math.max(...(b.productLines || []).map(l => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare))));
       return bMaxShareMove - aMaxShareMove;
     })
     .slice(0, 5);
@@ -88,7 +88,7 @@ export const CorporateIntelligenceTab: React.FC<CorporateIntelligenceTabProps> =
         </div>
         <div className="space-y-1">
           {sortedByCategoryShare.slice(0, 10).map((c) => {
-            const line = c.productLines.find(l => l.category === selectedCategory)!;
+            const line = (c.productLines || []).find(l => l.category === selectedCategory)!;
             return (
               <div key={c.ticker} className="flex items-center justify-between p-2 bg-slate-950 border border-slate-800 rounded-lg text-[11px]">
                 <span className="font-bold text-white">{c.ticker}</span>
@@ -128,7 +128,7 @@ export const CorporateIntelligenceTab: React.FC<CorporateIntelligenceTabProps> =
           <div className="space-y-1">
             <h4 className="text-[10px] text-slate-500 font-bold mb-1">Top Share Movers</h4>
             {biggestShareMovers.map(c => {
-              const line = c.productLines.reduce((max, l) => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare)) > Math.abs(max.categoryMarketShare - (max.previousCategoryMarketShare || max.categoryMarketShare)) ? l : max, c.productLines[0]);
+              const line = (c.productLines || []).reduce((max, l) => Math.abs(l.categoryMarketShare - (l.previousCategoryMarketShare || l.categoryMarketShare)) > Math.abs(max.categoryMarketShare - (max.previousCategoryMarketShare || max.categoryMarketShare)) ? l : max, (c.productLines || [])[0]);
               const move = line.categoryMarketShare - (line.previousCategoryMarketShare || line.categoryMarketShare);
               return (
                 <div key={c.ticker} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-850 text-[10px]">
