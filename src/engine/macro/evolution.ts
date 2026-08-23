@@ -362,6 +362,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,
     gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,
+    bottomUpGdpWeight: region.bottomUpGdpWeight ?? 0.30,
+    nominalGdpHistory: region.nominalGdpHistory ?? [],
     consumptionComponentUSD: region.consumptionComponentUSD ?? 0,
     investmentComponentUSD: region.investmentComponentUSD ?? 0,
     effectiveTaxRate: newEffectiveTaxRate,

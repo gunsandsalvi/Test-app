@@ -31,6 +31,7 @@ const trackers: Record<string, { history: number[]; extract: (s: GameState) => n
   usaUnemployment: { history: [], extract: s => s.regions.USA.unemploymentRate },
   usaBankCapitalRatio: { history: [], extract: s => s.regions.USA.bankingSector.bankCapitalRatio },
   usaCreditConditions: { history: [], extract: s => s.regions.USA.bankingSector.creditConditionsIndex },
+  usaGdpGrowthBlended: { history: [], extract: s => s.regions.USA.gdpGrowth },
 };
 
 for (let w = 1; w <= 520; w++) {

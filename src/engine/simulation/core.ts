@@ -794,14 +794,22 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
 
     const newDerivedNominalGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
-    const gdpGrowthBottomUp = reg.derivedNominalGdpUSD > 0
-      ? ((newDerivedNominalGdpUSD / reg.derivedNominalGdpUSD) - 1) * 52 - reg.inflation // annualize the weekly change, strip inflation to get a real-growth-comparable figure
-      : reg.gdpGrowthBottomUp;
+    const newNominalGdpHistory = [...(reg.nominalGdpHistory || []).slice(-51), newDerivedNominalGdpUSD];
+    const gdpLevel52WeeksAgo = newNominalGdpHistory.length >= 52 ? newNominalGdpHistory[0] : newDerivedNominalGdpUSD;
+    const gdpGrowthBottomUp = gdpLevel52WeeksAgo > 0
+      ? (newDerivedNominalGdpUSD / gdpLevel52WeeksAgo - 1) - reg.inflation
+      : 0;
+
+    const blendedGdpGrowth = (1 - (reg.bottomUpGdpWeight ?? 0.30)) * reg.gdpGrowth + (reg.bottomUpGdpWeight ?? 0.30) * gdpGrowthBottomUp;
+    const clampedBlendedGdpGrowth = Math.max(-0.02, Math.min(0.045, blendedGdpGrowth)); // same safety backstop as before, now applied to the blend
 
     updatedRegions[regionId] = {
       ...reg,
+      gdpGrowth: clampedBlendedGdpGrowth, // overwrites this week's AR1-only value with the blended figure — this is what the Taylor rule, unemployment, wage growth all read going forward
+      bottomUpGdpWeight: reg.bottomUpGdpWeight ?? 0.30, // unchanged this round — deliberately not auto-increasing; a future round raises this manually once more confidence is built
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
       gdpGrowthBottomUp: Number(Math.max(-0.5, Math.min(0.5, gdpGrowthBottomUp)).toFixed(4)), // generous diagnostic bound only — this is not the load-bearing clamp, just a display sanity guard since this is new and untrusted
+      nominalGdpHistory: newNominalGdpHistory,
       consumptionComponentUSD,
       investmentComponentUSD,
     };

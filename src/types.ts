@@ -134,10 +134,12 @@ export interface Region {
   untrackedPrivateEmployment: number;   // raw headcount employed by private businesses outside the tracked public-company panel
   unemploymentRateBottomUp: number;     // diagnostic only this phase — residual of the labor-force identity, not yet driving anything
 
-  // Government & Nominal GDP (Phase 2)
+  // Government & Nominal GDP (Phase 2 & Phase 4)
   estimatedNominalGdpUSD: number;    // proxy until Phase 4 — replaced by the true C+I+G+NX sum then
   derivedNominalGdpUSD: number;      // C+I+G+NX, this world's own bottom-up sum
   gdpGrowthBottomUp: number;         // diagnostic only — % change of the above, NOT yet driving anything
+  bottomUpGdpWeight: number;         // weight of bottom-up GDP in blended gdpGrowth (Phase 4b)
+  nominalGdpHistory: number[];       // rolling 52-week history of derivedNominalGdpUSD for YoY calculation
   consumptionComponentUSD: number;   // C, exposed for inspection
   investmentComponentUSD: number;    // I, exposed for inspection
   effectiveTaxRate: number;          // 0.28-0.35 typical; can drift with fiscal stance
