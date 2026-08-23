@@ -375,7 +375,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     estimatedHouseholdIncomeUSD: newEstimatedHouseholdIncomeUSD,
     dotPlot1Y,
     dotPlot2Y,
-    tradeBalance: Number((region.tradeBalance + (Math.random() - 0.5) * 1.0).toFixed(1)),
+    exportsUSD: region.exportsUSD ?? 0,
+    importsUSD: region.importsUSD ?? 0,
+    tradeBalance: region.tradeBalance ?? 0,
     yieldCurveParams: newCurveParams,
     zeroRates: newZeroRates,
     weather: updatedWeather,
@@ -407,7 +409,7 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
   const sigmaFx = 0.08;
   const eps = (Math.random() - 0.5) * Math.sqrt(dt) * 2;
 
-  const tradeShock = (baseRegion.tradeBalance - quoteRegion.tradeBalance) * 0.00002;
+  const tradeShock = Math.max(-0.005, Math.min(0.005, ((baseRegion.tradeBalance - quoteRegion.tradeBalance) / 1e12) * 0.002));
 
   const drift = rateDiff * dt * 0.3 + sigmaFx * eps + tradeShock;
   const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));

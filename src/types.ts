@@ -75,6 +75,17 @@ export interface HouseholdState {
   luxurySpendShare: number;
 }
 
+export const CATEGORY_TRADABILITY: Record<string, number> = {
+  StapleHousehold: 0.05,
+  StandardHousehold: 0.15,
+  LuxuryHousehold: 0.25,
+  GovernmentDefense: 0.10,
+  GovernmentInfrastructure: 0.05,
+  GovernmentHealthcare: 0.05,
+  CorporateIndustrial: 0.60,
+  CorporateTech: 0.55,
+};
+
 export interface Region {
   id: RegionId;
   name: string;
@@ -102,7 +113,9 @@ export interface Region {
   nairu: number;
   unemploymentRate: number; // e.g. 0.041 = 4.1%
   wageGrowth: number; // e.g. 0.038 = 3.8%
-  tradeBalance: number; // in billions USD equivalent
+  tradeBalance: number; // in USD equivalent (exportsUSD - importsUSD)
+  exportsUSD: number;
+  importsUSD: number;
   currentAccountPctGdp: number; // e.g. -0.031 = -3.1% of GDP
   fxReservesBlnUSD: number; // e.g. 38.5B USD
   structuralDeficitPctGdp: number;

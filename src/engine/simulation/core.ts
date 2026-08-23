@@ -7,7 +7,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair } from '../../types';
+import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair, CATEGORY_TRADABILITY } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from './constants';
@@ -217,6 +217,56 @@ export function advanceWeeklyStep(state: GameState): GameState {
     return 1.0;
   };
 
+  // Trade Dynamics (Phase 3: T1)
+  function computeRegionalCompetitiveness(companies: Company[], regionId: RegionId, category: string): number {
+    const firms = companies.filter(c => c.region === regionId && !c.isDefaulted && (c.productLines || []).some(l => l.category === category));
+    if (firms.length === 0) return 0;
+    return firms.reduce((s, f) => {
+      const line = f.productLines.find(l => l.category === category)!;
+      return s + line.competitiveness * line.categoryMarketShare;
+    }, 0) / firms.length;
+  }
+
+  function getFxCompetitivenessAdjustment(exporter: RegionId, importer: RegionId, fxPairs: FxPair[]): number {
+    const pair = fxPairs.find(f => (f.base === exporter && f.quote === importer) || (f.base === importer && f.quote === exporter));
+    if (!pair) return 0;
+    const direction = pair.base === exporter ? -1 : 1; // if exporter is the base currency, a RISING rate means exporter is depreciating (rate = quote-per-base) — cheaper exports, so flip sign
+    return Math.max(-0.1, Math.min(0.1, (pair.change1W / pair.rate) * direction * 5));
+  }
+
+  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionExports: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
+  const regionImports: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
+  const regionCategoryExports: Record<RegionId, Record<string, number>> = {
+    USA: {},
+    EUR: {},
+    UK: {},
+    JPN: {},
+  };
+
+  regionIds.forEach(exporter => {
+    regionIds.filter(r => r !== exporter).forEach(importer => {
+      Object.keys(CATEGORY_TRADABILITY).forEach(cat => {
+        const tradability = CATEGORY_TRADABILITY[cat];
+        if (tradability < 0.1) return; // not worth computing for near-untradable categories
+        const importerDemand = updatedRegions[importer].categoryDemand[cat as any]?.demandLevelUSD ?? 0;
+        const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
+        const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, updatedFxPairs);
+        const exportShareCapture = Math.max(0, Math.min(0.4, 0.1 + exporterCompetitiveness * 0.5 + fxCompetitiveness));
+        const flow = importerDemand * tradability * exportShareCapture / regionIds.length; // divided since multiple exporters compete for the same import demand
+        regionExports[exporter] += flow;
+        regionImports[importer] += flow;
+        regionCategoryExports[exporter][cat] = (regionCategoryExports[exporter][cat] ?? 0) + flow;
+      });
+    });
+  });
+
+  regionIds.forEach(r => {
+    updatedRegions[r].exportsUSD = regionExports[r];
+    updatedRegions[r].importsUSD = regionImports[r];
+    updatedRegions[r].tradeBalance = regionExports[r] - regionImports[r];
+  });
+
   // 4. Evolve Commodities
   const updatedCommodities = state.commodities.map((comm) =>
     evolveCommodity(comm, updatedRegions.USA.gdpGrowth, updatedRegions.USA.policyRate, updatedRegions)
@@ -346,7 +396,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
           categoryMarketShare: newCategoryMarketShare,
         };
       });
-    const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + noise + reg.inflation * pricingPowerBeta);
+        const exportRevenueBoost = (comp.productLines || []).reduce((s, line) => {
+          const tradability = CATEGORY_TRADABILITY[line.category] ?? 0;
+          if (tradability < 0.1) return s;
+          // this company's share of ITS region's export capture in this category, proportional to its domestic share
+          const regionExportsInCat = regionCategoryExports[comp.region]?.[line.category] ?? 0;
+          return s + (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue);
+        }, 0);
+        const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + exportRevenueBoost + noise + reg.inflation * pricingPowerBeta);
       
       // Smooth transition to target revenue (no exponential weekly compounding)
       newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
@@ -403,7 +460,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const catDemand = reg.categoryDemand[l.category as any];
       return s + Math.max(0, catDemand?.demandGrowthAnnual ?? 0) * l.revenueShare;
     }, 0);
-    const productiveReinvestmentEnvelope = newRevenue * avgCategoryOpportunity * 1.5; // generous multiple of addressable growth, not arbitrary
+    const productiveReinvestmentEnvelope = newRevenue * Math.max(0.01, avgCategoryOpportunity) * 1.5; // generous multiple of addressable growth, not arbitrary
 
     const fcfBeforeGrowthCapex = Math.max(0, weeklyOperatingCashFlow * 52 - newMaintenanceCapex);
     const excessCashGeneration = Math.max(0, fcfBeforeGrowthCapex - productiveReinvestmentEnvelope);
@@ -416,7 +473,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const qCapexEffect = Math.max(-0.15, Math.min(0.15, (tobinsQ - 1) * 0.2));
     const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
     const competitivenessCapexEffect = Math.max(-0.1, Math.min(0.1, avgCompetitiveness * 0.15));
-    const growthCapexAllocationShare = 1 - payoutPressure * 0.75; // even at max payout pressure, still reinvests a quarter of excess — realistic, not zero
+    const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75); // even at max payout pressure, still reinvests at least 40% — realistic, not zero
     const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
     const newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
 
