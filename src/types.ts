@@ -9,12 +9,14 @@ export interface ProductLine {
   category: ProductCategory;
   revenueShare: number;
   categoryMarketShare: number;
+  previousCategoryMarketShare: number;
   competitiveness: number;
 }
 
 export interface CategoryDemandState {
   demandLevelUSD: number;
   demandGrowthAnnual: number;
+  demandHistory: number[];
 }
 
 
@@ -488,6 +490,7 @@ export interface GameState {
   companies: Company[];
   commodities: Commodity[];
   compositeIndices: CompositeBenchmarkIndices;
+  recentIPOs: { ticker: string; name: string; category: string; week: number }[];
   marketVolPremium?: number;
   dealers: Dealer[];
   portfolio: Portfolio;

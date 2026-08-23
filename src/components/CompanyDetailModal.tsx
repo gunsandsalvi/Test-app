@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CapitalStructureBar } from './charts/Charts';
 import {
   Activity,
   AlertTriangle,
@@ -480,103 +481,42 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               </div>
             </div>
 
-            {/* 2. Senior Secured First Lien Leveraged Loan */}
-            {(() => {
-              const isSubIG = ['BB', 'B', 'CCC', 'D'].includes(company.creditRating);
+{/* Capital structure summary */}
+            <CapitalStructureBar tranches={company.debtTranches || []} currentWeek={currentWeek} />
+
+            {/* Debt Tranches — one row per real tranche */}
+            {company.debtTranches?.map((tranche) => {
+              const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - currentWeek) / 52);
+              const isFixed = tranche.rateType === 'FIXED';
+              const rateDesc = isFixed ? `${((tranche.couponRate ?? 0) * 100).toFixed(1)}% Fixed` : `Floating +${tranche.floatingMarginBps}bps`;
               return (
                 <div
+                  key={tranche.id}
                   onClick={() => {
-                    if (!isSubIG) return;
                     onClose();
                     onOpenTrade({
-                      assetType: 'LEV_LOAN',
-                      id: `${company.id}_LOAN`,
-                      symbol: `${company.ticker}-LOAN`,
-                      name: `${company.name} Senior Secured Term Loan B`,
+                      assetType: isFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
+                      id: tranche.id, symbol: tranche.id,
+                      name: `${company.name} ${remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Senior Bond' : 'Loan'}`,
                       region: company.region,
-                      price: company.leveragedLoan.pricePar,
-                      quoteUnit: 'pts of par',
-                      details: {
-                        sector: company.sector,
-                        rating: company.creditRating,
-                        tenorYears: company.leveragedLoan.tenorYears,
-                        referenceBenchmark: company.leveragedLoan.referenceBenchmark,
-                        quotedMarginBps: company.leveragedLoan.quotedMarginBps,
-                        discountMarginBps: company.leveragedLoan.discountMarginBps,
-                      },
+                      price: company.isDefaulted ? (isFixed ? company.recoveryRate * 100 : 65.0) : 100,
+                      quoteUnit: isFixed ? '% Par' : 'pts of par',
+                      details: { trancheId: tranche.id, tenorYears: remainingTenorYears, fixedRate: tranche.couponRate ?? 0, rateType: tranche.rateType, oasSpreadBps: company.oasSpreadBps, rating: company.creditRating, sector: company.sector },
                     });
                   }}
-                  className={`p-2.5 bg-slate-950 border border-slate-800 rounded-xl transition-all flex items-center justify-between ${
-                    isSubIG ? 'hover:bg-slate-850 cursor-pointer' : 'opacity-60 cursor-not-allowed'
-                  }`}
+                  className="p-2.5 bg-slate-950 hover:bg-slate-850 border border-slate-800 rounded-xl cursor-pointer transition-all flex items-center justify-between"
                 >
                   <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold text-xs text-white">Senior Secured Term Loan B</span>
-                      {isSubIG && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                          {company.leveragedLoan.referenceBenchmark} +{company.leveragedLoan.quotedMarginBps} bps
-                        </span>
-                      )}
-                    </div>
-                    {isSubIG ? (
-                      <div className="text-[10px] text-slate-400">
-                        Par Price: {company.leveragedLoan.pricePar} • DM: +{company.leveragedLoan.discountMarginBps} bps
-                      </div>
-                    ) : (
-                      <div className="text-[10px] text-slate-400 mt-1 italic">
-                        Senior Secured Loans unavailable — Investment Grade issuers access funding via Senior Unsecured Bonds.
-                      </div>
-                    )}
+                    <span className="font-bold text-xs text-white">{remainingTenorYears.toFixed(1)}Y {rateDesc}</span>
+                    <div className="text-[10px] text-slate-400 font-mono">due wk {tranche.maturityWeek}</div>
                   </div>
                   <div className="text-right">
-                    <span className={`text-xs font-bold font-mono ${isSubIG ? 'text-amber-400' : 'text-slate-500'}`}>
-                      {isSubIG ? 'Trade Loan' : 'Restricted (IG)'}
-                    </span>
-                    {isSubIG && <div className="text-[9px] text-slate-500">10x PB Lev</div>}
+                    <span className={`text-xs font-bold font-mono ${isFixed ? 'text-indigo-400' : 'text-amber-400'}`}>Trade {isFixed ? 'Bond' : 'Loan'}</span>
+                    <div className="text-[9px] text-slate-500">{isFixed ? '15x' : '10x'} PB Lev</div>
                   </div>
                 </div>
               );
-            })()}
-
-            {/* 3. Senior Unsecured Corporate Bond */}
-            <div
-              onClick={() => {
-                onClose();
-                onOpenTrade({
-                  assetType: 'CORP_BOND',
-                  id: `${company.id}_BOND`,
-                  symbol: `${company.ticker}-BOND`,
-                  name: `${company.name} 5Y Senior Unsecured Notes`,
-                  region: company.region,
-                  price: 100.0,
-                  quoteUnit: 'pts of par',
-                  details: {
-                    sector: company.sector,
-                    rating: company.creditRating,
-                    tenorYears: 5,
-                    oasSpreadBps: company.oasSpreadBps,
-                    yieldPct: company.seniorBondYield,
-                  },
-                });
-              }}
-              className="p-2.5 bg-slate-950 hover:bg-slate-850 border border-slate-800 rounded-xl cursor-pointer transition-all flex items-center justify-between"
-            >
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-xs text-white">5Y Senior Unsecured Bond</span>
-                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">
-                    {formatBps(company.oasSpreadBps, { showSign: true })}
-                  </span>
-                </div>
-                <div className="text-[10px] text-slate-400">Yield: {formatPercent(company.seniorBondYield, { isDecimal: true })}</div>
-              </div>
-              <div className="text-right">
-                <span className="text-xs font-bold font-mono text-indigo-400">Trade Bond</span>
-                <div className="text-[9px] text-slate-500">15x PB Lev</div>
-              </div>
-            </div>
-
+            })}
             {/* 4. 5Y Credit Default Swap (CDS) */}
             <div
               onClick={() => {
@@ -645,19 +585,19 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   <tr className="hover:bg-slate-900/40">
                     <td className="py-1 text-slate-400 font-sans text-left">Revenue</td>
                     {fundamentals.slice(-4).map((f, i) => (
-                      <td key={i} className="text-right py-1 font-bold text-white">${f.annualRevenue.toFixed(0)}M</td>
+                      <td key={i} className="text-right py-1 font-bold text-white">${(f.annualRevenue / 4).toFixed(0)}M</td>
                     ))}
                   </tr>
                   <tr className="hover:bg-slate-900/40">
                     <td className="py-1 text-slate-400 font-sans text-left">EBITDA</td>
                     {fundamentals.slice(-4).map((f, i) => (
-                      <td key={i} className="text-right py-1 text-emerald-400">${f.ebitda.toFixed(1)}M</td>
+                      <td key={i} className="text-right py-1 text-emerald-400">${(f.ebitda / 4).toFixed(1)}M</td>
                     ))}
                   </tr>
                   <tr className="hover:bg-slate-900/40">
                     <td className="py-1 text-slate-400 font-sans text-left">Net Income</td>
                     {fundamentals.slice(-4).map((f, i) => (
-                      <td key={i} className="text-right py-1">${f.netIncome.toFixed(1)}M</td>
+                      <td key={i} className="text-right py-1">${(f.netIncome / 4).toFixed(1)}M</td>
                     ))}
                   </tr>
                   <tr className="hover:bg-slate-900/40">

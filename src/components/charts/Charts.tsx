@@ -1,6 +1,7 @@
 import React from 'react';
-import { NelsonSiegelParams } from '../../types';
-import { calculateTenorZeroRates } from '../../engine/nelsonSiegel';
+
+import { calculateNelsonSiegelZeroRate, NelsonSiegelParams } from '../../engine/nelsonSiegel';
+import { DebtTranche } from '../../types';
 
 export const Sparkline: React.FC<{ data: number[], width?: number, height?: number, color?: string, strokeWidth?: number }> = ({ data, width = 60, height = 20, color = '#3b82f6', strokeWidth = 1.5 }) => {
   if (!data || data.length < 2) return null;
@@ -65,7 +66,7 @@ export const CreditConditionsMeter: React.FC<{ index: number, width?: number }> 
 
 export const YieldCurveChart: React.FC<{ params: NelsonSiegelParams, width?: number, height?: number }> = ({ params, width = 120, height = 60 }) => {
   const tenors = [0.25, 0.5, 1, 2, 3, 5, 7, 10, 20, 30];
-  const rates = calculateTenorZeroRates(params);
+  const rates = tenors.map(t => calculateNelsonSiegelZeroRate(t, params));
   const minRate = Math.min(0, ...rates);
   const maxRate = Math.max(...rates, 0.05); // cap at 5% min visual
   const range = maxRate - minRate || 0.01;
@@ -83,6 +84,24 @@ export const YieldCurveChart: React.FC<{ params: NelsonSiegelParams, width?: num
         <span>3M</span>
         <span>10Y</span>
         <span>30Y</span>
+      </div>
+    </div>
+  );
+};
+export const CapitalStructureBar: React.FC<{ tranches: DebtTranche[], currentWeek: number }> = ({ tranches, currentWeek }) => {
+  const fixed = tranches.filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+  const floating = tranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
+  const upcoming = tranches.filter(t => t.maturityWeek > currentWeek).map(t => t.maturityWeek);
+  const nextMaturity = upcoming.length ? Math.min(...upcoming) : null;
+  return (
+    <div>
+      <SegmentedBar segments={[
+        { value: fixed, color: '#3b82f6', label: 'Fixed' },
+        { value: floating, color: '#f59e0b', label: 'Float' },
+      ]} height={10} />
+      <div className="flex gap-3 mt-1 text-[9px] text-slate-500">
+        <span>{tranches.length} tranches</span>
+        {nextMaturity && <span>next maturity wk {nextMaturity}</span>}
       </div>
     </div>
   );

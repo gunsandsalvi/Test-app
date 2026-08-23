@@ -705,7 +705,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     seniorBondYield: 0.08, stockPrice: 20, historicalPrices: Array(52).fill(20), forwardPE: 15,
     marketCap: shares * 20, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,
     baselineRecoveryRate: 0.40, debtTranches,
-    productLines: [{ category: category as any, revenueShare: 1.0, competitiveness: 0.3, categoryMarketShare: 0.02 }],
+    productLines: [{ category: category as any, revenueShare: 1.0, competitiveness: 0.3, previousCategoryMarketShare: 0.02, categoryMarketShare: 0.02 }],
     leverage: debtBase / Math.max(1, ebitda),
     interestCoverage: ebit / Math.max(0.5, debtBase * 0.06),
     earningsWeekModulo: week % 13,

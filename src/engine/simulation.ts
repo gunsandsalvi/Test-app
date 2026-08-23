@@ -101,13 +101,14 @@ export function createInitialGameState(): GameState {
       CorporateTech: corpBase * 0.4,
     };
     Object.keys(targets).forEach(cat => {
-      (regions[regionId].categoryDemand as any)[cat] = { demandLevelUSD: targets[cat], demandGrowthAnnual: 0 };
+      (regions[regionId].categoryDemand as any)[cat] = { demandLevelUSD: targets[cat], demandGrowthAnnual: 0, demandHistory: [targets[cat]] };
     });
   });
 
   const commodities = getInitialCommodities();
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
+  const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
 
   const startingCash = 25_000_000; // $25M USD Hedge Fund Starting Capital
   const portfolio: Portfolio = {
@@ -161,6 +162,7 @@ export function createInitialGameState(): GameState {
     companies,
     commodities,
     compositeIndices,
+    recentIPOs,
     dealers,
     portfolio,
     watchlist: ['USA_NVST', 'USA_TXEN', 'BRENT', 'GOLD'],
@@ -227,6 +229,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const nextWeek = state.currentWeek + 1;
   const year = 2026 + Math.floor((nextWeek - 1) / 52);
   const currentWeekMod13 = ((nextWeek - 1) % 13) + 1;
+  const recentIPOs = [...(state.recentIPOs || [])];
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
   const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted);
@@ -344,7 +347,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const prevLevel = reg.categoryDemand[cat as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? target;
       const newLevel = prevLevel * (1 - smoothing) + target * smoothing;
       const growthAnnual = prevLevel > 0 ? ((newLevel / prevLevel) - 1) * 52 : 0;
-      (reg.categoryDemand as any)[cat] = { demandLevelUSD: newLevel, demandGrowthAnnual: growthAnnual };
+      const prevHistory = reg.categoryDemand[cat as keyof typeof reg.categoryDemand]?.demandHistory ?? [];
+      (reg.categoryDemand as any)[cat] = { demandLevelUSD: newLevel, demandGrowthAnnual: growthAnnual, demandHistory: [...prevHistory.slice(-25), newLevel] };
     });
   });
 
@@ -477,7 +481,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const newCategoryMarketShare = Math.max(0.001, Math.min(0.6, line.categoryMarketShare * (1 + shareGainRate / 52)));
       const lineGrowth = categoryGrowth + shareGainRate;
       categoryDrivenGrowth += lineGrowth * line.revenueShare;
-      return { ...line, competitiveness: newCompetitiveness, categoryMarketShare: newCategoryMarketShare };
+      return { ...line, previousCategoryMarketShare: line.categoryMarketShare, competitiveness: newCompetitiveness, categoryMarketShare: newCategoryMarketShare };
     });
     const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + noise + reg.inflation * pricingPowerBeta);
       
@@ -769,6 +773,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const ipo = checkForIPO(regionId, reg, state.companies, nextWeek);
     if (ipo) {
       updatedCompanies.push(ipo);
+      recentIPOs.push({ ticker: ipo.ticker, name: ipo.name, category: ipo.productLines?.[0]?.category || 'Unknown', week: nextWeek });
+      if (recentIPOs.length > 20) recentIPOs.shift();
       diagnosticLogs.push({ 
         week: nextWeek,
         timestamp: new Date().toISOString(),
@@ -1391,6 +1397,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     companies: updatedCompanies,
     commodities: updatedCommodities,
     compositeIndices: updatedCompositeIndices,
+    recentIPOs,
     marketVolPremium: Number(marketVolComponent.toFixed(4)),
     portfolio: updatedPortfolio,
     newsFeed: updatedNewsFeed,

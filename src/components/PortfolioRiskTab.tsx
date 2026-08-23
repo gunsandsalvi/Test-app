@@ -23,6 +23,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { GameState, Position, ReturnAttribution } from '../types';
+import { formatCurrency, formatPercent } from '../engine/formatters';
 
 interface PortfolioRiskTabProps {
   state: GameState;

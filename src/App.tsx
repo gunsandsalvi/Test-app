@@ -37,6 +37,7 @@ import { BondsCdsTab } from './components/BondsCdsTab';
 import { CommoditiesTab } from './components/CommoditiesTab';
 import { DerivativesTab } from './components/DerivativesTab';
 import { PortfolioRiskTab } from './components/PortfolioRiskTab';
+import { CorporateIntelligenceTab } from './components/CorporateIntelligenceTab';
 import { TradeTicketModal } from './components/TradeTicketModal';
 import { NewsDrawer } from './components/NewsDrawer';
 import { CompanyDetailModal } from './components/CompanyDetailModal';
@@ -51,6 +52,7 @@ export default function App() {
   const [isAutoAdvancing, setIsAutoAdvancing] = useState(false);
   const [isStatusBarExpanded, setIsStatusBarExpanded] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
+  const [riskView, setRiskView] = useState<'portfolio' | 'intel'>('portfolio');
   const [showTurnSummary, setShowTurnSummary] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -332,7 +334,31 @@ export default function App() {
             </div>
           )}
           {state.selectedTab === 'risk' && (
-            <PortfolioRiskTab state={state} onClosePosition={handleClosePosition} />
+            <div className="flex flex-col gap-3">
+              <div className="flex p-1 bg-slate-900 border border-slate-800 rounded-lg shrink-0">
+                <button
+                  onClick={() => setRiskView('portfolio')}
+                  className={`flex-1 py-1 text-xs font-bold rounded transition-all ${
+                    riskView === 'portfolio' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Portfolio Risk
+                </button>
+                <button
+                  onClick={() => setRiskView('intel')}
+                  className={`flex-1 py-1 text-xs font-bold rounded transition-all ${
+                    riskView === 'intel' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Corporate Intel
+                </button>
+              </div>
+              {riskView === 'portfolio' ? (
+                <PortfolioRiskTab state={state} onClosePosition={handleClosePosition} />
+              ) : (
+                <CorporateIntelligenceTab state={state} />
+              )}
+            </div>
           )}
         </main>
 

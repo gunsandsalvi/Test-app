@@ -31,7 +31,7 @@ export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRating, setSelectedRating] = useState<CreditRating | 'ALL'>('ALL');
   const [selectedRegion, setSelectedRegion] = useState<RegionId | 'ALL'>('ALL');
-  const [viewMode, setViewMode] = useState<'CDS' | 'CASH_DEBT'>('CDS');
+  const [viewMode, setViewMode] = useState<'CDS' | 'CASH_DEBT'>('CASH_DEBT');
 
   const filteredCompanies = useMemo(() => {
     return state.companies

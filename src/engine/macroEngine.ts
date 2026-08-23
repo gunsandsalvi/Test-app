@@ -176,14 +176,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       id: 'USA',
       name: 'United States',
       categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
       },
       currency: 'USD',
       symbol: '$',
@@ -241,14 +241,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       id: 'UK',
       name: 'United Kingdom',
       categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
       },
       currency: 'GBP',
       symbol: '£',
@@ -306,14 +306,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       id: 'JPN',
       name: 'Japan',
       categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
       },
       currency: 'JPY',
       symbol: '¥',
@@ -371,14 +371,14 @@ export function getInitialRegions(): Record<RegionId, Region> {
       id: 'EUR',
       name: 'Eurozone',
       categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [] },
       },
       currency: 'EUR',
       symbol: '€',
@@ -1102,6 +1102,13 @@ export function calculateCompositeIndices(
   const newUK = Number((prevUK * (1 + (prevIndices ? ukChange : 0))).toFixed(1));
   const newJP = Number((prevJP * (1 + (prevIndices ? jpChange : 0))).toFixed(0));
 
+
+  const advancingCompanies = companies.filter((c) => {
+    const prevP = c.historicalPrices[c.historicalPrices.length - 2] || c.stockPrice;
+    return c.stockPrice > prevP;
+  }).length;
+  const marketBreadth = companies.length > 0 ? (advancingCompanies / companies.length) * 100 : 50;
+
   const igRatings: CreditRating[] = ['AAA', 'AA', 'A', 'BBB'];
   const hyRatings: CreditRating[] = ['BB', 'B', 'CCC', 'D'];
 
@@ -1177,6 +1184,14 @@ export function calculateCompositeIndices(
 
     global10YBenchmark: makeIndexMetric('Global 10Y Benchmark Yield', 'G10Y Yield', global10Y, prevIndices?.global10YBenchmark, '%'),
     gsciCommodity: makeIndexMetric('S&P GSCI Commodity Index', 'GSCI Index', newGsci, prevIndices?.gsciCommodity, 'pts'),
+
+    techIndex: makeIndexMetric('Global Tech Composite', 'TECH', 1000, prevIndices?.techIndex),
+    financialsIndex: makeIndexMetric('Global Financials Composite', 'FIN', 1000, prevIndices?.financialsIndex),
+    energyIndex: makeIndexMetric('Global Energy Composite', 'NRG', 1000, prevIndices?.energyIndex),
+    industrialsIndex: makeIndexMetric('Global Industrials Composite', 'IND', 1000, prevIndices?.industrialsIndex),
+    globalCreditComposite: makeIndexMetric('Global Credit Index', 'GCI', 100, prevIndices?.globalCreditComposite),
+    marketBreadth,
+
   };
 }
 

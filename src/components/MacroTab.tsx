@@ -142,9 +142,12 @@ export const MacroTab: React.FC<MacroTabProps> = ({ state, onOpenTrade, onOpenCh
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
           <div className="p-2 rounded-xl bg-slate-950 border border-slate-850">
             <span className="text-[9px] text-slate-400 uppercase font-mono block">Debt-to-GDP</span>
-            <span className="text-xs font-bold font-mono text-white">
-              {formatPercent(region.debtToGdpPct || 1.15, { isDecimal: true })}
-            </span>
+            <div className="flex items-center gap-1.5 text-xs font-bold font-mono text-white">
+              {region.historicalDebtToGdp && region.historicalDebtToGdp.length > 1 && (
+                <Sparkline data={region.historicalDebtToGdp} width={30} height={12} color="#f59e0b" />
+              )}
+              <span>{formatPercent(region.debtToGdpPct || 1.15, { isDecimal: true })}</span>
+            </div>
             <span className="text-[8px] text-slate-500 block">Sovereign Leverage</span>
           </div>
 
@@ -564,18 +567,35 @@ export const MacroTab: React.FC<MacroTabProps> = ({ state, onOpenTrade, onOpenCh
         </div>
       </div>
 
+      {/* Regime & Curve */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-lg">
+        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Cycle Position & Curve</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col items-center gap-1">
+            <RegimeCompass regime={region.cycleRegime} size={70} />
+            <span className="text-[9px] text-slate-400">{region.cycleRegime}</span>
+          </div>
+          <YieldCurveChart params={region.yieldCurveParams} width={140} height={64} />
+        </div>
+      </div>
+
       {/* Category Demand Stats */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-lg">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-white uppercase tracking-wider">Demand Growth</h3>
         </div>
         <div className="grid grid-cols-2 gap-2 text-[10px]">
-          {Object.entries(region.categoryDemand).map(([cat, d]) => (
-            <div key={cat} className="flex justify-between p-1 border-b border-slate-800/50">
+          {Object.entries(region.categoryDemand).map(([cat, d]: [string, any]) => (
+            <div key={cat} className="flex justify-between items-center p-1 border-b border-slate-800/50">
               <span className="text-slate-400">{cat.replace('Household', ' HH').replace('Government', 'Gov ')}</span>
-              <span className={d.demandGrowthAnnual >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                {formatPercent(d.demandGrowthAnnual, { isDecimal: true })}
-              </span>
+              <div className="flex items-center gap-1.5">
+                {d.demandHistory && d.demandHistory.length > 1 && (
+                  <Sparkline data={d.demandHistory} width={30} height={12} color={d.demandGrowthAnnual >= 0 ? '#10b981' : '#f43f5e'} />
+                )}
+                <span className={d.demandGrowthAnnual >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                  {formatPercent(d.demandGrowthAnnual, { isDecimal: true })}
+                </span>
+              </div>
             </div>
           ))}
         </div>
