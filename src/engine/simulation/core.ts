@@ -359,7 +359,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
       newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52) - capacityDecayPenalty - avgCrowdingIntensity * 0.05));
 
-      const growthCapexToRev = (comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue);
+      const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
       const estCashHealth = comp.cash < 0 ? 0.4 : 1.0;
       const estTobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
@@ -466,7 +466,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const excessCashGeneration = Math.max(0, fcfBeforeGrowthCapex - productiveReinvestmentEnvelope);
     const payoutPressure = fcfBeforeGrowthCapex > 0 ? Math.min(1, excessCashGeneration / fcfBeforeGrowthCapex) : 0;
 
-    const growthCapexToRevenueRatio = (comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue);
+    const growthCapexToRevenueRatio = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
     const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
     const cashHealthFactor = comp.cash < 0 ? 0.4 : 1.0;
     const tobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
@@ -770,6 +770,41 @@ export function advanceWeeklyStep(state: GameState): GameState {
         data: { regionId }
       });
     }
+  });
+
+  // Phase 4a: Derived nominal GDP parallel diagnostic
+  regionIds.forEach((regionId) => {
+    const reg = updatedRegions[regionId];
+    const hs = reg.householdState;
+
+    // C — household consumption, already-established convention
+    const consumptionComponentUSD = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+
+    // I — tracked company investment, scaled up to represent the whole private sector via Phase 1's employment split
+    const trackedFirms = updatedCompanies.filter(f => f.region === regionId && !f.isDefaulted);
+    const trackedInvestmentUSD = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
+    const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
+    const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + reg.untrackedPrivateEmployment) / trackedEmployment : 1;
+    const investmentComponentUSD = trackedInvestmentUSD * investmentScaleFactor;
+
+    // G — government spending, already established in Phase 2 (weekly flow, annualize)
+    const governmentComponentUSD = reg.governmentSpendingUSD * 52;
+
+    // NX — net exports, already established in Phase 3 (already annualized-scale)
+    const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
+
+    const newDerivedNominalGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
+    const gdpGrowthBottomUp = reg.derivedNominalGdpUSD > 0
+      ? ((newDerivedNominalGdpUSD / reg.derivedNominalGdpUSD) - 1) * 52 - reg.inflation // annualize the weekly change, strip inflation to get a real-growth-comparable figure
+      : reg.gdpGrowthBottomUp;
+
+    updatedRegions[regionId] = {
+      ...reg,
+      derivedNominalGdpUSD: newDerivedNominalGdpUSD,
+      gdpGrowthBottomUp: Number(Math.max(-0.5, Math.min(0.5, gdpGrowthBottomUp)).toFixed(4)), // generous diagnostic bound only — this is not the load-bearing clamp, just a display sanity guard since this is new and untrusted
+      consumptionComponentUSD,
+      investmentComponentUSD,
+    };
   });
 
   const { newsItems, sectorSentimentShocks } = generateWeeklyNews(

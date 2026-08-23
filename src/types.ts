@@ -136,6 +136,10 @@ export interface Region {
 
   // Government & Nominal GDP (Phase 2)
   estimatedNominalGdpUSD: number;    // proxy until Phase 4 — replaced by the true C+I+G+NX sum then
+  derivedNominalGdpUSD: number;      // C+I+G+NX, this world's own bottom-up sum
+  gdpGrowthBottomUp: number;         // diagnostic only — % change of the above, NOT yet driving anything
+  consumptionComponentUSD: number;   // C, exposed for inspection
+  investmentComponentUSD: number;    // I, exposed for inspection
   effectiveTaxRate: number;          // 0.28-0.35 typical; can drift with fiscal stance
   governmentRevenueUSD: number;
   governmentSpendingUSD: number;
@@ -259,6 +263,7 @@ export interface Company {
   previousCapex?: number;
   maintenanceCapex: number;
   growthCapex: number;
+  baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;
   executionQuality: number;
   

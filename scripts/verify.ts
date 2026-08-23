@@ -37,6 +37,10 @@ for (let w = 1; w <= 520; w++) {
   state = advanceWeeklyStep(state);
   const nan = isNaNAnywhere(state);
   if (nan.length > 0) violations.push({ week: w, message: `NaN detected: ${nan.join(', ')}` });
+  const bottomUpGdp = state.regions.USA.gdpGrowthBottomUp;
+  if (isNaN(bottomUpGdp) || Math.abs(bottomUpGdp) > 0.5) {
+    violations.push({ week: w, message: `gdpGrowthBottomUp out of sane diagnostic range: ${bottomUpGdp}` });
+  }
   Object.entries(trackers).forEach(([name, t]) => {
     t.history.push(t.extract(state));
     if (t.history.length > PIN_THRESHOLD_WEEKS) {
