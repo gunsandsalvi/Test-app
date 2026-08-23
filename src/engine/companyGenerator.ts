@@ -50,6 +50,8 @@ interface CompanyTemplate {
   initialRating: CreditRating;
   beta: number;
   bankMarketShare?: number;
+  institutionalRole?: 'INSURER' | 'ASSET_MANAGER' | null;
+  institutionalMarketShare?: number;
 }
 
 const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
@@ -79,8 +81,8 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
     { ticker: 'CICK', name: 'Heritage Nuclear', sector: 'Energy', revBase: 7200, ebitdaMargin: 0.09, debtBase: 18000, cashBase: 290, shares: 210, initialRating: 'CCC', beta: 1.75 },
 
     // Financials (10)
-    { ticker: 'MDVI', name: 'Prime Mutual', sector: 'Financials', revBase: 140000, ebitdaMargin: 0.36, debtBase: 110000, cashBase: 65000, shares: 2900, initialRating: 'AAA', beta: 0.95 },
-    { ticker: 'ZTND', name: 'Stellar Equities', sector: 'Financials', revBase: 82000, ebitdaMargin: 0.31, debtBase: 74000, cashBase: 34000, shares: 1600, initialRating: 'AA', beta: 1.05 },
+    { ticker: 'MDVI', name: 'Prime Mutual', sector: 'Financials', revBase: 140000, ebitdaMargin: 0.36, debtBase: 110000, cashBase: 65000, shares: 2900, initialRating: 'AAA', beta: 0.95, institutionalRole: 'INSURER', institutionalMarketShare: 0.55 },
+    { ticker: 'ZTND', name: 'Stellar Equities', sector: 'Financials', revBase: 82000, ebitdaMargin: 0.31, debtBase: 74000, cashBase: 34000, shares: 1600, initialRating: 'AA', beta: 1.05, institutionalRole: 'ASSET_MANAGER', institutionalMarketShare: 0.45 },
     { ticker: 'AFIG', name: 'Crystal Fund', sector: 'Financials', revBase: 58000, ebitdaMargin: 0.28, debtBase: 52000, cashBase: 21000, shares: 1200, initialRating: 'A', beta: 1.10 },
     { ticker: 'SHBT', name: 'Fauna Underwriters', sector: 'Financials', revBase: 32000, ebitdaMargin: 0.46, debtBase: 18000, cashBase: 15000, shares: 850, initialRating: 'AA', beta: 1.20 },
     { ticker: 'KBDM', name: 'Crest Underwriters', sector: 'Financials', revBase: 49000, ebitdaMargin: 0.22, debtBase: 39000, cashBase: 18000, shares: 940, initialRating: 'A', beta: 0.80 },
@@ -145,8 +147,8 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
     { ticker: 'HCGZ', name: 'Aether Power', sector: 'Energy', revBase: 4100, ebitdaMargin: 0.05, debtBase: 13000, cashBase: 220, shares: 160, initialRating: 'CCC', beta: 1.80 },
 
     // Financials (10)
-    { ticker: 'TUEE', name: 'Heritage Group', sector: 'Financials', revBase: 95000, ebitdaMargin: 0.35, debtBase: 78000, cashBase: 45000, shares: 2200, initialRating: 'AA', beta: 0.90 },
-    { ticker: 'OLIP', name: 'Terra Holdings', sector: 'Financials', revBase: 68000, ebitdaMargin: 0.29, debtBase: 62000, cashBase: 29000, shares: 1700, initialRating: 'A', beta: 1.15 },
+    { ticker: 'TUEE', name: 'Heritage Group', sector: 'Financials', revBase: 95000, ebitdaMargin: 0.35, debtBase: 78000, cashBase: 45000, shares: 2200, initialRating: 'AA', beta: 0.90, institutionalRole: 'INSURER', institutionalMarketShare: 0.55 },
+    { ticker: 'OLIP', name: 'Terra Holdings', sector: 'Financials', revBase: 68000, ebitdaMargin: 0.29, debtBase: 62000, cashBase: 29000, shares: 1700, initialRating: 'A', beta: 1.15, institutionalRole: 'ASSET_MANAGER', institutionalMarketShare: 0.45 },
     { ticker: 'DSYM', name: 'Ruby Holdings', sector: 'Financials', revBase: 48000, ebitdaMargin: 0.33, debtBase: 42000, cashBase: 21000, shares: 1400, initialRating: 'A', beta: 0.95 },
     { ticker: 'LEMM', name: 'Helios Holdings', sector: 'Financials', revBase: 41000, ebitdaMargin: 0.30, debtBase: 38000, cashBase: 18000, shares: 1250, initialRating: 'BBB', beta: 1.05 },
     { ticker: 'NTKR', name: 'Quantum Exchange', sector: 'Financials', revBase: 36000, ebitdaMargin: 0.24, debtBase: 29000, cashBase: 16000, shares: 920, initialRating: 'A', beta: 1.00 },
@@ -211,8 +213,8 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
     { ticker: 'CKRX', name: 'Bronze Petroleum', sector: 'Energy', revBase: 12000, ebitdaMargin: 0.07, debtBase: 29000, cashBase: 620, shares: 380, initialRating: 'CCC', beta: 1.65 },
 
     // Financials (10)
-    { ticker: 'RNFO', name: 'Alpha Syndicate', sector: 'Financials', revBase: 98000, ebitdaMargin: 0.38, debtBase: 82000, cashBase: 55000, shares: 2600, initialRating: 'AA', beta: 0.85 },
-    { ticker: 'IZZP', name: 'Pinnacle Assurance', sector: 'Financials', revBase: 82000, ebitdaMargin: 0.36, debtBase: 69000, cashBase: 44000, shares: 2100, initialRating: 'AA', beta: 0.90 },
+    { ticker: 'RNFO', name: 'Alpha Syndicate', sector: 'Financials', revBase: 98000, ebitdaMargin: 0.38, debtBase: 82000, cashBase: 55000, shares: 2600, initialRating: 'AA', beta: 0.85, institutionalRole: 'INSURER', institutionalMarketShare: 0.55 },
+    { ticker: 'IZZP', name: 'Pinnacle Assurance', sector: 'Financials', revBase: 82000, ebitdaMargin: 0.36, debtBase: 69000, cashBase: 44000, shares: 2100, initialRating: 'AA', beta: 0.90, institutionalRole: 'ASSET_MANAGER', institutionalMarketShare: 0.45 },
     { ticker: 'KYJS', name: 'Pioneer Capital', sector: 'Financials', revBase: 64000, ebitdaMargin: 0.32, debtBase: 58000, cashBase: 32000, shares: 1800, initialRating: 'A', beta: 0.95 },
     { ticker: 'QHLF', name: 'Lunar Holdings', sector: 'Financials', revBase: 34000, ebitdaMargin: 0.26, debtBase: 46000, cashBase: 16000, shares: 980, initialRating: 'BBB', beta: 1.30 },
     { ticker: 'ASOH', name: 'Fauna Wealth', sector: 'Financials', revBase: 31000, ebitdaMargin: 0.34, debtBase: 38000, cashBase: 11000, shares: 850, initialRating: 'A', beta: 1.10 },
@@ -277,8 +279,8 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
     { ticker: 'RAWH', name: 'Atlas Offshore', sector: 'Energy', revBase: 4800, ebitdaMargin: 0.04, debtBase: 15000, cashBase: 290, shares: 180, initialRating: 'CCC', beta: 1.85 },
 
     // Financials (10)
-    { ticker: 'CKNU', name: 'Zenith Insurance', sector: 'Financials', revBase: 115000, ebitdaMargin: 0.34, debtBase: 98000, cashBase: 62000, shares: 2500, initialRating: 'AA', beta: 1.00 },
-    { ticker: 'IXGB', name: 'Crystal Securities', sector: 'Financials', revBase: 125000, ebitdaMargin: 0.22, debtBase: 65000, cashBase: 48000, shares: 2600, initialRating: 'AAA', beta: 0.70 },
+    { ticker: 'CKNU', name: 'Zenith Insurance', sector: 'Financials', revBase: 115000, ebitdaMargin: 0.34, debtBase: 98000, cashBase: 62000, shares: 2500, initialRating: 'AA', beta: 1.00, institutionalRole: 'ASSET_MANAGER', institutionalMarketShare: 0.45 },
+    { ticker: 'IXGB', name: 'Crystal Securities', sector: 'Financials', revBase: 125000, ebitdaMargin: 0.22, debtBase: 65000, cashBase: 48000, shares: 2600, initialRating: 'AAA', beta: 0.70, institutionalRole: 'INSURER', institutionalMarketShare: 0.55 },
     { ticker: 'CUJO', name: 'Sapphire Capital', sector: 'Financials', revBase: 88000, ebitdaMargin: 0.32, debtBase: 84000, cashBase: 39000, shares: 2200, initialRating: 'A', beta: 1.10 },
     { ticker: 'DIBY', name: 'Fauna Insurance', sector: 'Financials', revBase: 52000, ebitdaMargin: 0.36, debtBase: 48000, cashBase: 28000, shares: 1450, initialRating: 'A', beta: 1.05 },
     { ticker: 'HJZB', name: 'Titan Capital', sector: 'Financials', revBase: 95000, ebitdaMargin: 0.20, debtBase: 58000, cashBase: 36000, shares: 2100, initialRating: 'AA', beta: 0.75 },
@@ -524,6 +526,8 @@ export function generateInitialCompanies(): Company[] {
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         bankMarketShare: tmpl.bankMarketShare,
+        institutionalRole: tmpl.institutionalRole ?? null,
+        institutionalMarketShare: tmpl.institutionalMarketShare,
         beta: tmpl.beta,
         
         seniorBondYield: 0.05 + oasSpreadBps / 10000,
@@ -751,6 +755,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
       recoveryRate: 0.40,
     },
     ratingHistory: [initialRating],
+    institutionalRole: null,
     sentiment: 0.0,
   };
 }

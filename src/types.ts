@@ -48,6 +48,22 @@ export interface BankingSector {
   creditConditionsIndex: number; // -1 (very loose) to +1 (very tight)
 }
 
+export interface AssetOwnershipShares {
+  bankShare: number;
+  institutionalShare: number; // insurers + asset managers
+  foreignShare: Record<RegionId, number>; // this region's assets held by each of the other three
+  centralBankShare: number; // meaningful only for sovereign bonds — 0 elsewhere
+}
+
+export interface InstitutionalSector {
+  corpBondHoldingsUSD: number;
+  sovBondHoldingsUSD: number;
+  equityHoldingsUSD: number;
+  cashUSD: number;
+  sectorEquityUSD: number;          // capital base of the insurers/asset managers as a group — analogous to bankEquityUSD
+  investmentIncomeMarginPct: number; // analogous to netInterestMarginPct
+}
+
 export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
 
 export interface WeatherAnomaly {
@@ -97,6 +113,10 @@ export interface Region {
   inversionWeeksCount: number;
   recessionShockQueue: { week: number; shock: number }[];
   bankingSector: BankingSector;
+  equityOwnership: AssetOwnershipShares;
+  corpBondOwnership: AssetOwnershipShares;
+  sovBondOwnership: AssetOwnershipShares;
+  institutionalSector: InstitutionalSector;
   laggedCorporateDemandBase: number;
   estimatedHouseholdIncomeUSD: number; // aggregate regional household income proxy, in $M, grows with GDP
   // Macro fundamentals
@@ -301,6 +321,8 @@ export interface Company {
   dividendYield: number;
   baselineDividendYield: number;
   bankMarketShare?: number;
+  institutionalRole: 'INSURER' | 'ASSET_MANAGER' | null;
+  institutionalMarketShare?: number; // mirrors bankMarketShare exactly
   beta: number;
   
   // Debt & CDS Pricing

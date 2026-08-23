@@ -32,6 +32,16 @@ export function createInitialGameState(): GameState {
     Object.keys(targets).forEach(cat => {
       (regions[regionId].categoryDemand as any)[cat] = { demandLevelUSD: targets[cat], demandGrowthAnnual: 0, demandHistory: [targets[cat]] };
     });
+
+    // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
+    const regionCompanies = companies.filter(c => c.region === regionId);
+    const totalMarketCap = regionCompanies.reduce((s, c) => s + c.marketCap, 0);
+    const totalCorpDebt = regionCompanies.reduce((s, c) => s + c.totalDebt, 0);
+    const totalSovDebt = reg.debtToGdpPct * reg.derivedNominalGdpUSD;
+
+    reg.institutionalSector.equityHoldingsUSD = Number((reg.equityOwnership.institutionalShare * totalMarketCap).toFixed(0));
+    reg.institutionalSector.corpBondHoldingsUSD = Number((reg.corpBondOwnership.institutionalShare * totalCorpDebt).toFixed(0));
+    reg.institutionalSector.sovBondHoldingsUSD = Number((reg.sovBondOwnership.institutionalShare * totalSovDebt).toFixed(0));
   });
 
   const commodities = getInitialCommodities();

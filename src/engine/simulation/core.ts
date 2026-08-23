@@ -1540,3 +1540,23 @@ export function advanceWeeklyStep(state: GameState): GameState {
     gameOverReason,
   };
 }
+
+export function computeOwnershipConservation(state: GameState): { region: RegionId; assetClass: string; totalShareAccounted: number; householdShareImplied: number }[] {
+  const results: { region: RegionId; assetClass: string; totalShareAccounted: number; householdShareImplied: number }[] = [];
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach(regionId => {
+    const reg = state.regions[regionId];
+    (['equityOwnership', 'corpBondOwnership', 'sovBondOwnership'] as const).forEach(key => {
+      const o = reg[key];
+      const foreignSum = Object.values(o.foreignShare).reduce((s: number, v: number) => s + v, 0);
+      const totalShareAccounted = o.bankShare + o.institutionalShare + foreignSum + o.centralBankShare;
+      results.push({
+        region: regionId,
+        assetClass: key,
+        totalShareAccounted: Number(totalShareAccounted.toFixed(4)),
+        householdShareImplied: Number((1 - totalShareAccounted).toFixed(4)),
+      });
+    });
+  });
+  return results;
+}
+
