@@ -16,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Company, CreditRating, GameState, RegionId, TradeableInstrument } from '../types';
+import { priceCorporateBond, priceLeveragedLoan } from '../engine/pricing';
 
 interface BondsCdsTabProps {
   state: GameState;
@@ -262,13 +263,38 @@ export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
                         <button
                           onClick={() => {
                             const assetType = isFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN';
+                            const sovParams = state.regions[comp.region]?.yieldCurveParams;
+                            let livePrice = 100;
+                            if (isFixed) {
+                              if (sovParams) {
+                                livePrice = priceCorporateBond(
+                                  remainingTenorYears,
+                                  tranche.couponRate ?? 0.05,
+                                  sovParams,
+                                  comp.oasSpreadBps,
+                                  comp.isDefaulted,
+                                  comp.recoveryRate
+                                ).price;
+                              } else {
+                                livePrice = comp.isDefaulted ? comp.recoveryRate * 100 : 100;
+                              }
+                            } else {
+                              livePrice = priceLeveragedLoan(
+                                tranche.floatingMarginBps ?? 200,
+                                comp.oasSpreadBps,
+                                remainingTenorYears,
+                                comp.isDefaulted,
+                                comp.recoveryRate
+                              ).pricePar;
+                            }
+
                             onOpenTrade({
                               assetType,
                               id: tranche.id,
                               symbol: tranche.id,
                               name: `${comp.name} ${remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Senior Bond' : 'Loan'}`,
                               region: comp.region,
-                              price: comp.isDefaulted ? (isFixed ? comp.recoveryRate * 100 : 65.0) : 100, // Roughly 100 before pricing
+                              price: livePrice,
                               quoteUnit: isFixed ? '% Par' : 'pts of par',
                               details: {
                                 trancheId: tranche.id,

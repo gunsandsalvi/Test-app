@@ -71,7 +71,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
     .reduce((sum, p) => sum + p.notional, 0);
   const hasDealerLimit = (dealerExposure + notionalUSD) <= dealer.creditLimitUSD;
   
-  const canAfford = hasCash && hasDealerLimit;
+  const canAfford = hasCash && hasDealerLimit && !state.portfolio.isMarginCall;
 
   // Compute Expected 1-Week Carry
   const carryEstimate = useMemo(() => {
@@ -199,6 +199,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
       marginRequirement: initialMarginUSD,
       expectedWeeklyCarryUSD: carryEstimate.weeklyCarryUSD,
       tenorYears: instrument.details.tenorYears,
+      maturityWeek: instrument.details.tenorYears ? state.currentWeek + Math.round(instrument.details.tenorYears * 52) : undefined,
       fixedRate: instrument.details.fixedRate ?? instrument.details.couponRate,
       trancheId: instrument.details.trancheId,
       rateType: instrument.details.rateType,
@@ -468,14 +469,21 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
           </div>
         </div>
 
-        {!hasCash && (
+        {state.portfolio.isMarginCall && (
+          <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-semibold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>ACCOUNT IN MARGIN CALL: New risk positions blocked until required maintenance margin is restored.</span>
+          </div>
+        )}
+
+        {!hasCash && !state.portfolio.isMarginCall && (
           <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>Insufficient cash for required initial margin + spread cost.</span>
           </div>
         )}
         
-        {hasCash && !hasDealerLimit && (
+        {hasCash && !hasDealerLimit && !state.portfolio.isMarginCall && (
           <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>Trade exceeds available counterparty credit limit with {dealer.name}.</span>

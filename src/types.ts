@@ -302,6 +302,7 @@ export interface Position {
 
   // Derivative specifics
   tenorYears?: number;
+  maturityWeek?: number;
   fixedRate?: number;
   strike?: number;
   optionType?: 'CALL' | 'PUT';

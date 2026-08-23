@@ -60,7 +60,7 @@ export function evolveRegionMacro(
 
   // 2. Incremental bounded shocks (Annualized bps)
   const capexContribAnnual = capexGdpFeedback; // Already bounded and annualized in simulation.ts
-  const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02, householdDebtToIncomeRatio: 0.1167, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15 };
+  const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02, householdDebtToIncomeRatio: 1.05, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15 };
   const consumerContribAnnual = Math.max(-0.002, Math.min(0.002, (prevHS.consumerConfidence - 100) * 0.0001)); // Max +/- 20 bps
 
   // Real Rate Demand Channel

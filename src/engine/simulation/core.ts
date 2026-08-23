@@ -3,7 +3,7 @@ import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche } fro
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap } from '../pricing';
 import { calculateNelsonSiegelZeroRate, priceSovereignBond } from '../nelsonSiegel';
 import { EarningsReportEvent, generateWeeklyNews } from '../newsGenerator';
-import { formatQuarterFilingDate, formatSimulationDate } from '../formatters';
+import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../formatters';
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
@@ -263,18 +263,25 @@ export function advanceWeeklyStep(state: GameState): GameState {
       newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52)));
 
       let categoryDrivenGrowth = 0;
-    updatedProductLines = (comp.productLines || []).map((line) => {
-      const catDemand = reg.categoryDemand[line.category as any];
-      const categoryGrowth = catDemand?.demandGrowthAnnual ?? reg.gdpGrowth;
-      const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
-      const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 10));
-      const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
-      const shareGainRate = Math.max(-0.02, Math.min(0.02, newCompetitiveness * 0.04));
-      const newCategoryMarketShare = Math.max(0.001, Math.min(0.6, line.categoryMarketShare * (1 + shareGainRate / 52)));
-      const lineGrowth = categoryGrowth + shareGainRate;
-      categoryDrivenGrowth += lineGrowth * line.revenueShare;
-      return { ...line, previousCategoryMarketShare: line.categoryMarketShare, competitiveness: newCompetitiveness, categoryMarketShare: newCategoryMarketShare };
-    });
+      updatedProductLines = (comp.productLines || []).map((line) => {
+        const catDemand = reg.categoryDemand[line.category as any];
+        const categoryGrowth = catDemand?.demandGrowthAnnual ?? reg.gdpGrowth;
+        const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
+        // Mean reversion drag on competitiveness for outsized market share to prevent permanent monopolies (BUG-07)
+        const highShareDrag = Math.max(0, (line.categoryMarketShare - 0.15) * 2.0);
+        const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 10 - highShareDrag));
+        const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
+        const shareGainRate = Math.max(-0.01, Math.min(0.01, newCompetitiveness * 0.02));
+        const newCategoryMarketShare = Math.max(0.001, Math.min(0.50, line.categoryMarketShare * (1 + shareGainRate / 52)));
+        
+        // Subtract credit tightening penalty for consumer-facing product lines (BUG-06)
+        const isHouseholdFacing = line.category === 'StandardHousehold' || line.category === 'LuxuryHousehold' || line.category === 'StapleHousehold';
+        const linePenalty = isHouseholdFacing ? creditTighteningPenalty : 0;
+        const lineGrowth = categoryGrowth + shareGainRate - linePenalty;
+        
+        categoryDrivenGrowth += lineGrowth * line.revenueShare;
+        return { ...line, previousCategoryMarketShare: line.categoryMarketShare, competitiveness: newCompetitiveness, categoryMarketShare: newCategoryMarketShare };
+      });
     const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + noise + reg.inflation * pricingPowerBeta);
       
       // Smooth transition to target revenue (no exponential weekly compounding)
@@ -384,7 +391,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         id: `refinance-${comp.ticker}-${nextWeek}`,
         week: nextWeek,
         title: `${comp.ticker} Refinances Maturing Tranche`,
-        description: `${comp.name} refinanced a maturing $${(maturingTranche.principalUSD / 1000).toFixed(1)}B tranche (was ${oldRateDescription}) into a new ${newRateDescription} tranche.`,
+        description: `${comp.name} refinanced a maturing ${formatCurrency(maturingTranche.principalUSD, { compact: true })} tranche (was ${oldRateDescription}) into a new ${newRateDescription} tranche.`,
         category: 'CREDIT',
         impactBadge: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? '[REFINANCING SQUEEZE]' : '[REFINANCING]',
         impactRegion: comp.region,
@@ -758,8 +765,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
       }
 
       case 'SOV_BOND': {
+        const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 10) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 520));
+        const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
         const sovParams = updatedRegions[pos.region].yieldCurveParams;
-        const bondPriced = priceSovereignBond(pos.tenorYears || 10, pos.fixedRate || 0.04, sovParams);
+        const bondPriced = priceSovereignBond(remainingTenorYears, pos.fixedRate || 0.04, sovParams);
         currentPrice = bondPriced.price;
         const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;
         const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
@@ -777,17 +786,39 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const pnlMove = unrealizedPnL - prevPnL;
         attributionMacroRates += pnlMove;
 
-        marginReq = pos.notional * fxRateToUsd * marginRate;
-        maintMargin = marginReq * 0.6;
+        // Check sovereign bond maturity
+        if (nextWeek >= maturityWeek) {
+          pos.isClosed = true;
+          closedCount++;
+          const redemptionCash = pos.quantity * 1.0 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
+          weeklyRealizedCashUSD += redemptionCash;
+          weeklyRealizedPnL += unrealizedPnL;
+          newsItems.push({
+            id: `sov-matured-${pos.id}-${nextWeek}`,
+            week: nextWeek,
+            title: `Sovereign Bond Matured: ${pos.name}`,
+            description: `Your ${pos.region} bond position matured at week ${nextWeek} and was redeemed at par (100).`,
+            category: 'MACRO',
+            impactBadge: '[MATURITY]',
+            impactRegion: pos.region,
+            sentimentDelta: 0,
+            urgent: true,
+          });
+        } else {
+          marginReq = pos.notional * fxRateToUsd * marginRate;
+          maintMargin = marginReq * 0.6;
+        }
         break;
       }
 
       case 'IRS': {
+        const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 5) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 260));
+        const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
         const sovParams = updatedRegions[pos.region].yieldCurveParams;
         const irsPricing = priceInterestRateSwap(
           pos.notional,
           pos.fixedRate || 0.04,
-          pos.tenorYears || 5,
+          remainingTenorYears,
           pos.direction as any,
           sovParams
         );
@@ -806,8 +837,27 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const pnlMove = unrealizedPnL - prevPnL;
         attributionMacroRates += pnlMove;
 
-        marginReq = pos.notional * fxRateToUsd * marginRate;
-        maintMargin = marginReq * 0.6;
+        // Check IRS maturity
+        if (nextWeek >= maturityWeek) {
+          pos.isClosed = true;
+          closedCount++;
+          weeklyRealizedPnL += unrealizedPnL;
+          weeklyRealizedCashUSD += unrealizedPnL;
+          newsItems.push({
+            id: `irs-matured-${pos.id}-${nextWeek}`,
+            week: nextWeek,
+            title: `IRS Expired at Maturity: ${pos.name}`,
+            description: `Your interest rate swap terminated at its scheduled maturity date.`,
+            category: 'MACRO',
+            impactBadge: '[EXPIRY]',
+            impactRegion: pos.region,
+            sentimentDelta: 0,
+            urgent: false,
+          });
+        } else {
+          marginReq = pos.notional * fxRateToUsd * marginRate;
+          maintMargin = marginReq * 0.6;
+        }
         break;
       }
 
@@ -815,11 +865,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
         const sovParams = updatedRegions[pos.region].yieldCurveParams;
         if (comp) {
+          const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 5) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 260));
+          const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
           const cdsPricing = priceCreditDefaultSwap(
             pos.notional,
             pos.entryPrice,
             comp.oasSpreadBps,
-            pos.tenorYears || 5,
+            remainingTenorYears,
             pos.direction as any,
             sovParams,
             comp.recoveryRate,
@@ -838,8 +890,32 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const pnlMove = unrealizedPnL - prevPnL;
           attributionCreditSpread += pnlMove;
 
-          marginReq = pos.notional * fxRateToUsd * marginRate;
-          maintMargin = marginReq * 0.6;
+          // Check CDS maturity or default settlement
+          if (comp.isDefaulted) {
+            pos.isClosed = true;
+            closedCount++;
+            weeklyRealizedPnL += unrealizedPnL;
+            weeklyRealizedCashUSD += unrealizedPnL;
+          } else if (nextWeek >= maturityWeek) {
+            pos.isClosed = true;
+            closedCount++;
+            weeklyRealizedPnL += unrealizedPnL;
+            weeklyRealizedCashUSD += unrealizedPnL;
+            newsItems.push({
+              id: `cds-expired-${pos.id}-${nextWeek}`,
+              week: nextWeek,
+              title: `CDS Protection Expired: ${pos.name}`,
+              description: `Credit Default Swap contract expired with no default credit trigger.`,
+              category: 'CREDIT',
+              impactBadge: '[EXPIRY]',
+              impactRegion: pos.region,
+              sentimentDelta: 0,
+              urgent: false,
+            });
+          } else {
+            marginReq = pos.notional * fxRateToUsd * marginRate;
+            maintMargin = marginReq * 0.6;
+          }
         }
         break;
       }
@@ -954,12 +1030,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
       case 'XCS': {
         const fxPair = updatedFxPairs.find((p) => p.pair === pos.symbol);
         if (fxPair) {
+          const maturityWeek = pos.maturityWeek || (pos.openedWeek ? pos.openedWeek + Math.round((pos.tenorYears || 5) * 52) : (pos.tenorYears ? nextWeek + Math.round(pos.tenorYears * 52) : nextWeek + 260));
+          const remainingTenorYears = Math.max(0.01, (maturityWeek - nextWeek) / 52);
           const xcsPricing = priceCrossCurrencyBasisSwap(
             pos.notional,
             fxPair.rate,
             pos.entryPrice,
             fxPair.basisSpreadBps,
-            pos.tenorYears || 5,
+            remainingTenorYears,
             pos.direction as any
           );
           currentPrice = fxPair.basisSpreadBps;
@@ -976,8 +1054,26 @@ export function advanceWeeklyStep(state: GameState): GameState {
           weeklyFinancing = carryEst.components.financingCostUSD;
           attributionCarry += carryEst.weeklyCarryUSD;
 
-          marginReq = pos.notional * fxPair.rate * marginRate;
-          maintMargin = marginReq * 0.6;
+          if (nextWeek >= maturityWeek) {
+            pos.isClosed = true;
+            closedCount++;
+            weeklyRealizedPnL += unrealizedPnL;
+            weeklyRealizedCashUSD += unrealizedPnL;
+            newsItems.push({
+              id: `xcs-matured-${pos.id}-${nextWeek}`,
+              week: nextWeek,
+              title: `Basis Swap Matured: ${pos.name}`,
+              description: `Cross-currency basis swap terminated at scheduled maturity.`,
+              category: 'MACRO',
+              impactBadge: '[MATURITY]',
+              impactRegion: pos.region,
+              sentimentDelta: 0,
+              urgent: false,
+            });
+          } else {
+            marginReq = pos.notional * fxPair.rate * marginRate;
+            maintMargin = marginReq * 0.6;
+          }
         }
         break;
       }

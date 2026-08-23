@@ -14,7 +14,8 @@ export function evolveBankingSector(
   gdpGrowth: number
 ): BankingSector {
   const newBusinessLoanBook = businessLoanBookInputUSD;
-  const newConsumerLoanBook = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD;
+  const bankedConsumerDebtShare = 0.1167; // Share of total household debt held as bank consumer loans
+  const newConsumerLoanBook = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
   const weeklySavingsInflow = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
   const newDeposits = prevBanking.depositsUSD * (1 + gdpGrowth / 52) * 0.998 + weeklySavingsInflow * 0.3;
   const totalAssetsProxy = newBusinessLoanBook + newConsumerLoanBook + prevBanking.sovereignBondHoldingsUSD + prevBanking.cashReservesUSD;

@@ -22,7 +22,8 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { Company, CreditRating, TradeableInstrument } from '../types';
+import { Company, CreditRating, GameState, TradeableInstrument } from '../types';
+import { priceCorporateBond, priceLeveragedLoan } from '../engine/pricing';
 import {
   formatBps,
   formatCurrency,
@@ -36,6 +37,7 @@ import {
 interface CompanyDetailModalProps {
   company: Company;
   currentWeek: number;
+  state?: GameState;
   onClose: () => void;
   onOpenTrade: (instrument: any) => void;
   onOpenChart?: (chartData: {
@@ -51,6 +53,7 @@ interface CompanyDetailModalProps {
 export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   company,
   currentWeek,
+  state,
   onClose,
   onOpenTrade,
   onOpenChart,
@@ -477,7 +480,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               </div>
               <div className="text-right">
                 <span className="text-xs font-bold font-mono text-blue-400">Trade Equity</span>
-                <div className="text-[9px] text-slate-500">1.0x-5.0x Margin</div>
+                <div className="text-[9px] text-slate-500">6.7x Margin</div>
               </div>
             </div>
 
@@ -489,6 +492,31 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - currentWeek) / 52);
               const isFixed = tranche.rateType === 'FIXED';
               const rateDesc = isFixed ? `${((tranche.couponRate ?? 0) * 100).toFixed(1)}% Fixed` : `Floating +${tranche.floatingMarginBps}bps`;
+              const sovParams = state?.regions[company.region]?.yieldCurveParams;
+              let livePrice = 100;
+              if (isFixed) {
+                if (sovParams) {
+                  livePrice = priceCorporateBond(
+                    remainingTenorYears,
+                    tranche.couponRate ?? 0.05,
+                    sovParams,
+                    company.oasSpreadBps,
+                    company.isDefaulted,
+                    company.recoveryRate
+                  ).price;
+                } else {
+                  livePrice = company.isDefaulted ? company.recoveryRate * 100 : 100;
+                }
+              } else {
+                livePrice = priceLeveragedLoan(
+                  tranche.floatingMarginBps ?? 200,
+                  company.oasSpreadBps,
+                  remainingTenorYears,
+                  company.isDefaulted,
+                  company.recoveryRate
+                ).pricePar;
+              }
+
               return (
                 <div
                   key={tranche.id}
@@ -499,7 +527,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                       id: tranche.id, symbol: tranche.id,
                       name: `${company.name} ${remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Senior Bond' : 'Loan'}`,
                       region: company.region,
-                      price: company.isDefaulted ? (isFixed ? company.recoveryRate * 100 : 65.0) : 100,
+                      price: livePrice,
                       quoteUnit: isFixed ? '% Par' : 'pts of par',
                       details: { trancheId: tranche.id, tenorYears: remainingTenorYears, fixedRate: tranche.couponRate ?? 0, rateType: tranche.rateType, oasSpreadBps: company.oasSpreadBps, rating: company.creditRating, sector: company.sector },
                     });
@@ -512,7 +540,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   </div>
                   <div className="text-right">
                     <span className={`text-xs font-bold font-mono ${isFixed ? 'text-indigo-400' : 'text-amber-400'}`}>Trade {isFixed ? 'Bond' : 'Loan'}</span>
-                    <div className="text-[9px] text-slate-500">{isFixed ? '15x' : '10x'} PB Lev</div>
+                    <div className="text-[9px] text-slate-500">10x PB Lev</div>
                   </div>
                 </div>
               );
@@ -585,25 +613,25 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   <tr className="hover:bg-slate-900/40">
                     <td className="py-1 text-slate-400 font-sans text-left">Revenue</td>
                     {fundamentals.slice(-4).map((f, i) => (
-                      <td key={i} className="text-right py-1 font-bold text-white">${(f.annualRevenue / 4).toFixed(0)}M</td>
+                      <td key={i} className="text-right py-1 font-bold text-white">{formatCurrency(f.annualRevenue / 4, { compact: true })}</td>
                     ))}
                   </tr>
                   <tr className="hover:bg-slate-900/40">
                     <td className="py-1 text-slate-400 font-sans text-left">EBITDA</td>
                     {fundamentals.slice(-4).map((f, i) => (
-                      <td key={i} className="text-right py-1 text-emerald-400">${(f.ebitda / 4).toFixed(1)}M</td>
+                      <td key={i} className="text-right py-1 text-emerald-400">{formatCurrency(f.ebitda / 4, { compact: true })}</td>
                     ))}
                   </tr>
                   <tr className="hover:bg-slate-900/40">
                     <td className="py-1 text-slate-400 font-sans text-left">Net Income</td>
                     {fundamentals.slice(-4).map((f, i) => (
-                      <td key={i} className="text-right py-1">${(f.netIncome / 4).toFixed(1)}M</td>
+                      <td key={i} className="text-right py-1">{formatCurrency(f.netIncome / 4, { compact: true })}</td>
                     ))}
                   </tr>
                   <tr className="hover:bg-slate-900/40">
                     <td className="py-1 text-slate-400 font-sans text-left">Total Debt</td>
                     {fundamentals.slice(-4).map((f, i) => (
-                      <td key={i} className="text-right py-1 text-amber-400">${f.totalDebt.toFixed(0)}M</td>
+                      <td key={i} className="text-right py-1 text-amber-400">{formatCurrency(f.totalDebt, { compact: true })}</td>
                     ))}
                   </tr>
                   <tr className="hover:bg-slate-900/40">
