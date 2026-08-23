@@ -49,6 +49,7 @@ interface CompanyTemplate {
   shares: number;
   initialRating: CreditRating;
   beta: number;
+  bankMarketShare?: number;
 }
 
 const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
@@ -112,8 +113,12 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
     { ticker: 'CELA', name: 'Diamond Leisure', sector: 'Consumer', revBase: 19000, ebitdaMargin: 0.20, debtBase: 44000, cashBase: 2200, shares: 580, initialRating: 'B', beta: 1.70 },
     { ticker: 'ZIUS', name: 'Emerald Brands', sector: 'Consumer', revBase: 14500, ebitdaMargin: 0.17, debtBase: 18000, cashBase: 1400, shares: 410, initialRating: 'BB', beta: 1.10 },
     { ticker: 'WSJZ', name: 'Obsidian Apparel', sector: 'Consumer', revBase: 6500, ebitdaMargin: 0.07, debtBase: 19000, cashBase: 280, shares: 240, initialRating: 'CCC', beta: 1.60 },
+    // Banks (4)
+    { ticker: 'MRDN', name: 'Meridian National Bank', sector: 'Banks', revBase: 42000, ebitdaMargin: 0.35, debtBase: 8000, cashBase: 15000, shares: 1200, initialRating: 'A', beta: 1.1, bankMarketShare: 0.35 },
+    { ticker: 'CRWN', name: 'Crown Federal Financial', sector: 'Banks', revBase: 34000, ebitdaMargin: 0.33, debtBase: 6500, cashBase: 12000, shares: 950, initialRating: 'A', beta: 1.05, bankMarketShare: 0.28 },
+    { ticker: 'HRTG', name: 'Heritage Trust Bancorp', sector: 'Banks', revBase: 26000, ebitdaMargin: 0.31, debtBase: 5000, cashBase: 9000, shares: 780, initialRating: 'BBB', beta: 1.15, bankMarketShare: 0.22 },
+    { ticker: 'ANLT', name: 'Anchorline Community Bank', sector: 'Banks', revBase: 18000, ebitdaMargin: 0.28, debtBase: 3500, cashBase: 6000, shares: 520, initialRating: 'BBB', beta: 1.2, bankMarketShare: 0.15 },
   ],
-
   UK: [
     // Tech (10)
     { ticker: 'DLET', name: 'Lumina Digital', sector: 'Tech', revBase: 45000, ebitdaMargin: 0.46, debtBase: 8000, cashBase: 14000, shares: 1200, initialRating: 'AAA', beta: 1.20 },
@@ -174,8 +179,12 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
     { ticker: 'PTQB', name: 'Equinox Media', sector: 'Consumer', revBase: 21000, ebitdaMargin: 0.15, debtBase: 26000, cashBase: 2900, shares: 640, initialRating: 'BB', beta: 1.50 },
     { ticker: 'VCHX', name: 'Platinum Hospitality', sector: 'Consumer', revBase: 11000, ebitdaMargin: 0.12, debtBase: 19000, cashBase: 1100, shares: 380, initialRating: 'B', beta: 1.35 },
     { ticker: 'MBHK', name: 'Allied Cosmetics', sector: 'Consumer', revBase: 4800, ebitdaMargin: 0.06, debtBase: 16000, cashBase: 310, shares: 210, initialRating: 'CCC', beta: 1.90 },
+    // Banks (4)
+    { ticker: 'LMBR', name: 'Lombard Royal Bank', sector: 'Banks', revBase: 22000, ebitdaMargin: 0.35, debtBase: 4000, cashBase: 8000, shares: 700, initialRating: 'A', beta: 1.1, bankMarketShare: 0.35 },
+    { ticker: 'THMS', name: 'Thames City Financial', sector: 'Banks', revBase: 18000, ebitdaMargin: 0.33, debtBase: 3200, cashBase: 6500, shares: 550, initialRating: 'A', beta: 1.05, bankMarketShare: 0.28 },
+    { ticker: 'BRIX', name: 'Brixton Trust Bancorp', sector: 'Banks', revBase: 14000, ebitdaMargin: 0.31, debtBase: 2500, cashBase: 4500, shares: 450, initialRating: 'BBB', beta: 1.15, bankMarketShare: 0.22 },
+    { ticker: 'SHIR', name: 'Shire Community Bank', sector: 'Banks', revBase: 9000, ebitdaMargin: 0.28, debtBase: 1800, cashBase: 3000, shares: 320, initialRating: 'BBB', beta: 1.2, bankMarketShare: 0.15 },
   ],
-
   JPN: [
     // Tech (10)
     { ticker: 'PPNH', name: 'Bronze Digital', sector: 'Tech', revBase: 110000, ebitdaMargin: 0.25, debtBase: 32000, cashBase: 29000, shares: 2100, initialRating: 'AA', beta: 1.10 },
@@ -236,8 +245,12 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
     { ticker: 'VLNO', name: 'Aurora Grocers', sector: 'Consumer', revBase: 16000, ebitdaMargin: 0.32, debtBase: 11000, cashBase: 5200, shares: 480, initialRating: 'AA', beta: 0.85 },
     { ticker: 'RHWU', name: 'Vanguard Hospitality', sector: 'Consumer', revBase: 12500, ebitdaMargin: 0.16, debtBase: 9500, cashBase: 2400, shares: 380, initialRating: 'A', beta: 0.55 },
     { ticker: 'JZYB', name: 'Obsidian Cosmetics', sector: 'Consumer', revBase: 4500, ebitdaMargin: 0.06, debtBase: 14000, cashBase: 290, shares: 180, initialRating: 'CCC', beta: 1.70 },
+    // Banks (4)
+    { ticker: 'EDOB', name: 'Edo National Bank', sector: 'Banks', revBase: 28000, ebitdaMargin: 0.35, debtBase: 5000, cashBase: 9000, shares: 800, initialRating: 'A', beta: 1.1, bankMarketShare: 0.35 },
+    { ticker: 'KYOF', name: 'Kyoto Federal Financial', sector: 'Banks', revBase: 22000, ebitdaMargin: 0.33, debtBase: 4200, cashBase: 7500, shares: 650, initialRating: 'A', beta: 1.05, bankMarketShare: 0.28 },
+    { ticker: 'OSKT', name: 'Osaka Trust Bancorp', sector: 'Banks', revBase: 17000, ebitdaMargin: 0.31, debtBase: 3500, cashBase: 5500, shares: 550, initialRating: 'BBB', beta: 1.15, bankMarketShare: 0.22 },
+    { ticker: 'SAPB', name: 'Sapporo Community Bank', sector: 'Banks', revBase: 12000, ebitdaMargin: 0.28, debtBase: 2500, cashBase: 4000, shares: 420, initialRating: 'BBB', beta: 1.2, bankMarketShare: 0.15 },
   ],
-
   EUR: [
     // Tech (10)
     { ticker: 'GHRH', name: 'Ruby Software', sector: 'Tech', revBase: 95000, ebitdaMargin: 0.42, debtBase: 14000, cashBase: 26000, shares: 1800, initialRating: 'AAA', beta: 1.25 },
@@ -303,6 +316,11 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
 
 /**
  * Generate 200 fully instantiated companies (50 per region across 5 sectors)
+    // Banks (4)
+    { ticker: 'CONT', name: 'Continental National Bank', sector: 'Banks', revBase: 32000, ebitdaMargin: 0.35, debtBase: 6000, cashBase: 11000, shares: 900, initialRating: 'A', beta: 1.1, bankMarketShare: 0.35 },
+    { ticker: 'ALPF', name: 'Alpine Federal Financial', sector: 'Banks', revBase: 25000, ebitdaMargin: 0.33, debtBase: 5200, cashBase: 9500, shares: 750, initialRating: 'A', beta: 1.05, bankMarketShare: 0.28 },
+    { ticker: 'RHNT', name: 'Rhine Trust Bancorp', sector: 'Banks', revBase: 20000, ebitdaMargin: 0.31, debtBase: 4500, cashBase: 7500, shares: 650, initialRating: 'BBB', beta: 1.15, bankMarketShare: 0.22 },
+    { ticker: 'DANB', name: 'Danube Community Bank', sector: 'Banks', revBase: 14000, ebitdaMargin: 0.28, debtBase: 3500, cashBase: 5000, shares: 520, initialRating: 'BBB', beta: 1.2, bankMarketShare: 0.15 },
  */
 export function generateInitialCompanies(): Company[] {
   const companies: Company[] = [];
@@ -495,6 +513,7 @@ export function generateInitialCompanies(): Company[] {
         marketCap: Number((stockPrice * tmpl.shares).toFixed(0)),
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
+        bankMarketShare: tmpl.bankMarketShare,
         beta: tmpl.beta,
         
         seniorBondYield: 0.05 + oasSpreadBps / 10000,

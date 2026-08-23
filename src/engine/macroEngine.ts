@@ -712,7 +712,7 @@ export function evolveRegionMacro(
   let newPotentialGdpGrowth = region.potentialGdpGrowth;
   if (week % 52 === 0) {
     const laborForceTrend = (newParticipation - region.laborForceParticipation) * 52;
-    const capexIntensityTrend = Math.max(-0.002, Math.min(0.002, microFeedback.capexGdpContribution * 0.3));
+    const capexIntensityTrend = Math.max(-0.0015, Math.min(0.0015, microFeedback.capexGdpContribution * 0.15));
     const potentialGdpDrift = laborForceTrend * 0.3 + capexIntensityTrend;
     newPotentialGdpGrowth = Math.max(0.003, Math.min(0.035, Number((region.potentialGdpGrowth + potentialGdpDrift).toFixed(4))));
   }
@@ -721,7 +721,7 @@ export function evolveRegionMacro(
   const newNeutralRate = Number((region.neutralRate + potentialGdpDelta).toFixed(4));
 
   const newNairu = week % 52 === 0
-    ? Math.max(0.02, Math.min(0.09, Number((region.nairu + (newParticipation - region.laborForceParticipation) * 0.15).toFixed(4))))
+    ? Math.max(0.02, Math.min(0.09, Number((region.nairu + (newParticipation - region.laborForceParticipation) * 52 * 0.15).toFixed(4))))
     : region.nairu;
 
   const baseUnempChange = (potentialGdp - newGdpGrowth) * 0.25 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002);
@@ -743,7 +743,8 @@ export function evolveRegionMacro(
 
   const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5;
   const newSavingsRate = Math.max(0.02, Math.min(0.18, savingsBaseline + 0.2 * (region.policyRate - newNeutralRate) - 0.1 * ((newCCI - 100) / 100)));
-  const debtServiceBurden = prevHS.householdDebtToIncomeRatio * region.laggedPolicyRateEMA * 0.04;
+  const creditTighteningConsumerAddOn = Math.max(0, region.bankingSector.creditConditionsIndex) * 0.02;
+  const debtServiceBurden = prevHS.householdDebtToIncomeRatio * (region.laggedPolicyRateEMA + creditTighteningConsumerAddOn) * 0.04;
   const equityWealthEffect = equityReturn * 0.02;
   const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100) + equityWealthEffect - debtServiceBurden;
 
@@ -1144,7 +1145,7 @@ export function evolveBankingSector(
   const totalAssetsProxy = newBusinessLoanBook + newConsumerLoanBook + prevBanking.sovereignBondHoldingsUSD + prevBanking.cashReservesUSD;
   const targetSovHoldings = totalAssetsProxy * 0.15;
   const newSovHoldings = prevBanking.sovereignBondHoldingsUSD * 0.98 + targetSovHoldings * 0.02;
-  const newCashReserves = Math.max(0, newDeposits * 0.10) + Math.max(0, -balanceSheetStance) * totalAssetsProxy * 0.01;
+  const newCashReserves = Math.max(0, newDeposits * 0.10 + Math.max(0, -balanceSheetStance) * totalAssetsProxy * 0.01);
   const depositBeta = 0.45;
   const depositRate = policyRate * depositBeta;
   const businessLoanYield = policyRate + 0.025;
@@ -1156,7 +1157,10 @@ export function evolveBankingSector(
   const consumerLossRateAnnual = Math.min(0.06, Math.max(0, unemploymentRate - 0.045) * 0.8);
   const weeklyLoanLossProvision = (newBusinessLoanBook * businessLossRateAnnual + newConsumerLoanBook * consumerLossRateAnnual) / 52;
   const weeklyNetIncome = weeklyInterestIncome - weeklyInterestExpense - weeklyLoanLossProvision;
-  const newBankEquity = Math.max(0, prevBanking.bankEquityUSD + weeklyNetIncome);
+  const priorCapitalRatioForPayout = prevBanking.bankCapitalRatio;
+  const targetPayoutRatio = priorCapitalRatioForPayout > 0.14 ? 0.6 : priorCapitalRatioForPayout < 0.09 ? 0 : 0.3;
+  const weeklyPayout = Math.max(0, weeklyNetIncome) * targetPayoutRatio;
+  const newBankEquity = Math.max(0, prevBanking.bankEquityUSD + weeklyNetIncome - weeklyPayout);
   const riskWeightedAssets = newBusinessLoanBook * 1.0 + newConsumerLoanBook * 0.75 + newSovHoldings * 0.0;
   const newBankCapitalRatio = riskWeightedAssets > 0 ? newBankEquity / riskWeightedAssets : 0.15;
   const capitalGap = 0.12 - newBankCapitalRatio;

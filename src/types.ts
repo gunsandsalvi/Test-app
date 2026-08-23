@@ -232,6 +232,7 @@ export interface Company {
   marketCap: number;
   dividendYield: number;
   baselineDividendYield: number;
+  bankMarketShare?: number;
   beta: number;
   
   // Debt & CDS Pricing
