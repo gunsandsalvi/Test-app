@@ -83,18 +83,25 @@ export function createInitialGameState(): GameState {
   const companies = generateInitialCompanies();
 
   Object.keys(regions).forEach(r => {
-    const regComps = companies.filter(c => c.region === r);
-    const cats = Object.keys(regions[r as any].categoryDemand);
-    cats.forEach(cat => {
-      let sum = 0;
-      regComps.forEach(c => {
-        (c.productLines || []).forEach(line => {
-          if (line.category === cat) {
-            sum += line.revenueShare * c.annualRevenue;
-          }
-        });
-      });
-      regions[r as any].categoryDemand[cat as any].demandLevelUSD = sum;
+    const regionId = r as RegionId;
+    const reg = regions[regionId];
+    const hs = reg.householdState;
+    const aggregateConsumptionUSD = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+    const govBase = reg.estimatedHouseholdIncomeUSD * 0.18;
+    const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
+    reg.laggedCorporateDemandBase = corpBase;
+    const targets: Record<string, number> = {
+      StapleHousehold: aggregateConsumptionUSD * hs.stapleSpendShare,
+      StandardHousehold: aggregateConsumptionUSD * hs.standardSpendShare,
+      LuxuryHousehold: aggregateConsumptionUSD * hs.luxurySpendShare,
+      GovernmentDefense: govBase * 0.30, 
+      GovernmentInfrastructure: govBase * 0.45, 
+      GovernmentHealthcare: govBase * 0.25,
+      CorporateIndustrial: corpBase * 0.6, 
+      CorporateTech: corpBase * 0.4,
+    };
+    Object.keys(targets).forEach(cat => {
+      (regions[regionId].categoryDemand as any)[cat] = { demandLevelUSD: targets[cat], demandGrowthAnnual: 0 };
     });
   });
 
@@ -319,11 +326,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     };
 
     // Corporate demand (G3), tied to aggregate CapEx
-    const corporateDemandBase = prevActiveFirms.filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
-    const corpTargets: Partial<Record<string, number>> = {
-      CorporateIndustrial: corporateDemandBase * 0.6,
-      CorporateTech: corporateDemandBase * 0.4,
-    };
+    const rawCorporateDemandBase = prevActiveFirms.filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
+    const newLaggedCorporateDemandBase = reg.laggedCorporateDemandBase * 0.95 + rawCorporateDemandBase * 0.05;
+    reg.laggedCorporateDemandBase = newLaggedCorporateDemandBase;
+    const corpTargets = { CorporateIndustrial: newLaggedCorporateDemandBase * 0.6, CorporateTech: newLaggedCorporateDemandBase * 0.4 };
 
     const allTargets = { ...householdTargets, ...govTargets, ...corpTargets };
     const smoothingByCategory: Partial<Record<string, number>> = {

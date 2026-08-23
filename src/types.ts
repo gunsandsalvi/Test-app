@@ -82,6 +82,7 @@ export interface Region {
   inversionWeeksCount: number;
   recessionShockQueue: { week: number; shock: number }[];
   bankingSector: BankingSector;
+  laggedCorporateDemandBase: number;
   estimatedHouseholdIncomeUSD: number; // aggregate regional household income proxy, in $M, grows with GDP
   // Macro fundamentals
   policyRate: number; // e.g. 0.045 = 4.50%
@@ -159,7 +160,7 @@ export interface FxPair {
   basisSpreadBps: number; // Cross currency basis spread in bps (e.g. -15 bps)
 }
 
-export type TabKey = 'macro' | 'indices' | 'equities' | 'bonds_cds' | 'commodities' | 'derivatives' | 'portfolio';
+export type TabKey = 'macro' | 'markets' | 'credit' | 'risk';
 
 export interface FundamentalSnapshot {
   week: number;
@@ -433,6 +434,14 @@ export interface CompositeBenchmarkIndices {
   
   global10YBenchmark: IndexMetric;
   gsciCommodity: IndexMetric;
+  
+  techIndex: IndexMetric;
+  financialsIndex: IndexMetric;
+  energyIndex: IndexMetric;
+  industrialsIndex: IndexMetric;
+  
+  globalCreditComposite: IndexMetric;
+  marketBreadth: number;
 }
 
 export interface NewsItem {

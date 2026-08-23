@@ -189,6 +189,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       symbol: '$',
       centralBank: 'Federal Reserve',
       cycleRegime: 'Expansion',
+      laggedCorporateDemandBase: 0,
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 12_000_000_000_000,
@@ -253,6 +254,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       symbol: '£',
       centralBank: 'Bank of England',
       cycleRegime: 'Expansion',
+      laggedCorporateDemandBase: 0,
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 2_000_000_000_000,
@@ -317,6 +319,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       symbol: '¥',
       centralBank: 'Bank of Japan',
       cycleRegime: 'Expansion',
+      laggedCorporateDemandBase: 0,
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 3_500_000_000_000,
@@ -381,6 +384,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       symbol: '€',
       centralBank: 'European Central Bank',
       cycleRegime: 'Expansion',
+      laggedCorporateDemandBase: 0,
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 9_000_000_000_000,
@@ -1207,8 +1211,8 @@ export function evolveBankingSector(
   const weeklyInterestExpense = (newDeposits * depositRate) / 52;
     if (weeklyInterestIncome * 52 / totalAssetsProxy > 0.4) console.log(`DEBUG: policy=${policyRate} busYield=${businessLoanYield} consYield=${consumerLoanYield} sovYield=${sovereign10YYield} nimDamping=${nimDampingFactor} prevNIM=${priorNim} totalAst=${totalAssetsProxy} newCons=${newConsumerLoanBook} weeklyInc=${weeklyInterestIncome} weeklyExp=${weeklyInterestExpense} deposits=${newDeposits} depRate=${depositRate}`);
   const netInterestMarginPct = totalAssetsProxy > 0 ? ((weeklyInterestIncome - weeklyInterestExpense) * 52) / totalAssetsProxy : 0;
-  const businessLossRateAnnual = Math.min(0.08, (creditContagionBps / 10000) * 1.2);
-  const consumerLossRateAnnual = Math.min(0.06, Math.max(0, unemploymentRate - 0.045) * 0.8);
+  const businessLossRateAnnual = Math.min(0.12, (creditContagionBps / 10000) * 1.8);
+  const consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
   const weeklyLoanLossProvision = (newBusinessLoanBook * businessLossRateAnnual + newConsumerLoanBook * consumerLossRateAnnual) / 52;
   const weeklyNetIncome = weeklyInterestIncome - weeklyInterestExpense - weeklyLoanLossProvision;
   const priorCapitalRatioForPayout = prevBanking.bankCapitalRatio;

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Sparkline, SegmentedBar } from './charts/Charts';
 import {
   Activity,
   AlertOctagon,
@@ -109,6 +110,26 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
 
   return (
     <div className="space-y-3 pb-20">
+      {/* Asset Allocation Bar */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
+        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Gross Asset Allocation</h3>
+        <SegmentedBar 
+          segments={[
+            { value: portfolio.positions.filter(p => p.assetType === 'EQUITY').reduce((s,p) => s + p.notional, 0), color: '#3b82f6', label: 'Equities' },
+            { value: portfolio.positions.filter(p => p.assetType === 'CORP_BOND' || p.assetType === 'SOV_BOND' || p.assetType === 'LEVERAGED_LOAN').reduce((s,p) => s + p.notional, 0), color: '#10b981', label: 'Bonds' },
+            { value: portfolio.positions.filter(p => p.assetType === 'CDS').reduce((s,p) => s + p.notional, 0), color: '#f59e0b', label: 'CDS' },
+            { value: portfolio.positions.filter(p => !['EQUITY','CORP_BOND','SOV_BOND','CDS','LEVERAGED_LOAN'].includes(p.assetType)).reduce((s,p) => s + p.notional, 0), color: '#8b5cf6', label: 'Other' },
+          ]} 
+          height={12} 
+        />
+        <div className="flex justify-between text-[9px] text-slate-400 mt-1.5 font-medium">
+          <span className="text-blue-400">Equities</span>
+          <span className="text-emerald-400">Bonds</span>
+          <span className="text-amber-400">CDS</span>
+          <span className="text-purple-400">Other</span>
+        </div>
+      </div>
+
       {/* Mini Performance Trajectory & Benchmark Chart */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
@@ -164,7 +185,7 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
           <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 mt-2 pt-1 border-t border-slate-900">
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Fund NAV: <strong className="text-white">{formatUSD(portfolio.navUSD)}</strong></span>
+              <span>Fund NAV: <strong className="text-white">{formatCurrency(portfolio.navUSD)}</strong></span>
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-amber-400" />
@@ -194,7 +215,7 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
           <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-center">
             <span className="text-[8px] text-slate-500 block uppercase">Realized P&L</span>
             <span className={`font-bold mt-0.5 block ${portfolio.realizedPnLTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {formatUSD(portfolio.realizedPnLTotal)}
+              {formatCurrency(portfolio.realizedPnLTotal)}
             </span>
           </div>
           <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-center">
@@ -289,7 +310,7 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
                           isProfit ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {isProfit ? '+' : ''}{formatUSD(pos.unrealizedPnL)}
+                        {isProfit ? '+' : ''}{formatCurrency(pos.unrealizedPnL)}
                       </div>
                       <span className="text-[9px] text-slate-500 font-mono">Unrealized MTM</span>
                     </div>
@@ -299,11 +320,11 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
                   <div className="mt-2.5 pt-2 border-t border-slate-800/80 grid grid-cols-3 gap-2 text-[10px] font-mono text-slate-400">
                     <div>
                       <span className="text-slate-500 text-[8px] block uppercase">Notional</span>
-                      <span className="text-slate-200 font-semibold">{formatUSD(pos.notional)}</span>
+                      <span className="text-slate-200 font-semibold">{formatCurrency(pos.notional)}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[8px] block uppercase">PB Margin</span>
-                      <span className="text-slate-200 font-semibold">{formatUSD(pos.marginRequirement)}</span>
+                      <span className="text-slate-200 font-semibold">{formatCurrency(pos.marginRequirement)}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[8px] block uppercase">Dealer</span>
@@ -364,10 +385,10 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
 
                     <div className="text-right font-mono">
                       <span className={`text-xs font-extrabold block ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {isPos ? '+' : ''}{formatUSD(val)}
+                        {isPos ? '+' : ''}{formatCurrency(val)}
                       </span>
                       <span className="text-[8px] text-slate-500 block">
-                        Last Wk: {lastVal >= 0 ? '+' : ''}{formatUSD(lastVal)}
+                        Last Wk: {lastVal >= 0 ? '+' : ''}{formatCurrency(lastVal)}
                       </span>
                     </div>
                   </div>
@@ -391,7 +412,7 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
               <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
                 <span className="text-[9px] text-slate-500 font-semibold uppercase block">Net Delta Exposure (Δ)</span>
                 <span className="text-sm font-extrabold font-mono text-blue-400 mt-1 block">
-                  {formatUSD(portfolio.netDeltaUSD)}
+                  {formatCurrency(portfolio.netDeltaUSD)}
                 </span>
                 <span className="text-[8px] text-slate-500 mt-0.5 block">Equity & Spot directional delta</span>
               </div>
@@ -399,7 +420,7 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
               <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
                 <span className="text-[9px] text-slate-500 font-semibold uppercase block">Net DV01 (Rates Risk)</span>
                 <span className="text-sm font-extrabold font-mono text-indigo-400 mt-1 block">
-                  {formatUSD(portfolio.netDV01USD)}/bp
+                  {formatCurrency(portfolio.netDV01USD)}/bp
                 </span>
                 <span className="text-[8px] text-slate-500 mt-0.5 block">PnL sensitivity to 1 bp curve shift</span>
               </div>
@@ -407,7 +428,7 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
               <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
                 <span className="text-[9px] text-slate-500 font-semibold uppercase block">Net Vega (ν)</span>
                 <span className="text-sm font-extrabold font-mono text-purple-400 mt-1 block">
-                  {formatUSD(portfolio.netVegaUSD)}/1%
+                  {formatCurrency(portfolio.netVegaUSD)}/1%
                 </span>
                 <span className="text-[8px] text-slate-500 mt-0.5 block">Exposure to 1 point vol change</span>
               </div>
@@ -415,7 +436,7 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
               <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
                 <span className="text-[9px] text-slate-500 font-semibold uppercase block">Net Gamma (Γ)</span>
                 <span className="text-sm font-extrabold font-mono text-emerald-400 mt-1 block">
-                  {formatUSD(portfolio.netGammaUSD)}
+                  {formatCurrency(portfolio.netGammaUSD)}
                 </span>
                 <span className="text-[8px] text-slate-500 mt-0.5 block">Curvature & convex delta acceleration</span>
               </div>
@@ -460,8 +481,8 @@ export const PortfolioRiskTab: React.FC<PortfolioRiskTabProps> = ({
                     {/* Credit Limit Progress */}
                     <div className="pt-1 border-t border-slate-900">
                       <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono">
-                        <span>Line Used: {formatUSD(grossExposureUSD)}</span>
-                        <span>Credit Limit: {formatUSD(dealer.creditLimitUSD)} ({limitUtilization.toFixed(1)}%)</span>
+                        <span>Line Used: {formatCurrency(grossExposureUSD)}</span>
+                        <span>Credit Limit: {formatCurrency(dealer.creditLimitUSD)} ({limitUtilization.toFixed(1)}%)</span>
                       </div>
                       <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
                         <div
