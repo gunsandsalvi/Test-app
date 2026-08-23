@@ -327,7 +327,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   const newBalanceSheetStance = Math.max(-1, Math.min(1, -cbChangePct * 10));
   const newBankingSector = evolveBankingSector(region.bankingSector, microFeedback.businessLoanBookInputUSD, prevHS.householdDebtToIncomeRatio, region.estimatedHouseholdIncomeUSD, newSavingsRate, newPolicyRate, microFeedback.creditContagionBps, newUnemployment, newZeroRates.tenor10Y, newBalanceSheetStance, newGdpGrowth);
-  const newEstimatedHouseholdIncomeUSD = Number((region.estimatedHouseholdIncomeUSD * (1 + newGdpGrowth / 52)).toFixed(0));
+  const newEstimatedHouseholdIncomeUSD = Number((region.estimatedHouseholdIncomeUSD * (1 + (newGdpGrowth + newInflation) / 52)).toFixed(0));
 
   const updatedRegion: Region = {
     ...region,
@@ -362,7 +362,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,
     gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,
-    bottomUpGdpWeight: region.bottomUpGdpWeight ?? 0.30,
+    bottomUpGdpWeight: region.bottomUpGdpWeight ?? 0.50,
     nominalGdpHistory: region.nominalGdpHistory ?? [],
     consumptionComponentUSD: region.consumptionComponentUSD ?? 0,
     investmentComponentUSD: region.investmentComponentUSD ?? 0,

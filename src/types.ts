@@ -253,6 +253,7 @@ export interface Company {
   previousEmployeeCount: number;
   baselineEmployeeCount: number;
   ebitda: number;
+  baselineEbitdaMargin?: number;
   ebit: number;
   netIncome: number;
   eps: number;

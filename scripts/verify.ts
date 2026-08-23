@@ -59,6 +59,16 @@ state.companies.forEach(c => {
   }
 });
 
+const revenueAtStart = new Map(initialState.companies.map(c => [c.ticker, c.annualRevenue]));
+const defaultedGrowers = state.companies.filter(c => {
+  if (!c.isDefaulted) return false;
+  const startRev = revenueAtStart.get(c.ticker);
+  return startRev && c.annualRevenue > startRev * 1.2; // defaulted while revenue was still meaningfully above its starting level
+});
+if (defaultedGrowers.length > 3) {
+  violations.push({ week: 520, message: `${defaultedGrowers.length} companies defaulted while revenue was still elevated vs. their starting level — worth a manual check: ${defaultedGrowers.map(c=>c.ticker).join(', ')}` });
+}
+
 const finalBankCapRatio = trackers.usaBankCapitalRatio.history[trackers.usaBankCapitalRatio.history.length - 1];
 if (finalBankCapRatio > 0.35 || finalBankCapRatio < 0.05) {
   violations.push({ week: 520, message: `bankCapitalRatio out of plausible band: ${finalBankCapRatio}` });
