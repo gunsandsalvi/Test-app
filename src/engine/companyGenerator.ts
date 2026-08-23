@@ -481,6 +481,7 @@ export function generateInitialCompanies(): Company[] {
         maintenanceCapex,
         growthCapex,
         maintenanceShortfallStreak: 0,
+        executionQuality: 1.0,
         historicalFundamentals,
         
         earningsWeekModulo,
@@ -715,6 +716,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     maintenanceCapex,
     growthCapex,
     maintenanceShortfallStreak: 0,
+    executionQuality: 1.0,
     creditRating: initialRating, isDefaulted: false, oasSpreadBps: 300, cdsSpreadBps: 300,
     seniorBondYield: 0.08, stockPrice: 20, historicalPrices: Array(52).fill(20), forwardPE: 15,
     marketCap: shares * 20, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,

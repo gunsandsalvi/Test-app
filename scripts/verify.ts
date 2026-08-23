@@ -23,7 +23,9 @@ function isNaNAnywhere(state: GameState): string[] {
   return bad;
 }
 
-let state = createInitialGameState();
+const initialState = createInitialGameState();
+let state = initialState;
+const initialRevenueByTicker = new Map(initialState.companies.map(c => [c.ticker, c.annualRevenue]));
 const trackers: Record<string, { history: number[]; extract: (s: GameState) => number }> = {
   usaInflation: { history: [], extract: s => s.regions.USA.inflation },
   usaUnemployment: { history: [], extract: s => s.regions.USA.unemploymentRate },
@@ -44,6 +46,13 @@ for (let w = 1; w <= 520; w++) {
     }
   });
 }
+
+state.companies.forEach(c => {
+  const initial = initialRevenueByTicker.get(c.ticker);
+  if (initial && c.annualRevenue > initial * 20) {
+    violations.push({ week: 520, message: `${c.ticker} revenue grew ${(c.annualRevenue/initial).toFixed(0)}x over the run — check for a circularity` });
+  }
+});
 
 const finalBankCapRatio = trackers.usaBankCapitalRatio.history[trackers.usaBankCapitalRatio.history.length - 1];
 if (finalBankCapRatio > 0.35 || finalBankCapRatio < 0.05) {

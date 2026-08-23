@@ -18,6 +18,7 @@ export interface CategoryDemandState {
   demandLevelUSD: number;
   demandGrowthAnnual: number;
   demandHistory: number[];
+  crowdingIntensity: number;
 }
 
 
@@ -246,6 +247,7 @@ export interface Company {
   maintenanceCapex: number;
   growthCapex: number;
   maintenanceShortfallStreak: number;
+  executionQuality: number;
   
   // Asynchronous Quarterly Earnings Cycles (13-week staggered schedule)
   earningsWeekModulo: number; // 1 to 13

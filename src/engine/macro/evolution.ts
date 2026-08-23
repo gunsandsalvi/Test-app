@@ -263,10 +263,11 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const dotPlot1Y = Number((newPolicyRate * 0.4 + smoothedTargetRate * 0.6).toFixed(4));
   const dotPlot2Y = Number((smoothedTargetRate * 0.35 + (rStar + piStar) * 0.65).toFixed(4));
 
-  const qePace = newCycleRegime === 'Recession' ? 50e9 : (newCycleRegime === 'Expansion' ? -15e9 : 0);
-  const newCbBalance = Math.max(0, region.centralBankBalanceSheet + qePace);
-  const cbChangePct = (newCbBalance - region.centralBankBalanceSheet) / Math.max(1, region.centralBankBalanceSheet);
-  const qePremium = cbChangePct * -0.5;
+  const qePace = newCycleRegime === 'Recession' ? 10e9 : (newCycleRegime === 'Expansion' ? -3e9 : 0);
+  const cbFloor = 300e9; // Structural floor for central bank assets (currency in circulation & baseline reserves)
+  const newCbBalance = Math.max(cbFloor, region.centralBankBalanceSheet + qePace);
+  const cbChangePct = (newCbBalance - region.centralBankBalanceSheet) / Math.max(cbFloor, region.centralBankBalanceSheet);
+  const qePremium = Math.max(-0.01, Math.min(0.01, cbChangePct * -0.5));
 
   // Update Nelson-Siegel yield curve parameters
   const targetBeta0 = 0.035 + (newInflation - piStar) * 0.4 + fiscalDeficitTermPremium * 0.4 + (microFeedback.creditContagionBps / 10000) * 0.2 + qePremium * 2;
@@ -324,7 +325,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
-  const newBalanceSheetStance = -cbChangePct;
+  const newBalanceSheetStance = Math.max(-1, Math.min(1, -cbChangePct * 10));
   const newBankingSector = evolveBankingSector(region.bankingSector, microFeedback.businessLoanBookInputUSD, prevHS.householdDebtToIncomeRatio, region.estimatedHouseholdIncomeUSD, newSavingsRate, newPolicyRate, microFeedback.creditContagionBps, newUnemployment, newZeroRates.tenor10Y, newBalanceSheetStance, newGdpGrowth);
   const newEstimatedHouseholdIncomeUSD = Number((region.estimatedHouseholdIncomeUSD * (1 + newGdpGrowth / 52)).toFixed(0));
 

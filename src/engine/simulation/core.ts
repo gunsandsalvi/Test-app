@@ -123,6 +123,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const reg = updatedRegions[regionId];
     const hs = reg.householdState;
 
+    const categorySupplyGrowth: Record<string, number> = {};
+    (Object.keys(reg.categoryDemand) as string[]).forEach(cat => {
+      const firmsInCat = prevActiveFirms.filter(f => f.region === regionId && (f.productLines || []).some(l => l.category === cat));
+      if (firmsInCat.length === 0) { categorySupplyGrowth[cat] = 0; return; }
+      categorySupplyGrowth[cat] = firmsInCat.reduce((s, f) => {
+        const line = f.productLines.find(l => l.category === cat)!;
+        return s + (f.growthCapex / Math.max(1, f.annualRevenue)) * line.revenueShare;
+      }, 0) / firmsInCat.length;
+    });
+
     // Household demand (G2)
     const aggregateConsumptionUSD = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
     const householdTargets: Partial<Record<string, number>> = {
@@ -156,11 +166,20 @@ export function advanceWeeklyStep(state: GameState): GameState {
     Object.keys(allTargets).forEach((cat) => {
       const target = (allTargets as any)[cat]!;
       const smoothing = (smoothingByCategory as any)[cat] ?? 0.1;
-      const prevLevel = reg.categoryDemand[cat as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? target;
-      const newLevel = prevLevel * (1 - smoothing) + target * smoothing;
-      const growthAnnual = prevLevel > 0 ? ((newLevel / prevLevel) - 1) * 52 : 0;
-      const prevHistory = reg.categoryDemand[cat as keyof typeof reg.categoryDemand]?.demandHistory ?? [];
-      (reg.categoryDemand as any)[cat] = { demandLevelUSD: newLevel, demandGrowthAnnual: growthAnnual, demandHistory: [...prevHistory.slice(-25), newLevel] };
+      const existingEntry = reg.categoryDemand[cat as keyof typeof reg.categoryDemand];
+      const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelUSD > 0);
+      const prevLevel = hasPriorDemand ? existingEntry.demandLevelUSD : target;
+      const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
+      const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 ? ((newLevel / prevLevel) - 1) * 52 : 0;
+      const growthAnnual = Math.max(-0.25, Math.min(0.25, rawGrowthAnnual));
+      const prevHistory = existingEntry?.demandHistory ?? [];
+      const crowdingIntensity = Math.max(0, Math.min(1, (categorySupplyGrowth[cat] ?? 0) * 8 - (target ? growthAnnual : 0)));
+      (reg.categoryDemand as any)[cat] = {
+        demandLevelUSD: newLevel,
+        demandGrowthAnnual: growthAnnual,
+        demandHistory: [...prevHistory.slice(-25), newLevel],
+        crowdingIntensity,
+      };
     });
   });
 
@@ -235,6 +254,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let newNetIncome = 0;
     let newEps = 0;
 
+    const executionNoise = (Math.random() - 0.5) * 0.3;
+    const newExecutionQuality = Math.max(0.4, Math.min(1.8, (comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08));
+
     if (comp.sector === 'Banks') {
       const bs = reg.bankingSector;
       const share = comp.bankMarketShare ?? 0.25;
@@ -276,12 +298,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
       // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
       const pricingPowerBeta = SECTOR_PRICING_POWER[comp.sector] ?? 0.65;
-      // Operating margins update (Wage-Push compression and capacity decay)
+      // Operating margins update (Wage-Push compression, capacity decay, and competitive crowding)
       const capacityDecayPenalty = Math.min(0.08, (comp.maintenanceShortfallStreak ?? 0) * 0.003); // up to 8% margin erosion after ~27 consecutive underfunded weeks
       const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
       const wageCompression = Math.max(0, reg.householdState.wageGrowth - 0.025) * 0.15 * wageSensitivity;
+      const avgCrowdingIntensity = (comp.productLines || []).reduce((s, l) => {
+        const catDemand = reg.categoryDemand[l.category as any];
+        return s + (catDemand?.crowdingIntensity ?? 0) * l.revenueShare;
+      }, 0);
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
-      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52) - capacityDecayPenalty));
+      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52) - capacityDecayPenalty - avgCrowdingIntensity * 0.05));
 
       const growthCapexToRev = (comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue);
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
@@ -292,7 +318,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const estCompEffect = Math.max(-0.1, Math.min(0.1, estAvgComp * 0.15));
       const estTargetGrowthCapex = baseRev * growthCapexToRev * (1 - estRateDrag) * estCashHealth * (1 + estQCapexEffect + estCompEffect);
       const estNewGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + estTargetGrowthCapex * 0.10);
-      const growthInvestmentSignal = Math.max(-0.5, Math.min(0.5, (estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))));
+      const growthInvestmentSignal = Math.max(-0.5, Math.min(0.5, ((estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))) * newExecutionQuality));
 
       let categoryDrivenGrowth = 0;
       updatedProductLines = (comp.productLines || []).map((line) => {
@@ -345,18 +371,19 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const availableFundingForMaintenance = Math.max(0, weeklyOperatingCashFlow) + Math.max(0, comp.cash) * 0.05 + maintenanceBorrowingCapacity;
 
     // 3. Fund what's affordable, defer the rest
-    const fundedMaintenanceCapex = Math.min(weeklyDesiredMaintenanceCapex, availableFundingForMaintenance) * 52;
+    const weeklyFundedMaintenance = Math.min(weeklyDesiredMaintenanceCapex, availableFundingForMaintenance);
+    const fundedMaintenanceCapex = weeklyFundedMaintenance * 52;
     const maintenanceShortfallThisWeek = Math.max(0, targetMaintenanceCapex - fundedMaintenanceCapex);
-    const debtFundedPortion = Math.max(0, Math.min(fundedMaintenanceCapex, maintenanceBorrowingCapacity * 52) - Math.max(0, weeklyOperatingCashFlow * 52));
+    const weeklyDebtFundedPortion = Math.max(0, Math.min(weeklyFundedMaintenance, maintenanceBorrowingCapacity) - Math.max(0, weeklyOperatingCashFlow));
     const newMaintenanceCapex = Math.max(0, (comp.maintenanceCapex ?? (comp.capex * 0.6)) * 0.95 + fundedMaintenanceCapex * 0.05);
 
     // 4. Debt-funded maintenance becomes a real new floating tranche — genuinely raises leverage and next week's interest, not a free lunch
     let maintenanceFundingTranches: DebtTranche[] = [];
-    if (debtFundedPortion > 1000) {
+    if (weeklyDebtFundedPortion > 1000) {
       const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
       maintenanceFundingTranches = [{
         id: `${comp.ticker}-MAINT-${nextWeek}`,
-        principalUSD: debtFundedPortion,
+        principalUSD: weeklyDebtFundedPortion,
         rateType: 'FLOATING',
         floatingMarginBps: Math.round(currentBaseSpreadBps * 1.1), // priced wide — bridge/revolver-style, not term financing
         originationWeek: nextWeek,
@@ -370,7 +397,18 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? (comp.maintenanceShortfallStreak ?? 0) + 1
       : Math.max(0, (comp.maintenanceShortfallStreak ?? 0) - 2); // recovers twice as fast as it accumulates
 
-    // Growth — fully discretionary, now also tied to competitiveness:
+    // Growth — fully discretionary, now disciplined by addressable opportunity:
+    // Genuine reinvestment opportunity — bounded by how fast this company's actual addressable categories are growing, not by ambition
+    const avgCategoryOpportunity = (comp.productLines || []).reduce((s, l) => {
+      const catDemand = reg.categoryDemand[l.category as any];
+      return s + Math.max(0, catDemand?.demandGrowthAnnual ?? 0) * l.revenueShare;
+    }, 0);
+    const productiveReinvestmentEnvelope = newRevenue * avgCategoryOpportunity * 1.5; // generous multiple of addressable growth, not arbitrary
+
+    const fcfBeforeGrowthCapex = Math.max(0, weeklyOperatingCashFlow * 52 - newMaintenanceCapex);
+    const excessCashGeneration = Math.max(0, fcfBeforeGrowthCapex - productiveReinvestmentEnvelope);
+    const payoutPressure = fcfBeforeGrowthCapex > 0 ? Math.min(1, excessCashGeneration / fcfBeforeGrowthCapex) : 0;
+
     const growthCapexToRevenueRatio = (comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue);
     const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
     const cashHealthFactor = comp.cash < 0 ? 0.4 : 1.0;
@@ -378,7 +416,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const qCapexEffect = Math.max(-0.15, Math.min(0.15, (tobinsQ - 1) * 0.2));
     const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
     const competitivenessCapexEffect = Math.max(-0.1, Math.min(0.1, avgCompetitiveness * 0.15));
-    const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect);
+    const growthCapexAllocationShare = 1 - payoutPressure * 0.75; // even at max payout pressure, still reinvests a quarter of excess — realistic, not zero
+    const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
     const newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
 
     const newCapex = newMaintenanceCapex + newGrowthCapex;
@@ -389,7 +428,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let newTotalDebt = comp.totalDebt;
 
     const newBaselineDividendYield = Number((comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002).toFixed(4));
-    const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0));
+    const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + payoutPressure * 2.5);
     const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
 
     const headcountPressure = newCash < 0 ? -0.015 : (newEbitdaMargin < baseEbitdaMargin - 0.01 ? -0.002 : (reg.cycleRegime === 'Expansion' ? 0.001 : (reg.cycleRegime === 'Recession' ? -0.002 : 0)));
@@ -604,7 +643,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newBaselineRecoveryRate = Number(((comp.baselineRecoveryRate ?? 0.40) * 0.998 + comp.recoveryRate * 0.002).toFixed(4));
     const effectiveRecoveryRate = Math.max(0.10, newBaselineRecoveryRate * (1 - systemicStressFactor));
     const trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52;
-    const newBaselineAnnualRevenue = Number(((comp.baselineAnnualRevenue * (1 + trendWeeklyGrowth) * 0.90) + (newRevenue * 0.10)).toFixed(1));
+    const newBaselineAnnualRevenue = Number((comp.baselineAnnualRevenue * (1 + trendWeeklyGrowth)).toFixed(1));
 
     return {
       ...comp,
@@ -616,6 +655,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       maintenanceCapex: Number(newMaintenanceCapex.toFixed(1)),
       growthCapex: Number(newGrowthCapex.toFixed(1)),
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,
+      executionQuality: Number(newExecutionQuality.toFixed(3)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,
