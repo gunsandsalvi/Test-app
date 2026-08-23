@@ -24,6 +24,7 @@ export const SECTOR_BENCHMARKS = {
   Financials: { basePE: 13.5, growthRate: 0.06, vol: 0.22 },
   Industrials: { basePE: 18.0, growthRate: 0.07, vol: 0.20 },
   Consumer: { basePE: 21.0, growthRate: 0.05, vol: 0.18 },
+  Banks: { basePE: 10.0, growthRate: 0.03, vol: 0.24 },
 };
 
 /**

@@ -1,5 +1,42 @@
-import { Company, CreditRating, RegionId, Sector } from '../types';
+import { Company, CreditRating, RegionId, Sector, DebtTranche } from '../types';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
+
+export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
+  AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
+};
+
+function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating): DebtTranche[] {
+  const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
+  const trancheWeights = [0.35, 0.35, 0.30];
+  const maturityWeeks = [260, 520, 780]; // 5, 10, 15 years out
+  const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;
+  let cumulativePrincipalAssigned = 0;
+  return maturityWeeks.map((maturityWeek, i) => {
+    const principalUSD = debtBase * trancheWeights[i];
+    // Deterministic rule: assign FIXED as long as cumulative principal assigned so far is still under the fixedShare target.
+    const isFixed = cumulativePrincipalAssigned < fixedShare * debtBase;
+    cumulativePrincipalAssigned += principalUSD;
+    return isFixed
+      ? {
+          id: `${ticker}-T${i + 1}`,
+          principalUSD,
+          rateType: 'FIXED' as const,
+          couponRate: 0.045 + baseSpreadBps / 10000, // 0.045 approximates the initial policy rate across regions at game start — documented simplification
+          originationWeek: 0,
+          maturityWeek,
+          seniority: 'SENIOR' as const,
+        }
+      : {
+          id: `${ticker}-T${i + 1}`,
+          principalUSD,
+          rateType: 'FLOATING' as const,
+          floatingMarginBps: Math.round(baseSpreadBps * 0.85),
+          originationWeek: 0,
+          maturityWeek,
+          seniority: 'SENIOR' as const,
+        };
+  });
+}
 
 interface CompanyTemplate {
   ticker: string;
@@ -305,11 +342,6 @@ export function generateInitialCompanies(): Company[] {
       const netIncome = Math.max(5, (ebit - interestExpense) * (1 - taxRate));
       const eps = Number((netIncome / tmpl.shares).toFixed(2));
       
-      const debtMaturitySchedule = [
-        { amount: tmpl.debtBase * 0.35, weekDue: 260 },
-        { amount: tmpl.debtBase * 0.35, weekDue: 520 },
-        { amount: tmpl.debtBase * 0.30, weekDue: 780 },
-      ];
 
       const leverage = Number((tmpl.debtBase / Math.max(1, ebitda)).toFixed(2));
       const interestCoverage = Number((ebit / interestExpense).toFixed(2));
@@ -422,9 +454,8 @@ export function generateInitialCompanies(): Company[] {
         cash: tmpl.cashBase,
         totalDebt: tmpl.debtBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
-        debtInterestRate: interestRate,
+        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating),
         capex: Math.round(tmpl.revBase * 0.06),
-        debtMaturitySchedule,
         historicalFundamentals,
         
         earningsWeekModulo,

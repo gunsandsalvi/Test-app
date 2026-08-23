@@ -1,6 +1,34 @@
 export type RegionId = 'USA' | 'UK' | 'JPN' | 'EUR';
 
-export type Sector = 'Tech' | 'Energy' | 'Financials' | 'Industrials' | 'Consumer';
+export type Sector = 'Tech' | 'Energy' | 'Financials' | 'Industrials' | 'Consumer' | 'Banks';
+
+export interface DebtTranche {
+  id: string;                  // format: "{ticker}-T{n}"
+  principalUSD: number;
+  rateType: 'FIXED' | 'FLOATING';
+  couponRate?: number;         // FIXED only — locked annual rate, paid on principalUSD, never changes until maturity
+    trancheId?: string;
+    rateType?: "FIXED" | "FLOATING";
+    fixedRate?: number;
+    floatingMarginBps?: number;
+  floatingMarginBps?: number;  // FLOATING only — locked spread over policyRate, never changes until maturity
+  originationWeek: number;
+  maturityWeek: number;
+  seniority: 'SENIOR' | 'SUBORDINATED';
+}
+
+export interface BankingSector {
+  businessLoanBookUSD: number;
+  consumerLoanBookUSD: number;
+  depositsUSD: number;
+  sovereignBondHoldingsUSD: number;
+  cashReservesUSD: number;
+  bankEquityUSD: number;
+  bankCapitalRatio: number;
+  netInterestMarginPct: number;
+  loanLossProvisionRateAnnualPct: number;
+  creditConditionsIndex: number; // -1 (very loose) to +1 (very tight)
+}
 
 export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
 
@@ -35,6 +63,8 @@ export interface Region {
   cycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery';
   inversionWeeksCount: number;
   recessionShockQueue: { week: number; shock: number }[];
+  bankingSector: BankingSector;
+  estimatedHouseholdIncomeUSD: number; // aggregate regional household income proxy, in $M, grows with GDP
   // Macro fundamentals
   policyRate: number; // e.g. 0.045 = 4.50%
   neutralRate: number; // r* (e.g. 0.025)
@@ -171,7 +201,7 @@ export interface Company {
   cash: number; // in millions
   totalDebt: number; // in millions
   currentLiabilities: number; // in millions (for debt prepayment check)
-  debtInterestRate: number;
+  debtTranches: DebtTranche[];
   capex: number;
   
   // Asynchronous Quarterly Earnings Cycles (13-week staggered schedule)
@@ -205,7 +235,6 @@ export interface Company {
   dividendYield: number;
   baselineDividendYield: number;
   beta: number;
-  debtMaturitySchedule?: { amount: number; weekDue: number }[];
   
   // Debt & CDS Pricing
   seniorBondYield: number; // Sovereign benchmark + OAS
@@ -242,6 +271,10 @@ export interface Position {
   currentPrice: number;
   notional: number; // in USD
   
+  trancheId?: string;              // set for CORP_BOND/LEVERAGED_LOAN positions — the specific tranche this position tracks
+  rateType?: 'FIXED' | 'FLOATING'; // mirrors the tranche's type at entry
+  isClosed?: boolean;
+
   // Derivative specifics
   tenorYears?: number;
   fixedRate?: number;
@@ -468,6 +501,10 @@ export interface TradeableInstrument {
     leverage?: number;
     tenorYears?: number;
     couponRate?: number;
+    trancheId?: string;
+    rateType?: "FIXED" | "FLOATING";
+    fixedRate?: number;
+    floatingMarginBps?: number;
     oasSpreadBps?: number;
     cdsSpreadBps?: number;
     quotedMarginBps?: number;

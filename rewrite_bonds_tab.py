@@ -1,143 +1,25 @@
-import React, { useState, useMemo } from 'react';
-import {
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  DollarSign,
-  Filter,
-  Layers,
-  Percent,
-  Search,
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  TrendingDown,
-  Zap,
-} from 'lucide-react';
-import { Company, CreditRating, GameState, RegionId, TradeableInstrument } from '../types';
+import sys
+import re
 
-interface BondsCdsTabProps {
-  state: GameState;
-  onOpenTrade: (instrument: TradeableInstrument) => void;
-  onSelectCompany: (company: Company) => void;
-}
+with open('src/components/BondsCdsTab.tsx', 'r') as f:
+    text = f.read()
 
-export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
-  state,
-  onOpenTrade,
-  onSelectCompany,
-}) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRating, setSelectedRating] = useState<CreditRating | 'ALL'>('ALL');
-  const [selectedRegion, setSelectedRegion] = useState<RegionId | 'ALL'>('ALL');
-  const [viewMode, setViewMode] = useState<'CDS' | 'CASH_DEBT'>('CDS');
+# I will replace the whole return statement of the map
+# Find from "{filteredCompanies.map((comp) => {" to the end of that block.
 
-  const filteredCompanies = useMemo(() => {
-    return state.companies
-      .filter((c) => {
-        if (selectedRegion !== 'ALL' && c.region !== selectedRegion) return false;
-        if (selectedRating !== 'ALL' && c.creditRating !== selectedRating) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          return c.ticker.toLowerCase().includes(q) || c.name.toLowerCase().includes(q);
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        if (viewMode === 'LEVERAGED_LOANS') {
-          return b.leveragedLoan.quotedMarginBps - a.leveragedLoan.quotedMarginBps;
-        }
-        return b.cdsSpreadBps - a.cdsSpreadBps;
-      });
-  }, [state.companies, selectedRating, selectedRegion, searchQuery, viewMode]);
+start_str = "{filteredCompanies.map((comp) => {"
+end_str = "      </div>\n    </div>\n  );\n};"
+start_idx = text.find(start_str)
+end_idx = text.find(end_str)
 
-  const getRatingBadgeColor = (rating: CreditRating) => {
-    switch (rating) {
-      case 'AAA':
-      case 'AA':
-        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-      case 'A':
-      case 'BBB':
-        return 'bg-blue-500/20 text-blue-300 border-blue-500/40';
-      case 'BB':
-      case 'B':
-        return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-      case 'CCC':
-      case 'D':
-        return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
-    }
-  };
+if start_idx == -1 or end_idx == -1:
+    print("Could not find bounds")
+    sys.exit(1)
 
-  return (
-    <div className="space-y-3 pb-20">
-      {/* View Mode Toggle: Single-Name CDS vs Corporate Bonds vs Leveraged Loans */}
-      <div className="grid grid-cols-2 gap-1 p-1 bg-slate-900 rounded-xl border border-slate-800 text-[11px] font-bold text-center">
-        <button
-          onClick={() => setViewMode('CDS')}
-          className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
-            viewMode === 'CDS'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Shield className="w-3.5 h-3.5" />
-          <span>CDS Swaps</span>
-        </button>
-        <button
-          onClick={() => setViewMode('CASH_DEBT')}
-          className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
-            viewMode === 'CASH_DEBT'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>Cash Debt</span>
-        </button>
-      </div>
+prefix = text[:start_idx + len(start_str)]
+suffix = text[end_idx:]
 
-      {/* Search & Rating Filter Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 space-y-2">
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search issuer credit rating or ticker..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-          />
-        </div>
-
-        {/* Rating Pills */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar text-[10px]">
-          <span className="text-[9px] text-slate-500 font-semibold uppercase shrink-0">Rating:</span>
-          {(['ALL', 'AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC'] as (CreditRating | 'ALL')[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => setSelectedRating(r)}
-              className={`px-2 py-0.5 rounded-md font-semibold shrink-0 transition-colors ${
-                selectedRating === r
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Credit Overview Header */}
-      <div className="flex items-center justify-between px-1 text-[10px] text-slate-400">
-        <span>{filteredCompanies.length} Credit Names</span>
-        <span>Senior 1st Lien Recovery: 65% • Unsecured Bond: 40%</span>
-      </div>
-
-      {/* List of Credit Names */}
-      <div className="space-y-2">
-        {filteredCompanies.map((comp) => {
-
+replacement = """
           const reg = state.regions[comp.region];
           const hazardRate = comp.isDefaulted ? 1.0 : (comp.oasSpreadBps / 10000) / (1 - comp.recoveryRate);
           return (
@@ -286,7 +168,9 @@ export const BondsCdsTab: React.FC<BondsCdsTabProps> = ({
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-};
+"""
+
+with open('src/components/BondsCdsTab.tsx', 'w') as f:
+    f.write(prefix + "\n" + replacement + suffix)
+
+print("Done")

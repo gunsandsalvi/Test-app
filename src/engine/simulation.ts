@@ -1,5 +1,6 @@
 import {
   AssetType,
+  DebtTranche,
   Company,
   CreditRating,
   Dealer,
@@ -20,7 +21,7 @@ import {
   getInitialFxPairs,
   getInitialRegions,
 } from './macroEngine';
-import { generateInitialCompanies } from './companyGenerator';
+import { generateInitialCompanies, FIXED_SHARE_BY_RATING } from './companyGenerator';
 import { calculateExpectedCarry } from './carryCalculator';
 import { DEALERS, getUnifiedInitialMarginRate } from './dealers';
 import { calculateBlackScholesGreeks } from './blackScholes';
@@ -35,7 +36,7 @@ import {
   RATING_OAS_SPREADS,
   SECTOR_BENCHMARKS,
 } from './pricing';
-import { priceSovereignBond } from './nelsonSiegel';
+import { priceSovereignBond, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
 import { generateWeeklyNews, EarningsReportEvent } from './newsGenerator';
 import { formatQuarterFilingDate, formatSimulationDate } from './formatters';
 
@@ -347,9 +348,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newEbit = Math.max(1, newEbitda - da);
 
     // Interest Expense
-    const effectiveDebtRate = reg.policyRate + comp.oasSpreadBps / 10000;
-    const weeklyInterest = (comp.totalDebt * effectiveDebtRate) / 52;
-    const annualInterest = comp.totalDebt * effectiveDebtRate;
+    const nonMaturingTranches = comp.debtTranches.filter(t => t.maturityWeek !== nextWeek);
+    const annualInterest = nonMaturingTranches.reduce((sum, t) => {
+      if (t.rateType === 'FIXED') return sum + t.principalUSD * (t.couponRate ?? 0.05);
+      return sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
+    }, 0);
+    const weeklyInterest = annualInterest / 52;
+    const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
     const taxRate = 0.21;
     const newNetIncome = Math.max(-50, (newEbit - annualInterest) * (1 - taxRate));
     let newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
@@ -410,26 +415,56 @@ export function advanceWeeklyStep(state: GameState): GameState {
     // Dynamic OAS credit spread & Leveraged Loan pricing
     const ratingSpreadConfig = RATING_OAS_SPREADS[newRating];
     const targetOasBps = ratingSpreadConfig.baseBps + (newLeverage > 4 ? (newLeverage - 4) * 50 : 0);
-    let refinancingSpreadShockBps = 0;
-    const maturingTranche = comp.debtMaturitySchedule?.find(t => t.weekDue === nextWeek);
+    const maturingTranche = comp.debtTranches.find(t => t.maturityWeek === nextWeek);
+    let updatedTranches = comp.debtTranches.filter(t => t.maturityWeek !== nextWeek);
+    let refinancingNewsItem: NewsItem | null = null;
+    let refinancingSpreadShockBps = 0; // Kept to 0, or calculated if needed, but we rely on new interest calc now
+
     if (maturingTranche) {
-      refinancingSpreadShockBps = Math.max(0, (effectiveDebtRate - comp.debtInterestRate) * 10000 * 0.5);
-      if (refinancingSpreadShockBps > 100) {
-        refinanceNews.push({
-          id: `refinance-${comp.ticker}-${nextWeek}`,
-          week: nextWeek,
-          title: `${comp.ticker} Hits Maturity Wall`,
-          description: `${comp.name} refinanced debt at higher rates, adding +${Math.round(refinancingSpreadShockBps)} bps to spread.`,
-          category: 'CREDIT',
-          impactBadge: '[REFINANCING SQUEEZE]',
-          impactRegion: comp.region,
-          impactSector: comp.sector,
-          sentimentDelta: -0.05,
-          affectedTicker: comp.ticker, urgent: true,
-        });
-      }
+      const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
+      const refinanceAsFixed = Math.random() < currentFixedShare;
+      const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
+      const sovParams10Y = updatedRegions[comp.region].yieldCurveParams;
+      const tenYearSovRate = calculateNelsonSiegelZeroRate(10, sovParams10Y);
+
+      const newTranche: DebtTranche = refinanceAsFixed
+        ? {
+            id: `${comp.ticker}-T${nextWeek}`,
+            principalUSD: maturingTranche.principalUSD,
+            rateType: 'FIXED',
+            couponRate: tenYearSovRate + currentBaseSpreadBps / 10000,
+            originationWeek: nextWeek,
+            maturityWeek: nextWeek + 520,
+            seniority: 'SENIOR',
+          }
+        : {
+            id: `${comp.ticker}-T${nextWeek}`,
+            principalUSD: maturingTranche.principalUSD,
+            rateType: 'FLOATING',
+            floatingMarginBps: Math.round(currentBaseSpreadBps * 0.85),
+            originationWeek: nextWeek,
+            maturityWeek: nextWeek + 260,
+            seniority: 'SENIOR',
+          };
+      updatedTranches = [...updatedTranches, newTranche];
+
+      const oldRateDescription = maturingTranche.rateType === 'FIXED' ? `${((maturingTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${maturingTranche.floatingMarginBps}bps floating`;
+      const newRateDescription = newTranche.rateType === 'FIXED' ? `${((newTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${newTranche.floatingMarginBps}bps floating`;
+      refinancingNewsItem = {
+        id: `refinance-${comp.ticker}-${nextWeek}`,
+        week: nextWeek,
+        title: `${comp.ticker} Refinances Maturing Tranche`,
+        description: `${comp.name} refinanced a maturing $${(maturingTranche.principalUSD / 1000).toFixed(1)}B tranche (was ${oldRateDescription}) into a new ${newRateDescription} tranche.`,
+        category: 'CREDIT',
+        impactBadge: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? '[REFINANCING SQUEEZE]' : '[REFINANCING]',
+        impactRegion: comp.region,
+        impactSector: comp.sector,
+        sentimentDelta: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? -0.05 : 0,
+        affectedTicker: comp.ticker,
+        urgent: true,
+      };
+      refinanceNews.push(refinancingNewsItem);
     }
-    const updatedMaturitySchedule = comp.debtMaturitySchedule?.filter(t => t.weekDue !== nextWeek);
 
     const newOasBps = Math.round(
       comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35 + refinancingSpreadShockBps + (Math.random() - 0.5) * 5
@@ -545,7 +580,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       previousEmployeeCount: comp.employeeCount,
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
-      debtMaturitySchedule: updatedMaturitySchedule,
+      debtTranches: updatedTranches,
+      totalDebt: updatedTranches.reduce((s, t) => s + t.principalUSD, 0),
       dividendYield: Number(newDividendYield.toFixed(4)),
       capex: Number(newCapex.toFixed(1)),
       annualRevenue: Number(newRevenue.toFixed(1)),
@@ -554,7 +590,6 @@ export function advanceWeeklyStep(state: GameState): GameState {
       netIncome: Number(newNetIncome.toFixed(1)),
       eps: newEps,
       cash: Number(newCash.toFixed(1)),
-      totalDebt: Number(newTotalDebt.toFixed(1)),
       leverage: newLeverage,
       interestCoverage: newCoverage,
       creditRating: newRating,
@@ -603,6 +638,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
   // 8. Portfolio Mark-to-Market, Accruals, Attribution, and Margin Engine
   let weeklyInterestIncomeUSD = 0;
   let weeklyFinancingCostUSD = 0;
+  let weeklyRealizedCashUSD = 0;
+  let weeklyRealizedPnL = 0;
+  let closedCount = 0;
   let totalRequiredMarginUSD = 0;
   let maintenanceMarginUSD = 0;
   let netDeltaUSD = 0;
@@ -665,64 +703,95 @@ export function advanceWeeklyStep(state: GameState): GameState {
         break;
       }
 
-      case 'LEVERAGED_LOAN': {
-        const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
-        if (comp) {
-          currentPrice = comp.leveragedLoan.pricePar;
-          const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-          const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
-
-          unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
-          const carryEst = calculateExpectedCarry('LEVERAGED_LOAN', pos.direction, posValueUSD, {
-            policyRate: updatedRegions[pos.region].policyRate,
-            cdsSpreadBps: comp.leveragedLoan.quotedMarginBps
-          });
-          weeklyFinancing = carryEst.components.financingCostUSD;
-          attributionCarry += carryEst.weeklyCarryUSD;
-
-          const pnlMove = unrealizedPnL - prevPnL;
-          attributionCreditSpread += pnlMove * 0.8;
-          attributionMacroRates += pnlMove * 0.2;
-
-          marginReq = pos.notional * fxRateToUsd * marginRate;
-          maintMargin = marginReq * 0.65;
-        }
-        break;
-      }
-
+      case 'LEVERAGED_LOAN':
       case 'CORP_BOND': {
         const comp = updatedCompanies.find((c) => c.ticker === pos.symbol);
         const sovParams = updatedRegions[pos.region].yieldCurveParams;
         if (comp) {
-          const bondPriced = priceCorporateBond(
-            pos.tenorYears || 5,
-            pos.fixedRate || 0.05,
-            sovParams,
-            comp.oasSpreadBps,
-            comp.isDefaulted,
-            comp.recoveryRate
-          );
-          currentPrice = bondPriced.price;
-          const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;
-          const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+          const tranche = comp.debtTranches.find(t => t.id === pos.trancheId);
+          if (!tranche) {
+            currentPrice = comp.isDefaulted ? (comp.recoveryRate * 100) : 100;
+            const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;
+            const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+            unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
+            
+            if (pos.direction === 'LONG') {
+              weeklyRealizedCashUSD += posValueUSD; 
+            } else {
+              weeklyRealizedCashUSD -= posValueUSD;
+            }
+            weeklyRealizedPnL += unrealizedPnL;
+            pos.isClosed = true;
+            closedCount++;
+            
+            newsItems.push({
+              id: `redemption-${pos.id}-${nextWeek}`,
+              week: nextWeek,
+              title: `Tranche Matured: ${pos.name}`,
+              description: `Your position in ${pos.symbol} has been redeemed at ${currentPrice.toFixed(1)} points of par.`,
+              category: 'CREDIT',
+              impactBadge: '[REDEMPTION]',
+              impactRegion: pos.region,
+              sentimentDelta: 0,
+              affectedTicker: comp.ticker,
+              urgent: true
+            });
+            break;
+          }
 
-          unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
-          dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
+          const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - nextWeek) / 52);
 
-          const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueUSD, {
-            policyRate: updatedRegions[pos.region].policyRate,
-            couponRate: pos.fixedRate || 0.05,
-            cdsSpreadBps: comp.oasSpreadBps
-          });
-          weeklyFinancing = carryEst.components.financingCostUSD;
-          attributionCarry += carryEst.weeklyCarryUSD;
+          if (tranche.rateType === 'FIXED') {
+            const bondPriced = priceCorporateBond(
+              remainingTenorYears,
+              tranche.couponRate ?? 0.05,
+              sovParams,
+              comp.oasSpreadBps,
+              comp.isDefaulted,
+              comp.recoveryRate
+            );
+            currentPrice = bondPriced.price;
+            const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;
+            const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+            unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
+            dv01 = (pos.quantity / 100) * bondPriced.dv01 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
 
-          const pnlMove = unrealizedPnL - prevPnL;
-          attributionCreditSpread += pnlMove * 0.7;
-          attributionMacroRates += pnlMove * 0.3;
-
-          marginReq = pos.notional * fxRateToUsd * marginRate;
-          maintMargin = marginReq * 0.65;
+            const carryEst = calculateExpectedCarry('CORP_BOND', pos.direction, posValueUSD, {
+              policyRate: updatedRegions[pos.region].policyRate,
+              couponRate: tranche.couponRate ?? 0.05,
+              cdsSpreadBps: comp.oasSpreadBps
+            });
+            weeklyFinancing = carryEst.components.financingCostUSD;
+            attributionCarry += carryEst.weeklyCarryUSD;
+            const pnlMove = unrealizedPnL - prevPnL;
+            attributionCreditSpread += pnlMove * 0.7;
+            attributionMacroRates += pnlMove * 0.3;
+            marginReq = pos.notional * fxRateToUsd * marginRate;
+            maintMargin = marginReq * 0.65;
+          } else {
+            const loanPricing = priceLeveragedLoan(
+              tranche.floatingMarginBps ?? 200,
+              comp.oasSpreadBps,
+              remainingTenorYears,
+              comp.isDefaulted,
+              comp.recoveryRate
+            );
+            currentPrice = loanPricing.pricePar;
+            const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;
+            const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
+            unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
+            const carryEst = calculateExpectedCarry('LEVERAGED_LOAN', pos.direction, posValueUSD, {
+              policyRate: updatedRegions[pos.region].policyRate,
+              cdsSpreadBps: tranche.floatingMarginBps ?? 200
+            });
+            weeklyFinancing = carryEst.components.financingCostUSD;
+            attributionCarry += carryEst.weeklyCarryUSD;
+            const pnlMove = unrealizedPnL - prevPnL;
+            attributionCreditSpread += pnlMove * 0.8;
+            attributionMacroRates += pnlMove * 0.2;
+            marginReq = pos.notional * fxRateToUsd * marginRate;
+            maintMargin = marginReq * 0.65;
+          }
         }
         break;
       }
@@ -975,18 +1044,17 @@ export function advanceWeeklyStep(state: GameState): GameState {
       dv01: Number(dv01.toFixed(0)),
     };
   });
-
-  // Calculate updated Cash & NAV
+// Calculate updated Cash & NAV
+  const finalPositions = updatedPositions.filter(p => !p.isClosed);
   const netWeeklyAccruals = weeklyInterestIncomeUSD - weeklyFinancingCostUSD;
-  const updatedCashUSD = state.portfolio.cashUSD + netWeeklyAccruals;
-  const totalUnrealizedPnL = updatedPositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
+  const updatedCashUSD = state.portfolio.cashUSD + netWeeklyAccruals + weeklyRealizedCashUSD;
+  const totalUnrealizedPnL = finalPositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
   const currentNavUSD = Math.max(0, updatedCashUSD + totalUnrealizedPnL);
 
   const pnlDeltaUSD = currentNavUSD - state.portfolio.navUSD;
   const pnlDeltaPct = state.portfolio.navUSD > 0 ? (pnlDeltaUSD / state.portfolio.navUSD) * 100 : 0;
 
-  const totalGrossExposureUSD = updatedPositions.reduce((sum, p) => sum + p.notional, 0);
-  const totalLeverage = Number((totalGrossExposureUSD / Math.max(1, currentNavUSD)).toFixed(1));
+  const totalGrossExposureUSD = finalPositions.reduce((sum, p) => sum + p.notional, 0);  const totalLeverage = Number((totalGrossExposureUSD / Math.max(1, currentNavUSD)).toFixed(1));
   const marginUtilizationPct = currentNavUSD > 0 ? Math.min(100, Math.round((totalRequiredMarginUSD / currentNavUSD) * 100)) : 100;
 
   let isGameOver = false;
@@ -1046,9 +1114,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     previousNavUSD: state.portfolio.navUSD,
     historicalNav: [...state.portfolio.historicalNav.slice(-51), currentNavUSD],
     historicalBenchmarks: updatedBenchmarks,
-    positions: updatedPositions,
-    closedPositionsCount: state.portfolio.closedPositionsCount,
-    realizedPnLTotal: state.portfolio.realizedPnLTotal,
+    positions: finalPositions,
+    closedPositionsCount: state.portfolio.closedPositionsCount + closedCount,
+    realizedPnLTotal: state.portfolio.realizedPnLTotal + weeklyRealizedPnL,
     cumulativeAttribution: cumulativeAttr,
     lastWeekAttribution: lastWeekAttr,
     totalRequiredMarginUSD,

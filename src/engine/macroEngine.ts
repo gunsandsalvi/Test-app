@@ -181,6 +181,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      estimatedHouseholdIncomeUSD: 12_000_000,
+      bankingSector: { businessLoanBookUSD: 800_000, consumerLoanBookUSD: 1_400_000, depositsUSD: 2_100_000, sovereignBondHoldingsUSD: 400_000, cashReservesUSD: 210_000, bankEquityUSD: 280_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.028, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 8.5e12,
       policyRate: 0.0450,
       neutralRate: 0.0100, // r* = 1.00%
@@ -231,6 +233,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      estimatedHouseholdIncomeUSD: 2_000_000,
+      bankingSector: { businessLoanBookUSD: 150_000, consumerLoanBookUSD: 260_000, depositsUSD: 400_000, sovereignBondHoldingsUSD: 80_000, cashReservesUSD: 40_000, bankEquityUSD: 55_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.025, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 1.2e12,
       policyRate: 0.0475,
       neutralRate: 0.0075, // r* = 0.75%
@@ -281,6 +285,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      estimatedHouseholdIncomeUSD: 3_500_000,
+      bankingSector: { businessLoanBookUSD: 300_000, consumerLoanBookUSD: 420_000, depositsUSD: 900_000, sovereignBondHoldingsUSD: 260_000, cashReservesUSD: 90_000, bankEquityUSD: 90_000, bankCapitalRatio: 0.11, netInterestMarginPct: 0.012, loanLossProvisionRateAnnualPct: 0.004, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 4.8e12,
       policyRate: 0.0025,
       neutralRate: -0.0025, // r* = -0.25%
@@ -331,6 +337,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
+      estimatedHouseholdIncomeUSD: 9_000_000,
+      bankingSector: { businessLoanBookUSD: 650_000, consumerLoanBookUSD: 1_000_000, depositsUSD: 1_600_000, sovereignBondHoldingsUSD: 350_000, cashReservesUSD: 160_000, bankEquityUSD: 200_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.022, loanLossProvisionRateAnnualPct: 0.007, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 7.2e12,
       policyRate: 0.0325,
       neutralRate: 0.0050, // r* = 0.50%
@@ -706,7 +714,8 @@ export function evolveRegionMacro(
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
   const contagionHit = microFeedback.creditContagionBps > 50 ? (microFeedback.creditContagionBps / 100) * 0.5 : 0;
-  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100 - contagionHit));
+  const cciMeanReversion = (100 - prevHS.consumerConfidence) * 0.015;
+  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + cciMeanReversion + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100 - contagionHit));
 
   const newSavingsRate = Math.max(0.02, Math.min(0.18, 0.06 + 0.2 * (region.policyRate - 0.02) - 0.1 * ((newCCI - 100) / 100)));
   const debtServiceBurden = prevHS.householdDebtToIncomeRatio * region.laggedPolicyRateEMA * 0.04;
