@@ -156,10 +156,12 @@ export const MacroTab: React.FC<MacroTabProps> = ({ state, onOpenTrade, onOpenCh
             >
               {formatPercent(region.fiscalDeficitPctGdp, { isDecimal: true })}
             </span>
-            {region.fiscalDeficitPctGdp > 0.06 ? (
-              <span className="text-[8px] text-amber-400 font-bold block">Warning: &gt;6% Deficit</span>
+            {region.fiscalStanceScore > 0.1 ? (
+              <span className="text-[8px] text-amber-400 font-bold block">Stimulus Mode</span>
+            ) : region.fiscalStanceScore < -0.1 ? (
+              <span className="text-[8px] text-cyan-400 font-bold block">Austerity Mode</span>
             ) : (
-              <span className="text-[8px] text-slate-500 block">Fiscal Rule Compliant</span>
+              <span className="text-[8px] text-slate-500 block">Neutral Stance</span>
             )}
           </div>
 

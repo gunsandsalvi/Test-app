@@ -23,6 +23,7 @@ export interface HouseholdState {
   wageGrowth: number;         // Average Hourly Earnings YoY %
   savingsRate: number;        // Personal Savings Rate %
   realConsumptionGrowth: number; // Real Consumer Spending Growth %
+  householdDebtToIncomeRatio: number;
 }
 
 export interface Region {
@@ -49,9 +50,13 @@ export interface Region {
   tradeBalance: number; // in billions USD equivalent
   currentAccountPctGdp: number; // e.g. -0.031 = -3.1% of GDP
   fxReservesBlnUSD: number; // e.g. 38.5B USD
+  structuralDeficitPctGdp: number;
   fiscalDeficitPctGdp: number; // e.g. 0.065 = 6.5% deficit
   debtToGdpPct: number; // e.g. 1.224 = 122.4% gross debt
+  fiscalStanceScore: number;
   sovereignRating: CreditRating; // e.g. 'AAA', 'AA'
+  laggedPolicyRateEMA: number;
+  laborForceParticipation: number;
 
   householdState: HouseholdState;
 
@@ -155,6 +160,9 @@ export interface Company {
   // 3-Statement Fundamentals (Vectorized state)
   baselineAnnualRevenue: number;
   annualRevenue: number; // in millions
+  employeeCount: number;
+  previousEmployeeCount: number;
+  baselineEmployeeCount: number;
   ebitda: number;
   ebit: number;
   netIncome: number;

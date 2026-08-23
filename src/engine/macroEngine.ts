@@ -13,7 +13,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     affectedCommodityId: 'CORN',
     commodityImpactPct: 0.04,
     gdpImpactPct: -0.001,
-    inflationImpactPct: 0.002,
+    inflationImpactPct: 0.002, weeksActive: 1,
   },
   UK: {
     region: 'UK',
@@ -25,7 +25,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     affectedCommodityId: 'NATGAS',
     commodityImpactPct: 0.08,
     gdpImpactPct: -0.002,
-    inflationImpactPct: 0.003,
+    inflationImpactPct: 0.003, weeksActive: 1,
   },
   EUR: {
     region: 'EUR',
@@ -37,7 +37,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     affectedCommodityId: 'BRENT',
     commodityImpactPct: 0.03,
     gdpImpactPct: -0.001,
-    inflationImpactPct: 0.0015,
+    inflationImpactPct: 0.0015, weeksActive: 1,
   },
   JPN: {
     region: 'JPN',
@@ -48,7 +48,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     economicImpact: 'Maritime transport and port operations encounter localized weather delays.',
     commodityImpactPct: 0.01,
     gdpImpactPct: -0.0005,
-    inflationImpactPct: 0.0005,
+    inflationImpactPct: 0.0005, weeksActive: 1,
   },
 };
 
@@ -106,8 +106,7 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         affectedCommodityId: 'BRENT',
         commodityImpactPct: 0.05,
         gdpImpactPct: -0.002,
-        inflationImpactPct: 0.003,
-        weeksActive: 1,
+        inflationImpactPct: 0.003, weeksActive: 1,
       };
     }
 
@@ -196,14 +195,19 @@ export function getInitialRegions(): Record<RegionId, Region> {
       tradeBalance: -62.0,
       currentAccountPctGdp: -0.030,
       fxReservesBlnUSD: 38.5,
+      structuralDeficitPctGdp: 0.062,
       fiscalDeficitPctGdp: 0.062, // 6.2% of GDP (generates supply term premium)
       debtToGdpPct: 1.210, // 121.0% gross debt to GDP
+      fiscalStanceScore: 0,
       sovereignRating: 'AA',
+      laggedPolicyRateEMA: 0.0550,
+      laborForceParticipation: 0.63,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0360,
         savingsRate: 0.055,
         realConsumptionGrowth: 0.02,
+        householdDebtToIncomeRatio: 1.0,
       },
       dotPlot1Y: 0.0400,
       dotPlot2Y: 0.0325,
@@ -241,14 +245,19 @@ export function getInitialRegions(): Record<RegionId, Region> {
       tradeBalance: -20.0,
       currentAccountPctGdp: -0.034,
       fxReservesBlnUSD: 185.2,
+      structuralDeficitPctGdp: 0.046,
       fiscalDeficitPctGdp: 0.046,
       debtToGdpPct: 0.975,
+      fiscalStanceScore: 0,
       sovereignRating: 'AA',
+      laggedPolicyRateEMA: 0.0450,
+      laborForceParticipation: 0.65,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0420,
         savingsRate: 0.060,
         realConsumptionGrowth: 0.015,
+        householdDebtToIncomeRatio: 0.95,
       },
       dotPlot1Y: 0.0425,
       dotPlot2Y: 0.0350,
@@ -286,14 +295,19 @@ export function getInitialRegions(): Record<RegionId, Region> {
       tradeBalance: 14.0,
       currentAccountPctGdp: 0.036,
       fxReservesBlnUSD: 1240.0,
+      structuralDeficitPctGdp: 0.055,
       fiscalDeficitPctGdp: 0.055,
       debtToGdpPct: 2.550,
+      fiscalStanceScore: 0,
       sovereignRating: 'A',
+      laggedPolicyRateEMA: 0.0525,
+      laborForceParticipation: 0.64,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0250,
         savingsRate: 0.080,
         realConsumptionGrowth: 0.01,
+        householdDebtToIncomeRatio: 1.1,
       },
       dotPlot1Y: 0.0050,
       dotPlot2Y: 0.0075,
@@ -331,14 +345,19 @@ export function getInitialRegions(): Record<RegionId, Region> {
       tradeBalance: 26.0,
       currentAccountPctGdp: 0.022,
       fxReservesBlnUSD: 890.5,
+      structuralDeficitPctGdp: 0.034,
       fiscalDeficitPctGdp: 0.034,
       debtToGdpPct: 0.880,
+      fiscalStanceScore: 0,
       sovereignRating: 'AAA',
+      laggedPolicyRateEMA: 0.0010,
+      laborForceParticipation: 0.62,
       householdState: {
         consumerConfidence: 100,
         wageGrowth: 0.0320,
         savingsRate: 0.070,
         realConsumptionGrowth: 0.008,
+        householdDebtToIncomeRatio: 0.8,
       },
       dotPlot1Y: 0.0275,
       dotPlot2Y: 0.0225,
@@ -571,7 +590,7 @@ export function getInitialCommodities(): Commodity[] {
 export function evolveRegionMacro(
   region: Region,
   globalShock: { gdpShock: number; inflationShock: number },
-  microFeedback: { capexGdpContribution: number; marginCompression: number; creditContagionBps: number },
+  microFeedback: { capexGdpContribution: number; marginCompression: number; creditContagionBps: number; bottomUpUnemploymentDelta: number },
   week: number,
   equityReturn: number = 0,
   prevCommodities: Commodity[] = []
@@ -623,12 +642,30 @@ export function evolveRegionMacro(
 
   // 2. Incremental bounded shocks (Annualized bps)
   const capexContribAnnual = capexGdpFeedback; // Already bounded and annualized in simulation.ts
-  const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02 };
+  const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02, householdDebtToIncomeRatio: 1.0 };
   const consumerContribAnnual = Math.max(-0.002, Math.min(0.002, (prevHS.consumerConfidence - 100) * 0.0001)); // Max +/- 20 bps
 
   // Real Rate Demand Channel
   const realRateGap = (region.policyRate - region.inflation) - region.neutralRate;
-  const monetaryDrag = Math.max(-0.025, Math.min(0.025, -realRateGap * 0.35));
+  const monetaryDrag = Math.max(-0.025, Math.min(0.025, -realRateGap * 0.60));
+
+  let newFiscalStanceScore = region.fiscalStanceScore;
+  let newStructuralDeficitPctGdp = region.structuralDeficitPctGdp;
+  const piStar = region.targetInflation;
+
+  // Evaluate once per quarter, same cadence as monetary policy meetings
+  if (week % 13 === 0) {
+    if (region.cycleRegime === 'Recession' && region.unemploymentRate > 0.07) {
+      newFiscalStanceScore = Math.min(1, region.fiscalStanceScore + 0.15); // stimulus package
+    } else if (region.cycleRegime === 'Expansion' && region.inflation > piStar + 0.03) {
+      newFiscalStanceScore = Math.max(-1, region.fiscalStanceScore - 0.10); // austerity/consolidation
+    } else {
+      newFiscalStanceScore = region.fiscalStanceScore * 0.95; // slow decay back to neutral
+    }
+    const stanceChange = newFiscalStanceScore - region.fiscalStanceScore;
+    newStructuralDeficitPctGdp = Math.max(0.01, Math.min(0.12, region.structuralDeficitPctGdp + stanceChange * 0.05));
+  }
+  const fiscalImpulse = newFiscalStanceScore * 0.006;
 
   // Process recession shocks
   let scheduledShock = 0;
@@ -641,20 +678,26 @@ export function evolveRegionMacro(
   });
 
   // 3. Set new GDP Growth: Must be absolute rate, NOT compounded
-  const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag + scheduledShock;
+  const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag + fiscalImpulse + scheduledShock;
 
   // 4. Absolute hard clamp to prevent runaway simulation
   const newGdpGrowth = Math.max(-0.02, Math.min(0.045, updatedGdpGrowth)); // Bounded between -2.0% and +4.5%
 
   let newInflation = Math.max(0.0050, Math.min(0.20, Number((region.inflation + infNoise).toFixed(4))));
-  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + (potentialGdp - newGdpGrowth) * 0.25 + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002)).toFixed(3))));
-  const unempDelta = newUnemployment - region.unemploymentRate;
 
   let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
   if (newGdpGrowth < 0) newCycleRegime = 'Recession';
   else if (newGdpGrowth > potentialGdp + 0.005) newCycleRegime = region.cycleRegime === 'Recession' ? 'Recovery' : 'Expansion';
   else if (region.cycleRegime === 'Recession' && newGdpGrowth >= 0) newCycleRegime = 'Recovery';
-  
+
+  const participationDrift = newCycleRegime === 'Recession' ? -0.0003 : (newCycleRegime === 'Recovery' ? 0.0002 : 0);
+  const newParticipation = Math.max(0.55, Math.min(0.68, region.laborForceParticipation + participationDrift));
+
+  const baseUnempChange = (potentialGdp - newGdpGrowth) * 0.25 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002);
+  const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
+  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + baseUnempChange + participationEffect).toFixed(3))));
+  const unempDelta = newUnemployment - region.unemploymentRate;
+
   // Consumer & Household Sector Simulation
   const nairu = 0.045; 
   const slackGap = nairu - newUnemployment;
@@ -666,7 +709,9 @@ export function evolveRegionMacro(
   const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100 - contagionHit));
 
   const newSavingsRate = Math.max(0.02, Math.min(0.18, 0.06 + 0.2 * (region.policyRate - 0.02) - 0.1 * ((newCCI - 100) / 100)));
-  const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100);
+  const debtServiceBurden = prevHS.householdDebtToIncomeRatio * region.laggedPolicyRateEMA * 0.04;
+  const equityWealthEffect = equityReturn * 0.02;
+  const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100) + equityWealthEffect - debtServiceBurden;
 
   const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   
@@ -678,7 +723,6 @@ export function evolveRegionMacro(
   // Calibrated Inertial Taylor Rule:
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
   const rStar = region.neutralRate; // US: 1.00%, UK: 0.75%, EU: 0.50%, JP: -0.25%
-  const piStar = region.targetInflation; // 2.00% across all central banks
   
   const output_gap = Math.max(-0.03, Math.min(0.03, newGdpGrowth - potentialGdp));
   const inflation_gap = Math.max(-0.02, Math.min(0.04, newExpectedInflation - piStar));
@@ -763,9 +807,25 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     newInversionCount = 0;
   }
 
+  const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
+  const newFiscalDeficitPctGdp = Math.max(-0.02, Math.min(0.15, newStructuralDeficitPctGdp + cyclicalDeficitComponent));
+
   const nominalGdpGrowthWeekly = (newGdpGrowth + newInflation) / 52; // real growth + inflation ≈ nominal growth
-  const weeklyDebtToGdpChange = (region.fiscalDeficitPctGdp / 52) - (nominalGdpGrowthWeekly * region.debtToGdpPct);
+  const weeklyDebtToGdpChange = (newFiscalDeficitPctGdp / 52) - (nominalGdpGrowthWeekly * region.debtToGdpPct);
   const newDebtToGdpPct = Number((region.debtToGdpPct + weeklyDebtToGdpChange).toFixed(4));
+
+  let newSovereignRating = region.sovereignRating;
+  if (week % 26 === 0) {
+    if (newDebtToGdpPct > 1.2 && newFiscalDeficitPctGdp > 0.05) {
+      if (newSovereignRating === 'AAA') newSovereignRating = 'AA';
+      else if (newSovereignRating === 'AA') newSovereignRating = 'A';
+      else if (newSovereignRating === 'A') newSovereignRating = 'BBB';
+    } else if (newDebtToGdpPct < 0.9 && newFiscalDeficitPctGdp < 0.03) {
+      if (newSovereignRating === 'BBB') newSovereignRating = 'A';
+      else if (newSovereignRating === 'A') newSovereignRating = 'AA';
+      else if (newSovereignRating === 'AA') newSovereignRating = 'AAA';
+    }
+  }
 
   const histPolicy = [...region.historicalPolicyRates.slice(-51), newPolicyRate];
   const histInf = [...region.historicalInflation.slice(-51), newInflation];
@@ -781,6 +841,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     inversionWeeksCount: newInversionCount,
     recessionShockQueue: remainingShocks,
     centralBankBalanceSheet: newCbBalance,
+    structuralDeficitPctGdp: newStructuralDeficitPctGdp,
+    fiscalDeficitPctGdp: newFiscalDeficitPctGdp,
+    fiscalStanceScore: newFiscalStanceScore,
+    sovereignRating: newSovereignRating,
+    laggedPolicyRateEMA: region.laggedPolicyRateEMA * 0.96 + newPolicyRate * 0.04,
+    laborForceParticipation: newParticipation,
     policyRate: newPolicyRate,
     inflation: newInflation,
     coreInflation: newCoreInflation,
@@ -794,6 +860,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       wageGrowth: newWageGrowth,
       savingsRate: newSavingsRate,
       realConsumptionGrowth: newRealConsumptionGrowth,
+      householdDebtToIncomeRatio: prevHS.householdDebtToIncomeRatio,
     },
     dotPlot1Y,
     dotPlot2Y,

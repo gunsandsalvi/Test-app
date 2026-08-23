@@ -287,6 +287,17 @@ export function generateInitialCompanies(): Company[] {
       const ebitda = tmpl.revBase * tmpl.ebitdaMargin;
       const da = tmpl.revBase * 0.05; // 5% depreciation & amortization
       const ebit = Math.max(10, ebitda - da);
+
+      const revPerEmployee: Record<string, number> = {
+        Tech: 800_000,
+        Financials: 1_000_000,
+        Industrials: 300_000,
+        Energy: 1_500_000,
+        Consumer: 200_000,
+        Healthcare: 400_000,
+        Utilities: 1_200_000,
+      };
+      const employeeCount = Math.max(100, Math.round(tmpl.revBase / (revPerEmployee[tmpl.sector] ?? 500_000)));
       
       const interestRate = 0.045;
       const interestExpense = Math.max(1, tmpl.debtBase * interestRate);
@@ -317,6 +328,7 @@ export function generateInitialCompanies(): Company[] {
         filingPeriod: "Q4 '25",
         filingDate: 'Dec 31, 2025',
         baselineAnnualRevenue: tmpl.revBase, annualRevenue: tmpl.revBase,
+        employeeCount, previousEmployeeCount: employeeCount, baselineEmployeeCount: employeeCount,
         ebitda,
         ebit,
         netIncome,
@@ -401,6 +413,7 @@ export function generateInitialCompanies(): Company[] {
         sector: tmpl.sector,
         
         baselineAnnualRevenue: tmpl.revBase, annualRevenue: tmpl.revBase,
+        employeeCount, previousEmployeeCount: employeeCount, baselineEmployeeCount: employeeCount,
         ebitda,
         ebit,
         netIncome,

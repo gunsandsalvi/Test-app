@@ -204,10 +204,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
     let equityRet = 0;
-    if (regionId === 'USA') equityRet = state.compositeIndices.us500.change1W || 0;
-    if (regionId === 'EUR') equityRet = state.compositeIndices.euStoxx.change1W || 0;
-    if (regionId === 'UK') equityRet = state.compositeIndices.uk100.change1W || 0;
-    if (regionId === 'JPN') equityRet = state.compositeIndices.jp225.change1W || 0;
+    if (regionId === 'USA') equityRet = (state.compositeIndices.us500.change1W / Math.max(1, state.compositeIndices.us500.value)) || 0;
+    if (regionId === 'EUR') equityRet = (state.compositeIndices.euStoxx.change1W / Math.max(1, state.compositeIndices.euStoxx.value)) || 0;
+    if (regionId === 'UK') equityRet = (state.compositeIndices.uk100.change1W / Math.max(1, state.compositeIndices.uk100.value)) || 0;
+    if (regionId === 'JPN') equityRet = (state.compositeIndices.jp225.change1W / Math.max(1, state.compositeIndices.jp225.value)) || 0;
 
     const REGIONAL_BASE_GDP: Record<string, number> = {
       USA: 28_000_000_000_000,
@@ -216,6 +216,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
       JPN: 4_200_000_000_000
     };
     const regionFirms = prevActiveFirms.filter(f => f.region === regionId);
+    
+    const regionEmployment = regionFirms.reduce((sum, f) => sum + f.employeeCount, 0);
+    const regionEmploymentLastWeek = state.companies.filter(f => f.region === regionId).reduce((sum, f) => sum + (f.previousEmployeeCount || f.employeeCount), 0);
+    const employmentChangePct = (regionEmployment - regionEmploymentLastWeek) / Math.max(1, regionEmploymentLastWeek);
+    const bottomUpUnemploymentDelta = -employmentChangePct * 0.1;
+    
     const totalRegionalCapEx = regionFirms.reduce((sum, f) => sum + (f.capex || 0), 0);
     const baseGdp = REGIONAL_BASE_GDP[regionId] || 10_000_000_000_000;
     const baselineExpectedCapEx = (baseGdp * 0.03) / 52;
@@ -226,7 +232,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
-      { capexGdpContribution: boundedGdpContribution, marginCompression, creditContagionBps },
+      { capexGdpContribution: boundedGdpContribution, marginCompression, creditContagionBps, bottomUpUnemploymentDelta },
       nextWeek,
       equityRet,
       state.commodities
@@ -294,7 +300,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   const updatedCompanies: Company[] = state.companies.map((comp) => {
     if (comp.isDefaulted) {
-      return comp;
+      return { ...comp, previousEmployeeCount: 0, employeeCount: 0 };
     }
 
     const reg = updatedRegions[comp.region];
@@ -353,7 +359,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const capexToRevenueRatio = comp.capex / Math.max(1, comp.annualRevenue); // preserves firm-specific intensity
     const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 1.5; // capex pulls back when funding costs rise above ~4%
     const cashHealthFactor = comp.cash < 0 ? 0.6 : 1.0; // firms in cash distress cut capex materially
-    const targetCapex = newRevenue * capexToRevenueRatio * (1 - rateDrag) * cashHealthFactor;
+    const tobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5); // rough proxy
+    const qCapexEffect = Math.max(-0.15, Math.min(0.15, (tobinsQ - 1) * 0.2));
+    const targetCapex = newRevenue * capexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect);
     const newCapex = Math.max(0, comp.capex * 0.92 + targetCapex * 0.08); // smoothed transition, avoid whipsaws
 
     // Weekly Cash flow and debt amortization / prepayment
@@ -363,6 +371,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     const targetDivYield = comp.baselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0));
     const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
+
+    const headcountPressure = newCash < 0 ? -0.015 : (newEbitdaMargin < baseEbitdaMargin - 0.01 ? -0.002 : (reg.cycleRegime === 'Expansion' ? 0.001 : (reg.cycleRegime === 'Recession' ? -0.002 : 0)));
+    const newEmployeeCount = Math.max(10, Math.round(comp.employeeCount * (1 + headcountPressure)));
 
     // Debt Prepayment Rule: When Cash > 2.5x Current Liabilities, retire debt principal
     if (newCash > 2.5 * comp.currentLiabilities && newTotalDebt > 50) {
@@ -406,13 +417,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
       if (refinancingSpreadShockBps > 100) {
         refinanceNews.push({
           id: `refinance-${comp.ticker}-${nextWeek}`,
-          date: `Week ${nextWeek}`,
-          timestampMs: Date.now(),
-          category: 'Corporate',
-          severity: 'High',
-          headline: `${comp.ticker} Hits Maturity Wall, Refinances Debt in Higher Rate Environment`,
-          content: `${comp.name} faced a maturity wall this week and was forced to refinance existing obligations. The effective financing rate has jumped, contributing an estimated +${Math.round(refinancingSpreadShockBps)} bps to their ongoing credit spread as market participants digest the increased debt service burden.`,
-          relatedEntities: [comp.ticker],
+          week: nextWeek,
+          title: `${comp.ticker} Hits Maturity Wall`,
+          description: `${comp.name} refinanced debt at higher rates, adding +${Math.round(refinancingSpreadShockBps)} bps to spread.`,
+          category: 'CREDIT',
+          impactBadge: '[REFINANCING SQUEEZE]',
+          impactRegion: comp.region,
+          impactSector: comp.sector,
+          sentimentDelta: -0.05,
+          affectedTicker: comp.ticker, urgent: true,
         });
       }
     }
@@ -529,6 +542,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     return {
       ...comp,
+      previousEmployeeCount: comp.employeeCount,
+      employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtMaturitySchedule: updatedMaturitySchedule,
       dividendYield: Number(newDividendYield.toFixed(4)),
