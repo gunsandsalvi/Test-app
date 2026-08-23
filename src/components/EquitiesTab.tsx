@@ -1,3 +1,4 @@
+import { formatCurrency } from '../engine/formatters';
 import React, { useState, useMemo } from 'react';
 import {
   AlertTriangle,
@@ -149,7 +150,7 @@ export const EquitiesTab: React.FC<EquitiesTabProps> = ({
 
       {/* Issuers Count Summary */}
       <div className="flex items-center justify-between px-1 text-[10px] text-slate-400 font-medium">
-        <span>Showing {filteredCompanies.length} of 200 Issuers</span>
+        <span>Showing {filteredCompanies.length} of {state.companies.length} Issuers</span>
         <span>Tap row for 3-Statement sheet</span>
       </div>
 
@@ -248,7 +249,7 @@ export const EquitiesTab: React.FC<EquitiesTabProps> = ({
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[8px]">MCAP</span>
-                    <span className="text-slate-200 font-semibold">${(comp.marketCap / 1000).toFixed(1)}B</span>
+                    <span className="text-slate-200 font-semibold">{formatCurrency(comp.marketCap, { compact: true })}</span>
                   </div>
                 </div>
 

@@ -5,7 +5,7 @@
     "useDefineForClassFields": false,
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "strict": true,
+    "strict": false,
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,

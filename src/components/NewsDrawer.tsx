@@ -134,7 +134,7 @@ export const NewsDrawer: React.FC<NewsDrawerProps> = ({
   };
 
   return (
-    <div className="fixed bottom-14 left-0 right-0 z-30 max-w-md mx-auto px-2 pointer-events-auto">
+    <div className="fixed bottom-20 left-0 right-0 z-30 max-w-md mx-auto px-2 pointer-events-auto">
       {/* Floating Ticker Bar */}
       <div
         onClick={onToggle}

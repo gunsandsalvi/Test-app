@@ -162,7 +162,7 @@ export interface FxPair {
   basisSpreadBps: number; // Cross currency basis spread in bps (e.g. -15 bps)
 }
 
-export type TabKey = 'macro' | 'markets' | 'credit' | 'risk';
+export type TabKey = 'macro' | 'indices' | 'equities' | 'commodities' | 'bonds_cds' | 'derivatives' | 'risk';
 
 export interface FundamentalSnapshot {
   week: number;

@@ -259,11 +259,11 @@ export default function App() {
         )}
         
         {/* Segmented Navigation Tab Bar */}
-        <nav className="flex items-center justify-between gap-1 p-2 bg-slate-900 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider shrink-0 overflow-x-auto no-scrollbar">
+        <nav className="flex items-center justify-start gap-1 p-2 bg-slate-900 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider shrink-0 overflow-x-auto no-scrollbar">
           <button
             id="nav-tab-macro"
             onClick={() => setState((prev) => ({ ...prev, selectedTab: 'macro' }))}
-            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-none min-w-[70px] py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               state.selectedTab === 'macro'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -274,35 +274,74 @@ export default function App() {
           </button>
           
           <button
-            id="nav-tab-markets"
-            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'markets' }))}
-            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              state.selectedTab === 'markets'
+            id="nav-tab-indices"
+            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'indices' }))}
+            className={`flex-none min-w-[70px] py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              state.selectedTab === 'indices'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>Markets</span>
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Indices</span>
           </button>
           
           <button
-            id="nav-tab-credit"
-            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'credit' }))}
-            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              state.selectedTab === 'credit'
+            id="nav-tab-equities"
+            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'equities' }))}
+            className={`flex-none min-w-[70px] py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              state.selectedTab === 'equities'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <LineChart className="w-3.5 h-3.5" />
+            <span>Equities</span>
+          </button>
+          
+          <button
+            id="nav-tab-commodities"
+            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'commodities' }))}
+            className={`flex-none min-w-[90px] py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              state.selectedTab === 'commodities'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5" />
+            <span>Commodities</span>
+          </button>
+          
+          <button
+            id="nav-tab-bonds_cds"
+            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'bonds_cds' }))}
+            className={`flex-none min-w-[90px] py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              state.selectedTab === 'bonds_cds'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>Credit</span>
+            <span>Credit/Bonds</span>
+          </button>
+          
+          <button
+            id="nav-tab-derivatives"
+            onClick={() => setState((prev) => ({ ...prev, selectedTab: 'derivatives' }))}
+            className={`flex-none min-w-[90px] py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              state.selectedTab === 'derivatives'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Derivatives</span>
           </button>
           
           <button
             id="nav-tab-risk"
             onClick={() => setState((prev) => ({ ...prev, selectedTab: 'risk' }))}
-            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-none min-w-[70px] py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               state.selectedTab === 'risk'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -314,7 +353,7 @@ export default function App() {
         </nav>
 
         {/* Scrollable Tab Content View */}
-        <main className="flex-1 overflow-y-auto p-3 space-y-3 scroll-smooth no-scrollbar">
+        <main className="flex-1 overflow-y-auto p-3 space-y-3 scroll-smooth no-scrollbar pb-24">
           {state.selectedTab === 'macro' && (
             <MacroTab
               state={state}
@@ -322,16 +361,20 @@ export default function App() {
               onOpenChart={(chartData) => setActiveChartData(chartData)}
             />
           )}
-          {state.selectedTab === 'markets' && (
-            <div className="flex flex-col gap-4">
-              <EquitiesTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c: Company) => setSelectedCompany(c)} onOpenChart={(chartData) => setActiveChartData(chartData)} />
-              <BondsCdsTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c: Company) => setSelectedCompany(c)} onOpenChart={(chartData) => setActiveChartData(chartData)} />
-            </div>
+          {state.selectedTab === 'indices' && (
+            <IndicesTab state={state} onOpenTrade={handleOpenTrade} onOpenChart={(chartData) => setActiveChartData(chartData)} />
           )}
-          {state.selectedTab === 'credit' && (
-            <div className="flex flex-col gap-4 p-4 items-center justify-center text-slate-500 h-64 text-sm font-medium">
-              Credit dashboard coming soon.
-            </div>
+          {state.selectedTab === 'equities' && (
+            <EquitiesTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c) => setSelectedCompany(c)} onOpenChart={(chartData) => setActiveChartData(chartData)} />
+          )}
+          {state.selectedTab === 'commodities' && (
+            <CommoditiesTab state={state} onOpenTrade={handleOpenTrade} onOpenChart={(chartData) => setActiveChartData(chartData)} />
+          )}
+          {state.selectedTab === 'bonds_cds' && (
+            <BondsCdsTab state={state} onOpenTrade={handleOpenTrade} onSelectCompany={(c) => setSelectedCompany(c)} onOpenChart={(chartData) => setActiveChartData(chartData)} />
+          )}
+          {state.selectedTab === 'derivatives' && (
+            <DerivativesTab state={state} onOpenTrade={handleOpenTrade} onOpenChart={(chartData) => setActiveChartData(chartData)} />
           )}
           {state.selectedTab === 'risk' && (
             <div className="flex flex-col gap-3">
