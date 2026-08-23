@@ -21,7 +21,7 @@ import {
   getInitialFxPairs,
   getInitialRegions,
 } from './macroEngine';
-import { generateInitialCompanies, FIXED_SHARE_BY_RATING } from './companyGenerator';
+import { generateInitialCompanies, FIXED_SHARE_BY_RATING, generateIPOCompany } from './companyGenerator';
 import { calculateExpectedCarry } from './carryCalculator';
 import { DEALERS, getUnifiedInitialMarginRate } from './dealers';
 import { calculateBlackScholesGreeks } from './blackScholes';
@@ -80,6 +80,23 @@ export function createInitialGameState(): GameState {
   const regions = getInitialRegions();
   const fxPairs = getInitialFxPairs();
   const companies = generateInitialCompanies();
+
+  Object.keys(regions).forEach(r => {
+    const regComps = companies.filter(c => c.region === r);
+    const cats = Object.keys(regions[r as any].categoryDemand);
+    cats.forEach(cat => {
+      let sum = 0;
+      regComps.forEach(c => {
+        (c.productLines || []).forEach(line => {
+          if (line.category === cat) {
+            sum += line.revenueShare * c.annualRevenue;
+          }
+        });
+      });
+      regions[r as any].categoryDemand[cat as any].demandLevelUSD = sum;
+    });
+  });
+
   const commodities = getInitialCommodities();
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
@@ -179,6 +196,23 @@ export function createInitialGameState(): GameState {
 /**
  * Advance Simulation by One Week (T -> T+1)
  */
+
+function checkForIPO(regionId: RegionId, reg: Region, companies: Company[], week: number): Company | null {
+  if (week % 26 !== 0) return null;
+  const categories = Object.keys(reg.categoryDemand) as string[];
+  for (const cat of categories) {
+    const demand = reg.categoryDemand[cat];
+    if (!demand || demand.demandGrowthAnnual < 0.04) continue;
+    const incumbents = companies.filter(c => c.region === regionId && !c.isDefaulted && (c.productLines || []).some(l => l.category === cat));
+    const incumbentGrowthProxy = incumbents.length ? incumbents.reduce((s, c) => s + (c.annualRevenue - c.baselineAnnualRevenue) / Math.max(1, c.baselineAnnualRevenue), 0) / incumbents.length : 0;
+    const supplyGap = demand.demandGrowthAnnual - incumbentGrowthProxy;
+    if (supplyGap > 0.03 && Math.random() < 0.35) {
+      return generateIPOCompany(regionId, cat, demand.demandLevelUSD, week);
+    }
+  }
+  return null;
+}
+
 export function advanceWeeklyStep(state: GameState): GameState {
   if (state.isGameOver) return state;
 
@@ -324,7 +358,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
     const taxRate = 0.21;
 
-    let newRevenue = 0;
+    let updatedProductLines = comp.productLines || []; let newRevenue = 0;
     let baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     let newEbitdaMargin = 0;
     let newEbitda = 0;
@@ -351,15 +385,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
       const effectiveConsumptionGrowth = reg.householdState.realConsumptionGrowth - creditTighteningPenalty;
-      let consumerRevBoost = 0;
-      if (comp.sector === 'Consumer') consumerRevBoost = effectiveConsumptionGrowth * 1.6;
-      else if (comp.sector === 'Tech') consumerRevBoost = effectiveConsumptionGrowth * 1.1;
-      else consumerRevBoost = effectiveConsumptionGrowth * 0.4;
+
 
       // Weekly revenue transition
       const noise = (Math.random() - 0.5) * 0.015;
       const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
-      const sectorGdpBeta = comp.beta;
+
       
       const SECTOR_REGIME_TILT: Record<string, Partial<Record<'Expansion' | 'Slowdown' | 'Recession' | 'Recovery', number>>> = {
         Industrials: { Expansion: 0.0015, Recovery: 0.002, Recession: -0.0015 },
@@ -376,16 +407,29 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
       // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
       const pricingPowerBeta = SECTOR_PRICING_POWER[comp.sector] ?? 0.65;
-      const targetAnnualRevenue = baseRev * (1 + (reg.gdpGrowth * sectorGdpBeta) + consumerRevBoost + noise + reg.inflation * pricingPowerBeta + regimeTilt + financialsTilt);
-      
-      // Smooth transition to target revenue (no exponential weekly compounding)
-      newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
-
       // Operating margins update (Wage-Push compression)
       const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
       const wageCompression = Math.max(0, reg.householdState.wageGrowth - 0.025) * 0.15 * wageSensitivity;
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
       newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin + (Math.random() - 0.5) * 0.004 - (wageCompression / 52)));
+
+      let categoryDrivenGrowth = 0;
+    updatedProductLines = (comp.productLines || []).map((line) => {
+      const catDemand = reg.categoryDemand[line.category as any];
+      const categoryGrowth = catDemand?.demandGrowthAnnual ?? reg.gdpGrowth;
+      const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
+      const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 10));
+      const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
+      const shareGainRate = Math.max(-0.02, Math.min(0.02, newCompetitiveness * 0.04));
+      const newCategoryMarketShare = Math.max(0.001, Math.min(0.6, line.categoryMarketShare * (1 + shareGainRate / 52)));
+      const lineGrowth = categoryGrowth + shareGainRate;
+      categoryDrivenGrowth += lineGrowth * line.revenueShare;
+      return { ...line, competitiveness: newCompetitiveness, categoryMarketShare: newCategoryMarketShare };
+    });
+    const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + noise + reg.inflation * pricingPowerBeta);
+      
+      // Smooth transition to target revenue (no exponential weekly compounding)
+      newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
       newEbitda = newRevenue * newEbitdaMargin;
       const da = newRevenue * 0.05;
       newEbit = Math.max(1, newEbitda - da);
@@ -630,6 +674,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,
+      productLines: updatedProductLines,
       totalDebt: updatedTranches.reduce((s, t) => s + t.principalUSD, 0),
       dividendYield: Number(newDividendYield.toFixed(4)),
       capex: Number(newCapex.toFixed(1)),

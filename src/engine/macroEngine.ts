@@ -175,14 +175,24 @@ export function getInitialRegions(): Record<RegionId, Region> {
     USA: {
       id: 'USA',
       name: 'United States',
+      categoryDemand: {
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+      },
       currency: 'USD',
       symbol: '$',
       centralBank: 'Federal Reserve',
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 12_000_000,
-      bankingSector: { businessLoanBookUSD: 800_000, consumerLoanBookUSD: 1_400_000, depositsUSD: 2_100_000, sovereignBondHoldingsUSD: 400_000, cashReservesUSD: 210_000, bankEquityUSD: 280_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.028, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
+      estimatedHouseholdIncomeUSD: 12_000_000_000_000,
+      bankingSector: { businessLoanBookUSD: 800_000_000_000, consumerLoanBookUSD: 1_400_000_000_000, depositsUSD: 2_100_000_000_000, sovereignBondHoldingsUSD: 400_000_000_000, cashReservesUSD: 210_000_000_000, bankEquityUSD: 280_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.028, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 8.5e12,
       balanceSheetStance: 0,
       policyRate: 0.0450,
@@ -229,14 +239,24 @@ export function getInitialRegions(): Record<RegionId, Region> {
     UK: {
       id: 'UK',
       name: 'United Kingdom',
+      categoryDemand: {
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+      },
       currency: 'GBP',
       symbol: '£',
       centralBank: 'Bank of England',
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 2_000_000,
-      bankingSector: { businessLoanBookUSD: 150_000, consumerLoanBookUSD: 260_000, depositsUSD: 400_000, sovereignBondHoldingsUSD: 80_000, cashReservesUSD: 40_000, bankEquityUSD: 55_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.025, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
+      estimatedHouseholdIncomeUSD: 2_000_000_000_000,
+      bankingSector: { businessLoanBookUSD: 150_000_000_000, consumerLoanBookUSD: 260_000_000_000, depositsUSD: 400_000_000_000, sovereignBondHoldingsUSD: 80_000_000_000, cashReservesUSD: 40_000_000_000, bankEquityUSD: 55_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.025, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 1.2e12,
       balanceSheetStance: 0,
       policyRate: 0.0475,
@@ -283,14 +303,24 @@ export function getInitialRegions(): Record<RegionId, Region> {
     JPN: {
       id: 'JPN',
       name: 'Japan',
+      categoryDemand: {
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+      },
       currency: 'JPY',
       symbol: '¥',
       centralBank: 'Bank of Japan',
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 3_500_000,
-      bankingSector: { businessLoanBookUSD: 300_000, consumerLoanBookUSD: 420_000, depositsUSD: 900_000, sovereignBondHoldingsUSD: 260_000, cashReservesUSD: 90_000, bankEquityUSD: 90_000, bankCapitalRatio: 0.11, netInterestMarginPct: 0.012, loanLossProvisionRateAnnualPct: 0.004, creditConditionsIndex: 0 },
+      estimatedHouseholdIncomeUSD: 3_500_000_000_000,
+      bankingSector: { businessLoanBookUSD: 300_000_000_000, consumerLoanBookUSD: 420_000_000_000, depositsUSD: 900_000_000_000, sovereignBondHoldingsUSD: 260_000_000_000, cashReservesUSD: 90_000_000_000, bankEquityUSD: 90_000_000_000, bankCapitalRatio: 0.11, netInterestMarginPct: 0.012, loanLossProvisionRateAnnualPct: 0.004, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 4.8e12,
       balanceSheetStance: 0,
       policyRate: 0.0025,
@@ -337,14 +367,24 @@ export function getInitialRegions(): Record<RegionId, Region> {
     EUR: {
       id: 'EUR',
       name: 'Eurozone',
+      categoryDemand: {
+        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0 },
+      },
       currency: 'EUR',
       symbol: '€',
       centralBank: 'European Central Bank',
       cycleRegime: 'Expansion',
       inversionWeeksCount: 0,
       recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 9_000_000,
-      bankingSector: { businessLoanBookUSD: 650_000, consumerLoanBookUSD: 1_000_000, depositsUSD: 1_600_000, sovereignBondHoldingsUSD: 350_000, cashReservesUSD: 160_000, bankEquityUSD: 200_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.022, loanLossProvisionRateAnnualPct: 0.007, creditConditionsIndex: 0 },
+      estimatedHouseholdIncomeUSD: 9_000_000_000_000,
+      bankingSector: { businessLoanBookUSD: 650_000_000_000, consumerLoanBookUSD: 1_000_000_000_000, depositsUSD: 1_600_000_000_000, sovereignBondHoldingsUSD: 350_000_000_000, cashReservesUSD: 160_000_000_000, bankEquityUSD: 200_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.022, loanLossProvisionRateAnnualPct: 0.007, creditConditionsIndex: 0 },
       centralBankBalanceSheet: 7.2e12,
       balanceSheetStance: 0,
       policyRate: 0.0325,
@@ -747,6 +787,13 @@ export function evolveRegionMacro(
   const debtServiceBurden = prevHS.householdDebtToIncomeRatio * (region.laggedPolicyRateEMA + creditTighteningConsumerAddOn) * 0.04;
   const equityWealthEffect = equityReturn * 0.02;
   const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100) + equityWealthEffect - debtServiceBurden;
+
+  const wealthSignal = Math.max(-0.02, Math.min(0.02, equityReturn * 0.3 + (newCCI - 100) / 100 * 0.01));
+  const targetLuxuryShare = Math.max(0.05, Math.min(0.30, prevHS.luxurySpendShare + wealthSignal));
+  const targetStapleShare = Math.max(0.25, Math.min(0.55, prevHS.stapleSpendShare - wealthSignal * 0.6));
+  const newLuxuryShare = Number((prevHS.luxurySpendShare * 0.95 + targetLuxuryShare * 0.05).toFixed(4));
+  const newStapleShare = Number((prevHS.stapleSpendShare * 0.95 + targetStapleShare * 0.05).toFixed(4));
+  const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
   const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   

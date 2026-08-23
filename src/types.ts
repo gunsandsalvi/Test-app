@@ -1,4 +1,22 @@
 export type RegionId = 'USA' | 'UK' | 'JPN' | 'EUR';
+export type NecessityTier = 'Staple' | 'Standard' | 'Luxury';
+export type ProductCategory =
+  | 'StapleHousehold' | 'StandardHousehold' | 'LuxuryHousehold'
+  | 'CorporateIndustrial' | 'CorporateTech'
+  | 'GovernmentDefense' | 'GovernmentInfrastructure' | 'GovernmentHealthcare';
+
+export interface ProductLine {
+  category: ProductCategory;
+  revenueShare: number;
+  categoryMarketShare: number;
+  competitiveness: number;
+}
+
+export interface CategoryDemandState {
+  demandLevelUSD: number;
+  demandGrowthAnnual: number;
+}
+
 
 export type Sector = 'Tech' | 'Energy' | 'Financials' | 'Industrials' | 'Consumer' | 'Banks';
 
@@ -48,11 +66,15 @@ export interface HouseholdState {
   savingsRate: number;        // Personal Savings Rate %
   realConsumptionGrowth: number; // Real Consumer Spending Growth %
   householdDebtToIncomeRatio: number;
+  stapleSpendShare: number;
+  standardSpendShare: number;
+  luxurySpendShare: number;
 }
 
 export interface Region {
   id: RegionId;
   name: string;
+  categoryDemand: Record<string, CategoryDemandState>;
   currency: string;
   symbol: string;
   centralBank: string;
@@ -188,6 +210,7 @@ export interface Company {
   // 3-Statement Fundamentals (Vectorized state)
   baselineAnnualRevenue: number;
   annualRevenue: number; // in millions
+  productLines?: ProductLine[];
   employeeCount: number;
   previousEmployeeCount: number;
   baselineEmployeeCount: number;

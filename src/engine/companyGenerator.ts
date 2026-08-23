@@ -526,5 +526,172 @@ export function generateInitialCompanies(): Company[] {
     });
   });
 
+  
+  // G1: Assign Product Lines & Category Market Share
+  const categories = [
+    'StapleHousehold', 'StandardHousehold', 'LuxuryHousehold',
+    'CorporateIndustrial', 'CorporateTech',
+    'GovernmentDefense', 'GovernmentInfrastructure', 'GovernmentHealthcare'
+  ];
+
+  const regionMap = new Map<string, Company[]>();
+  companies.forEach(c => {
+    if (!regionMap.has(c.region)) regionMap.set(c.region, []);
+    regionMap.get(c.region)!.push(c);
+  });
+
+  regionMap.forEach((regionComps, regionId) => {
+    const sectorComps = new Map<string, Company[]>();
+    regionComps.forEach(c => {
+      if (!sectorComps.has(c.sector)) sectorComps.set(c.sector, []);
+      sectorComps.get(c.sector)!.push(c);
+    });
+
+    sectorComps.forEach((comps, sector) => {
+      comps.sort((a, b) => b.baselineAnnualRevenue - a.baselineAnnualRevenue);
+      comps.forEach((c, idx) => {
+        let lines: any[] = [];
+        const isTop = idx < 2;
+        
+        if (sector === 'Tech' || sector === 'Financials') {
+          if (isTop) {
+            lines = [
+              { category: 'CorporateTech', revenueShare: 0.6, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: 0.4, competitiveness: 0 }
+            ];
+          } else {
+            lines = [
+              { category: c.ebitda / Math.max(1, c.annualRevenue) > 0.3 ? 'CorporateTech' : 'StandardHousehold', revenueShare: 1.0, competitiveness: 0 }
+            ];
+          }
+        } else if (sector === 'Energy' || sector === 'Industrials') {
+          if (isTop) {
+            lines = [
+              { category: 'CorporateIndustrial', revenueShare: 0.7, competitiveness: 0 },
+              { category: 'GovernmentInfrastructure', revenueShare: 0.3, competitiveness: 0 }
+            ];
+          } else {
+            lines = [
+              { category: c.ebitda / Math.max(1, c.annualRevenue) > 0.15 ? 'CorporateIndustrial' : 'GovernmentInfrastructure', revenueShare: 1.0, competitiveness: 0 }
+            ];
+          }
+        } else if (sector === 'Consumer') {
+          const mgn = c.ebitda / Math.max(1, c.annualRevenue);
+          if (isTop) {
+            if (mgn > 0.3) {
+              lines = [{ category: 'LuxuryHousehold', revenueShare: 0.7, competitiveness: 0 }, { category: 'StandardHousehold', revenueShare: 0.3, competitiveness: 0 }];
+            } else if (mgn < 0.15) {
+              lines = [{ category: 'StapleHousehold', revenueShare: 0.8, competitiveness: 0 }, { category: 'StandardHousehold', revenueShare: 0.2, competitiveness: 0 }];
+            } else {
+              lines = [{ category: 'StandardHousehold', revenueShare: 0.6, competitiveness: 0 }, { category: 'StapleHousehold', revenueShare: 0.4, competitiveness: 0 }];
+            }
+          } else {
+            if (mgn > 0.25) lines = [{ category: 'LuxuryHousehold', revenueShare: 1.0, competitiveness: 0 }];
+            else if (mgn < 0.15) lines = [{ category: 'StapleHousehold', revenueShare: 1.0, competitiveness: 0 }];
+            else lines = [{ category: 'StandardHousehold', revenueShare: 1.0, competitiveness: 0 }];
+          }
+        } else if (sector === 'Banks') {
+          lines = [{ category: 'CorporateTech', revenueShare: 1.0, competitiveness: 0 }];
+        }
+
+        c.productLines = lines;
+      });
+    });
+
+    // Compute category market shares and initialize Region category demand
+    const catTotals: Record<string, number> = {};
+    categories.forEach(cat => catTotals[cat] = 0);
+
+    regionComps.forEach(c => {
+      (c.productLines || []).forEach(line => {
+        catTotals[line.category] += line.revenueShare * c.annualRevenue;
+      });
+    });
+
+    regionComps.forEach(c => {
+      (c.productLines || []).forEach(line => {
+        const catTotal = catTotals[line.category];
+        line.categoryMarketShare = catTotal > 0 ? (line.revenueShare * c.annualRevenue) / catTotal : 0;
+      });
+    });
+    
+    // Note: Region categoryDemand is initialized in getInitialRegions but we'll populate it there.
+    // So we don't do it here because macroEngine initializes regions.
+    // Wait, macroEngine creates regions, then simulation creates companies. 
+    // We can just export a function to patch regions with category demands, or do it in createInitialGameState.
+  });
+
   return companies;
+}
+
+
+const USED_NAMES = new Set<string>();
+
+export function generateUniqueCompanyName(region: string, category: string): { ticker: string, name: string } {
+  const prefixes = ['Global', 'Quantum', 'Nexus', 'Aero', 'Stratos', 'Nova', 'Titan', 'Zenith', 'Horizon', 'Apex', 'Pearl', 'Obsidian', 'Astral', 'Galactic', 'Orion', 'Meridian', 'Crown', 'Heritage'];
+  const suffixes = ['Industries', 'Tech', 'Systems', 'Holdings', 'Group', 'Networks', 'Dynamics', 'Logistics', 'Stores', 'Brands'];
+  
+  let attempts = 0;
+  while (attempts < 100) {
+    const p = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const s = suffixes[Math.floor(Math.random() * suffixes.length)];
+    const name = `${p} ${s}`;
+    const ticker = (p.substring(0,2) + s.substring(0,2)).toUpperCase();
+    
+    if (!USED_NAMES.has(name) && !USED_NAMES.has(ticker)) {
+      USED_NAMES.add(name);
+      USED_NAMES.add(ticker);
+      return { ticker, name };
+    }
+    attempts++;
+  }
+  
+  const fbName = `NewEntrant ${Math.floor(Math.random()*1000)}`;
+  const fbTicker = `NEW${Math.floor(Math.random()*1000)}`;
+  USED_NAMES.add(fbName);
+  USED_NAMES.add(fbTicker);
+  return { ticker: fbTicker, name: fbName };
+}
+
+export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number): Company {
+  const revBase = categoryDemandUSD * (0.02 + Math.random() * 0.03); 
+  const ebitdaMargin = 0.15 + Math.random() * 0.15;
+  const shares = Math.floor(revBase * 10);
+  const { ticker, name } = generateUniqueCompanyName(regionId, category);
+  
+  const sectorMap: Record<string, Sector> = {
+    'CorporateTech': 'Tech',
+    'StandardHousehold': 'Consumer',
+    'StapleHousehold': 'Consumer',
+    'LuxuryHousehold': 'Consumer',
+    'CorporateIndustrial': 'Industrials',
+    'GovernmentInfrastructure': 'Industrials',
+    'GovernmentDefense': 'Industrials',
+    'GovernmentHealthcare': 'Healthcare'
+  };
+  
+  const sector = sectorMap[category] ?? 'Tech';
+  const initialRating: CreditRating = Math.random() > 0.5 ? 'BB' : 'B';
+  const debtBase = revBase * 1.5;
+  
+  const ebitda = revBase * ebitdaMargin;
+  const da = revBase * 0.05;
+  const ebit = Math.max(10, ebitda - da);
+  const employeeCount = Math.max(100, Math.round(revBase / 500_000));
+  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating);
+  
+  return {
+    id: `comp_${ticker}_${Date.now()}_${week}`,
+    ticker, name, region: regionId, sector,
+    baselineAnnualRevenue: revBase, annualRevenue: revBase,
+    previousEmployeeCount: employeeCount, employeeCount,
+    ebitda, ebit, netIncome: ebitda * 0.5, eps: 1.0,
+    sharesOutstanding: shares, currentLiabilities: Math.round(debtBase * 0.25 + revBase * 0.08),
+    totalDebt: debtBase, cashAndEquivalents: revBase * 0.5, capex: Math.round(revBase * 0.06),
+    creditRating: initialRating, isDefaulted: false, oasSpreadBps: 300, cdsSpreadBps: 300,
+    seniorBondYield: 0.08, stockPrice: 20, historicalPrices: Array(52).fill(20), forwardPE: 15,
+    marketCap: shares * 20, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,
+    baselineRecoveryRate: 0.40, debtTranches,
+    productLines: [{ category: category as any, revenueShare: 1.0, competitiveness: 0.3, categoryMarketShare: 0.02 }]
+  };
 }
