@@ -8,7 +8,15 @@ import { generate52WeekHistory } from './utils';
 export function evolveRegionMacro(
   region: Region,
   globalShock: { gdpShock: number; inflationShock: number },
-  microFeedback: { capexGdpContribution: number; marginCompression: number; creditContagionBps: number; bottomUpUnemploymentDelta: number; businessLoanBookInputUSD: number },
+  microFeedback: {
+    capexGdpContribution: number;
+    marginCompression: number;
+    creditContagionBps: number;
+    bottomUpUnemploymentDelta: number;
+    businessLoanBookInputUSD: number;
+    trackedHealthSignal: number;
+    publicCompanyEmployment: number;
+  },
   week: number,
   equityReturn: number = 0,
   prevCommodities: Commodity[] = []
@@ -110,6 +118,26 @@ export function evolveRegionMacro(
 
   const participationDrift = newCycleRegime === 'Recession' ? -0.0003 : (newCycleRegime === 'Recovery' ? 0.0002 : 0);
   const newParticipation = Math.max(0.55, Math.min(0.68, region.laborForceParticipation + participationDrift));
+
+  // Slow demographic drift — independent of the business cycle
+  const nonEmployableDrift = (Math.random() - 0.5) * 0.00002; // tiny, structural, not cycle-driven
+  const newNonEmployablePct = Math.max(0.28, Math.min(0.45, region.nonEmployablePct + nonEmployableDrift));
+  const totalLaborForce = region.totalPopulation * (1 - newNonEmployablePct) * newParticipation;
+
+  // Government employment responds to fiscal stance, same mechanism already driving discretionary stimulus
+  const govEmploymentGrowthRate = newFiscalStanceScore * 0.0008; // weekly rate; positive stance hires, negative sheds
+  const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
+
+  // SME sector breathes in sync with the tracked-company health signal, scaled down (SMEs are less volatile than large-cap panel)
+  const untrackedCyclicalGrowth = microFeedback.trackedHealthSignal * 0.01;
+  const targetUntracked = totalLaborForce * (1 - region.unemploymentRate) - microFeedback.publicCompanyEmployment - newGovernmentEmployment;
+  const meanReversionPull = (targetUntracked - region.untrackedPrivateEmployment) / Math.max(1, region.untrackedPrivateEmployment) * 0.05;
+  const untrackedGrowthRate = Math.max(-0.003, Math.min(0.003, untrackedCyclicalGrowth + meanReversionPull));
+  const newUntrackedPrivateEmployment = Math.max(1, Math.round(region.untrackedPrivateEmployment * (1 + untrackedGrowthRate)));
+
+  // Bottom-up labor-force identity residual (Phase 1 diagnostic)
+  const totalEmployed = microFeedback.publicCompanyEmployment + newGovernmentEmployment + newUntrackedPrivateEmployment;
+  const newUnemploymentRateBottomUp = totalLaborForce > 0 ? Math.max(0, Math.min(1, (totalLaborForce - totalEmployed) / totalLaborForce)) : region.unemploymentRateBottomUp;
 
   let newPotentialGdpGrowth = region.potentialGdpGrowth;
   if (week % 52 === 0) {
@@ -315,6 +343,11 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     wageGrowth: Number(newWageGrowth.toFixed(4)),
     debtToGdpPct: newDebtToGdpPct,
     unemploymentRate: newUnemployment,
+    totalPopulation: region.totalPopulation,
+    nonEmployablePct: newNonEmployablePct,
+    governmentEmployment: newGovernmentEmployment,
+    untrackedPrivateEmployment: newUntrackedPrivateEmployment,
+    unemploymentRateBottomUp: Number(newUnemploymentRateBottomUp.toFixed(4)),
     householdState: {
       consumerConfidence: newCCI,
       wageGrowth: newWageGrowth,

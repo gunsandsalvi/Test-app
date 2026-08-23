@@ -32,6 +32,18 @@ export function advanceWeeklyStep(state: GameState): GameState {
     regionFloatingPrincipal[f.region] += floatingSum;
   });
 
+  const regionTrackedHealthSignal: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
+  (['USA','EUR','UK','JPN'] as RegionId[]).forEach(rid => {
+    const firms = prevActiveFirms.filter(f => f.region === rid);
+    if (firms.length === 0) return;
+    regionTrackedHealthSignal[rid] = firms.reduce((s, f) => s + (f.annualRevenue - f.baselineAnnualRevenue) / Math.max(1, f.baselineAnnualRevenue), 0) / firms.length;
+  });
+
+  const regionPublicCompanyEmployment: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
+  (['USA','EUR','UK','JPN'] as RegionId[]).forEach(rid => {
+    regionPublicCompanyEmployment[rid] = prevActiveFirms.filter(f => f.region === rid).reduce((s, f) => s + f.employeeCount, 0);
+  });
+
   const totalCapex = prevActiveFirms.reduce((sum, c) => sum + c.capex, 0);
   const avgMargin = prevActiveFirms.reduce((sum, c) => sum + (c.ebitda / Math.max(1, c.annualRevenue)), 0) / Math.max(1, prevActiveFirms.length);
   const marginCompression = avgMargin < 0.22 ? 0.22 - avgMargin : 0.0;
@@ -77,7 +89,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
-      { capexGdpContribution: boundedGdpContribution, marginCompression, creditContagionBps, bottomUpUnemploymentDelta, businessLoanBookInputUSD: regionFloatingPrincipal[regionId] },
+      {
+        capexGdpContribution: boundedGdpContribution,
+        marginCompression,
+        creditContagionBps,
+        bottomUpUnemploymentDelta,
+        businessLoanBookInputUSD: regionFloatingPrincipal[regionId],
+        trackedHealthSignal: regionTrackedHealthSignal[regionId],
+        publicCompanyEmployment: regionPublicCompanyEmployment[regionId],
+      },
       nextWeek,
       equityRet,
       state.commodities
@@ -526,6 +546,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const systemicStressFactor = systemicStressFactorGlobal + Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.3;
     const newBaselineRecoveryRate = Number(((comp.baselineRecoveryRate ?? 0.40) * 0.998 + comp.recoveryRate * 0.002).toFixed(4));
     const effectiveRecoveryRate = Math.max(0.10, newBaselineRecoveryRate * (1 - systemicStressFactor));
+    const trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52;
+    const newBaselineAnnualRevenue = Number(((comp.baselineAnnualRevenue * (1 + trendWeeklyGrowth) * 0.90) + (newRevenue * 0.10)).toFixed(1));
 
     return {
       ...comp,
@@ -542,6 +564,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       dividendYield: Number(newDividendYield.toFixed(4)),
       capex: Number(newCapex.toFixed(1)),
       annualRevenue: Number(newRevenue.toFixed(1)),
+      baselineAnnualRevenue: newBaselineAnnualRevenue,
       ebitda: Number(newEbitda.toFixed(1)),
       ebit: Number(newEbit.toFixed(1)),
       netIncome: Number(newNetIncome.toFixed(1)),

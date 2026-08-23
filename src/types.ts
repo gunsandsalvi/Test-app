@@ -113,6 +113,13 @@ export interface Region {
   laborForceParticipation: number;
   inflationDeviationStreak: number;
 
+  // Population & Labor Force Accounting (Phase 1)
+  totalPopulation: number;              // raw headcount, this world's own organic figure — not calibrated to any real country
+  nonEmployablePct: number;             // fraction of population outside the labor force for demographic reasons (children, retired, students, disabled)
+  governmentEmployment: number;         // raw headcount employed by government
+  untrackedPrivateEmployment: number;   // raw headcount employed by private businesses outside the tracked public-company panel
+  unemploymentRateBottomUp: number;     // diagnostic only this phase — residual of the labor-force identity, not yet driving anything
+
   householdState: HouseholdState;
 
   // Central Banking Dot Plot Projections (1Y & 2Y terminal target rates)
