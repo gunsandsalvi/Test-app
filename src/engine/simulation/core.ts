@@ -264,7 +264,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const bidQuantity = (demander.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
         const clearingRatio = totalAvailableSupply > 0 ? bidQuantity / totalAvailableSupply : 1;
 
-        const targetPriceIndex = Math.max(0.5, Math.min(2.0, 1.0 + (clearingRatio - 1.0) * 0.4));
+        const targetPriceIndex = Math.max(0, 1.0 + (clearingRatio - 1.0) * 0.4); // 0 floor only — a price index cannot go negative
         const newPriceIndex = (supplier.clearedInputPriceIndex ?? 1.0) * 0.85 + targetPriceIndex * 0.15;
 
         const quantityFulfilled = Math.min(bidQuantity, totalAvailableSupply);
@@ -505,7 +505,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
         const shareGainRate = Math.max(-0.01, Math.min(0.01, newCompetitiveness * 0.02 - dominanceDrag));
-        const newCategoryMarketShare = Math.max(0.0005, Math.min(0.80, line.categoryMarketShare * (1 + shareGainRate / 52)));
+        const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // 0 floor only — a market share literally cannot go negative, this is a math guard not a behavioral clamp
         
         const lineGrowth = categoryGrowth + shareGainRate;
         

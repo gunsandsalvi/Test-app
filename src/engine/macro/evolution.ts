@@ -150,12 +150,12 @@ export function evolveRegionMacro(
   const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag + fiscalImpulse + scheduledShock;
 
   // 4. Absolute hard clamp to prevent runaway simulation
-  const newGdpGrowth = Math.max(-0.06, Math.min(0.08, updatedGdpGrowth)); // Bounded between -6.0% and +8.0%
+  const newGdpGrowth = updatedGdpGrowth;
 
   // 1. Autoregressive AR(1) base with anchor to target inflation piStar + supply noise
   const infPersistence = 0.98;
   const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
-  let newInflation = Math.max(-0.020, Math.min(0.20, Number(baseInflation.toFixed(4))));
+  let newInflation = Number(baseInflation.toFixed(4));
 
   const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
   const newFiscalDeficitPctGdp = Math.max(-0.02, Math.min(0.15, newStructuralDeficitPctGdp + cyclicalDeficitComponent));
@@ -204,7 +204,7 @@ export function evolveRegionMacro(
   const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0);
   const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
   const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
-  const newUnemployment = Math.max(0.020, Math.min(0.180, Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4))));
+  const newUnemployment = Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4));
   const unempDelta = newUnemployment - region.unemploymentRate;
 
   // Consumer & Household Sector Simulation
@@ -443,7 +443,7 @@ export function evolveRegionMacro(
   const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   
   // Wage-push and monetary inflation add to CPI (scaled for weekly turn)
-  newInflation = Math.max(-0.020, Math.min(0.20, Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4))));
+  newInflation = Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4));
   const newCoreInflation = Number((newInflation * 0.92 + wagePushInflation * 0.1).toFixed(4));
   const newExpectedInflation = region.expectedInflation * 0.9 + newInflation * 0.1;
 
