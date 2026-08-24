@@ -65,7 +65,7 @@ export function evolveBankingSector(
   const weeklyInterestIncome = (newBusinessLoanBook * businessLoanYield + newConsumerLoanBook * consumerLoanYield + newSovHoldings * sovereign10YYield + newCashReserves * reserveYield) / 52;
   const weeklyInterestExpense = (newDeposits * depositRate) / 52;
   const rawNim = totalAssetsProxy > 0 ? ((weeklyInterestIncome - weeklyInterestExpense) * 52) / totalAssetsProxy : 0.025;
-  const netInterestMarginPct = Math.max(0.012, Math.min(0.055, rawNim));
+  const netInterestMarginPct = (rawNim);
   const businessLossRateAnnual = Math.min(0.12, (creditContagionBps / 10000) * 1.8);
   const consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
   const weeklyLoanLossProvision = (newBusinessLoanBook * businessLossRateAnnual + newConsumerLoanBook * consumerLossRateAnnual) / 52;
@@ -82,7 +82,7 @@ export function evolveBankingSector(
   }
   const newBankCapitalRatio = riskWeightedAssets > 0 ? newBankEquity / riskWeightedAssets : 0.13;
   const capitalGap = 0.12 - newBankCapitalRatio;
-  const newCreditConditionsIndex = Math.max(-0.95, Math.min(0.95, capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment));
+  const newCreditConditionsIndex = (capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment);
 
   // V6. Lender of last resort: emergency reserve injection during genuine systemic stress
   const systemicLiquidityStress = (prevBanking.bankCapitalRatio < 0.082 && newCreditConditionsIndex > 0.22) || (prevBanking.bankCapitalRatio < 0.075);

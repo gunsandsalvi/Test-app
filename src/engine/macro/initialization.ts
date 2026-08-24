@@ -1,8 +1,18 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool } from '../../types';
+import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool, CreditTierBook } from '../../types';
 import { generate52WeekHistory } from './utils';
 import { INITIAL_WEATHER } from './weather';
+
+function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDebtUSD: number): CreditTierBook[] {
+  const totalDebt = creditCardDebtUSD + otherConsumerLoanDebtUSD;
+  return [
+    { tier: 'SUPER_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: totalDebt * 0.25, avgInterestRate: 0.08, delinquencyRatePct: 0.005 },
+    { tier: 'PRIME', shareOfHouseholds: 0.35, debtBalanceUSD: totalDebt * 0.35, avgInterestRate: 0.12, delinquencyRatePct: 0.02 },
+    { tier: 'NEAR_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: totalDebt * 0.25, avgInterestRate: 0.18, delinquencyRatePct: 0.06 },
+    { tier: 'SUBPRIME', shareOfHouseholds: 0.15, debtBalanceUSD: totalDebt * 0.15, avgInterestRate: 0.25, delinquencyRatePct: 0.15 },
+  ];
+}
 
 export function getInitialRegions(): Record<RegionId, Region> {
   const usaParams: NelsonSiegelParams = { beta0: 0.044, beta1: -0.004, beta2: 0.010, lambda: 1.8 };
@@ -86,7 +96,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'AA',
       laggedPolicyRateEMA: 0.0550,
       laborForceParticipation: 0.63,
-      inflationDeviationStreak: 0,
+      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
       totalPopulation: 145_000_000,
       birthRateAnnual: 0.011,
       deathRateAnnual: 0.009,
@@ -133,6 +143,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       debtToGdpPctBottomUp: 0,
       householdState: {
         consumerConfidence: 100,
+        creditTierBooks: generateCreditTierBooks(900_000_000_000, 1_600_000_000_000),
         wageGrowth: 0.0360,
         savingsRate: 0.055,
         realConsumptionGrowth: 0.02,
@@ -230,7 +241,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'AA',
       laggedPolicyRateEMA: 0.0450,
       laborForceParticipation: 0.65,
-      inflationDeviationStreak: 0,
+      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
       totalPopulation: 38_000_000,
       birthRateAnnual: 0.010,
       deathRateAnnual: 0.009,
@@ -277,6 +288,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       debtToGdpPctBottomUp: 0,
       householdState: {
         consumerConfidence: 100,
+        creditTierBooks: generateCreditTierBooks(100_000_000_000, 180_000_000_000),
         wageGrowth: 0.0420,
         savingsRate: 0.060,
         realConsumptionGrowth: 0.015,
@@ -373,7 +385,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'A',
       laggedPolicyRateEMA: 0.0525,
       laborForceParticipation: 0.64,
-      inflationDeviationStreak: 0,
+      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
       totalPopulation: 65_000_000,
       birthRateAnnual: 0.007,
       deathRateAnnual: 0.011,
@@ -420,6 +432,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       debtToGdpPctBottomUp: 0,
       householdState: {
         consumerConfidence: 100,
+        creditTierBooks: generateCreditTierBooks(120_000_000_000, 200_000_000_000),
         wageGrowth: 0.0250,
         savingsRate: 0.080,
         realConsumptionGrowth: 0.01,
@@ -517,7 +530,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       sovereignRating: 'AAA',
       laggedPolicyRateEMA: 0.0010,
       laborForceParticipation: 0.62,
-      inflationDeviationStreak: 0,
+      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
       totalPopulation: 190_000_000,
       birthRateAnnual: 0.009,
       deathRateAnnual: 0.010,
@@ -564,6 +577,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       debtToGdpPctBottomUp: 0,
       householdState: {
         consumerConfidence: 100,
+        creditTierBooks: generateCreditTierBooks(350_000_000_000, 700_000_000_000),
         wageGrowth: 0.0320,
         savingsRate: 0.070,
         realConsumptionGrowth: 0.008,
@@ -691,7 +705,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 0.65,
       volatility: 0.30,
       supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 46,
+      inventoryLevelPct: 46, dailyConsumptionUnits: 10_000_000,
     },
     {
       id: 'BRENT',
@@ -708,7 +722,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 0.50,
       volatility: 0.28,
       supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 48,
+      inventoryLevelPct: 48, dailyConsumptionUnits: 10_000_000,
     },
     {
       id: 'NATGAS',
@@ -725,7 +739,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 0.05,
       volatility: 0.45,
       supplyDemandBalance: 'Deficit (Tight Supply)',
-      inventoryLevelPct: 38,
+      inventoryLevelPct: 38, dailyConsumptionUnits: 10_000_000,
     },
     // 2. Metals
     {
@@ -743,7 +757,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 15.0,
       volatility: 0.16,
       supplyDemandBalance: 'Deficit (Tight Supply)',
-      inventoryLevelPct: 35,
+      inventoryLevelPct: 35, dailyConsumptionUnits: 10_000_000,
     },
     {
       id: 'SILVER',
@@ -760,7 +774,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 0.42,
       volatility: 0.26,
       supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 44,
+      inventoryLevelPct: 44, dailyConsumptionUnits: 10_000_000,
     },
     {
       id: 'COPPER',
@@ -777,7 +791,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 0.04,
       volatility: 0.22,
       supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 52,
+      inventoryLevelPct: 52, dailyConsumptionUnits: 10_000_000,
     },
     // 3. Agriculture
     {
@@ -795,7 +809,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: -0.08,
       volatility: 0.28,
       supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 54,
+      inventoryLevelPct: 54, dailyConsumptionUnits: 10_000_000,
     },
     {
       id: 'CORN',
@@ -812,7 +826,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 0.06,
       volatility: 0.25,
       supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 51,
+      inventoryLevelPct: 51, dailyConsumptionUnits: 10_000_000,
     },
     {
       id: 'SOYBEANS',
@@ -829,7 +843,7 @@ export function getInitialCommodities(): Commodity[] {
       change1W: 0.12,
       volatility: 0.24,
       supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 49,
+      inventoryLevelPct: 49, dailyConsumptionUnits: 10_000_000,
     },
   ];
 }

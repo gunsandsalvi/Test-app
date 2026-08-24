@@ -30,6 +30,12 @@ function getSegmentDemandSignal(segmentType: PrivateSegmentType, reg: Region, pr
   }
 }
 
+function pushAndReadLagged(buffer: number[], newValue: number, lagWeeks: number): { updatedBuffer: number[]; laggedValue: number } {
+  const updatedBuffer = [...buffer, newValue].slice(-8);
+  const laggedValue = updatedBuffer.length > lagWeeks ? updatedBuffer[updatedBuffer.length - 1 - lagWeeks] : updatedBuffer[0] ?? newValue;
+  return { updatedBuffer, laggedValue };
+}
+
 export function evolveRegionMacro(
   region: Region,
   globalShock: { gdpShock: number; inflationShock: number },
@@ -54,6 +60,8 @@ export function evolveRegionMacro(
   isMeeting: boolean;
   diagnosticString: string;
 } {
+  const { updatedBuffer: newPolicyRateLagBuffer, laggedValue: laggedPolicyRate } = pushAndReadLagged(region.policyRateLagBuffer || [], region.policyRate, 6);
+  
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week);
 
   const weatherDecay = Math.pow(0.55, Math.max(0, updatedWeather.weeksActive - 1));
@@ -114,7 +122,7 @@ export function evolveRegionMacro(
       newFiscalStanceScore = region.fiscalStanceScore * 0.95; // slow decay back to neutral
     }
     const stanceChange = newFiscalStanceScore - region.fiscalStanceScore;
-    newStructuralDeficitPctGdp = Math.max(0.01, Math.min(0.12, region.structuralDeficitPctGdp + stanceChange * 0.05));
+    newStructuralDeficitPctGdp = (region.structuralDeficitPctGdp + stanceChange * 0.05);
   }
 
   // Process recession shocks
@@ -126,13 +134,13 @@ export function evolveRegionMacro(
   let newInflation = Number(baseInflation.toFixed(4));
 
   const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
-  const newFiscalDeficitPctGdp = Math.max(-0.02, Math.min(0.15, newStructuralDeficitPctGdp + cyclicalDeficitComponent));
+  const newFiscalDeficitPctGdp = (newStructuralDeficitPctGdp + cyclicalDeficitComponent);
 
   const newEstimatedNominalGdpUSD = region.estimatedNominalGdpUSD * (1 + (newGdpGrowth + newInflation) / 52); // nominal = real + inflation
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
-  const newEffectiveTaxRate = Math.max(0.15, Math.min(0.45, region.effectiveTaxRate + taxRateDrift));
+  const newEffectiveTaxRate = (region.effectiveTaxRate + taxRateDrift);
 
   const newGovernmentRevenueUSD = newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52; // weekly flow
   const newGovernmentSpendingUSD = newGovernmentRevenueUSD + (newEstimatedNominalGdpUSD * newFiscalDeficitPctGdp) / 52; // spending = revenue + deficit, by definition
@@ -143,23 +151,23 @@ export function evolveRegionMacro(
   else if (region.cycleRegime === 'Recession' && newGdpGrowth >= 0) newCycleRegime = 'Recovery';
 
   const participationDrift = newCycleRegime === 'Recession' ? -0.0003 : (newCycleRegime === 'Recovery' ? 0.0002 : 0);
-  const newParticipation = Math.max(0.55, Math.min(0.68, region.laborForceParticipation + participationDrift));
+  const newParticipation = (region.laborForceParticipation + participationDrift);
 
   // Slow demographic drift — independent of the business cycle
   const nonEmployableDrift = (Math.random() - 0.5) * 0.00002; // tiny, structural, not cycle-driven
-  const newNonEmployablePct = Math.max(0.28, Math.min(0.45, region.nonEmployablePct + nonEmployableDrift));
+  const newNonEmployablePct = (region.nonEmployablePct + nonEmployableDrift);
 
   // Government employment responds to real spending growth
   const spendingGrowthRate = region.governmentSpendingUSD > 0 ? (newGovernmentSpendingUSD - region.governmentSpendingUSD) / region.governmentSpendingUSD : 0;
-  const govEmploymentGrowthRate = Math.max(-0.001, Math.min(0.001, spendingGrowthRate * 0.3));
+  const govEmploymentGrowthRate = (spendingGrowthRate * 0.3);
   const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
   let newPotentialGdpGrowth = region.potentialGdpGrowth;
   if (week % 52 === 0) {
     const laborForceTrend = (newParticipation - region.laborForceParticipation) * 52;
-    const capexIntensityTrend = Math.max(-0.0015, Math.min(0.0015, microFeedback.capexGdpContribution * 0.15));
+    const capexIntensityTrend = (microFeedback.capexGdpContribution * 0.15);
     const potentialGdpDrift = laborForceTrend * 0.3 + capexIntensityTrend;
-    newPotentialGdpGrowth = Math.max(0.003, Math.min(0.035, Number((region.potentialGdpGrowth + potentialGdpDrift).toFixed(4))));
+    newPotentialGdpGrowth = (Number((region.potentialGdpGrowth + potentialGdpDrift).toFixed(4)));
   }
 
   const potentialGdpDelta = newPotentialGdpGrowth - region.potentialGdpGrowth;
@@ -170,9 +178,9 @@ export function evolveRegionMacro(
   const hysteresis = Math.min(0.015, weeksAboveNairu * 0.00005);
   const hysteresisDelta = isHighUnemp ? hysteresis / 52 : -hysteresis / 104;
   const baseNairu = week % 52 === 0
-    ? Math.max(0.02, Math.min(0.09, Number((region.nairu + (newParticipation - region.laborForceParticipation) * 52 * 0.15).toFixed(4))))
+    ? (Number((region.nairu + (newParticipation - region.laborForceParticipation) * 52 * 0.15).toFixed(4)))
     : region.nairu;
-  const newNairu = Number(Math.max(0.02, Math.min(0.09, baseNairu + hysteresisDelta)).toFixed(4));
+  const newNairu = Number((baseNairu + hysteresisDelta).toFixed(4));
 
   const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0);
   const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
@@ -189,17 +197,18 @@ export function evolveRegionMacro(
   const newSmoothedSlackGap = prevSmoothedSlackGap * 0.85 + slackGap * 0.15;
   
   const taperedSlackEffect = newSmoothedSlackGap > 0.01 ? 0.01 + (newSmoothedSlackGap - 0.01) * 0.3 : newSmoothedSlackGap;
-  const newWageGrowth = Math.max(0.0, Math.min(0.08, 0.025 + 0.8 * taperedSlackEffect + 0.1 * region.expectedInflation));
+  const newWageGrowth = (0.025 + 0.8 * taperedSlackEffect + 0.1 * region.expectedInflation);
+  const { updatedBuffer: newWageGrowthLagBuffer, laggedValue: laggedWageGrowth } = pushAndReadLagged(region.wageGrowthLagBuffer || [], newWageGrowth, 3);
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
   const contagionHit = microFeedback.creditContagionBps > 50 ? (microFeedback.creditContagionBps / 100) * 0.5 : 0;
   const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80;
   const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.08;
   const unempShock = unempDelta > 0 ? cciUnempMultiplier * unempDelta * 100 : 0;
-  const newCCI = Math.max(60, Math.min(140, Number((prevHS.consumerConfidence + cciReversion + 0.05 * (equityReturn * 100) - unempShock - contagionHit).toFixed(2))));
+  const newCCI = (Number((prevHS.consumerConfidence + cciReversion + 0.05 * (equityReturn * 100) - unempShock - contagionHit).toFixed(2)));
 
   // Population Growth & Net Migration Dynamics (Part AG)
-  const migrationAttractivenessSignal = Math.max(-0.001, Math.min(0.001, ((newCCI - 100) / 100) * 0.0006));
+  const migrationAttractivenessSignal = (((newCCI - 100) / 100) * 0.0006);
   const birthRate = region.birthRateAnnual ?? 0.010;
   const deathRate = region.deathRateAnnual ?? 0.009;
   const migrationRate = region.netMigrationRateAnnual ?? 0.002;
@@ -208,9 +217,9 @@ export function evolveRegionMacro(
   const totalLaborForce = newTotalPopulation * (1 - newNonEmployablePct) * newParticipation;
 
   const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5 - 0.1 * ((newCCI - 100) / 100);
-  const realRateGap = region.policyRate - newNeutralRate;
-  const rateSavingsIncentive = Math.max(-0.02, Math.min(0.02, realRateGap * 0.4));
-  const newSavingsRate = Math.max(0.02, Math.min(0.30, savingsBaseline + rateSavingsIncentive));
+  const realRateGap = laggedPolicyRate - newNeutralRate;
+  const rateSavingsIncentive = (realRateGap * 0.4);
+  const newSavingsRate = (savingsBaseline + rateSavingsIncentive);
 
   // Net new lending from banking sector expands deposits
   const estBusinessLoanBook = microFeedback.businessLoanBookInputUSD;
@@ -234,9 +243,9 @@ export function evolveRegionMacro(
   const ccPaydownRate = 0.04;        // ~4%/wk revolving turnover
 
   // New borrowing demand scales with CCI and policy rate:
-  const borrowingMultiplier = Math.max(0.5, Math.min(1.8,
+  const borrowingMultiplier = (
     1.0 + (newCCI - 100) / 100 * 0.5 - (region.policyRate - newNeutralRate) * 4
-  ));
+  );
 
   const weeklyNewMortgagesUSD = (prevHS.mortgageDebtUSD || 0) * mortgagePaydownRate * borrowingMultiplier;
   const weeklyNewCCDebtUSD = (prevHS.creditCardDebtUSD || 0) * ccPaydownRate * borrowingMultiplier;
@@ -277,7 +286,7 @@ export function evolveRegionMacro(
     const demandForThisOccupation = occDemandInput[occ] ?? 0;
     const tightness = availableSupply > 0 ? demandForThisOccupation / availableSupply : 1.0;
 
-    const targetWageGrowth = Math.max(-0.01, Math.min(0.15, (tightness - 0.92) * 0.5));
+    const targetWageGrowth = ((tightness - 0.92) * 0.5);
     const newWageGrowthAnnual = pool.wageGrowthAnnual * 0.9 + targetWageGrowth * 0.1;
     const newWageIndex = pool.wageIndex * (1 + newWageGrowthAnnual / 52);
     acc[occ] = {
@@ -294,7 +303,7 @@ export function evolveRegionMacro(
   (Object.keys(newOccupationPools) as OccupationType[]).forEach(occ => {
     const wageGapVsAvg = newOccupationPools[occ].wageIndex / Math.max(0.01, avgWageIndex) - 1;
     const retrainingSpeed = occ === 'GENERAL' ? 0.015 : (occ === 'SPECIALIZED_PROFESSIONAL' || occ === 'TECHNICAL_ENGINEERING') ? 0.003 : 0.008;
-    newLaborForceShares[occ] = Math.max(0.03, Math.min(0.65, (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]) + wageGapVsAvg * retrainingSpeed));
+    newLaborForceShares[occ] = ((currentLaborForceShares[occ] ?? defaultOccupationShares[occ]) + wageGapVsAvg * retrainingSpeed);
   });
 
   const shareSum = Object.values(newLaborForceShares).reduce((s, v) => s + v, 0);
@@ -316,9 +325,9 @@ export function evolveRegionMacro(
 
   const newPrivateSectorSegments = (region.privateSectorSegments || []).map(seg => {
     const demandSignal = seg.segmentType === 'CONSTRUCTION_REALESTATE' ? mortgageGrowthSignal : getSegmentDemandSignal(seg.segmentType, region, prevHS);
-    const employmentGrowthRate = Math.max(-0.0015, Math.min(0.0015, demandSignal * 0.05));
+    const employmentGrowthRate = (demandSignal * 0.05);
     const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate)));
-    const revenueGrowthRate = Math.max(-0.002, Math.min(0.002, demandSignal * 0.06));
+    const revenueGrowthRate = (demandSignal * 0.06);
     const newAnnualRevenueUSD = Math.max(1, seg.annualRevenueUSD * (1 + revenueGrowthRate));
 
     const segOccMix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 };
@@ -326,8 +335,8 @@ export function evolveRegionMacro(
     const wageDrag = Math.max(0, segWageGrowth - 0.028) * 0.05;
 
     const marginReversion = (seedMarginByType[seg.segmentType] - seg.marginPct) * 0.02; // pulls back toward each segment's realistic baseline
-    const marginDrift = Math.max(-0.001, Math.min(0.001, demandSignal * 0.01)) + marginReversion - wageDrag * 0.02;
-    const newMarginPct = Math.max(0.02, Math.min(0.22, seg.marginPct + marginDrift)); // ceiling lowered from 0.30 to 0.22
+    const marginDrift = (demandSignal * 0.01) + marginReversion - wageDrag * 0.02;
+    const newMarginPct = (seg.marginPct + marginDrift); // ceiling lowered from 0.30 to 0.22
     return {
       segmentType: seg.segmentType,
       employment: newEmployment,
@@ -352,7 +361,7 @@ export function evolveRegionMacro(
     : 1.0;
 
   // 4. Wealth-effect correction in CCI & consumption:
-  const balanceSheetWealthEffect = Math.max(-0.02, Math.min(0.02, (netWorthToIncomeRatio - 1.0) * 0.006));
+  const balanceSheetWealthEffect = ((netWorthToIncomeRatio - 1.0) * 0.006);
   const creditFundedSpendingUSD = (weeklyNewCCDebtUSD + weeklyNewOtherLoansUSD) * 0.8; // credit directly buying goods
   const weeklyIncomeUSD = region.estimatedHouseholdIncomeUSD / 52;
   const creditSpendingBoostPct = weeklyIncomeUSD > 0 ? (creditFundedSpendingUSD / weeklyIncomeUSD) * 0.05 : 0;
@@ -370,26 +379,26 @@ export function evolveRegionMacro(
 
   // Update newRealConsumptionGrowth with real balance-sheet channels:
   const trendConsumptionGrowth = region.potentialGdpGrowth * (newCCI / 100);
-  const realWageGainEffect = (1 - newSavingsRate) * (newWageGrowth - region.inflation - 0.005);
+  const realWageGainEffect = (1 - newSavingsRate) * (laggedWageGrowth - region.inflation - 0.005);
   const newRealConsumptionGrowth = trendConsumptionGrowth
     + realWageGainEffect
     + balanceSheetWealthEffect
     + creditSpendingBoostPct
     - debtServiceDrag;
 
-  const wealthSignal = Math.max(-0.02, Math.min(0.02, equityReturn * 0.3 + (newCCI - 100) / 100 * 0.01));
-  const targetLuxuryShare = Math.max(0.05, Math.min(0.30, prevHS.luxurySpendShare + wealthSignal));
-  const targetStapleShare = Math.max(0.25, Math.min(0.55, prevHS.stapleSpendShare - wealthSignal * 0.6));
+  const wealthSignal = (equityReturn * 0.3 + (newCCI - 100) / 100 * 0.01);
+  const targetLuxuryShare = (prevHS.luxurySpendShare + wealthSignal);
+  const targetStapleShare = (prevHS.stapleSpendShare - wealthSignal * 0.6);
   const newLuxuryShare = Number((prevHS.luxurySpendShare * 0.95 + targetLuxuryShare * 0.05).toFixed(4));
   const newStapleShare = Number((prevHS.stapleSpendShare * 0.95 + targetStapleShare * 0.05).toFixed(4));
   const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
   // Central bank stance and banking sector evolution
-  const targetBalanceSheetStance = Math.max(-1, Math.min(1,
+  const targetBalanceSheetStance = (
     (Math.max(0, 0.07 - newUnemployment) * -8) +
     (Math.max(0, newUnemployment - 0.07) * 10) +
     (Math.max(0, newInflation - 0.04) * -6)
-  ));
+  );
   const newBalanceSheetStance = (region.balanceSheetStance ?? 0) * 0.95 + targetBalanceSheetStance * 0.05;
   const cbFloor = 300e9; // Structural floor for central bank assets (currency in circulation & baseline reserves)
   const newCbBalance = Math.max(cbFloor, region.centralBankBalanceSheet * (1 + newBalanceSheetStance * 0.001));
@@ -417,8 +426,8 @@ export function evolveRegionMacro(
   const m2GrowthRateAnnualized = prevM2 > 0
     ? ((newBankingSector.moneySupplyM2USD / prevM2) - 1) * 52
     : 0;
-  const velocityFactor = Math.max(0.5, Math.min(1.2, 1.0 - Math.max(0, (100 - newCCI) / 100) * 0.6)); // low confidence suppresses velocity, dampening inflation pass-through
-  const monetaryInflationPressure = Math.max(0, Math.min(0.02, (m2GrowthRateAnnualized - newGdpGrowth) * 0.15 * velocityFactor));
+  const velocityFactor = (1.0 - Math.max(0, (100 - newCCI) / 100) * 0.6); // low confidence suppresses velocity, dampening inflation pass-through
+  const monetaryInflationPressure = ((m2GrowthRateAnnualized - newGdpGrowth) * 0.15 * velocityFactor);
 
   const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   
@@ -431,8 +440,8 @@ export function evolveRegionMacro(
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
   const rStar = region.neutralRate; // US: 1.00%, UK: 0.75%, EU: 0.50%, JP: -0.25%
   
-  const output_gap = Math.max(-0.03, Math.min(0.03, newGdpGrowth - potentialGdp));
-  const inflation_gap = Math.max(-0.02, Math.min(0.04, newExpectedInflation - piStar));
+  const output_gap = (newGdpGrowth - potentialGdp);
+  const inflation_gap = (newExpectedInflation - piStar);
   const taylorTarget = rStar + newExpectedInflation + 0.5 * inflation_gap + 0.5 * output_gap;
 
   let rateChanged = false;
@@ -441,9 +450,9 @@ export function evolveRegionMacro(
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
   let newPolicyRate = region.policyRate + 0.15 * (taylorTarget - region.policyRate);
-  newPolicyRate = Math.max(0.00, Math.min(0.30, newPolicyRate));
+  newPolicyRate = (newPolicyRate);
   if (region.id === 'JPN') {
-    newPolicyRate = Math.max(-0.001, Math.min(0.025, newPolicyRate));
+    newPolicyRate = (newPolicyRate);
   }
 
   // Update inflation deviation streak
@@ -473,7 +482,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const dotPlot1Y = Number((newPolicyRate * 0.4 + smoothedTargetRate * 0.6).toFixed(4));
   const dotPlot2Y = Number((smoothedTargetRate * 0.35 + (rStar + piStar) * 0.65).toFixed(4));
 
-  const qePremium = Math.max(-0.01, Math.min(0.01, cbChangePct * -0.5));
+  const qePremium = (cbChangePct * -0.5);
 
   // Update Nelson-Siegel yield curve parameters
   const targetBeta0 = 0.035 + (newInflation - piStar) * 0.4 + fiscalDeficitTermPremium * 0.4 + (microFeedback.creditContagionBps / 10000) * 0.2 + qePremium * 2;
@@ -538,6 +547,48 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
   const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
 
+  const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
+
+  const updatedTiers = region.householdState.creditTierBooks.map(tier => {
+    let newShare = tier.shareOfHouseholds;
+    if (tier.tier === 'SUBPRIME') {
+      newShare = tier.shareOfHouseholds + householdStressSignal * 0.5;
+    } else if (tier.tier === 'SUPER_PRIME') {
+      newShare = tier.shareOfHouseholds - householdStressSignal * 0.5;
+    }
+
+    const cci = region.bankingSector.creditConditionsIndex;
+    let newAvgInterestRate = tier.avgInterestRate;
+    let newDelinquency = tier.delinquencyRatePct + householdStressSignal * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
+
+    if (tier.tier === 'SUBPRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.05;
+    } else if (tier.tier === 'NEAR_PRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.03;
+    } else if (tier.tier === 'PRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.01;
+    } else if (tier.tier === 'SUPER_PRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.005;
+    }
+    
+    // Ensure delinquency doesn't fall below 0 mathematically
+    newDelinquency = Math.max(0.001, newDelinquency);
+
+    return {
+      ...tier,
+      shareOfHouseholds: Math.max(0.01, newShare),
+      avgInterestRate: Math.max(0.02, newAvgInterestRate),
+      delinquencyRatePct: newDelinquency
+    };
+  });
+
+  const totalShare = updatedTiers.reduce((s, t) => s + t.shareOfHouseholds, 0);
+  const normalizedTiers = updatedTiers.map(t => ({
+    ...t,
+    shareOfHouseholds: t.shareOfHouseholds / totalShare,
+    debtBalanceUSD: (newCreditCardDebtUSD + newOtherLoanDebtUSD) * (t.shareOfHouseholds / totalShare)
+  }));
+
   const updatedRegion: Region = {
     ...region,
     cycleRegime: newCycleRegime,
@@ -553,6 +604,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     laborForceParticipation: newParticipation,
     inflationDeviationStreak: newInflationDeviationStreak,
     smoothedSlackGap: newSmoothedSlackGap,
+    policyRateLagBuffer: newPolicyRateLagBuffer,
+    wageGrowthLagBuffer: newWageGrowthLagBuffer,
     potentialGdpGrowth: newPotentialGdpGrowth,
     neutralRate: newNeutralRate,
     nairu: newNairu,
@@ -588,6 +641,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     governmentSpendingUSD: newGovernmentSpendingUSD,
     householdState: {
       consumerConfidence: newCCI,
+      creditTierBooks: normalizedTiers,
       wageGrowth: newWageGrowth,
       savingsRate: newSavingsRate,
       realConsumptionGrowth: newRealConsumptionGrowth,
@@ -640,7 +694,7 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
   const sigmaFx = 0.08;
   const eps = (Math.random() - 0.5) * Math.sqrt(dt) * 2;
 
-  const tradeShock = Math.max(-0.005, Math.min(0.005, ((baseRegion.tradeBalance - quoteRegion.tradeBalance) / 1e12) * 0.002));
+  const tradeShock = (((baseRegion.tradeBalance - quoteRegion.tradeBalance) / 1e12) * 0.002);
 
   const drift = rateDiff * dt * 0.3 + sigmaFx * eps + tradeShock;
   const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));
@@ -664,11 +718,19 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
  * Evolve Commodities with Weather & Supply/Demand shocks
  */
 
+function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity): number {
+  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && !c.isDefaulted);
+  const totalWeeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
+  const impliedDemandUSD = comm.spotPrice * (comm as any).dailyConsumptionUnits * 7; 
+  return totalWeeklySupplyUSD > 0 ? impliedDemandUSD / totalWeeklySupplyUSD : 1.0;
+}
+
 export function evolveCommodity(
   comm: Commodity,
   globalGrowth: number,
   rfUSD: number,
-  regions: Record<RegionId, Region>
+  regions: Record<RegionId, Region>,
+  allCompanies: Company[]
 ): Commodity {
   const dt = 1 / 52;
   const demandShock = globalGrowth * 0.8;
@@ -683,7 +745,11 @@ export function evolveCommodity(
   });
 
   const drift = demandShock * dt + randomEps + weatherBoost * dt * 4;
-  const newSpot = Math.max(0.5, Number((comm.spotPrice * Math.exp(drift)).toFixed(2)));
+  
+  const clearingRatio = computeCommodityClearingRatio(comm.id, allCompanies, comm);
+  const supplyDemandDrift = (clearingRatio - 1.0) * 0.15; // no clamp — a genuine imbalance drives a genuine move
+  const newSpot = Math.max(0.5, Number((comm.spotPrice * Math.exp(drift * 0.4 + supplyDemandDrift)).toFixed(2))); // 0.5 floor stays
+  
   const change1W = Number((newSpot - comm.spotPrice).toFixed(2));
 
   const f1M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 1 / 12).toFixed(2));
@@ -692,7 +758,7 @@ export function evolveCommodity(
 
   const hist = [...comm.historicalPrices.slice(-51), newSpot];
 
-  const inventoryLevelPct = Math.max(20, Math.min(80, Math.round(comm.inventoryLevelPct + (Math.random() - 0.5) * 3 - (weatherBoost > 0 ? 4 : 0))));
+  const inventoryLevelPct = (Math.round(comm.inventoryLevelPct + (Math.random() - 0.5) * 3 - (weatherBoost > 0 ? 4 : 0)));
   const supplyDemandBalance = inventoryLevelPct < 40 ? 'Deficit (Tight Supply)' : inventoryLevelPct > 60 ? 'Surplus (Oversupplied)' : 'Balanced';
 
   return {

@@ -253,7 +253,7 @@ export function priceLeveragedLoan(
   const discountMarginBps = Math.round(oasSpreadBps * 0.85);
   const marginDeltaBps = discountMarginBps - quotedMarginBps;
   // Price in points of par
-  const pricePar = Math.max(10, Math.min(105, 100 - (marginDeltaBps / 10000) * creditDuration * 100));
+  const pricePar = (100 - (marginDeltaBps / 10000) * creditDuration * 100);
   const effectiveYield = (quotedMarginBps / 10000) + ((100 - pricePar) / creditDuration) / 100;
 
   return {

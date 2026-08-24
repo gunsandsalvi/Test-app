@@ -1,6 +1,6 @@
 
 import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche, GovDebtTranche } from '../../types';
-import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap, priceCommodityFutures } from '../pricing';
+import { SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap, priceCommodityFutures } from '../pricing';
 import { calculateNelsonSiegelZeroRate, priceSovereignBond } from '../nelsonSiegel';
 import { EarningsReportEvent, generateWeeklyNews } from '../newsGenerator';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../formatters';
@@ -16,6 +16,23 @@ import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeInd
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot } from '../companyGenerator';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
+
+function computeExpectedLossSpreadBps(comp: Company): number {
+  const impliedAnnualDefaultProb = Math.max(0, Math.min(1, 1 / (1 + Math.exp(comp.interestCoverage * 0.8 - comp.leverage * 0.4)))); // bounded 0-1 because it's a probability by definition, not an arbitrary clamp
+  const expectedLossRate = impliedAnnualDefaultProb * (1 - comp.recoveryRate);
+  return expectedLossRate * 10000;
+}
+type RatingBucket = 'IG' | 'HY';
+function getRatingBucket(rating: CreditRating): RatingBucket {
+  return ['AAA','AA','A','BBB'].includes(rating) ? 'IG' : 'HY';
+}
+function computeBucketDemandPremiumBps(bucket: RatingBucket, reg: Region, allCompaniesInBucket: Company[]): number {
+  const bucketTotalOutstandingUSD = allCompaniesInBucket.reduce((s, c) => s + c.totalDebt, 0);
+  const bucketDemandUSD = (bucket === 'IG' ? reg.corpBondOwnership.institutionalShare * 0.7 : reg.corpBondOwnership.institutionalShare * 0.3) * reg.institutionalSector.sectorEquityUSD
+    + (bucket === 'IG' ? reg.corpBondOwnership.bankShare * 0.8 : reg.corpBondOwnership.bankShare * 0.2) * reg.bankingSector.bankEquityUSD;
+  const demandToSupplyRatio = bucketTotalOutstandingUSD > 0 ? bucketDemandUSD / bucketTotalOutstandingUSD : 1.0;
+  return (1.0 - demandToSupplyRatio) * 200;
+}
 
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<OccupationType, number> {
   const demand: Record<OccupationType, number> = { GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 };
@@ -65,7 +82,7 @@ function computeTargetOwnershipShares(
   allRegions: Record<RegionId, Region>
 ): AssetOwnershipShares {
   // Banks: heavier in sovBond and corpBond, driven by their own capital/reserve capacity
-  const bankCapacitySignal = Math.max(0.5, Math.min(1.5, reg.bankingSector.bankCapitalRatio / 0.10));
+  const bankCapacitySignal = (reg.bankingSector.bankCapitalRatio / 0.10);
   const bankTarget = assetClass === 'sovBond' ? 0.22 * bankCapacitySignal : assetClass === 'corpBond' ? 0.28 * bankCapacitySignal : 0.03;
   // Institutional: driven by sector equity health
   const institutionalTarget = assetClass === 'equity' ? 0.42 : assetClass === 'corpBond' ? 0.45 : 0.30;
@@ -74,9 +91,9 @@ function computeTargetOwnershipShares(
   (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).filter(r => r !== regionId).forEach(counterpartId => {
     const rateDiff = (allRegions[counterpartId]?.policyRate ?? reg.policyRate) - reg.policyRate;
     const baseForeign = assetClass === 'sovBond' ? 0.08 : assetClass === 'corpBond' ? 0.045 : 0.05;
-    foreignShare[counterpartId] = Math.max(0.01, Math.min(0.20, baseForeign + rateDiff * 0.3));
+    foreignShare[counterpartId] = (baseForeign + rateDiff * 0.3);
   });
-  const centralBankShare = assetClass === 'sovBond' ? Math.max(0.05, Math.min(0.35, 0.15 + reg.balanceSheetStance * 0.1)) : 0;
+  const centralBankShare = assetClass === 'sovBond' ? (0.15 + reg.balanceSheetStance * 0.1) : 0;
   return { bankShare: bankTarget, institutionalShare: institutionalTarget, foreignShare, centralBankShare };
 }
 
@@ -89,7 +106,7 @@ function computeSupplyDemandPremium(
   const impliedInstitutionalDemandUSD = ownership.institutionalShare * totalSectorInvestableUSD.institutional;
   const totalImpliedDemandUSD = impliedBankDemandUSD + impliedInstitutionalDemandUSD;
   const demandToSupplyRatio = totalOutstandingUSD > 0 ? totalImpliedDemandUSD / totalOutstandingUSD : 1.0;
-  return Math.max(-0.15, Math.min(0.15, (demandToSupplyRatio - 1.0) * 0.3));
+  return (demandToSupplyRatio - 1.0) * 0.3;
 }
 
 function attributeItemizedHoldings(
@@ -179,7 +196,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const baselineExpectedCapEx = (baseGdp * 0.03) / 52;
     const capexDeltaDollars = totalRegionalCapEx - baselineExpectedCapEx;
     const capexGdpImpactWeekly = capexDeltaDollars / baseGdp;
-    const boundedGdpContribution = Math.max(-0.005, Math.min(0.005, capexGdpImpactWeekly * 52));
+    const boundedGdpContribution = (capexGdpImpactWeekly * 52);
 
     const regionOccDemand = computeOccupationDemand(
       prevActiveFirms,
@@ -191,7 +208,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const maturedTranchesPrev = (state.regions[regionId].govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);
     const maturedPrincipalUSDPrev = maturedTranchesPrev.reduce((s, t) => s + t.principalUSD, 0);
     const weeklyDeficitUSDPrev = Math.max(0, state.regions[regionId].governmentSpendingUSD - state.regions[regionId].governmentRevenueUSD) + maturedPrincipalUSDPrev;
-    const monetizationSharePrev = Math.max(0, Math.min(0.4, (state.regions[regionId].balanceSheetStance ?? 0) * 0.5));
+    const monetizationSharePrev = ((state.regions[regionId].balanceSheetStance ?? 0) * 0.5);
     const monetizedAmountUSD = weeklyDeficitUSDPrev * monetizationSharePrev;
 
     const { updatedRegion, rateChanged: _rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
@@ -273,7 +290,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     // Government demand (G3), tied to fiscalStanceScore
     const govProcurementBase = reg.governmentSpendingUSD * 52 * 0.35; // annualized spending, ~35% of which is procurement-style (vs. transfers/employee comp)
-    const fiscalMultiplier = 1 + Math.max(-0.3, Math.min(0.3, reg.fiscalStanceScore * 0.25));
+    const fiscalMultiplier = 1 + (reg.fiscalStanceScore * 0.25);
     const govTargets: Partial<Record<string, number>> = {
       GovernmentDefense: govProcurementBase * 0.30 * fiscalMultiplier,
       GovernmentInfrastructure: govProcurementBase * 0.45 * fiscalMultiplier,
@@ -301,7 +318,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const prevLevel = hasPriorDemand ? existingEntry.demandLevelUSD : target;
       const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
       const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 ? ((newLevel / prevLevel) - 1) * 52 : 0;
-      const growthAnnual = Math.max(-0.25, Math.min(0.25, rawGrowthAnnual));
+      const growthAnnual = (rawGrowthAnnual);
       const prevHistory = existingEntry?.demandHistory ?? [];
       const crowdingIntensity = Math.max(0, Math.min(1, (categorySupplyGrowth[cat] ?? 0) * 8 - (target ? growthAnnual : 0)));
       (reg.categoryDemand as any)[cat] = {
@@ -326,7 +343,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         if (!supplier || !demander) return;
 
         const regionCapacityUtilization = (reg.categoryDemand['CorporateIndustrial'] as any)?.clearedInputPriceIndex ?? 1.0;
-        const industrialProductionRate = Math.max(0.005, Math.min(0.04, 0.02 * (0.5 + regionCapacityUtilization * 0.5)));
+        const industrialProductionRate = (0.02 * (0.5 + regionCapacityUtilization * 0.5));
 
         const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
         const currentGlutSeverity = Math.max(0, 1.0 - (supplier.clearedInputPriceIndex ?? 1.0)); // how far below fair value the price currently sits
@@ -342,7 +359,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const warehouseCap = c.annualRevenue * 0.15;
           const throttle = (c.finishedGoodsInventoryUSD ?? 0) > warehouseCap ? 0.3 : 1.0;
           const priceSignal = (supplier.clearedInputPriceIndex ?? 1.0) - 1.0;
-          const responsiveFactor = Math.max(0.05, Math.min(1.8, 1.0 + priceSignal * 1.5));
+          const responsiveFactor = (1.0 + priceSignal * 1.5);
           return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;
         }, 0) * weatherSupplyPenalty;
         const totalAvailableSupply = decayedInventory + weeklyProduction;
@@ -418,7 +435,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const pair = fxPairs.find(f => (f.base === exporter && f.quote === importer) || (f.base === importer && f.quote === exporter));
     if (!pair) return 0;
     const direction = pair.base === exporter ? -1 : 1; // if exporter is the base currency, a RISING rate means exporter is depreciating (rate = quote-per-base) — cheaper exports, so flip sign
-    return Math.max(-0.1, Math.min(0.1, (pair.change1W / pair.rate) * direction * 5));
+    return ((pair.change1W / pair.rate) * direction * 5);
   }
 
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -439,7 +456,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const importerDemand = updatedRegions[importer].categoryDemand[cat as any]?.demandLevelUSD ?? 0;
         const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
         const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, updatedFxPairs);
-        const exportShareCapture = Math.max(0, Math.min(0.4, 0.1 + exporterCompetitiveness * 0.5 + fxCompetitiveness));
+        const exportShareCapture = (0.1 + exporterCompetitiveness * 0.5 + fxCompetitiveness);
         const flow = importerDemand * tradability * exportShareCapture / regionIds.length; // divided since multiple exporters compete for the same import demand
         regionExports[exporter] += flow;
         regionImports[importer] += flow;
@@ -456,44 +473,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   // 4. Evolve Commodities (Part QB - Dynamic Feedback Loop)
   const updatedCommodities = state.commodities.map((comm) => {
-    const producers = state.companies.filter(c => !c.isDefaulted && c.producedCommodityId === comm.id);
-    const totalProductionUSD = producers.reduce((sum, c) => sum + c.annualRevenue, 0);
-    const productionVolume = comm.spotPrice > 0 ? (totalProductionUSD / comm.spotPrice / 52) : 0;
-
-    const baseDemandVolume = producers.reduce((sum, c) => sum + (c.baselineAnnualRevenue / comm.spotPrice / 52), 0);
-    const avgGdpGrowth = (updatedRegions.USA.gdpGrowth + updatedRegions.UK.gdpGrowth + updatedRegions.JPN.gdpGrowth + updatedRegions.EUR.gdpGrowth) / 4;
-    const demandVolume = baseDemandVolume * Math.pow(1 + avgGdpGrowth, state.currentWeek / 52);
-
-    const evolvedComm = evolveCommodity(comm, updatedRegions.USA.gdpGrowth, updatedRegions.USA.policyRate, updatedRegions);
-
-    let newSpot = evolvedComm.spotPrice;
-    if (productionVolume > 0 && demandVolume > 0) {
-      if (productionVolume > demandVolume) {
-        newSpot = evolvedComm.spotPrice * (1 - 0.02 * (productionVolume / demandVolume - 1));
-      } else {
-        newSpot = evolvedComm.spotPrice * (1 + 0.02 * (demandVolume / productionVolume - 1));
-      }
-    }
-
-    newSpot = Math.max(0.1, Math.min(10000.0, newSpot));
-
-    const rfUSD = updatedRegions.USA.zeroRates.tenor3M;
-    const f1M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 1 / 12).toFixed(2));
-    const f3M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 3 / 12).toFixed(2));
-    const f6M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 6 / 12).toFixed(2));
-
-    const change1W = comm.historicalPrices.length > 0 ? (newSpot - comm.historicalPrices[comm.historicalPrices.length - 1]) / comm.historicalPrices[comm.historicalPrices.length - 1] * 100 : 0;
-
-    return {
-      ...evolvedComm,
-      spotPrice: Number(newSpot.toFixed(2)),
-      futures1M: f1M,
-      futures3M: f3M,
-      futures6M: f6M,
-      change1W: Number(change1W.toFixed(2)),
-      historicalPrices: [...comm.historicalPrices.slice(-51), Number(newSpot.toFixed(2))],
-      supplyDemandBalance: (productionVolume > demandVolume * 1.05 ? 'Surplus (Oversupplied)' : productionVolume < demandVolume * 0.95 ? 'Deficit (Tight Supply)' : 'Balanced') as 'Balanced' | 'Deficit (Tight Supply)' | 'Surplus (Oversupplied)'
-    };
+    return evolveCommodity(comm, updatedRegions.USA.gdpGrowth, updatedRegions.USA.zeroRates.tenor3M, updatedRegions, state.companies);
   });
 
   // 5. Evolve 200 Company Fundamentals + Asynchronous Earnings + Debt Prepayment + M&A
@@ -536,7 +516,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) - carryingCostUSD);
 
     const executionNoise = (Math.random() - 0.5) * 0.3;
-    const newExecutionQuality = Math.max(0.4, Math.min(1.8, (comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08));
+    const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
 
     if (comp.sector === 'Banks') {
       const bs = reg.bankingSector;
@@ -578,7 +558,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const relevantFulfillment = compInputCategories.length > 0
         ? compInputCategories.reduce((min, c) => Math.min(min, (reg.categoryDemand[c as any] as any)?._fulfillmentRatio ?? 1), 1)
         : 1;
-      newInputSupplyConstraintFactor = Math.max(0.5, Math.min(1.0, (comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + relevantFulfillment * 0.3));
+      newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + relevantFulfillment * 0.3);
 
       const inputPriceDrag = compInputCategories.length > 0
         ? compInputCategories.reduce((s, c) => s + ((reg.categoryDemand[c as any] as any)?.inputCostPressure ?? 0), 0) / compInputCategories.length
@@ -593,12 +573,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
       const estCashHealth = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
       const estTobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
-      const estQCapexEffect = Math.max(-0.15, Math.min(0.15, (estTobinsQ - 1) * 0.2));
+      const estQCapexEffect = ((estTobinsQ - 1) * 0.2);
       const estAvgComp = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
-      const estCompEffect = Math.max(-0.1, Math.min(0.1, estAvgComp * 0.15));
+      const estCompEffect = (estAvgComp * 0.15);
       const estTargetGrowthCapex = baseRev * growthCapexToRev * (1 - estRateDrag) * estCashHealth * (1 + estQCapexEffect + estCompEffect);
       const estNewGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + estTargetGrowthCapex * 0.10);
-      const growthInvestmentSignal = Math.max(-0.5, Math.min(0.5, ((estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))) * newExecutionQuality));
+      const growthInvestmentSignal = (((estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))) * newExecutionQuality);
 
       let categoryDrivenGrowth = 0;
       updatedProductLines = (comp.productLines || []).map((line) => {
@@ -607,9 +587,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const categoryGrowth = (catDemand?.demandGrowthAnnual ?? reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
-        const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 16 + growthInvestmentSignal * 0.5));
+        const targetCompetitiveness = (marginEdge * 16 + growthInvestmentSignal * 0.5);
         const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
-        const shareGainRate = Math.max(-0.02, Math.min(0.02, newCompetitiveness * 0.035 - dominanceDrag));
+        const shareGainRate = (newCompetitiveness * 0.035 - dominanceDrag);
         const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // 0 floor only — a market share literally cannot go negative, this is a math guard not a behavioral clamp
         
         const lineGrowth = categoryGrowth + shareGainRate;
@@ -624,6 +604,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
           categoryMarketShare: newCategoryMarketShare,
         };
       });
+        
+        const buffer = comp.demandShockLagBuffer || [];
+        const updatedBuffer = [...buffer, categoryDrivenGrowth].slice(-8);
+        const laggedCategoryGrowth = updatedBuffer.length > 2 ? updatedBuffer[updatedBuffer.length - 1 - 2] : updatedBuffer[0] ?? categoryDrivenGrowth;
+        comp.demandShockLagBuffer = updatedBuffer;
+
         const exportRevenueBoost = (comp.productLines || []).reduce((s, line) => {
           const tradability = CATEGORY_TRADABILITY[line.category] ?? 0;
           if (tradability < 0.1) return s;
@@ -632,7 +618,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           return s + exportShareOfRev * (reg.gdpGrowth / 52);
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
-        const annualGrowthRate = categoryDrivenGrowth + noise + reg.inflation * pricingPowerBeta;
+        const annualGrowthRate = laggedCategoryGrowth + noise + reg.inflation * pricingPowerBeta;
         const weeklyGrowthRate = (annualGrowthRate / 52) + exportRevenueBoost;
         const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
       
@@ -650,7 +636,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;
         const supplierClearedPrice = (reg.categoryDemand['CorporateIndustrial'] as any)?.clearedInputPriceIndex ?? 1.0;
         const priceSignal = supplierClearedPrice - 1.0;
-        const productionResponseFactor = Math.max(0.2, Math.min(1.8, 1.0 + priceSignal * 1.5));
+        const productionResponseFactor = (1.0 + priceSignal * 1.5);
 
         targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
         productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
@@ -694,7 +680,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     // 4. Debt-funded maintenance becomes a real new floating tranche — genuinely raises leverage and next week's interest, not a free lunch
     let maintenanceFundingTranches: DebtTranche[] = [];
     if (weeklyDebtFundedPortion > 1000) {
-      const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
+      const currentBaseSpreadBps = comp.oasSpreadBps;
       const newTrancheMaturityWeek = nextWeek + STANDARD_CORP_TENOR_YEARS * 52;
       maintenanceFundingTranches = [{
         id: `${comp.ticker}-MAINT-${nextWeek}`,
@@ -728,9 +714,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
     const cashHealthFactor = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
     const tobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
-    const qCapexEffect = Math.max(-0.15, Math.min(0.15, (tobinsQ - 1) * 0.2));
+    const qCapexEffect = ((tobinsQ - 1) * 0.2);
     const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
-    const competitivenessCapexEffect = Math.max(-0.1, Math.min(0.1, avgCompetitiveness * 0.15));
+    const competitivenessCapexEffect = (avgCompetitiveness * 0.15);
     const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75); // even at max payout pressure, still reinvests at least 40% — realistic, not zero
     const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
     const newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
@@ -800,12 +786,29 @@ export function advanceWeeklyStep(state: GameState): GameState {
     }
 
     // Dynamic OAS credit spread & Leveraged Loan pricing
-    const systemicCreditSpreadBps = Math.max(0, reg.bankingSector.creditConditionsIndex) * 150;
-    const ratingSpreadConfig = RATING_OAS_SPREADS[newRating];
-    const targetOasBps = ratingSpreadConfig.baseBps + (newLeverage > 4 ? (newLeverage - 4) * 50 : 0) + systemicCreditSpreadBps;
+    const bucket = getRatingBucket(newRating);
+    const bucketPeers = state.companies.filter(c => c.region === comp.region && getRatingBucket(c.creditRating) === bucket);
+    const targetOasBps = computeExpectedLossSpreadBps(comp) + computeBucketDemandPremiumBps(bucket, reg, bucketPeers);
+    comp.oasSpreadBps = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35;
 
     // PART OF: Pre-refinancing trigger roughly one year before maturity
-    const companyTranches = comp.debtTranches.map(t => ({ ...t }));
+    let companyTranches = comp.debtTranches.map(t => ({ ...t }));
+
+    // PART RB: Corporate debt lifecycle: prepayment/call when genuinely accretive
+    companyTranches.forEach(tranche => {
+      if (tranche.rateType !== 'FIXED') return;
+      const currentFairRate = calculateNelsonSiegelZeroRate(Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52), reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
+      const rateSavingsIfRefinanced = tranche.couponRate - currentFairRate;
+      const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
+      if (rateSavingsIfRefinanced > 0.01 && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
+        const prepayAmountUSD = Math.min(tranche.principalUSD, newCash - comp.annualRevenue * 0.15);
+        tranche.principalUSD -= prepayAmountUSD;
+        newCash -= prepayAmountUSD;
+      }
+    });
+    // Remove any tranche whose principalUSD reaches zero
+    companyTranches = companyTranches.filter(t => t.principalUSD > 0.01);
+
     const tranchesToRefinance = companyTranches.filter(tranche => {
       const weeksToMaturity = tranche.maturityWeek - state.currentWeek;
       return weeksToMaturity <= 52 && weeksToMaturity > 45 && !tranche._refinanceInitiated;
@@ -817,7 +820,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         originalTranche._refinanceInitiated = true;
       }
       const fiveYearSovRateForRefi = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
-      const currentBaseSpreadBpsForRefi = RATING_OAS_SPREADS[newRating]?.baseBps ?? comp.oasSpreadBps;
+      const currentBaseSpreadBpsForRefi = comp.oasSpreadBps;
       const currentFairCouponRate = fiveYearSovRateForRefi + currentBaseSpreadBpsForRefi / 10000;
       const currentFloatingMarginBps = Math.round(currentBaseSpreadBpsForRefi * 0.85);
 
@@ -861,7 +864,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         // Fallback: standard refinancing at maturity
         const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
         const refinanceAsFixed = Math.random() < currentFixedShare;
-        const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
+        const currentBaseSpreadBps = comp.oasSpreadBps;
         const fiveYearSovRateAtMaturity = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
 
         debtIssuanceThisWeek = maturingTranche.principalUSD;
@@ -941,7 +944,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const actualEps = newEps;
       const epsDiff = actualEps - consensusEps;
       const rawSurprise = epsDiff / Math.max(Math.abs(consensusEps), Math.abs(actualEps), 1.0);
-      lastEarningsSurprisePct = Number(Math.max(-2.0, Math.min(2.0, rawSurprise)).toFixed(3));
+      lastEarningsSurprisePct = Number((rawSurprise).toFixed(3));
 
       // Management commentary & guidance snippet generation
       let guidanceSnippet = '';
@@ -996,10 +999,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const realRate = reg.policyRate - reg.inflation;
     const rateEffect = -(realRate - reg.neutralRate) * 8;
     const growthEffect = (reg.gdpGrowth - reg.potentialGdpGrowth) * 4;
-    const targetPE = sectorPE * (1 + Math.max(-0.5, Math.min(0.5, rateEffect + growthEffect)));
+    const targetPE = sectorPE * (1 + (rateEffect + growthEffect));
     const newForwardPE = Number((comp.forwardPE * 0.97 + Math.max(sectorPE * 0.5, Math.min(sectorPE * 1.6, targetPE)) * 0.03).toFixed(2));
 
-    const newSentiment = Math.max(-1.0, Math.min(1.0, comp.sentiment * 0.85 + sentimentDelta));
+    const newSentiment = (comp.sentiment * 0.85 + sentimentDelta);
     const unadjustedStockPrice = isDefaulted ? 0.0 : Number(priceEquity(newEps, newForwardPE, newSentiment, false).toFixed(2));
 
     const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region).reduce((s, c) => s + c.marketCap, 0);
@@ -1342,7 +1345,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? (newDerivedNominalGdpUSD / gdpLevel52WeeksAgo - 1) - reg.inflation
       : 0;
 
-    const finalGdpGrowth = Math.max(-0.5, Math.min(0.5, gdpGrowthBottomUp));
+    const finalGdpGrowth = (gdpGrowthBottomUp);
 
     // Government Debt Tranches: roll-off and new issuance
     const maturedTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);
@@ -1350,7 +1353,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalUSD, 0);
 
     const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedPrincipalUSD;
-    const monetizationShare = Math.max(0, Math.min(0.4, reg.balanceSheetStance * 0.5));
+    const monetizationShare = (reg.balanceSheetStance * 0.5);
     const monetizedAmountUSD = weeklyDeficitUSD * monetizationShare;
     const marketFundedDeficitUSD = weeklyDeficitUSD - monetizedAmountUSD;
 
@@ -1365,7 +1368,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     // Curve-smart tenor allocation: read the actual yield curve shape already computed for this region.
     const curveSteepness = reg.zeroRates.tenor30Y - reg.zeroRates.tenor2Y;
     const baseWeights = { t2: 0.30, t5: 0.30, t10: 0.25, t30: 0.15 };
-    const steepnessAdjustment = Math.max(-0.15, Math.min(0.15, curveSteepness * 3));
+    const steepnessAdjustment = (curveSteepness * 3);
     const tenorWeights = {
       t2: Math.max(0.10, baseWeights.t2 + steepnessAdjustment * 0.5),
       t5: baseWeights.t5,

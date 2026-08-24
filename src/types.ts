@@ -103,8 +103,18 @@ export interface WeatherAnomaly {
   weeksActive: number;
 }
 
+export type CreditTier = 'SUPER_PRIME' | 'PRIME' | 'NEAR_PRIME' | 'SUBPRIME';
+export interface CreditTierBook {
+  tier: CreditTier;
+  shareOfHouseholds: number;
+  debtBalanceUSD: number;
+  avgInterestRate: number;
+  delinquencyRatePct: number;
+}
+
 export interface HouseholdState {
   consumerConfidence: number; // CCI, baseline 100
+  creditTierBooks: CreditTierBook[];
   wageGrowth: number;         // Average Hourly Earnings YoY %
   savingsRate: number;        // Personal Savings Rate %
   realConsumptionGrowth: number; // Real Consumer Spending Growth %
@@ -233,6 +243,9 @@ export interface Region {
   laborForceParticipation: number;
   inflationDeviationStreak: number;
   smoothedSlackGap?: number;
+  policyRateLagBuffer: number[];
+  wageGrowthLagBuffer: number[];
+  demandShockLagBuffer: number[];
 
   // Population & Labor Force Accounting (Phase 1, Private-Sector Segments & Occupation Pools)
   totalPopulation: number;              // raw headcount, this world's own organic figure — not calibrated to any real country
@@ -485,6 +498,7 @@ export interface Company {
   _targetProductionUSD?: number; // transient
   treasuryHoldings: ItemizedHolding[];
   producedCommodityId?: string;
+  demandShockLagBuffer?: number[];
 }
 
 export type AssetType = 
@@ -628,6 +642,7 @@ export interface Commodity {
   // Cash and carry supply / demand balance
   supplyDemandBalance: 'Deficit (Tight Supply)' | 'Balanced' | 'Surplus (Oversupplied)';
   inventoryLevelPct: number; // e.g. 42% (low = backwardation)
+  dailyConsumptionUnits: number;
 }
 
 export interface IndexMetric {

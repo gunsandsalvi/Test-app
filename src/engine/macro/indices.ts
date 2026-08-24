@@ -139,9 +139,9 @@ function calculatePmiComposite(regions: Record<RegionId, Region>, companies: Com
   const avgCapexGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.capex - (c.previousCapex ?? c.capex)) / Math.max(1, c.previousCapex ?? c.capex), 0) / usaCompanies.length : 0;
   const avgHeadcountGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.employeeCount - c.previousEmployeeCount) / Math.max(1, c.previousEmployeeCount), 0) / usaCompanies.length : 0;
 
-  const demandComponent = 50 + Math.max(-15, Math.min(15, avgCategoryDemandGrowth * 300));
-  const capexComponent = 50 + Math.max(-15, Math.min(15, avgCapexGrowth * 250 * 52)); // annualize weekly capex growth
-  const employmentComponent = 50 + Math.max(-15, Math.min(15, avgHeadcountGrowth * 400 * 52));
+  const demandComponent = 50 + (avgCategoryDemandGrowth * 300);
+  const capexComponent = 50 + (avgCapexGrowth * 250 * 52); // annualize weekly capex growth
+  const employmentComponent = 50 + (avgHeadcountGrowth * 400 * 52);
   const headline = (demandComponent + capexComponent + employmentComponent) / 3;
   return { headline: Number(headline.toFixed(1)), demandComponent: Number(demandComponent.toFixed(1)), capexComponent: Number(capexComponent.toFixed(1)), employmentComponent: Number(employmentComponent.toFixed(1)) };
 }
