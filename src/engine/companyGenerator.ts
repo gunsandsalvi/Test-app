@@ -572,57 +572,98 @@ export function generateInitialCompanies(): Company[] {
         const isTop = idx < 2;
         
         if (sector === 'Tech') {
-          if (isTop) {
+          const mgn = c.ebitda / Math.max(1, c.annualRevenue);
+          if (idx < 4) {
             lines = [
-              { category: 'CorporateTech', revenueShare: 0.6, competitiveness: 0 },
-              { category: 'StandardHousehold', revenueShare: 0.4, competitiveness: 0 }
+              { category: 'CorporateTech', revenueShare: 0.55, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 },
+              { category: 'LuxuryHousehold', revenueShare: 0.15, competitiveness: 0 }
             ];
           } else {
             lines = [
-              { category: c.ebitda / Math.max(1, c.annualRevenue) > 0.3 ? 'CorporateTech' : 'StandardHousehold', revenueShare: 1.0, competitiveness: 0 }
+              { category: 'CorporateTech', revenueShare: mgn > 0.20 ? 0.65 : 0.50, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: mgn > 0.20 ? 0.25 : 0.40, competitiveness: 0 },
+              { category: 'LuxuryHousehold', revenueShare: 0.10, competitiveness: 0 }
             ];
           }
         } else if (sector === 'Energy' || sector === 'Industrials') {
-          if (isTop) {
+          if (idx < 4) {
             lines = [
-              { category: 'CorporateIndustrial', revenueShare: 0.55, competitiveness: 0 },
-              { category: 'GovernmentInfrastructure', revenueShare: 0.25, competitiveness: 0 },
+              { category: 'CorporateIndustrial', revenueShare: 0.50, competitiveness: 0 },
+              { category: 'GovernmentInfrastructure', revenueShare: 0.30, competitiveness: 0 },
               { category: 'GovernmentDefense', revenueShare: 0.20, competitiveness: 0 }
             ];
           } else {
-            lines = [
-              { category: c.ebitda / Math.max(1, c.annualRevenue) > 0.15 ? 'CorporateIndustrial' : 'GovernmentInfrastructure', revenueShare: 1.0, competitiveness: 0 }
-            ];
+            const mgn = c.ebitda / Math.max(1, c.annualRevenue);
+            if (mgn > 0.20) {
+              lines = [
+                { category: 'CorporateIndustrial', revenueShare: 0.60, competitiveness: 0 },
+                { category: 'GovernmentDefense', revenueShare: 0.40, competitiveness: 0 }
+              ];
+            } else {
+              lines = [
+                { category: 'CorporateIndustrial', revenueShare: 0.50, competitiveness: 0 },
+                { category: 'GovernmentInfrastructure', revenueShare: 0.50, competitiveness: 0 }
+              ];
+            }
           }
         } else if (sector === 'Consumer') {
           const mgn = c.ebitda / Math.max(1, c.annualRevenue);
-          if (isTop) {
-            if (mgn > 0.3) {
-              lines = [{ category: 'LuxuryHousehold', revenueShare: 0.7, competitiveness: 0 }, { category: 'StandardHousehold', revenueShare: 0.3, competitiveness: 0 }];
-            } else if (mgn < 0.15) {
-              lines = [{ category: 'StapleHousehold', revenueShare: 0.8, competitiveness: 0 }, { category: 'StandardHousehold', revenueShare: 0.2, competitiveness: 0 }];
-            } else {
-              lines = [{ category: 'StandardHousehold', revenueShare: 0.6, competitiveness: 0 }, { category: 'StapleHousehold', revenueShare: 0.4, competitiveness: 0 }];
-            }
-          } else {
-            if (mgn > 0.25) lines = [{ category: 'LuxuryHousehold', revenueShare: 1.0, competitiveness: 0 }];
-            else if (mgn < 0.15) lines = [{ category: 'StapleHousehold', revenueShare: 1.0, competitiveness: 0 }];
-            else lines = [{ category: 'StandardHousehold', revenueShare: 1.0, competitiveness: 0 }];
-          }
-        } else if (sector === 'Financials') {
-          if (isTop) {
+          const isMegaCap = c.baselineAnnualRevenue > 100000;
+          if (isMegaCap) {
             lines = [
-              { category: 'CorporateTech', revenueShare: 0.6, competitiveness: 0 },
-              { category: 'StandardHousehold', revenueShare: 0.25, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: 0.60, competitiveness: 0 },
+              { category: 'StapleHousehold', revenueShare: 0.10, competitiveness: 0 },
+              { category: 'LuxuryHousehold', revenueShare: 0.15, competitiveness: 0 },
+              { category: 'GovernmentHealthcare', revenueShare: 0.15, competitiveness: 0 }
+            ];
+          } else if (mgn > 0.25) {
+            lines = [
+              { category: 'LuxuryHousehold', revenueShare: 0.35, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: 0.35, competitiveness: 0 },
+              { category: 'StapleHousehold', revenueShare: 0.20, competitiveness: 0 },
+              { category: 'GovernmentHealthcare', revenueShare: 0.10, competitiveness: 0 }
+            ];
+          } else if (mgn >= 0.16) {
+            lines = [
+              { category: 'StandardHousehold', revenueShare: 0.35, competitiveness: 0 },
+              { category: 'StapleHousehold', revenueShare: 0.30, competitiveness: 0 },
+              { category: 'LuxuryHousehold', revenueShare: 0.20, competitiveness: 0 },
               { category: 'GovernmentHealthcare', revenueShare: 0.15, competitiveness: 0 }
             ];
           } else {
             lines = [
-              { category: c.ebitda / Math.max(1, c.annualRevenue) > 0.3 ? 'CorporateTech' : 'StandardHousehold', revenueShare: 1.0, competitiveness: 0 }
+              { category: 'StapleHousehold', revenueShare: 0.35, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 },
+              { category: 'LuxuryHousehold', revenueShare: 0.15, competitiveness: 0 },
+              { category: 'GovernmentHealthcare', revenueShare: 0.20, competitiveness: 0 }
             ];
           }
+        } else if (sector === 'Financials') {
+          if (idx < 4) {
+            lines = [
+              { category: 'CorporateTech', revenueShare: 0.50, competitiveness: 0 },
+              { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 },
+              { category: 'GovernmentHealthcare', revenueShare: 0.20, competitiveness: 0 }
+            ];
+          } else {
+            if (idx % 2 === 0) {
+              lines = [
+                { category: 'CorporateTech', revenueShare: 0.60, competitiveness: 0 },
+                { category: 'GovernmentHealthcare', revenueShare: 0.40, competitiveness: 0 }
+              ];
+            } else {
+              lines = [
+                { category: 'CorporateTech', revenueShare: 0.60, competitiveness: 0 },
+                { category: 'StandardHousehold', revenueShare: 0.40, competitiveness: 0 }
+              ];
+            }
+          }
         } else if (sector === 'Banks') {
-          lines = [{ category: 'CorporateTech', revenueShare: 1.0, competitiveness: 0 }];
+          lines = [
+            { category: 'CorporateTech', revenueShare: 0.70, competitiveness: 0 },
+            { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 }
+          ];
         }
 
         c.productLines = lines;
