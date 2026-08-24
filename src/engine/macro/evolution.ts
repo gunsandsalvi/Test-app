@@ -586,6 +586,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     inflation: newInflation,
     coreInflation: newCoreInflation,
     expectedInflation: newExpectedInflation,
+    wagePushInflation,
+    monetaryInflationPressure,
     gdpGrowth: newGdpGrowth,
     wageGrowth: Number(newWageGrowth.toFixed(4)),
     debtToGdpPct: newDebtToGdpPct,

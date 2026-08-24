@@ -1,16 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { GameState } from '../../types';
+import { GameState, Company, DebtTranche, Commodity, FxPair } from '../../types';
 
-export const MarketScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => void }> = ({ state, onOpenTrade }) => {
-  const [filter, setFilter] = useState<'equities' | 'bonds' | 'commodities'>('equities');
+type FilterType = 'equities' | 'bonds' | 'commodities' | 'fx' | 'derivatives';
+
+export const MarketScreen: React.FC<{ state: GameState, prevState?: GameState | null, onOpenTrade: (i: any) => void }> = ({ state, onOpenTrade }) => {
+  const [filter, setFilter] = useState<FilterType>('equities');
 
   const assets = useMemo(() => {
     if (filter === 'equities') {
       return state.companies
-        .filter(c => !c.isDefaulted && c.stockPrice > 0)
-        .sort((a, b) => b.marketCap - a.marketCap)
+        .filter((c: Company) => !c.isDefaulted && c.stockPrice > 0)
+        .sort((a: Company, b: Company) => b.marketCap - a.marketCap)
         .slice(0, 50)
-        .map(c => ({
+        .map((c: Company) => ({
           id: c.id,
           name: c.name,
           ticker: c.ticker,
@@ -23,8 +25,8 @@ export const MarketScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) =>
     }
     if (filter === 'bonds') {
       return state.companies
-        .filter(c => !c.isDefaulted)
-        .flatMap(c => (c.debtTranches || []).map(d => ({
+        .filter((c: Company) => !c.isDefaulted)
+        .flatMap((c: Company) => (c.debtTranches || []).map((d: DebtTranche) => ({
           id: d.id,
           name: `${c.ticker} ${Math.round((d.maturityWeek - d.originationWeek) / 52)}Y`,
           ticker: d.id,
@@ -36,7 +38,7 @@ export const MarketScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) =>
         }))).slice(0, 50);
     }
     if (filter === 'commodities') {
-      return Object.values(state.commodities || {}).map(c => ({
+      return Object.values(state.commodities || {}).map((c: Commodity) => ({
         id: c.id,
         name: c.name,
         ticker: c.id,
@@ -47,6 +49,35 @@ export const MarketScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) =>
         obj: c
       }));
     }
+    if (filter === 'fx') {
+      return (state.fxPairs || []).map((fx: FxPair) => ({
+        id: fx.pair,
+        name: `${fx.pair} Spot`,
+        ticker: fx.pair,
+        region: fx.base,
+        price: fx.rate,
+        change: fx.rate - (fx.historicalRates[0] || fx.rate),
+        type: 'fx',
+        obj: fx
+      }));
+    }
+    if (filter === 'derivatives') {
+       // Just list top 10 companies' ATM Call Options for simplicity to represent derivatives
+       return state.companies
+        .filter((c: Company) => !c.isDefaulted && c.stockPrice > 0)
+        .sort((a: Company, b: Company) => b.marketCap - a.marketCap)
+        .slice(0, 10)
+        .map((c: Company) => ({
+          id: `${c.id}_CALL_ATM`,
+          name: `${c.name} ATM Call (8W)`,
+          ticker: `${c.ticker} CALL`,
+          region: c.region,
+          price: c.stockPrice * 0.05, // Rough ATM premium estimate
+          change: 0,
+          type: 'derivative',
+          obj: { ...c, isOption: true }
+        }));
+    }
     return [];
   }, [state, filter]);
 
@@ -56,8 +87,8 @@ export const MarketScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) =>
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Markets</h2>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {(['equities', 'bonds', 'commodities'] as const).map(f => (
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
+        {(['equities', 'bonds', 'commodities', 'fx', 'derivatives'] as FilterType[]).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}

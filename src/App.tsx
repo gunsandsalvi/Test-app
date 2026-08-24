@@ -47,6 +47,7 @@ export type Destination = 'briefing' | 'world' | 'market' | 'book';
 
 export default function App() {
   const [state, setState] = useState<GameState>(() => createInitialGameState());
+  const [prevState, setPrevState] = useState<GameState | null>(null);
   const [destination, setDestination] = useState<Destination>('briefing');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isAutoAdvancing, setIsAutoAdvancing] = useState(false);
@@ -67,27 +68,25 @@ export default function App() {
   } | null>(null);
   const [isDesktopFrame, setIsDesktopFrame] = useState(true);
 
-  // Auto-advance loop if enabled
   useEffect(() => {
     let interval: any = null;
     if (isAutoAdvancing && !state.isGameOver) {
       interval = setInterval(() => {
+        setPrevState(state);
         setState((prev) => advanceWeeklyStep(prev));
       }, 2000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isAutoAdvancing, state.isGameOver]);
+  }, [isAutoAdvancing, state]);
 
   const handleAdvanceWeek = useCallback(() => {
     if (state.isGameOver) return;
-    setState((prev) => {
-      const next = advanceWeeklyStep(prev);
-      return next;
-    });
+    setPrevState(state);
+    setState((prev) => advanceWeeklyStep(prev));
     setShowTurnSummary(true);
-  }, [state.isGameOver]);
+  }, [state]);
 
   const handleOpenTrade = (instrument: any) => {
     setState((prev) => ({
@@ -262,10 +261,10 @@ export default function App() {
 
         {/* Scrollable Content View */}
         <main className="flex-1 overflow-y-auto p-3 scroll-smooth no-scrollbar">
-          {destination === 'briefing' && <BriefingScreen state={state} onNavigate={setDestination} />}
-          {destination === 'world' && <WorldScreen state={state} />}
-          {destination === 'market' && <MarketScreen state={state} onOpenTrade={handleOpenTrade} />}
-          {destination === 'book' && <MyBookScreen state={state} />}
+          {destination === 'briefing' && <BriefingScreen state={state} prevState={prevState} onNavigate={setDestination} />}
+          {destination === 'world' && <WorldScreen state={state} prevState={prevState} />}
+          {destination === 'market' && <MarketScreen state={state} prevState={prevState} onOpenTrade={handleOpenTrade} />}
+          {destination === 'book' && <MyBookScreen state={state} prevState={prevState} />}
         </main>
 
         {/* Expandable News Ticker Drawer */}

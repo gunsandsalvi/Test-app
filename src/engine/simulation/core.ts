@@ -55,6 +55,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const year = 2026 + Math.floor((nextWeek - 1) / 52);
   const currentWeekMod13 = ((nextWeek - 1) % 13) + 1;
   const recentIPOs = [...(state.recentIPOs || [])];
+  const recentMergers = [...(state.recentMergers || [])];
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
   const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted);
@@ -991,6 +992,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
         target.annualRevenue = 0;
         target.marketCap = 0;
 
+        recentMergers.push({
+          acquirerTicker: acquirer.ticker,
+          acquirerName: acquirer.name,
+          targetTicker: target.ticker,
+          targetName: target.name,
+          week: nextWeek,
+          dealValueUSD: purchasePrice
+        });
+        if (recentMergers.length > 20) recentMergers.shift();
+
         mergerNews.push({
           id: `merger-${merger.acquirerTicker}-${merger.targetTicker}-${nextWeek}`,
           week: nextWeek,
@@ -1807,6 +1818,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     commodities: updatedCommodities,
     compositeIndices: updatedCompositeIndices,
     recentIPOs,
+    recentMergers,
     marketVolPremium: Number(marketVolComponent.toFixed(4)),
     portfolio: updatedPortfolio,
     newsFeed: updatedNewsFeed,

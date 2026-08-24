@@ -189,6 +189,8 @@ export interface Region {
   inflation: number; // pi_t headline (e.g. 0.029)
   coreInflation: number; // core CPI (e.g. 0.026)
   expectedInflation: number;
+  wagePushInflation: number;
+  monetaryInflationPressure: number;
   centralBankBalanceSheet: number;
   balanceSheetStance: number;
   creditConditionsSpilloverAdjustment?: number;
@@ -641,6 +643,7 @@ export interface GameState {
   commodities: Commodity[];
   compositeIndices: CompositeBenchmarkIndices;
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];
+  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];
   marketVolPremium?: number;
   dealers: Dealer[];
   portfolio: Portfolio;

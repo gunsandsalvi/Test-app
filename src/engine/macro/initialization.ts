@@ -64,6 +64,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inflation: 0.0260,
       coreInflation: 0.0240,
       expectedInflation: 0.0240,
+      wagePushInflation: 0.012,
+      monetaryInflationPressure: 0.005,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0220,
       potentialGdpGrowth: 0.0210,
@@ -205,6 +207,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inflation: 0.0280,
       coreInflation: 0.0260,
       expectedInflation: 0.0260,
+      wagePushInflation: 0.015,
+      monetaryInflationPressure: 0.006,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0130,
       potentialGdpGrowth: 0.0150,
@@ -345,6 +349,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inflation: 0.0180,
       coreInflation: 0.0160,
       expectedInflation: 0.0160,
+      wagePushInflation: 0.005,
+      monetaryInflationPressure: 0.002,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0100,
       potentialGdpGrowth: 0.0080,
@@ -486,6 +492,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inflation: 0.0230,
       coreInflation: 0.0220,
       expectedInflation: 0.0220,
+      wagePushInflation: 0.010,
+      monetaryInflationPressure: 0.004,
       targetInflation: 0.0200, // pi* = 2.00%
       gdpGrowth: 0.0120,
       potentialGdpGrowth: 0.0140,

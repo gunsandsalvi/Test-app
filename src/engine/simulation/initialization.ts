@@ -82,6 +82,7 @@ export function createInitialGameState(): GameState {
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
+  const recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[] = [];
 
   const startingCash = 25_000_000; // $25M USD Hedge Fund Starting Capital
   const portfolio: Portfolio = {
@@ -136,6 +137,7 @@ export function createInitialGameState(): GameState {
     commodities,
     compositeIndices,
     recentIPOs,
+    recentMergers,
     dealers,
     portfolio,
     watchlist: ['USA_NVST', 'USA_TXEN', 'BRENT', 'GOLD'],
