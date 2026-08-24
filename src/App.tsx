@@ -33,7 +33,10 @@ import { StatusBar } from './components/StatusBar';
 import { OverflowMenu } from './components/OverflowMenu';
 import { BriefingScreen } from './components/screens/BriefingScreen';
 import { WorldScreen } from './components/screens/WorldScreen';
-import { MarketScreen } from './components/screens/MarketScreen';
+import { CorporatesScreen } from './components/screens/CorporatesScreen';
+import { RatesScreen } from './components/screens/RatesScreen';
+import { FxScreen } from './components/screens/FxScreen';
+import { CommoditiesScreen } from './components/screens/CommoditiesScreen';
 import { MyBookScreen } from './components/screens/MyBookScreen';
 import { TradeTicketModal } from './components/TradeTicketModal';
 import { NewsDrawer } from './components/NewsDrawer';
@@ -44,11 +47,13 @@ import { DiagnosticsModal } from './components/DiagnosticsModal';
 import { InteractiveChartModal } from './components/InteractiveChartModal';
 
 export type Destination = 'briefing' | 'world' | 'market' | 'book';
+export type MarketSubScreen = 'corporates' | 'rates' | 'fx' | 'commodities';
 
 export default function App() {
   const [state, setState] = useState<GameState>(() => createInitialGameState());
   const [prevState, setPrevState] = useState<GameState | null>(null);
   const [destination, setDestination] = useState<Destination>('briefing');
+  const [marketSub, setMarketSub] = useState<MarketSubScreen>('corporates');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [marketFilter, setMarketFilter] = useState<'equities' | 'bonds' | 'commodities' | 'fx' | 'derivatives'>('equities');
 
@@ -63,6 +68,9 @@ export default function App() {
     }
     if (payload?.marketFilter) {
        setMarketFilter(payload.marketFilter);
+    }
+    if (payload?.marketSub) {
+       setMarketSub(payload.marketSub);
     }
   };
   const [isAutoAdvancing, setIsAutoAdvancing] = useState(false);
@@ -278,7 +286,29 @@ export default function App() {
         <main className="flex-1 overflow-y-auto scroll-smooth no-scrollbar">
           {destination === 'briefing' && <BriefingScreen state={state} prevState={prevState} onNavigate={handleNavigate} />}
           {destination === 'world' && <WorldScreen state={state} prevState={prevState} onNavigate={handleNavigate} />}
-          {destination === 'market' && <MarketScreen state={state} prevState={prevState} onOpenTrade={handleOpenTrade} externalFilter={marketFilter} setExternalFilter={setMarketFilter} onNavigate={handleNavigate} />}
+          {destination === 'market' && (
+            <div className="flex flex-col h-full">
+              <div className="flex items-center gap-1 px-3 py-1.5 bg-[var(--bg-panel)] border-b border-[var(--border-hairline)] shrink-0">
+                {[
+                  { id: 'corporates', label: 'Corporates' },
+                  { id: 'rates', label: 'Rates' },
+                  { id: 'fx', label: 'FX' },
+                  { id: 'commodities', label: 'Commodities' },
+                ].map(s => (
+                  <button key={s.id} onClick={() => setMarketSub(s.id as MarketSubScreen)}
+                    className={`px-3 py-1 rounded-md text-[11px] font-semibold ${marketSub===s.id ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto no-scrollbar relative">
+                {marketSub === 'corporates' && <CorporatesScreen state={state} onOpenTrade={handleOpenTrade} />}
+                {marketSub === 'rates' && <RatesScreen state={state} onOpenTrade={handleOpenTrade} />}
+                {marketSub === 'fx' && <FxScreen state={state} onOpenTrade={handleOpenTrade} onNavigate={handleNavigate} />}
+                {marketSub === 'commodities' && <CommoditiesScreen state={state} onOpenTrade={handleOpenTrade} />}
+              </div>
+            </div>
+          )}
           {destination === 'book' && <MyBookScreen state={state} prevState={prevState} onNavigate={handleNavigate} />}
         </main>
 

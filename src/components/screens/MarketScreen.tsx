@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { GameState, Company, DebtTranche, Commodity, FxPair } from '../../types';
+import { GameState, Company, DebtTranche, Commodity, FxPair, RegionId } from '../../types';
 import { priceCorporateBond, priceLeveragedLoan, calculateParSwapRate } from '../../engine/pricing';
 import { calculateBlackScholesGreeks } from '../../engine/blackScholes';
 
@@ -95,26 +95,22 @@ export const MarketScreen: React.FC<{
     if (filter === 'derivatives') {
        const derivAssets: any[] = [];
        // IRS
-       Object.values(state.regions).forEach(reg => {
+       (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach(regionId => {
+         const reg = state.regions[regionId];
          const { parRate: fixedRate } = calculateParSwapRate(5, reg.yieldCurveParams);
          derivAssets.push({
-           id: `IRS_5Y_${reg.id}`,
-           name: `${reg.id} 5Y Interest Rate Swap`,
-           ticker: `IRS ${reg.id}`,
-           region: reg.id,
+           id: `IRS_5Y_${regionId}`,
+           name: `${regionId} 5Y Interest Rate Swap`,
+           ticker: `IRS ${regionId}`,
+           region: regionId,
            price: fixedRate * 100,
            change: 0,
            type: 'derivative',
            obj: {
-             assetType: 'IRS',
-             id: `IRS_5Y_${reg.id}`,
-             symbol: `IRS ${reg.id} 5Y`,
-             name: `${reg.id} 5Y Interest Rate Swap`,
-             region: reg.id,
-             price: fixedRate * 100,
-             quoteUnit: '% Fixed Rate',
-             details: { tenorYears: 5, fixedRate }
-           }
+             assetType: 'IRS', id: `IRS_5Y_${regionId}`, symbol: `IRS ${regionId} 5Y`,
+             name: `${regionId} 5Y Interest Rate Swap`, region: regionId, price: fixedRate * 100,
+             quoteUnit: '% Fixed Rate', details: { tenorYears: 5, fixedRate },
+           },
          });
        });
        // XCS

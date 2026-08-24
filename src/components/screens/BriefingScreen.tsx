@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { GameState } from '../../types';
+import { GameState, RegionId, OccupationType, ProductCategory } from '../../types';
 import { WhyDrilldown } from '../shared/WhyDrilldown';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 
@@ -83,7 +83,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
 
     // Macro changes (need prevState)
     if (prevState) {
-      for (const regId of Object.keys(state.regions) as (keyof typeof state.regions)[]) {
+      for (const regId of ['USA', 'EUR', 'UK', 'JPN'] as RegionId[]) {
         const reg = state.regions[regId];
         const prevReg = prevState.regions[regId];
 
@@ -112,7 +112,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
         }
 
         // Occupation Pool Tightness
-        for (const occId of Object.keys(reg.occupationPools) as (keyof typeof reg.occupationPools)[]) {
+        for (const occId of ['GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL'] as OccupationType[]) {
           const pool = reg.occupationPools[occId];
           const prevPool = prevReg.occupationPools[occId];
           if (pool.wageGrowthAnnual > 0.08 && prevPool.wageGrowthAnnual <= 0.08) {
@@ -128,7 +128,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
         }
 
         // Category Crowding / Supply Chain
-        for (const catId of Object.keys(reg.categoryDemand) as (keyof typeof reg.categoryDemand)[]) {
+        for (const catId of Object.keys(reg.categoryDemand) as ProductCategory[]) {
           const cat = reg.categoryDemand[catId];
           const prevCat = prevReg.categoryDemand[catId];
           if (cat.clearedInputPriceIndex && prevCat.clearedInputPriceIndex && (cat.clearedInputPriceIndex - prevCat.clearedInputPriceIndex) > 0.05) {
@@ -141,7 +141,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
               targetDest: 'world'
             });
           }
-          if (cat.crowdingIntensity > 1.2 && prevCat.crowdingIntensity <= 1.2) {
+          if (cat.crowdingIntensity > 0.5 && prevCat.crowdingIntensity <= 0.5) {
              generated.push({
               id: `crowd-${regId}-${catId}`,
               severity: 5,
@@ -193,20 +193,6 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
         )}
       </div>
 
-      <div className="pt-4 space-y-2">
-        <h3 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Quick Market Read</h3>
-        <WhyDrilldown
-          headline="Global Equities"
-          value={state.compositeIndices?.us500?.value !== undefined ? state.compositeIndices.us500.value.toFixed(2) : '—'}
-          signal={(state.compositeIndices?.us500?.value ?? 0) > (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.us500?.value ?? 0) < (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'negative' : 'neutral')}
-          contributors={[
-            { label: 'US 500', value: state.compositeIndices?.us500?.value !== undefined ? state.compositeIndices.us500.value.toFixed(2) : '—', signal: (state.compositeIndices?.us500?.value ?? 0) > (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.us500?.value ?? 0) < (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
-            { label: 'EU Stoxx', value: state.compositeIndices?.euStoxx?.value !== undefined ? state.compositeIndices.euStoxx.value.toFixed(2) : '—', signal: (state.compositeIndices?.euStoxx?.value ?? 0) > (state.compositeIndices?.euStoxx?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.euStoxx?.value ?? 0) < (state.compositeIndices?.euStoxx?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
-            { label: 'UK 100', value: state.compositeIndices?.uk100?.value !== undefined ? state.compositeIndices.uk100.value.toFixed(2) : '—', signal: (state.compositeIndices?.uk100?.value ?? 0) > (state.compositeIndices?.uk100?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.uk100?.value ?? 0) < (state.compositeIndices?.uk100?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
-            { label: 'JP 225', value: state.compositeIndices?.jp225?.value !== undefined ? state.compositeIndices.jp225.value.toFixed(2) : '—', signal: (state.compositeIndices?.jp225?.value ?? 0) > (state.compositeIndices?.jp225?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.jp225?.value ?? 0) < (state.compositeIndices?.jp225?.historical?.[0] ?? 0) ? 'negative' : 'neutral') }
-          ]}
-        />
-      </div>
     </div>
   );
 };

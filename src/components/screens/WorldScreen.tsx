@@ -75,6 +75,21 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
         ))}
       </div>
 
+      <div className="space-y-2">
+        <h3 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Global Equities</h3>
+        <WhyDrilldown
+          headline="Composite Indices"
+          value={state.compositeIndices?.us500?.value !== undefined ? state.compositeIndices.us500.value.toFixed(2) : '—'}
+          signal={(state.compositeIndices?.us500?.value ?? 0) > (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.us500?.value ?? 0) < (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'negative' : 'neutral')}
+          contributors={[
+            { label: 'US 500', value: state.compositeIndices?.us500?.value !== undefined ? state.compositeIndices.us500.value.toFixed(2) : '—', signal: (state.compositeIndices?.us500?.value ?? 0) > (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.us500?.value ?? 0) < (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
+            { label: 'EU Stoxx', value: state.compositeIndices?.euStoxx?.value !== undefined ? state.compositeIndices.euStoxx.value.toFixed(2) : '—', signal: (state.compositeIndices?.euStoxx?.value ?? 0) > (state.compositeIndices?.euStoxx?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.euStoxx?.value ?? 0) < (state.compositeIndices?.euStoxx?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
+            { label: 'UK 100', value: state.compositeIndices?.uk100?.value !== undefined ? state.compositeIndices.uk100.value.toFixed(2) : '—', signal: (state.compositeIndices?.uk100?.value ?? 0) > (state.compositeIndices?.uk100?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.uk100?.value ?? 0) < (state.compositeIndices?.uk100?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
+            { label: 'JP 225', value: state.compositeIndices?.jp225?.value !== undefined ? state.compositeIndices.jp225.value.toFixed(2) : '—', signal: (state.compositeIndices?.jp225?.value ?? 0) > (state.compositeIndices?.jp225?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.jp225?.value ?? 0) < (state.compositeIndices?.jp225?.historical?.[0] ?? 0) ? 'negative' : 'neutral') }
+          ]}
+        />
+      </div>
+
       <div className="space-y-4">
         <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Macroeconomic Fundamentals</h3>
         
@@ -190,9 +205,13 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
             {(reg.categoryDemand['StandardHousehold' as ProductCategory]?.demandHistory || []).map((_, i) => (
                <div key={i} className="flex-1 flex flex-col justify-end gap-[1px]">
                   {(Object.keys(reg.categoryDemand) as ProductCategory[]).map((cat, j) => {
-                     const h = reg.categoryDemand[cat]?.demandHistory?.[i] || 0;
-                     const hPx = Math.max(1, Math.min(10, h / 500)); 
-                     return <div key={j} style={{ height: `${hPx}px`, backgroundColor: `hsl(${j * 40}, 60%, 50%)` }} />
+                     const series = reg.categoryDemand[cat]?.demandHistory || [];
+                     const h = series[i] || 0;
+                     const seriesMax = Math.max(...series, 1);
+                     const seriesMin = Math.min(...series, 0);
+                     const range = seriesMax - seriesMin || 1;
+                     const hPx = Math.max(1, Math.round(((h - seriesMin) / range) * 20));
+                     return <div key={j} style={{ height: `${hPx}px`, backgroundColor: `hsl(${j * 40}, 60%, 50%)` }} />;
                   })}
                </div>
             ))}
