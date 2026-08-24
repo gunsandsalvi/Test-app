@@ -499,12 +499,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const isHouseholdFacing = ['StapleHousehold', 'StandardHousehold', 'LuxuryHousehold'].includes(line.category);
         const categoryGrowth = (catDemand?.demandGrowthAnnual ?? reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
-        // Mean reversion drag on competitiveness for outsized market share to prevent permanent monopolies (BUG-07)
-        const highShareDrag = Math.max(0, (line.categoryMarketShare - 0.15) * 2.0);
-        const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 10 + growthInvestmentSignal * 0.3 - highShareDrag));
-        const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
-        const shareGainRate = Math.max(-0.01, Math.min(0.01, newCompetitiveness * 0.02 - dominanceDrag));
+        const targetCompetitiveness = Math.max(-1, Math.min(1, marginEdge * 16 + growthInvestmentSignal * 0.5));
+        const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
+        const shareGainRate = Math.max(-0.02, Math.min(0.02, newCompetitiveness * 0.035 - dominanceDrag));
         const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // 0 floor only — a market share literally cannot go negative, this is a math guard not a behavioral clamp
         
         const lineGrowth = categoryGrowth + shareGainRate;
@@ -541,9 +539,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
         const categoryFulfillmentRatio = (reg.categoryDemand['CorporateIndustrial'] as any)?._fulfillmentRatio ?? 1;
         newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;
-        const demandResponsiveFactor = Math.max(0.3, Math.min(1.3, 0.4 + newRecentFulfillmentEMA * 0.9));
+        const supplierClearedPrice = (reg.categoryDemand['CorporateIndustrial'] as any)?.clearedInputPriceIndex ?? 1.0;
+        const priceSignal = supplierClearedPrice - 1.0;
+        const productionResponseFactor = Math.max(0.2, Math.min(1.8, 1.0 + priceSignal * 1.5));
 
-        targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * demandResponsiveFactor * productionThrottle;
+        targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
         productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
 
         const soldThisWeekUSD = targetProductionUSD * categoryFulfillmentRatio;

@@ -1,6 +1,36 @@
 @import "tailwindcss";
 
+@theme {
+  --color-region-usa: var(--region-usa);
+  --color-region-eur: var(--region-eur);
+  --color-region-uk: var(--region-uk);
+  --color-region-jpn: var(--region-jpn);
+}
+
+:root {
+  --bg-void: #050607;
+  --bg-panel: #0d0f11;
+  --bg-elevated: #151819;
+  --border-hairline: #23272a;
+
+  --region-usa: #4f9dde;
+  --region-eur: #d4a24f;
+  --region-uk: #b06fd4;
+  --region-jpn: #e0546e;
+
+  --signal-positive: #34d399;
+  --signal-negative: #f2495c;
+  --signal-neutral: #8b9199;
+
+  --text-primary: #f0f2f4;
+  --text-secondary: #9aa1a8;
+  --text-tertiary: #5b6167;
+
+  --font-numeric: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+}
+
 @keyframes marquee {
   0% { transform: translateX(100%); }
   100% { transform: translateX(-100%); }
 }
+
