@@ -7,6 +7,12 @@ type FxTab = 'pairs' | 'carry' | 'flows';
 export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => void, onNavigate: (dest: any, payload?: any) => void }> = ({ state, onOpenTrade, onNavigate }) => {
   const [fxTab, setFxTab] = useState<FxTab>('pairs');
 
+  const sortedPairs = [...(state.fxPairs || [])].sort((a, b) => {
+    const changeA = Math.abs(a.rate - (a.historicalRates?.[0] || a.rate));
+    const changeB = Math.abs(b.rate - (b.historicalRates?.[0] || b.rate));
+    return changeB - changeA;
+  });
+
   return (
     <div className="p-3 space-y-4 pb-20">
       {/* Tab Selector */}
@@ -24,21 +30,38 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
 
       {fxTab === 'pairs' && (
         <div className="space-y-3">
-          {(state.fxPairs || []).map((fx: FxPair) => {
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold flex justify-between">
+            <span>Pairs (Sorted by 1W Volatility)</span>
+            <span>Rate & 1W Δ</span>
+          </div>
+
+          {sortedPairs.map((fx: FxPair) => {
             const baseRate = state.regions[fx.base as RegionId]?.policyRate ?? 0;
             const quoteRate = state.regions[fx.quote as RegionId]?.policyRate ?? 0;
-            const change1W = fx.rate - (fx.historicalRates?.[0] || fx.rate);
+            const prevRate = fx.historicalRates?.[0] || fx.rate;
+            const change1W = fx.rate - prevRate;
+            const changePct = prevRate > 0 ? (change1W / prevRate) * 100 : 0;
             const fxAssetObj = {
               assetType: 'FX_SPOT', id: fx.pair, symbol: fx.pair, name: `${fx.pair} Spot`,
               region: fx.base, price: fx.rate, quoteUnit: fx.pair,
               details: { base: fx.base, quote: fx.quote },
             };
 
+            const ratesHistory = fx.historicalRates || [fx.rate];
+            const minRate = Math.min(...ratesHistory, fx.rate);
+            const maxRate = Math.max(...ratesHistory, fx.rate);
+            const range = maxRate - minRate || 1;
+
             return (
-              <div key={fx.pair} onClick={() => onOpenTrade(fxAssetObj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-1.5">
+              <div key={fx.pair} onClick={() => onOpenTrade(fxAssetObj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-2 hover:border-[var(--text-tertiary)]">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-[var(--text-primary)]">{fx.pair} Spot</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[var(--text-primary)]">{fx.pair} Spot</span>
+                      {Math.abs(changePct) > 0.5 && (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[var(--signal-neutral)]/20 text-[var(--signal-neutral)]">MOVER</span>
+                      )}
+                    </div>
                     <div className="text-[10px] text-[var(--text-tertiary)]">{fx.base} / {fx.quote}</div>
                   </div>
                   <div className="text-right">
@@ -46,10 +69,20 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
                       {fx.rate > 10 ? fx.rate.toFixed(2) : fx.rate.toFixed(4)}
                     </div>
                     <div className={`text-[10px] font-bold ${change1W > 0 ? 'text-[var(--signal-positive)]' : change1W < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                      {change1W > 0 ? '+' : ''}{change1W.toFixed(4)}
+                      {change1W > 0 ? '+' : ''}{change1W.toFixed(4)} ({changePct.toFixed(2)}%)
                     </div>
                   </div>
                 </div>
+
+                {/* Historical Rate Sparkline / Range Indicator */}
+                {ratesHistory.length > 1 && (
+                  <div className="h-1.5 w-full bg-[var(--bg-panel)] rounded-full overflow-hidden flex items-center">
+                    <div
+                      className={`h-full rounded-full transition-all ${change1W >= 0 ? 'bg-[var(--signal-positive)]' : 'bg-[var(--signal-negative)]'}`}
+                      style={{ width: `${Math.max(10, Math.min(100, ((fx.rate - minRate) / range) * 100))}%` }}
+                    />
+                  </div>
+                )}
 
                 <div className="text-[10px] text-[var(--text-tertiary)] pt-1 border-t border-[var(--border-hairline)] flex justify-between font-mono">
                   <span>{fx.base}: {formatPercent(baseRate, { isDecimal: true })}</span>
@@ -75,7 +108,7 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
                 details: { tenorYears: 5 }
               };
               return (
-                <div key={xcsObj.id} onClick={() => onOpenTrade(xcsObj)} className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform mb-2">
+                <div key={xcsObj.id} onClick={() => onOpenTrade(xcsObj)} className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform mb-2 hover:border-[var(--text-tertiary)]">
                   <div>
                     <div className="text-xs font-bold text-[var(--text-primary)]">XCS {fx.pair} 5Y</div>
                     <div className="text-[10px] text-[var(--text-tertiary)]">USD Liquidity Premium</div>

@@ -19,14 +19,18 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
     const futures = tenors.map(t => t === 0 ? spot : priceCommodityFutures(spot, rf, q, t));
     const isContango = futures[futures.length - 1] > spot;
 
+    const prevPrice = c.historicalPrices?.[c.historicalPrices.length - 2] ?? spot;
+    const change1W = spot - prevPrice;
+    const changePct = prevPrice > 0 ? (change1W / prevPrice) * 100 : 0;
+
     const obj = {
       assetType: 'COMMODITY', id: c.id, symbol: c.id, name: c.name, region: 'Global',
       price: spot, quoteUnit: `USD per ${c.unit || 'unit'}`,
       details: { commodityId: c.id },
     };
 
-    return { ...c, spot, futures, isContango, obj };
-  });
+    return { ...c, spot, futures, isContango, change1W, changePct, obj };
+  }).sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
 
   return (
     <div className="p-3 space-y-4 pb-20">
@@ -45,20 +49,38 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
 
       {tab === 'spot' && (
         <div className="space-y-2">
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold flex justify-between">
+            <span>Commodities (Sorted by 1W Move)</span>
+            <span>Spot Price</span>
+          </div>
+
           {commodities.map(c => {
-            // Find active weather shock if any
             const activeWeatherEntry = (Object.entries(state.regions) as [RegionId, Region][]).find(([, r]) => r.weather && r.weather.affectedCommodityId === c.id && r.weather.severity !== 'Normal');
             const activeWeather = activeWeatherEntry ? { id: activeWeatherEntry[0], weather: activeWeatherEntry[1].weather } : undefined;
 
             return (
-              <div key={c.id} onClick={() => onOpenTrade(c.obj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-2">
+              <div key={c.id} onClick={() => onOpenTrade(c.obj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-2 hover:border-[var(--text-tertiary)]">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-[var(--text-primary)]">{c.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[var(--text-primary)]">{c.name}</span>
+                      {Math.abs(c.changePct) > 1.0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[var(--signal-neutral)]/20 text-[var(--signal-neutral)]">VOLATILE</span>
+                      )}
+                    </div>
                     <div className="text-[10px] text-[var(--text-tertiary)]">{c.category} · per {c.unit}</div>
                   </div>
-                  <TapToChart label="" value={formatCurrency(c.spot, { compact: false })} history={c.historicalPrices} />
+                  <div className="text-right">
+                    <div className="text-sm font-[var(--font-numeric)] font-bold text-[var(--text-primary)]">
+                      {formatCurrency(c.spot, { compact: false })}
+                    </div>
+                    <div className={`text-[10px] font-bold ${c.change1W > 0 ? 'text-[var(--signal-positive)]' : c.change1W < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
+                      {c.change1W > 0 ? '+' : ''}{formatCurrency(c.change1W, { compact: false })} ({c.changePct.toFixed(2)}%)
+                    </div>
+                  </div>
                 </div>
+
+                <TapToChart label="Price History" value={formatCurrency(c.spot, { compact: false })} history={c.historicalPrices} />
 
                 <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] pt-1 border-t border-[var(--border-hairline)] font-mono">
                   <span>S/D Balance: <span className="font-bold text-[var(--text-primary)]">{c.supplyDemandBalance}</span></span>
@@ -85,7 +107,7 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
             const pts = c.futures.map((f, i) => `${(i / (c.futures.length - 1)) * 240},${40 - ((f - minF) / rangeF) * 32}`).join(' ');
 
             return (
-              <div key={c.id} onClick={() => onOpenTrade(c.obj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-2">
+              <div key={c.id} onClick={() => onOpenTrade(c.obj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-2 hover:border-[var(--text-tertiary)]">
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="text-xs font-bold text-[var(--text-primary)]">{c.name} Term Structure</div>

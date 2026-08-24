@@ -302,7 +302,7 @@ export default function App() {
                 ))}
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar relative">
-                {marketSub === 'corporates' && <CorporatesScreen state={state} onOpenTrade={handleOpenTrade} />}
+                {marketSub === 'corporates' && <CorporatesScreen state={state} onOpenTrade={handleOpenTrade} selectedCompany={selectedCompany} onSelectCompany={setSelectedCompany} />}
                 {marketSub === 'rates' && <RatesScreen state={state} onOpenTrade={handleOpenTrade} />}
                 {marketSub === 'fx' && <FxScreen state={state} onOpenTrade={handleOpenTrade} onNavigate={handleNavigate} />}
                 {marketSub === 'commodities' && <CommoditiesScreen state={state} onOpenTrade={handleOpenTrade} />}
