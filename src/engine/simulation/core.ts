@@ -10,6 +10,7 @@ import { calculateExpectedCarry } from '../carryCalculator';
 import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
+import { checkForMerger } from './merger';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from './constants';
 import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeIndices, evolveBankingSector, evolveRegionalWeather } from '../macroEngine';
 import { priceCommodityFutures } from '../pricing';
@@ -125,6 +126,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
       state.regions[regionId].governmentEmployment
     );
 
+    const maturedTranchesPrev = (state.regions[regionId].govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);
+    const maturedPrincipalUSDPrev = maturedTranchesPrev.reduce((s, t) => s + t.principalUSD, 0);
+    const weeklyDeficitUSDPrev = Math.max(0, state.regions[regionId].governmentSpendingUSD - state.regions[regionId].governmentRevenueUSD) + maturedPrincipalUSDPrev;
+    const monetizationSharePrev = Math.max(0, Math.min(0.4, (state.regions[regionId].balanceSheetStance ?? 0) * 0.5));
+    const monetizedAmountUSD = weeklyDeficitUSDPrev * monetizationSharePrev;
+
     const { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
@@ -137,6 +144,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         trackedHealthSignal: regionTrackedHealthSignal[regionId],
         publicCompanyEmployment: regionPublicCompanyEmployment[regionId],
         occupationDemand: regionOccDemand,
+        monetizedAmountUSD,
       },
       nextWeek,
       equityRet,
@@ -368,6 +376,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   // 5. Evolve 200 Company Fundamentals + Asynchronous Earnings + Debt Prepayment + M&A
   const ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[] = [];
   const refinanceNews: NewsItem[] = [];
+  const mergerNews: NewsItem[] = [];
   const defaultedTickers: string[] = [];
   const earningsReportedThisTurn: EarningsReportEvent[] = [];
 
@@ -397,6 +406,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let newNetIncome = 0;
     let newEps = 0;
     let newInputSupplyConstraintFactor = comp.inputSupplyConstraintFactor ?? 1.0;
+    let newRecentFulfillmentEMA = comp.recentFulfillmentEMA ?? 1.0;
     let targetProductionUSD = 0;
     let productionCostUSD = 0;
     let carryingCostUSD = (comp.finishedGoodsInventoryUSD ?? 0) * (comp.inventoryCarryingCostRate ?? 0.02) / 52;
@@ -495,7 +505,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
         const shareGainRate = Math.max(-0.01, Math.min(0.01, newCompetitiveness * 0.02 - dominanceDrag));
-        const newCategoryMarketShare = Math.max(0.001, Math.min(0.50, line.categoryMarketShare * (1 + shareGainRate / 52)));
+        const newCategoryMarketShare = Math.max(0.0005, Math.min(0.80, line.categoryMarketShare * (1 + shareGainRate / 52)));
         
         const lineGrowth = categoryGrowth + shareGainRate;
         
@@ -529,10 +539,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const warehouseCapacityUSD = comp.annualRevenue * 0.15;
         const productionThrottle = (comp.finishedGoodsInventoryUSD ?? 0) > warehouseCapacityUSD ? 0.3 : 1.0;
 
-        targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionThrottle;
+        const categoryFulfillmentRatio = (reg.categoryDemand['CorporateIndustrial'] as any)?._fulfillmentRatio ?? 1;
+        newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;
+        const demandResponsiveFactor = Math.max(0.3, Math.min(1.3, 0.4 + newRecentFulfillmentEMA * 0.9));
+
+        targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * demandResponsiveFactor * productionThrottle;
         productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
 
-        const categoryFulfillmentRatio = (reg.categoryDemand['CorporateIndustrial'] as any)?._fulfillmentRatio ?? 1;
         const soldThisWeekUSD = targetProductionUSD * categoryFulfillmentRatio;
         unsoldThisWeekUSD = targetProductionUSD - soldThisWeekUSD;
 
@@ -818,7 +831,24 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newSentiment = Math.max(-1.0, Math.min(1.0, comp.sentiment * 0.85 + sentimentDelta));
     const newStockPrice = isDefaulted ? 0.0 : Number(priceEquity(newEps, newForwardPE, newSentiment, false).toFixed(2));
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
-    const newMarketCap = Number((newStockPrice * comp.sharesOutstanding).toFixed(0));
+
+    // Buyback Execution (Part AH)
+    let updatedSharesOutstanding = comp.sharesOutstanding;
+    const targetCashBuffer = Math.max(10, comp.currentLiabilities * 1.5);
+    const excessCash = Math.max(0, newCash - targetCashBuffer);
+    const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * comp.sharesOutstanding));
+    if (excessCash > 5 && debtToEquity < 0.6 && comp.sharesOutstanding > 10 && !isDefaulted && newStockPrice > 0) {
+      const estimatedBookValuePerShare = Math.max(0.5, (newCash + newRevenue * 0.8 - newTotalDebt) / comp.sharesOutstanding);
+      const isCheap = newStockPrice < estimatedBookValuePerShare || newForwardPE < (sectorPE * 0.95);
+      const buybackShare = isCheap ? 0.60 : 0.25;
+      const buybackSpendM = (excessCash * 0.05 / 52) * buybackShare;
+      const sharesToRetire = Math.min(comp.sharesOutstanding * 0.005, buybackSpendM / Math.max(0.1, newStockPrice));
+      if (sharesToRetire > 0.001) {
+        updatedSharesOutstanding = Math.max(1.0, comp.sharesOutstanding - sharesToRetire);
+        newCash -= sharesToRetire * newStockPrice;
+      }
+    }
+    const newMarketCap = Number((newStockPrice * updatedSharesOutstanding).toFixed(0));
     const newSeniorBondYield = reg.zeroRates.tenor5Y + newOasBps / 10000;
 
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
@@ -864,6 +894,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       _targetProductionUSD: targetProductionUSD,
       finishedGoodsInventoryUSD: Number(newFinishedGoodsInventoryUSD.toFixed(2)),
       inventoryCarryingCostRate: comp.inventoryCarryingCostRate ?? 0.02,
+      recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,
@@ -877,6 +908,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ebit: Number(newEbit.toFixed(1)),
       netIncome: Number(newNetIncome.toFixed(1)),
       eps: newEps,
+      sharesOutstanding: Number(updatedSharesOutstanding.toFixed(3)),
       cash: Number(newCash.toFixed(1)),
       leverage: newLeverage,
       interestCoverage: newCoverage,
@@ -923,6 +955,68 @@ export function advanceWeeklyStep(state: GameState): GameState {
     }
   });
 
+  // Check for M&A Consolidation (Part AH)
+  if (nextWeek % 13 === 0) {
+    const merger = checkForMerger(updatedCompanies, nextWeek);
+    if (merger) {
+      const acquirer = updatedCompanies.find(c => c.ticker === merger.acquirerTicker);
+      const target = updatedCompanies.find(c => c.ticker === merger.targetTicker);
+      if (acquirer && target && !acquirer.isDefaulted && !target.isDefaulted) {
+        const purchasePrice = target.marketCap * 1.15;
+        const cashPaid = purchasePrice * 0.5;
+        const stockPaid = purchasePrice * 0.5;
+
+        acquirer.cash = Math.max(10, acquirer.cash - cashPaid);
+        const newShares = stockPaid / Math.max(1, acquirer.stockPrice);
+        acquirer.sharesOutstanding = Number((acquirer.sharesOutstanding + newShares).toFixed(3));
+        acquirer.annualRevenue = Number((acquirer.annualRevenue + target.annualRevenue * 0.85).toFixed(1));
+        acquirer.employeeCount += Math.round(target.employeeCount * 0.75);
+
+        // Merge product lines
+        if (target.productLines && acquirer.productLines) {
+          target.productLines.forEach(tpl => {
+            const existingPl = acquirer.productLines?.find(apl => apl.category === tpl.category);
+            if (existingPl) {
+              existingPl.categoryMarketShare = Number((existingPl.categoryMarketShare + tpl.categoryMarketShare).toFixed(4));
+            } else {
+              acquirer.productLines?.push({ ...tpl });
+            }
+          });
+        }
+
+        // Target is absorbed and exits active operations
+        target.isDefaulted = true;
+        target.stockPrice = 0;
+        target.employeeCount = 0;
+        target.annualRevenue = 0;
+        target.marketCap = 0;
+
+        mergerNews.push({
+          id: `merger-${merger.acquirerTicker}-${merger.targetTicker}-${nextWeek}`,
+          week: nextWeek,
+          title: merger.title,
+          description: merger.description,
+          category: 'EARNINGS',
+          impactBadge: '[M&A MERGER]',
+          impactRegion: acquirer.region,
+          impactSector: acquirer.sector,
+          sentimentDelta: 0.10,
+          affectedTicker: acquirer.ticker,
+          urgent: true,
+        });
+
+        diagnosticLogs.push({
+          week: nextWeek,
+          timestamp: new Date().toISOString(),
+          category: 'MICRO',
+          message: `Merger Executed: ${acquirer.name} acquired ${target.name}`,
+          deltaText: '',
+          data: { acquirer: acquirer.ticker, target: target.ticker }
+        });
+      }
+    }
+  }
+
   // Phase 4a: Derived nominal GDP parallel diagnostic
   regionIds.forEach((regionId) => {
     const reg = updatedRegions[regionId];
@@ -952,7 +1046,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? (newDerivedNominalGdpUSD / gdpLevel52WeeksAgo - 1) - reg.inflation
       : 0;
 
-    const blendedGdpGrowth = (1 - (reg.bottomUpGdpWeight ?? 0.50)) * reg.gdpGrowth + (reg.bottomUpGdpWeight ?? 0.50) * gdpGrowthBottomUp;
+    const blendedGdpGrowth = (1 - (reg.bottomUpGdpWeight ?? 1.0)) * reg.gdpGrowth + (reg.bottomUpGdpWeight ?? 1.0) * gdpGrowthBottomUp;
     const clampedBlendedGdpGrowth = Math.max(-0.02, Math.min(0.045, blendedGdpGrowth)); // same safety backstop as before, now applied to the blend
 
     // Government Debt Tranches: roll-off and new issuance
@@ -961,6 +1055,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalUSD, 0);
 
     const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedPrincipalUSD;
+    const monetizationShare = Math.max(0, Math.min(0.4, reg.balanceSheetStance * 0.5));
+    const monetizedAmountUSD = weeklyDeficitUSD * monetizationShare;
+    const marketFundedDeficitUSD = weeklyDeficitUSD - monetizedAmountUSD;
 
     // Curve-smart tenor allocation: read the actual yield curve shape already computed for this region.
     // Steep curve (long >> short) → issue shorter, cheaper debt now. Flat/inverted curve → lock in long
@@ -977,9 +1074,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const weightSum = tenorWeights.t2 + tenorWeights.t5 + tenorWeights.t10 + tenorWeights.t30;
 
     const newTranches: GovDebtTranche[] = [];
-    if (weeklyDeficitUSD > 1000) {
+    if (marketFundedDeficitUSD > 1000) {
       ([['t2', 2, 104], ['t5', 5, 260], ['t10', 10, 520], ['t30', 30, 1560]] as const).forEach(([key, tenorYears, tenorWeeks]) => {
-        const principal = weeklyDeficitUSD * (tenorWeights[key] / weightSum);
+        const principal = marketFundedDeficitUSD * (tenorWeights[key] / weightSum);
         if (principal < 100) return;
         newTranches.push({
           id: `${regionId}-GOV-${tenorYears}Y-${nextWeek}`,
@@ -998,7 +1095,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     updatedRegions[regionId] = {
       ...reg,
       gdpGrowth: clampedBlendedGdpGrowth, // overwrites this week's AR1-only value with the blended figure — this is what the Taylor rule, unemployment, wage growth all read going forward
-      bottomUpGdpWeight: reg.bottomUpGdpWeight ?? 0.50, // unchanged this round — deliberately not auto-increasing; a future round raises this manually once more confidence is built
+      bottomUpGdpWeight: reg.bottomUpGdpWeight ?? 1.0,
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
       gdpGrowthBottomUp: Number(Math.max(-0.5, Math.min(0.5, gdpGrowthBottomUp)).toFixed(4)), // generous diagnostic bound only — this is not the load-bearing clamp, just a display sanity guard since this is new and untrusted
       nominalGdpHistory: newNominalGdpHistory,
@@ -1698,7 +1795,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const updatedDiagnosticsLogs = [...(state.diagnosticsLogs || []), ...diagnosticLogs, ...newStepLogs].slice(-100);
 
   // News feed strictly displays headlines generated during the current active weekly step
-  const updatedNewsFeed = [...newsItems, ...refinanceNews];
+  const updatedNewsFeed = [...newsItems, ...refinanceNews, ...mergerNews];
 
   return {
     ...state,

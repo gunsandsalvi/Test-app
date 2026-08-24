@@ -537,6 +537,7 @@ export function generateInitialCompanies(): Company[] {
         inputSupplyConstraintFactor: 1.0,
         finishedGoodsInventoryUSD: 0,
         inventoryCarryingCostRate: 0.02,
+        recentFulfillmentEMA: 1.0,
       };
 
       companies.push(company);
@@ -763,5 +764,6 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     inputSupplyConstraintFactor: 1.0,
     finishedGoodsInventoryUSD: 0,
     inventoryCarryingCostRate: 0.02,
+    recentFulfillmentEMA: 1.0,
   };
 }

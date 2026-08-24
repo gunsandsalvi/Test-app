@@ -12,7 +12,8 @@ export function evolveBankingSector(
   sovereign10YYield: number,
   balanceSheetStance: number,
   gdpGrowth: number,
-  spilloverAdjustment: number = 0
+  spilloverAdjustment: number = 0,
+  monetizedAmountUSD: number = 0
 ): BankingSector {
   const bankedConsumerDebtShare = 0.1167; // Share of total household debt held as bank consumer loans
   const newConsumerLoanBook = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
@@ -48,7 +49,7 @@ export function evolveBankingSector(
   const netNewLending = Math.max(0, (newBusinessLoanBook - prevBanking.businessLoanBookUSD)) + Math.max(0, (newConsumerLoanBook - prevBanking.consumerLoanBookUSD));
   const netLoanRepayment = Math.max(0, (prevBanking.businessLoanBookUSD - newBusinessLoanBook)) + Math.max(0, (prevBanking.consumerLoanBookUSD - newConsumerLoanBook));
 
-  const newDeposits = prevBanking.depositsUSD * 0.999 + weeklySavingsInflow * 0.3 + netNewLending - netLoanRepayment;
+  const newDeposits = prevBanking.depositsUSD * 0.999 + weeklySavingsInflow * 0.3 + netNewLending - netLoanRepayment + (monetizedAmountUSD ?? 0);
 
   const targetSovHoldings = (newBusinessLoanBook + newConsumerLoanBook + prevBanking.sovereignBondHoldingsUSD) * 0.18;
   const newSovHoldings = prevBanking.sovereignBondHoldingsUSD * 0.98 + targetSovHoldings * 0.02;
@@ -90,7 +91,8 @@ export function evolveBankingSector(
     ? Math.min(newCentralBankReserves * 0.015, 15e9)
     : 0;
   const newCentralBankReservesFinal = newCentralBankReserves + emergencyReserveInjection;
-  const newMoneySupplyM2USD = newDeposits + newCentralBankReservesFinal * 0.1;
+  const newCentralBankReservesWithMonetization = newCentralBankReservesFinal + (monetizedAmountUSD ?? 0);
+  const newMoneySupplyM2USD = newDeposits + newCentralBankReservesWithMonetization * 0.1;
 
   return {
     businessLoanBookUSD: Number(newBusinessLoanBook.toFixed(0)),
@@ -103,7 +105,7 @@ export function evolveBankingSector(
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
     loanLossProvisionRateAnnualPct: Number(businessLossRateAnnual.toFixed(4)),
     creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
-    centralBankReservesUSD: Number(newCentralBankReservesFinal.toFixed(0)),
+    centralBankReservesUSD: Number(newCentralBankReservesWithMonetization.toFixed(0)),
     moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
   };
 }

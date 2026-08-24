@@ -43,6 +43,7 @@ export function evolveRegionMacro(
     trackedHealthSignal: number;
     publicCompanyEmployment: number;
     occupationDemand?: Record<OccupationType, number>;
+    monetizedAmountUSD?: number;
   },
   week: number,
   equityReturn: number = 0,
@@ -149,12 +150,12 @@ export function evolveRegionMacro(
   const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag + fiscalImpulse + scheduledShock;
 
   // 4. Absolute hard clamp to prevent runaway simulation
-  const newGdpGrowth = Math.max(-0.02, Math.min(0.045, updatedGdpGrowth)); // Bounded between -2.0% and +4.5%
+  const newGdpGrowth = Math.max(-0.06, Math.min(0.08, updatedGdpGrowth)); // Bounded between -6.0% and +8.0%
 
   // 1. Autoregressive AR(1) base with anchor to target inflation piStar + supply noise
   const infPersistence = 0.98;
   const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
-  let newInflation = Math.max(0.0050, Math.min(0.15, Number(baseInflation.toFixed(4))));
+  let newInflation = Math.max(-0.020, Math.min(0.20, Number(baseInflation.toFixed(4))));
 
   const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
   const newFiscalDeficitPctGdp = Math.max(-0.02, Math.min(0.15, newStructuralDeficitPctGdp + cyclicalDeficitComponent));
@@ -179,7 +180,6 @@ export function evolveRegionMacro(
   // Slow demographic drift — independent of the business cycle
   const nonEmployableDrift = (Math.random() - 0.5) * 0.00002; // tiny, structural, not cycle-driven
   const newNonEmployablePct = Math.max(0.28, Math.min(0.45, region.nonEmployablePct + nonEmployableDrift));
-  const totalLaborForce = region.totalPopulation * (1 - newNonEmployablePct) * newParticipation;
 
   // Government employment responds to real spending growth
   const spendingGrowthRate = region.governmentSpendingUSD > 0 ? (newGovernmentSpendingUSD - region.governmentSpendingUSD) / region.governmentSpendingUSD : 0;
@@ -204,7 +204,7 @@ export function evolveRegionMacro(
   const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0);
   const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
   const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
-  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4))));
+  const newUnemployment = Math.max(0.020, Math.min(0.180, Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4))));
   const unempDelta = newUnemployment - region.unemploymentRate;
 
   // Consumer & Household Sector Simulation
@@ -219,6 +219,15 @@ export function evolveRegionMacro(
   const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.08;
   const unempShock = unempDelta > 0 ? cciUnempMultiplier * unempDelta * 100 : 0;
   const newCCI = Math.max(60, Math.min(140, Number((prevHS.consumerConfidence + cciReversion + 0.05 * (equityReturn * 100) - unempShock - contagionHit).toFixed(2))));
+
+  // Population Growth & Net Migration Dynamics (Part AG)
+  const migrationAttractivenessSignal = Math.max(-0.001, Math.min(0.001, ((newCCI - 100) / 100) * 0.0006));
+  const birthRate = region.birthRateAnnual ?? 0.010;
+  const deathRate = region.deathRateAnnual ?? 0.009;
+  const migrationRate = region.netMigrationRateAnnual ?? 0.002;
+  const netPopulationGrowthRate = (birthRate - deathRate + migrationRate + migrationAttractivenessSignal) / 52;
+  const newTotalPopulation = Math.max(1, Math.round(region.totalPopulation * (1 + netPopulationGrowthRate)));
+  const totalLaborForce = newTotalPopulation * (1 - newNonEmployablePct) * newParticipation;
 
   const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5;
   const newSavingsRate = Math.max(0.02, Math.min(0.18, savingsBaseline + 0.2 * (region.policyRate - newNeutralRate) - 0.1 * ((newCCI - 100) / 100)));
@@ -418,7 +427,8 @@ export function evolveRegionMacro(
     region.zeroRates.tenor10Y,
     newBalanceSheetStance,
     newGdpGrowth,
-    region.creditConditionsSpilloverAdjustment ?? 0
+    region.creditConditionsSpilloverAdjustment ?? 0,
+    microFeedback.monetizedAmountUSD ?? 0
   );
 
   const prevM2 = region.bankingSector.moneySupplyM2USD > 0
@@ -433,7 +443,7 @@ export function evolveRegionMacro(
   const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   
   // Wage-push and monetary inflation add to CPI (scaled for weekly turn)
-  newInflation = Math.max(0.0050, Math.min(0.12, Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4))));
+  newInflation = Math.max(-0.020, Math.min(0.20, Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4))));
   const newCoreInflation = Number((newInflation * 0.92 + wagePushInflation * 0.1).toFixed(4));
   const newExpectedInflation = region.expectedInflation * 0.9 + newInflation * 0.1;
 
@@ -580,7 +590,10 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     wageGrowth: Number(newWageGrowth.toFixed(4)),
     debtToGdpPct: newDebtToGdpPct,
     unemploymentRate: newUnemployment,
-    totalPopulation: region.totalPopulation,
+    totalPopulation: newTotalPopulation,
+    birthRateAnnual: birthRate,
+    deathRateAnnual: deathRate,
+    netMigrationRateAnnual: migrationRate,
     nonEmployablePct: newNonEmployablePct,
     governmentEmployment: newGovernmentEmployment,
     privateSectorSegments: newPrivateSectorSegments,
@@ -590,7 +603,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,
     gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,
-    bottomUpGdpWeight: region.bottomUpGdpWeight ?? 0.50,
+    bottomUpGdpWeight: region.bottomUpGdpWeight ?? 1.0,
     nominalGdpHistory: region.nominalGdpHistory ?? [],
     consumptionComponentUSD: region.consumptionComponentUSD ?? 0,
     investmentComponentUSD: region.investmentComponentUSD ?? 0,

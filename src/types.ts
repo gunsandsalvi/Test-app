@@ -214,6 +214,9 @@ export interface Region {
 
   // Population & Labor Force Accounting (Phase 1, Private-Sector Segments & Occupation Pools)
   totalPopulation: number;              // raw headcount, this world's own organic figure — not calibrated to any real country
+  birthRateAnnual: number;
+  deathRateAnnual: number;
+  netMigrationRateAnnual: number;
   nonEmployablePct: number;             // fraction of population outside the labor force for demographic reasons (children, retired, students, disabled)
   governmentEmployment: number;         // raw headcount employed by government
   privateSectorSegments: PrivateSectorSegment[]; // 5 real, distinct aggregate entities per region
@@ -406,6 +409,7 @@ export interface Company {
   // Production Economics & Finished Goods Inventory
   finishedGoodsInventoryUSD: number; // unsold output, carried at production cost
   inventoryCarryingCostRate: number; // small, sector-typical — storage, obsolescence, spoilage
+  recentFulfillmentEMA: number; // EMA of supplier fulfillment ratio for responsive production
   _targetProductionUSD?: number; // transient
 }
 
