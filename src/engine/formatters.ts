@@ -50,6 +50,15 @@ export function formatQuarterFilingDate(quarterIndex: number, startYear: number 
   return `Q${qNum} '${shortYear} (${quarterDates[qNum]})`;
 }
 
+export function formatBondName(ticker: string, couponRate: number | undefined, maturityWeek: number, currentWeek: number, rateType: 'FIXED' | 'FLOATING'): string {
+  const yearsRemaining = Math.max(0, (maturityWeek - currentWeek) / 52);
+  const maturityYear = new Date().getFullYear() + Math.round(yearsRemaining);
+  if (rateType === 'FIXED') {
+    return `${ticker} ${((couponRate ?? 0) * 100).toFixed(2)} '${String(maturityYear).slice(-2)}`;
+  }
+  return `${ticker} FRN '${String(maturityYear).slice(-2)}`;
+}
+
 /**
  * Strips raw LaTeX tokens and replaces them with clean UTF-8 text
  */

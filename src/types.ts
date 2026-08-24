@@ -198,6 +198,7 @@ export interface Region {
   gdpGrowth: number; // y_t (annualized, e.g. 0.022)
   potentialGdpGrowth: number; // y* (e.g. 0.020)
   nairu: number;
+  weeksAboveNairu: number;
   unemploymentRate: number; // e.g. 0.041 = 4.1%
   wageGrowth: number; // e.g. 0.038 = 3.8%
   tradeBalance: number; // in USD equivalent (exportsUSD - importsUSD)
@@ -363,6 +364,7 @@ export interface Company {
   baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;
   executionQuality: number;
+  occupationMixDrift: Partial<Record<OccupationType, number>>;
   
   // Asynchronous Quarterly Earnings Cycles (13-week staggered schedule)
   earningsWeekModulo: number; // 1 to 13

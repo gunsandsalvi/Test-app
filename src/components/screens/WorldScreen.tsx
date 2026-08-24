@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GameState, RegionId, OccupationType } from '../../types';
-import { formatCurrency, formatPercent } from '../../engine/formatters';
+import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { SegmentedBar } from '../charts/Charts';
 
 type WorldTab = 'overview' | 'growth' | 'labor' | 'supplychain' | 'fiscal' | 'banking' | 'private';
@@ -291,7 +291,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
                       .sort((a, b) => a.maturityWeek - b.maturityWeek)
                       .map((t, i) => ({
                         value: t.principalUSD,
-                        label: `${t.tenorAtIssuanceYears}Y (${formatCurrency(t.principalUSD, { compact: true })})`,
+                        label: `${formatBondName(reg.id, t.couponRate, t.maturityWeek, state.currentWeek, 'FIXED')} (${formatCurrency(t.principalUSD, { compact: true })})`,
                         color: `hsl(${210 + i * 25}, 70%, 50%)`
                       }))
                     }
@@ -299,7 +299,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
                   <div className="grid grid-cols-2 gap-1.5 pt-2">
                     {reg.govDebtTranches.map(t => (
                       <div key={t.id} className="p-2 rounded bg-[var(--bg-panel)] text-[10px] font-mono flex justify-between">
-                        <span className="text-[var(--text-secondary)]">{t.tenorAtIssuanceYears}Y Bond</span>
+                        <span className="text-[var(--text-secondary)]">{formatBondName(reg.id, t.couponRate, t.maturityWeek, state.currentWeek, 'FIXED')}</span>
                         <span className="font-bold">{formatCurrency(t.principalUSD, { compact: true })}</span>
                       </div>
                     ))}

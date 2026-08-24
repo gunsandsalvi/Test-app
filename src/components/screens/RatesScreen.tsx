@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GameState, RegionId, GovDebtTranche } from '../../types';
 import { calculateNelsonSiegelZeroRate } from '../../engine/nelsonSiegel';
 import { calculateParSwapRate, priceCorporateBond } from '../../engine/pricing';
+import { formatBondName } from '../../engine/formatters';
 
 export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => void }> = ({ state, onOpenTrade }) => {
   const [selectedRegion, setSelectedRegion] = useState<RegionId>('USA');
@@ -13,7 +14,7 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
   const govBonds = (reg.govDebtTranches || []).map((t: GovDebtTranche) => {
     const remainingTenorYears = Math.max(0.01, (t.maturityWeek - state.currentWeek) / 52);
     const bondPricing = priceCorporateBond(remainingTenorYears, t.couponRate, reg.yieldCurveParams, sovereignRiskPremiumBps, false, 0.40);
-    const cleanName = `${selectedRegion} ${remainingTenorYears.toFixed(1)}Y (due wk ${t.maturityWeek})`;
+    const cleanName = formatBondName(selectedRegion, t.couponRate, t.maturityWeek, state.currentWeek, 'FIXED');
     
     return {
       id: t.id,

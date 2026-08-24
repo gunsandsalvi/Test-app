@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GameState, Company } from '../../types';
-import { formatCurrency, formatPercent } from '../../engine/formatters';
+import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
 import { priceCorporateBond, priceLeveragedLoan } from '../../engine/pricing';
 
@@ -171,14 +171,15 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                   ? priceCorporateBond(remainingTenorYears, t.couponRate ?? 0.05, reg.yieldCurveParams, company.oasSpreadBps, company.isDefaulted, company.recoveryRate)
                   : priceLeveragedLoan(t.floatingMarginBps ?? 200, company.oasSpreadBps, remainingTenorYears, company.isDefaulted, company.recoveryRate);
                 const price = isFixed ? (pricing as any).price : (pricing as any).pricePar;
+                const bondName = formatBondName(company.ticker, t.couponRate, t.maturityWeek, state.currentWeek, t.rateType);
                 return (
                   <div key={t.id} onClick={() => onOpenTrade({
                     assetType: isFixed ? 'CORP_BOND' : 'LEV_LOAN', id: t.id, symbol: t.id,
-                    name: `${company.name} ${isNaN(remainingTenorYears) ? '0' : remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Bond' : 'Loan'}`,
+                    name: bondName,
                     region: company.region, price, quoteUnit: isFixed ? '% Par' : 'pts of par',
                     details: { trancheId: t.id, tenorYears: remainingTenorYears, fixedRate: t.couponRate ?? 0, rateType: t.rateType, oasSpreadBps: company.oasSpreadBps, rating: company.creditRating, sector: company.sector },
                   })} className="flex justify-between items-center p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-1 cursor-pointer hover:border-[var(--text-tertiary)] transition-colors">
-                    <span className="text-[11px]">{isNaN(remainingTenorYears) ? '0' : remainingTenorYears.toFixed(1)}Y {isFixed ? `${((t.couponRate ?? 0) * 100).toFixed(1)}% Fixed` : `+${t.floatingMarginBps}bps Float`}</span>
+                    <span className="text-[11px]">{bondName}</span>
                     <span className="text-[11px] font-[var(--font-numeric)] font-bold">{isNaN(price) ? '—' : price.toFixed(2)}</span>
                   </div>
                 );

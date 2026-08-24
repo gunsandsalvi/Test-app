@@ -18,8 +18,17 @@ import { FIXED_SHARE_BY_RATING } from '../companyGenerator';
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<OccupationType, number> {
   const demand: Record<OccupationType, number> = { GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 };
   companies.filter(c => c.region === regionId && !c.isDefaulted).forEach(c => {
-    const mix = SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 };
-    Object.entries(mix).forEach(([occ, share]) => { demand[occ as OccupationType] += c.employeeCount * (share ?? 0); });
+    const baseMix = SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 };
+    const drift = c.occupationMixDrift || {};
+    const mix = { ...baseMix };
+    Object.keys(mix).forEach(occ => {
+      const o = occ as OccupationType;
+      (mix as any)[o] = Math.max(0.01, ((mix as any)[o] ?? 0) + (drift[o] ?? 0));
+    });
+    const totalShare = Object.values(mix).reduce((s, v) => s + v, 0);
+    Object.entries(mix).forEach(([occ, share]) => {
+      demand[occ as OccupationType] += c.employeeCount * (share / Math.max(0.001, totalShare));
+    });
   });
   (privateSegments || []).forEach(seg => {
     const mix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType];
@@ -250,13 +259,18 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const demander = reg.categoryDemand[cat as any] as any;
         if (!supplier || !demander) return;
 
+        const regionCapacityUtilization = (reg.categoryDemand['CorporateIndustrial'] as any)?.clearedInputPriceIndex ?? 1.0;
+        const industrialProductionRate = Math.max(0.005, Math.min(0.04, 0.02 * (0.5 + regionCapacityUtilization * 0.5)));
+
         const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
         const supplierFirms = prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.category === inputCat));
         const weeklyProduction = supplierFirms.reduce((s, c) => {
           const line = (c.productLines || []).find(l => l.category === inputCat);
           const warehouseCap = c.annualRevenue * 0.15;
           const throttle = (c.finishedGoodsInventoryUSD ?? 0) > warehouseCap ? 0.3 : 1.0;
-          return s + (c._targetProductionUSD ?? ((c.annualRevenue * 0.02 / 52) * (line?.revenueShare ?? 0) * throttle));
+          const priceSignal = (supplier.clearedInputPriceIndex ?? 1.0) - 1.0;
+          const responsiveFactor = Math.max(0.2, Math.min(1.8, 1.0 + priceSignal * 1.5));
+          return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;
         }, 0);
         const totalAvailableSupply = lastWeekInventory + weeklyProduction;
 
@@ -608,6 +622,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
     const newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
 
+    const growthCapexIntensity = (newGrowthCapex - (comp.growthCapex ?? 0)) / Math.max(1, comp.growthCapex ?? 1);
+    const isAutomating = growthCapexIntensity > 0.05 && newExecutionQuality > 1.0;
+    const newOccupationMixDrift = { ...(comp.occupationMixDrift || {}) };
+    if (isAutomating) {
+      newOccupationMixDrift.TECHNICAL_ENGINEERING = Math.min(0.15, (newOccupationMixDrift.TECHNICAL_ENGINEERING ?? 0) + 0.001);
+      newOccupationMixDrift.GENERAL = Math.max(-0.15, (newOccupationMixDrift.GENERAL ?? 0) - 0.001);
+    }
+
     const newCapex = comp.sector === 'Banks' ? 0 : (newMaintenanceCapex + newGrowthCapex);
 
     // Weekly Cash flow and debt amortization / prepayment
@@ -873,6 +895,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       growthCapex: Number(newGrowthCapex.toFixed(1)),
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,
       executionQuality: Number(newExecutionQuality.toFixed(3)),
+      occupationMixDrift: newOccupationMixDrift,
       inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
       _targetProductionUSD: targetProductionUSD,
       finishedGoodsInventoryUSD: Number(newFinishedGoodsInventoryUSD.toFixed(2)),
