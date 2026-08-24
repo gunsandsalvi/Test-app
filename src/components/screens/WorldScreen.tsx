@@ -1,64 +1,14 @@
 import React, { useState } from 'react';
-import { GameState, RegionId, OccupationType, ProductCategory } from '../../types';
-import { WhyDrilldown } from '../shared/WhyDrilldown';
-import { TapToChart } from '../shared/TapToChart';
-import { SegmentedBar } from '../charts/Charts';
+import { GameState, RegionId, OccupationType } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
+import { SegmentedBar } from '../charts/Charts';
 
-const SUPPLY_CHAIN_CATEGORIES: string[] = ['CorporateTech', 'StandardHousehold', 'LuxuryHousehold'];
+type WorldTab = 'overview' | 'growth' | 'labor' | 'supplychain' | 'fiscal' | 'banking' | 'private';
 
 export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state, prevState, onNavigate }) => {
   const [activeRegion, setActiveRegion] = useState<RegionId>('USA');
+  const [worldTab, setWorldTab] = useState<WorldTab>('overview');
   const reg = state.regions[activeRegion];
-  const prevReg = prevState?.regions[activeRegion];
-
-  const getSignal = (current: number, previous?: number): 'positive' | 'negative' | 'neutral' => {
-    if (previous === undefined || previous === null) return 'neutral';
-    if (current > previous + 0.0001) return 'positive';
-    if (current < previous - 0.0001) return 'negative';
-    return 'neutral';
-  };
-
-  const getInverseSignal = (current: number, previous?: number): 'positive' | 'negative' | 'neutral' => {
-    if (previous === undefined || previous === null) return 'neutral';
-    if (current < previous - 0.0001) return 'positive';
-    if (current > previous + 0.0001) return 'negative';
-    return 'neutral';
-  };
-
-  const getMultiplierSignal = (current: number, previous?: number): 'positive' | 'negative' | 'neutral' => {
-    if (previous === undefined || previous === null) return 'neutral';
-    if (current > previous * 1.001) return 'positive';
-    if (current < previous * 0.999) return 'negative';
-    return 'neutral';
-  };
-
-  const formatPct = (val: number | undefined | null, showSign: boolean = false) => formatPercent(val, { isDecimal: true, precision: 2, showSign });
-  const formatBln = (val: number | undefined | null) => formatCurrency(val, { compact: true, precision: 1 });
-
-  // 1. GDP
-  const nx = reg.exportsUSD - reg.importsUSD;
-
-  // Investment derivation
-  const publicCompanies = state.companies.filter(c => c.region === activeRegion && !c.isDefaulted);
-  const trackedEmployment = publicCompanies.reduce((s, c) => s + (c.employeeCount || 0), 0);
-  const publicInvestment = publicCompanies.reduce((s, c) => s + (c.maintenanceCapex || 0) + (c.growthCapex || 0), 0);
-
-  // 3. Unemployment Labor Force Identity
-  const privateEmployment = reg.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0);
-  const prevPrivateEmployment = prevReg?.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0) || 0;
-  const publicEmployment = publicCompanies.reduce((s, comp) => s + (comp.employeeCount ?? 0), 0);
-  const prevPublicEmployment = prevState?.companies.filter(c => c.region === activeRegion && !c.isDefaulted).reduce((s, comp) => s + (comp.employeeCount ?? 0), 0) || 0;
-
-  // 8. Government Debt Tranches
-  const govDebtTotal = reg.govDebtTranches.reduce((sum, t) => sum + t.principalUSD, 0);
-  const debtSegments = [...reg.govDebtTranches]
-    .sort((a, b) => a.maturityWeek - b.maturityWeek)
-    .map((t, i) => ({
-      value: t.principalUSD,
-      label: `${Math.round(Math.max(0, t.maturityWeek - state.currentWeek) / 52)}Y`,
-      color: `hsl(${220 - (i % 10) * 15}, 60%, 50%)`
-    }));
 
   const generateRegionStatus = (r: typeof reg): string => {
     const parts: string[] = [];
@@ -69,8 +19,14 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
     return parts.join(' · ');
   };
 
+  const c = reg.consumptionComponentUSD;
+  const i = reg.investmentComponentUSD;
+  const g = reg.governmentSpendingUSD * 52;
+  const nx = reg.exportsUSD - reg.importsUSD;
+
   return (
-    <div className="p-3 space-y-6 pb-20">
+    <div className="p-3 space-y-4 pb-20">
+      {/* Region Selector & Status */}
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           {(['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => (
@@ -89,233 +45,259 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
         </div>
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Global Equities</h3>
-        <WhyDrilldown
-          headline="Composite Indices"
-          value={state.compositeIndices?.us500?.value !== undefined ? state.compositeIndices.us500.value.toFixed(2) : '—'}
-          signal={(state.compositeIndices?.us500?.value ?? 0) > (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.us500?.value ?? 0) < (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'negative' : 'neutral')}
-          contributors={[
-            { label: 'US 500', value: state.compositeIndices?.us500?.value !== undefined ? state.compositeIndices.us500.value.toFixed(2) : '—', signal: (state.compositeIndices?.us500?.value ?? 0) > (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.us500?.value ?? 0) < (state.compositeIndices?.us500?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
-            { label: 'EU Stoxx', value: state.compositeIndices?.euStoxx?.value !== undefined ? state.compositeIndices.euStoxx.value.toFixed(2) : '—', signal: (state.compositeIndices?.euStoxx?.value ?? 0) > (state.compositeIndices?.euStoxx?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.euStoxx?.value ?? 0) < (state.compositeIndices?.euStoxx?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
-            { label: 'UK 100', value: state.compositeIndices?.uk100?.value !== undefined ? state.compositeIndices.uk100.value.toFixed(2) : '—', signal: (state.compositeIndices?.uk100?.value ?? 0) > (state.compositeIndices?.uk100?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.uk100?.value ?? 0) < (state.compositeIndices?.uk100?.historical?.[0] ?? 0) ? 'negative' : 'neutral') },
-            { label: 'JP 225', value: state.compositeIndices?.jp225?.value !== undefined ? state.compositeIndices.jp225.value.toFixed(2) : '—', signal: (state.compositeIndices?.jp225?.value ?? 0) > (state.compositeIndices?.jp225?.historical?.[0] ?? 0) ? 'positive' : ((state.compositeIndices?.jp225?.value ?? 0) < (state.compositeIndices?.jp225?.historical?.[0] ?? 0) ? 'negative' : 'neutral') }
-          ]}
-        />
+      {/* World Tab Navigation */}
+      <div className="flex overflow-x-auto no-scrollbar border-b border-[var(--border-hairline)] pb-1">
+        {(['overview', 'growth', 'labor', 'supplychain', 'fiscal', 'banking', 'private'] as WorldTab[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setWorldTab(t)}
+            className={`px-3 py-1.5 text-[11px] font-bold uppercase whitespace-nowrap transition-colors ${worldTab === t ? 'text-[var(--text-primary)] border-b-2 border-[var(--region-usa)]' : 'text-[var(--text-tertiary)]'}`}
+          >
+            {t === 'supplychain' ? 'Supply Chain' : t}
+          </button>
+        ))}
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Macroeconomic Fundamentals</h3>
-        
-        <WhyDrilldown
-          headline="GDP Growth (Annualized)"
-          value={formatPct(reg.gdpGrowth, true)}
-          signal={getSignal(reg.gdpGrowth, prevReg?.gdpGrowth)}
-          contributors={[
-            { label: 'Consumption (C)', value: formatBln(reg.consumptionComponentUSD), signal: getSignal(reg.consumptionComponentUSD, prevReg?.consumptionComponentUSD) },
-            { 
-              label: 'Investment (I)', 
-              value: formatBln(reg.investmentComponentUSD), 
-              signal: getSignal(reg.investmentComponentUSD, prevReg?.investmentComponentUSD),
-              contributors: [
-                { label: 'Public Companies', value: formatBln(publicInvestment), signal: 'neutral' },
-                ...reg.privateSectorSegments.map(seg => ({
-                  label: seg.segmentType.replace('_', ' ').toLowerCase(),
-                  value: formatBln((publicInvestment / (trackedEmployment || 1)) * seg.employment),
-                  signal: 'neutral' as const
-                }))
-              ]
-            },
-            { label: 'Gov Spending (G)', value: formatBln(reg.governmentSpendingUSD * 52), signal: getSignal(reg.governmentSpendingUSD, prevReg?.governmentSpendingUSD) },
-            { label: 'Net Exports (NX)', value: formatBln(nx), signal: nx >= 0 ? 'positive' : 'negative' }
-          ]}
-        />
-
-        <WhyDrilldown
-          headline="Inflation (CPI YoY)"
-          value={formatPct(reg.inflation)}
-          signal={getInverseSignal(reg.inflation, prevReg?.inflation)}
-          contributors={[
-            { label: 'Wage-Push Inflation', value: formatPct(reg.wagePushInflation), signal: getInverseSignal(reg.wagePushInflation, prevReg?.wagePushInflation) },
-            { label: 'Monetary Pressure', value: formatPct(reg.monetaryInflationPressure), signal: getInverseSignal(reg.monetaryInflationPressure, prevReg?.monetaryInflationPressure) }
-          ]}
-        />
-
-        <WhyDrilldown
-          headline="Unemployment Rate"
-          value={formatPct(reg.unemploymentRate)}
-          signal={getInverseSignal(reg.unemploymentRate, prevReg?.unemploymentRate)}
-          contributors={[
-            { 
-              label: 'Private Sector', 
-              value: Math.round(privateEmployment).toLocaleString(), 
-              signal: getMultiplierSignal(privateEmployment, prevPrivateEmployment),
-              contributors: reg.privateSectorSegments.map(seg => ({
-                label: seg.segmentType.replace('_', ' ').toLowerCase(),
-                value: Math.round(seg.employment).toLocaleString(),
-                signal: 'neutral' as const
-              }))
-            },
-            { label: 'Government', value: Math.round(reg.governmentEmployment).toLocaleString(), signal: getMultiplierSignal(reg.governmentEmployment, prevReg?.governmentEmployment) },
-            { label: 'Public Companies', value: Math.round(publicEmployment).toLocaleString(), signal: getMultiplierSignal(publicEmployment, prevPublicEmployment) }
-          ]}
-        />
-        
-        <WhyDrilldown
-          headline="Government Deficit"
-          value={formatPct(reg.fiscalDeficitPctGdp)}
-          signal={getInverseSignal(reg.fiscalDeficitPctGdp, prevReg?.fiscalDeficitPctGdp)}
-          contributors={[
-            { label: 'Spending', value: formatBln(reg.governmentSpendingUSD), signal: getInverseSignal(reg.governmentSpendingUSD, prevReg?.governmentSpendingUSD) },
-            { label: 'Revenue', value: formatBln(reg.governmentRevenueUSD), signal: getSignal(reg.governmentRevenueUSD, prevReg?.governmentRevenueUSD) }
-          ]}
-        />
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Composite Indicators</h3>
-        <WhyDrilldown
-          headline="PMI Composite"
-          value={state.compositeIndices?.pmiComposite?.headline !== undefined ? state.compositeIndices.pmiComposite.headline.toFixed(1) : '—'}
-          signal={getSignal(state.compositeIndices?.pmiComposite?.headline ?? 0, prevState?.compositeIndices?.pmiComposite?.headline)}
-          contributors={[
-            { label: 'Demand', value: state.compositeIndices?.pmiComposite?.demandComponent !== undefined ? state.compositeIndices.pmiComposite.demandComponent.toFixed(1) : '—', signal: getSignal(state.compositeIndices?.pmiComposite?.demandComponent ?? 0, prevState?.compositeIndices?.pmiComposite?.demandComponent) },
-            { label: 'CapEx', value: state.compositeIndices?.pmiComposite?.capexComponent !== undefined ? state.compositeIndices.pmiComposite.capexComponent.toFixed(1) : '—', signal: getSignal(state.compositeIndices?.pmiComposite?.capexComponent ?? 0, prevState?.compositeIndices?.pmiComposite?.capexComponent) },
-            { label: 'Employment', value: state.compositeIndices?.pmiComposite?.employmentComponent !== undefined ? state.compositeIndices.pmiComposite.employmentComponent.toFixed(1) : '—', signal: getSignal(state.compositeIndices?.pmiComposite?.employmentComponent ?? 0, prevState?.compositeIndices?.pmiComposite?.employmentComponent) }
-          ]}
-        />
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Labor Market (Occupations)</h3>
-        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] p-3">
-          <div className="flex items-end h-24 gap-1 mb-2">
-            {(Object.entries(reg.occupationPools) as [OccupationType, typeof reg.occupationPools[OccupationType]][]).map(([occType, pool]) => {
-              const h = Math.max(0, Math.min(100, pool.wageGrowthAnnual * 1000));
-              return (
-                <div key={occType} className="flex-1 flex flex-col justify-end items-center group relative cursor-pointer" title={occType}>
-                  <div
-                    className="w-full rounded-t transition-all"
-                    style={{
-                      height: `${Math.max(8, h)}%`,
-                      backgroundColor: pool.wageGrowthAnnual > 0.08 ? 'var(--signal-negative)' : 'var(--region-usa)'
-                    }}
-                  ></div>
-                  <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-[var(--bg-highlight)] text-xs p-1 rounded z-10 pointer-events-none">
-                    {formatPct(pool.wageGrowthAnnual)}
+      {/* Tab Contents */}
+      <div className="space-y-3">
+        {worldTab === 'overview' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'GDP Growth', value: formatPercent(reg.gdpGrowth, { isDecimal: true, precision: 2, showSign: true }), signal: reg.gdpGrowth >= 0 ? 'positive' : 'negative' },
+                { label: 'Inflation', value: formatPercent(reg.inflation, { isDecimal: true, precision: 2 }), signal: reg.inflation <= reg.targetInflation * 1.2 ? 'positive' : 'negative' },
+                { label: 'Unemployment', value: formatPercent(reg.unemploymentRate, { isDecimal: true, precision: 2 }), signal: reg.unemploymentRate <= 0.06 ? 'positive' : 'negative' },
+                { label: 'PMI Composite', value: state.compositeIndices?.pmiComposite?.headline?.toFixed(1) ?? '—', signal: (state.compositeIndices?.pmiComposite?.headline ?? 50) >= 50 ? 'positive' : 'negative' },
+              ].map(tile => (
+                <div key={tile.label} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
+                  <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold">{tile.label}</div>
+                  <div className={`text-lg font-bold font-[var(--font-numeric)] ${tile.signal === 'positive' ? 'text-[var(--signal-positive)]' : 'text-[var(--signal-negative)]'}`}>
+                    {tile.value}
                   </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-1">
+              <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold">Cycle Regime & Policy</div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-[var(--text-primary)]">{reg.cycleRegime}</span>
+                <span className="text-xs font-mono font-bold text-[var(--region-usa)]">Policy Rate: {formatPercent(reg.policyRate, { isDecimal: true })}</span>
+              </div>
+              <div className="text-[10px] text-[var(--text-tertiary)]">
+                Target Inflation: {formatPercent(reg.targetInflation, { isDecimal: true })} · Neutral Rate (r*): {formatPercent(reg.neutralRate, { isDecimal: true })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {worldTab === 'growth' && (
+          <>
+            <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-1">GDP Composition (Annualized)</div>
+            <div className="h-8 w-full flex rounded overflow-hidden">
+              {[
+                { label: 'C', value: Math.max(0, c), color: '#3b82f6' },
+                { label: 'I', value: Math.max(0, i), color: '#10b981' },
+                { label: 'G', value: Math.max(0, g), color: '#f59e0b' },
+                { label: 'NX', value: Math.max(0, nx), color: nx >= 0 ? '#10b981' : '#ef4444' },
+              ].map(seg => {
+                const total = Math.max(0, c) + Math.max(0, i) + Math.max(0, g) + Math.max(0, nx);
+                const pct = total > 0 ? (seg.value / total) * 100 : 0;
+                return (
+                  <div key={seg.label} style={{ width: `${pct}%`, backgroundColor: seg.color }} className="flex items-center justify-center text-[9px] font-bold text-white transition-all">
+                    {pct > 8 ? seg.label : ''}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-[9px] text-[var(--text-tertiary)] mt-1 font-mono">
+              <span>C: {formatCurrency(c, { compact: true })}</span>
+              <span>I: {formatCurrency(i, { compact: true })}</span>
+              <span>G: {formatCurrency(g, { compact: true })}</span>
+              <span>NX: {formatCurrency(nx, { compact: true, showSign: true })}</span>
+            </div>
+
+            <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mt-4 mb-1">PMI Subcomponents</div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'Demand', v: state.compositeIndices?.pmiComposite?.demandComponent },
+                { label: 'CapEx', v: state.compositeIndices?.pmiComposite?.capexComponent },
+                { label: 'Employment', v: state.compositeIndices?.pmiComposite?.employmentComponent },
+              ].map(comp => (
+                <div key={comp.label} className="p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] text-center">
+                  <div className="text-[9px] text-[var(--text-tertiary)]">{comp.label}</div>
+                  <div className={`text-sm font-bold font-[var(--font-numeric)] ${(comp.v ?? 50) >= 50 ? 'text-[var(--signal-positive)]' : 'text-[var(--signal-negative)]'}`}>
+                    {(comp.v ?? 0).toFixed(1)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-[9px] text-[var(--text-tertiary)] text-center mt-1">50 = neutral · above expansion, below contraction</div>
+          </>
+        )}
+
+        {worldTab === 'labor' && (
+          <>
+            <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-1">Wage Growth by Occupation</div>
+            <div className="p-3 bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] space-y-3">
+              <div className="flex items-end h-32 gap-2 px-1">
+                {(Object.entries(reg.occupationPools) as [OccupationType, any][]).map(([occ, pool]) => {
+                  const heightPct = Math.max(4, Math.min(100, ((pool.wageGrowthAnnual + 0.02) / 0.20) * 100));
+                  return (
+                    <div key={occ} className="flex-1 flex flex-col items-center">
+                      <div className="text-[9px] font-bold font-mono mb-1">{formatPercent(pool.wageGrowthAnnual, { isDecimal: true })}</div>
+                      <div className="w-full rounded-t transition-all" style={{ height: `${heightPct}%`, backgroundColor: pool.wageGrowthAnnual > 0.08 ? 'var(--signal-negative)' : pool.wageGrowthAnnual < 0 ? 'var(--text-tertiary)' : 'var(--signal-positive)' }} />
+                      <div className="text-[8px] text-[var(--text-tertiary)] mt-1 uppercase text-center">{occ.replace('_', ' ').substring(0, 6)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] pt-2 border-t border-[var(--border-hairline)]">
+                <span>Unemployment Rate: <span className="font-bold text-[var(--text-primary)]">{formatPercent(reg.unemploymentRate, { isDecimal: true })}</span></span>
+                <span>Labor Force Part: <span className="font-bold text-[var(--text-primary)]">{formatPercent(reg.laborForceParticipation, { isDecimal: true })}</span></span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {worldTab === 'supplychain' && (
+          <>
+            {(Object.entries(reg.categoryDemand) as [string, any][]).map(([cat, demand]) => {
+              const hasLinkage = ['CorporateTech', 'StandardHousehold', 'LuxuryHousehold'].includes(cat);
+              const inputPrice = demand.clearedInputPriceIndex ?? 1.0;
+              return (
+                <div key={cat} className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-2 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-[var(--text-primary)]">{cat}</span>
+                    <span className={demand.demandGrowthAnnual >= 0 ? 'text-[var(--signal-positive)] text-xs font-bold' : 'text-[var(--signal-negative)] text-xs font-bold'}>
+                      {formatPercent(demand.demandGrowthAnnual, { isDecimal: true, showSign: true })} Demand YoY
+                    </span>
+                  </div>
+                  {hasLinkage && (
+                    <div>
+                      <div className="flex justify-between text-[9px] text-[var(--text-tertiary)] mb-0.5 font-mono">
+                        <span>Input Cost Index</span>
+                        <span className={inputPrice > 1.05 ? 'text-[var(--signal-negative)] font-bold' : inputPrice < 0.95 ? 'text-[var(--signal-positive)] font-bold' : ''}>
+                          {inputPrice.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[var(--bg-panel)] relative overflow-hidden">
+                        <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--text-tertiary)]" />
+                        <div className="h-full rounded-full transition-all" style={{
+                          width: `${Math.min(50, Math.abs(inputPrice - 1.0) * 100)}%`,
+                          marginLeft: inputPrice >= 1.0 ? '50%' : `${50 - Math.min(50, Math.abs(inputPrice - 1.0) * 100)}%`,
+                          backgroundColor: inputPrice > 1.0 ? 'var(--signal-negative)' : 'var(--signal-positive)',
+                        }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
-          </div>
-          <div className="flex justify-between text-[8px] text-[var(--text-secondary)] uppercase font-bold text-center">
-            {(Object.keys(reg.occupationPools) as OccupationType[]).map(occType => (
-               <div key={occType} className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap" title={occType.replace('_', ' ').toLowerCase()}>
-                 {occType.substring(0, 3)}
-               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+          </>
+        )}
 
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Supply Chain & Demand</h3>
-        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] overflow-hidden">
-          <div className="h-24 w-full flex items-end gap-[2px] opacity-80 border-b border-[var(--border-hairline)] px-2 pt-2">
-            {(reg.categoryDemand['StandardHousehold' as ProductCategory]?.demandHistory || []).map((_, i) => (
-               <div key={i} className="flex-1 flex flex-col justify-end gap-[1px]">
-                  {(Object.keys(reg.categoryDemand) as ProductCategory[]).map((cat, j) => {
-                     const series = reg.categoryDemand[cat]?.demandHistory || [];
-                     const h = series[i] || 0;
-                     const seriesMax = Math.max(...series, 1);
-                     const seriesMin = Math.min(...series, 0);
-                     const range = seriesMax - seriesMin || 1;
-                     const hPx = Math.max(1, Math.round(((h - seriesMin) / range) * 20));
-                     return <div key={j} style={{ height: `${hPx}px`, backgroundColor: `hsl(${j * 40}, 60%, 50%)` }} />;
+        {worldTab === 'fiscal' && (
+          <>
+            <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Government Operations (Annualized)</div>
+              <div className="flex h-6 rounded overflow-hidden">
+                <div style={{ width: `${Math.min(100, (reg.governmentRevenueUSD / Math.max(1, reg.governmentSpendingUSD)) * 100)}%` }} className="bg-[var(--signal-positive)] flex items-center justify-center text-[9px] font-bold text-white">
+                  Revenue ({formatCurrency(reg.governmentRevenueUSD, { compact: true })})
+                </div>
+                <div style={{ width: `${Math.max(0, 100 - (reg.governmentRevenueUSD / Math.max(1, reg.governmentSpendingUSD)) * 100)}%` }} className="bg-[var(--signal-negative)] flex items-center justify-center text-[9px] font-bold text-white">
+                  Deficit
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] font-mono">
+                <span>Spending: {formatCurrency(reg.governmentSpendingUSD * 52, { compact: true })}/yr</span>
+                <span>Debt/GDP: {formatPercent(reg.debtToGdpPct, { isDecimal: true })}</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Sovereign Debt Ladder</div>
+              {reg.govDebtTranches && reg.govDebtTranches.length > 0 ? (
+                <SegmentedBar
+                  segments={[...reg.govDebtTranches]
+                    .sort((a, b) => a.maturityWeek - b.maturityWeek)
+                    .map((t, i) => ({
+                      value: t.principalUSD,
+                      label: `${t.tenorAtIssuanceYears}Y`,
+                      color: `hsl(${210 + i * 25}, 70%, 50%)`
+                    }))
+                  }
+                  total={reg.govDebtTranches.reduce((sum, t) => sum + t.principalUSD, 0)}
+                  formatValue={val => formatCurrency(val, { compact: true })}
+                />
+              ) : (
+                <div className="text-xs text-[var(--text-tertiary)]">No sovereign debt tranches active.</div>
+              )}
+            </div>
+          </>
+        )}
+
+        {worldTab === 'banking' && (
+          <>
+            <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Bank Capital Ratio vs Floor</div>
+              <div className="relative h-3 rounded-full bg-[var(--bg-panel)] overflow-hidden">
+                <div className="absolute inset-y-0 rounded-full bg-[var(--region-usa)] transition-all" style={{ width: `${Math.min(100, reg.bankingSector.bankCapitalRatio * 400)}%` }} />
+                <div className="absolute inset-y-0 w-0.5 bg-[var(--signal-negative)] z-10" style={{ left: `${0.08 * 400}%` }} title="8% Floor" />
+              </div>
+              <div className="text-[9px] text-[var(--text-tertiary)] font-mono flex justify-between">
+                <span>Capital Ratio: <span className="font-bold text-[var(--text-primary)]">{formatPercent(reg.bankingSector.bankCapitalRatio, { isDecimal: true })}</span></span>
+                <span className="text-[var(--signal-negative)]">Red line = 8% floor</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-[var(--border-hairline)]">
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-secondary)]">Credit Conditions</span>
+                  <span className="font-bold font-mono">{reg.bankingSector.creditConditionsIndex.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-secondary)]">Net Int Margin</span>
+                  <span className="font-bold font-mono">{formatPercent(reg.bankingSector.netInterestMarginPct, { isDecimal: true })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-secondary)]">Loan Loss Prov</span>
+                  <span className="font-bold font-mono">{formatPercent(reg.bankingSector.loanLossProvisionRateAnnualPct, { isDecimal: true })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-secondary)]">Deposits</span>
+                  <span className="font-bold font-mono">{formatCurrency(reg.bankingSector.depositsUSD, { compact: true })}</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {worldTab === 'private' && (
+          <>
+            <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Private Sector Segments (Revenue × Margin × Employment)</div>
+              <div className="relative w-full aspect-[3/2] bg-[var(--bg-panel)] rounded-lg p-2 flex items-center justify-center">
+                <svg viewBox="0 0 300 200" className="w-full h-full">
+                  {reg.privateSectorSegments.map((seg, i) => {
+                    const x = 40 + Math.min(220, seg.marginPct * 1200);
+                    const y = 180 - Math.min(150, (seg.annualRevenueUSD / 5_000_000_000) * 150);
+                    const r = Math.max(10, Math.min(28, Math.sqrt(seg.employment) / 100));
+                    return (
+                      <g key={seg.segmentType} className="group cursor-pointer">
+                        <circle cx={x} cy={y} r={r} fill={`hsl(${i * 65 + 180}, 65%, 55%)`} opacity={0.75} stroke="var(--border-hairline)" strokeWidth="1" />
+                        <text x={x} y={y + 3} fontSize="7" textAnchor="middle" fill="white" fontWeight="bold">
+                          {seg.segmentType.substring(0, 4)}
+                        </text>
+                      </g>
+                    );
                   })}
-               </div>
-            ))}
-          </div>
-          <div className="divide-y divide-[var(--border-hairline)]">
-            {(Object.entries(reg.categoryDemand) as [ProductCategory, typeof reg.categoryDemand[ProductCategory]][]).map(([cat, demand]) => (
-              <div key={cat} className="p-3 flex items-center justify-between hover:bg-[var(--bg-highlight)] transition-colors">
-                <div className="flex-1">
-                  <TapToChart
-                    label={cat}
-                    value={<span className={`text-xs font-bold font-[var(--font-numeric)] ${demand.demandGrowthAnnual > 0 ? 'text-[var(--signal-positive)]' : demand.demandGrowthAnnual < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>{formatPct(demand.demandGrowthAnnual, true)}</span>}
-                    history={demand.demandHistory}
-                  />
-                </div>
-                <div className="text-[10px] text-[var(--text-tertiary)] ml-4 text-right">
-                  {SUPPLY_CHAIN_CATEGORIES.includes(cat) && demand.clearedInputPriceIndex !== undefined ? `Cost: ${demand.clearedInputPriceIndex.toFixed(2)}` : 'No supply-chain linkage'}
-                </div>
+                  <text x="150" y="195" fontSize="8" fill="var(--text-tertiary)" textAnchor="middle">Margin % →</text>
+                  <text x="10" y="100" fontSize="8" fill="var(--text-tertiary)" textAnchor="middle" transform="rotate(-90 10 100)">Revenue →</text>
+                </svg>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Government Debt Profile</h3>
-        <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
-          <div className="flex justify-between items-end">
-            <div>
-              <div className="text-xs text-[var(--text-secondary)]">Total Sovereign Debt</div>
-              <div className="text-lg font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatBln(govDebtTotal)}</div>
+              <div className="text-[9px] text-[var(--text-tertiary)] text-center">Bubble size represents total employment</div>
             </div>
-            <div className="text-right">
-              <div className="text-[10px] text-[var(--text-tertiary)]">Debt to GDP</div>
-              <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatPercent(reg.debtToGdpPctBottomUp || reg.debtToGdpPct, { isDecimal: true, precision: 1 })}</div>
-            </div>
-          </div>
-          <div className="h-2">
-            <SegmentedBar segments={debtSegments} height={8} />
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Banking & Money Supply</h3>
-        <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
-          <TapToChart 
-            label="Bank Capital Ratio" 
-            value={formatPercent(reg.bankingSector.bankCapitalRatio, { isDecimal: true, precision: 2 })}
-            history={undefined}
-          />
-          <TapToChart 
-            label="M2 Money Supply" 
-            value={formatBln(reg.bankingSector.moneySupplyM2USD)}
-            history={undefined}
-          />
-          <div className="flex justify-between p-1">
-            <span className="text-[11px] text-[var(--text-secondary)]">CB Reserves</span>
-            <span className="text-xs font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatBln(reg.bankingSector.centralBankReservesUSD)}</span>
-          </div>
-          <div className="flex justify-between p-1">
-            <span className="text-[11px] text-[var(--text-secondary)]">CB Stance</span>
-            <span className={`text-xs font-bold ${reg.balanceSheetStance > 0 ? 'text-[var(--signal-positive)]' : reg.balanceSheetStance < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-              {reg.balanceSheetStance > 0 ? 'Quantitative Easing (QE)' : reg.balanceSheetStance < 0 ? 'Quantitative Tightening (QT)' : 'Neutral'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Private Sector Segments</h3>
-        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] divide-y divide-[var(--border-hairline)]">
-          {reg.privateSectorSegments.map((seg) => (
-            <div key={seg.segmentType} className="p-3 flex items-center justify-between">
-              <div>
-                <div className="text-[10px] font-bold text-[var(--text-primary)] capitalize">{seg.segmentType.replace('_', ' ').toLowerCase()}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">Employees: {Math.round(seg.employment).toLocaleString()}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatBln(seg.annualRevenueUSD)}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">Margin: {formatPercent(seg.marginPct, { isDecimal: true, precision: 1 })}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
