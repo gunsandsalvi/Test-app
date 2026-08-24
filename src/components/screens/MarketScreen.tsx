@@ -69,15 +69,19 @@ export const MarketScreen: React.FC<{
         })).slice(0, 50);
     }
     if (filter === 'commodities') {
-      return Object.values(state.commodities || {}).map((c: Commodity) => ({
+      return Object.entries(state.commodities || {}).map(([id, c]: [string, Commodity]) => ({
         id: c.id,
         name: c.name,
         ticker: c.id,
-        region: 'Global',
+        region: (c as any).region ?? 'Global',
         price: c.spotPrice,
         change: c.spotPrice - (c.historicalPrices[0] || c.spotPrice),
         type: 'commodity',
-        obj: c
+        obj: {
+          assetType: 'COMMODITY', id, symbol: id, name: c.name, region: (c as any).region ?? 'Global',
+          price: c.spotPrice, quoteUnit: `USD per ${(c as any).unit ?? 'unit'}`,
+          details: { commodityId: id },
+        }
       }));
     }
     if (filter === 'fx') {
@@ -89,7 +93,11 @@ export const MarketScreen: React.FC<{
         price: fx.rate,
         change: fx.rate - (fx.historicalRates[0] || fx.rate),
         type: 'fx',
-        obj: fx
+        obj: {
+          assetType: 'FX_SPOT', id: fx.pair, symbol: fx.pair, name: `${fx.pair} Spot`,
+          region: fx.base, price: fx.rate, quoteUnit: fx.pair,
+          details: { base: fx.base, quote: fx.quote },
+        }
       }));
     }
     if (filter === 'derivatives') {

@@ -14,7 +14,7 @@ export const DEALERS: Dealer[] = [
     baseSpreadBps: 6,
     creditLimitUSD: 75_000_000,
     currentExposureUSD: 0,
-    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION'],
+    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION', 'FX_SPOT'],
     color: '#3b82f6', // blue
   },
   {
@@ -24,13 +24,13 @@ export const DEALERS: Dealer[] = [
     inventoryAxe: 'Axe: FX & Commodities 0-Slippage',
     axeBadge: 'Axe: FX/Commodities',
     axeDescription: 'Best liquidity and lowest slippage for cross-currency basis swaps, FX forwards, and commodities.',
-    axeAssetClasses: ['COMMODITY', 'XCS'],
+    axeAssetClasses: ['COMMODITY', 'XCS', 'FX_SPOT'],
     axeDiscountPct: 0.50,
     spreadMultiplier: 1.0,
     baseSpreadBps: 8,
     creditLimitUSD: 100_000_000,
     currentExposureUSD: 0,
-    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION'],
+    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION', 'FX_SPOT'],
     color: '#10b981', // emerald
   },
   {
@@ -46,7 +46,7 @@ export const DEALERS: Dealer[] = [
     baseSpreadBps: 10,
     creditLimitUSD: 150_000_000,
     currentExposureUSD: 0,
-    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION'],
+    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION', 'FX_SPOT'],
     color: '#8b5cf6', // purple
   },
 ];
@@ -70,6 +70,8 @@ export function getUnifiedInitialMarginRate(assetType: AssetType): number {
       return 0.04; // 25x basis swap leverage
     case 'COMMODITY':
       return 0.10; // 10x futures margin
+    case 'FX_SPOT':
+      return 0.05; // 20x FX spot margin
     case 'EQUITY':
     case 'TRS':
       return 0.15; // ~6.6x equity margin
@@ -93,6 +95,7 @@ export function calculateDynamicSpreadBps(
   switch (assetType) {
     case 'SOV_BOND':
     case 'IRS':
+    case 'FX_SPOT':
       assetClassMultiplier = 0.6;
       break;
     case 'EQUITY':

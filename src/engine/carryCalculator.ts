@@ -202,6 +202,12 @@ export function calculateExpectedCarry(
       }
       break;
     }
+
+    case 'FX_SPOT': {
+      weeklyCarryUSD = 0;
+      description = `FX Spot Exchange Rate`;
+      break;
+    }
   }
 
   const annualizedCarryUSD = weeklyCarryUSD * 52;

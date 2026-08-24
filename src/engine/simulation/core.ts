@@ -1609,6 +1609,20 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
         break;
       }
+
+      case 'FX_SPOT': {
+        const fxPair = updatedFxPairs.find((p) => p.pair === pos.symbol);
+        if (fxPair) {
+          currentPrice = fxPair.rate;
+          const priceDiff = pos.direction === 'LONG' ? (currentPrice - pos.entryPrice) : (pos.entryPrice - currentPrice);
+          unrealizedPnL = priceDiff * pos.notional;
+          marginReq = pos.notional * currentPrice * 0.05;
+          maintMargin = marginReq * 0.75;
+          const pnlMove = unrealizedPnL - prevPnL;
+          attributionMacroRates += pnlMove;
+        }
+        break;
+      }
     }
 
     weeklyFinancingCostUSD += weeklyFinancing;

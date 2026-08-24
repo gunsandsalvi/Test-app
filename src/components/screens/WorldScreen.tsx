@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { GameState, RegionId, OccupationType, ProductCategory } from '../../types';
 import { WhyDrilldown } from '../shared/WhyDrilldown';
 import { TapToChart } from '../shared/TapToChart';
-import { SegmentedBar, Sparkline } from '../charts/Charts';
+import { SegmentedBar } from '../charts/Charts';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
+
+const SUPPLY_CHAIN_CATEGORIES: string[] = ['CorporateTech', 'StandardHousehold', 'LuxuryHousehold'];
 
 export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state, prevState, onNavigate }) => {
   const [activeRegion, setActiveRegion] = useState<RegionId>('USA');
@@ -31,18 +33,16 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
     return 'neutral';
   };
 
-  const formatPct = (val: number | undefined | null) => formatPercent(val, { precision: 2, showSign: true });
+  const formatPct = (val: number | undefined | null, showSign: boolean = false) => formatPercent(val, { isDecimal: true, precision: 2, showSign });
   const formatBln = (val: number | undefined | null) => formatCurrency(val, { compact: true, precision: 1 });
 
   // 1. GDP
   const nx = reg.exportsUSD - reg.importsUSD;
-  const prevNx = prevReg ? prevReg.exportsUSD - prevReg.importsUSD : undefined;
 
   // Investment derivation
   const publicCompanies = state.companies.filter(c => c.region === activeRegion && !c.isDefaulted);
   const trackedEmployment = publicCompanies.reduce((s, c) => s + (c.employeeCount || 0), 0);
   const publicInvestment = publicCompanies.reduce((s, c) => s + (c.maintenanceCapex || 0) + (c.growthCapex || 0), 0);
-  const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + reg.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0)) / trackedEmployment : 1;
 
   // 3. Unemployment Labor Force Identity
   const privateEmployment = reg.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0);
@@ -95,14 +95,14 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
         
         <WhyDrilldown
           headline="GDP Growth (Annualized)"
-          value={formatPct(reg.gdpGrowth)}
+          value={formatPct(reg.gdpGrowth, true)}
           signal={getSignal(reg.gdpGrowth, prevReg?.gdpGrowth)}
           contributors={[
-            { label: 'Consumption (C)', value: formatBln(reg.consumptionComponentUSD), signal: getMultiplierSignal(reg.consumptionComponentUSD, prevReg?.consumptionComponentUSD) },
+            { label: 'Consumption (C)', value: formatBln(reg.consumptionComponentUSD), signal: getSignal(reg.consumptionComponentUSD, prevReg?.consumptionComponentUSD) },
             { 
               label: 'Investment (I)', 
               value: formatBln(reg.investmentComponentUSD), 
-              signal: getMultiplierSignal(reg.investmentComponentUSD, prevReg?.investmentComponentUSD),
+              signal: getSignal(reg.investmentComponentUSD, prevReg?.investmentComponentUSD),
               contributors: [
                 { label: 'Public Companies', value: formatBln(publicInvestment), signal: 'neutral' },
                 ...reg.privateSectorSegments.map(seg => ({
@@ -112,8 +112,8 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
                 }))
               ]
             },
-            { label: 'Gov Spending (G)', value: formatBln(reg.governmentSpendingUSD * 52), signal: getMultiplierSignal(reg.governmentSpendingUSD, prevReg?.governmentSpendingUSD) },
-            { label: 'Net Exports (NX)', value: formatBln(nx), signal: getSignal(nx, prevNx) }
+            { label: 'Gov Spending (G)', value: formatBln(reg.governmentSpendingUSD * 52), signal: getSignal(reg.governmentSpendingUSD, prevReg?.governmentSpendingUSD) },
+            { label: 'Net Exports (NX)', value: formatBln(nx), signal: nx >= 0 ? 'positive' : 'negative' }
           ]}
         />
 
@@ -176,11 +176,17 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
         <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Labor Market (Occupations)</h3>
         <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] p-3">
           <div className="flex items-end h-24 gap-1 mb-2">
-            {(Object.entries(reg.occupationPools) as [OccupationType, typeof reg.occupationPools[OccupationType]][]).map(([occType, pool], i) => {
+            {(Object.entries(reg.occupationPools) as [OccupationType, typeof reg.occupationPools[OccupationType]][]).map(([occType, pool]) => {
               const h = Math.max(0, Math.min(100, pool.wageGrowthAnnual * 1000));
               return (
                 <div key={occType} className="flex-1 flex flex-col justify-end items-center group relative cursor-pointer" title={occType}>
-                  <div className={`w-full rounded-t transition-all ${pool.wageGrowthAnnual > 0.08 ? 'bg-[var(--signal-negative)]' : 'bg-[var(--text-tertiary)]'}`} style={{ height: `${Math.max(4, h)}%` }}></div>
+                  <div
+                    className="w-full rounded-t transition-all"
+                    style={{
+                      height: `${Math.max(4, h)}%`,
+                      backgroundColor: pool.wageGrowthAnnual > 0.08 ? 'var(--signal-negative)' : 'var(--text-tertiary)'
+                    }}
+                  ></div>
                   <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-[var(--bg-highlight)] text-xs p-1 rounded z-10 pointer-events-none">
                     {formatPct(pool.wageGrowthAnnual)}
                   </div>
@@ -222,12 +228,12 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
                 <div className="flex-1">
                   <TapToChart
                     label={cat}
-                    value={<span className={`text-xs font-bold font-[var(--font-numeric)] ${demand.demandGrowthAnnual > 0 ? 'text-[var(--signal-positive)]' : demand.demandGrowthAnnual < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>{formatPct(demand.demandGrowthAnnual)}</span>}
+                    value={<span className={`text-xs font-bold font-[var(--font-numeric)] ${demand.demandGrowthAnnual > 0 ? 'text-[var(--signal-positive)]' : demand.demandGrowthAnnual < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>{formatPct(demand.demandGrowthAnnual, true)}</span>}
                     history={demand.demandHistory}
                   />
                 </div>
                 <div className="text-[10px] text-[var(--text-tertiary)] ml-4 text-right">
-                  {demand.clearedInputPriceIndex !== undefined ? `Cost: ${demand.clearedInputPriceIndex.toFixed(2)}` : 'Services'}
+                  {SUPPLY_CHAIN_CATEGORIES.includes(cat) && demand.clearedInputPriceIndex !== undefined ? `Cost: ${demand.clearedInputPriceIndex.toFixed(2)}` : 'No supply-chain linkage'}
                 </div>
               </div>
             ))}
@@ -245,7 +251,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
             </div>
             <div className="text-right">
               <div className="text-[10px] text-[var(--text-tertiary)]">Debt to GDP</div>
-              <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatPercent(reg.debtToGdpPctBottomUp || reg.debtToGdpPct, { precision: 1 })}</div>
+              <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatPercent(reg.debtToGdpPctBottomUp || reg.debtToGdpPct, { isDecimal: true, precision: 1 })}</div>
             </div>
           </div>
           <div className="h-2">
@@ -259,13 +265,13 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
         <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
           <TapToChart 
             label="Bank Capital Ratio" 
-            value={formatPercent(reg.bankingSector.bankCapitalRatio, { precision: 2 })}
-            history={undefined} /* FIXME: Gap - bankCapitalRatio history not tracked in state */
+            value={formatPercent(reg.bankingSector.bankCapitalRatio, { isDecimal: true, precision: 2 })}
+            history={undefined}
           />
           <TapToChart 
             label="M2 Money Supply" 
             value={formatBln(reg.bankingSector.moneySupplyM2USD)}
-            history={undefined} /* FIXME: Gap - moneySupplyM2USD history not tracked in state */
+            history={undefined}
           />
           <div className="flex justify-between p-1">
             <span className="text-[11px] text-[var(--text-secondary)]">CB Reserves</span>
@@ -291,7 +297,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
               </div>
               <div className="text-right">
                 <div className="text-xs font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatBln(seg.annualRevenueUSD)}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">Margin: {formatPercent(seg.marginPct, { precision: 1 })}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">Margin: {formatPercent(seg.marginPct, { isDecimal: true, precision: 1 })}</div>
               </div>
             </div>
           ))}

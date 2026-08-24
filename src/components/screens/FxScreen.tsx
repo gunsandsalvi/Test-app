@@ -10,7 +10,11 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
     price: fx.rate,
     change: fx.rate - (fx.historicalRates[0] || fx.rate),
     type: 'fx',
-    obj: fx
+    obj: {
+      assetType: 'FX_SPOT', id: fx.pair, symbol: fx.pair, name: `${fx.pair} Spot`,
+      region: fx.base, price: fx.rate, quoteUnit: fx.pair,
+      details: { base: fx.base, quote: fx.quote },
+    }
   }));
 
   const xcsAssets = (state.fxPairs || []).map((fx: FxPair) => {

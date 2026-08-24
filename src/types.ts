@@ -425,7 +425,8 @@ export type AssetType =
   | 'TRS' 
   | 'XCS' 
   | 'COMMODITY' 
-  | 'OPTION';
+  | 'OPTION'
+  | 'FX_SPOT';
 
 export interface Position {
   id: string;
