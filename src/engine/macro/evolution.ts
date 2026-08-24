@@ -1,6 +1,6 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BankingSector } from '../../types';
+import { RegionId, Region, FxPair, Commodity, BankingSector, HouseholdState } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { generate52WeekHistory } from './utils';
@@ -68,7 +68,22 @@ export function evolveRegionMacro(
 
   // 2. Incremental bounded shocks (Annualized bps)
   const capexContribAnnual = capexGdpFeedback; // Already bounded and annualized in simulation.ts
-  const prevHS = region.householdState || { consumerConfidence: 100, wageGrowth: region.wageGrowth, savingsRate: 0.06, realConsumptionGrowth: 0.02, householdDebtToIncomeRatio: 1.05, stapleSpendShare: 0.35, standardSpendShare: 0.50, luxurySpendShare: 0.15 };
+  const prevHS: HouseholdState = region.householdState || {
+    consumerConfidence: 100,
+    wageGrowth: region.wageGrowth,
+    savingsRate: 0.06,
+    realConsumptionGrowth: 0.02,
+    householdDebtToIncomeRatio: 1.05,
+    stapleSpendShare: 0.35,
+    standardSpendShare: 0.50,
+    luxurySpendShare: 0.15,
+    depositsUSD: region.estimatedHouseholdIncomeUSD * 0.6,
+    equityHoldingsUSD: region.estimatedHouseholdIncomeUSD * 1.5,
+    mortgageDebtUSD: region.estimatedHouseholdIncomeUSD * 0.8,
+    creditCardDebtUSD: region.estimatedHouseholdIncomeUSD * 0.05,
+    otherConsumerLoanDebtUSD: region.estimatedHouseholdIncomeUSD * 0.1,
+    netWorthUSD: 0,
+  };
   const consumerContribAnnual = Math.max(-0.002, Math.min(0.002, (prevHS.consumerConfidence - 100) * 0.0001)); // Max +/- 20 bps
 
   // Real Rate Demand Channel
@@ -186,10 +201,66 @@ export function evolveRegionMacro(
 
   const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5;
   const newSavingsRate = Math.max(0.02, Math.min(0.18, savingsBaseline + 0.2 * (region.policyRate - newNeutralRate) - 0.1 * ((newCCI - 100) / 100)));
-  const creditTighteningConsumerAddOn = Math.max(0, region.bankingSector.creditConditionsIndex) * 0.02;
-  const debtServiceBurden = prevHS.householdDebtToIncomeRatio * (region.laggedPolicyRateEMA + creditTighteningConsumerAddOn) * 0.04;
-  const equityWealthEffect = equityReturn * 0.02;
-  const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100) + equityWealthEffect - debtServiceBurden;
+
+  // 1. Asset side
+  // Savings flow into deposits
+  const weeklySavingsUSD = (region.estimatedHouseholdIncomeUSD * newSavingsRate) / 52;
+  const depositInterestUSD = (prevHS.depositsUSD || 0) * (region.policyRate * 0.6) / 52;
+  const newDepositsUSD = Math.max(0, (prevHS.depositsUSD || 0) + weeklySavingsUSD + depositInterestUSD);
+
+  // Equities appreciate / depreciate with the region's market return
+  const newEquityHoldingsUSD = Math.max(0, (prevHS.equityHoldingsUSD || 0) * (1 + equityReturn));
+
+  // 2. Liability side
+  // Principal paydown rates (weekly)
+  const mortgagePaydownRate = 0.0004; // ~2% principal amortization/yr
+  const otherLoanPaydownRate = 0.003; // ~15%/yr (auto, personal loans)
+  const ccPaydownRate = 0.04;        // ~4%/wk revolving turnover
+
+  // New borrowing demand scales with CCI and policy rate:
+  const borrowingMultiplier = Math.max(0.5, Math.min(1.8,
+    1.0 + (newCCI - 100) / 100 * 0.5 - (region.policyRate - newNeutralRate) * 4
+  ));
+
+  const weeklyNewMortgagesUSD = (prevHS.mortgageDebtUSD || 0) * mortgagePaydownRate * borrowingMultiplier;
+  const weeklyNewCCDebtUSD = (prevHS.creditCardDebtUSD || 0) * ccPaydownRate * borrowingMultiplier;
+  const weeklyNewOtherLoansUSD = (prevHS.otherConsumerLoanDebtUSD || 0) * otherLoanPaydownRate * borrowingMultiplier;
+
+  const newMortgageDebtUSD = Math.max(0, (prevHS.mortgageDebtUSD || 0) * (1 - mortgagePaydownRate) + weeklyNewMortgagesUSD);
+  const newCreditCardDebtUSD = Math.max(0, (prevHS.creditCardDebtUSD || 0) * (1 - ccPaydownRate) + weeklyNewCCDebtUSD);
+  const newOtherLoanDebtUSD = Math.max(0, (prevHS.otherConsumerLoanDebtUSD || 0) * (1 - otherLoanPaydownRate) + weeklyNewOtherLoansUSD);
+
+  const totalHouseholdDebtUSD = newMortgageDebtUSD + newCreditCardDebtUSD + newOtherLoanDebtUSD;
+  const newHouseholdDebtToIncomeRatio = region.estimatedHouseholdIncomeUSD > 0
+    ? totalHouseholdDebtUSD / region.estimatedHouseholdIncomeUSD
+    : prevHS.householdDebtToIncomeRatio;
+
+  // 3. Net worth
+  const newNetWorthUSD = newDepositsUSD + newEquityHoldingsUSD - totalHouseholdDebtUSD;
+  const netWorthToIncomeRatio = region.estimatedHouseholdIncomeUSD > 0
+    ? newNetWorthUSD / region.estimatedHouseholdIncomeUSD
+    : 3.5;
+
+  // 4. Wealth-effect correction in CCI & consumption:
+  const balanceSheetWealthEffect = (netWorthToIncomeRatio - 3.5) * 0.003;
+  const creditFundedSpendingUSD = (weeklyNewCCDebtUSD + weeklyNewOtherLoansUSD) * 0.8; // credit directly buying goods
+  const weeklyIncomeUSD = region.estimatedHouseholdIncomeUSD / 52;
+  const creditSpendingBoostPct = weeklyIncomeUSD > 0 ? (creditFundedSpendingUSD / weeklyIncomeUSD) * 0.05 : 0;
+
+  // Correct debtServiceBurden to use the real liability-weighted rate:
+  const effectiveBorrowingRate = (
+    newMortgageDebtUSD * (region.zeroRates.tenor5Y + 0.015) +
+    newCreditCardDebtUSD * (region.policyRate + 0.14) +
+    newOtherLoanDebtUSD * (region.policyRate + 0.05)
+  ) / Math.max(1, totalHouseholdDebtUSD);
+
+  const newDebtServiceBurden = (totalHouseholdDebtUSD * (effectiveBorrowingRate / 52)) / Math.max(1, weeklyIncomeUSD);
+
+  // Update newRealConsumptionGrowth with real balance-sheet channels:
+  const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100)
+    + balanceSheetWealthEffect
+    + creditSpendingBoostPct
+    - newDebtServiceBurden;
 
   const wealthSignal = Math.max(-0.02, Math.min(0.02, equityReturn * 0.3 + (newCCI - 100) / 100 * 0.01));
   const targetLuxuryShare = Math.max(0.05, Math.min(0.30, prevHS.luxurySpendShare + wealthSignal));
@@ -374,8 +445,16 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       wageGrowth: newWageGrowth,
       savingsRate: newSavingsRate,
       realConsumptionGrowth: newRealConsumptionGrowth,
-      householdDebtToIncomeRatio: prevHS.householdDebtToIncomeRatio,
-        stapleSpendShare: newStapleShare, standardSpendShare: newStandardShare, luxurySpendShare: newLuxuryShare,
+      householdDebtToIncomeRatio: newHouseholdDebtToIncomeRatio,
+      stapleSpendShare: newStapleShare,
+      standardSpendShare: newStandardShare,
+      luxurySpendShare: newLuxuryShare,
+      netWorthUSD: newNetWorthUSD,
+      depositsUSD: newDepositsUSD,
+      equityHoldingsUSD: newEquityHoldingsUSD,
+      mortgageDebtUSD: newMortgageDebtUSD,
+      creditCardDebtUSD: newCreditCardDebtUSD,
+      otherConsumerLoanDebtUSD: newOtherLoanDebtUSD,
     },
     bankingSector: newBankingSector,
     estimatedHouseholdIncomeUSD: newEstimatedHouseholdIncomeUSD,

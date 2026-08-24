@@ -1,5 +1,5 @@
 
-import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche } from '../../types';
+import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche, GovDebtTranche } from '../../types';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap } from '../pricing';
 import { calculateNelsonSiegelZeroRate, priceSovereignBond } from '../nelsonSiegel';
 import { EarningsReportEvent, generateWeeklyNews } from '../newsGenerator';
@@ -818,6 +818,46 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const blendedGdpGrowth = (1 - (reg.bottomUpGdpWeight ?? 0.50)) * reg.gdpGrowth + (reg.bottomUpGdpWeight ?? 0.50) * gdpGrowthBottomUp;
     const clampedBlendedGdpGrowth = Math.max(-0.02, Math.min(0.045, blendedGdpGrowth)); // same safety backstop as before, now applied to the blend
 
+    // Government Debt Tranches: roll-off and new issuance
+    const maturedTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);
+    const liveTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek > nextWeek);
+    const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalUSD, 0);
+
+    const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedPrincipalUSD;
+
+    // Curve-smart tenor allocation: read the actual yield curve shape already computed for this region.
+    // Steep curve (long >> short) → issue shorter, cheaper debt now. Flat/inverted curve → lock in long
+    // financing while it's relatively cheap, and reduce near-term rollover risk.
+    const curveSteepness = reg.zeroRates.tenor30Y - reg.zeroRates.tenor2Y;
+    const baseWeights = { t2: 0.30, t5: 0.30, t10: 0.25, t30: 0.15 };
+    const steepnessAdjustment = Math.max(-0.15, Math.min(0.15, curveSteepness * 3));
+    const tenorWeights = {
+      t2: Math.max(0.10, baseWeights.t2 + steepnessAdjustment * 0.5),
+      t5: baseWeights.t5,
+      t10: Math.max(0.10, baseWeights.t10 - steepnessAdjustment * 0.3),
+      t30: Math.max(0.05, baseWeights.t30 - steepnessAdjustment * 0.2),
+    };
+    const weightSum = tenorWeights.t2 + tenorWeights.t5 + tenorWeights.t10 + tenorWeights.t30;
+
+    const newTranches: GovDebtTranche[] = [];
+    if (weeklyDeficitUSD > 1000) {
+      ([['t2', 2, 104], ['t5', 5, 260], ['t10', 10, 520], ['t30', 30, 1560]] as const).forEach(([key, tenorYears, tenorWeeks]) => {
+        const principal = weeklyDeficitUSD * (tenorWeights[key] / weightSum);
+        if (principal < 100) return;
+        newTranches.push({
+          id: `${regionId}-GOV-${tenorYears}Y-${nextWeek}`,
+          principalUSD: principal,
+          couponRate: calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams), // priced off the region's own real curve
+          originationWeek: nextWeek,
+          maturityWeek: nextWeek + tenorWeeks,
+          tenorAtIssuanceYears: tenorYears,
+        });
+      });
+    }
+
+    const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
+    const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);
+
     updatedRegions[regionId] = {
       ...reg,
       gdpGrowth: clampedBlendedGdpGrowth, // overwrites this week's AR1-only value with the blended figure — this is what the Taylor rule, unemployment, wage growth all read going forward
@@ -827,6 +867,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       nominalGdpHistory: newNominalGdpHistory,
       consumptionComponentUSD,
       investmentComponentUSD,
+      govDebtTranches: [...liveTranches, ...newTranches],
+      debtToGdpPctBottomUp,
     };
   });
 

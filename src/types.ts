@@ -89,6 +89,21 @@ export interface HouseholdState {
   stapleSpendShare: number;
   standardSpendShare: number;
   luxurySpendShare: number;
+  netWorthUSD: number;
+  depositsUSD: number;
+  equityHoldingsUSD: number;
+  mortgageDebtUSD: number;
+  creditCardDebtUSD: number;
+  otherConsumerLoanDebtUSD: number;
+}
+
+export interface GovDebtTranche {
+  id: string;
+  principalUSD: number;
+  couponRate: number;
+  originationWeek: number;
+  maturityWeek: number;
+  tenorAtIssuanceYears: number; // 2, 5, 10, or 30 — for curve-allocation tracking
 }
 
 export const CATEGORY_TRADABILITY: Record<string, number> = {
@@ -165,6 +180,8 @@ export interface Region {
   effectiveTaxRate: number;          // 0.28-0.35 typical; can drift with fiscal stance
   governmentRevenueUSD: number;
   governmentSpendingUSD: number;
+  govDebtTranches: GovDebtTranche[];
+  debtToGdpPctBottomUp: number;
 
   householdState: HouseholdState;
 
