@@ -172,6 +172,51 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
          </div>
       </div>
 
+      {/* Trailing 26W 2Y & 10Y Curve Shape Chart */}
+      {(() => {
+        const history26 = (reg.historicalZeroCurves || []).slice(-26);
+        if (history26.length === 0) return null;
+        const first = history26[0];
+        const last = history26[history26.length - 1];
+        const initialSlope = first.tenor10Y - first.tenor2Y;
+        const currentSlope = last.tenor10Y - last.tenor2Y;
+        const slopeState = currentSlope > initialSlope + 0.0005 ? 'Steepening' : currentSlope < initialSlope - 0.0005 ? 'Flattening' : 'Stable';
+
+        const allRates26 = history26.flatMap(h => [h.tenor2Y, h.tenor10Y]);
+        const min26 = Math.min(...allRates26);
+        const max26 = Math.max(...allRates26);
+        const range26 = max26 - min26 || 0.01;
+        const h26Width = width - 32;
+        const h26Height = 80;
+
+        const pts2Y = history26.map((h, i) => `${(i / Math.max(1, history26.length - 1)) * h26Width},${h26Height - ((h.tenor2Y - min26) / range26) * h26Height}`).join(' ');
+        const pts10Y = history26.map((h, i) => `${(i / Math.max(1, history26.length - 1)) * h26Width},${h26Height - ((h.tenor10Y - min26) / range26) * h26Height}`).join(' ');
+
+        return (
+          <div className="p-4 bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] space-y-2">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Yield Curve Dynamics (Trailing 26W)</h3>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded ${slopeState === 'Steepening' ? 'bg-[var(--signal-positive)]/20 text-[var(--signal-positive)]' : slopeState === 'Flattening' ? 'bg-[var(--signal-negative)]/20 text-[var(--signal-negative)]' : 'bg-[var(--bg-highlight)] text-[var(--text-tertiary)]'}`}>
+                {slopeState}
+              </span>
+            </div>
+            <div className="relative mx-auto" style={{ width: h26Width, height: h26Height }}>
+              <svg width={h26Width} height={h26Height} className="overflow-visible">
+                <polyline points={pts2Y} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round" />
+                <polyline points={pts10Y} fill="none" stroke="#a855f7" strokeWidth="2" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] pt-1">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 2Y Zero</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> 10Y Zero</span>
+              </div>
+              <span>2s10s Change: {((currentSlope - initialSlope) * 100).toFixed(2)}%</span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* IRS / CDS Basis */}
       <div className="p-3 bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] space-y-2">
          <h3 className="text-xs font-bold text-[var(--text-primary)]">Derivatives & Swaps</h3>

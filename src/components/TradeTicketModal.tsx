@@ -205,6 +205,11 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
       fixedRate: instrument.details.fixedRate ?? instrument.details.couponRate,
       trancheId: instrument.details.trancheId,
       rateType: instrument.details.rateType,
+      entryOasSpreadBps: instrument.details.oasSpreadBps,
+      entryPolicyRate: state.regions[instrument.region]?.policyRate,
+      entryBenchmarkYield: instrument.details.tenorYears && state.regions[instrument.region]?.yieldCurveParams
+        ? calculateNelsonSiegelZeroRate(instrument.details.tenorYears, state.regions[instrument.region].yieldCurveParams)
+        : undefined,
       strike: instrument.details.strike,
       optionType: instrument.details.optionType,
       expiryWeek: state.currentWeek + 8,

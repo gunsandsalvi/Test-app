@@ -444,6 +444,9 @@ export interface Position {
   
   trancheId?: string;              // set for CORP_BOND/LEVERAGED_LOAN positions — the specific tranche this position tracks
   rateType?: 'FIXED' | 'FLOATING'; // mirrors the tranche's type at entry
+  entryOasSpreadBps?: number;
+  entryPolicyRate?: number;
+  entryBenchmarkYield?: number;
   isClosed?: boolean;
 
   // Derivative specifics

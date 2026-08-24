@@ -45,7 +45,45 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
   return (
     <div className="p-3 space-y-4 pb-20">
       <div className="space-y-2">
-        {assets.map(a => (
+        {(state.fxPairs || []).map((fx: FxPair) => {
+          const fxAsset = {
+            id: fx.pair,
+            name: `${fx.pair} Spot`,
+            ticker: fx.pair,
+            region: fx.base,
+            price: fx.rate,
+            change: fx.rate - (fx.historicalRates[0] || fx.rate),
+            type: 'fx',
+            obj: {
+              assetType: 'FX_SPOT', id: fx.pair, symbol: fx.pair, name: `${fx.pair} Spot`,
+              region: fx.base, price: fx.rate, quoteUnit: fx.pair,
+              details: { base: fx.base, quote: fx.quote },
+            }
+          };
+          return (
+            <div key={fx.pair} onClick={() => onOpenTrade(fxAsset.obj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-[var(--text-primary)]">{fxAsset.ticker}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)]">{fxAsset.name}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-[var(--font-numeric)] text-[var(--text-primary)]">
+                    {fxAsset.price > 10 ? fxAsset.price.toFixed(2) : fxAsset.price.toFixed(4)}
+                  </div>
+                  <div className={`text-[10px] font-bold ${fxAsset.change > 0 ? 'text-[var(--signal-positive)]' : fxAsset.change < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
+                    {fxAsset.change > 0 ? '+' : ''}{fxAsset.change.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+              <div className="text-[10px] text-[var(--text-tertiary)] pt-1 border-t border-[var(--border-hairline)]">
+                {fx.base} policy: {(state.regions[fx.base].policyRate * 100).toFixed(2)}% · {fx.quote} policy: {(state.regions[fx.quote as RegionId].policyRate * 100).toFixed(2)}%
+              </div>
+            </div>
+          );
+        })}
+
+        {xcsAssets.map(a => (
           <div key={a.id} onClick={() => onOpenTrade(a.obj)} className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform">
             <div>
               <div className="text-xs font-bold text-[var(--text-primary)]">{a.ticker}</div>
@@ -53,10 +91,7 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
             </div>
             <div className="text-right">
               <div className="text-sm font-[var(--font-numeric)] text-[var(--text-primary)]">
-                {a.price > 10 ? a.price.toFixed(2) : a.price.toFixed(4)}
-              </div>
-              <div className={`text-[10px] font-bold ${a.change > 0 ? 'text-[var(--signal-positive)]' : a.change < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                {a.change > 0 ? '+' : ''}{a.change.toFixed(2)}
+                {a.price.toFixed(1)} <span className="text-[10px] text-[var(--text-tertiary)]">bps</span>
               </div>
             </div>
           </div>

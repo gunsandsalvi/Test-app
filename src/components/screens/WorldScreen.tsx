@@ -60,19 +60,33 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
       color: `hsl(${220 - (i % 10) * 15}, 60%, 50%)`
     }));
 
+  const generateRegionStatus = (r: typeof reg): string => {
+    const parts: string[] = [];
+    if (r.cycleRegime === 'Recession' || r.cycleRegime === 'Slowdown') parts.push(`${r.cycleRegime} with unemployment at ${(r.unemploymentRate * 100).toFixed(1)}%`);
+    else parts.push(`${r.cycleRegime}, GDP growing at ${(r.gdpGrowth * 100).toFixed(1)}%`);
+    if (r.inflation > r.targetInflation * 1.3) parts.push('inflation running hot');
+    if (r.bankingSector.creditConditionsIndex > 0.5) parts.push('credit conditions tight');
+    return parts.join(' · ');
+  };
+
   return (
     <div className="p-3 space-y-6 pb-20">
-      <div className="flex items-center gap-2">
-        {(['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => (
-          <button
-            key={r}
-            onClick={() => setActiveRegion(r)}
-            className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${activeRegion === r ? 'text-[var(--bg-void)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'}`}
-            style={{ backgroundColor: activeRegion === r ? `var(--region-${r.toLowerCase()})` : 'var(--bg-elevated)' }}
-          >
-            {r}
-          </button>
-        ))}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          {(['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => (
+            <button
+              key={r}
+              onClick={() => setActiveRegion(r)}
+              className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${activeRegion === r ? 'text-[var(--bg-void)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'}`}
+              style={{ backgroundColor: activeRegion === r ? `var(--region-${r.toLowerCase()})` : 'var(--bg-elevated)' }}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <div className="text-[11px] text-[var(--text-secondary)] italic px-1 pt-1">
+          {generateRegionStatus(reg)}
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -183,8 +197,8 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
                   <div
                     className="w-full rounded-t transition-all"
                     style={{
-                      height: `${Math.max(4, h)}%`,
-                      backgroundColor: pool.wageGrowthAnnual > 0.08 ? 'var(--signal-negative)' : 'var(--text-tertiary)'
+                      height: `${Math.max(8, h)}%`,
+                      backgroundColor: pool.wageGrowthAnnual > 0.08 ? 'var(--signal-negative)' : 'var(--region-usa)'
                     }}
                   ></div>
                   <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-[var(--bg-highlight)] text-xs p-1 rounded z-10 pointer-events-none">

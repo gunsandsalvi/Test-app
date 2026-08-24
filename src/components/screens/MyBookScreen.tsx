@@ -63,19 +63,42 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
               const costBasis = p.entryPrice * p.quantity;
               const pnl = currentVal - costBasis;
               const pnlPct = costBasis !== 0 ? pnl / costBasis : 0;
+
+              const getAttributionLabel = () => {
+                if (p.assetType === 'EQUITY') return `Equity Move: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
+                if (p.assetType === 'FX_SPOT') return `FX Move: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
+                if (p.assetType === 'COMMODITY') return `Commodity Move: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
+                if (p.assetType === 'SOV_BOND' || p.assetType === 'IRS') return `Rate Move: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
+                if (p.assetType === 'CDS') return `Spread Move: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
+                if ((p.assetType === 'CORP_BOND' || p.assetType === 'LEV_LOAN') && p.entryOasSpreadBps !== undefined) {
+                  const currentCompany = state.companies.find(c => c.debtTranches?.some(t => t.id === p.trancheId));
+                  const currentOas = currentCompany?.oasSpreadBps ?? p.entryOasSpreadBps;
+                  const spreadDiffBps = p.entryOasSpreadBps - currentOas;
+                  const approxSpreadPnL = (spreadDiffBps / 10000) * currentVal * (p.tenorYears || 5);
+                  const ratePnL = pnl - approxSpreadPnL;
+                  return `Rate: ${formatCurrency(ratePnL, { compact: true, showSign: true })} · Spread: ${formatCurrency(approxSpreadPnL, { compact: true, showSign: true })}`;
+                }
+                return `MTM PnL: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
+              };
+
               return (
-                <div key={p.id} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] flex justify-between items-center">
-                  <div>
-                    <div className="text-xs font-bold text-[var(--text-primary)]">{p.symbol}</div>
-                    <div className="text-[10px] text-[var(--text-tertiary)]">{p.assetType} • {p.direction}</div>
+                <div key={p.id} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-1">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="text-xs font-bold text-[var(--text-primary)]">{p.symbol}</div>
+                      <div className="text-[10px] text-[var(--text-tertiary)]">{p.assetType} • {p.direction}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-[var(--font-numeric)] text-[var(--text-primary)]">
+                        {formatCurrency(currentVal, { compact: true, precision: 1 })}
+                      </div>
+                      <div className={`text-[10px] font-bold ${pnl > 0 ? 'text-[var(--signal-positive)]' : pnl < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
+                        {formatCurrency(pnl, { compact: true, precision: 1, showSign: true })} ({formatPercent(pnlPct, { precision: 2, showSign: true })})
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-[var(--font-numeric)] text-[var(--text-primary)]">
-                      {formatCurrency(currentVal, { compact: true, precision: 1 })}
-                    </div>
-                    <div className={`text-[10px] font-bold ${pnl > 0 ? 'text-[var(--signal-positive)]' : pnl < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                      {formatCurrency(pnl, { compact: true, precision: 1, showSign: true })} ({formatPercent(pnlPct, { precision: 2, showSign: true })})
-                    </div>
+                  <div className="text-[10px] text-[var(--text-tertiary)] pt-1 border-t border-[var(--border-hairline)] font-mono">
+                    {getAttributionLabel()}
                   </div>
                 </div>
               );
