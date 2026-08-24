@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { GameState, RegionId, OccupationType, ProductCategory } from '../../types';
 import { WhyDrilldown } from '../shared/WhyDrilldown';
+import { TapToChart } from '../shared/TapToChart';
 import { SegmentedBar, Sparkline } from '../charts/Charts';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 
-export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | null }> = ({ state, prevState }) => {
+export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state, prevState, onNavigate }) => {
   const [activeRegion, setActiveRegion] = useState<RegionId>('USA');
   const reg = state.regions[activeRegion];
   const prevReg = prevState?.regions[activeRegion];
@@ -37,23 +38,27 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
   const nx = reg.exportsUSD - reg.importsUSD;
   const prevNx = prevReg ? prevReg.exportsUSD - prevReg.importsUSD : undefined;
 
+  // Investment derivation
+  const publicCompanies = state.companies.filter(c => c.region === activeRegion && !c.isDefaulted);
+  const trackedEmployment = publicCompanies.reduce((s, c) => s + (c.employeeCount || 0), 0);
+  const publicInvestment = publicCompanies.reduce((s, c) => s + (c.maintenanceCapex || 0) + (c.growthCapex || 0), 0);
+  const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + reg.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0)) / trackedEmployment : 1;
+
   // 3. Unemployment Labor Force Identity
   const privateEmployment = reg.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0);
-  const prevPrivateEmployment = prevReg?.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0);
-  const publicEmployment = state.companies.filter(c => c.region === activeRegion).reduce((s, comp) => s + (comp.employeeCount ?? 0), 0);
-  const prevPublicEmployment = prevState?.companies.filter(c => c.region === activeRegion).reduce((s, comp) => s + (comp.employeeCount ?? 0), 0);
+  const prevPrivateEmployment = prevReg?.privateSectorSegments.reduce((s, seg) => s + seg.employment, 0) || 0;
+  const publicEmployment = publicCompanies.reduce((s, comp) => s + (comp.employeeCount ?? 0), 0);
+  const prevPublicEmployment = prevState?.companies.filter(c => c.region === activeRegion && !c.isDefaulted).reduce((s, comp) => s + (comp.employeeCount ?? 0), 0) || 0;
 
   // 8. Government Debt Tranches
   const govDebtTotal = reg.govDebtTranches.reduce((sum, t) => sum + t.principalUSD, 0);
-  const shortDebt = reg.govDebtTranches.filter(t => (t.maturityWeek - t.originationWeek) <= 104).reduce((sum, t) => sum + t.principalUSD, 0);
-  const medDebt = reg.govDebtTranches.filter(t => (t.maturityWeek - t.originationWeek) > 104 && (t.maturityWeek - t.originationWeek) <= 520).reduce((sum, t) => sum + t.principalUSD, 0);
-  const longDebt = reg.govDebtTranches.filter(t => (t.maturityWeek - t.originationWeek) > 520).reduce((sum, t) => sum + t.principalUSD, 0);
-
-  const debtSegments = [
-    { value: shortDebt, color: 'var(--region-usa)', label: 'Short' },
-    { value: medDebt, color: 'var(--region-eur)', label: 'Med' },
-    { value: longDebt, color: 'var(--region-uk)', label: 'Long' },
-  ];
+  const debtSegments = [...reg.govDebtTranches]
+    .sort((a, b) => a.maturityWeek - b.maturityWeek)
+    .map((t, i) => ({
+      value: t.principalUSD,
+      label: `${Math.round(Math.max(0, t.maturityWeek - state.currentWeek) / 52)}Y`,
+      color: `hsl(${220 - (i % 10) * 15}, 60%, 50%)`
+    }));
 
   return (
     <div className="p-3 space-y-6 pb-20">
@@ -79,7 +84,19 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
           signal={getSignal(reg.gdpGrowth, prevReg?.gdpGrowth)}
           contributors={[
             { label: 'Consumption (C)', value: formatBln(reg.consumptionComponentUSD), signal: getMultiplierSignal(reg.consumptionComponentUSD, prevReg?.consumptionComponentUSD) },
-            { label: 'Investment (I)', value: formatBln(reg.investmentComponentUSD), signal: getMultiplierSignal(reg.investmentComponentUSD, prevReg?.investmentComponentUSD) },
+            { 
+              label: 'Investment (I)', 
+              value: formatBln(reg.investmentComponentUSD), 
+              signal: getMultiplierSignal(reg.investmentComponentUSD, prevReg?.investmentComponentUSD),
+              contributors: [
+                { label: 'Public Companies', value: formatBln(publicInvestment), signal: 'neutral' },
+                ...reg.privateSectorSegments.map(seg => ({
+                  label: seg.segmentType.replace('_', ' ').toLowerCase(),
+                  value: formatBln((publicInvestment / (trackedEmployment || 1)) * seg.employment),
+                  signal: 'neutral' as const
+                }))
+              ]
+            },
             { label: 'Gov Spending (G)', value: formatBln(reg.governmentSpendingUSD * 52), signal: getMultiplierSignal(reg.governmentSpendingUSD, prevReg?.governmentSpendingUSD) },
             { label: 'Net Exports (NX)', value: formatBln(nx), signal: getSignal(nx, prevNx) }
           ]}
@@ -100,7 +117,16 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
           value={formatPct(reg.unemploymentRate)}
           signal={getInverseSignal(reg.unemploymentRate, prevReg?.unemploymentRate)}
           contributors={[
-            { label: 'Private Sector', value: Math.round(privateEmployment).toLocaleString(), signal: getMultiplierSignal(privateEmployment, prevPrivateEmployment) },
+            { 
+              label: 'Private Sector', 
+              value: Math.round(privateEmployment).toLocaleString(), 
+              signal: getMultiplierSignal(privateEmployment, prevPrivateEmployment),
+              contributors: reg.privateSectorSegments.map(seg => ({
+                label: seg.segmentType.replace('_', ' ').toLowerCase(),
+                value: Math.round(seg.employment).toLocaleString(),
+                signal: 'neutral' as const
+              }))
+            },
             { label: 'Government', value: Math.round(reg.governmentEmployment).toLocaleString(), signal: getMultiplierSignal(reg.governmentEmployment, prevReg?.governmentEmployment) },
             { label: 'Public Companies', value: Math.round(publicEmployment).toLocaleString(), signal: getMultiplierSignal(publicEmployment, prevPublicEmployment) }
           ]}
@@ -133,42 +159,60 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
       <div className="space-y-4">
         <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Labor Market (Occupations)</h3>
-        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] divide-y divide-[var(--border-hairline)]">
-          {(Object.entries(reg.occupationPools) as [OccupationType, typeof reg.occupationPools[OccupationType]][]).map(([occType, pool]) => (
-            <div key={occType} className="p-3 flex items-center justify-between">
-              <div className="flex-1">
-                <div className="text-[10px] font-bold text-[var(--text-primary)] capitalize">{occType.replace('_', ' ').toLowerCase()}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">Wage Idx: {pool.wageIndex.toFixed(2)}</div>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className={`text-xs font-bold font-[var(--font-numeric)] ${pool.wageGrowthAnnual > 0 ? 'text-[var(--signal-positive)]' : pool.wageGrowthAnnual < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                  {formatPct(pool.wageGrowthAnnual)}
-                </span>
-                <div className="w-16 h-4 opacity-50">
-                  <Sparkline data={reg.historicalWageGrowth?.length ? reg.historicalWageGrowth : [pool.wageGrowthAnnual]} color="var(--text-secondary)" />
+        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] p-3">
+          <div className="flex items-end h-24 gap-1 mb-2">
+            {(Object.entries(reg.occupationPools) as [OccupationType, typeof reg.occupationPools[OccupationType]][]).map(([occType, pool], i) => {
+              const h = Math.max(0, Math.min(100, pool.wageGrowthAnnual * 1000));
+              return (
+                <div key={occType} className="flex-1 flex flex-col justify-end items-center group relative cursor-pointer" title={occType}>
+                  <div className={`w-full rounded-t transition-all ${pool.wageGrowthAnnual > 0.08 ? 'bg-[var(--signal-negative)]' : 'bg-[var(--text-tertiary)]'}`} style={{ height: `${Math.max(4, h)}%` }}></div>
+                  <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-[var(--bg-highlight)] text-xs p-1 rounded z-10 pointer-events-none">
+                    {formatPct(pool.wageGrowthAnnual)}
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-[8px] text-[var(--text-secondary)] uppercase font-bold text-center">
+            {(Object.keys(reg.occupationPools) as OccupationType[]).map(occType => (
+               <div key={occType} className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap" title={occType.replace('_', ' ').toLowerCase()}>
+                 {occType.substring(0, 3)}
+               </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="space-y-4">
         <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Supply Chain & Demand</h3>
-        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] divide-y divide-[var(--border-hairline)] overflow-hidden">
-          {Object.entries(reg.categoryDemand).map(([cat, demand]) => (
-            <div key={cat} className="p-3 flex items-center justify-between">
-              <div>
-                <div className="text-[10px] font-bold text-[var(--text-primary)]">{cat}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">
-                  {demand.clearedInputPriceIndex !== undefined ? `Cost Idx: ${demand.clearedInputPriceIndex.toFixed(2)} | Crowd: ${demand.crowdingIntensity.toFixed(2)}` : 'Services'}
+        <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-hairline)] overflow-hidden">
+          <div className="h-24 w-full flex items-end gap-[2px] opacity-80 border-b border-[var(--border-hairline)] px-2 pt-2">
+            {(reg.categoryDemand['StandardHousehold' as ProductCategory]?.demandHistory || []).map((_, i) => (
+               <div key={i} className="flex-1 flex flex-col justify-end gap-[1px]">
+                  {(Object.keys(reg.categoryDemand) as ProductCategory[]).map((cat, j) => {
+                     const h = reg.categoryDemand[cat]?.demandHistory?.[i] || 0;
+                     const hPx = Math.max(1, Math.min(10, h / 500)); 
+                     return <div key={j} style={{ height: `${hPx}px`, backgroundColor: `hsl(${j * 40}, 60%, 50%)` }} />
+                  })}
+               </div>
+            ))}
+          </div>
+          <div className="divide-y divide-[var(--border-hairline)]">
+            {(Object.entries(reg.categoryDemand) as [ProductCategory, typeof reg.categoryDemand[ProductCategory]][]).map(([cat, demand]) => (
+              <div key={cat} className="p-3 flex items-center justify-between hover:bg-[var(--bg-highlight)] transition-colors">
+                <div className="flex-1">
+                  <TapToChart
+                    label={cat}
+                    value={<span className={`text-xs font-bold font-[var(--font-numeric)] ${demand.demandGrowthAnnual > 0 ? 'text-[var(--signal-positive)]' : demand.demandGrowthAnnual < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>{formatPct(demand.demandGrowthAnnual)}</span>}
+                    history={demand.demandHistory}
+                  />
+                </div>
+                <div className="text-[10px] text-[var(--text-tertiary)] ml-4 text-right">
+                  {demand.clearedInputPriceIndex !== undefined ? `Cost: ${demand.clearedInputPriceIndex.toFixed(2)}` : 'Services'}
                 </div>
               </div>
-              <span className={`text-xs font-bold font-[var(--font-numeric)] ${demand.demandGrowthAnnual > 0 ? 'text-[var(--signal-positive)]' : demand.demandGrowthAnnual < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                {formatPct(demand.demandGrowthAnnual)}
-              </span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
@@ -193,26 +237,23 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
       <div className="space-y-4">
         <h3 className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Banking & Money Supply</h3>
-        <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
-          <div className="flex justify-between">
-            <span className="text-xs text-[var(--text-secondary)]">Bank Capital Ratio</span>
-            <span className="text-xs font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatPercent(reg.bankingSector.bankCapitalRatio, { precision: 2 })}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-xs text-[var(--text-secondary)]">CB Reserves</span>
+        <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
+          <TapToChart 
+            label="Bank Capital Ratio" 
+            value={formatPercent(reg.bankingSector.bankCapitalRatio, { precision: 2 })}
+            history={undefined} /* FIXME: Gap - bankCapitalRatio history not tracked in state */
+          />
+          <TapToChart 
+            label="M2 Money Supply" 
+            value={formatBln(reg.bankingSector.moneySupplyM2USD)}
+            history={undefined} /* FIXME: Gap - moneySupplyM2USD history not tracked in state */
+          />
+          <div className="flex justify-between p-1">
+            <span className="text-[11px] text-[var(--text-secondary)]">CB Reserves</span>
             <span className="text-xs font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatBln(reg.bankingSector.centralBankReservesUSD)}</span>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-xs text-[var(--text-secondary)]">M2 Money Supply</span>
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-bold ${getSignal(reg.bankingSector.moneySupplyM2USD, prevReg?.bankingSector?.moneySupplyM2USD) === 'positive' ? 'text-[var(--signal-positive)]' : 'text-[var(--text-tertiary)]'}`}>
-                {getSignal(reg.bankingSector.moneySupplyM2USD, prevReg?.bankingSector?.moneySupplyM2USD) === 'positive' ? 'Growing' : 'Flat/Shrinking'}
-              </span>
-              <span className="text-xs font-bold font-[var(--font-numeric)] text-[var(--text-primary)]">{formatBln(reg.bankingSector.moneySupplyM2USD)}</span>
-            </div>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-xs text-[var(--text-secondary)]">CB Stance</span>
+          <div className="flex justify-between p-1">
+            <span className="text-[11px] text-[var(--text-secondary)]">CB Stance</span>
             <span className={`text-xs font-bold ${reg.balanceSheetStance > 0 ? 'text-[var(--signal-positive)]' : reg.balanceSheetStance < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
               {reg.balanceSheetStance > 0 ? 'Quantitative Easing (QE)' : reg.balanceSheetStance < 0 ? 'Quantitative Tightening (QT)' : 'Neutral'}
             </span>

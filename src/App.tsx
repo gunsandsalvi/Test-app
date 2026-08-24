@@ -50,6 +50,21 @@ export default function App() {
   const [prevState, setPrevState] = useState<GameState | null>(null);
   const [destination, setDestination] = useState<Destination>('briefing');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [marketFilter, setMarketFilter] = useState<'equities' | 'bonds' | 'commodities' | 'fx' | 'derivatives'>('equities');
+
+  const handleNavigate = (dest: Destination, payload?: any) => {
+    setDestination(dest);
+    if (payload?.companyId) {
+       const c = state.companies.find(x => x.id === payload.companyId);
+       if (c) setSelectedCompany(c);
+    } else if (payload?.companyTicker) {
+       const c = state.companies.find(x => x.ticker === payload.companyTicker);
+       if (c) setSelectedCompany(c);
+    }
+    if (payload?.marketFilter) {
+       setMarketFilter(payload.marketFilter);
+    }
+  };
   const [isAutoAdvancing, setIsAutoAdvancing] = useState(false);
   const [isStatusBarExpanded, setIsStatusBarExpanded] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
@@ -260,11 +275,11 @@ export default function App() {
         )}
 
         {/* Scrollable Content View */}
-        <main className="flex-1 overflow-y-auto p-3 scroll-smooth no-scrollbar">
-          {destination === 'briefing' && <BriefingScreen state={state} prevState={prevState} onNavigate={setDestination} />}
-          {destination === 'world' && <WorldScreen state={state} prevState={prevState} />}
-          {destination === 'market' && <MarketScreen state={state} prevState={prevState} onOpenTrade={handleOpenTrade} />}
-          {destination === 'book' && <MyBookScreen state={state} prevState={prevState} />}
+        <main className="flex-1 overflow-y-auto scroll-smooth no-scrollbar">
+          {destination === 'briefing' && <BriefingScreen state={state} prevState={prevState} onNavigate={handleNavigate} />}
+          {destination === 'world' && <WorldScreen state={state} prevState={prevState} onNavigate={handleNavigate} />}
+          {destination === 'market' && <MarketScreen state={state} prevState={prevState} onOpenTrade={handleOpenTrade} externalFilter={marketFilter} setExternalFilter={setMarketFilter} onNavigate={handleNavigate} />}
+          {destination === 'book' && <MyBookScreen state={state} prevState={prevState} onNavigate={handleNavigate} />}
         </main>
 
         {/* Expandable News Ticker Drawer */}
@@ -324,7 +339,6 @@ export default function App() {
             state={state}
             onClose={() => setSelectedCompany(null)}
             onOpenTrade={handleOpenTrade}
-            onOpenChart={(chartData) => setActiveChartData(chartData)}
           />
         )}
 

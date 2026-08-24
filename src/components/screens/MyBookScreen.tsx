@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GameState, ProductCategory } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 
-export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | null }> = ({ state }) => {
+export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state, onNavigate }) => {
   const portfolio = state.portfolio;
   const nav = portfolio.cashUSD + portfolio.positions.reduce((sum, p) => sum + (p.notional || (p.currentPrice * p.quantity)), 0);
   const initialCapital = 25000000;

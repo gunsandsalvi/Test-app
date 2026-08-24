@@ -12,9 +12,10 @@ interface BriefingItem {
   title: string;
   description: string;
   targetDest: Destination;
+  payload?: any;
 }
 
-export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate: (dest: Destination) => void }> = ({ state, prevState, onNavigate }) => {
+export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate: (dest: Destination, payload?: any) => void }> = ({ state, prevState, onNavigate }) => {
   const currentWeek = state.currentWeek;
 
   const items = useMemo(() => {
@@ -30,7 +31,8 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
           category: 'M&A',
           title: `M&A: ${m.acquirerName} acquires ${m.targetName}`,
           description: `Consolidation in sector. Deal valued at ${formatCurrency(m.dealValueUSD, { compact: true })}.`,
-          targetDest: 'market'
+          targetDest: 'market',
+          payload: { companyTicker: m.acquirerTicker }
         });
       }
     }
@@ -45,7 +47,8 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
           category: 'IPO',
           title: `New Listing: ${ipo.name} (${ipo.ticker})`,
           description: `Began trading this week in ${ipo.category}.`,
-          targetDest: 'market'
+          targetDest: 'market',
+          payload: { companyTicker: ipo.ticker }
         });
       }
     }
@@ -59,7 +62,8 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
         category: 'URGENT',
         title: `DEFAULT: ${c.name} (${c.ticker})`,
         description: `Company has defaulted on obligations and halted trading.`,
-        targetDest: 'market'
+        targetDest: 'market',
+        payload: { companyTicker: c.ticker }
       });
     }
 
@@ -72,7 +76,8 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
         category: 'MICRO',
         title: `Distress Alert: ${c.name} (${c.ticker})`,
         description: `Maintenance capex shortfall streak reached ${c.maintenanceShortfallStreak} weeks. Operational quality degrading.`,
-        targetDest: 'market'
+        targetDest: 'market',
+        payload: { companyTicker: c.ticker }
       });
     }
 
@@ -123,7 +128,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
         }
 
         // Category Crowding / Supply Chain
-        for (const catId of Object.keys(reg.categoryDemand)) {
+        for (const catId of Object.keys(reg.categoryDemand) as (keyof typeof reg.categoryDemand)[]) {
           const cat = reg.categoryDemand[catId];
           const prevCat = prevReg.categoryDemand[catId];
           if (cat.clearedInputPriceIndex && prevCat.clearedInputPriceIndex && (cat.clearedInputPriceIndex - prevCat.clearedInputPriceIndex) > 0.05) {
@@ -150,19 +155,6 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
       }
     }
 
-    // Weather / Anomalies
-    const activeAnomalies = Object.values(state.regions).map(r => ({ r: r.id, w: r.weather })).filter(x => x.w && x.w.type !== 'Normal');
-    for (const a of activeAnomalies) {
-      generated.push({
-        id: `wea-${a.r}`,
-        severity: 8,
-        category: 'URGENT',
-        title: `Anomaly: ${a.w.title} (${a.r})`,
-        description: `Severity: ${a.w.severity}. Expected GDP Impact: ${formatPercent(a.w.gdpImpactPct, { showSign: true })}.`,
-        targetDest: 'world'
-      });
-    }
-
     return generated.sort((a, b) => b.severity - a.severity);
   }, [state, prevState, currentWeek]);
 
@@ -178,7 +170,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
           items.map(item => (
             <button
               key={item.id}
-              onClick={() => onNavigate(item.targetDest)}
+              onClick={() => onNavigate(item.targetDest, item.payload)}
               className="w-full text-left p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] hover:border-[var(--text-tertiary)] transition-colors"
             >
               <div className="flex items-center gap-2 mb-1">
