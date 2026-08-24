@@ -1,9 +1,14 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BankingSector, HouseholdState, PrivateSegmentType, PrivateSectorSegment } from '../../types';
+import { RegionId, Region, FxPair, Commodity, BankingSector, HouseholdState, PrivateSegmentType, PrivateSectorSegment, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { generate52WeekHistory } from './utils';
+
+export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
+  if (!pools) return 0.03;
+  return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
+}
 
 function getSegmentDemandSignal(segmentType: PrivateSegmentType, reg: Region, prevHS: HouseholdState): number {
   const cat = reg.categoryDemand as any;
@@ -37,6 +42,7 @@ export function evolveRegionMacro(
     businessLoanBookInputUSD: number;
     trackedHealthSignal: number;
     publicCompanyEmployment: number;
+    occupationDemand?: Record<OccupationType, number>;
   },
   week: number,
   equityReturn: number = 0,
@@ -251,16 +257,88 @@ export function evolveRegionMacro(
   const newCreditCardDebtUSD = Math.max(0, (prevHS.creditCardDebtUSD || 0) * (1 - ccPaydownRate) + weeklyNewCCDebtUSD);
   const newOtherLoanDebtUSD = Math.max(0, (prevHS.otherConsumerLoanDebtUSD || 0) * (1 - otherLoanPaydownRate) + weeklyNewOtherLoansUSD);
 
-  // Private-Sector Segments evolution driven by specific demand signals
+  // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
+  const defaultOccupationShares: Record<OccupationType, number> = {
+    GENERAL: 0.55,
+    SKILLED_TRADES: 0.15,
+    TECHNICAL_ENGINEERING: 0.12,
+    SPECIALIZED_PROFESSIONAL: 0.08,
+    MANAGERIAL_FINANCIAL: 0.10,
+  };
+  const currentLaborForceShares = region.occupationLaborForceShare || defaultOccupationShares;
+  const currentOccupationPools = region.occupationPools || {
+    GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+  };
+
+  const occDemandInput = microFeedback.occupationDemand || {
+    GENERAL: 0,
+    SKILLED_TRADES: 0,
+    TECHNICAL_ENGINEERING: 0,
+    SPECIALIZED_PROFESSIONAL: 0,
+    MANAGERIAL_FINANCIAL: 0,
+  };
+
+  const newOccupationPools = (Object.keys(currentOccupationPools) as OccupationType[]).reduce((acc, occ) => {
+    const pool = currentOccupationPools[occ];
+    const availableSupply = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
+    const demandForThisOccupation = occDemandInput[occ] ?? 0;
+    const tightness = availableSupply > 0 ? demandForThisOccupation / availableSupply : 1.0;
+
+    const targetWageGrowth = Math.max(-0.01, Math.min(0.15, (tightness - 0.92) * 0.5));
+    const newWageGrowthAnnual = pool.wageGrowthAnnual * 0.9 + targetWageGrowth * 0.1;
+    const newWageIndex = pool.wageIndex * (1 + newWageGrowthAnnual / 52);
+    acc[occ] = {
+      employed: Math.min(availableSupply, demandForThisOccupation),
+      wageIndex: Number(newWageIndex.toFixed(4)),
+      wageGrowthAnnual: Number(newWageGrowthAnnual.toFixed(4)),
+    };
+    return acc;
+  }, {} as Record<OccupationType, OccupationPool>);
+
+  // X4: Retraining friction — slow, asymmetric flow between pools
+  const avgWageIndex = (Object.values(newOccupationPools) as OccupationPool[]).reduce((s, p) => s + p.wageIndex, 0) / 5;
+  const newLaborForceShares: Record<OccupationType, number> = { ...currentLaborForceShares };
+  (Object.keys(newOccupationPools) as OccupationType[]).forEach(occ => {
+    const wageGapVsAvg = newOccupationPools[occ].wageIndex / Math.max(0.01, avgWageIndex) - 1;
+    const retrainingSpeed = occ === 'GENERAL' ? 0.015 : (occ === 'SPECIALIZED_PROFESSIONAL' || occ === 'TECHNICAL_ENGINEERING') ? 0.003 : 0.008;
+    newLaborForceShares[occ] = Math.max(0.03, Math.min(0.65, (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]) + wageGapVsAvg * retrainingSpeed));
+  });
+
+  const shareSum = Object.values(newLaborForceShares).reduce((s, v) => s + v, 0);
+  if (shareSum > 0) {
+    (Object.keys(newLaborForceShares) as OccupationType[]).forEach(occ => {
+      newLaborForceShares[occ] = Number((newLaborForceShares[occ] / shareSum).toFixed(4));
+    });
+  }
+
+  // Private-Sector Segments evolution driven by specific demand signals & occupational wage costs
   const mortgageGrowthSignal = prevHS.mortgageDebtUSD > 0 ? (newMortgageDebtUSD / prevHS.mortgageDebtUSD - 1) * 52 : 0;
+  const seedMarginByType: Record<PrivateSegmentType, number> = {
+    MANUFACTURING: 0.09,
+    PROFESSIONAL_SERVICES: 0.14,
+    RETAIL_TRADE: 0.05,
+    CONSTRUCTION_REALESTATE: 0.10,
+    HEALTHCARE_SERVICES: 0.12,
+  };
+
   const newPrivateSectorSegments = (region.privateSectorSegments || []).map(seg => {
     const demandSignal = seg.segmentType === 'CONSTRUCTION_REALESTATE' ? mortgageGrowthSignal : getSegmentDemandSignal(seg.segmentType, region, prevHS);
     const employmentGrowthRate = Math.max(-0.0015, Math.min(0.0015, demandSignal * 0.05));
     const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate)));
     const revenueGrowthRate = Math.max(-0.002, Math.min(0.002, demandSignal * 0.06));
     const newAnnualRevenueUSD = Math.max(1, seg.annualRevenueUSD * (1 + revenueGrowthRate));
-    const marginDrift = Math.max(-0.001, Math.min(0.001, demandSignal * 0.01));
-    const newMarginPct = Math.max(0.02, Math.min(0.30, seg.marginPct + marginDrift));
+
+    const segOccMix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 };
+    const segWageGrowth = getBlendedWageGrowth(segOccMix, newOccupationPools);
+    const wageDrag = Math.max(0, segWageGrowth - 0.028) * 0.05;
+
+    const marginReversion = (seedMarginByType[seg.segmentType] - seg.marginPct) * 0.02; // pulls back toward each segment's realistic baseline
+    const marginDrift = Math.max(-0.001, Math.min(0.001, demandSignal * 0.01)) + marginReversion - wageDrag * 0.02;
+    const newMarginPct = Math.max(0.02, Math.min(0.22, seg.marginPct + marginDrift)); // ceiling lowered from 0.30 to 0.22
     return {
       segmentType: seg.segmentType,
       employment: newEmployment,
@@ -506,6 +584,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     nonEmployablePct: newNonEmployablePct,
     governmentEmployment: newGovernmentEmployment,
     privateSectorSegments: newPrivateSectorSegments,
+    occupationPools: newOccupationPools,
+    occupationLaborForceShare: newLaborForceShares,
     unemploymentRateBottomUp: Number(newUnemploymentRateBottomUp.toFixed(4)),
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,

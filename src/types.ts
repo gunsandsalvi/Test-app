@@ -128,6 +128,33 @@ export interface PrivateSectorSegment {
   marginPct: number;
 }
 
+export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
+
+export interface OccupationPool {
+  employed: number;
+  wageIndex: number; // relative wage level for this occupation, starts at 1.0, drifts with tightness
+  wageGrowthAnnual: number;
+}
+
+export const SECTOR_OCCUPATION_MIX: Record<string, Partial<Record<OccupationType, number>>> = {
+  Tech: { TECHNICAL_ENGINEERING: 0.55, MANAGERIAL_FINANCIAL: 0.15, GENERAL: 0.30 },
+  Energy: { SKILLED_TRADES: 0.45, TECHNICAL_ENGINEERING: 0.25, GENERAL: 0.30 },
+  Financials: { MANAGERIAL_FINANCIAL: 0.60, GENERAL: 0.40 },
+  Banks: { MANAGERIAL_FINANCIAL: 0.55, GENERAL: 0.45 },
+  Industrials: { SKILLED_TRADES: 0.40, TECHNICAL_ENGINEERING: 0.20, GENERAL: 0.40 },
+  Consumer: { GENERAL: 0.85, MANAGERIAL_FINANCIAL: 0.15 },
+  Healthcare: { SPECIALIZED_PROFESSIONAL: 0.50, GENERAL: 0.50 },
+  Utilities: { SKILLED_TRADES: 0.40, TECHNICAL_ENGINEERING: 0.20, GENERAL: 0.40 },
+};
+
+export const PRIVATE_SEGMENT_OCCUPATION_MIX: Record<PrivateSegmentType, Partial<Record<OccupationType, number>>> = {
+  MANUFACTURING: { SKILLED_TRADES: 0.45, TECHNICAL_ENGINEERING: 0.15, GENERAL: 0.40 },
+  PROFESSIONAL_SERVICES: { TECHNICAL_ENGINEERING: 0.30, SPECIALIZED_PROFESSIONAL: 0.25, MANAGERIAL_FINANCIAL: 0.15, GENERAL: 0.30 },
+  RETAIL_TRADE: { GENERAL: 0.92, MANAGERIAL_FINANCIAL: 0.08 },
+  CONSTRUCTION_REALESTATE: { SKILLED_TRADES: 0.65, GENERAL: 0.35 },
+  HEALTHCARE_SERVICES: { SPECIALIZED_PROFESSIONAL: 0.55, GENERAL: 0.45 },
+};
+
 export interface Region {
   id: RegionId;
   name: string;
@@ -174,11 +201,13 @@ export interface Region {
   laborForceParticipation: number;
   inflationDeviationStreak: number;
 
-  // Population & Labor Force Accounting (Phase 1 & Private-Sector Segments)
+  // Population & Labor Force Accounting (Phase 1, Private-Sector Segments & Occupation Pools)
   totalPopulation: number;              // raw headcount, this world's own organic figure — not calibrated to any real country
   nonEmployablePct: number;             // fraction of population outside the labor force for demographic reasons (children, retired, students, disabled)
   governmentEmployment: number;         // raw headcount employed by government
   privateSectorSegments: PrivateSectorSegment[]; // 5 real, distinct aggregate entities per region
+  occupationPools: Record<OccupationType, OccupationPool>;
+  occupationLaborForceShare: Record<OccupationType, number>;
   unemploymentRateBottomUp: number;     // diagnostic only this phase — residual of the labor-force identity, not yet driving anything
 
   // Government & Nominal GDP (Phase 2 & Phase 4)

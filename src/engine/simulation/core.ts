@@ -7,13 +7,33 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair, CATEGORY_TRADABILITY } from '../../types';
+import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from './constants';
 import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeIndices, evolveBankingSector, evolveRegionalWeather } from '../macroEngine';
 import { priceCommodityFutures } from '../pricing';
 import { FIXED_SHARE_BY_RATING } from '../companyGenerator';
+
+function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId): Record<OccupationType, number> {
+  const demand: Record<OccupationType, number> = { GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 };
+  companies.filter(c => c.region === regionId && !c.isDefaulted).forEach(c => {
+    const mix = SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 };
+    Object.entries(mix).forEach(([occ, share]) => { demand[occ as OccupationType] += c.employeeCount * (share ?? 0); });
+  });
+  (privateSegments || []).forEach(seg => {
+    const mix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType];
+    if (mix) {
+      Object.entries(mix).forEach(([occ, share]) => { demand[occ as OccupationType] += seg.employment * (share ?? 0); });
+    }
+  });
+  return demand;
+}
+
+function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
+  if (!pools) return 0.03;
+  return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
+}
 
 export function advanceWeeklyStep(state: GameState): GameState {
   if (state.isGameOver) return state;
@@ -86,6 +106,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const capexGdpImpactWeekly = capexDeltaDollars / baseGdp;
     const boundedGdpContribution = Math.max(-0.005, Math.min(0.005, capexGdpImpactWeekly * 52));
 
+    const regionOccDemand = computeOccupationDemand(
+      prevActiveFirms,
+      state.regions[regionId].privateSectorSegments,
+      regionId
+    );
+
     const { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
@@ -97,6 +123,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         businessLoanBookInputUSD: regionFloatingPrincipal[regionId],
         trackedHealthSignal: regionTrackedHealthSignal[regionId],
         publicCompanyEmployment: regionPublicCompanyEmployment[regionId],
+        occupationDemand: regionOccDemand,
       },
       nextWeek,
       equityRet,
@@ -359,7 +386,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
       // Operating margins update (Wage-Push compression, capacity decay, and competitive crowding)
       const capacityDecayPenalty = Math.min(0.08, (comp.maintenanceShortfallStreak ?? 0) * 0.003); // up to 8% margin erosion after ~27 consecutive underfunded weeks
       const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
-      const wageCompression = Math.max(0, reg.householdState.wageGrowth - 0.025) * 0.15 * wageSensitivity;
+      const compOccMix = SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 };
+      const compWageGrowth = getBlendedWageGrowth(compOccMix, reg.occupationPools);
+      const wageCompression = Math.max(0, compWageGrowth - 0.025) * 0.15 * wageSensitivity;
       const avgCrowdingIntensity = (comp.productLines || []).reduce((s, l) => {
         const catDemand = reg.categoryDemand[l.category as any];
         return s + (catDemand?.crowdingIntensity ?? 0) * l.revenueShare;
