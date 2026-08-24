@@ -44,6 +44,7 @@ export interface DebtTranche {
   originationWeek: number;
   maturityWeek: number;
   seniority: 'SENIOR' | 'SUBORDINATED';
+  _refinanceInitiated?: boolean;
 }
 
 export interface BankingSector {
@@ -255,6 +256,7 @@ export interface Region {
   governmentRevenueUSD: number;
   governmentSpendingUSD: number;
   govDebtTranches: GovDebtTranche[];
+  pendingUnfundedDeficitUSD?: number;
   debtToGdpPctBottomUp: number;
 
   householdState: HouseholdState;
@@ -377,7 +379,7 @@ export interface FundamentalSnapshot {
 
 export interface DealerEstimate {
   eps: number;
-  revenue: number; // in millions
+  revenue: number;
 }
 
 export interface ConsensusForecast {
@@ -407,7 +409,7 @@ export interface Company {
   
   // 3-Statement Fundamentals (Vectorized state)
   baselineAnnualRevenue: number;
-  annualRevenue: number; // in millions
+  annualRevenue: number;
   productLines?: ProductLine[];
   employeeCount: number;
   previousEmployeeCount: number;
@@ -417,10 +419,10 @@ export interface Company {
   ebit: number;
   netIncome: number;
   eps: number;
-  sharesOutstanding: number; // in millions
-  cash: number; // in millions
-  totalDebt: number; // in millions
-  currentLiabilities: number; // in millions (for debt prepayment check)
+  sharesOutstanding: number;
+  cash: number;
+  totalDebt: number;
+  currentLiabilities: number;
   debtTranches: DebtTranche[];
   capex: number;
   previousCapex?: number;

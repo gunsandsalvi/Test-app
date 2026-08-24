@@ -611,6 +611,13 @@ export function getInitialRegions(): Record<RegionId, Region> {
     }, 0);
     const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
     reg.estimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
+
+    // Dynamically calculate non-zero starting government spending and revenue to avoid week-52 YoY spike
+    const effectiveTaxRate = reg.effectiveTaxRate || 0.30;
+    const initialFiscalDeficitPctGdp = reg.fiscalDeficitPctGdp || 0.05;
+    const initialGdp = reg.estimatedNominalGdpUSD;
+    reg.governmentRevenueUSD = Number(((initialGdp * effectiveTaxRate) / 52).toFixed(0));
+    reg.governmentSpendingUSD = Number((reg.governmentRevenueUSD + (initialGdp * initialFiscalDeficitPctGdp) / 52).toFixed(0));
   });
 
   return regions;

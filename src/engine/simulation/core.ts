@@ -15,6 +15,8 @@ import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from './constants';
 import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeIndices } from '../macroEngine';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot } from '../companyGenerator';
 
+const STANDARD_CORP_TENOR_YEARS = 5;
+
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<OccupationType, number> {
   const demand: Record<OccupationType, number> = { GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 };
   companies.filter(c => c.region === regionId && !c.isDefaulted).forEach(c => {
@@ -327,7 +329,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const industrialProductionRate = Math.max(0.005, Math.min(0.04, 0.02 * (0.5 + regionCapacityUtilization * 0.5)));
 
         const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
-        const inventoryHoldingDecayRate = 0.015 / 52;
+        const currentGlutSeverity = Math.max(0, 1.0 - (supplier.clearedInputPriceIndex ?? 1.0)); // how far below fair value the price currently sits
+        const inventoryHoldingDecayRate = (0.015 + currentGlutSeverity * 0.35) / 52; // decay accelerates sharply the more oversupplied the market genuinely is — real obsolescence pressure, not a flat constant
         const decayedInventory = lastWeekInventory * (1 - inventoryHoldingDecayRate);
         const weatherDecay = Math.pow(0.55, Math.max(0, (reg.weather?.weeksActive ?? 1) - 1));
         const weatherSupplyPenalty = (reg.weather && reg.weather.severity !== 'Normal' && inputCat === 'CorporateIndustrial')
@@ -588,7 +591,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const tradability = CATEGORY_TRADABILITY[line.category] ?? 0;
           if (tradability < 0.1) return s;
           const regionExportsInCat = regionCategoryExports[comp.region]?.[line.category] ?? 0;
-          const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue * 1_000_000);
+          const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue);
           return s + exportShareOfRev * (reg.gdpGrowth / 52);
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
@@ -628,7 +631,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const da = newRevenue * 0.05;
       newEbit = Math.max(1, newEbitda - da);
 
-      newNetIncome = Math.max(-50, (newEbit - annualInterest) * (1 - taxRate));
+      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
       newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
     }
 
@@ -655,13 +658,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let maintenanceFundingTranches: DebtTranche[] = [];
     if (weeklyDebtFundedPortion > 1000) {
       const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
+      const newTrancheMaturityWeek = nextWeek + STANDARD_CORP_TENOR_YEARS * 52;
       maintenanceFundingTranches = [{
         id: `${comp.ticker}-MAINT-${nextWeek}`,
         principalUSD: weeklyDebtFundedPortion,
         rateType: 'FLOATING',
         floatingMarginBps: Math.round(currentBaseSpreadBps * 1.1), // priced wide — bridge/revolver-style, not term financing
         originationWeek: nextWeek,
-        maturityWeek: nextWeek + 260,
+        maturityWeek: newTrancheMaturityWeek,
         seniority: 'SENIOR',
       }];
     }
@@ -762,8 +766,48 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const systemicCreditSpreadBps = Math.max(0, reg.bankingSector.creditConditionsIndex) * 150;
     const ratingSpreadConfig = RATING_OAS_SPREADS[newRating];
     const targetOasBps = ratingSpreadConfig.baseBps + (newLeverage > 4 ? (newLeverage - 4) * 50 : 0) + systemicCreditSpreadBps;
-    const maturingTranche = comp.debtTranches.find(t => t.maturityWeek === nextWeek);
-    let updatedTranches = comp.debtTranches.filter(t => t.maturityWeek !== nextWeek);
+
+    // PART OF: Pre-refinancing trigger roughly one year before maturity
+    const companyTranches = comp.debtTranches.map(t => ({ ...t }));
+    const tranchesToRefinance = companyTranches.filter(tranche => {
+      const weeksToMaturity = tranche.maturityWeek - state.currentWeek;
+      return weeksToMaturity <= 52 && weeksToMaturity > 45 && !tranche._refinanceInitiated;
+    });
+
+    tranchesToRefinance.forEach(tranche => {
+      const originalTranche = companyTranches.find(t => t.id === tranche.id);
+      if (originalTranche) {
+        originalTranche._refinanceInitiated = true;
+      }
+      const fiveYearSovRateForRefi = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
+      const currentBaseSpreadBpsForRefi = RATING_OAS_SPREADS[newRating]?.baseBps ?? comp.oasSpreadBps;
+      const currentFairCouponRate = fiveYearSovRateForRefi + currentBaseSpreadBpsForRefi / 10000;
+      const currentFloatingMarginBps = Math.round(currentBaseSpreadBpsForRefi * 0.85);
+
+      const refinanceTranche: DebtTranche = tranche.rateType === 'FIXED'
+        ? {
+            id: `${comp.id}-REFI-${state.currentWeek}`,
+            principalUSD: tranche.principalUSD,
+            rateType: 'FIXED',
+            couponRate: currentFairCouponRate,
+            originationWeek: state.currentWeek,
+            maturityWeek: state.currentWeek + STANDARD_CORP_TENOR_YEARS * 52,
+            seniority: 'SENIOR',
+          }
+        : {
+            id: `${comp.id}-REFI-${state.currentWeek}`,
+            principalUSD: tranche.principalUSD,
+            rateType: 'FLOATING',
+            floatingMarginBps: currentFloatingMarginBps,
+            originationWeek: state.currentWeek,
+            maturityWeek: state.currentWeek + STANDARD_CORP_TENOR_YEARS * 52,
+            seniority: 'SENIOR',
+          };
+      companyTranches.push(refinanceTranche);
+    });
+
+    const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek);
+    let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek);
     let refinancingNewsItem: NewsItem | null = null;
     let refinancingSpreadShockBps = 0; // Kept to 0, or calculated if needed, but we rely on new interest calc now
     let debtIssuanceThisWeek = 0;
@@ -771,52 +815,58 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let buybacksThisWeek = 0;
 
     if (maturingTranche) {
-      const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
-      const refinanceAsFixed = Math.random() < currentFixedShare;
-      const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
-      const sovParams10Y = updatedRegions[comp.region].yieldCurveParams;
-      const tenYearSovRate = calculateNelsonSiegelZeroRate(10, sovParams10Y);
-
       debtRepaymentThisWeek = maturingTranche.principalUSD;
-      debtIssuanceThisWeek = maturingTranche.principalUSD;
 
-      const newTranche: DebtTranche = refinanceAsFixed
-        ? {
-            id: `${comp.ticker}-T${nextWeek}`,
-            principalUSD: maturingTranche.principalUSD,
-            rateType: 'FIXED',
-            couponRate: tenYearSovRate + currentBaseSpreadBps / 10000,
-            originationWeek: nextWeek,
-            maturityWeek: nextWeek + 520,
-            seniority: 'SENIOR',
-          }
-        : {
-            id: `${comp.ticker}-T${nextWeek}`,
-            principalUSD: maturingTranche.principalUSD,
-            rateType: 'FLOATING',
-            floatingMarginBps: Math.round(currentBaseSpreadBps * 0.85),
-            originationWeek: nextWeek,
-            maturityWeek: nextWeek + 260,
-            seniority: 'SENIOR',
-          };
-      updatedTranches = [...updatedTranches, newTranche];
+      if (maturingTranche._refinanceInitiated) {
+        // Already pre-refinanced a year ago. Just repay the maturing principal without issuing a new tranche now.
+        debtIssuanceThisWeek = 0;
+      } else {
+        // Fallback: standard refinancing at maturity
+        const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
+        const refinanceAsFixed = Math.random() < currentFixedShare;
+        const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
+        const fiveYearSovRateAtMaturity = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
 
-      const oldRateDescription = maturingTranche.rateType === 'FIXED' ? `${((maturingTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${maturingTranche.floatingMarginBps}bps floating`;
-      const newRateDescription = newTranche.rateType === 'FIXED' ? `${((newTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${newTranche.floatingMarginBps}bps floating`;
-      refinancingNewsItem = {
-        id: `refinance-${comp.ticker}-${nextWeek}`,
-        week: nextWeek,
-        title: `${comp.ticker} Refinances Maturing Tranche`,
-        description: `${comp.name} refinanced a maturing ${formatCurrency(maturingTranche.principalUSD, { compact: true })} tranche (was ${oldRateDescription}) into a new ${newRateDescription} tranche.`,
-        category: 'CREDIT',
-        impactBadge: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? '[REFINANCING SQUEEZE]' : '[REFINANCING]',
-        impactRegion: comp.region,
-        impactSector: comp.sector,
-        sentimentDelta: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? -0.05 : 0,
-        affectedTicker: comp.ticker,
-        urgent: true,
-      };
-      refinanceNews.push(refinancingNewsItem);
+        debtIssuanceThisWeek = maturingTranche.principalUSD;
+
+        const newTranche: DebtTranche = refinanceAsFixed
+          ? {
+              id: `${comp.ticker}-T${nextWeek}`,
+              principalUSD: maturingTranche.principalUSD,
+              rateType: 'FIXED',
+              couponRate: fiveYearSovRateAtMaturity + currentBaseSpreadBps / 10000,
+              originationWeek: nextWeek,
+              maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+              seniority: 'SENIOR',
+            }
+          : {
+              id: `${comp.ticker}-T${nextWeek}`,
+              principalUSD: maturingTranche.principalUSD,
+              rateType: 'FLOATING',
+              floatingMarginBps: Math.round(currentBaseSpreadBps * 0.85),
+              originationWeek: nextWeek,
+              maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+              seniority: 'SENIOR',
+            };
+        updatedTranches = [...updatedTranches, newTranche];
+
+        const oldRateDescription = maturingTranche.rateType === 'FIXED' ? `${((maturingTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${maturingTranche.floatingMarginBps}bps floating`;
+        const newRateDescription = newTranche.rateType === 'FIXED' ? `${((newTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${newTranche.floatingMarginBps}bps floating`;
+        refinancingNewsItem = {
+          id: `refinance-${comp.ticker}-${nextWeek}`,
+          week: nextWeek,
+          title: `${comp.ticker} Refinances Maturing Tranche`,
+          description: `${comp.name} refinanced a maturing ${formatCurrency(maturingTranche.principalUSD, { compact: true })} tranche (was ${oldRateDescription}) into a new ${newRateDescription} tranche.`,
+          category: 'CREDIT',
+          impactBadge: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? '[REFINANCING SQUEEZE]' : '[REFINANCING]',
+          impactRegion: comp.region,
+          impactSector: comp.sector,
+          sentimentDelta: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? -0.05 : 0,
+          affectedTicker: comp.ticker,
+          urgent: true,
+        };
+        refinanceNews.push(refinancingNewsItem);
+      }
     }
 
     if (maintenanceFundingTranches.length > 0) {
@@ -915,7 +965,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newSentiment = Math.max(-1.0, Math.min(1.0, comp.sentiment * 0.85 + sentimentDelta));
     const unadjustedStockPrice = isDefaulted ? 0.0 : Number(priceEquity(newEps, newForwardPE, newSentiment, false).toFixed(2));
 
-    const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region).reduce((s, c) => s + c.marketCap, 0) * 1_000_000;
+    const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region).reduce((s, c) => s + c.marketCap, 0);
     const equityPremium = computeSupplyDemandPremium(
       reg.equityOwnership,
       { bank: reg.bankingSector.bankEquityUSD, institutional: reg.institutionalSector.sectorEquityUSD },
@@ -925,7 +975,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
 
     // Company Treasury Holdings (Part MF)
-    const investableCashUSD = Math.max(0, (newCash - newRevenue * 0.05) * 1_000_000);
+    const investableCashUSD = Math.max(0, newCash - newRevenue * 0.05);
     const targetTreasuryUSD = investableCashUSD * 0.6;
     const currentTreasuryUSD = (comp.treasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
     let newTreasuryHoldings = [...(comp.treasuryHoldings || [])];
@@ -1064,7 +1114,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const ipo = checkForIPO(regionId, reg, state.companies, nextWeek);
     if (ipo) {
       const underwritingFeePct = 0.02;
-      const proceedsUSDReal = ipo.sharesOutstanding * ipo.stockPrice * 1_000_000;
+      const proceedsUSDReal = ipo.sharesOutstanding * ipo.stockPrice;
       const underwritingFeeUSD = proceedsUSDReal * underwritingFeePct;
       reg.bankingSector.bankEquityUSD += underwritingFeeUSD;
       if (!reg.bankingSector.itemizedHoldings) reg.bankingSector.itemizedHoldings = [];
@@ -1169,7 +1219,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
     
     regionCompanies.forEach(c => {
-      equityCandidates.push({ id: c.id, type: 'EQUITY', region: regionId, outstandingUSD: c.marketCap * 1_000_000 });
+      equityCandidates.push({ id: c.id, type: 'EQUITY', region: regionId, outstandingUSD: c.marketCap });
       (c.debtTranches || []).forEach(t => {
         corpCandidates.push({
           id: t.id,
@@ -1228,7 +1278,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
     const totalPrivateEmployment = (reg.privateSectorSegments || []).reduce((s, seg) => s + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + totalPrivateEmployment) / trackedEmployment : 1;
-    const investmentComponentUSD = trackedInvestmentUSD * 1_000_000 * investmentScaleFactor;
+    const investmentComponentUSD = trackedInvestmentUSD * investmentScaleFactor;
 
     // G — government spending, already established in Phase 2 (weekly flow, annualize)
     const governmentComponentUSD = reg.governmentSpendingUSD * 52;
@@ -1255,9 +1305,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const monetizedAmountUSD = weeklyDeficitUSD * monetizationShare;
     const marketFundedDeficitUSD = weeklyDeficitUSD - monetizedAmountUSD;
 
+    // PART OD: Sovereign debt issued in large, infrequent blocks
+    const currentUnfundedDeficitUSD = (reg.pendingUnfundedDeficitUSD ?? 0) + marketFundedDeficitUSD;
+    const issuanceCalendarWeek = nextWeek % 13 === 0; // large blocks roughly quarterly, not every week
+    
+    let quarterlyFundingNeedUSD = 0;
+    let nextPendingUnfundedDeficitUSD = currentUnfundedDeficitUSD;
+    const newTranches: GovDebtTranche[] = [];
+
     // Curve-smart tenor allocation: read the actual yield curve shape already computed for this region.
-    // Steep curve (long >> short) → issue shorter, cheaper debt now. Flat/inverted curve → lock in long
-    // financing while it's relatively cheap, and reduce near-term rollover risk.
     const curveSteepness = reg.zeroRates.tenor30Y - reg.zeroRates.tenor2Y;
     const baseWeights = { t2: 0.30, t5: 0.30, t10: 0.25, t30: 0.15 };
     const steepnessAdjustment = Math.max(-0.15, Math.min(0.15, curveSteepness * 3));
@@ -1269,21 +1325,35 @@ export function advanceWeeklyStep(state: GameState): GameState {
     };
     const weightSum = tenorWeights.t2 + tenorWeights.t5 + tenorWeights.t10 + tenorWeights.t30;
 
-    const newTranches: GovDebtTranche[] = [];
-    if (marketFundedDeficitUSD > 1000) {
-      ([['t2', 2, 104], ['t5', 5, 260], ['t10', 10, 520], ['t30', 30, 1560]] as const).forEach(([key, tenorYears, tenorWeeks]) => {
-        const principal = marketFundedDeficitUSD * (tenorWeights[key] / weightSum);
-        if (principal < 100) return;
-        newTranches.push({
-          id: `${regionId}-GOV-${tenorYears}Y-${nextWeek}`,
-          principalUSD: principal,
-          couponRate: calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams), // priced off the region's own real curve
-          originationWeek: nextWeek,
-          maturityWeek: nextWeek + tenorWeeks,
-          tenorAtIssuanceYears: tenorYears,
+    if (issuanceCalendarWeek) {
+      quarterlyFundingNeedUSD = currentUnfundedDeficitUSD; // roll up 13 weeks of accumulated need into one real issuance event
+      nextPendingUnfundedDeficitUSD = 0;
+
+      if (quarterlyFundingNeedUSD > 1000) {
+        ([['t2', 2, 104], ['t5', 5, 260], ['t10', 10, 520], ['t30', 30, 1560]] as const).forEach(([key, tenorYears, tenorWeeks]) => {
+          const principal = quarterlyFundingNeedUSD * (tenorWeights[key] / weightSum);
+          if (principal < 100) return;
+          newTranches.push({
+            id: `${regionId}-GOV-${tenorYears}Y-${nextWeek}`,
+            principalUSD: principal,
+            couponRate: calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams), // priced off the region's own real curve
+            originationWeek: nextWeek,
+            maturityWeek: nextWeek + tenorWeeks,
+            tenorAtIssuanceYears: tenorYears,
+          });
         });
-      });
+      }
     }
+
+    // PART OE: Excess unfunded-deficit float held at the central bank between issuance weeks as temporary bridge financing
+    const prevPendingUnfundedDeficitUSD = reg.pendingUnfundedDeficitUSD ?? 0;
+    const updatedBankingSector = { ...reg.bankingSector };
+    if (issuanceCalendarWeek) {
+      updatedBankingSector.centralBankReservesUSD -= (quarterlyFundingNeedUSD - prevPendingUnfundedDeficitUSD);
+    } else {
+      updatedBankingSector.centralBankReservesUSD -= marketFundedDeficitUSD;
+    }
+    updatedBankingSector.centralBankReservesUSD = Number(Math.max(0, updatedBankingSector.centralBankReservesUSD).toFixed(0));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
     const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);
@@ -1291,6 +1361,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     updatedRegions[regionId] = {
       ...reg,
       gdpGrowth: finalGdpGrowth,
+      estimatedNominalGdpUSD: newDerivedNominalGdpUSD,
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
       gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
       nominalGdpHistory: newNominalGdpHistory,
@@ -1298,6 +1369,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       investmentComponentUSD,
       govDebtTranches: [...liveTranches, ...newTranches],
       debtToGdpPctBottomUp,
+      pendingUnfundedDeficitUSD: nextPendingUnfundedDeficitUSD,
+      bankingSector: updatedBankingSector,
     };
   });
 
@@ -1424,7 +1497,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           }
 
           const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - nextWeek) / 52);
-          const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + c.totalDebt, 0) * 1_000_000;
+          const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + c.totalDebt, 0);
           const corpBondPremium = computeSupplyDemandPremium(
             updatedRegions[pos.region].corpBondOwnership,
             { bank: updatedRegions[pos.region].bankingSector.bankEquityUSD, institutional: updatedRegions[pos.region].institutionalSector.sectorEquityUSD },
