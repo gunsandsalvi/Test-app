@@ -1,9 +1,173 @@
-import { Company, CreditRating, RegionId, Sector, DebtTranche } from '../types';
+import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet } from '../types';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
+import { getInitialRegions } from './macro/initialization';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
 };
+
+export function getCategoryDemandSeedUSD(category: string, region: RegionId): number {
+  const incomes: Record<RegionId, number> = {
+    USA: 12_000_000_000_000,
+    EUR: 10_000_000_000_000,
+    UK: 2_200_000_000_000,
+    JPN: 3_500_000_000_000,
+  };
+  const income = incomes[region] ?? 10_000_000_000_000;
+  const consumption = income * 0.95;
+  const govBase = income * 0.18;
+  const corpBase = income * 0.08;
+
+  switch (category) {
+    case 'StapleHousehold': return consumption * 0.25;
+    case 'StandardHousehold': return consumption * 0.50;
+    case 'LuxuryHousehold': return consumption * 0.25;
+    case 'GovernmentDefense': return govBase * 0.30;
+    case 'GovernmentInfrastructure': return govBase * 0.45;
+    case 'GovernmentHealthcare': return govBase * 0.25;
+    case 'CorporateIndustrial': return corpBase * 0.60;
+    case 'CorporateTech': return corpBase * 0.40;
+    default: return consumption * 0.20;
+  }
+}
+
+export function deriveInitialRevenueUSD(
+  _category: ProductCategory,
+  regionCategoryDemandSeedUSD: number,
+  companyRankInCategory: number,
+  totalCompaniesInCategory: number
+): number {
+  const rankWeight = Math.pow(0.8, companyRankInCategory);
+  const totalRankWeight = Array.from({ length: totalCompaniesInCategory }, (_, i) => Math.pow(0.8, i)).reduce((a, b) => a + b, 0);
+  return regionCategoryDemandSeedUSD * (rankWeight / totalRankWeight) * 0.35;
+}
+
+export function buildQuarterlyFundamentalSnapshot(
+  week: number,
+  filingPeriod: string,
+  filingDate: string,
+  annualRevenue: number,
+  ebitda: number,
+  netIncome: number,
+  eps: number,
+  cash: number,
+  totalDebt: number,
+  treasuryHoldingsUSD: number = 0,
+  finishedGoodsInventoryUSD: number = 0,
+  maintenanceCapex: number = 0,
+  growthCapex: number = 0,
+  oasSpreadBps: number = 150,
+  dividendYield: number = 0.02,
+  marketCap: number = 1_000_000_000,
+  prevSnapshot?: FundamentalSnapshot,
+  debtIssuance: number = 0,
+  debtRepayment: number = 0,
+  buybacks: number = 0,
+): FundamentalSnapshot {
+  const revQ = annualRevenue / 4;
+  const ebitdaQ = ebitda / 4;
+  const ebitdaMargin = ebitda / Math.max(1, annualRevenue);
+  const cogs = revQ * (1 - ebitdaMargin - 0.12);
+  const sgaExpense = revQ * 0.12;
+  const grossProfit = revQ - cogs;
+  const daQuarterly = Math.max(1, (maintenanceCapex + growthCapex) / 4 * 0.8);
+  const interestExpense = totalDebt * (oasSpreadBps / 10000 + 0.03) / 4;
+  const pretaxIncome = ebitdaQ - daQuarterly - interestExpense;
+  const taxExpense = Math.max(0, pretaxIncome * 0.21);
+  const netIncQ = netIncome / 4;
+  const epsQ = eps / 4;
+
+  const incomeStatement: QuarterlyIncomeStatement = {
+    revenue: revQ,
+    cogs,
+    grossProfit,
+    sgaExpense,
+    ebitda: ebitdaQ,
+    depreciationAmortization: daQuarterly,
+    ebit: ebitdaQ - daQuarterly,
+    interestExpense,
+    pretaxIncome,
+    taxExpense,
+    netIncome: netIncQ,
+    eps: epsQ,
+  };
+
+  const workingCapitalUSD = annualRevenue * 0.08;
+  const accountsReceivable = workingCapitalUSD * 0.6;
+  const accountsPayable = workingCapitalUSD * 0.4;
+  const netPPE = totalDebt * 0.7;
+  const totalAssets = cash + accountsReceivable + finishedGoodsInventoryUSD + netPPE;
+  const shortTermDebt = totalDebt * 0.15;
+  const longTermDebt = totalDebt * 0.85;
+  const totalLiabilities = accountsPayable + totalDebt;
+  const shareholdersEquity = totalAssets - totalLiabilities;
+
+  const balanceSheet: QuarterlyBalanceSheet = {
+    cash,
+    treasuryHoldingsUSD,
+    accountsReceivable,
+    finishedGoodsInventoryUSD,
+    netPPE,
+    totalAssets,
+    accountsPayable,
+    shortTermDebt,
+    longTermDebt,
+    totalLiabilities,
+    shareholdersEquity,
+  };
+
+  const prevWC = prevSnapshot
+    ? prevSnapshot.balanceSheet.accountsReceivable + prevSnapshot.balanceSheet.finishedGoodsInventoryUSD - prevSnapshot.balanceSheet.accountsPayable
+    : workingCapitalUSD;
+  const currentWC = accountsReceivable + finishedGoodsInventoryUSD - accountsPayable;
+  const changeInWorkingCapital = -(currentWC - prevWC);
+  const cashFromOperations = netIncQ + daQuarterly + changeInWorkingCapital;
+
+  const prevTreasury = prevSnapshot?.balanceSheet.treasuryHoldingsUSD ?? 0;
+  const treasuryPurchases = -(treasuryHoldingsUSD - prevTreasury);
+  const cashFromInvesting = -maintenanceCapex / 4 - growthCapex / 4 + treasuryPurchases;
+
+  const dividendsPaid = -(dividendYield * marketCap / 4);
+  const cashFromFinancing = dividendsPaid - buybacks + debtIssuance - debtRepayment;
+
+  const netChangeInCash = cashFromOperations + cashFromInvesting + cashFromFinancing;
+
+  const leverage = Number((totalDebt / Math.max(1, ebitda)).toFixed(2));
+  const interestCoverage = Number(((ebitdaQ - daQuarterly) / Math.max(0.01, interestExpense)).toFixed(2));
+
+  return {
+    week,
+    filingPeriod,
+    filingDate,
+    incomeStatement,
+    balanceSheet,
+    cashFlowStatement: {
+      netIncome: netIncQ,
+      daAddback: daQuarterly,
+      changeInWorkingCapital,
+      cashFromOperations,
+      maintenanceCapex: -maintenanceCapex / 4,
+      growthCapex: -growthCapex / 4,
+      treasuryPurchases,
+      cashFromInvesting,
+      debtIssuance,
+      debtRepayment,
+      dividendsPaid,
+      buybacks: -buybacks,
+      cashFromFinancing,
+      netChangeInCash,
+    },
+    leverage,
+    interestCoverage,
+    annualRevenue,
+    ebitda,
+    ebit: ebitda - daQuarterly * 4,
+    netIncome,
+    cash,
+    totalDebt,
+    eps,
+  };
+}
 
 function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating): DebtTranche[] {
   const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
@@ -331,13 +495,57 @@ export function generateInitialCompanies(): Company[] {
 
   regions.forEach((region) => {
     const templates = REGION_COMPANIES[region];
+
+    // Group templates by primary category to rank them properly
+    const categoryGroups: Record<string, CompanyTemplate[]> = {};
+    templates.forEach((tmpl) => {
+      let primaryCat = 'StandardHousehold';
+      if (tmpl.sector === 'Tech') primaryCat = 'CorporateTech';
+      else if (tmpl.sector === 'Energy') primaryCat = 'CorporateIndustrial';
+      else if (tmpl.sector === 'Industrials') primaryCat = 'CorporateIndustrial';
+      else if (tmpl.sector === 'Financials' || tmpl.sector === 'Banks') primaryCat = 'CorporateTech';
+      else if (tmpl.sector === 'Consumer') primaryCat = 'StandardHousehold';
+
+      if (!categoryGroups[primaryCat]) categoryGroups[primaryCat] = [];
+      categoryGroups[primaryCat].push(tmpl);
+    });
+
     templates.forEach((rawTmpl) => {
-      // Fix: Convert raw millions to absolute dollar units
+      let primaryCat: ProductCategory = 'StandardHousehold';
+      if (rawTmpl.sector === 'Tech') primaryCat = 'CorporateTech';
+      else if (rawTmpl.sector === 'Energy') primaryCat = 'CorporateIndustrial';
+      else if (rawTmpl.sector === 'Industrials') primaryCat = 'CorporateIndustrial';
+      else if (rawTmpl.sector === 'Financials' || rawTmpl.sector === 'Banks') primaryCat = 'CorporateTech';
+      else if (rawTmpl.sector === 'Consumer') primaryCat = 'StandardHousehold';
+
+      const group = categoryGroups[primaryCat];
+      const rankInCategory = group.findIndex(t => t.ticker === rawTmpl.ticker);
+      const totalInCategory = group.length;
+
+      const regionDemandSeed = getCategoryDemandSeedUSD(primaryCat, region);
+      let derivedRevBase = deriveInitialRevenueUSD(primaryCat, regionDemandSeed, rankInCategory >= 0 ? rankInCategory : 0, totalInCategory || 1);
+
+      if (rawTmpl.sector === 'Banks') {
+        const bankShare = rawTmpl.bankMarketShare ?? 0.25;
+        const initRegs = getInitialRegions();
+        const initReg = initRegs[region];
+        if (initReg?.bankingSector) {
+          const bs = initReg.bankingSector;
+          const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
+          derivedRevBase = bs.netInterestMarginPct * totalAssets * bankShare * 2.2;
+        }
+      }
+
+      const debtRatio = rawTmpl.debtBase / Math.max(1, rawTmpl.revBase);
+      const cashRatio = rawTmpl.cashBase / Math.max(1, rawTmpl.revBase);
+      const derivedDebtBase = derivedRevBase * debtRatio;
+      const derivedCashBase = derivedRevBase * cashRatio;
+
       const tmpl: CompanyTemplate = {
         ...rawTmpl,
-        revBase: rawTmpl.revBase * 1_000_000,
-        debtBase: rawTmpl.debtBase * 1_000_000,
-        cashBase: rawTmpl.cashBase * 1_000_000,
+        revBase: derivedRevBase,
+        debtBase: derivedDebtBase,
+        cashBase: derivedCashBase,
         shares: rawTmpl.shares * 1_000_000,
       };
 
@@ -372,75 +580,15 @@ export function generateInitialCompanies(): Company[] {
       const oasSpreadBps = RATING_OAS_SPREADS[tmpl.initialRating].baseBps;
       const cdsSpreadBps = oasSpreadBps + Math.floor(Math.random() * 10 - 5);
       
-      // Fix: Start history with ONLY the initial realized data point
       const historicalPrices: number[] = [stockPrice];
+      const marketCap = tmpl.shares * stockPrice;
 
-      const baseSnapshot = {
-        week: 1,
-        filingPeriod: "Q4 '25",
-        filingDate: 'Dec 31, 2025',
-        baselineAnnualRevenue: tmpl.revBase, annualRevenue: tmpl.revBase,
-        employeeCount, previousEmployeeCount: employeeCount, baselineEmployeeCount: employeeCount,
-        ebitda,
-        ebit,
-        netIncome,
-        cash: tmpl.cashBase,
-        totalDebt: tmpl.debtBase,
-        leverage,
-        interestCoverage,
-        eps,
-        creditRating: tmpl.initialRating,
-      };
+      const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap);
+      const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1);
+      const snapQ3 = buildQuarterlyFundamentalSnapshot(-1, "Q3 '25", 'Sep 30, 2025', tmpl.revBase * 0.98, ebitda * 0.97, netIncome * 0.97, eps * 0.98, tmpl.cashBase * 0.99, tmpl.debtBase * 1.00, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ2);
+      const snapQ4 = buildQuarterlyFundamentalSnapshot(1, "Q4 '25", 'Dec 31, 2025', tmpl.revBase, ebitda, netIncome, eps, tmpl.cashBase, tmpl.debtBase, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ3);
 
-      // 4 previous simulated quarterly statements with exact filing end dates
-      const historicalFundamentals = [
-        {
-          ...baseSnapshot,
-          week: -3,
-          filingPeriod: "Q1 '25",
-          filingDate: 'Mar 31, 2025',
-          annualRevenue: Number((tmpl.revBase * 0.94).toFixed(1)),
-          ebitda: Number((ebitda * 0.93).toFixed(1)),
-          ebit: Number((ebit * 0.92).toFixed(1)),
-          netIncome: Number((netIncome * 0.91).toFixed(1)),
-          cash: Number((tmpl.cashBase * 0.95).toFixed(1)),
-          totalDebt: Number((tmpl.debtBase * 1.02).toFixed(1)),
-          leverage: Number((leverage * 1.05).toFixed(2)),
-          interestCoverage: Number((interestCoverage * 0.95).toFixed(2)),
-          eps: Number((eps * 0.92).toFixed(2)),
-        },
-        {
-          ...baseSnapshot,
-          week: -2,
-          filingPeriod: "Q2 '25",
-          filingDate: 'Jun 30, 2025',
-          annualRevenue: Number((tmpl.revBase * 0.96).toFixed(1)),
-          ebitda: Number((ebitda * 0.95).toFixed(1)),
-          ebit: Number((ebit * 0.94).toFixed(1)),
-          netIncome: Number((netIncome * 0.94).toFixed(1)),
-          cash: Number((tmpl.cashBase * 0.97).toFixed(1)),
-          totalDebt: Number((tmpl.debtBase * 1.01).toFixed(1)),
-          leverage: Number((leverage * 1.03).toFixed(2)),
-          interestCoverage: Number((interestCoverage * 0.97).toFixed(2)),
-          eps: Number((eps * 0.95).toFixed(2)),
-        },
-        {
-          ...baseSnapshot,
-          week: -1,
-          filingPeriod: "Q3 '25",
-          filingDate: 'Sep 30, 2025',
-          annualRevenue: Number((tmpl.revBase * 0.98).toFixed(1)),
-          ebitda: Number((ebitda * 0.97).toFixed(1)),
-          ebit: Number((ebit * 0.97).toFixed(1)),
-          netIncome: Number((netIncome * 0.97).toFixed(1)),
-          cash: Number((tmpl.cashBase * 0.99).toFixed(1)),
-          totalDebt: Number((tmpl.debtBase * 1.00).toFixed(1)),
-          leverage: Number((leverage * 1.01).toFixed(2)),
-          interestCoverage: Number((interestCoverage * 0.99).toFixed(2)),
-          eps: Number((eps * 0.98).toFixed(2)),
-        },
-        baseSnapshot,
-      ];
+      const historicalFundamentals = [snapQ1, snapQ2, snapQ3, snapQ4];
 
       const quotedMarginBps = Math.round(oasSpreadBps * 0.85 + 35);
       const discountMarginBps = Math.round(oasSpreadBps * 0.85);

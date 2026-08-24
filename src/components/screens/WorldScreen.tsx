@@ -4,10 +4,13 @@ import { formatCurrency, formatPercent, formatBondName } from '../../engine/form
 import { SegmentedBar } from '../charts/Charts';
 import { BankDeepDive } from '../bank/BankDeepDive';
 
-type WorldTab = 'overview' | 'growth' | 'labor' | 'supplychain' | 'fiscal' | 'banking' | 'private';
+import { EconomyDashboard } from './EconomyDashboard';
+
+type WorldTab = 'overview' | 'economy' | 'growth' | 'labor' | 'supplychain' | 'fiscal' | 'banking' | 'private';
 
 const WORLD_TAB_LABELS: Record<WorldTab, string> = {
   overview: 'Overview',
+  economy: 'Macro Dashboard',
   growth: 'Growth & Cycle',
   labor: 'Labor Market',
   supplychain: 'Supply Chain',
@@ -68,7 +71,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
       {/* World Tab Bar */}
       <div className="flex overflow-x-auto no-scrollbar border-b border-[var(--border-hairline)] pb-1">
-        {(['overview', 'growth', 'labor', 'supplychain', 'fiscal', 'banking', 'private'] as WorldTab[]).map(t => (
+        {(['overview', 'economy', 'growth', 'labor', 'supplychain', 'fiscal', 'banking', 'private'] as WorldTab[]).map(t => (
           <button
             key={t}
             onClick={() => setWorldTab(t)}
@@ -81,6 +84,8 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
       {/* Tab Contents */}
       <div className="space-y-3">
+        {worldTab === 'economy' && <EconomyDashboard state={state} />}
+
         {worldTab === 'overview' && (
           <>
             <div className="grid grid-cols-2 gap-2">

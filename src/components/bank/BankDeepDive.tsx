@@ -23,7 +23,7 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
   const sovOwnership = region.sovBondOwnership;
 
   const getHouseholdShare = (shares: typeof eqOwnership) => {
-    const foreignSum = Object.values(shares.foreignShare).reduce((a, b) => a + b, 0);
+    const foreignSum = (Object.values(shares.foreignShare) as number[]).reduce((a, b) => a + b, 0);
     return Math.max(0, 1 - shares.bankShare - shares.institutionalShare - foreignSum - shares.centralBankShare);
   };
 

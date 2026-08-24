@@ -310,20 +310,69 @@ export interface FxPair {
 
 export type TabKey = 'macro' | 'indices' | 'equities' | 'commodities' | 'bonds_cds' | 'derivatives' | 'risk';
 
+export interface QuarterlyIncomeStatement {
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  sgaExpense: number;
+  ebitda: number;
+  depreciationAmortization: number;
+  ebit: number;
+  interestExpense: number;
+  pretaxIncome: number;
+  taxExpense: number;
+  netIncome: number;
+  eps: number;
+}
+
+export interface QuarterlyBalanceSheet {
+  cash: number;
+  treasuryHoldingsUSD: number;
+  accountsReceivable: number;
+  finishedGoodsInventoryUSD: number;
+  netPPE: number;
+  totalAssets: number;
+  accountsPayable: number;
+  shortTermDebt: number;
+  longTermDebt: number;
+  totalLiabilities: number;
+  shareholdersEquity: number;
+}
+
+export interface QuarterlyCashFlowStatement {
+  netIncome: number;
+  daAddback: number;
+  changeInWorkingCapital: number;
+  cashFromOperations: number;
+  maintenanceCapex: number;
+  growthCapex: number;
+  treasuryPurchases: number;
+  cashFromInvesting: number;
+  debtIssuance: number;
+  debtRepayment: number;
+  dividendsPaid: number;
+  buybacks: number;
+  cashFromFinancing: number;
+  netChangeInCash: number;
+}
+
 export interface FundamentalSnapshot {
   week: number;
   filingPeriod: string;
   filingDate: string;
-  annualRevenue: number;
-  ebitda: number;
-  ebit: number;
-  netIncome: number;
-  cash: number;
-  totalDebt: number;
+  incomeStatement: QuarterlyIncomeStatement;
+  balanceSheet: QuarterlyBalanceSheet;
+  cashFlowStatement: QuarterlyCashFlowStatement;
   leverage: number;
   interestCoverage: number;
-  eps: number;
-  creditRating: CreditRating;
+  annualRevenue?: number; // legacy optional fallback
+  ebitda?: number;
+  ebit?: number;
+  netIncome?: number;
+  cash?: number;
+  totalDebt?: number;
+  eps?: number;
+  creditRating?: CreditRating;
 }
 
 export interface DealerEstimate {

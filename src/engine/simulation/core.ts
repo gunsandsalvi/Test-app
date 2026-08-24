@@ -13,7 +13,7 @@ import { checkForIPO } from './ipo';
 import { checkForMerger } from './merger';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from './constants';
 import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeIndices } from '../macroEngine';
-import { FIXED_SHARE_BY_RATING } from '../companyGenerator';
+import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot } from '../companyGenerator';
 
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<OccupationType, number> {
   const demand: Record<OccupationType, number> = { GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 };
@@ -587,12 +587,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const exportRevenueBoost = (comp.productLines || []).reduce((s, line) => {
           const tradability = CATEGORY_TRADABILITY[line.category] ?? 0;
           if (tradability < 0.1) return s;
-          // this company's share of ITS region's export capture in this category, proportional to its domestic share
           const regionExportsInCat = regionCategoryExports[comp.region]?.[line.category] ?? 0;
-          return s + (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue);
+          const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue * 1_000_000);
+          return s + exportShareOfRev * (reg.gdpGrowth / 52);
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
-        const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + exportRevenueBoost + noise + reg.inflation * pricingPowerBeta) * distressPenalty * newInputSupplyConstraintFactor;
+        const annualGrowthRate = categoryDrivenGrowth + noise + reg.inflation * pricingPowerBeta;
+        const weeklyGrowthRate = (annualGrowthRate / 52) + exportRevenueBoost;
+        const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
       
       // Smooth transition to target revenue (no exponential weekly compounding)
       newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
@@ -764,6 +766,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let updatedTranches = comp.debtTranches.filter(t => t.maturityWeek !== nextWeek);
     let refinancingNewsItem: NewsItem | null = null;
     let refinancingSpreadShockBps = 0; // Kept to 0, or calculated if needed, but we rely on new interest calc now
+    let debtIssuanceThisWeek = 0;
+    let debtRepaymentThisWeek = 0;
+    let buybacksThisWeek = 0;
 
     if (maturingTranche) {
       const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
@@ -771,6 +776,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const currentBaseSpreadBps = RATING_OAS_SPREADS[comp.creditRating]?.baseBps ?? comp.oasSpreadBps;
       const sovParams10Y = updatedRegions[comp.region].yieldCurveParams;
       const tenYearSovRate = calculateNelsonSiegelZeroRate(10, sovParams10Y);
+
+      debtRepaymentThisWeek = maturingTranche.principalUSD;
+      debtIssuanceThisWeek = maturingTranche.principalUSD;
 
       const newTranche: DebtTranche = refinanceAsFixed
         ? {
@@ -813,6 +821,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     if (maintenanceFundingTranches.length > 0) {
       updatedTranches = [...updatedTranches, ...maintenanceFundingTranches];
+      debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
     }
 
     const newOasBps = Math.round(
@@ -945,28 +954,39 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const sharesToRetire = Math.min(comp.sharesOutstanding * 0.005, buybackSpendM / Math.max(0.1, newStockPrice));
       if (sharesToRetire > 0.001) {
         updatedSharesOutstanding = Math.max(1.0, comp.sharesOutstanding - sharesToRetire);
-        newCash -= sharesToRetire * newStockPrice;
+        buybacksThisWeek = sharesToRetire * newStockPrice;
+        newCash -= buybacksThisWeek;
       }
     }
     const newMarketCap = Number((newStockPrice * updatedSharesOutstanding).toFixed(0));
     const newSeniorBondYield = reg.zeroRates.tenor5Y + newOasBps / 10000;
 
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
-    const currentSnapshot = {
-      week: nextWeek,
-      filingPeriod: formatQuarterFilingDate(quarterIdx),
-      filingDate: formatSimulationDate(nextWeek),
-      annualRevenue: Number(newRevenue.toFixed(1)),
-      ebitda: Number(newEbitda.toFixed(1)),
-      ebit: Number(newEbit.toFixed(1)),
-      netIncome: Number(newNetIncome.toFixed(1)),
-      cash: Number(newCash.toFixed(1)),
-      totalDebt: Number(newTotalDebt.toFixed(1)),
-      leverage: newLeverage,
-      interestCoverage: newCoverage,
-      eps: newEps,
-      creditRating: newRating,
-    };
+    const prevSnapshot = comp.historicalFundamentals ? comp.historicalFundamentals[comp.historicalFundamentals.length - 1] : undefined;
+    const currentTreasuryHoldingsUSD = (newTreasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
+
+    const currentSnapshot = buildQuarterlyFundamentalSnapshot(
+      nextWeek,
+      formatQuarterFilingDate(quarterIdx),
+      formatSimulationDate(nextWeek),
+      newRevenue,
+      newEbitda,
+      newNetIncome,
+      newEps,
+      newCash,
+      newTotalDebt,
+      currentTreasuryHoldingsUSD,
+      newFinishedGoodsInventoryUSD,
+      newMaintenanceCapex,
+      newGrowthCapex,
+      newOasBps,
+      newDividendYield,
+      newMarketCap,
+      prevSnapshot,
+      debtIssuanceThisWeek,
+      debtRepaymentThisWeek,
+      buybacksThisWeek
+    );
     const histFundamentals = isReportingThisWeek
       ? [...(comp.historicalFundamentals || []).slice(-3), currentSnapshot]
       : comp.historicalFundamentals || [];
@@ -1208,7 +1228,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
     const totalPrivateEmployment = (reg.privateSectorSegments || []).reduce((s, seg) => s + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + totalPrivateEmployment) / trackedEmployment : 1;
-    const investmentComponentUSD = trackedInvestmentUSD * investmentScaleFactor;
+    const investmentComponentUSD = trackedInvestmentUSD * 1_000_000 * investmentScaleFactor;
 
     // G — government spending, already established in Phase 2 (weekly flow, annualize)
     const governmentComponentUSD = reg.governmentSpendingUSD * 52;
