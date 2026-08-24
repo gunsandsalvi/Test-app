@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GameState, RegionId, OccupationType } from '../../types';
 import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { SegmentedBar } from '../charts/Charts';
+import { BankDeepDive } from '../bank/BankDeepDive';
 
 type WorldTab = 'overview' | 'growth' | 'labor' | 'supplychain' | 'fiscal' | 'banking' | 'private';
 
@@ -313,46 +314,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
         )}
 
         {worldTab === 'banking' && (
-          <>
-            <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
-              <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Bank Capital Ratio vs Floor</div>
-              <div className="relative h-3 rounded-full bg-[var(--bg-panel)] overflow-hidden">
-                <div className="absolute inset-y-0 rounded-full bg-[var(--region-usa)] transition-all" style={{ width: `${Math.min(100, reg.bankingSector.bankCapitalRatio * 400)}%` }} />
-                <div className="absolute inset-y-0 w-0.5 bg-[var(--signal-negative)] z-10" style={{ left: `${0.08 * 400}%` }} title="8% Floor" />
-              </div>
-              <div className="text-[9px] text-[var(--text-tertiary)] font-mono flex justify-between">
-                <span>Capital Ratio: <span className="font-bold text-[var(--text-primary)]">{formatPercent(reg.bankingSector.bankCapitalRatio, { isDecimal: true })}</span></span>
-                <span className="text-[var(--signal-negative)]">Red line = 8% floor</span>
-              </div>
-
-              <div className="text-[10px] text-[var(--text-secondary)] italic p-2 rounded bg-[var(--bg-panel)] border border-[var(--border-hairline)]">
-                {reg.bankingSector.loanLossProvisionRateAnnualPct > 0.02
-                  ? 'Capital ratio pressured by rising loan loss provisions.'
-                  : reg.bankingSector.creditConditionsIndex > 0.5
-                  ? 'Credit conditions tightening; loan originations moderating.'
-                  : 'Banking sector capital buffers healthy with stable credit conditions.'}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-[var(--border-hairline)]">
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">Credit Conditions</span>
-                  <span className="font-bold font-mono">{reg.bankingSector.creditConditionsIndex.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">Net Int Margin</span>
-                  <span className="font-bold font-mono">{formatPercent(reg.bankingSector.netInterestMarginPct, { isDecimal: true })}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">Loan Loss Prov</span>
-                  <span className="font-bold font-mono">{formatPercent(reg.bankingSector.loanLossProvisionRateAnnualPct, { isDecimal: true })}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">Deposits</span>
-                  <span className="font-bold font-mono">{formatCurrency(reg.bankingSector.depositsUSD, { compact: true })}</span>
-                </div>
-              </div>
-            </div>
-          </>
+          <BankDeepDive regionId={activeRegion} state={state} />
         )}
 
         {worldTab === 'private' && (

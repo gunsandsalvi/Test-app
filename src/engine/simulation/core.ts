@@ -7,7 +7,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS } from '../../types';
+import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { checkForMerger } from './merger';
@@ -54,6 +54,58 @@ export function computeOccupationDemand(companies: Company[], privateSegments: P
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
+}
+
+function computeTargetOwnershipShares(
+  assetClass: 'equity' | 'corpBond' | 'sovBond',
+  regionId: RegionId,
+  reg: Region,
+  allRegions: Record<RegionId, Region>
+): AssetOwnershipShares {
+  // Banks: heavier in sovBond and corpBond, driven by their own capital/reserve capacity
+  const bankCapacitySignal = Math.max(0.5, Math.min(1.5, reg.bankingSector.bankCapitalRatio / 0.10));
+  const bankTarget = assetClass === 'sovBond' ? 0.22 * bankCapacitySignal : assetClass === 'corpBond' ? 0.28 * bankCapacitySignal : 0.03;
+  // Institutional: driven by sector equity health
+  const institutionalTarget = assetClass === 'equity' ? 0.42 : assetClass === 'corpBond' ? 0.45 : 0.30;
+  // Foreign share by counterpart region: driven by interest-rate differential
+  const foreignShare: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).filter(r => r !== regionId).forEach(counterpartId => {
+    const rateDiff = (allRegions[counterpartId]?.policyRate ?? reg.policyRate) - reg.policyRate;
+    const baseForeign = assetClass === 'sovBond' ? 0.08 : assetClass === 'corpBond' ? 0.045 : 0.05;
+    foreignShare[counterpartId] = Math.max(0.01, Math.min(0.20, baseForeign + rateDiff * 0.3));
+  });
+  const centralBankShare = assetClass === 'sovBond' ? Math.max(0.05, Math.min(0.35, 0.15 + reg.balanceSheetStance * 0.1)) : 0;
+  return { bankShare: bankTarget, institutionalShare: institutionalTarget, foreignShare, centralBankShare };
+}
+
+function computeSupplyDemandPremium(
+  ownership: AssetOwnershipShares,
+  totalSectorInvestableUSD: { bank: number; institutional: number },
+  totalOutstandingUSD: number
+): number {
+  const impliedBankDemandUSD = ownership.bankShare * totalSectorInvestableUSD.bank;
+  const impliedInstitutionalDemandUSD = ownership.institutionalShare * totalSectorInvestableUSD.institutional;
+  const totalImpliedDemandUSD = impliedBankDemandUSD + impliedInstitutionalDemandUSD;
+  const demandToSupplyRatio = totalOutstandingUSD > 0 ? totalImpliedDemandUSD / totalOutstandingUSD : 1.0;
+  return Math.max(-0.15, Math.min(0.15, (demandToSupplyRatio - 1.0) * 0.3));
+}
+
+function attributeItemizedHoldings(
+  sectorShareUSD: number,
+  candidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[]
+): ItemizedHolding[] {
+  const sorted = [...candidates].sort((a, b) => b.outstandingUSD - a.outstandingUSD);
+  let remaining = sectorShareUSD;
+  const result: ItemizedHolding[] = [];
+  for (const c of sorted) {
+    if (remaining <= 0) break;
+    const take = Math.min(c.outstandingUSD * 0.4, remaining); // no single sector holds more than 40% of any one issue
+    if (take > 0) {
+      result.push({ instrumentId: c.id, instrumentType: c.type, issuerRegion: c.region, quantityOrNotionalUSD: take });
+      remaining -= take;
+    }
+  }
+  return result;
 }
 
 export function advanceWeeklyStep(state: GameState): GameState {
@@ -159,6 +211,18 @@ export function advanceWeeklyStep(state: GameState): GameState {
       state.commodities
     );
     updatedRegions[regionId] = updatedRegion;
+
+    (['equity', 'corpBond', 'sovBond'] as const).forEach(assetClass => {
+      const fieldName = `${assetClass}Ownership` as 'equityOwnership' | 'corpBondOwnership' | 'sovBondOwnership';
+      const target = computeTargetOwnershipShares(assetClass, regionId, updatedRegion, state.regions);
+      const current = updatedRegion[fieldName];
+      updatedRegion[fieldName] = {
+        bankShare: current.bankShare + (target.bankShare - current.bankShare) * 0.05,
+        institutionalShare: current.institutionalShare + (target.institutionalShare - current.institutionalShare) * 0.05,
+        foreignShare: Object.fromEntries((['USA','EUR','UK','JPN'] as RegionId[]).map(r => [r, current.foreignShare[r] + ((target.foreignShare[r] ?? 0) - current.foreignShare[r]) * 0.05])) as Record<RegionId, number>,
+        centralBankShare: current.centralBankShare + (target.centralBankShare - current.centralBankShare) * 0.05,
+      };
+    });
     if (isMeeting) {
       rateChanges.push({ region: regionId, deltaBps: rateDeltaBps });
     }
@@ -840,8 +904,33 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newForwardPE = Number((comp.forwardPE * 0.97 + Math.max(sectorPE * 0.5, Math.min(sectorPE * 1.6, targetPE)) * 0.03).toFixed(2));
 
     const newSentiment = Math.max(-1.0, Math.min(1.0, comp.sentiment * 0.85 + sentimentDelta));
-    const newStockPrice = isDefaulted ? 0.0 : Number(priceEquity(newEps, newForwardPE, newSentiment, false).toFixed(2));
+    const unadjustedStockPrice = isDefaulted ? 0.0 : Number(priceEquity(newEps, newForwardPE, newSentiment, false).toFixed(2));
+
+    const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region).reduce((s, c) => s + c.marketCap, 0) * 1_000_000;
+    const equityPremium = computeSupplyDemandPremium(
+      reg.equityOwnership,
+      { bank: reg.bankingSector.bankEquityUSD, institutional: reg.institutionalSector.sectorEquityUSD },
+      totalRegionEquityCapUSD
+    );
+    const newStockPrice = isDefaulted ? 0.0 : Number((unadjustedStockPrice * (1 + equityPremium * 0.1)).toFixed(2));
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
+
+    // Company Treasury Holdings (Part MF)
+    const investableCashUSD = Math.max(0, (newCash - newRevenue * 0.05) * 1_000_000);
+    const targetTreasuryUSD = investableCashUSD * 0.6;
+    const currentTreasuryUSD = (comp.treasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
+    let newTreasuryHoldings = [...(comp.treasuryHoldings || [])];
+    if (targetTreasuryUSD > currentTreasuryUSD) {
+      const nearestGovTranche = reg.govDebtTranches.find(t => t.tenorAtIssuanceYears <= 2);
+      if (nearestGovTranche) {
+        newTreasuryHoldings.push({
+          instrumentId: nearestGovTranche.id,
+          instrumentType: 'GOV_BOND',
+          issuerRegion: comp.region,
+          quantityOrNotionalUSD: targetTreasuryUSD - currentTreasuryUSD
+        });
+      }
+    }
 
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = comp.sharesOutstanding;
@@ -945,6 +1034,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         pricePar: loanPricing.pricePar,
         discountMarginBps: loanPricing.discountMarginBps,
       },
+      treasuryHoldings: newTreasuryHoldings,
     };
   });
 
@@ -953,6 +1043,17 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const reg = updatedRegions[regionId];
     const ipo = checkForIPO(regionId, reg, state.companies, nextWeek);
     if (ipo) {
+      const underwritingFeePct = 0.02;
+      const proceedsUSDReal = ipo.sharesOutstanding * ipo.stockPrice * 1_000_000;
+      const underwritingFeeUSD = proceedsUSDReal * underwritingFeePct;
+      reg.bankingSector.bankEquityUSD += underwritingFeeUSD;
+      if (!reg.bankingSector.itemizedHoldings) reg.bankingSector.itemizedHoldings = [];
+      reg.bankingSector.itemizedHoldings.push({
+        instrumentId: ipo.id,
+        instrumentType: 'EQUITY',
+        issuerRegion: regionId,
+        quantityOrNotionalUSD: proceedsUSDReal * 0.05
+      });
       updatedCompanies.push(ipo);
       recentIPOs.push({ ticker: ipo.ticker, name: ipo.name, category: ipo.productLines?.[0]?.category || 'Unknown', week: nextWeek });
       if (recentIPOs.length > 20) recentIPOs.shift();
@@ -1038,6 +1139,60 @@ export function advanceWeeklyStep(state: GameState): GameState {
       }
     }
   }
+
+  // Part ME: Itemized holdings attribution
+  (Object.keys(updatedRegions) as RegionId[]).forEach(regionId => {
+    const reg = updatedRegions[regionId];
+    const regionCompanies = updatedCompanies.filter(c => c.region === regionId && !c.isDefaulted);
+    
+    const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
+    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
+    
+    regionCompanies.forEach(c => {
+      equityCandidates.push({ id: c.id, type: 'EQUITY', region: regionId, outstandingUSD: c.marketCap * 1_000_000 });
+      (c.debtTranches || []).forEach(t => {
+        corpCandidates.push({
+          id: t.id,
+          type: t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN',
+          region: regionId,
+          outstandingUSD: t.principalUSD
+        });
+      });
+    });
+    
+    const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = (reg.govDebtTranches || []).map(gt => ({
+      id: gt.id,
+      type: 'GOV_BOND',
+      region: regionId,
+      outstandingUSD: gt.principalUSD
+    }));
+    
+    const totalCorpUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0);
+    const totalSovUSD = sovCandidates.reduce((s, c) => s + c.outstandingUSD, 0);
+    const totalEquityUSD = equityCandidates.reduce((s, c) => s + c.outstandingUSD, 0);
+    
+    // Banking Sector
+    const bankCorpShareUSD = reg.corpBondOwnership.bankShare * totalCorpUSD;
+    const bankSovShareUSD = reg.sovBondOwnership.bankShare * totalSovUSD;
+    const bankEquityShareUSD = reg.equityOwnership.bankShare * totalEquityUSD;
+    
+    reg.bankingSector.itemizedHoldings = [
+      ...attributeItemizedHoldings(bankCorpShareUSD, corpCandidates),
+      ...attributeItemizedHoldings(bankSovShareUSD, sovCandidates),
+      ...attributeItemizedHoldings(bankEquityShareUSD, equityCandidates),
+    ];
+    
+    // Institutional Sector
+    const instCorpShareUSD = reg.corpBondOwnership.institutionalShare * totalCorpUSD;
+    const instSovShareUSD = reg.sovBondOwnership.institutionalShare * totalSovUSD;
+    const instEquityShareUSD = reg.equityOwnership.institutionalShare * totalEquityUSD;
+    
+    reg.institutionalSector.itemizedHoldings = [
+      ...attributeItemizedHoldings(instCorpShareUSD, corpCandidates),
+      ...attributeItemizedHoldings(instSovShareUSD, sovCandidates),
+      ...attributeItemizedHoldings(instEquityShareUSD, equityCandidates),
+    ];
+  });
 
   // Phase 4a: Derived nominal GDP parallel diagnostic
   regionIds.forEach((regionId) => {
@@ -1249,13 +1404,20 @@ export function advanceWeeklyStep(state: GameState): GameState {
           }
 
           const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - nextWeek) / 52);
+          const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + c.totalDebt, 0) * 1_000_000;
+          const corpBondPremium = computeSupplyDemandPremium(
+            updatedRegions[pos.region].corpBondOwnership,
+            { bank: updatedRegions[pos.region].bankingSector.bankEquityUSD, institutional: updatedRegions[pos.region].institutionalSector.sectorEquityUSD },
+            totalCorpBondPrincipalOutstanding
+          );
+          const adjustedOasSpreadBps = comp.oasSpreadBps * (1 - corpBondPremium);
 
           if (tranche.rateType === 'FIXED') {
             const bondPriced = priceCorporateBond(
               remainingTenorYears,
               tranche.couponRate ?? 0.05,
               sovParams,
-              comp.oasSpreadBps,
+              adjustedOasSpreadBps,
               comp.isDefaulted,
               comp.recoveryRate
             );
@@ -1280,7 +1442,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           } else {
             const loanPricing = priceLeveragedLoan(
               tranche.floatingMarginBps ?? 200,
-              comp.oasSpreadBps,
+              adjustedOasSpreadBps,
               remainingTenorYears,
               comp.isDefaulted,
               comp.recoveryRate

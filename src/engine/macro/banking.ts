@@ -107,5 +107,6 @@ export function evolveBankingSector(
     creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
     centralBankReservesUSD: Number(newCentralBankReservesWithMonetization.toFixed(0)),
     moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
+    itemizedHoldings: prevBanking.itemizedHoldings || [],
   };
 }

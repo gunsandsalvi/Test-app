@@ -59,6 +59,7 @@ export interface BankingSector {
   creditConditionsIndex: number; // -1 (very loose) to +1 (very tight)
   centralBankReservesUSD: number;
   moneySupplyM2USD: number;
+  itemizedHoldings: ItemizedHolding[];
 }
 
 export interface AssetOwnershipShares {
@@ -68,6 +69,13 @@ export interface AssetOwnershipShares {
   centralBankShare: number; // meaningful only for sovereign bonds — 0 elsewhere
 }
 
+export interface ItemizedHolding {
+  instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN: the DebtTranche.id; for GOV_BOND: the GovDebtTranche.id
+  instrumentType: 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND';
+  issuerRegion: RegionId;
+  quantityOrNotionalUSD: number; // dollar-denominated market value at cost, not share count — consistent with how the rest of this codebase tracks position size
+}
+
 export interface InstitutionalSector {
   corpBondHoldingsUSD: number;
   sovBondHoldingsUSD: number;
@@ -75,6 +83,7 @@ export interface InstitutionalSector {
   cashUSD: number;
   sectorEquityUSD: number;          // capital base of the insurers/asset managers as a group — analogous to bankEquityUSD
   investmentIncomeMarginPct: number; // analogous to netInterestMarginPct
+  itemizedHoldings: ItemizedHolding[];
 }
 
 export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
@@ -422,6 +431,7 @@ export interface Company {
   inventoryCarryingCostRate: number; // small, sector-typical — storage, obsolescence, spoilage
   recentFulfillmentEMA: number; // EMA of supplier fulfillment ratio for responsive production
   _targetProductionUSD?: number; // transient
+  treasuryHoldings: ItemizedHolding[];
 }
 
 export type AssetType = 
