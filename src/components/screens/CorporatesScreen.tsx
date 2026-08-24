@@ -30,20 +30,29 @@ export const CorporatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any
       const isFixed = d.rateType === 'FIXED';
       const remainingTenorYears = Math.max(0.01, (d.maturityWeek - state.currentWeek) / 52);
       const sovParams = state.regions[c.region].yieldCurveParams;
-      const livePrice = c.isDefaulted
-        ? (isFixed ? c.recoveryRate * 100 : 65.0)
-        : isFixed
-          ? priceCorporateBond(remainingTenorYears, d.couponRate ?? 0.05, sovParams, c.oasSpreadBps, c.isDefaulted, c.recoveryRate).price
-          : priceLeveragedLoan(d.floatingMarginBps ?? 200, c.oasSpreadBps, remainingTenorYears, c.isDefaulted, c.recoveryRate).pricePar;
+      
+      let bondPricing, loanPricing;
+      if (isFixed) {
+        bondPricing = priceCorporateBond(remainingTenorYears, d.couponRate ?? 0.05, sovParams, c.oasSpreadBps, c.isDefaulted, c.recoveryRate);
+      } else {
+        loanPricing = priceLeveragedLoan(d.floatingMarginBps ?? 200, c.oasSpreadBps, remainingTenorYears, c.isDefaulted, c.recoveryRate);
+      }
+      
+      const livePrice = isFixed ? bondPricing!.price : loanPricing!.pricePar;
+      const cleanSymbol = `${c.ticker} ${remainingTenorYears.toFixed(1)}Y (wk ${d.maturityWeek})`;
+      const cleanName = `${c.name} ${remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Senior Bond' : 'Loan'}`;
       
       return {
         ...d,
         livePrice,
         remainingTenorYears,
+        ytm: bondPricing ? bondPricing.yieldToMaturity : undefined,
+        duration: bondPricing ? bondPricing.duration : undefined,
+        dm: loanPricing ? loanPricing.discountMarginBps : undefined,
         obj: {
           assetType: isFixed ? 'CORP_BOND' : 'LEV_LOAN',
-          id: d.id, symbol: d.id,
-          name: `${c.name} ${remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Senior Bond' : 'Loan'}`,
+          id: d.id, symbol: cleanSymbol,
+          name: cleanName,
           region: c.region, price: livePrice, quoteUnit: isFixed ? '% Par' : 'pts of par',
           details: { trancheId: d.id, tenorYears: remainingTenorYears, fixedRate: d.couponRate ?? 0, rateType: d.rateType, oasSpreadBps: c.oasSpreadBps, rating: c.creditRating, sector: c.sector },
         }
@@ -149,11 +158,13 @@ export const CorporatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any
                       <div key={t.id} onClick={() => onOpenTrade(t.obj)} className="flex items-center justify-between p-2 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer hover:border-[var(--text-tertiary)] transition-colors">
                          <div>
                             <div className="text-xs font-bold text-[var(--text-primary)]">{t.obj.name}</div>
-                            <div className="text-[9px] text-[var(--text-tertiary)]">Rate: {(t.obj.details.fixedRate! * 100).toFixed(2)}% | Prin: ${(t.principalUSD/1000).toFixed(1)}B</div>
+                            <div className="text-[9px] text-[var(--text-tertiary)]">Rate: {(t.obj.details.fixedRate! * 100).toFixed(2)}% | OAS {c.oasSpreadBps.toFixed(0)}bps ({c.creditRating}) | Prin: ${(t.principalUSD/1000).toFixed(1)}B</div>
                          </div>
                          <div className="text-right">
                             <div className="text-sm font-[var(--font-numeric)] text-[var(--text-primary)]">{t.livePrice.toFixed(2)}</div>
-                            <div className="text-[9px] text-[var(--text-tertiary)]">{t.obj.quoteUnit}</div>
+                            <div className="text-[9px] text-[var(--text-tertiary)]">
+                               {t.ytm !== undefined ? `YTM ${(t.ytm * 100).toFixed(2)}% · Dur ${t.duration!.toFixed(1)}y` : `DM ${t.dm?.toFixed(0)}bps`}
+                            </div>
                          </div>
                       </div>
                    ))}

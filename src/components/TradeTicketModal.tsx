@@ -40,6 +40,8 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   const [direction, setDirection] = useState<'BUY' | 'SELL'>('BUY');
   const [showPayoffChart, setShowPayoffChart] = useState<boolean>(true);
 
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const dealer = state.dealers.find((d) => d.id === selectedDealerId) || state.dealers[0];
   const region = state.regions[instrument.region];
   const policyRate = region?.policyRate ?? 0.0475;
@@ -367,7 +369,15 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
           </div>
         </div>
 
-        {/* Dealer Selection Counterparties (With Inventory Axes) */}
+        
+        <button onClick={() => setShowAdvanced(!showAdvanced)} className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors">
+          {showAdvanced ? 'Hide' : 'Show'} advanced (dealer, spread, payoff) <ChevronRight className={`w-3 h-3 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
+        </button>
+
+        {showAdvanced && (
+          <div className="space-y-3 pt-3 border-t border-slate-800">
+            {/* Dealer Selection Counterparties (With Inventory Axes) */}
+
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-400 font-medium">Counterparty Dealer & Axe:</span>
@@ -449,14 +459,23 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
           </div>
         </div>
 
-        {/* Execution Costs & Margining Summary */}
-        <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-[10px] font-mono">
-          <div className="flex items-center justify-between text-slate-400">
-            <span>Execution Spread:</span>
-            <span className="text-amber-400 font-bold">{spreadBps} bps</span>
+          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-[10px] font-mono">
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Execution Spread:</span>
+              <span className="text-amber-400 font-bold">{spreadBps} bps</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Estimated Spread Cost:</span>
+              <span className="text-slate-200">${spreadCostUSD.toFixed(0)}</span>
+            </div>
           </div>
+        </div>
+        )}
+        
+        {/* Always visible margin required */}
+        <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-[10px] font-mono mt-3">
           <div className="flex items-center justify-between text-slate-400">
-            <span>Estimated Spread Cost:</span>
+            <span>Estimated Total Cost (Spread):</span>
             <span className="text-slate-200">${spreadCostUSD.toFixed(0)}</span>
           </div>
           <div className="flex items-center justify-between text-slate-400 pt-1 border-t border-slate-800/80">

@@ -72,13 +72,18 @@ export function priceCorporateBond(
   let pv = 0;
   let weightedTime = 0;
 
-  for (let year = 1; year <= maturityYears; year++) {
-    const baseZeroRate = calculateNelsonSiegelZeroRate(year, sovCurveParams);
+  const cfTimes: number[] = [];
+  for (let t = maturityYears; t > 0; t -= 1) {
+    cfTimes.push(t);
+  }
+
+  for (const t of cfTimes) {
+    const baseZeroRate = calculateNelsonSiegelZeroRate(t, sovCurveParams);
     const discountRate = baseZeroRate + spread;
-    const df = Math.exp(-discountRate * year);
-    const cf = year === maturityYears ? annualCoupon + 100 : annualCoupon;
+    const df = Math.exp(-discountRate * t);
+    const cf = t === maturityYears ? annualCoupon + 100 : annualCoupon;
     pv += cf * df;
-    weightedTime += year * cf * df;
+    weightedTime += t * cf * df;
   }
 
   const ytm = calculateNelsonSiegelZeroRate(maturityYears, sovCurveParams) + spread;
