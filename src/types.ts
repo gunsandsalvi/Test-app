@@ -19,7 +19,15 @@ export interface CategoryDemandState {
   demandGrowthAnnual: number;
   demandHistory: number[];
   crowdingIntensity: number;
+  inventoryLevelUSD: number;
+  inputCostPressure: number;
 }
+
+export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = {
+  CorporateTech: { CorporateIndustrial: 0.12 },
+  StandardHousehold: { CorporateIndustrial: 0.10 },
+  LuxuryHousehold: { CorporateIndustrial: 0.08 },
+};
 
 
 export type Sector = 'Tech' | 'Energy' | 'Financials' | 'Industrials' | 'Consumer' | 'Banks';

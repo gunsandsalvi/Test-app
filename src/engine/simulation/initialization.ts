@@ -1,10 +1,11 @@
 
-import { RegionId, Region, Portfolio, Dealer } from '../../types';
+import { RegionId, Region, Portfolio, Dealer, OccupationType } from '../../types';
 import { DEALERS } from '../dealers';
 import { generateIPOCompany } from '../companyGenerator';
 import { GameState, Company } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices } from '../macroEngine';
+import { computeOccupationDemand } from './core';
 
 export function createInitialGameState(): GameState {
   const regions = getInitialRegions();
@@ -30,7 +31,14 @@ export function createInitialGameState(): GameState {
       CorporateTech: corpBase * 0.4,
     };
     Object.keys(targets).forEach(cat => {
-      (regions[regionId].categoryDemand as any)[cat] = { demandLevelUSD: targets[cat], demandGrowthAnnual: 0, demandHistory: [targets[cat]] };
+      (regions[regionId].categoryDemand as any)[cat] = {
+        demandLevelUSD: targets[cat],
+        demandGrowthAnnual: 0,
+        demandHistory: [targets[cat]],
+        crowdingIntensity: 0,
+        inventoryLevelUSD: targets[cat] * 0.10,
+        inputCostPressure: 0,
+      };
     });
 
     // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
@@ -42,6 +50,30 @@ export function createInitialGameState(): GameState {
     reg.institutionalSector.equityHoldingsUSD = Number((reg.equityOwnership.institutionalShare * totalMarketCap).toFixed(0));
     reg.institutionalSector.corpBondHoldingsUSD = Number((reg.corpBondOwnership.institutionalShare * totalCorpDebt).toFixed(0));
     reg.institutionalSector.sovBondHoldingsUSD = Number((reg.sovBondOwnership.institutionalShare * totalSovDebt).toFixed(0));
+
+    // Calibrate initial occupationLaborForceShare from actual week-1 demand across companies & private segments
+    // with realistic occupational tightness differentials
+    const week1OccDemand = computeOccupationDemand(regionCompanies, reg.privateSectorSegments, regionId, reg.governmentEmployment);
+    const week1DemandTotal = Object.values(week1OccDemand).reduce((s, v) => s + v, 0);
+    const slackMultipliers: Record<OccupationType, number> = {
+      GENERAL: 1.12,
+      SKILLED_TRADES: 1.08,
+      TECHNICAL_ENGINEERING: 1.04,
+      SPECIALIZED_PROFESSIONAL: 1.05,
+      MANAGERIAL_FINANCIAL: 1.07,
+    };
+    const calibratedShares = (Object.keys(week1OccDemand) as OccupationType[]).reduce((acc, occ) => {
+      const mult = slackMultipliers[occ] ?? 1.08;
+      acc[occ] = week1DemandTotal > 0 ? Math.max(0.03, (week1OccDemand[occ] / week1DemandTotal) * mult) : 0.2;
+      return acc;
+    }, {} as Record<OccupationType, number>);
+    const shareSum = Object.values(calibratedShares).reduce((s, v) => s + v, 0);
+    if (shareSum > 0) {
+      (Object.keys(calibratedShares) as OccupationType[]).forEach(occ => {
+        calibratedShares[occ] = Number((calibratedShares[occ] / shareSum).toFixed(4));
+      });
+    }
+    reg.occupationLaborForceShare = calibratedShares;
   });
 
   const commodities = getInitialCommodities();

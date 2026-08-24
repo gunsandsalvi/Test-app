@@ -7,7 +7,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment } from '../../types';
+import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from './constants';
@@ -15,7 +15,7 @@ import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeInd
 import { priceCommodityFutures } from '../pricing';
 import { FIXED_SHARE_BY_RATING } from '../companyGenerator';
 
-function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId): Record<OccupationType, number> {
+export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<OccupationType, number> {
   const demand: Record<OccupationType, number> = { GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 };
   companies.filter(c => c.region === regionId && !c.isDefaulted).forEach(c => {
     const mix = SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 };
@@ -27,10 +27,22 @@ function computeOccupationDemand(companies: Company[], privateSegments: PrivateS
       Object.entries(mix).forEach(([occ, share]) => { demand[occ as OccupationType] += seg.employment * (share ?? 0); });
     }
   });
+  if (governmentEmployment && governmentEmployment > 0) {
+    const govMix: Record<OccupationType, number> = {
+      GENERAL: 0.40,
+      SPECIALIZED_PROFESSIONAL: 0.35,
+      MANAGERIAL_FINANCIAL: 0.15,
+      TECHNICAL_ENGINEERING: 0.10,
+      SKILLED_TRADES: 0.00,
+    };
+    Object.entries(govMix).forEach(([occ, share]) => {
+      demand[occ as OccupationType] += governmentEmployment * share;
+    });
+  }
   return demand;
 }
 
-function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
+export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
 }
@@ -109,7 +121,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const regionOccDemand = computeOccupationDemand(
       prevActiveFirms,
       state.regions[regionId].privateSectorSegments,
-      regionId
+      regionId,
+      state.regions[regionId].governmentEmployment
     );
 
     const { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
@@ -214,7 +227,27 @@ export function advanceWeeklyStep(state: GameState): GameState {
         demandGrowthAnnual: growthAnnual,
         demandHistory: [...prevHistory.slice(-25), newLevel],
         crowdingIntensity,
+        inventoryLevelUSD: existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
+        inputCostPressure: existingEntry?.inputCostPressure ?? 0,
       };
+    });
+
+    // Stage 3: Input-Output Map + Inventory (formulaic input flow, bidding disabled)
+    Object.keys(CATEGORY_INPUT_REQUIREMENTS).forEach(cat => {
+      const requirements = CATEGORY_INPUT_REQUIREMENTS[cat];
+      if (!requirements) return;
+      Object.entries(requirements).forEach(([inputCat, intensity]) => {
+        const inputSupplierCategory = reg.categoryDemand[inputCat as any];
+        if (!inputSupplierCategory) return;
+        const inputNeeded = (reg.categoryDemand[cat as any]?.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
+        const availableFromInventory = Math.min(inputNeeded, inputSupplierCategory.inventoryLevelUSD ?? 0);
+        const shortfall = inputNeeded - availableFromInventory;
+        // no bidding this stage — shortfall just draws inventory toward zero and (formulaically) raises inputCostPressure, no quantity rationing yet
+        const newInventory = Math.max(0, (inputSupplierCategory.inventoryLevelUSD ?? 0) - availableFromInventory + inputSupplierCategory.demandLevelUSD * 0.02); // 2% of category output banks as inventory each week, formulaic production
+        const inputCostPressure = inputNeeded > 0 ? Math.min(0.5, shortfall / inputNeeded) : 0;
+        (reg.categoryDemand[inputCat as any] as any).inventoryLevelUSD = newInventory;
+        (reg.categoryDemand[cat as any] as any).inputCostPressure = inputCostPressure;
+      });
     });
   });
 
