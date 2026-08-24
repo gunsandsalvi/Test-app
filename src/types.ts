@@ -402,6 +402,11 @@ export interface Company {
   // Dynamic Sentiment
   sentiment: number; // -1.0 (bearish) to +1.0 (bullish)
   inputSupplyConstraintFactor: number; // 0-1, how much of desired output this company can actually produce given input access this week
+
+  // Production Economics & Finished Goods Inventory
+  finishedGoodsInventoryUSD: number; // unsold output, carried at production cost
+  inventoryCarryingCostRate: number; // small, sector-typical — storage, obsolescence, spoilage
+  _targetProductionUSD?: number; // transient
 }
 
 export type AssetType = 

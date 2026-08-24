@@ -234,12 +234,6 @@ export function advanceWeeklyStep(state: GameState): GameState {
       };
     });
 
-    Object.keys(reg.categoryDemand).forEach(cat => {
-      const entry = reg.categoryDemand[cat as any] as any;
-      if (entry.inventoryLevelUSD === undefined) return;
-      entry.inventoryLevelUSD = Math.max(0, (entry.inventoryLevelUSD ?? 0) + (entry.demandLevelUSD ?? 0) * 0.02 / 52);
-    });
-
     // Stage 4: Input-Output Map + Weekly Clearing Bidding
     Object.keys(CATEGORY_INPUT_REQUIREMENTS).forEach(cat => {
       const requirements = CATEGORY_INPUT_REQUIREMENTS[cat];
@@ -250,7 +244,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         if (!supplier || !demander) return;
 
         const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
-        const weeklyProduction = (supplier.demandLevelUSD ?? 0) * 0.02 / 52;
+        const supplierFirms = prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.category === inputCat));
+        const weeklyProduction = supplierFirms.reduce((s, c) => {
+          const line = (c.productLines || []).find(l => l.category === inputCat);
+          const warehouseCap = c.annualRevenue * 0.15;
+          const throttle = (c.finishedGoodsInventoryUSD ?? 0) > warehouseCap ? 0.3 : 1.0;
+          return s + (c._targetProductionUSD ?? ((c.annualRevenue * 0.02 / 52) * (line?.revenueShare ?? 0) * throttle));
+        }, 0);
         const totalAvailableSupply = lastWeekInventory + weeklyProduction;
 
         const bidQuantity = (demander.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
@@ -264,6 +264,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
         supplier.clearedInputPriceIndex = Number(newPriceIndex.toFixed(4));
         supplier.inventoryLevelUSD = Math.max(0, totalAvailableSupply - quantityFulfilled);
+        supplier._fulfillmentRatio = totalAvailableSupply > 0 ? quantityFulfilled / totalAvailableSupply : 1;
         demander.inputCostPressure = Number(Math.max(0, newPriceIndex - 1.0).toFixed(4));
         demander._fulfillmentRatio = fulfillmentRatio; // transient, read by AA3 same week, not persisted
       });
@@ -396,6 +397,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let newNetIncome = 0;
     let newEps = 0;
     let newInputSupplyConstraintFactor = comp.inputSupplyConstraintFactor ?? 1.0;
+    let targetProductionUSD = 0;
+    let productionCostUSD = 0;
+    let carryingCostUSD = (comp.finishedGoodsInventoryUSD ?? 0) * (comp.inventoryCarryingCostRate ?? 0.02) / 52;
+    let newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) - carryingCostUSD);
 
     const executionNoise = (Math.random() - 0.5) * 0.3;
     const newExecutionQuality = Math.max(0.4, Math.min(1.8, (comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08));
@@ -516,6 +521,27 @@ export function advanceWeeklyStep(state: GameState): GameState {
       
       // Smooth transition to target revenue (no exponential weekly compounding)
       newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
+
+      const industrialLine = (comp.productLines || []).find(l => l.category === 'CorporateIndustrial');
+      let unsoldThisWeekUSD = 0;
+
+      if (industrialLine && industrialLine.revenueShare > 0) {
+        const warehouseCapacityUSD = comp.annualRevenue * 0.15;
+        const productionThrottle = (comp.finishedGoodsInventoryUSD ?? 0) > warehouseCapacityUSD ? 0.3 : 1.0;
+
+        targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionThrottle;
+        productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
+
+        const categoryFulfillmentRatio = (reg.categoryDemand['CorporateIndustrial'] as any)?._fulfillmentRatio ?? 1;
+        const soldThisWeekUSD = targetProductionUSD * categoryFulfillmentRatio;
+        unsoldThisWeekUSD = targetProductionUSD - soldThisWeekUSD;
+
+        newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) + unsoldThisWeekUSD - carryingCostUSD);
+      }
+
+      const revenueAdjustmentForUnsold = -unsoldThisWeekUSD * 0.5;
+      newRevenue = Math.max(10, newRevenue + revenueAdjustmentForUnsold);
+
       newEbitda = newRevenue * newEbitdaMargin;
       const da = newRevenue * 0.05;
       newEbit = Math.max(1, newEbitda - da);
@@ -591,7 +617,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     // Weekly Cash flow and debt amortization / prepayment
     const weeklyFreeCashFlow = comp.sector === 'Banks'
       ? (newNetIncome / 52)
-      : (newEbitda / 52 - newCapex / 52 - weeklyInterest + weeklyDebtFundedPortion);
+      : (newEbitda / 52 - newCapex / 52 - weeklyInterest + weeklyDebtFundedPortion - (productionCostUSD + carryingCostUSD));
     let newCash = comp.cash + weeklyFreeCashFlow;
     let newTotalDebt = comp.totalDebt;
 
@@ -835,6 +861,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,
       executionQuality: Number(newExecutionQuality.toFixed(3)),
       inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
+      _targetProductionUSD: targetProductionUSD,
+      finishedGoodsInventoryUSD: Number(newFinishedGoodsInventoryUSD.toFixed(2)),
+      inventoryCarryingCostRate: comp.inventoryCarryingCostRate ?? 0.02,
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,
