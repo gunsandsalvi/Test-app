@@ -200,7 +200,7 @@ export interface Region {
   sovBondOwnership: AssetOwnershipShares;
   institutionalSector: InstitutionalSector;
   laggedCorporateDemandBase: number;
-  estimatedHouseholdIncomeUSD: number; // aggregate regional household income proxy, in $M, grows with GDP
+  estimatedHouseholdIncomeUSD: number; // aggregate regional household income proxy, grows with GDP
   // Macro fundamentals
   policyRate: number; // e.g. 0.045 = 4.50%
   neutralRate: number; // r* (e.g. 0.025)
@@ -223,7 +223,7 @@ export interface Region {
   exportsUSD: number;
   importsUSD: number;
   currentAccountPctGdp: number; // e.g. -0.031 = -3.1% of GDP
-  fxReservesBlnUSD: number; // e.g. 38.5B USD
+  fxReservesUSD: number; // raw USD
   structuralDeficitPctGdp: number;
   fiscalDeficitPctGdp: number; // e.g. 0.065 = 6.5% deficit
   debtToGdpPct: number; // e.g. 1.224 = 122.4% gross debt
@@ -232,6 +232,7 @@ export interface Region {
   laggedPolicyRateEMA: number;
   laborForceParticipation: number;
   inflationDeviationStreak: number;
+  smoothedSlackGap?: number;
 
   // Population & Labor Force Accounting (Phase 1, Private-Sector Segments & Occupation Pools)
   totalPopulation: number;              // raw headcount, this world's own organic figure — not calibrated to any real country
@@ -483,6 +484,7 @@ export interface Company {
   recentFulfillmentEMA: number; // EMA of supplier fulfillment ratio for responsive production
   _targetProductionUSD?: number; // transient
   treasuryHoldings: ItemizedHolding[];
+  producedCommodityId?: string;
 }
 
 export type AssetType = 

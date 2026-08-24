@@ -14,6 +14,7 @@ import { calculateDynamicSpreadBps, getUnifiedInitialMarginRate } from '../engin
 import { calculateExpectedCarry } from '../engine/carryCalculator';
 import { calculateBlackScholesGreeks } from '../engine/blackScholes';
 import { calculateNelsonSiegelZeroRate } from '../engine/nelsonSiegel';
+import { formatCurrency as formatCurrencyCentral } from '../engine/formatters';
 
 interface TradeTicketModalProps {
   instrument: TradeableInstrument;
@@ -213,14 +214,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   };
 
   const formatCurrency = (val: number) => {
-    const abs = Math.abs(val);
-    if (abs >= 1_000_000) {
-      return `$${(val / 1_000_000).toFixed(2)}M`;
-    }
-    if (abs >= 1_000) {
-      return `$${(val / 1_000).toFixed(1)}k`;
-    }
-    return `$${val.toFixed(0)}`;
+    return formatCurrencyCentral(val, { compact: true });
   };
 
   return (
@@ -314,7 +308,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
                     : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
-                ${amt >= 1e6 ? `${amt / 1e6}M` : `${amt / 1e3}k`}
+                {formatCurrency(amt)}
               </button>
             ))}
           </div>

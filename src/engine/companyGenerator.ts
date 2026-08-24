@@ -494,7 +494,32 @@ export function generateInitialCompanies(): Company[] {
   const regions: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
 
   regions.forEach((region) => {
-    const templates = REGION_COMPANIES[region];
+    const regionPrefix = region === 'USA' ? 'U' : region === 'UK' ? 'K' : region === 'EUR' ? 'E' : 'J';
+    const commodityTemplates: any[] = [
+      // 1. Energy
+      { ticker: regionPrefix + 'WTA', name: `${region} Crude Oil Alpha`, sector: 'Energy', revBase: 55000, ebitdaMargin: 0.32, debtBase: 25000, cashBase: 15000, shares: 1200, initialRating: 'AA', beta: 1.10, producedCommodityId: 'WTI' },
+      { ticker: regionPrefix + 'WTB', name: `${region} Crude Oil Beta`, sector: 'Energy', revBase: 48000, ebitdaMargin: 0.30, debtBase: 22000, cashBase: 12000, shares: 1000, initialRating: 'A', beta: 1.15, producedCommodityId: 'WTI' },
+      { ticker: regionPrefix + 'BRA', name: `${region} Brent Production A`, sector: 'Energy', revBase: 62000, ebitdaMargin: 0.35, debtBase: 28000, cashBase: 18000, shares: 1400, initialRating: 'AA', beta: 1.05, producedCommodityId: 'BRENT' },
+      { ticker: regionPrefix + 'BRB', name: `${region} Brent Production B`, sector: 'Energy', revBase: 50000, ebitdaMargin: 0.31, debtBase: 24000, cashBase: 14000, shares: 1100, initialRating: 'A', beta: 1.12, producedCommodityId: 'BRENT' },
+      { ticker: regionPrefix + 'NGA', name: `${region} Gas Extraction A`, sector: 'Energy', revBase: 38000, ebitdaMargin: 0.28, debtBase: 18000, cashBase: 10000, shares: 900, initialRating: 'A', beta: 1.25, producedCommodityId: 'NATGAS' },
+      { ticker: regionPrefix + 'NGB', name: `${region} Gas Extraction B`, sector: 'Energy', revBase: 32000, ebitdaMargin: 0.26, debtBase: 16000, cashBase: 8000, shares: 750, initialRating: 'BBB', beta: 1.30, producedCommodityId: 'NATGAS' },
+      // 2. Metals
+      { ticker: regionPrefix + 'GDA', name: `${region} Gold Mining A`, sector: 'Industrials', revBase: 45000, ebitdaMargin: 0.38, debtBase: 15000, cashBase: 16000, shares: 1500, initialRating: 'AA', beta: 0.85, producedCommodityId: 'GOLD' },
+      { ticker: regionPrefix + 'GDB', name: `${region} Gold Mining B`, sector: 'Industrials', revBase: 38000, ebitdaMargin: 0.34, debtBase: 12000, cashBase: 11000, shares: 1100, initialRating: 'A', beta: 0.90, producedCommodityId: 'GOLD' },
+      { ticker: regionPrefix + 'SLA', name: `${region} Silver Extraction A`, sector: 'Industrials', revBase: 32000, ebitdaMargin: 0.28, debtBase: 14000, cashBase: 9000, shares: 800, initialRating: 'A', beta: 1.15, producedCommodityId: 'SILVER' },
+      { ticker: regionPrefix + 'SLB', name: `${region} Silver Extraction B`, sector: 'Industrials', revBase: 28000, ebitdaMargin: 0.24, debtBase: 12000, cashBase: 7000, shares: 650, initialRating: 'BBB', beta: 1.20, producedCommodityId: 'SILVER' },
+      { ticker: regionPrefix + 'CPA', name: `${region} Copper Mining A`, sector: 'Industrials', revBase: 42000, ebitdaMargin: 0.30, debtBase: 22000, cashBase: 11000, shares: 1000, initialRating: 'A', beta: 1.20, producedCommodityId: 'COPPER' },
+      { ticker: regionPrefix + 'CPB', name: `${region} Copper Mining B`, sector: 'Industrials', revBase: 35000, ebitdaMargin: 0.27, debtBase: 18000, cashBase: 9000, shares: 850, initialRating: 'BBB', beta: 1.25, producedCommodityId: 'COPPER' },
+      // 3. Agriculture
+      { ticker: regionPrefix + 'WHA', name: `${region} Wheat Farms A`, sector: 'Consumer', revBase: 28000, ebitdaMargin: 0.18, debtBase: 10000, cashBase: 6000, shares: 700, initialRating: 'A', beta: 0.75, producedCommodityId: 'WHEAT' },
+      { ticker: regionPrefix + 'WHB', name: `${region} Wheat Farms B`, sector: 'Consumer', revBase: 24000, ebitdaMargin: 0.16, debtBase: 8000, cashBase: 5000, shares: 600, initialRating: 'BBB', beta: 0.80, producedCommodityId: 'WHEAT' },
+      { ticker: regionPrefix + 'CRA', name: `${region} Corn Agribusiness A`, sector: 'Consumer', revBase: 34000, ebitdaMargin: 0.20, debtBase: 12000, cashBase: 8000, shares: 900, initialRating: 'A', beta: 0.80, producedCommodityId: 'CORN' },
+      { ticker: regionPrefix + 'CRB', name: `${region} Corn Agribusiness B`, sector: 'Consumer', revBase: 29000, ebitdaMargin: 0.17, debtBase: 10000, cashBase: 6000, shares: 750, initialRating: 'BBB', beta: 0.85, producedCommodityId: 'CORN' },
+      { ticker: regionPrefix + 'SYA', name: `${region} Soybean Growers A`, sector: 'Consumer', revBase: 31000, ebitdaMargin: 0.19, debtBase: 11000, cashBase: 7000, shares: 800, initialRating: 'A', beta: 0.82, producedCommodityId: 'SOYBEANS' },
+      { ticker: regionPrefix + 'SYB', name: `${region} Soybean Growers B`, sector: 'Consumer', revBase: 26000, ebitdaMargin: 0.16, debtBase: 9000, cashBase: 5000, shares: 650, initialRating: 'BBB', beta: 0.88, producedCommodityId: 'SOYBEANS' },
+    ];
+
+    const templates = [...REGION_COMPANIES[region], ...commodityTemplates];
 
     // Group templates by primary category to rank them properly
     const categoryGroups: Record<string, CompanyTemplate[]> = {};
@@ -688,6 +713,7 @@ export function generateInitialCompanies(): Company[] {
         inventoryCarryingCostRate: 0.02,
         recentFulfillmentEMA: 1.0,
         treasuryHoldings: [],
+        producedCommodityId: (tmpl as any).producedCommodityId,
       };
 
       companies.push(company);

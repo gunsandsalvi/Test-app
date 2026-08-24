@@ -1,6 +1,6 @@
 
 import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche, GovDebtTranche } from '../../types';
-import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap } from '../pricing';
+import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap, priceCommodityFutures } from '../pricing';
 import { calculateNelsonSiegelZeroRate, priceSovereignBond } from '../nelsonSiegel';
 import { EarningsReportEvent, generateWeeklyNews } from '../newsGenerator';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../formatters';
@@ -454,10 +454,47 @@ export function advanceWeeklyStep(state: GameState): GameState {
     updatedRegions[r].tradeBalance = regionExports[r] - regionImports[r];
   });
 
-  // 4. Evolve Commodities
-  const updatedCommodities = state.commodities.map((comm) =>
-    evolveCommodity(comm, updatedRegions.USA.gdpGrowth, updatedRegions.USA.policyRate, updatedRegions)
-  );
+  // 4. Evolve Commodities (Part QB - Dynamic Feedback Loop)
+  const updatedCommodities = state.commodities.map((comm) => {
+    const producers = state.companies.filter(c => !c.isDefaulted && c.producedCommodityId === comm.id);
+    const totalProductionUSD = producers.reduce((sum, c) => sum + c.annualRevenue, 0);
+    const productionVolume = comm.spotPrice > 0 ? (totalProductionUSD / comm.spotPrice / 52) : 0;
+
+    const baseDemandVolume = producers.reduce((sum, c) => sum + (c.baselineAnnualRevenue / comm.spotPrice / 52), 0);
+    const avgGdpGrowth = (updatedRegions.USA.gdpGrowth + updatedRegions.UK.gdpGrowth + updatedRegions.JPN.gdpGrowth + updatedRegions.EUR.gdpGrowth) / 4;
+    const demandVolume = baseDemandVolume * Math.pow(1 + avgGdpGrowth, state.currentWeek / 52);
+
+    const evolvedComm = evolveCommodity(comm, updatedRegions.USA.gdpGrowth, updatedRegions.USA.policyRate, updatedRegions);
+
+    let newSpot = evolvedComm.spotPrice;
+    if (productionVolume > 0 && demandVolume > 0) {
+      if (productionVolume > demandVolume) {
+        newSpot = evolvedComm.spotPrice * (1 - 0.02 * (productionVolume / demandVolume - 1));
+      } else {
+        newSpot = evolvedComm.spotPrice * (1 + 0.02 * (demandVolume / productionVolume - 1));
+      }
+    }
+
+    newSpot = Math.max(0.1, Math.min(10000.0, newSpot));
+
+    const rfUSD = updatedRegions.USA.zeroRates.tenor3M;
+    const f1M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 1 / 12).toFixed(2));
+    const f3M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 3 / 12).toFixed(2));
+    const f6M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 6 / 12).toFixed(2));
+
+    const change1W = comm.historicalPrices.length > 0 ? (newSpot - comm.historicalPrices[comm.historicalPrices.length - 1]) / comm.historicalPrices[comm.historicalPrices.length - 1] * 100 : 0;
+
+    return {
+      ...evolvedComm,
+      spotPrice: Number(newSpot.toFixed(2)),
+      futures1M: f1M,
+      futures3M: f3M,
+      futures6M: f6M,
+      change1W: Number(change1W.toFixed(2)),
+      historicalPrices: [...comm.historicalPrices.slice(-51), Number(newSpot.toFixed(2))],
+      supplyDemandBalance: (productionVolume > demandVolume * 1.05 ? 'Surplus (Oversupplied)' : productionVolume < demandVolume * 0.95 ? 'Deficit (Tight Supply)' : 'Balanced') as 'Balanced' | 'Deficit (Tight Supply)' | 'Surplus (Oversupplied)'
+    };
+  });
 
   // 5. Evolve 200 Company Fundamentals + Asynchronous Earnings + Debt Prepayment + M&A
   const ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[] = [];
@@ -974,7 +1011,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newStockPrice = isDefaulted ? 0.0 : Number((unadjustedStockPrice * (1 + equityPremium * 0.1)).toFixed(2));
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
 
-    // Company Treasury Holdings (Part MF)
+    // Company Treasury Holdings (Part MF) - Fixed Cash Leak & Liquidations
     const investableCashUSD = Math.max(0, newCash - newRevenue * 0.05);
     const targetTreasuryUSD = investableCashUSD * 0.6;
     const currentTreasuryUSD = (comp.treasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
@@ -982,12 +1019,24 @@ export function advanceWeeklyStep(state: GameState): GameState {
     if (targetTreasuryUSD > currentTreasuryUSD) {
       const nearestGovTranche = reg.govDebtTranches.find(t => t.tenorAtIssuanceYears <= 2);
       if (nearestGovTranche) {
+        const purchaseAmountUSD = targetTreasuryUSD - currentTreasuryUSD;
         newTreasuryHoldings.push({
           instrumentId: nearestGovTranche.id,
           instrumentType: 'GOV_BOND',
           issuerRegion: comp.region,
-          quantityOrNotionalUSD: targetTreasuryUSD - currentTreasuryUSD
+          quantityOrNotionalUSD: purchaseAmountUSD
         });
+        newCash -= purchaseAmountUSD; // debit the cash
+      }
+    } else if (targetTreasuryUSD < currentTreasuryUSD) {
+      const sellAmountUSD = currentTreasuryUSD - targetTreasuryUSD;
+      if (currentTreasuryUSD > 0) {
+        const scale = targetTreasuryUSD / currentTreasuryUSD;
+        newTreasuryHoldings = newTreasuryHoldings.map(h => ({
+          ...h,
+          quantityOrNotionalUSD: h.quantityOrNotionalUSD * scale
+        })).filter(h => h.quantityOrNotionalUSD > 0.01);
+        newCash += sellAmountUSD; // credit the cash
       }
     }
 
@@ -1933,7 +1982,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     gameOverReason = 'INSOLVENCY: Portfolio NAV collapsed below $1,000,000 liquidation floor.';
   } else if (currentNavUSD < maintenanceMarginUSD) {
     isMarginCall = true;
-    marginCallWarning = `CRITICAL MARGIN CALL: NAV ($${(currentNavUSD / 1e6).toFixed(2)}M) breached Maintenance Margin ($${(maintenanceMarginUSD / 1e6).toFixed(2)}M). Liquidate risky positions immediately.`;
+    marginCallWarning = `CRITICAL MARGIN CALL: NAV (${formatCurrency(currentNavUSD, { compact: true })}) breached Maintenance Margin (${formatCurrency(maintenanceMarginUSD, { compact: true })}). Liquidate risky positions immediately.`;
   } else if (marginUtilizationPct > 80) {
     marginCallWarning = `WARNING: Margin Utilization reached ${marginUtilizationPct}%. Approaching initial margin limits.`;
   }
@@ -2070,8 +2119,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     week: nextWeek,
     timestamp: new Date().toISOString(),
     category: 'EXECUTION',
-    message: `Weekly NAV Settlement: NAV $${(currentNavUSD / 1e6).toFixed(2)}M (PnL ${pnlDeltaUSD >= 0 ? '+' : ''}$${pnlDeltaUSD.toFixed(0)})`,
-    deltaText: `Margin Util: ${marginUtilizationPct}% | Delta: $${(netDeltaUSD / 1e3).toFixed(1)}K | DV01: $${netDV01USD.toFixed(0)}`,
+    message: `Weekly NAV Settlement: NAV ${formatCurrency(currentNavUSD, { compact: true })} (PnL ${pnlDeltaUSD >= 0 ? '+' : ''}${formatCurrency(pnlDeltaUSD, { precision: 0 })})`,
+    deltaText: `Margin Util: ${marginUtilizationPct}% | Delta: ${formatCurrency(netDeltaUSD, { compact: true })} | DV01: ${formatCurrency(netDV01USD, { precision: 0 })}`,
     data: {
       navUSD: currentNavUSD,
       pnlDeltaUSD,

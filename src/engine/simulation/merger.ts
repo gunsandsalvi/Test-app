@@ -1,4 +1,5 @@
 import { Company } from '../../types';
+import { formatCurrency } from '../formatters';
 
 export interface MergerCandidate {
   acquirerTicker: string;
@@ -32,8 +33,7 @@ export function checkForMerger(
 
       // Probabilistic execution trigger: 20% when an eligible match is found
       if (Math.random() < 0.20) {
-        const valM = target.marketCap > 1e6 ? target.marketCap / 1e6 : target.marketCap;
-        const valStr = valM >= 1000 ? `$${(valM * 1.15 / 1000).toFixed(1)}B` : `$${(valM * 1.15).toFixed(0)}M`;
+        const valStr = formatCurrency(target.marketCap * 1.15, { compact: true, precision: 1 });
         return {
           acquirerTicker: acquirer.ticker,
           targetTicker: target.ticker,

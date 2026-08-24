@@ -1,6 +1,7 @@
 import React from 'react';
 import { GameState } from '../types';
 import { X, RefreshCw, FileText } from 'lucide-react';
+import { formatCurrency } from '../engine/formatters';
 
 interface OverflowMenuProps {
   onClose: () => void;
@@ -34,7 +35,7 @@ export const OverflowMenu: React.FC<OverflowMenuProps> = ({ onClose, onRestart, 
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Global AUM:</span>
-              <span className="font-mono text-slate-200">${(state.portfolio.navUSD / 1e9).toFixed(2)}B</span>
+              <span className="font-mono text-slate-200">{formatCurrency(state.portfolio.navUSD, { compact: true })}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Sim Clock:</span>
