@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GameState, Commodity } from '../../types';
+import { GameState, Commodity, Region, RegionId } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
 import { priceCommodityFutures } from '../../engine/pricing';
@@ -47,7 +47,9 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
         <div className="space-y-2">
           {commodities.map(c => {
             // Find active weather shock if any
-            const activeWeather = Object.values(state.regions).find(r => r.weather && r.weather.affectedCommodityId === c.id && r.weather.severity !== 'Normal');
+            const activeWeatherEntry = (Object.entries(state.regions) as [RegionId, Region][]).find(([, r]) => r.weather && r.weather.affectedCommodityId === c.id && r.weather.severity !== 'Normal');
+            const activeWeather = activeWeatherEntry ? { id: activeWeatherEntry[0], weather: activeWeatherEntry[1].weather } : undefined;
+
             return (
               <div key={c.id} onClick={() => onOpenTrade(c.obj)} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] cursor-pointer active:scale-[0.99] transition-transform space-y-2">
                 <div className="flex items-center justify-between">
@@ -63,7 +65,7 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
                   <span>Inv Level: <span className="font-bold text-[var(--text-secondary)]">{formatPercent(c.inventoryLevelPct, { isDecimal: true })}</span></span>
                 </div>
 
-                {activeWeather && (
+                {activeWeather && activeWeather.weather && (
                   <div className="text-[9px] text-[var(--signal-negative)] font-bold bg-[var(--signal-negative)]/10 p-1.5 rounded">
                     ⚡ {activeWeather.weather.type} in {activeWeather.id} ({activeWeather.weather.severity}): {activeWeather.weather.economicImpact}
                   </div>
@@ -115,7 +117,7 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
 
       {tab === 'supplychain' && (
         <div className="space-y-3">
-          {Object.entries(state.regions).map(([rId, reg]) => {
+          {(Object.entries(state.regions) as [RegionId, Region][]).map(([rId, reg]) => {
             const indDemand = reg.categoryDemand.CorporateIndustrial;
             if (!indDemand) return null;
             return (

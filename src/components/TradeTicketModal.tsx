@@ -21,6 +21,7 @@ import { AssetType, Dealer, GameState, Position, TradeableInstrument } from '../
 import { calculateDynamicSpreadBps, getUnifiedInitialMarginRate } from '../engine/dealers';
 import { calculateExpectedCarry } from '../engine/carryCalculator';
 import { calculateBlackScholesGreeks } from '../engine/blackScholes';
+import { calculateNelsonSiegelZeroRate } from '../engine/nelsonSiegel';
 
 interface TradeTicketModalProps {
   instrument: TradeableInstrument;

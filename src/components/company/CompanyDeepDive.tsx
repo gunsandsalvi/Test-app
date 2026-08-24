@@ -122,7 +122,9 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                   {catDemand?.crowdingIntensity !== undefined && (
                     <div className="flex justify-between text-[11px]">
                       <span className="text-[var(--text-secondary)]">Crowding intensity</span>
-                      <span className={catDemand.crowdingIntensity > 0.5 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}>{catDemand.crowdingIntensity.toFixed(2)}</span>
+                      <span className={catDemand.crowdingIntensity > 0.5 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}>
+                        {isNaN(catDemand.crowdingIntensity) ? '—' : catDemand.crowdingIntensity.toFixed(2)}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -133,11 +135,14 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
         {tab === 'supplychain' && (
           <>
-            <TapToChart label="Finished Goods Inventory" value={formatCurrency(company.finishedGoodsInventoryUSD ?? 0, { compact: true })} history={undefined} />
+            <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+              <span className="text-[var(--text-secondary)]">Finished Goods Inventory</span>
+              <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(company.finishedGoodsInventoryUSD ?? 0, { compact: true })}</span>
+            </div>
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Input Supply Constraint</span>
               <span className={(company.inputSupplyConstraintFactor ?? 1) < 1 ? 'text-[var(--signal-negative)] font-bold' : 'text-[var(--text-tertiary)]'}>
-                {(company.inputSupplyConstraintFactor ?? 1) < 1 ? `Constrained (${((company.inputSupplyConstraintFactor ?? 1) * 100).toFixed(0)}% capacity)` : 'Unconstrained'}
+                {(company.inputSupplyConstraintFactor ?? 1) < 1 ? `Constrained (${(((company.inputSupplyConstraintFactor ?? 1)) * 100).toFixed(0)}% capacity)` : 'Unconstrained'}
               </span>
             </div>
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
@@ -155,8 +160,8 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
               <span className="text-[var(--text-secondary)]">Credit Rating</span>
               <span className="font-bold">{company.creditRating} {(company.ratingHistory?.length ?? 0) > 1 && `(was ${company.ratingHistory[company.ratingHistory.length - 2]})`}</span>
             </div>
-            <TapToChart label="Leverage (Debt/EBITDA)" value={`${company.leverage.toFixed(2)}x`} history={(company.historicalFundamentals || []).map(f => f.leverage ?? 0)} />
-            <TapToChart label="Interest Coverage" value={`${company.interestCoverage.toFixed(1)}x`} history={(company.historicalFundamentals || []).map(f => f.interestCoverage ?? 0)} />
+            <TapToChart label="Leverage (Debt/EBITDA)" value={isNaN(company.leverage) ? '—' : `${company.leverage.toFixed(2)}x`} history={(company.historicalFundamentals || []).map(f => f.leverage ?? 0)} />
+            <TapToChart label="Interest Coverage" value={isNaN(company.interestCoverage) ? '—' : `${company.interestCoverage.toFixed(1)}x`} history={(company.historicalFundamentals || []).map(f => f.interestCoverage ?? 0)} />
             <div className="pt-2 border-t border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-1">Debt Tranches</div>
               {(company.debtTranches || []).map(t => {
@@ -169,26 +174,29 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 return (
                   <div key={t.id} onClick={() => onOpenTrade({
                     assetType: isFixed ? 'CORP_BOND' : 'LEV_LOAN', id: t.id, symbol: t.id,
-                    name: `${company.name} ${remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Bond' : 'Loan'}`,
+                    name: `${company.name} ${isNaN(remainingTenorYears) ? '0' : remainingTenorYears.toFixed(1)}Y ${isFixed ? 'Bond' : 'Loan'}`,
                     region: company.region, price, quoteUnit: isFixed ? '% Par' : 'pts of par',
                     details: { trancheId: t.id, tenorYears: remainingTenorYears, fixedRate: t.couponRate ?? 0, rateType: t.rateType, oasSpreadBps: company.oasSpreadBps, rating: company.creditRating, sector: company.sector },
                   })} className="flex justify-between items-center p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-1 cursor-pointer hover:border-[var(--text-tertiary)] transition-colors">
-                    <span className="text-[11px]">{remainingTenorYears.toFixed(1)}Y {isFixed ? `${((t.couponRate ?? 0) * 100).toFixed(1)}% Fixed` : `+${t.floatingMarginBps}bps Float`}</span>
-                    <span className="text-[11px] font-[var(--font-numeric)] font-bold">{price.toFixed(2)}</span>
+                    <span className="text-[11px]">{isNaN(remainingTenorYears) ? '0' : remainingTenorYears.toFixed(1)}Y {isFixed ? `${((t.couponRate ?? 0) * 100).toFixed(1)}% Fixed` : `+${t.floatingMarginBps}bps Float`}</span>
+                    <span className="text-[11px] font-[var(--font-numeric)] font-bold">{isNaN(price) ? '—' : price.toFixed(2)}</span>
                   </div>
                 );
               })}
             </div>
             <div className="flex justify-between text-xs py-2 border-t border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Bond-implied spread (OAS)</span>
-              <span className="font-bold">{company.oasSpreadBps.toFixed(0)}bps</span>
+              <span className="font-bold">{isNaN(company.oasSpreadBps) ? '—' : `${company.oasSpreadBps.toFixed(0)}bps`}</span>
             </div>
           </>
         )}
 
         {tab === 'management' && (
           <>
-            <TapToChart label="Execution Quality" value={company.executionQuality.toFixed(2)} history={undefined} />
+            <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+              <span className="text-[var(--text-secondary)]">Execution Quality</span>
+              <span className="font-bold font-[var(--font-numeric)]">{isNaN(company.executionQuality) ? '—' : company.executionQuality.toFixed(2)}</span>
+            </div>
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Dividend Yield</span>
               <span className="font-bold">{formatPercent(company.dividendYield, { isDecimal: true })}</span>

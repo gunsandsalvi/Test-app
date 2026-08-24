@@ -96,13 +96,13 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
             <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-1">GDP Composition (Annualized)</div>
             <div className="h-8 w-full flex rounded overflow-hidden">
               {[
-                { label: 'C', value: Math.max(0, c), color: '#3b82f6' },
-                { label: 'I', value: Math.max(0, i), color: '#10b981' },
-                { label: 'G', value: Math.max(0, g), color: '#f59e0b' },
-                { label: 'NX', value: Math.max(0, nx), color: nx >= 0 ? '#10b981' : '#ef4444' },
+                { label: 'C', value: c, color: '#3b82f6' },
+                { label: 'I', value: i, color: '#10b981' },
+                { label: 'G', value: g, color: '#f59e0b' },
+                { label: 'NX', value: nx, color: nx >= 0 ? '#10b981' : '#ef4444' },
               ].map(seg => {
-                const total = Math.max(0, c) + Math.max(0, i) + Math.max(0, g) + Math.max(0, nx);
-                const pct = total > 0 ? (seg.value / total) * 100 : 0;
+                const totalMag = Math.max(1, Math.abs(c) + Math.abs(i) + Math.abs(g) + Math.abs(nx));
+                const pct = (Math.abs(seg.value) / totalMag) * 100;
                 return (
                   <div key={seg.label} style={{ width: `${pct}%`, backgroundColor: seg.color }} className="flex items-center justify-center text-[9px] font-bold text-white transition-all">
                     {pct > 8 ? seg.label : ''}
@@ -277,19 +277,22 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Private Sector Segments (Revenue × Margin × Employment)</div>
               <div className="relative w-full aspect-[3/2] bg-[var(--bg-panel)] rounded-lg p-2 flex items-center justify-center">
                 <svg viewBox="0 0 300 200" className="w-full h-full">
-                  {reg.privateSectorSegments.map((seg, i) => {
-                    const x = 40 + Math.min(220, seg.marginPct * 1200);
-                    const y = 180 - Math.min(150, (seg.annualRevenueUSD / 5_000_000_000) * 150);
-                    const r = Math.max(10, Math.min(28, Math.sqrt(seg.employment) / 100));
-                    return (
-                      <g key={seg.segmentType} className="group cursor-pointer">
-                        <circle cx={x} cy={y} r={r} fill={`hsl(${i * 65 + 180}, 65%, 55%)`} opacity={0.75} stroke="var(--border-hairline)" strokeWidth="1" />
-                        <text x={x} y={y + 3} fontSize="7" textAnchor="middle" fill="white" fontWeight="bold">
-                          {seg.segmentType.substring(0, 4)}
-                        </text>
-                      </g>
-                    );
-                  })}
+                  {(() => {
+                    const maxSegRevenue = Math.max(...reg.privateSectorSegments.map(s => s.annualRevenueUSD), 1);
+                    return reg.privateSectorSegments.map((seg, i) => {
+                      const x = 40 + Math.min(220, seg.marginPct * 1200);
+                      const y = 180 - Math.min(150, (seg.annualRevenueUSD / maxSegRevenue) * 150);
+                      const r = Math.max(10, Math.min(28, Math.sqrt(seg.employment) / 100));
+                      return (
+                        <g key={seg.segmentType} className="group cursor-pointer">
+                          <circle cx={x} cy={y} r={r} fill={`hsl(${i * 65 + 180}, 65%, 55%)`} opacity={0.75} stroke="var(--border-hairline)" strokeWidth="1" />
+                          <text x={x} y={y + 3} fontSize="7" textAnchor="middle" fill="white" fontWeight="bold">
+                            {seg.segmentType.substring(0, 4)}
+                          </text>
+                        </g>
+                      );
+                    });
+                  })()}
                   <text x="150" y="195" fontSize="8" fill="var(--text-tertiary)" textAnchor="middle">Margin % →</text>
                   <text x="10" y="100" fontSize="8" fill="var(--text-tertiary)" textAnchor="middle" transform="rotate(-90 10 100)">Revenue →</text>
                 </svg>
