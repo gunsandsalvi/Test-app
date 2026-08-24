@@ -118,6 +118,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
     });
   });
 
+  // V7: Cross-border reserve / balance-sheet stance spillover effect
+  const allRegionIds = Object.keys(updatedRegions) as RegionId[];
+  const globalStanceAvg = allRegionIds.reduce((s, r) => s + (updatedRegions[r].balanceSheetStance ?? 0), 0) / Math.max(1, allRegionIds.length);
+  allRegionIds.forEach(r => {
+    const spilloverEffect = (globalStanceAvg - (updatedRegions[r].balanceSheetStance ?? 0)) * 0.05; // pulled gently toward the global average
+    updatedRegions[r].creditConditionsSpilloverAdjustment = spilloverEffect;
+  });
+
   Object.keys(updatedRegions).forEach((regionIdKey) => {
     const regionId = regionIdKey as RegionId;
     const reg = updatedRegions[regionId];

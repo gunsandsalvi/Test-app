@@ -285,11 +285,15 @@ export function evolveRegionMacro(
   const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
   // Central bank stance and banking sector evolution
-  const qePace = newCycleRegime === 'Recession' ? 10e9 : (newCycleRegime === 'Expansion' ? -3e9 : 0);
+  const targetBalanceSheetStance = Math.max(-1, Math.min(1,
+    (Math.max(0, 0.07 - newUnemployment) * -8) +
+    (Math.max(0, newUnemployment - 0.07) * 10) +
+    (Math.max(0, newInflation - 0.04) * -6)
+  ));
+  const newBalanceSheetStance = (region.balanceSheetStance ?? 0) * 0.95 + targetBalanceSheetStance * 0.05;
   const cbFloor = 300e9; // Structural floor for central bank assets (currency in circulation & baseline reserves)
-  const newCbBalance = Math.max(cbFloor, region.centralBankBalanceSheet + qePace);
+  const newCbBalance = Math.max(cbFloor, region.centralBankBalanceSheet * (1 + newBalanceSheetStance * 0.001));
   const cbChangePct = (newCbBalance - region.centralBankBalanceSheet) / Math.max(cbFloor, region.centralBankBalanceSheet);
-  const newBalanceSheetStance = Math.max(-1, Math.min(1, -cbChangePct * 10));
 
   const newBankingSector = evolveBankingSector(
     region.bankingSector,
@@ -302,7 +306,8 @@ export function evolveRegionMacro(
     newUnemployment,
     region.zeroRates.tenor10Y,
     newBalanceSheetStance,
-    newGdpGrowth
+    newGdpGrowth,
+    region.creditConditionsSpilloverAdjustment ?? 0
   );
 
   const prevM2 = region.bankingSector.moneySupplyM2USD > 0
@@ -311,7 +316,8 @@ export function evolveRegionMacro(
   const m2GrowthRateAnnualized = prevM2 > 0
     ? ((newBankingSector.moneySupplyM2USD / prevM2) - 1) * 52
     : 0;
-  const monetaryInflationPressure = Math.max(0, Math.min(0.02, (m2GrowthRateAnnualized - newGdpGrowth) * 0.15));
+  const velocityFactor = Math.max(0.5, Math.min(1.2, 1.0 - Math.max(0, (100 - newCCI) / 100) * 0.6)); // low confidence suppresses velocity, dampening inflation pass-through
+  const monetaryInflationPressure = Math.max(0, Math.min(0.02, (m2GrowthRateAnnualized - newGdpGrowth) * 0.15 * velocityFactor));
 
   const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   

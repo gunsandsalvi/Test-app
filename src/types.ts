@@ -144,6 +144,7 @@ export interface Region {
   expectedInflation: number;
   centralBankBalanceSheet: number;
   balanceSheetStance: number;
+  creditConditionsSpilloverAdjustment?: number;
   targetInflation: number; // pi* (e.g. 0.020)
   gdpGrowth: number; // y_t (annualized, e.g. 0.022)
   potentialGdpGrowth: number; // y* (e.g. 0.020)

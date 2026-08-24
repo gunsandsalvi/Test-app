@@ -11,9 +11,9 @@ export function evolveBankingSector(
   unemploymentRate: number,
   sovereign10YYield: number,
   balanceSheetStance: number,
-  gdpGrowth: number
+  gdpGrowth: number,
+  spilloverAdjustment: number = 0
 ): BankingSector {
-  const newBusinessLoanBook = businessLoanBookInputUSD;
   const bankedConsumerDebtShare = 0.1167; // Share of total household debt held as bank consumer loans
   const newConsumerLoanBook = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
   const weeklySavingsInflow = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
@@ -22,12 +22,33 @@ export function evolveBankingSector(
   const reserveInjectionRate = balanceSheetStance * 0.002; // positive stance = QE, expands reserves; negative = QT, contracts
   const newCentralBankReserves = Math.max(0, (prevBanking.centralBankReservesUSD ?? 1e12) * (1 + reserveInjectionRate));
 
+  // V2. Reserve constraint on lending
+  const reserveRequirementRatio = 0.10;
+  const maxLendingCapacityFromReserves = newCentralBankReserves / reserveRequirementRatio;
+  const currentTotalLoanBook = prevBanking.businessLoanBookUSD + prevBanking.consumerLoanBookUSD;
+  const reserveLendingHeadroom = Math.max(0, maxLendingCapacityFromReserves - currentTotalLoanBook);
+
+  // V4. Capital constraint on lending (Basel-style dynamic)
+  const minCapitalRatio = 0.08; // floor below which lending stops expanding
+  const capitalLendingHeadroom = prevBanking.bankCapitalRatio > minCapitalRatio
+    ? (prevBanking.bankEquityUSD / minCapitalRatio - currentTotalLoanBook * 1.0)
+    : 0;
+
+  // V5. Deposit recycling constraint on lending
+  const depositFundingRatio = 0.85; // banks lend against roughly this share of deposit base
+  const depositLendingCapacity = prevBanking.depositsUSD * depositFundingRatio;
+  const depositLendingHeadroom = Math.max(0, depositLendingCapacity - currentTotalLoanBook);
+
+  // Binding constraint is the tightest of all three
+  const lendingHeadroom = Math.max(0, Math.min(reserveLendingHeadroom, Math.min(capitalLendingHeadroom, depositLendingHeadroom)));
+  const businessLoanBookConstrained = Math.min(businessLoanBookInputUSD, prevBanking.businessLoanBookUSD + lendingHeadroom);
+  const newBusinessLoanBook = businessLoanBookConstrained;
+
   // U4. Loans create deposits, repayment destroys them — the actual mechanism
   const netNewLending = Math.max(0, (newBusinessLoanBook - prevBanking.businessLoanBookUSD)) + Math.max(0, (newConsumerLoanBook - prevBanking.consumerLoanBookUSD));
   const netLoanRepayment = Math.max(0, (prevBanking.businessLoanBookUSD - newBusinessLoanBook)) + Math.max(0, (prevBanking.consumerLoanBookUSD - newConsumerLoanBook));
 
   const newDeposits = prevBanking.depositsUSD * 0.999 + weeklySavingsInflow * 0.3 + netNewLending - netLoanRepayment;
-  const newMoneySupplyM2USD = newDeposits + newCentralBankReserves * 0.1;
 
   const targetSovHoldings = (newBusinessLoanBook + newConsumerLoanBook + prevBanking.sovereignBondHoldingsUSD) * 0.18;
   const newSovHoldings = prevBanking.sovereignBondHoldingsUSD * 0.98 + targetSovHoldings * 0.02;
@@ -60,7 +81,17 @@ export function evolveBankingSector(
   }
   const newBankCapitalRatio = riskWeightedAssets > 0 ? newBankEquity / riskWeightedAssets : 0.13;
   const capitalGap = 0.12 - newBankCapitalRatio;
-  const newCreditConditionsIndex = Math.max(-0.95, Math.min(0.95, capitalGap * 8 + (0.025 - netInterestMarginPct) * 10));
+  const newCreditConditionsIndex = Math.max(-0.95, Math.min(0.95, capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment));
+
+  // V6. Lender of last resort: emergency reserve injection during genuine systemic stress
+  const systemicLiquidityStress = (prevBanking.bankCapitalRatio < 0.082 && newCreditConditionsIndex > 0.22) || (prevBanking.bankCapitalRatio < 0.075);
+  const emergencyReserveCap = Math.max(1.5e12, prevBanking.depositsUSD * 0.60);
+  const emergencyReserveInjection = (systemicLiquidityStress && newCentralBankReserves < emergencyReserveCap)
+    ? Math.min(newCentralBankReserves * 0.015, 15e9)
+    : 0;
+  const newCentralBankReservesFinal = newCentralBankReserves + emergencyReserveInjection;
+  const newMoneySupplyM2USD = newDeposits + newCentralBankReservesFinal * 0.1;
+
   return {
     businessLoanBookUSD: Number(newBusinessLoanBook.toFixed(0)),
     consumerLoanBookUSD: Number(newConsumerLoanBook.toFixed(0)),
@@ -72,7 +103,7 @@ export function evolveBankingSector(
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
     loanLossProvisionRateAnnualPct: Number(businessLossRateAnnual.toFixed(4)),
     creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
-    centralBankReservesUSD: Number(newCentralBankReserves.toFixed(0)),
+    centralBankReservesUSD: Number(newCentralBankReservesFinal.toFixed(0)),
     moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
   };
 }
