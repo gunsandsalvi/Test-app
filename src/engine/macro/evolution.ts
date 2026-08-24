@@ -1,6 +1,6 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 
@@ -106,6 +106,12 @@ export function evolveRegionMacro(
     creditCardDebtUSD: region.estimatedHouseholdIncomeUSD * 0.05,
     otherConsumerLoanDebtUSD: region.estimatedHouseholdIncomeUSD * 0.1,
     netWorthUSD: region.estimatedHouseholdIncomeUSD * 1.0,
+    creditTierBooks: [
+      { tier: 'SUPER_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: 0, avgInterestRate: 0.06, delinquencyRatePct: 0.002 },
+      { tier: 'PRIME', shareOfHouseholds: 0.35, debtBalanceUSD: 0, avgInterestRate: 0.12, delinquencyRatePct: 0.015 },
+      { tier: 'NEAR_PRIME', shareOfHouseholds: 0.25, debtBalanceUSD: 0, avgInterestRate: 0.19, delinquencyRatePct: 0.045 },
+      { tier: 'SUBPRIME', shareOfHouseholds: 0.15, debtBalanceUSD: 0, avgInterestRate: 0.28, delinquencyRatePct: 0.11 },
+    ],
   };
 
   let newFiscalStanceScore = region.fiscalStanceScore;

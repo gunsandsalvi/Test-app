@@ -282,7 +282,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
             {/* PART ME: Debt Tranche & Corporate Ownership Breakdown */}
             <div className="pt-3 border-t border-[var(--border-hairline)] space-y-2">
-              <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Debt Ownership Breakdown</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Ownership Breakdown</div>
               {(() => {
                 const cb = reg.corpBondOwnership;
                 const foreignSum = (Object.values(cb.foreignShare) as number[]).reduce((a, b) => a + b, 0);
@@ -294,11 +294,11 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
                 const trancheIds = new Set((company.debtTranches || []).map(t => t.id));
                 const bankHoldings = (reg.bankingSector.itemizedHoldings || [])
-                  .filter(h => trancheIds.has(h.instrumentId))
-                  .map(h => ({ id: h.instrumentId + '-bank', holderName: 'Banking Sector', amountUSD: h.quantityOrNotionalUSD }));
+                  .filter(h => h.instrumentId === company.id || trancheIds.has(h.instrumentId))
+                  .map(h => ({ id: h.instrumentId + '-bank', holderName: h.instrumentId === company.id ? 'Banking Sector (Equity)' : 'Banking Sector (Debt)', amountUSD: h.quantityOrNotionalUSD }));
                 const instHoldings = (reg.institutionalSector.itemizedHoldings || [])
-                  .filter(h => trancheIds.has(h.instrumentId))
-                  .map(h => ({ id: h.instrumentId + '-inst', holderName: 'Institutional Sector', amountUSD: h.quantityOrNotionalUSD }));
+                  .filter(h => h.instrumentId === company.id || trancheIds.has(h.instrumentId))
+                  .map(h => ({ id: h.instrumentId + '-inst', holderName: h.instrumentId === company.id ? 'Institutional Sector (Equity)' : 'Institutional Sector (Debt)', amountUSD: h.quantityOrNotionalUSD }));
                 const companyHoldings = [...bankHoldings, ...instHoldings];
 
                 return (
@@ -318,7 +318,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
                     {companyHoldings.length > 0 && (
                       <div className="mt-2 space-y-1">
-                        <div className="text-[10px] text-[var(--text-tertiary)] font-bold uppercase">Itemized Tranche Holders</div>
+                        <div className="text-[10px] text-[var(--text-tertiary)] font-bold uppercase">Itemized Asset Holders</div>
                         {companyHoldings.slice(0, 5).map(h => (
                           <div key={h.id} className="flex justify-between text-[11px] py-0.5 border-b border-[var(--border-hairline)]">
                             <span className="text-[var(--text-secondary)]">{h.holderName}</span>

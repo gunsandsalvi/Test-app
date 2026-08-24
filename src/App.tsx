@@ -114,7 +114,8 @@ export default function App() {
     posData: Omit<
       Position,
       'id' | 'openedWeek' | 'unrealizedPnL' | 'realizedPnL' | 'maintenanceMargin' | 'weeklyFinancingCost'
-    >
+    >,
+    executionDetails?: { fillPrice: number; counterpartyFeeUSD: number; sourcedFrom: string }
   ) => {
     setState((prev) => {
       const newPos: Position = {
@@ -139,8 +140,59 @@ export default function App() {
       const navUSD = updatedCash + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
       const marginUtilizationPct = navUSD > 0 ? Math.round((totalMarginReq / navUSD) * 100) : 100;
 
+      const updatedRegions = { ...prev.regions };
+      if (executionDetails && executionDetails.counterpartyFeeUSD > 0) {
+        const region = updatedRegions[posData.region];
+        if (region) {
+          // Find instrument in bank or institutional
+          const instrumentId = posData.trancheId || posData.symbol;
+          // Actually, we don't need to manually debit the quantity if it's too complex because we don't have the exact exact security quantity.
+          // The prompt says: "and debit the sourced amount from whichever entity's itemizedHoldings/securityHoldings it came from (bank inventory first, then the largest institutional holder) — crediting the bank's bankEquityUSD with the fee."
+          
+          let remainingToSource = posData.notional;
+          let newBankHoldings = [...region.bankingSector.itemizedHoldings];
+          let newInstHoldings = [...region.institutionalSector.itemizedHoldings];
+          
+          // First, deduct from bank
+          newBankHoldings = newBankHoldings.map(h => {
+            if (h.instrumentId === instrumentId && remainingToSource > 0) {
+              const deduction = Math.min(h.quantityOrNotionalUSD, remainingToSource);
+              remainingToSource -= deduction;
+              return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD - deduction };
+            }
+            return h;
+          }).filter(h => h.quantityOrNotionalUSD > 0.01);
+          
+          // Then deduct from institutional
+          if (remainingToSource > 0) {
+             newInstHoldings = newInstHoldings.map(h => {
+              if (h.instrumentId === instrumentId && remainingToSource > 0) {
+                const deduction = Math.min(h.quantityOrNotionalUSD, remainingToSource);
+                remainingToSource -= deduction;
+                return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD - deduction };
+              }
+              return h;
+             }).filter(h => h.quantityOrNotionalUSD > 0.01);
+          }
+          
+          updatedRegions[posData.region] = {
+            ...region,
+            bankingSector: {
+               ...region.bankingSector,
+               bankEquityUSD: region.bankingSector.bankEquityUSD + executionDetails.counterpartyFeeUSD,
+               itemizedHoldings: newBankHoldings
+            },
+            institutionalSector: {
+               ...region.institutionalSector,
+               itemizedHoldings: newInstHoldings
+            }
+          };
+        }
+      }
+
       return {
         ...prev,
+        regions: updatedRegions,
         isTradeModalOpen: false,
         selectedInstrument: null,
         portfolio: {

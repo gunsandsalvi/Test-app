@@ -9,7 +9,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { GameState, Position, TradeableInstrument } from '../types';
+import { GameState, Position, TradeableInstrument, Region } from '../types';
 import { calculateDynamicSpreadBps, getUnifiedInitialMarginRate } from '../engine/dealers';
 import { calculateExpectedCarry } from '../engine/carryCalculator';
 import { calculateBlackScholesGreeks } from '../engine/blackScholes';
@@ -20,7 +20,7 @@ interface TradeTicketModalProps {
   instrument: TradeableInstrument;
   state: GameState;
   onClose: () => void;
-  onExecuteTrade: (position: Omit<Position, 'id' | 'openedWeek' | 'unrealizedPnL' | 'realizedPnL' | 'maintenanceMargin' | 'weeklyFinancingCost'>) => void;
+  onExecuteTrade: (position: Omit<Position, 'id' | 'openedWeek' | 'unrealizedPnL' | 'realizedPnL' | 'maintenanceMargin' | 'weeklyFinancingCost'>, executionDetails?: { fillPrice: number; counterpartyFeeUSD: number; sourcedFrom: string }) => void;
 }
 
 export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
@@ -163,6 +163,20 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
 
   const labels = getDirectionLabels();
 
+  
+  const resolveCounterpartyFill = (instrument: any, quantityUSD: number, region: Region) => {
+    const bankInventory = region.bankingSector.itemizedHoldings.filter((h: any) => h.instrumentId === instrument.id || h.instrumentId === instrument.symbol || (instrument.details && h.instrumentId === instrument.details.trancheId));
+    const bankInventoryUSD = bankInventory.reduce((s: number, h: any) => s + h.quantityOrNotionalUSD, 0);
+    if (bankInventoryUSD >= quantityUSD) {
+      return { fillPrice: instrument.price, counterpartyFeeUSD: 0, sourcedFrom: 'Bank inventory' };
+    }
+    const shortfallUSD = quantityUSD - bankInventoryUSD;
+    const intermediationFeeRate = 0.0015; // real, modest, distinct from zero
+    return { fillPrice: instrument.price * (1 + intermediationFeeRate), counterpartyFeeUSD: shortfallUSD * intermediationFeeRate, sourcedFrom: 'Bank intermediated (sourced externally)' };
+  };
+
+  const executionDetails = useMemo(() => resolveCounterpartyFill(instrument, notionalUSD, region), [instrument, notionalUSD, region]);
+
   const handleConfirm = () => {
     if (!canAfford) return;
 
@@ -188,8 +202,8 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
       dealerId: selectedDealerId,
       direction: tradeDirection,
       quantity,
-      entryPrice: instrument.price,
-      currentPrice: instrument.price,
+      entryPrice: executionDetails.fillPrice,
+      currentPrice: executionDetails.fillPrice,
       notional: notionalUSD,
       marginRequirement: initialMarginUSD,
       expectedWeeklyCarryUSD: carryEstimate.weeklyCarryUSD,
@@ -210,7 +224,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
       delta: instrument.details.delta,
       gamma: instrument.details.gamma,
       vega: instrument.details.vega,
-    });
+    }, executionDetails);
   };
 
   const formatCurrency = (val: number) => {
@@ -500,7 +514,23 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
           </div>
         )}
 
+        
+        {/* Execution Sourcing SourcedFrom info */}
+        <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-[10px] font-mono mt-3">
+          <div className="flex items-center justify-between text-slate-400">
+            <span>Execution Source:</span>
+            <span className="text-emerald-400">{executionDetails.sourcedFrom}</span>
+          </div>
+          {executionDetails.counterpartyFeeUSD > 0 && (
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Intermediation Fee:</span>
+              <span className="text-rose-400">-{formatCurrencyCentral(executionDetails.counterpartyFeeUSD)}</span>
+            </div>
+          )}
+        </div>
+        
         {/* Execute Button */}
+
         <button
           id="btn-confirm-trade"
           onClick={handleConfirm}

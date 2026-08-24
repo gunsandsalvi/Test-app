@@ -1,6 +1,6 @@
 
 import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche, GovDebtTranche } from '../../types';
-import { SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap, priceCommodityFutures } from '../pricing';
+import { SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap } from '../pricing';
 import { calculateNelsonSiegelZeroRate, priceSovereignBond } from '../nelsonSiegel';
 import { EarningsReportEvent, generateWeeklyNews } from '../newsGenerator';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../formatters';
