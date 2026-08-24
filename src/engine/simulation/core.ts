@@ -807,7 +807,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const trackedFirms = updatedCompanies.filter(f => f.region === regionId && !f.isDefaulted);
     const trackedInvestmentUSD = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
     const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
-    const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + reg.untrackedPrivateEmployment) / trackedEmployment : 1;
+    const totalPrivateEmployment = (reg.privateSectorSegments || []).reduce((s, seg) => s + seg.employment, 0);
+    const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + totalPrivateEmployment) / trackedEmployment : 1;
     const investmentComponentUSD = trackedInvestmentUSD * investmentScaleFactor;
 
     // G — government spending, already established in Phase 2 (weekly flow, annualize)

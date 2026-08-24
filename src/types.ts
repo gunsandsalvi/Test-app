@@ -119,6 +119,15 @@ export const CATEGORY_TRADABILITY: Record<string, number> = {
   CorporateTech: 0.55,
 };
 
+export type PrivateSegmentType = 'MANUFACTURING' | 'PROFESSIONAL_SERVICES' | 'RETAIL_TRADE' | 'CONSTRUCTION_REALESTATE' | 'HEALTHCARE_SERVICES';
+
+export interface PrivateSectorSegment {
+  segmentType: PrivateSegmentType;
+  employment: number;
+  annualRevenueUSD: number;
+  marginPct: number;
+}
+
 export interface Region {
   id: RegionId;
   name: string;
@@ -165,11 +174,11 @@ export interface Region {
   laborForceParticipation: number;
   inflationDeviationStreak: number;
 
-  // Population & Labor Force Accounting (Phase 1)
+  // Population & Labor Force Accounting (Phase 1 & Private-Sector Segments)
   totalPopulation: number;              // raw headcount, this world's own organic figure — not calibrated to any real country
   nonEmployablePct: number;             // fraction of population outside the labor force for demographic reasons (children, retired, students, disabled)
   governmentEmployment: number;         // raw headcount employed by government
-  untrackedPrivateEmployment: number;   // raw headcount employed by private businesses outside the tracked public-company panel
+  privateSectorSegments: PrivateSectorSegment[]; // 5 real, distinct aggregate entities per region
   unemploymentRateBottomUp: number;     // diagnostic only this phase — residual of the labor-force identity, not yet driving anything
 
   // Government & Nominal GDP (Phase 2 & Phase 4)

@@ -1,9 +1,30 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BankingSector, HouseholdState } from '../../types';
+import { RegionId, Region, FxPair, Commodity, BankingSector, HouseholdState, PrivateSegmentType, PrivateSectorSegment } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { generate52WeekHistory } from './utils';
+
+function getSegmentDemandSignal(segmentType: PrivateSegmentType, reg: Region, prevHS: HouseholdState): number {
+  const cat = reg.categoryDemand as any;
+  switch (segmentType) {
+    case 'MANUFACTURING':
+      return cat.CorporateIndustrial?.demandGrowthAnnual ?? 0;
+    case 'PROFESSIONAL_SERVICES':
+      return ((cat.CorporateTech?.demandGrowthAnnual ?? 0) + (cat.LuxuryHousehold?.demandGrowthAnnual ?? 0)) / 2;
+    case 'RETAIL_TRADE':
+      return ((cat.StapleHousehold?.demandGrowthAnnual ?? 0) + (cat.StandardHousehold?.demandGrowthAnnual ?? 0)) / 2;
+    case 'CONSTRUCTION_REALESTATE': {
+      // no direct category exists for housing — mortgage debt growth (S1) is a genuine, already-built proxy for real housing-market activity
+      const mortgageGrowth = prevHS.mortgageDebtUSD > 0 ? 0 : 0; // computed by caller from prevHS vs current — see below
+      return mortgageGrowth;
+    }
+    case 'HEALTHCARE_SERVICES':
+      return cat.GovernmentHealthcare?.demandGrowthAnnual ?? 0;
+    default:
+      return 0;
+  }
+}
 
 export function evolveRegionMacro(
   region: Region,
@@ -159,17 +180,6 @@ export function evolveRegionMacro(
   const govEmploymentGrowthRate = Math.max(-0.001, Math.min(0.001, spendingGrowthRate * 0.3));
   const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
-  // SME sector breathes in sync with the tracked-company health signal, scaled down (SMEs are less volatile than large-cap panel)
-  const untrackedCyclicalGrowth = microFeedback.trackedHealthSignal * 0.01;
-  const targetUntracked = totalLaborForce * (1 - region.unemploymentRate) - microFeedback.publicCompanyEmployment - newGovernmentEmployment;
-  const meanReversionPull = (targetUntracked - region.untrackedPrivateEmployment) / Math.max(1, region.untrackedPrivateEmployment) * 0.05;
-  const untrackedGrowthRate = Math.max(-0.003, Math.min(0.003, untrackedCyclicalGrowth + meanReversionPull));
-  const newUntrackedPrivateEmployment = Math.max(1, Math.round(region.untrackedPrivateEmployment * (1 + untrackedGrowthRate)));
-
-  // Bottom-up labor-force identity residual (Phase 1 diagnostic)
-  const totalEmployed = microFeedback.publicCompanyEmployment + newGovernmentEmployment + newUntrackedPrivateEmployment;
-  const newUnemploymentRateBottomUp = totalLaborForce > 0 ? Math.max(0, Math.min(1, (totalLaborForce - totalEmployed) / totalLaborForce)) : region.unemploymentRateBottomUp;
-
   let newPotentialGdpGrowth = region.potentialGdpGrowth;
   if (week % 52 === 0) {
     const laborForceTrend = (newParticipation - region.laborForceParticipation) * 52;
@@ -185,9 +195,10 @@ export function evolveRegionMacro(
     ? Math.max(0.02, Math.min(0.09, Number((region.nairu + (newParticipation - region.laborForceParticipation) * 52 * 0.15).toFixed(4))))
     : region.nairu;
 
-  const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : -0.00005);
+  const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0);
+  const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
   const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
-  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + baseUnempChange + participationEffect).toFixed(4))));
+  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4))));
   const unempDelta = newUnemployment - region.unemploymentRate;
 
   // Consumer & Household Sector Simulation
@@ -239,6 +250,28 @@ export function evolveRegionMacro(
   const newMortgageDebtUSD = Math.max(0, (prevHS.mortgageDebtUSD || 0) * (1 - mortgagePaydownRate) + weeklyNewMortgagesUSD);
   const newCreditCardDebtUSD = Math.max(0, (prevHS.creditCardDebtUSD || 0) * (1 - ccPaydownRate) + weeklyNewCCDebtUSD);
   const newOtherLoanDebtUSD = Math.max(0, (prevHS.otherConsumerLoanDebtUSD || 0) * (1 - otherLoanPaydownRate) + weeklyNewOtherLoansUSD);
+
+  // Private-Sector Segments evolution driven by specific demand signals
+  const mortgageGrowthSignal = prevHS.mortgageDebtUSD > 0 ? (newMortgageDebtUSD / prevHS.mortgageDebtUSD - 1) * 52 : 0;
+  const newPrivateSectorSegments = (region.privateSectorSegments || []).map(seg => {
+    const demandSignal = seg.segmentType === 'CONSTRUCTION_REALESTATE' ? mortgageGrowthSignal : getSegmentDemandSignal(seg.segmentType, region, prevHS);
+    const employmentGrowthRate = Math.max(-0.0015, Math.min(0.0015, demandSignal * 0.05));
+    const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate)));
+    const revenueGrowthRate = Math.max(-0.002, Math.min(0.002, demandSignal * 0.06));
+    const newAnnualRevenueUSD = Math.max(1, seg.annualRevenueUSD * (1 + revenueGrowthRate));
+    const marginDrift = Math.max(-0.001, Math.min(0.001, demandSignal * 0.01));
+    const newMarginPct = Math.max(0.02, Math.min(0.30, seg.marginPct + marginDrift));
+    return {
+      segmentType: seg.segmentType,
+      employment: newEmployment,
+      annualRevenueUSD: Number(newAnnualRevenueUSD.toFixed(0)),
+      marginPct: Number(newMarginPct.toFixed(4)),
+    };
+  });
+
+  const totalPrivateSegmentEmployment = newPrivateSectorSegments.reduce((s, seg) => s + seg.employment, 0);
+  const totalEmployed = microFeedback.publicCompanyEmployment + newGovernmentEmployment + totalPrivateSegmentEmployment;
+  const newUnemploymentRateBottomUp = totalLaborForce > 0 ? Math.max(0, Math.min(1, (totalLaborForce - totalEmployed) / totalLaborForce)) : region.unemploymentRateBottomUp;
 
   const totalHouseholdDebtUSD = newMortgageDebtUSD + newCreditCardDebtUSD + newOtherLoanDebtUSD;
   const newHouseholdDebtToIncomeRatio = region.estimatedHouseholdIncomeUSD > 0
@@ -472,7 +505,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     totalPopulation: region.totalPopulation,
     nonEmployablePct: newNonEmployablePct,
     governmentEmployment: newGovernmentEmployment,
-    untrackedPrivateEmployment: newUntrackedPrivateEmployment,
+    privateSectorSegments: newPrivateSectorSegments,
     unemploymentRateBottomUp: Number(newUnemploymentRateBottomUp.toFixed(4)),
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,

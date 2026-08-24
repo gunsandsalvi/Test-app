@@ -10,7 +10,8 @@ for (let w = 1; w <= 520; w++) {
     const prevActiveFirms = state.companies.filter(c => !c.isDefaulted && c.region === 'USA');
     const pubEmp = prevActiveFirms.reduce((s, f) => s + f.employeeCount, 0);
     const totalLaborForce = r.totalPopulation * (1 - r.nonEmployablePct) * r.laborForceParticipation;
-    const totalEmployed = pubEmp + r.governmentEmployment + r.untrackedPrivateEmployment;
+    const untrackedEmp = (r.privateSectorSegments || []).reduce((s, seg) => s + seg.employment, 0);
+    const totalEmployed = pubEmp + r.governmentEmployment + untrackedEmp;
     const healthSignal = prevActiveFirms.reduce((s, f) => s + (f.annualRevenue - (f.baselineAnnualRevenue || f.annualRevenue)) / Math.max(1, (f.baselineAnnualRevenue || f.annualRevenue)), 0) / prevActiveFirms.length;
 
     console.log(JSON.stringify({
@@ -20,7 +21,7 @@ for (let w = 1; w <= 520; w++) {
       bottomUpUnemployment: +r.unemploymentRateBottomUp.toFixed(4),
       pubEmp,
       govEmp: r.governmentEmployment,
-      untrackedEmp: r.untrackedPrivateEmployment,
+      untrackedEmp,
       totalEmployed,
       totalLaborForce: Math.round(totalLaborForce),
       healthSignal: +healthSignal.toFixed(5),
