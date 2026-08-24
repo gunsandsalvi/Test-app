@@ -38,6 +38,8 @@ export function createInitialGameState(): GameState {
         crowdingIntensity: 0,
         inventoryLevelUSD: targets[cat] * 0.10,
         inputCostPressure: 0,
+        clearedInputPriceIndex: 1.0,
+        lastWeekInventoryLevelUSD: targets[cat] * 0.10,
       };
     });
 

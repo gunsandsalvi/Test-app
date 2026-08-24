@@ -534,6 +534,7 @@ export function generateInitialCompanies(): Company[] {
         oasSpreadBps,
         cdsSpreadBps,
         sentiment: 0.0,
+        inputSupplyConstraintFactor: 1.0,
       };
 
       companies.push(company);
@@ -757,5 +758,6 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     ratingHistory: [initialRating],
     institutionalRole: null,
     sentiment: 0.0,
+    inputSupplyConstraintFactor: 1.0,
   };
 }

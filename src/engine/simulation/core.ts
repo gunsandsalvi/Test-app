@@ -229,25 +229,49 @@ export function advanceWeeklyStep(state: GameState): GameState {
         crowdingIntensity,
         inventoryLevelUSD: existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
         inputCostPressure: existingEntry?.inputCostPressure ?? 0,
+        clearedInputPriceIndex: existingEntry?.clearedInputPriceIndex ?? 1.0,
+        lastWeekInventoryLevelUSD: existingEntry?.lastWeekInventoryLevelUSD ?? existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
       };
     });
 
-    // Stage 3: Input-Output Map + Inventory (formulaic input flow, bidding disabled)
+    Object.keys(reg.categoryDemand).forEach(cat => {
+      const entry = reg.categoryDemand[cat as any] as any;
+      if (entry.inventoryLevelUSD === undefined) return;
+      entry.inventoryLevelUSD = Math.max(0, (entry.inventoryLevelUSD ?? 0) + (entry.demandLevelUSD ?? 0) * 0.02 / 52);
+    });
+
+    // Stage 4: Input-Output Map + Weekly Clearing Bidding
     Object.keys(CATEGORY_INPUT_REQUIREMENTS).forEach(cat => {
       const requirements = CATEGORY_INPUT_REQUIREMENTS[cat];
       if (!requirements) return;
       Object.entries(requirements).forEach(([inputCat, intensity]) => {
-        const inputSupplierCategory = reg.categoryDemand[inputCat as any];
-        if (!inputSupplierCategory) return;
-        const inputNeeded = (reg.categoryDemand[cat as any]?.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
-        const availableFromInventory = Math.min(inputNeeded, inputSupplierCategory.inventoryLevelUSD ?? 0);
-        const shortfall = inputNeeded - availableFromInventory;
-        // no bidding this stage — shortfall just draws inventory toward zero and (formulaically) raises inputCostPressure, no quantity rationing yet
-        const newInventory = Math.max(0, (inputSupplierCategory.inventoryLevelUSD ?? 0) - availableFromInventory + inputSupplierCategory.demandLevelUSD * 0.02); // 2% of category output banks as inventory each week, formulaic production
-        const inputCostPressure = inputNeeded > 0 ? Math.min(0.5, shortfall / inputNeeded) : 0;
-        (reg.categoryDemand[inputCat as any] as any).inventoryLevelUSD = newInventory;
-        (reg.categoryDemand[cat as any] as any).inputCostPressure = inputCostPressure;
+        const supplier = reg.categoryDemand[inputCat as any] as any;
+        const demander = reg.categoryDemand[cat as any] as any;
+        if (!supplier || !demander) return;
+
+        const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
+        const weeklyProduction = (supplier.demandLevelUSD ?? 0) * 0.02 / 52;
+        const totalAvailableSupply = lastWeekInventory + weeklyProduction;
+
+        const bidQuantity = (demander.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
+        const clearingRatio = totalAvailableSupply > 0 ? bidQuantity / totalAvailableSupply : 1;
+
+        const targetPriceIndex = Math.max(0.5, Math.min(2.0, 1.0 + (clearingRatio - 1.0) * 0.4));
+        const newPriceIndex = (supplier.clearedInputPriceIndex ?? 1.0) * 0.85 + targetPriceIndex * 0.15;
+
+        const quantityFulfilled = Math.min(bidQuantity, totalAvailableSupply);
+        const fulfillmentRatio = bidQuantity > 0 ? quantityFulfilled / bidQuantity : 1;
+
+        supplier.clearedInputPriceIndex = Number(newPriceIndex.toFixed(4));
+        supplier.inventoryLevelUSD = Math.max(0, totalAvailableSupply - quantityFulfilled);
+        demander.inputCostPressure = Number(Math.max(0, newPriceIndex - 1.0).toFixed(4));
+        demander._fulfillmentRatio = fulfillmentRatio; // transient, read by AA3 same week, not persisted
       });
+    });
+    // after the loop, snapshot this week's inventory as next week's lag anchor:
+    Object.keys(reg.categoryDemand).forEach(cat => {
+      const entry = reg.categoryDemand[cat as any] as any;
+      entry.lastWeekInventoryLevelUSD = entry.inventoryLevelUSD ?? 0;
     });
   });
 
@@ -371,6 +395,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     let newEbit = 0;
     let newNetIncome = 0;
     let newEps = 0;
+    let newInputSupplyConstraintFactor = comp.inputSupplyConstraintFactor ?? 1.0;
 
     const executionNoise = (Math.random() - 0.5) * 0.3;
     const newExecutionQuality = Math.max(0.4, Math.min(1.8, (comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08));
@@ -426,9 +451,20 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const catDemand = reg.categoryDemand[l.category as any];
         return s + (catDemand?.crowdingIntensity ?? 0) * l.revenueShare;
       }, 0);
+
+      const compInputCategories = (comp.productLines || []).map(l => l.category).filter(c => CATEGORY_INPUT_REQUIREMENTS[c]);
+      const relevantFulfillment = compInputCategories.length > 0
+        ? compInputCategories.reduce((min, c) => Math.min(min, (reg.categoryDemand[c as any] as any)?._fulfillmentRatio ?? 1), 1)
+        : 1;
+      newInputSupplyConstraintFactor = Math.max(0.5, Math.min(1.0, (comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + relevantFulfillment * 0.3));
+
+      const inputPriceDrag = compInputCategories.length > 0
+        ? compInputCategories.reduce((s, c) => s + ((reg.categoryDemand[c as any] as any)?.inputCostPressure ?? 0), 0) / compInputCategories.length
+        : 0;
+
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
       const baselineMargin = comp.baselineEbitdaMargin ?? (comp.ebitda / Math.max(1, comp.annualRevenue));
-      const targetMargin = Math.min(0.65, Math.max(0.04, baselineMargin - wageCompression - capacityDecayPenalty - avgCrowdingIntensity * 0.08));
+      const targetMargin = Math.min(0.65, Math.max(0.04, baselineMargin - wageCompression - capacityDecayPenalty - avgCrowdingIntensity * 0.08 - inputPriceDrag * 0.03));
       newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (Math.random() - 0.5) * 0.004));
 
       const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
@@ -476,7 +512,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           return s + (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue);
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
-        const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + exportRevenueBoost + noise + reg.inflation * pricingPowerBeta) * distressPenalty;
+        const targetAnnualRevenue = baseRev * (1 + categoryDrivenGrowth + exportRevenueBoost + noise + reg.inflation * pricingPowerBeta) * distressPenalty * newInputSupplyConstraintFactor;
       
       // Smooth transition to target revenue (no exponential weekly compounding)
       newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
@@ -798,6 +834,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       growthCapex: Number(newGrowthCapex.toFixed(1)),
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,
       executionQuality: Number(newExecutionQuality.toFixed(3)),
+      inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,

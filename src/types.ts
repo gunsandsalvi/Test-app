@@ -21,12 +21,15 @@ export interface CategoryDemandState {
   crowdingIntensity: number;
   inventoryLevelUSD: number;
   inputCostPressure: number;
+  clearedInputPriceIndex: number; // 1.0 = baseline; rises/falls with genuine scarcity/glut
+  lastWeekInventoryLevelUSD: number; // explicit lag anchor — bidders always react to this, never same-week inventory
+  _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
 }
 
 export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = {
-  CorporateTech: { CorporateIndustrial: 0.12 },
-  StandardHousehold: { CorporateIndustrial: 0.10 },
-  LuxuryHousehold: { CorporateIndustrial: 0.08 },
+  CorporateTech: { CorporateIndustrial: 0.008 },
+  StandardHousehold: { CorporateIndustrial: 0.00010 },
+  LuxuryHousehold: { CorporateIndustrial: 0.00015 },
 };
 
 
@@ -398,6 +401,7 @@ export interface Company {
   
   // Dynamic Sentiment
   sentiment: number; // -1.0 (bearish) to +1.0 (bullish)
+  inputSupplyConstraintFactor: number; // 0-1, how much of desired output this company can actually produce given input access this week
 }
 
 export type AssetType = 
