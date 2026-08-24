@@ -1,9 +1,8 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BankingSector, HouseholdState, PrivateSegmentType, PrivateSectorSegment, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
-import { generate52WeekHistory } from './utils';
 
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;

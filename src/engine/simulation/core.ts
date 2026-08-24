@@ -7,13 +7,12 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, RegionId, Region, TradeableInstrument, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS } from '../../types';
+import { GameState, Company, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { checkForMerger } from './merger';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from './constants';
-import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeIndices, evolveBankingSector, evolveRegionalWeather } from '../macroEngine';
-import { priceCommodityFutures } from '../pricing';
+import { evolveRegionMacro, evolveFxPair, evolveCommodity, calculateCompositeIndices } from '../macroEngine';
 import { FIXED_SHARE_BY_RATING } from '../companyGenerator';
 
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<OccupationType, number> {
@@ -78,7 +77,6 @@ export function advanceWeeklyStep(state: GameState): GameState {
     regionPublicCompanyEmployment[rid] = prevActiveFirms.filter(f => f.region === rid).reduce((s, f) => s + f.employeeCount, 0);
   });
 
-  const totalCapex = prevActiveFirms.reduce((sum, c) => sum + c.capex, 0);
   const avgMargin = prevActiveFirms.reduce((sum, c) => sum + (c.ebitda / Math.max(1, c.annualRevenue)), 0) / Math.max(1, prevActiveFirms.length);
   const marginCompression = avgMargin < 0.22 ? 0.22 - avgMargin : 0.0;
   const recentDefaultsCount = state.companies.filter((c) => c.isDefaulted || c.creditRating === 'CCC').length;
@@ -133,7 +131,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const monetizationSharePrev = Math.max(0, Math.min(0.4, (state.regions[regionId].balanceSheetStance ?? 0) * 0.5));
     const monetizedAmountUSD = weeklyDeficitUSDPrev * monetizationSharePrev;
 
-    const { updatedRegion, rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
+    const { updatedRegion, rateChanged: _rateChanged, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
       {
@@ -434,26 +432,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     } else {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
-      const effectiveConsumptionGrowth = reg.householdState.realConsumptionGrowth - creditTighteningPenalty;
-
-
+      
       // Weekly revenue transition
       const noise = (Math.random() - 0.5) * 0.015;
       const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
-
-      
-      const SECTOR_REGIME_TILT: Record<string, Partial<Record<'Expansion' | 'Slowdown' | 'Recession' | 'Recovery', number>>> = {
-        Industrials: { Expansion: 0.0015, Recovery: 0.002, Recession: -0.0015 },
-        Energy:      { Expansion: 0.0012, Recovery: 0.0018, Recession: -0.001 },
-        Tech:        { Expansion: 0.0015, Recovery: 0.0025, Recession: -0.002 },
-        Consumer:    { Recession: 0.0008, Slowdown: 0.0005 }, // defensive tailwind
-        Healthcare:  { Recession: 0.0008, Slowdown: 0.0005 }, // defensive tailwind
-        Utilities:   { Recession: 0.0006, Slowdown: 0.0004 },
-      };
-
-      const curveSlope = (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.tenor10Y ?? 0) - (updatedRegions[comp.region].historicalZeroCurves.at(-1)?.tenor2Y ?? 0);
-      const financialsTilt = comp.sector === 'Financials' ? Math.max(-0.001, Math.min(0.001, curveSlope * 0.02)) : 0;
-      const regimeTilt = SECTOR_REGIME_TILT[comp.sector]?.[reg.cycleRegime as 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery'] ?? 0;
 
       // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
       const pricingPowerBeta = SECTOR_PRICING_POWER[comp.sector] ?? 0.65;
@@ -1117,7 +1099,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     };
   });
 
-  const { newsItems, sectorSentimentShocks } = generateWeeklyNews(
+  const { newsItems, sectorSentimentShocks: _sectorSentimentShocks } = generateWeeklyNews(
     nextWeek,
     updatedRegions,
     updatedCompanies,
@@ -1457,7 +1439,6 @@ export function advanceWeeklyStep(state: GameState): GameState {
         if (comp) {
           const assetReturn = (comp.stockPrice - pos.entryPrice) / pos.entryPrice;
           const regPolicyRate = updatedRegions[pos.region].policyRate;
-          const financingRate = (regPolicyRate + 0.0075) / 52;
 
           const notionalUSD = pos.notional * fxRateToUsd;
           const priceReturnUSD = notionalUSD * assetReturn;

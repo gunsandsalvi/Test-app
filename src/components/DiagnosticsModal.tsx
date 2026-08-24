@@ -1,19 +1,11 @@
 import React, { useState } from 'react';
 import {
   Activity,
-  ArrowRight,
-  CheckCircle2,
   Cpu,
-  Database,
-  Layers,
-  Percent,
   Radio,
-  RefreshCw,
-  Sliders,
   Terminal,
   TrendingUp,
   X,
-  Zap,
 } from 'lucide-react';
 import { GameState, RegionId } from '../types';
 import {

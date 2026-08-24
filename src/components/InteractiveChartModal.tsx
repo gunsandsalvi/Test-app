@@ -1,22 +1,10 @@
 import React, { useState } from 'react';
 import {
-  Activity,
-  ArrowDownRight,
-  ArrowUpRight,
-  BarChart2,
-  Calendar,
-  Layers,
-  LineChart,
-  Maximize2,
-  Minimize2,
-  Percent,
-  Sliders,
   TrendingDown,
   TrendingUp,
   X,
-  Zap,
 } from 'lucide-react';
-import { formatCurrency, formatPercent, formatSimulationDate, formatSimulationDateShort, formatStockPrice } from '../engine/formatters';
+import { formatCurrency, formatSimulationDate, formatSimulationDateShort } from '../engine/formatters';
 
 interface InteractiveChartModalProps {
   data: {
@@ -34,7 +22,6 @@ interface InteractiveChartModalProps {
 export const InteractiveChartModal: React.FC<InteractiveChartModalProps> = ({ data, currentWeek = 1, onClose }) => {
   const [timeRange, setTimeRange] = useState<'13W' | '26W' | '52W' | 'ALL'>('52W');
   const [showSma20, setShowSma20] = useState<boolean>(true);
-  const [showBollinger, setShowBollinger] = useState<boolean>(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const rawSeries = data?.historicalSeries?.length > 0 ? data.historicalSeries : [data?.currentValue ?? 0];
@@ -55,7 +42,7 @@ export const InteractiveChartModal: React.FC<InteractiveChartModalProps> = ({ da
 
   // Simple Moving Average (20 period or relative)
   const smaPeriod = Math.min(20, Math.max(3, Math.floor(displayData.length / 2)));
-  const smaData: (number | null)[] = displayData.map((val, idx, arr) => {
+  const smaData: (number | null)[] = displayData.map((_val, idx, arr) => {
     if (idx < smaPeriod - 1) return null;
     const windowSlice = arr.slice(idx - smaPeriod + 1, idx + 1);
     const avg = windowSlice.reduce((s, v) => s + v, 0) / smaPeriod;
@@ -113,8 +100,6 @@ export const InteractiveChartModal: React.FC<InteractiveChartModalProps> = ({ da
       ? currentWeek - (displayData.length - 1 - hoverIndex)
       : currentWeek;
   const hoverDateLabel = formatSimulationDate(hoverPointWeek);
-  const startDateLabel = formatSimulationDate(currentWeek - (displayData.length - 1));
-  const endDateLabel = formatSimulationDate(currentWeek);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 animate-in fade-in font-sans">

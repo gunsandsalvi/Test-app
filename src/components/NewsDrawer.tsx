@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import {
-  AlertTriangle,
   ArrowRight,
   ChevronDown,
   ChevronUp,
   CloudRain,
-  DollarSign,
-  Filter,
   Globe,
   Landmark,
   Newspaper,
   ShieldAlert,
   Sparkles,
-  TrendingDown,
   TrendingUp,
   X,
   Zap,

@@ -1,8 +1,7 @@
 
-import { RegionId, Region, Portfolio, Dealer, OccupationType } from '../../types';
+import { RegionId, Portfolio, OccupationType } from '../../types';
 import { DEALERS } from '../dealers';
-import { generateIPOCompany } from '../companyGenerator';
-import { GameState, Company } from '../../types';
+import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices } from '../macroEngine';
 import { computeOccupationDemand } from './core';
@@ -178,23 +177,5 @@ export function createInitialGameState(): GameState {
   };
 }
 
-/**
- * Advance Simulation by One Week (T -> T+1)
- */
 
-function checkForIPO(regionId: RegionId, reg: Region, companies: Company[], week: number): Company | null {
-  if (week % 26 !== 0) return null;
-  const categories = Object.keys(reg.categoryDemand) as string[];
-  for (const cat of categories) {
-    const demand = reg.categoryDemand[cat];
-    if (!demand || demand.demandGrowthAnnual < 0.04) continue;
-    const incumbents = companies.filter(c => c.region === regionId && !c.isDefaulted && (c.productLines || []).some(l => l.category === cat));
-    const incumbentGrowthProxy = incumbents.length ? incumbents.reduce((s, c) => s + (c.annualRevenue - c.baselineAnnualRevenue) / Math.max(1, c.baselineAnnualRevenue), 0) / incumbents.length : 0;
-    const supplyGap = demand.demandGrowthAnnual - incumbentGrowthProxy;
-    if (supplyGap > 0.03 && Math.random() < 0.35) {
-      return generateIPOCompany(regionId, cat, demand.demandLevelUSD, week);
-    }
-  }
-  return null;
-}
 

@@ -2,23 +2,14 @@ import React, { useState } from 'react';
 import {
   Activity,
   BookOpen,
-  CheckCircle2,
-  ChevronRight,
-  Compass,
   DollarSign,
-  FileText,
-  Flame,
-  Globe,
-  HelpCircle,
   Landmark,
   Layers,
   Percent,
   Shield,
   Sparkles,
   Thermometer,
-  TrendingUp,
   X,
-  Zap,
 } from 'lucide-react';
 
 interface ManualModalProps {

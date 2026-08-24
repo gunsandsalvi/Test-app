@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { GameState, RegionId, OccupationType, ProductCategory } from '../../types';
-import { WhyDrilldown } from '../shared/WhyDrilldown';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 
 type Destination = 'briefing' | 'world' | 'market' | 'book';

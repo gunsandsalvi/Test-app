@@ -3,21 +3,13 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
-  Check,
   ChevronRight,
-  DollarSign,
-  Info,
-  Layers,
   Percent,
-  Shield,
-  ShieldAlert,
   Sparkles,
-  TrendingDown,
-  TrendingUp,
   X,
   Zap,
 } from 'lucide-react';
-import { AssetType, Dealer, GameState, Position, TradeableInstrument } from '../types';
+import { GameState, Position, TradeableInstrument } from '../types';
 import { calculateDynamicSpreadBps, getUnifiedInitialMarginRate } from '../engine/dealers';
 import { calculateExpectedCarry } from '../engine/carryCalculator';
 import { calculateBlackScholesGreeks } from '../engine/blackScholes';
@@ -39,7 +31,6 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   const [selectedDealerId, setSelectedDealerId] = useState<string>('alpha');
   const [notionalUSD, setNotionalUSD] = useState<number>(1_000_000); // Default $1M
   const [direction, setDirection] = useState<'BUY' | 'SELL'>('BUY');
-  const [showPayoffChart, setShowPayoffChart] = useState<boolean>(true);
 
   const [showAdvanced, setShowAdvanced] = useState(false);
 

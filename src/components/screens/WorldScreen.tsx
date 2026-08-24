@@ -23,13 +23,12 @@ const OCCUPATION_SHORT_LABEL: Record<string, string> = {
   MANAGERIAL_FINANCIAL: 'Managerial & Fin',
 };
 
-export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state, prevState, onNavigate }) => {
+export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state, prevState }) => {
   const [activeRegion, setActiveRegion] = useState<RegionId>('USA');
   const [worldTab, setWorldTab] = useState<WorldTab>('overview');
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
 
   const reg = state.regions[activeRegion];
-  const prevReg = prevState?.regions[activeRegion];
 
   const generateRegionStatus = (r: typeof reg): string => {
     const parts: string[] = [];
@@ -296,8 +295,6 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
                         color: `hsl(${210 + i * 25}, 70%, 50%)`
                       }))
                     }
-                    total={reg.govDebtTranches.reduce((sum, t) => sum + t.principalUSD, 0)}
-                    formatValue={val => formatCurrency(val, { compact: true })}
                   />
                   <div className="grid grid-cols-2 gap-1.5 pt-2">
                     {reg.govDebtTranches.map(t => (

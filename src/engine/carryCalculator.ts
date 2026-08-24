@@ -1,4 +1,4 @@
-import { AssetType, Region } from '../types';
+import { AssetType } from '../types';
 
 export interface CarryEstimate {
   weeklyCarryUSD: number;

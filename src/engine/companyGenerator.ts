@@ -331,7 +331,7 @@ export function generateInitialCompanies(): Company[] {
 
   regions.forEach((region) => {
     const templates = REGION_COMPANIES[region];
-    templates.forEach((rawTmpl, idx) => {
+    templates.forEach((rawTmpl) => {
       // Fix: Convert raw millions to absolute dollar units
       const tmpl: CompanyTemplate = {
         ...rawTmpl,
@@ -558,7 +558,7 @@ export function generateInitialCompanies(): Company[] {
     regionMap.get(c.region)!.push(c);
   });
 
-  regionMap.forEach((regionComps, regionId) => {
+  regionMap.forEach((regionComps, _regionId) => {
     const sectorComps = new Map<string, Company[]>();
     regionComps.forEach(c => {
       if (!sectorComps.has(c.sector)) sectorComps.set(c.sector, []);
@@ -569,7 +569,6 @@ export function generateInitialCompanies(): Company[] {
       comps.sort((a, b) => b.baselineAnnualRevenue - a.baselineAnnualRevenue);
       comps.forEach((c, idx) => {
         let lines: any[] = [];
-        const isTop = idx < 2;
         
         if (sector === 'Tech') {
           const mgn = c.ebitda / Math.max(1, c.annualRevenue);
@@ -699,7 +698,7 @@ export function generateInitialCompanies(): Company[] {
 
 const USED_NAMES = new Set<string>();
 
-export function generateUniqueCompanyName(region: string, category: string): { ticker: string, name: string } {
+export function generateUniqueCompanyName(_region: string, _category: string): { ticker: string, name: string } {
   const prefixes = ['Global', 'Quantum', 'Nexus', 'Aero', 'Stratos', 'Nova', 'Titan', 'Zenith', 'Horizon', 'Apex', 'Pearl', 'Obsidian', 'Astral', 'Galactic', 'Orion', 'Meridian', 'Crown', 'Heritage'];
   const suffixes = ['Industries', 'Tech', 'Systems', 'Holdings', 'Group', 'Networks', 'Dynamics', 'Logistics', 'Stores', 'Brands'];
   

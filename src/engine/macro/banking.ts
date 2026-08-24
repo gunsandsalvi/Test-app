@@ -11,7 +11,7 @@ export function evolveBankingSector(
   unemploymentRate: number,
   sovereign10YYield: number,
   balanceSheetStance: number,
-  gdpGrowth: number,
+  _gdpGrowth: number,
   spilloverAdjustment: number = 0,
   monetizedAmountUSD: number = 0
 ): BankingSector {

@@ -54,7 +54,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
  * Generate or evolve regional weather systems
  */
 
-export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomaly, week: number): WeatherAnomaly {
+export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomaly, _week: number): WeatherAnomaly {
   if (Math.random() < 0.28) {
     const r = Math.random();
     let pick: WeatherAnomaly['type'] = 'Normal';

@@ -1,6 +1,6 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BankingSector } from '../../types';
+import { RegionId, Region, FxPair, Commodity } from '../../types';
 import { generate52WeekHistory } from './utils';
 import { INITIAL_WEATHER } from './weather';
 

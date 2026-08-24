@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GameState, ProductCategory } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 
-export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state, onNavigate }) => {
+export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state }) => {
   const portfolio = state.portfolio;
   const nav = portfolio.cashUSD + portfolio.positions.reduce((sum, p) => sum + (p.notional || (p.currentPrice * p.quantity)), 0);
   const initialCapital = 25000000;
@@ -86,7 +86,7 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
                 if (p.assetType === 'COMMODITY') return `Commodity Spot Move: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
                 if (p.assetType === 'SOV_BOND' || p.assetType === 'IRS') return `Yield Curve Delta: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
                 if (p.assetType === 'CDS') return `Credit Default Spread Delta: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
-                if ((p.assetType === 'CORP_BOND' || p.assetType === 'LEV_LOAN') && p.entryOasSpreadBps !== undefined) {
+                if ((p.assetType === 'CORP_BOND' || (p.assetType as string) === 'LEVERAGED_LOAN' || (p.assetType as string) === 'LEV_LOAN') && p.entryOasSpreadBps !== undefined) {
                   const currentCompany = state.companies.find(c => c.debtTranches?.some(t => t.id === p.trancheId));
                   const currentOas = currentCompany?.oasSpreadBps ?? p.entryOasSpreadBps;
                   const spreadDiffBps = p.entryOasSpreadBps - currentOas;

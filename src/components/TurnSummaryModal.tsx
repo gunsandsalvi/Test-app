@@ -4,13 +4,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Calendar,
-  CheckCircle2,
-  FastForward,
-  Landmark,
-  ShieldAlert,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
   X,
 } from 'lucide-react';
 import { GameState } from '../types';

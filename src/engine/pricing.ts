@@ -1,4 +1,4 @@
-import { NelsonSiegelParams, calculateDiscountFactor, calculateForwardRate, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
+import { NelsonSiegelParams, calculateDiscountFactor, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
 import { CreditRating } from '../types';
 
 /**

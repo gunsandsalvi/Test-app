@@ -3,31 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Activity,
   AlertOctagon,
-  BarChart3,
   BookOpen,
   Briefcase,
-  ChevronRight,
-  CreditCard,
   FastForward,
-  Flame,
   Globe,
-  Layers,
-  LineChart,
   Newspaper,
-  Percent,
-  RefreshCw,
   RotateCcw,
-  Shield,
   Smartphone,
   TrendingUp,
-  Zap,
 } from 'lucide-react';
 
-import { Company, GameState, Position, TradeableInstrument } from './types';
+import { Company, GameState, Position } from './types';
 import { advanceWeeklyStep, createInitialGameState } from './engine/simulation';
 import { StatusBar } from './components/StatusBar';
 import { OverflowMenu } from './components/OverflowMenu';
@@ -40,7 +30,6 @@ import { CommoditiesScreen } from './components/screens/CommoditiesScreen';
 import { MyBookScreen } from './components/screens/MyBookScreen';
 import { TradeTicketModal } from './components/TradeTicketModal';
 import { NewsDrawer } from './components/NewsDrawer';
-import { CompanyDetailModal } from './components/CompanyDetailModal';
 import { TurnSummaryModal } from './components/TurnSummaryModal';
 import { ManualModal } from './components/ManualModal';
 import { DiagnosticsModal } from './components/DiagnosticsModal';
@@ -55,7 +44,6 @@ export default function App() {
   const [destination, setDestination] = useState<Destination>('briefing');
   const [marketSub, setMarketSub] = useState<MarketSubScreen>('corporates');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [marketFilter, setMarketFilter] = useState<'equities' | 'bonds' | 'commodities' | 'fx' | 'derivatives'>('equities');
 
   const handleNavigate = (dest: Destination, payload?: any) => {
     setDestination(dest);
@@ -66,9 +54,6 @@ export default function App() {
        const c = state.companies.find(x => x.ticker === payload.companyTicker);
        if (c) setSelectedCompany(c);
     }
-    if (payload?.marketFilter) {
-       setMarketFilter(payload.marketFilter);
-    }
     if (payload?.marketSub) {
        setMarketSub(payload.marketSub);
     }
@@ -76,8 +61,6 @@ export default function App() {
   const [isAutoAdvancing, setIsAutoAdvancing] = useState(false);
   const [isStatusBarExpanded, setIsStatusBarExpanded] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
-  const [riskView, setRiskView] = useState<'portfolio' | 'intel'>('portfolio');
-  const [lastTradableMarketsTab, setLastTradableMarketsTab] = useState<'equities' | 'commodities' | 'bonds_cds' | 'derivatives'>('equities');
   const [showTurnSummary, setShowTurnSummary] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -165,39 +148,6 @@ export default function App() {
           cashUSD: updatedCash,
           navUSD,
           positions: updatedPositions,
-          totalRequiredMarginUSD: totalMarginReq,
-          maintenanceMarginUSD: totalMaintMargin,
-          marginUtilizationPct,
-        },
-      };
-    });
-  };
-
-  const handleClosePosition = (positionId: string) => {
-    setState((prev) => {
-      const pos = prev.portfolio.positions.find((p) => p.id === positionId);
-      if (!pos) return prev;
-
-      const realizedDelta = pos.unrealizedPnL;
-      const remainingPositions = prev.portfolio.positions.filter((p) => p.id !== positionId);
-
-      const updatedRealizedTotal = prev.portfolio.realizedPnLTotal + realizedDelta;
-      const updatedCash = prev.portfolio.cashUSD + realizedDelta;
-
-      const totalMarginReq = remainingPositions.reduce((s, p) => s + p.marginRequirement, 0);
-      const totalMaintMargin = remainingPositions.reduce((s, p) => s + p.maintenanceMargin, 0);
-      const currentNav = updatedCash + remainingPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
-      const marginUtilizationPct = currentNav > 0 ? Math.round((totalMarginReq / currentNav) * 100) : 0;
-
-      return {
-        ...prev,
-        portfolio: {
-          ...prev.portfolio,
-          cashUSD: updatedCash,
-          navUSD: currentNav,
-          positions: remainingPositions,
-          closedPositionsCount: prev.portfolio.closedPositionsCount + 1,
-          realizedPnLTotal: updatedRealizedTotal,
           totalRequiredMarginUSD: totalMarginReq,
           maintenanceMarginUSD: totalMaintMargin,
           marginUtilizationPct,
@@ -358,17 +308,6 @@ export default function App() {
             state={state}
             onClose={handleCloseTradeModal}
             onExecuteTrade={handleExecuteTrade}
-          />
-        )}
-
-        {/* Company 3-Statement Detail Sheet Modal */}
-        {selectedCompany && (
-          <CompanyDetailModal
-            company={selectedCompany}
-            currentWeek={state.currentWeek}
-            state={state}
-            onClose={() => setSelectedCompany(null)}
-            onOpenTrade={handleOpenTrade}
           />
         )}
 
