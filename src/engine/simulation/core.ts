@@ -265,6 +265,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
         const inventoryHoldingDecayRate = 0.015 / 52;
         const decayedInventory = lastWeekInventory * (1 - inventoryHoldingDecayRate);
+        const weatherDecay = Math.pow(0.55, Math.max(0, (reg.weather?.weeksActive ?? 1) - 1));
+        const weatherSupplyPenalty = (reg.weather && reg.weather.severity !== 'Normal' && inputCat === 'CorporateIndustrial')
+          ? Math.max(0.80, 1.0 - Math.abs(reg.weather.gdpImpactPct ?? 0.002) * 5 * weatherDecay)
+          : 1.0;
         const supplierFirms = prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.category === inputCat));
         const weeklyProduction = supplierFirms.reduce((s, c) => {
           const line = (c.productLines || []).find(l => l.category === inputCat);
@@ -273,7 +277,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const priceSignal = (supplier.clearedInputPriceIndex ?? 1.0) - 1.0;
           const responsiveFactor = Math.max(0.05, Math.min(1.8, 1.0 + priceSignal * 1.5));
           return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;
-        }, 0);
+        }, 0) * weatherSupplyPenalty;
         const totalAvailableSupply = decayedInventory + weeklyProduction;
 
         const bidQuantity = (demander.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
@@ -1064,8 +1068,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? (newDerivedNominalGdpUSD / gdpLevel52WeeksAgo - 1) - reg.inflation
       : 0;
 
-    const blendedGdpGrowth = (1 - (reg.bottomUpGdpWeight ?? 1.0)) * reg.gdpGrowth + (reg.bottomUpGdpWeight ?? 1.0) * gdpGrowthBottomUp;
-    const clampedBlendedGdpGrowth = Math.max(-0.02, Math.min(0.045, blendedGdpGrowth)); // same safety backstop as before, now applied to the blend
+    const finalGdpGrowth = Math.max(-0.5, Math.min(0.5, gdpGrowthBottomUp));
 
     // Government Debt Tranches: roll-off and new issuance
     const maturedTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);
@@ -1112,10 +1115,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     updatedRegions[regionId] = {
       ...reg,
-      gdpGrowth: clampedBlendedGdpGrowth, // overwrites this week's AR1-only value with the blended figure — this is what the Taylor rule, unemployment, wage growth all read going forward
-      bottomUpGdpWeight: reg.bottomUpGdpWeight ?? 1.0,
+      gdpGrowth: finalGdpGrowth,
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
-      gdpGrowthBottomUp: Number(Math.max(-0.5, Math.min(0.5, gdpGrowthBottomUp)).toFixed(4)), // generous diagnostic bound only — this is not the load-bearing clamp, just a display sanity guard since this is new and untrusted
+      gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
       nominalGdpHistory: newNominalGdpHistory,
       consumptionComponentUSD,
       investmentComponentUSD,

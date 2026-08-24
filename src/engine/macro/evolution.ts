@@ -1,6 +1,6 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 
@@ -70,13 +70,8 @@ export function evolveRegionMacro(
     }
   }
 
-  const weatherGdpShock = updatedWeather.gdpImpactPct * weatherDecay;
-
   // Micro-to-Macro Transmission:
-  // 1. Aggregate Corporate CapEx produces realistic incremental additions to national GDP (bounded -0.5% to +0.5%)
-  const capexGdpFeedback = microFeedback.capexGdpContribution;
-  
-  // 2. Margin compression forces hiring freezes, cooling wage inflation
+  // 1. Margin compression forces hiring freezes, cooling wage inflation
   const laborCooling = microFeedback.marginCompression * 0.15;
   
   // 3. Fiscal deficit > 6% injects supply-side term premium
@@ -84,17 +79,10 @@ export function evolveRegionMacro(
 
   const infNoise = (Math.random() - 0.5) * 0.0008 + globalShock.inflationShock + weatherInfShock * 0.20 - laborCooling * 0.0008;
 
-  // --- GDP CALCULATION REWRITE ---
+  // GDP Growth is derived bottom-up from C+I+G+NX identity in simulation core (Phase 4)
   const potentialGdp = region.potentialGdpGrowth;
-  
-  // 1. Autoregressive AR(1) base with mean-reversion to potential GDP
-  const gdpPersistence = region.cycleRegime === 'Recession' ? 0.75 : 0.85; // Strong gravity pulling back to potential
-  const noiseMultiplier = region.cycleRegime === 'Recession' ? 1.5 : 1.0;
-  const stochasticNoise = (Math.random() - 0.5) * 0.001 * noiseMultiplier; // +/- 5 bps random variation (increased in recession)
-  const baseGdp = (region.gdpGrowth * gdpPersistence) + (potentialGdp * (1 - gdpPersistence)) + stochasticNoise + globalShock.gdpShock + weatherGdpShock * 0.20;
+  const newGdpGrowth = region.gdpGrowth;
 
-  // 2. Incremental bounded shocks (Annualized bps)
-  const capexContribAnnual = capexGdpFeedback; // Already bounded and annualized in simulation.ts
   const prevHS: HouseholdState = region.householdState || {
     consumerConfidence: 100,
     wageGrowth: region.wageGrowth,
@@ -111,11 +99,6 @@ export function evolveRegionMacro(
     otherConsumerLoanDebtUSD: region.estimatedHouseholdIncomeUSD * 0.1,
     netWorthUSD: region.estimatedHouseholdIncomeUSD * 1.0,
   };
-  const consumerContribAnnual = Math.max(-0.002, Math.min(0.002, (prevHS.consumerConfidence - 100) * 0.0001)); // Max +/- 20 bps
-
-  // Real Rate Demand Channel
-  const realRateGap = (region.policyRate - region.inflation) - region.neutralRate;
-  const monetaryDrag = Math.max(-0.025, Math.min(0.025, -realRateGap * 0.60));
 
   let newFiscalStanceScore = region.fiscalStanceScore;
   let newStructuralDeficitPctGdp = region.structuralDeficitPctGdp;
@@ -133,23 +116,9 @@ export function evolveRegionMacro(
     const stanceChange = newFiscalStanceScore - region.fiscalStanceScore;
     newStructuralDeficitPctGdp = Math.max(0.01, Math.min(0.12, region.structuralDeficitPctGdp + stanceChange * 0.05));
   }
-  const fiscalImpulse = newFiscalStanceScore * 0.006;
 
   // Process recession shocks
-  let scheduledShock = 0;
-  const remainingShocks = region.recessionShockQueue.filter(s => {
-    if (s.week === week) {
-      scheduledShock += s.shock;
-      return false;
-    }
-    return true;
-  });
-
-  // 3. Set new GDP Growth: Must be absolute rate, NOT compounded
-  const updatedGdpGrowth = baseGdp + capexContribAnnual + consumerContribAnnual + monetaryDrag + fiscalImpulse + scheduledShock;
-
-  // 4. Absolute hard clamp to prevent runaway simulation
-  const newGdpGrowth = updatedGdpGrowth;
+  const remainingShocks = region.recessionShockQueue.filter(s => s.week !== week);
 
   // 1. Autoregressive AR(1) base with anchor to target inflation piStar + supply noise
   const infPersistence = 0.98;
@@ -233,8 +202,10 @@ export function evolveRegionMacro(
   const newTotalPopulation = Math.max(1, Math.round(region.totalPopulation * (1 + netPopulationGrowthRate)));
   const totalLaborForce = newTotalPopulation * (1 - newNonEmployablePct) * newParticipation;
 
-  const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5;
-  const newSavingsRate = Math.max(0.02, Math.min(0.18, savingsBaseline + 0.2 * (region.policyRate - newNeutralRate) - 0.1 * ((newCCI - 100) / 100)));
+  const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5 - 0.1 * ((newCCI - 100) / 100);
+  const realRateGap = region.policyRate - newNeutralRate;
+  const rateSavingsIncentive = Math.max(-0.02, Math.min(0.02, realRateGap * 0.4));
+  const newSavingsRate = Math.max(0.02, Math.min(0.30, savingsBaseline + rateSavingsIncentive));
 
   // Net new lending from banking sector expands deposits
   const estBusinessLoanBook = microFeedback.businessLoanBookInputUSD;
@@ -496,8 +467,8 @@ export function evolveRegionMacro(
   const smoothedTargetRate = taylorTarget; // Used for dot plot and curve parameters
 
   // --- DIAGNOSTIC TELEMETRY OUTPUT ---
-  const capexBps = Math.round(capexContribAnnual * 10000);
-  const consBps = Math.round(consumerContribAnnual * 10000);
+  const capexBps = Math.round((microFeedback.capexGdpContribution ?? 0) * 10000);
+  const consBps = Math.round(((prevHS.consumerConfidence ?? 100) - 100) * 0.0001 * 10000);
   const outGapBps = Math.round(output_gap * 10000);
   const infGapBps = Math.round(inflation_gap * 10000);
   
@@ -567,7 +538,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
-  const newEstimatedHouseholdIncomeUSD = Number((region.estimatedHouseholdIncomeUSD * (1 + (newGdpGrowth + newInflation) / 52)).toFixed(0));
+  const totalWageIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
+    const pool = newOccupationPools[occ];
+    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * pool.employed;
+  }, 0);
+  const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
+  const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
 
   const updatedRegion: Region = {
     ...region,
@@ -610,7 +586,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,
     gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,
-    bottomUpGdpWeight: region.bottomUpGdpWeight ?? 1.0,
     nominalGdpHistory: region.nominalGdpHistory ?? [],
     consumptionComponentUSD: region.consumptionComponentUSD ?? 0,
     investmentComponentUSD: region.investmentComponentUSD ?? 0,

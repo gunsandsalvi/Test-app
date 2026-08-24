@@ -1,6 +1,6 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity } from '../../types';
+import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool } from '../../types';
 import { generate52WeekHistory } from './utils';
 import { INITIAL_WEATHER } from './weather';
 
@@ -15,7 +15,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
   const jpnZeros = calculateTenorZeroRates(jpnParams);
   const eurZeros = calculateTenorZeroRates(eurParams);
 
-  return {
+  const regions: Record<RegionId, Region> = {
     USA: {
       id: 'USA',
       name: 'United States',
@@ -117,7 +117,6 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedNominalGdpUSD: 19_500_000_000_000,
       derivedNominalGdpUSD: 19_500_000_000_000,
       gdpGrowthBottomUp: 0,
-      bottomUpGdpWeight: 1.0,
       nominalGdpHistory: [],
       consumptionComponentUSD: 0,
       investmentComponentUSD: 0,
@@ -261,7 +260,6 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedNominalGdpUSD: 3_200_000_000_000,
       derivedNominalGdpUSD: 3_200_000_000_000,
       gdpGrowthBottomUp: 0,
-      bottomUpGdpWeight: 1.0,
       nominalGdpHistory: [],
       consumptionComponentUSD: 0,
       investmentComponentUSD: 0,
@@ -404,7 +402,6 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedNominalGdpUSD: 5_500_000_000_000,
       derivedNominalGdpUSD: 5_500_000_000_000,
       gdpGrowthBottomUp: 0,
-      bottomUpGdpWeight: 1.0,
       nominalGdpHistory: [],
       consumptionComponentUSD: 0,
       investmentComponentUSD: 0,
@@ -548,7 +545,6 @@ export function getInitialRegions(): Record<RegionId, Region> {
       estimatedNominalGdpUSD: 14_500_000_000_000,
       derivedNominalGdpUSD: 14_500_000_000_000,
       gdpGrowthBottomUp: 0,
-      bottomUpGdpWeight: 1.0,
       nominalGdpHistory: [],
       consumptionComponentUSD: 0,
       investmentComponentUSD: 0,
@@ -592,6 +588,28 @@ export function getInitialRegions(): Record<RegionId, Region> {
       historicalZeroCurves: [{ week: 1, ...eurZeros }],
     },
   };
+
+  Object.values(regions).forEach(reg => {
+    const totalLaborForce = reg.totalPopulation * (1 - reg.nonEmployablePct) * reg.laborForceParticipation;
+    const totalEmployed = totalLaborForce * (1 - reg.unemploymentRate);
+    const shares = reg.occupationLaborForceShare;
+    const pools: Record<OccupationType, OccupationPool> = { ...reg.occupationPools };
+    (Object.keys(shares) as OccupationType[]).forEach(occ => {
+      pools[occ] = {
+        employed: Math.round(totalEmployed * shares[occ]),
+        wageIndex: 1.0,
+        wageGrowthAnnual: reg.wageGrowth || 0.03,
+      };
+    });
+    reg.occupationPools = pools;
+    const totalWageIncomeUSD = (Object.keys(pools) as OccupationType[]).reduce((sum, occ) => {
+      return sum + BASE_ANNUAL_WAGE_USD[occ] * pools[occ].wageIndex * pools[occ].employed;
+    }, 0);
+    const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
+    reg.estimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
+  });
+
+  return regions;
 }
 
 /**

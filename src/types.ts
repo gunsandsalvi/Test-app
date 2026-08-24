@@ -141,6 +141,14 @@ export interface PrivateSectorSegment {
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
 
+export const BASE_ANNUAL_WAGE_USD: Record<OccupationType, number> = {
+  GENERAL: 42_000,
+  SKILLED_TRADES: 62_000,
+  TECHNICAL_ENGINEERING: 98_000,
+  SPECIALIZED_PROFESSIONAL: 145_000,
+  MANAGERIAL_FINANCIAL: 118_000,
+};
+
 export interface OccupationPool {
   employed: number;
   wageIndex: number; // relative wage level for this occupation, starts at 1.0, drifts with tightness
@@ -230,8 +238,7 @@ export interface Region {
   // Government & Nominal GDP (Phase 2 & Phase 4)
   estimatedNominalGdpUSD: number;    // proxy until Phase 4 — replaced by the true C+I+G+NX sum then
   derivedNominalGdpUSD: number;      // C+I+G+NX, this world's own bottom-up sum
-  gdpGrowthBottomUp: number;         // diagnostic only — % change of the above, NOT yet driving anything
-  bottomUpGdpWeight: number;         // weight of bottom-up GDP in blended gdpGrowth (Phase 4b)
+  gdpGrowthBottomUp: number;         // derived % change YoY
   nominalGdpHistory: number[];       // rolling 52-week history of derivedNominalGdpUSD for YoY calculation
   consumptionComponentUSD: number;   // C, exposed for inspection
   investmentComponentUSD: number;    // I, exposed for inspection
