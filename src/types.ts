@@ -46,6 +46,8 @@ export interface BankingSector {
   netInterestMarginPct: number;
   loanLossProvisionRateAnnualPct: number;
   creditConditionsIndex: number; // -1 (very loose) to +1 (very tight)
+  centralBankReservesUSD: number;
+  moneySupplyM2USD: number;
 }
 
 export interface AssetOwnershipShares {

@@ -82,7 +82,7 @@ export function evolveRegionMacro(
     mortgageDebtUSD: region.estimatedHouseholdIncomeUSD * 0.8,
     creditCardDebtUSD: region.estimatedHouseholdIncomeUSD * 0.05,
     otherConsumerLoanDebtUSD: region.estimatedHouseholdIncomeUSD * 0.1,
-    netWorthUSD: 0,
+    netWorthUSD: region.estimatedHouseholdIncomeUSD * 1.0,
   };
   const consumerContribAnnual = Math.max(-0.002, Math.min(0.002, (prevHS.consumerConfidence - 100) * 0.0001)); // Max +/- 20 bps
 
@@ -124,7 +124,10 @@ export function evolveRegionMacro(
   // 4. Absolute hard clamp to prevent runaway simulation
   const newGdpGrowth = Math.max(-0.02, Math.min(0.045, updatedGdpGrowth)); // Bounded between -2.0% and +4.5%
 
-  let newInflation = Math.max(0.0050, Math.min(0.20, Number((region.inflation + infNoise).toFixed(4))));
+  // 1. Autoregressive AR(1) base with anchor to target inflation piStar + supply noise
+  const infPersistence = 0.98;
+  const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
+  let newInflation = Math.max(0.0050, Math.min(0.15, Number(baseInflation.toFixed(4))));
 
   const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
   const newFiscalDeficitPctGdp = Math.max(-0.02, Math.min(0.15, newStructuralDeficitPctGdp + cyclicalDeficitComponent));
@@ -182,9 +185,9 @@ export function evolveRegionMacro(
     ? Math.max(0.02, Math.min(0.09, Number((region.nairu + (newParticipation - region.laborForceParticipation) * 52 * 0.15).toFixed(4))))
     : region.nairu;
 
-  const baseUnempChange = (potentialGdp - newGdpGrowth) * 0.25 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0004 : -0.0002);
+  const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : -0.00005);
   const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
-  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + baseUnempChange + participationEffect).toFixed(3))));
+  const newUnemployment = Math.max(0.032, Math.min(0.100, Number((region.unemploymentRate + baseUnempChange + participationEffect).toFixed(4))));
   const unempDelta = newUnemployment - region.unemploymentRate;
 
   // Consumer & Household Sector Simulation
@@ -195,18 +198,25 @@ export function evolveRegionMacro(
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
   const contagionHit = microFeedback.creditContagionBps > 50 ? (microFeedback.creditContagionBps / 100) * 0.5 : 0;
-  const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 300 - Math.max(0, region.expectedInflation - piStar) * 100;
-  const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.05;
-  const newCCI = Math.max(60, Math.min(140, prevHS.consumerConfidence + cciReversion + 0.3 * (newWageGrowth - region.inflation) * 100 + 0.1 * (equityReturn * 100) - cciUnempMultiplier * unempDelta * 100 - contagionHit));
+  const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80;
+  const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.08;
+  const unempShock = unempDelta > 0 ? cciUnempMultiplier * unempDelta * 100 : 0;
+  const newCCI = Math.max(60, Math.min(140, Number((prevHS.consumerConfidence + cciReversion + 0.05 * (equityReturn * 100) - unempShock - contagionHit).toFixed(2))));
 
   const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5;
   const newSavingsRate = Math.max(0.02, Math.min(0.18, savingsBaseline + 0.2 * (region.policyRate - newNeutralRate) - 0.1 * ((newCCI - 100) / 100)));
 
+  // Net new lending from banking sector expands deposits
+  const estBusinessLoanBook = microFeedback.businessLoanBookInputUSD;
+  const bankedConsumerDebtShare = 0.1167;
+  const estConsumerLoanBook = prevHS.householdDebtToIncomeRatio * region.estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
+  const netNewLending = Math.max(0, estBusinessLoanBook - region.bankingSector.businessLoanBookUSD) + Math.max(0, estConsumerLoanBook - region.bankingSector.consumerLoanBookUSD);
+
   // 1. Asset side
-  // Savings flow into deposits
+  // Savings flow into deposits + portion of new lending (loan disbursements, payroll funded by credit)
   const weeklySavingsUSD = (region.estimatedHouseholdIncomeUSD * newSavingsRate) / 52;
   const depositInterestUSD = (prevHS.depositsUSD || 0) * (region.policyRate * 0.6) / 52;
-  const newDepositsUSD = Math.max(0, (prevHS.depositsUSD || 0) + weeklySavingsUSD + depositInterestUSD);
+  const newDepositsUSD = Math.max(0, (prevHS.depositsUSD || 0) + weeklySavingsUSD + depositInterestUSD + netNewLending * 0.15);
 
   // Equities appreciate / depreciate with the region's market return
   const newEquityHoldingsUSD = Math.max(0, (prevHS.equityHoldingsUSD || 0) * (1 + equityReturn));
@@ -239,10 +249,10 @@ export function evolveRegionMacro(
   const newNetWorthUSD = newDepositsUSD + newEquityHoldingsUSD - totalHouseholdDebtUSD;
   const netWorthToIncomeRatio = region.estimatedHouseholdIncomeUSD > 0
     ? newNetWorthUSD / region.estimatedHouseholdIncomeUSD
-    : 3.5;
+    : 1.0;
 
   // 4. Wealth-effect correction in CCI & consumption:
-  const balanceSheetWealthEffect = (netWorthToIncomeRatio - 3.5) * 0.003;
+  const balanceSheetWealthEffect = Math.max(-0.02, Math.min(0.02, (netWorthToIncomeRatio - 1.0) * 0.006));
   const creditFundedSpendingUSD = (weeklyNewCCDebtUSD + weeklyNewOtherLoansUSD) * 0.8; // credit directly buying goods
   const weeklyIncomeUSD = region.estimatedHouseholdIncomeUSD / 52;
   const creditSpendingBoostPct = weeklyIncomeUSD > 0 ? (creditFundedSpendingUSD / weeklyIncomeUSD) * 0.05 : 0;
@@ -255,12 +265,17 @@ export function evolveRegionMacro(
   ) / Math.max(1, totalHouseholdDebtUSD);
 
   const newDebtServiceBurden = (totalHouseholdDebtUSD * (effectiveBorrowingRate / 52)) / Math.max(1, weeklyIncomeUSD);
+  const baselineDebtServiceBurden = 0.055; // Baseline ~5.5% debt service burden of household income
+  const debtServiceDrag = (newDebtServiceBurden - baselineDebtServiceBurden) * 0.4;
 
   // Update newRealConsumptionGrowth with real balance-sheet channels:
-  const newRealConsumptionGrowth = (1 - newSavingsRate) * (newWageGrowth - region.inflation) * (newCCI / 100)
+  const trendConsumptionGrowth = region.potentialGdpGrowth * (newCCI / 100);
+  const realWageGainEffect = (1 - newSavingsRate) * (newWageGrowth - region.inflation - 0.005);
+  const newRealConsumptionGrowth = trendConsumptionGrowth
+    + realWageGainEffect
     + balanceSheetWealthEffect
     + creditSpendingBoostPct
-    - newDebtServiceBurden;
+    - debtServiceDrag;
 
   const wealthSignal = Math.max(-0.02, Math.min(0.02, equityReturn * 0.3 + (newCCI - 100) / 100 * 0.01));
   const targetLuxuryShare = Math.max(0.05, Math.min(0.30, prevHS.luxurySpendShare + wealthSignal));
@@ -269,10 +284,39 @@ export function evolveRegionMacro(
   const newStapleShare = Number((prevHS.stapleSpendShare * 0.95 + targetStapleShare * 0.05).toFixed(4));
   const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
+  // Central bank stance and banking sector evolution
+  const qePace = newCycleRegime === 'Recession' ? 10e9 : (newCycleRegime === 'Expansion' ? -3e9 : 0);
+  const cbFloor = 300e9; // Structural floor for central bank assets (currency in circulation & baseline reserves)
+  const newCbBalance = Math.max(cbFloor, region.centralBankBalanceSheet + qePace);
+  const cbChangePct = (newCbBalance - region.centralBankBalanceSheet) / Math.max(cbFloor, region.centralBankBalanceSheet);
+  const newBalanceSheetStance = Math.max(-1, Math.min(1, -cbChangePct * 10));
+
+  const newBankingSector = evolveBankingSector(
+    region.bankingSector,
+    microFeedback.businessLoanBookInputUSD,
+    prevHS.householdDebtToIncomeRatio,
+    region.estimatedHouseholdIncomeUSD,
+    newSavingsRate,
+    region.policyRate,
+    microFeedback.creditContagionBps,
+    newUnemployment,
+    region.zeroRates.tenor10Y,
+    newBalanceSheetStance,
+    newGdpGrowth
+  );
+
+  const prevM2 = region.bankingSector.moneySupplyM2USD > 0
+    ? region.bankingSector.moneySupplyM2USD
+    : (region.bankingSector.depositsUSD + (region.bankingSector.centralBankReservesUSD ?? 1.2e12) * 0.1);
+  const m2GrowthRateAnnualized = prevM2 > 0
+    ? ((newBankingSector.moneySupplyM2USD / prevM2) - 1) * 52
+    : 0;
+  const monetaryInflationPressure = Math.max(0, Math.min(0.02, (m2GrowthRateAnnualized - newGdpGrowth) * 0.15));
+
   const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
   
-  // Wage-push inflation adds to CPI (scaled for weekly turn)
-  newInflation = Math.max(0.0050, Math.min(0.20, Number((newInflation + wagePushInflation * 0.02).toFixed(4))));
+  // Wage-push and monetary inflation add to CPI (scaled for weekly turn)
+  newInflation = Math.max(0.0050, Math.min(0.12, Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4))));
   const newCoreInflation = Number((newInflation * 0.92 + wagePushInflation * 0.1).toFixed(4));
   const newExpectedInflation = region.expectedInflation * 0.9 + newInflation * 0.1;
 
@@ -334,10 +378,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const dotPlot1Y = Number((newPolicyRate * 0.4 + smoothedTargetRate * 0.6).toFixed(4));
   const dotPlot2Y = Number((smoothedTargetRate * 0.35 + (rStar + piStar) * 0.65).toFixed(4));
 
-  const qePace = newCycleRegime === 'Recession' ? 10e9 : (newCycleRegime === 'Expansion' ? -3e9 : 0);
-  const cbFloor = 300e9; // Structural floor for central bank assets (currency in circulation & baseline reserves)
-  const newCbBalance = Math.max(cbFloor, region.centralBankBalanceSheet + qePace);
-  const cbChangePct = (newCbBalance - region.centralBankBalanceSheet) / Math.max(cbFloor, region.centralBankBalanceSheet);
   const qePremium = Math.max(-0.01, Math.min(0.01, cbChangePct * -0.5));
 
   // Update Nelson-Siegel yield curve parameters
@@ -396,8 +436,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
-  const newBalanceSheetStance = Math.max(-1, Math.min(1, -cbChangePct * 10));
-  const newBankingSector = evolveBankingSector(region.bankingSector, microFeedback.businessLoanBookInputUSD, prevHS.householdDebtToIncomeRatio, region.estimatedHouseholdIncomeUSD, newSavingsRate, newPolicyRate, microFeedback.creditContagionBps, newUnemployment, newZeroRates.tenor10Y, newBalanceSheetStance, newGdpGrowth);
   const newEstimatedHouseholdIncomeUSD = Number((region.estimatedHouseholdIncomeUSD * (1 + (newGdpGrowth + newInflation) / 52)).toFixed(0));
 
   const updatedRegion: Region = {

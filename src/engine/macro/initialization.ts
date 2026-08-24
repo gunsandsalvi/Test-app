@@ -37,7 +37,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 12_000_000_000_000,
-      bankingSector: { businessLoanBookUSD: 800_000_000_000, consumerLoanBookUSD: 1_400_000_000_000, depositsUSD: 2_100_000_000_000, sovereignBondHoldingsUSD: 400_000_000_000, cashReservesUSD: 210_000_000_000, bankEquityUSD: 280_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.028, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
+      bankingSector: { businessLoanBookUSD: 800_000_000_000, consumerLoanBookUSD: 1_400_000_000_000, depositsUSD: 2_100_000_000_000, sovereignBondHoldingsUSD: 400_000_000_000, cashReservesUSD: 210_000_000_000, bankEquityUSD: 280_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.028, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0, centralBankReservesUSD: 1_200_000_000_000, moneySupplyM2USD: 0 },
       equityOwnership: {
         bankShare: 0.06, institutionalShare: 0.06,
         foreignShare: { EUR: 0.16, UK: 0.08, JPN: 0.12, USA: 0 },
@@ -155,7 +155,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 2_000_000_000_000,
-      bankingSector: { businessLoanBookUSD: 150_000_000_000, consumerLoanBookUSD: 260_000_000_000, depositsUSD: 400_000_000_000, sovereignBondHoldingsUSD: 80_000_000_000, cashReservesUSD: 40_000_000_000, bankEquityUSD: 55_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.025, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0 },
+      bankingSector: { businessLoanBookUSD: 150_000_000_000, consumerLoanBookUSD: 260_000_000_000, depositsUSD: 400_000_000_000, sovereignBondHoldingsUSD: 80_000_000_000, cashReservesUSD: 40_000_000_000, bankEquityUSD: 55_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.025, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0, centralBankReservesUSD: 200_000_000_000, moneySupplyM2USD: 0 },
       equityOwnership: {
         bankShare: 0.06, institutionalShare: 0.08,
         foreignShare: { USA: 0.18, EUR: 0.13, JPN: 0.05, UK: 0 },
@@ -273,7 +273,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 3_500_000_000_000,
-      bankingSector: { businessLoanBookUSD: 300_000_000_000, consumerLoanBookUSD: 420_000_000_000, depositsUSD: 900_000_000_000, sovereignBondHoldingsUSD: 260_000_000_000, cashReservesUSD: 90_000_000_000, bankEquityUSD: 90_000_000_000, bankCapitalRatio: 0.11, netInterestMarginPct: 0.012, loanLossProvisionRateAnnualPct: 0.004, creditConditionsIndex: 0 },
+      bankingSector: { businessLoanBookUSD: 300_000_000_000, consumerLoanBookUSD: 420_000_000_000, depositsUSD: 900_000_000_000, sovereignBondHoldingsUSD: 260_000_000_000, cashReservesUSD: 90_000_000_000, bankEquityUSD: 90_000_000_000, bankCapitalRatio: 0.11, netInterestMarginPct: 0.012, loanLossProvisionRateAnnualPct: 0.004, creditConditionsIndex: 0, centralBankReservesUSD: 1_500_000_000_000, moneySupplyM2USD: 0 },
       equityOwnership: {
         bankShare: 0.08, institutionalShare: 0.08,
         foreignShare: { USA: 0.15, EUR: 0.10, UK: 0.03, JPN: 0 },
@@ -391,7 +391,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       inversionWeeksCount: 0,
       recessionShockQueue: [],
       estimatedHouseholdIncomeUSD: 9_000_000_000_000,
-      bankingSector: { businessLoanBookUSD: 650_000_000_000, consumerLoanBookUSD: 1_000_000_000_000, depositsUSD: 1_600_000_000_000, sovereignBondHoldingsUSD: 350_000_000_000, cashReservesUSD: 160_000_000_000, bankEquityUSD: 200_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.022, loanLossProvisionRateAnnualPct: 0.007, creditConditionsIndex: 0 },
+      bankingSector: { businessLoanBookUSD: 650_000_000_000, consumerLoanBookUSD: 1_000_000_000_000, depositsUSD: 1_600_000_000_000, sovereignBondHoldingsUSD: 350_000_000_000, cashReservesUSD: 160_000_000_000, bankEquityUSD: 200_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.022, loanLossProvisionRateAnnualPct: 0.007, creditConditionsIndex: 0, centralBankReservesUSD: 800_000_000_000, moneySupplyM2USD: 0 },
       equityOwnership: {
         bankShare: 0.08, institutionalShare: 0.08,
         foreignShare: { USA: 0.20, JPN: 0.06, UK: 0.04, EUR: 0 },
