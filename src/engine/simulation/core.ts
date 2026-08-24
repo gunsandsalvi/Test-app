@@ -263,16 +263,18 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const industrialProductionRate = Math.max(0.005, Math.min(0.04, 0.02 * (0.5 + regionCapacityUtilization * 0.5)));
 
         const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
+        const inventoryHoldingDecayRate = 0.015 / 52;
+        const decayedInventory = lastWeekInventory * (1 - inventoryHoldingDecayRate);
         const supplierFirms = prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.category === inputCat));
         const weeklyProduction = supplierFirms.reduce((s, c) => {
           const line = (c.productLines || []).find(l => l.category === inputCat);
           const warehouseCap = c.annualRevenue * 0.15;
           const throttle = (c.finishedGoodsInventoryUSD ?? 0) > warehouseCap ? 0.3 : 1.0;
           const priceSignal = (supplier.clearedInputPriceIndex ?? 1.0) - 1.0;
-          const responsiveFactor = Math.max(0.2, Math.min(1.8, 1.0 + priceSignal * 1.5));
+          const responsiveFactor = Math.max(0.05, Math.min(1.8, 1.0 + priceSignal * 1.5));
           return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;
         }, 0);
-        const totalAvailableSupply = lastWeekInventory + weeklyProduction;
+        const totalAvailableSupply = decayedInventory + weeklyProduction;
 
         const bidQuantity = (demander.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
         const clearingRatio = totalAvailableSupply > 0 ? bidQuantity / totalAvailableSupply : 1;

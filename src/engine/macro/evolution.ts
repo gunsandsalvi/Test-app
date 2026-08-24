@@ -196,13 +196,14 @@ export function evolveRegionMacro(
   const potentialGdpDelta = newPotentialGdpGrowth - region.potentialGdpGrowth;
   const newNeutralRate = Number((region.neutralRate + potentialGdpDelta).toFixed(4));
 
-  const isHighUnemp = region.unemploymentRate > region.nairu;
-  const weeksAboveNairu = isHighUnemp ? (region.weeksAboveNairu ?? 0) + 1 : 0;
-  const hysteresis = weeksAboveNairu > 8 ? 0.0001 : 0;
+  const isHighUnemp = region.unemploymentRate > region.nairu + 0.005;
+  const weeksAboveNairu = isHighUnemp ? (region.weeksAboveNairu ?? 0) + 1 : Math.max(0, (region.weeksAboveNairu ?? 0) - 2);
+  const hysteresis = Math.min(0.015, weeksAboveNairu * 0.00005);
+  const hysteresisDelta = isHighUnemp ? hysteresis / 52 : -hysteresis / 104;
   const baseNairu = week % 52 === 0
     ? Math.max(0.02, Math.min(0.09, Number((region.nairu + (newParticipation - region.laborForceParticipation) * 52 * 0.15).toFixed(4))))
     : region.nairu;
-  const newNairu = Number(Math.max(0.02, Math.min(0.09, baseNairu + hysteresis)).toFixed(4));
+  const newNairu = Number(Math.max(0.02, Math.min(0.09, baseNairu + hysteresisDelta)).toFixed(4));
 
   const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0);
   const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
