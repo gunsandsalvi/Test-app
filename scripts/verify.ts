@@ -35,7 +35,10 @@ const trackers: Record<string, { history: number[]; extract: (s: GameState) => n
 };
 
 for (let w = 1; w <= 520; w++) {
-  console.log(`Advancing Week ${w}`);
+  if (w % 52 === 0 || w === 1) {
+    const b = state.regions.USA.bankingSector;
+    console.log(`[Diagnostic Week ${w}] USA bankCapRatio: ${(b.bankCapitalRatio*100).toFixed(2)}%, NIM: ${(b.netInterestMarginPct*100).toFixed(2)}%, deposits: ${b.depositsUSD.toExponential(2)}, equity: ${b.bankEquityUSD.toExponential(2)}, policyRate: ${(state.regions.USA.policyRate*100).toFixed(2)}%`);
+  }
   state = advanceWeeklyStep(state);
   const nan = isNaNAnywhere(state);
   if (nan.length > 0) violations.push({ week: w, message: `NaN detected: ${nan.join(', ')}` });

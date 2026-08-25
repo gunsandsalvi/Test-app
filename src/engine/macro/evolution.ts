@@ -482,10 +482,10 @@ export function evolveRegionMacro(
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
   let newPolicyRate = region.policyRate + 0.15 * (taylorTarget - region.policyRate);
-  newPolicyRate = (newPolicyRate);
-  if (region.id === 'JPN') {
-    newPolicyRate = (newPolicyRate);
-  }
+  // Effective Lower Bound (ELB) and upper bound to keep rates in plausible zones
+  const elb = region.id === 'JPN' ? -0.0025 : -0.0075;
+  const rateCap = 0.15;
+  newPolicyRate = Math.max(elb, Math.min(rateCap, newPolicyRate));
 
   // Update inflation deviation streak
   const isAboveTarget = region.inflation > piStar + 0.01;
@@ -783,7 +783,9 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   }, 0) : 0;
   const baselineWeeklyDemandUSD = (totalCategoryDemandUSD * (linkage?.intensityShare ?? 0)) / 52;
 
-  const referencePrice = comm.historicalPrices.length >= 52 ? comm.historicalPrices[comm.historicalPrices.length - 52] : comm.spotPrice;
+  const referencePrice = comm.historicalPrices.length >= 2
+    ? comm.historicalPrices[Math.max(0, comm.historicalPrices.length - 52)]
+    : comm.spotPrice;
   const priceRatio = referencePrice > 0 ? comm.spotPrice / referencePrice : 1.0;
   const demandElasticity = -0.4;
   const supplyElasticity = 0.3;

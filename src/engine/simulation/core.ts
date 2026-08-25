@@ -880,13 +880,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const targetMargin = Math.min(0.65, Math.max(0.04, baselineMargin - wageCompression - capacityDecayPenalty - avgCrowdingIntensity * 0.08 - inputPriceDrag * 0.03));
       newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (Math.random() - 0.5) * 0.004));
 
-      const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
+      const growthCapexToRev = Math.min(0.15, comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue)));
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
       const estCashHealth = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
       const estTobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
-      const estQCapexEffect = ((estTobinsQ - 1) * 0.2);
+      const estQCapexEffect = Math.max(-0.5, Math.min(1.5, (estTobinsQ - 1) * 0.2));
       const estAvgComp = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
-      const estCompEffect = (estAvgComp * 0.15);
+      const estCompEffect = Math.max(-0.5, Math.min(0.5, estAvgComp * 0.15));
       const estTargetGrowthCapex = baseRev * growthCapexToRev * (1 - estRateDrag) * estCashHealth * (1 + estQCapexEffect + estCompEffect);
       const estNewGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + estTargetGrowthCapex * 0.10);
       
@@ -904,7 +904,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
         const targetCompetitiveness = (marginEdge * 16 + growthInvestmentSignal * 0.5);
-        const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
+        const newCompetitiveness = Number(Math.max(-3.0, Math.min(3.0, line.competitiveness * 0.98 + targetCompetitiveness * 0.02)).toFixed(3));
         const shareGainRate = (newCompetitiveness * 0.035 - dominanceDrag);
         const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // 0 floor only — a market share literally cannot go negative, this is a math guard not a behavioral clamp
         
@@ -936,7 +936,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
         const annualGrowthRate = laggedCategoryGrowth + noise + reg.inflation * pricingPowerBeta;
         
-        const weeklyGrowthRate = (annualGrowthRate / 52) + exportRevenueBoost;
+        const weeklyGrowthRate = Math.max(-0.03, Math.min(0.03, (annualGrowthRate / 52) + exportRevenueBoost));
         if (isNaN(weeklyGrowthRate)) throw new Error(`weeklyGrowthRate is NaN, laggedCategoryGrowth=${laggedCategoryGrowth}, noise=${noise}, reg.inflation=${reg.inflation}, pricingPowerBeta=${pricingPowerBeta}`);
         const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
       
@@ -996,7 +996,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     // Maintenance — funded, not assumed:
     // 1. What maintenance WOULD cost if fully funded (capacity-based target)
-    const maintenanceCapexToRevenueRatio = (comp.maintenanceCapex ?? (comp.capex * 0.6)) / Math.max(1, comp.annualRevenue);
+    const maintenanceCapexToRevenueRatio = Math.min(0.20, (comp.maintenanceCapex ?? (comp.capex * 0.6)) / Math.max(1, comp.annualRevenue));
     const targetMaintenanceCapex = newRevenue * maintenanceCapexToRevenueRatio;
     const weeklyDesiredMaintenanceCapex = targetMaintenanceCapex / 52;
 
@@ -1046,13 +1046,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const excessCashGeneration = Math.max(0, fcfBeforeGrowthCapex - productiveReinvestmentEnvelope);
     const payoutPressure = fcfBeforeGrowthCapex > 0 ? Math.min(1, excessCashGeneration / fcfBeforeGrowthCapex) : 0;
 
-    const growthCapexToRevenueRatio = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
+    const growthCapexToRevenueRatio = Math.min(0.15, comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue)));
     const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
     const cashHealthFactor = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
     const tobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
-    const qCapexEffect = ((tobinsQ - 1) * 0.2);
+    const qCapexEffect = Math.max(-0.5, Math.min(1.5, (tobinsQ - 1) * 0.2));
     const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
-    const competitivenessCapexEffect = (avgCompetitiveness * 0.15);
+    const competitivenessCapexEffect = Math.max(-0.5, Math.min(0.5, avgCompetitiveness * 0.15));
     const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75); // even at max payout pressure, still reinvests at least 40% — realistic, not zero
     const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
     let newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
@@ -1768,7 +1768,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       gdpGrowth: finalGdpGrowth,
       estimatedNominalGdpUSD: newDerivedNominalGdpUSD,
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
-      gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
+      gdpGrowthBottomUp: Number(Math.max(-0.35, Math.min(0.35, gdpGrowthBottomUp)).toFixed(4)),
       nominalGdpHistory: newNominalGdpHistory,
       consumptionComponentUSD,
       investmentComponentUSD,
