@@ -158,7 +158,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const recentIPOs = [...(state.recentIPOs || [])];
   const recentMergers = [...(state.recentMergers || [])];
 
-  const companyUpdates: Record<string, { finishedGoodsUnits?: number; finishedGoodsInventoryUSD?: number; cashChange?: number; salesUnits?: number; salesUSD?: number; purchasesUnits?: number; purchasesUSD?: number; inputSupplyConstraintFactor?: number }> = {};
+  const companyUpdates: Record<string, { finishedGoodsUnits?: number; finishedGoodsInventoryUSD?: number; cashChange?: number; salesUnits?: number; salesUSD?: number; purchasesUnits?: number; purchasesUSD?: number; inputSupplyConstraintFactor?: number; _targetProductionUSD?: number }> = {};
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
   const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted);
@@ -619,7 +619,17 @@ export function advanceWeeklyStep(state: GameState): GameState {
       if (subUnitId === 'food_beverage' || subUnitId === 'refined_products' || subUnitId === 'pharmaceuticals' || subUnitId === 'passenger_vehicles') {
         const hhShare = subUnitId === 'food_beverage' ? 0.95 : subUnitId === 'passenger_vehicles' ? 0.80 : subUnitId === 'refined_products' ? 0.60 : 0.40;
         const hhWeeklyDemandUSD = (demandState.demandLevelUSD * hhShare) / 52;
-        const hhDemandUnits = hhWeeklyDemandUSD / currentUnitPrice;
+        let hhDemandUnits = hhWeeklyDemandUSD / currentUnitPrice;
+        
+        if (subUnitId === 'passenger_vehicles') {
+           const initialStock = targetReg.householdState.durableGoodsStockUnits ?? ((demandState.demandLevelUSD * hhShare / currentUnitPrice) * 3.5);
+           const scrappageRate = 0.12 / 52; 
+           const replacementDemandUnits = initialStock * scrappageRate;
+           const targetStock = (targetReg.estimatedHouseholdIncomeUSD * (1 - targetReg.householdState.savingsRate) * 0.10) / currentUnitPrice; 
+           const expansionDemandUnits = Math.max(0, (targetStock - initialStock) * 0.05); 
+           hhDemandUnits = replacementDemandUnits + expansionDemandUnits;
+           targetReg.householdState.durableGoodsStockUnits = initialStock - (initialStock * scrappageRate);
+        }
 
         if (hhDemandUnits > 0.001) {
           const priceElasticityPremium = Math.tanh(0.05) * 0.15;
@@ -680,6 +690,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
             openPurchases[bid.companyId].units += transactQty;
             openPurchases[bid.companyId].amount += transactQty * matchPrice;
           }
+          if (bid.isHouseholdAggregate && subUnitId === 'passenger_vehicles') {
+            targetReg.householdState.durableGoodsStockUnits = (targetReg.householdState.durableGoodsStockUnits ?? 0) + transactQty;
+          }
 
           bid.quantityUnits -= transactQty;
           offer.quantityUnits -= transactQty;
@@ -717,6 +730,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           supUp.finishedGoodsUnits = Math.max(0, initialUnits + targetProductionUnits - (supUp.salesUnits ?? 0));
           supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * clearedPriceUSD;
         }
+        supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + targetProductionUSD;
       });
 
       customers.forEach(comp => {
@@ -746,8 +760,24 @@ export function advanceWeeklyStep(state: GameState): GameState {
               const relativeSize = customerComp.annualRevenue / Math.max(1, supplierComp.annualRevenue);
               const supplierPowerFactor = 0.5 + (supplierMarketShare - 0.25) * 0.5;
               const customerBargainingPower = (relativeSize > 1.0 ? 0.6 : 0.4) * (1.0 - supplierPowerFactor);
-              const contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
-              const duration = 12 + Math.floor(Math.random() * 40);
+              let contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
+              let duration = 12 + Math.floor(Math.random() * 40);
+              
+              // PART BGA: Hedging for revenue volatility
+              const revHist = customerComp.revenueHistory || [];
+              let revVol = 0;
+              if (revHist.length > 3) {
+                 const meanRev = revHist.reduce((s, v) => s + v, 0) / revHist.length;
+                 const varRev = revHist.reduce((s, v) => s + Math.pow(v - meanRev, 2), 0) / revHist.length;
+                 revVol = Math.sqrt(varRev) / meanRev;
+              }
+              if (revVol > 0.05) {
+                 duration = 52 + Math.floor(Math.random() * 52); // Seek longer contracts
+                 const impliedPd = Math.max(0, Math.min(1, 1 / (1 + Math.exp(customerComp.interestCoverage * 0.8 - customerComp.leverage * 0.4))));
+                 const costOfCapital = 0.05 + (impliedPd * 0.60);
+                 const hedgingPremium = costOfCapital * 0.20; // Modest price premium
+                 contractPrice *= (1.0 + hedgingPremium);
+              }
 
               const baseContractUnits = subUnitId === 'industrial_automation'
                 ? (Math.random() * 2 + 0.5)
@@ -1120,6 +1150,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
       const revenueAdjustmentForUnsold = -unsoldThisWeekUSD * 0.5;
       newRevenue = Math.max(10, newRevenue + revenueAdjustmentForUnsold);
+      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
 
       newEbitda = newRevenue * newEbitdaMargin;
       const da = newRevenue * 0.05;

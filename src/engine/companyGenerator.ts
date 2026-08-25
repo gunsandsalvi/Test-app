@@ -52,6 +52,40 @@ export function deriveInitialRevenueUSD(
   return regionCategoryDemandSeedUSD * (rankWeight / totalRankWeight) * 0.35;
 }
 
+
+const NAME_PREFIXES = ['Apex', 'Meridian', 'Quantum', 'Summit', 'Pinnacle', 'Vanguard', 'Stellar', 'Nexus', 'Horizon', 'Nova', 'Echo', 'Strata', 'Zenith', 'Aegis', 'Omni'];
+const NAME_SUFFIXES = ['Systems', 'Technologies', 'Group', 'Holdings', 'Dynamics', 'Solutions', 'Corp', 'Enterprises', 'Innovations', 'Global', 'Industries', 'Partners', 'Capital', 'Ventures', 'Networks'];
+
+function generateUniqueName(baseName: string, _sector: string, existingNames: Set<string>): string {
+  let attempt = 0;
+  while (attempt < 50) {
+    const p = NAME_PREFIXES[Math.floor(Math.random() * NAME_PREFIXES.length)];
+    const s = NAME_SUFFIXES[Math.floor(Math.random() * NAME_SUFFIXES.length)];
+    const name = `${p} ${s}`;
+    if (!existingNames.has(name)) {
+      existingNames.add(name);
+      return name;
+    }
+    attempt++;
+  }
+  return `${baseName} ${Math.floor(Math.random()*10000)} Corp`;
+}
+
+function generateUniqueTicker(existingTickers: Set<string>): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let attempt = 0;
+  while (attempt < 100) {
+    let t = '';
+    for(let i=0; i<4; i++) t += chars.charAt(Math.floor(Math.random()*chars.length));
+    if (!existingTickers.has(t)) {
+      existingTickers.add(t);
+      return t;
+    }
+    attempt++;
+  }
+  return 'XXXX';
+}
+
 export function buildQuarterlyFundamentalSnapshot(
   week: number,
   filingPeriod: string,
@@ -581,43 +615,8 @@ export function generateInitialCompanies(): Company[] {
 
     let templates = [...REGION_COMPANIES[region], ...commodityTemplates];
 
-    // Scale up templates to exactly 200 per region
-    const targetCount = 200;
-    const baseTemplates = [...templates];
-    let cloneIndex = 1;
-    while (templates.length < targetCount) {
-      const parent = baseTemplates[templates.length % baseTemplates.length];
-      let newTicker = parent.ticker;
-      if (newTicker.length >= 4) {
-        newTicker = newTicker.substring(0, 3) + cloneIndex;
-      } else {
-        newTicker = newTicker + cloneIndex;
-      }
-      while (templates.some(t => t.ticker === newTicker)) {
-        cloneIndex++;
-        newTicker = parent.ticker.substring(0, 3) + cloneIndex;
-      }
-      const variation = 0.85 + Math.random() * 0.30;
-      const revBase = Math.round(parent.revBase * variation);
-      const debtBase = Math.round(parent.debtBase * variation);
-      const cashBase = Math.round(parent.cashBase * variation);
-      const shares = Math.round(parent.shares * (0.9 + Math.random() * 0.2));
-      const beta = Number((parent.beta * (0.9 + Math.random() * 0.2)).toFixed(2));
-      templates.push({
-        ...parent,
-        ticker: newTicker,
-        name: `${parent.name} clone ${cloneIndex}`,
-        revBase,
-        debtBase,
-        cashBase,
-        shares,
-        beta,
-        bankMarketShare: undefined,
-        institutionalRole: undefined,
-        institutionalMarketShare: undefined,
-      });
-      cloneIndex++;
-    }
+
+
 
     // Group templates by primary category to rank them properly
     const categoryGroups: Record<string, CompanyTemplate[]> = {};

@@ -519,9 +519,15 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 const bankHoldings = (reg.bankingSector.itemizedHoldings || [])
                   .filter(h => h.instrumentId === company.id || trancheIds.has(h.instrumentId))
                   .map(h => ({ id: h.instrumentId + '-bank', holderName: h.instrumentId === company.id ? 'Banking Sector (Equity)' : 'Banking Sector (Debt)', amountUSD: h.quantityOrNotionalUSD }));
-                const instHoldings = (reg.institutionalSector.itemizedHoldings || [])
-                  .filter(h => h.instrumentId === company.id || trancheIds.has(h.instrumentId))
-                  .map(h => ({ id: h.instrumentId + '-inst', holderName: h.instrumentId === company.id ? 'Institutional Sector (Equity)' : 'Institutional Sector (Debt)', amountUSD: h.quantityOrNotionalUSD }));
+                const instHoldings = (state.institutionalEntities || [])
+                  .flatMap(ent => (ent.itemizedHoldings || [])
+                    .filter(h => h.instrumentId === company.id || trancheIds.has(h.instrumentId))
+                    .map(h => ({
+                      id: h.instrumentId + '-' + ent.id,
+                      holderName: h.instrumentId === company.id ? `${ent.name} (Equity)` : `${ent.name} (Debt)`,
+                      amountUSD: h.quantityOrNotionalUSD
+                    }))
+                  );
                 const companyHoldings = [...bankHoldings, ...instHoldings];
 
                 return (

@@ -1,0 +1,3980 @@
+{
+  "checkpoints": [
+    {
+      "week": 1,
+      "regions": {
+        "USA": {
+          "gdpGrowth": 0,
+          "consumptionComponentUSD": 4317884221969.2637,
+          "investmentComponentUSD": 839489598800.1382,
+          "governmentSpendingUSD": 961465816.9667985,
+          "fiscalDeficitPctGdp": 0.0682962982119597,
+          "governmentEmployment": 9000000,
+          "totalPrivateEmployment": 42515545,
+          "totalOccupationEmployed": 56670288.624291725,
+          "estimatedHouseholdIncomeUSD": 4628602293963,
+          "activeContractsCount": 73,
+          "activeContractsBySubUnit": {
+            "industrial_automation": 4,
+            "refined_products": 19,
+            "pharmaceuticals": 17,
+            "passenger_vehicles": 33
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 18224313293.808098,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 94432.74
+            },
+            "refined_products": {
+              "demandLevelUSD": 153006497979.6002,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 4.01
+            },
+            "food_beverage": {
+              "demandLevelUSD": 349779357776.7223,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 9.93
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 243452512746.0752,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 123.54
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 302522617699.1239,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 35333.71
+            },
+            "semiconductors": {
+              "demandLevelUSD": 53767199878.561005,
+              "demandGrowthAnnual": 0
+            },
+            "defense_systems": {
+              "demandLevelUSD": 200893083505.62222,
+              "demandGrowthAnnual": 0
+            }
+          },
+          "durableGoodsStockUnits": 24145959.08650854
+        },
+        "EUR": {
+          "gdpGrowth": 0,
+          "consumptionComponentUSD": 5316850926946.379,
+          "investmentComponentUSD": 902265665180.9811,
+          "governmentSpendingUSD": 758495802.3638439,
+          "fiscalDeficitPctGdp": 0.038198902744098165,
+          "governmentEmployment": 14000000,
+          "totalPrivateEmployment": 48503259,
+          "totalOccupationEmployed": 66575663,
+          "estimatedHouseholdIncomeUSD": 5674697341288,
+          "activeContractsCount": 72,
+          "activeContractsBySubUnit": {
+            "refined_products": 5,
+            "pharmaceuticals": 33,
+            "passenger_vehicles": 34
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 18718846317.87654,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 92943.13
+            },
+            "refined_products": {
+              "demandLevelUSD": 182469793366.41296,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 3.93
+            },
+            "food_beverage": {
+              "demandLevelUSD": 420995571317.483,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 9.7
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 293914941282.8296,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 125.94
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 363779807313.2093,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 37341.1
+            },
+            "semiconductors": {
+              "demandLevelUSD": 61835991377.18231,
+              "demandGrowthAnnual": 0
+            },
+            "defense_systems": {
+              "demandLevelUSD": 244605583876.42737,
+              "demandGrowthAnnual": 0
+            }
+          },
+          "durableGoodsStockUnits": 29035225.236014307
+        },
+        "UK": {
+          "gdpGrowth": 0,
+          "consumptionComponentUSD": 1007410424634.0985,
+          "investmentComponentUSD": 158905286354.92853,
+          "governmentSpendingUSD": 160476338.5530747,
+          "fiscalDeficitPctGdp": 0.05049865048582302,
+          "governmentEmployment": 2800000,
+          "totalPrivateEmployment": 8083881,
+          "totalOccupationEmployed": 11827989,
+          "estimatedHouseholdIncomeUSD": 1083400108225,
+          "activeContractsCount": 75,
+          "activeContractsBySubUnit": {
+            "industrial_automation": 6,
+            "refined_products": 3,
+            "pharmaceuticals": 34,
+            "passenger_vehicles": 32
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 4214830496.773419,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 95192.92
+            },
+            "refined_products": {
+              "demandLevelUSD": 39781273763.769226,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 3.82
+            },
+            "food_beverage": {
+              "demandLevelUSD": 91321714025.20386,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 10.02
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 63987528737.83098,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 125.36
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 78936611285.95134,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 36785.4
+            },
+            "semiconductors": {
+              "demandLevelUSD": 13579782492.394627,
+              "demandGrowthAnnual": 0
+            },
+            "defense_systems": {
+              "demandLevelUSD": 53283514662.22816,
+              "demandGrowthAnnual": 0
+            }
+          },
+          "durableGoodsStockUnits": 6300355.990023317
+        },
+        "JPN": {
+          "gdpGrowth": 0,
+          "consumptionComponentUSD": 1683160281730.436,
+          "investmentComponentUSD": 307798210040.49207,
+          "governmentSpendingUSD": 243783695.05356556,
+          "fiscalDeficitPctGdp": 0.05739979522096935,
+          "governmentEmployment": 3200000,
+          "totalPrivateEmployment": 16167732,
+          "totalOccupationEmployed": 20842283,
+          "estimatedHouseholdIncomeUSD": 1777416688734,
+          "activeContractsCount": 66,
+          "activeContractsBySubUnit": {
+            "refined_products": 6,
+            "pharmaceuticals": 25,
+            "passenger_vehicles": 35
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6675254061.321797,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 95883.53
+            },
+            "refined_products": {
+              "demandLevelUSD": 63028128081.02705,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 4.14
+            },
+            "food_beverage": {
+              "demandLevelUSD": 144610898314.19736,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 9.94
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 101879432100.34769,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 128.11
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 125035733697.52196,
+              "demandGrowthAnnual": 0,
+              "unitPriceUSD": 37799.05
+            },
+            "semiconductors": {
+              "demandLevelUSD": 21492704649.597466,
+              "demandGrowthAnnual": 0
+            },
+            "defense_systems": {
+              "demandLevelUSD": 85698186211.0094,
+              "demandGrowthAnnual": 0
+            }
+          },
+          "durableGoodsStockUnits": 9979775.175734524
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 73.05,
+          "weeklySupplyUnits": 7008703.0710075535,
+          "weeklyDemandUnits": 6856488.578078576
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 78.77,
+          "weeklySupplyUnits": 3940200.6228336673,
+          "weeklyDemandUnits": 3831808.430874837
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.9,
+          "weeklySupplyUnits": 56237727.91079713,
+          "weeklyDemandUnits": 60968013.54128235
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 2633.49,
+          "weeklySupplyUnits": 64358.11757153756,
+          "weeklyDemandUnits": 57040.02225396186
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 31.55,
+          "weeklySupplyUnits": 2961387.6978241215,
+          "weeklyDemandUnits": 2827443.910567525
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 4.61,
+          "weeklySupplyUnits": 12754097.614595538,
+          "weeklyDemandUnits": 188912432.9799289
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 6.08,
+          "weeklySupplyUnits": 182545388.85549498,
+          "weeklyDemandUnits": 325624712.3759481
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 4.47,
+          "weeklySupplyUnits": 182409836.34971684,
+          "weeklyDemandUnits": 356111933.7483968
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 10.61,
+          "weeklySupplyUnits": 36013689.79349719,
+          "weeklyDemandUnits": 117378606.93979733
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 288,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 4,
+        "worstTobinsQ": {
+          "q": 151.38956743578805,
+          "ticker": "JPEN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4154653959180.4688,
+          "holdingsCount": 295
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3231397523807.0312,
+          "holdingsCount": 295
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 1846512870746.875,
+          "holdingsCount": 295
+        }
+      ],
+      "pmi": {
+        "headline": 33.3,
+        "demandComponent": 50,
+        "capexComponent": 0,
+        "employmentComponent": 50
+      }
+    },
+    {
+      "week": 10,
+      "regions": {
+        "USA": {
+          "gdpGrowth": 0.029682968954912514,
+          "consumptionComponentUSD": 4231827204741.2305,
+          "investmentComponentUSD": 716563037046.679,
+          "governmentSpendingUSD": 45271169915.971664,
+          "fiscalDeficitPctGdp": 0.029863399003468676,
+          "governmentEmployment": 9555004,
+          "totalPrivateEmployment": 42499423,
+          "totalOccupationEmployed": 56829041.18401487,
+          "estimatedHouseholdIncomeUSD": 4666803740959,
+          "activeContractsCount": 288,
+          "activeContractsBySubUnit": {
+            "industrial_automation": 47,
+            "refined_products": 127,
+            "pharmaceuticals": 44,
+            "passenger_vehicles": 70
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 18631567971.599495,
+              "demandGrowthAnnual": 0.08719664834921659,
+              "unitPriceUSD": 92940.6
+            },
+            "refined_products": {
+              "demandLevelUSD": 155406571431.4191,
+              "demandGrowthAnnual": 0.028906915849843173,
+              "unitPriceUSD": 3.95
+            },
+            "food_beverage": {
+              "demandLevelUSD": 354132230823.1312,
+              "demandGrowthAnnual": -0.016460468130580885,
+              "unitPriceUSD": 10.04
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 250138663904.84915,
+              "demandGrowthAnnual": 0.11303610702993883,
+              "unitPriceUSD": 127.28
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 306701392437.8931,
+              "demandGrowthAnnual": -0.007830863240577912,
+              "unitPriceUSD": 37281.75
+            },
+            "semiconductors": {
+              "demandLevelUSD": 54577106794.320656,
+              "demandGrowthAnnual": 0.026946340857853635
+            },
+            "defense_systems": {
+              "demandLevelUSD": 205732023797.66248,
+              "demandGrowthAnnual": 0.16623357480971812
+            }
+          },
+          "durableGoodsStockUnits": 24479489.599504456
+        },
+        "EUR": {
+          "gdpGrowth": 0.08085965471690915,
+          "consumptionComponentUSD": 5308692746997.293,
+          "investmentComponentUSD": 830904270384.7097,
+          "governmentSpendingUSD": 55369577719.43882,
+          "fiscalDeficitPctGdp": -0.008671866212517872,
+          "governmentEmployment": 14928556,
+          "totalPrivateEmployment": 48914298,
+          "totalOccupationEmployed": 67633045,
+          "estimatedHouseholdIncomeUSD": 5769453882626,
+          "activeContractsCount": 331,
+          "activeContractsBySubUnit": {
+            "refined_products": 118,
+            "pharmaceuticals": 116,
+            "passenger_vehicles": 81,
+            "industrial_automation": 16
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 19480133748.738773,
+              "demandGrowthAnnual": 0.16777114073266208,
+              "unitPriceUSD": 93642.47
+            },
+            "refined_products": {
+              "demandLevelUSD": 188487663617.65262,
+              "demandGrowthAnnual": 0.12201902142718613,
+              "unitPriceUSD": 4.08
+            },
+            "food_beverage": {
+              "demandLevelUSD": 435098485384.81866,
+              "demandGrowthAnnual": 0.10150452482973904,
+              "unitPriceUSD": 9.74
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 306230556450.4001,
+              "demandGrowthAnnual": 0.16978623434316997,
+              "unitPriceUSD": 121.27
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 376387759243.8671,
+              "demandGrowthAnnual": 0.10685135769867138,
+              "unitPriceUSD": 34639.31
+            },
+            "semiconductors": {
+              "demandLevelUSD": 63868042759.14083,
+              "demandGrowthAnnual": 0.12236067925868888
+            },
+            "defense_systems": {
+              "demandLevelUSD": 251850888658.89984,
+              "demandGrowthAnnual": 0.16011493172282876
+            }
+          },
+          "durableGoodsStockUnits": 30041533.768572044
+        },
+        "UK": {
+          "gdpGrowth": 0.1122551338192852,
+          "consumptionComponentUSD": 1002460206875.3623,
+          "investmentComponentUSD": 136395160929.61606,
+          "governmentSpendingUSD": 13292226452.45573,
+          "fiscalDeficitPctGdp": 0.004458002093079415,
+          "governmentEmployment": 2987266,
+          "totalPrivateEmployment": 8066856,
+          "totalOccupationEmployed": 11954266,
+          "estimatedHouseholdIncomeUSD": 1094638338539,
+          "activeContractsCount": 259,
+          "activeContractsBySubUnit": {
+            "industrial_automation": 23,
+            "refined_products": 138,
+            "pharmaceuticals": 56,
+            "passenger_vehicles": 42
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 4528889643.809959,
+              "demandGrowthAnnual": 0.27859852567392096,
+              "unitPriceUSD": 88645.15
+            },
+            "refined_products": {
+              "demandLevelUSD": 39009147097.9207,
+              "demandGrowthAnnual": -0.09350711164773395,
+              "unitPriceUSD": 3.98
+            },
+            "food_beverage": {
+              "demandLevelUSD": 87047802015.63757,
+              "demandGrowthAnnual": -0.20730310625002613,
+              "unitPriceUSD": 9.66
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 65426587910.910095,
+              "demandGrowthAnnual": 0.09792237054757269,
+              "unitPriceUSD": 128.87
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 75623308226.53088,
+              "demandGrowthAnnual": -0.18596857587226534,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 13484904700.717705,
+              "demandGrowthAnnual": -0.04412612859891185
+            },
+            "defense_systems": {
+              "demandLevelUSD": 56970427243.57392,
+              "demandGrowthAnnual": 0.3390306911067613
+            }
+          },
+          "durableGoodsStockUnits": 6035903.431988342
+        },
+        "JPN": {
+          "gdpGrowth": 0.018076238695895253,
+          "consumptionComponentUSD": 1650008584115.4307,
+          "investmentComponentUSD": 256193530393.22684,
+          "governmentSpendingUSD": 18056196164.4479,
+          "fiscalDeficitPctGdp": 0.017304879000238478,
+          "governmentEmployment": 3372725,
+          "totalPrivateEmployment": 15978927,
+          "totalOccupationEmployed": 20794931.000000004,
+          "estimatedHouseholdIncomeUSD": 1779704956563,
+          "activeContractsCount": 276,
+          "activeContractsBySubUnit": {
+            "refined_products": 155,
+            "pharmaceuticals": 60,
+            "passenger_vehicles": 45,
+            "industrial_automation": 16
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6722587913.620685,
+              "demandGrowthAnnual": 0.0310248068650667,
+              "unitPriceUSD": 88510.93
+            },
+            "refined_products": {
+              "demandLevelUSD": 62123254886.14513,
+              "demandGrowthAnnual": -0.098578150185483,
+              "unitPriceUSD": 4.14
+            },
+            "food_beverage": {
+              "demandLevelUSD": 141389402922.79034,
+              "demandGrowthAnnual": -0.1501671867543828,
+              "unitPriceUSD": 9.89
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 101431311298.06155,
+              "demandGrowthAnnual": -0.02733922552007284,
+              "unitPriceUSD": 127.66
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 122423028156.78464,
+              "demandGrowthAnnual": -0.1416837256838548,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 21243280096.777126,
+              "demandGrowthAnnual": -0.08374825153403531
+            },
+            "defense_systems": {
+              "demandLevelUSD": 85751392523.69998,
+              "demandGrowthAnnual": 0.037917387146170434
+            }
+          },
+          "durableGoodsStockUnits": 9771241.078113828
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 72.79,
+          "weeklySupplyUnits": 7211630.302570801,
+          "weeklyDemandUnits": 7166408.648379397
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 80.25,
+          "weeklySupplyUnits": 3914693.2832773235,
+          "weeklyDemandUnits": 3897897.468421253
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 3.02,
+          "weeklySupplyUnits": 62051044.05980198,
+          "weeklyDemandUnits": 60884269.08460251
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 3256.99,
+          "weeklySupplyUnits": 35537.51225641035,
+          "weeklyDemandUnits": 52837.88650637294
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 39.79,
+          "weeklySupplyUnits": 1644805.4755252872,
+          "weeklyDemandUnits": 2525152.608055158
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 6.61,
+          "weeklySupplyUnits": 7747084.736694608,
+          "weeklyDemandUnits": 151136357.52036828
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 8.9,
+          "weeklySupplyUnits": 114876284.98347004,
+          "weeklyDemandUnits": 253486753.52166647
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 6.5,
+          "weeklySupplyUnits": 113373709.33339179,
+          "weeklyDemandUnits": 278044596.22338986
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 15.41,
+          "weeklySupplyUnits": 22519479.754167493,
+          "weeklyDemandUnits": 91890773.12250572
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 288,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 6,
+        "worstTobinsQ": {
+          "q": 359.1677388586965,
+          "ticker": "JPEN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4177201859323.534,
+          "holdingsCount": 279
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3248934779473.8594,
+          "holdingsCount": 279
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 1856534159699.3486,
+          "holdingsCount": 279
+        }
+      ],
+      "pmi": {
+        "headline": 41.4,
+        "demandComponent": 60.3,
+        "capexComponent": 1.4,
+        "employmentComponent": 62.7
+      }
+    },
+    {
+      "week": 52,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.05291274277513747,
+          "consumptionComponentUSD": 4050037678514.552,
+          "investmentComponentUSD": 523255474526.90466,
+          "governmentSpendingUSD": 51595542550.00023,
+          "fiscalDeficitPctGdp": 0.07935754741956987,
+          "governmentEmployment": 10177436,
+          "totalPrivateEmployment": 40131542,
+          "totalOccupationEmployed": 54361273.2480848,
+          "estimatedHouseholdIncomeUSD": 4646155034178,
+          "activeContractsCount": 1109,
+          "activeContractsBySubUnit": {
+            "passenger_vehicles": 24,
+            "industrial_automation": 12,
+            "refined_products": 1004,
+            "pharmaceuticals": 69
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 18551127544.018738,
+              "demandGrowthAnnual": -0.11161394315794038,
+              "unitPriceUSD": 92480.27
+            },
+            "refined_products": {
+              "demandLevelUSD": 152630428968.734,
+              "demandGrowthAnnual": 0.004111248472791651,
+              "unitPriceUSD": 3.39
+            },
+            "food_beverage": {
+              "demandLevelUSD": 337874692329.2669,
+              "demandGrowthAnnual": 0.015213087817099513,
+              "unitPriceUSD": 9.92
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 263616324179.40073,
+              "demandGrowthAnnual": 0.021405776466925985,
+              "unitPriceUSD": 139.04
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 294244578367.3628,
+              "demandGrowthAnnual": 0.014319380249239622,
+              "unitPriceUSD": 39616.01
+            },
+            "semiconductors": {
+              "demandLevelUSD": 53033178159.11626,
+              "demandGrowthAnnual": -0.028187408108555356
+            },
+            "defense_systems": {
+              "demandLevelUSD": 241870976282.87677,
+              "demandGrowthAnnual": 0.0727944401396261
+            }
+          },
+          "durableGoodsStockUnits": 23485244.193382744
+        },
+        "EUR": {
+          "gdpGrowth": 0.008493082213877123,
+          "consumptionComponentUSD": 5168203790123.367,
+          "investmentComponentUSD": 559356821361.1805,
+          "governmentSpendingUSD": 64138896040.14845,
+          "fiscalDeficitPctGdp": 0.04214824634912666,
+          "governmentEmployment": 15936505,
+          "totalPrivateEmployment": 47771269,
+          "totalOccupationEmployed": 67227021.3614982,
+          "estimatedHouseholdIncomeUSD": 5843043191607,
+          "activeContractsCount": 1245,
+          "activeContractsBySubUnit": {
+            "pharmaceuticals": 71,
+            "passenger_vehicles": 25,
+            "refined_products": 1128,
+            "industrial_automation": 21
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 21032932880.770668,
+              "demandGrowthAnnual": -0.029768636971171603,
+              "unitPriceUSD": 91800.95
+            },
+            "refined_products": {
+              "demandLevelUSD": 192205642608.79706,
+              "demandGrowthAnnual": 0.019449409069498103,
+              "unitPriceUSD": 3.27
+            },
+            "food_beverage": {
+              "demandLevelUSD": 430610682140.09827,
+              "demandGrowthAnnual": 0.019402169763421462,
+              "unitPriceUSD": 9.99
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 330599276912.1574,
+              "demandGrowthAnnual": 0.04146036111226614,
+              "unitPriceUSD": 116.82
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 374390914532.38025,
+              "demandGrowthAnnual": 0.01995727738425579,
+              "unitPriceUSD": 38743.3
+            },
+            "semiconductors": {
+              "demandLevelUSD": 65191905122.13837,
+              "demandGrowthAnnual": 0.0035468834749510236
+            },
+            "defense_systems": {
+              "demandLevelUSD": 297295411313.8177,
+              "demandGrowthAnnual": 0.10326079182986803
+            }
+          },
+          "durableGoodsStockUnits": 29882154.83990752
+        },
+        "UK": {
+          "gdpGrowth": 0.019831909889648447,
+          "consumptionComponentUSD": 941719062844.2538,
+          "investmentComponentUSD": 96804949216.64679,
+          "governmentSpendingUSD": 15440120538.280237,
+          "fiscalDeficitPctGdp": 0.05559985557447905,
+          "governmentEmployment": 3192022,
+          "totalPrivateEmployment": 7825231,
+          "totalOccupationEmployed": 11902979,
+          "estimatedHouseholdIncomeUSD": 1068332878880,
+          "activeContractsCount": 514,
+          "activeContractsBySubUnit": {
+            "pharmaceuticals": 18,
+            "passenger_vehicles": 14,
+            "industrial_automation": 6,
+            "refined_products": 476
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 4956258194.307901,
+              "demandGrowthAnnual": -0.018240888042620362,
+              "unitPriceUSD": 92616.72
+            },
+            "refined_products": {
+              "demandLevelUSD": 37421878004.03836,
+              "demandGrowthAnnual": -0.020753071363291298,
+              "unitPriceUSD": 3.41
+            },
+            "food_beverage": {
+              "demandLevelUSD": 79612843769.75262,
+              "demandGrowthAnnual": -0.03492163100536283,
+              "unitPriceUSD": 10.06
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 69415307287.5583,
+              "demandGrowthAnnual": 0.026761620229461158,
+              "unitPriceUSD": 136.21
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 69856169146.1052,
+              "demandGrowthAnnual": -0.031383294147467655,
+              "unitPriceUSD": 38981.27
+            },
+            "semiconductors": {
+              "demandLevelUSD": 13092337751.999296,
+              "demandGrowthAnnual": -0.030564775239878994
+            },
+            "defense_systems": {
+              "demandLevelUSD": 70913830573.07237,
+              "demandGrowthAnnual": 0.12918382373920334
+            }
+          },
+          "durableGoodsStockUnits": 5575597.00815375
+        },
+        "JPN": {
+          "gdpGrowth": -0.018666501950549197,
+          "consumptionComponentUSD": 1498460563167.8052,
+          "investmentComponentUSD": 179575214358.63596,
+          "governmentSpendingUSD": 20734159133.4181,
+          "fiscalDeficitPctGdp": 0.072544141806346,
+          "governmentEmployment": 3584185,
+          "totalPrivateEmployment": 14785289,
+          "totalOccupationEmployed": 19668230,
+          "estimatedHouseholdIncomeUSD": 1684828133245,
+          "activeContractsCount": 560,
+          "activeContractsBySubUnit": {
+            "passenger_vehicles": 12,
+            "industrial_automation": 9,
+            "refined_products": 505,
+            "pharmaceuticals": 34
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6902551898.699087,
+              "demandGrowthAnnual": -0.05702796268727006,
+              "unitPriceUSD": 92188.43
+            },
+            "refined_products": {
+              "demandLevelUSD": 57826458919.228714,
+              "demandGrowthAnnual": -0.047646547819256035,
+              "unitPriceUSD": 3.38
+            },
+            "food_beverage": {
+              "demandLevelUSD": 126662742989.28796,
+              "demandGrowthAnnual": -0.05281383944517337,
+              "unitPriceUSD": 9.4
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 102064516344.9973,
+              "demandGrowthAnnual": -0.007479671300708812,
+              "unitPriceUSD": 130.29
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 110489040360.8212,
+              "demandGrowthAnnual": -0.05035841311542022,
+              "unitPriceUSD": 41159.93
+            },
+            "semiconductors": {
+              "demandLevelUSD": 19912105720.279877,
+              "demandGrowthAnnual": -0.05852017514472685
+            },
+            "defense_systems": {
+              "demandLevelUSD": 97019141758.79886,
+              "demandGrowthAnnual": 0.0766378271325383
+            }
+          },
+          "durableGoodsStockUnits": 8818725.2521837
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 76.04,
+          "weeklySupplyUnits": 7673608.515310426,
+          "weeklyDemandUnits": 7223038.500348678
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 78.1,
+          "weeklySupplyUnits": 4166068.32281383,
+          "weeklyDemandUnits": 4185473.8163796766
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.83,
+          "weeklySupplyUnits": 68558979.33400808,
+          "weeklyDemandUnits": 67823742.17883688
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 17503.58,
+          "weeklySupplyUnits": 3063.317095718155,
+          "weeklyDemandUnits": 16726.099391179217
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 220.8,
+          "weeklySupplyUnits": 160744.69120904733,
+          "weeklyDemandUnits": 800603.0122770863
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 34.9,
+          "weeklySupplyUnits": 713839.3021797416,
+          "weeklyDemandUnits": 49267165.017956965
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 46.06,
+          "weeklySupplyUnits": 9740842.415162586,
+          "weeklyDemandUnits": 76634079.13629696
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 34.78,
+          "weeklySupplyUnits": 8587146.421851821,
+          "weeklyDemandUnits": 78707777.37329346
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 82.07,
+          "weeklySupplyUnits": 2119614.9115347364,
+          "weeklyDemandUnits": 27510329.467671204
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 295,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 10,
+        "worstTobinsQ": {
+          "q": 954.1217052866695,
+          "ticker": "JPEN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4282425393324.505,
+          "holdingsCount": 253
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3330775305919.059,
+          "holdingsCount": 253
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 1903300174810.891,
+          "holdingsCount": 253
+        }
+      ],
+      "pmi": {
+        "headline": 36,
+        "demandComponent": 44.2,
+        "capexComponent": 37.9,
+        "employmentComponent": 26
+      }
+    },
+    {
+      "week": 100,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.003597023474143368,
+          "consumptionComponentUSD": 4071632841028.859,
+          "investmentComponentUSD": 541059315322.51825,
+          "governmentSpendingUSD": 53555263997.34967,
+          "fiscalDeficitPctGdp": 0.08731202790562581,
+          "governmentEmployment": 10288034,
+          "totalPrivateEmployment": 37923522,
+          "totalOccupationEmployed": 51931043.15281743,
+          "estimatedHouseholdIncomeUSD": 4651719670298,
+          "activeContractsCount": 607,
+          "activeContractsBySubUnit": {
+            "refined_products": 569,
+            "pharmaceuticals": 20,
+            "passenger_vehicles": 12,
+            "industrial_automation": 6
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 19096637344.973106,
+              "demandGrowthAnnual": 0.08200194816184059,
+              "unitPriceUSD": 89842.17
+            },
+            "refined_products": {
+              "demandLevelUSD": 156137991073.13895,
+              "demandGrowthAnnual": 0.03173852319792836,
+              "unitPriceUSD": 3.37
+            },
+            "food_beverage": {
+              "demandLevelUSD": 340680632636.506,
+              "demandGrowthAnnual": 0.011659459561474073,
+              "unitPriceUSD": 10.07
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 280425419246.1493,
+              "demandGrowthAnnual": 0.06846258229290036,
+              "unitPriceUSD": 127.9
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 297698776278.8881,
+              "demandGrowthAnnual": 0.015107146005377103,
+              "unitPriceUSD": 39094.37
+            },
+            "semiconductors": {
+              "demandLevelUSD": 53888389341.81271,
+              "demandGrowthAnnual": 0.03638652012076715
+            },
+            "defense_systems": {
+              "demandLevelUSD": 272528359805.44928,
+              "demandGrowthAnnual": 0.1413720662199882
+            }
+          },
+          "durableGoodsStockUnits": 23760942.328228794
+        },
+        "EUR": {
+          "gdpGrowth": -0.034079384089435005,
+          "consumptionComponentUSD": 5071143145186.611,
+          "investmentComponentUSD": 578258168263.7574,
+          "governmentSpendingUSD": 66392939616.35579,
+          "fiscalDeficitPctGdp": 0.05589305833935414,
+          "governmentEmployment": 16110658,
+          "totalPrivateEmployment": 44713553,
+          "totalOccupationEmployed": 64291175.00000001,
+          "estimatedHouseholdIncomeUSD": 5780202563669,
+          "activeContractsCount": 910,
+          "activeContractsBySubUnit": {
+            "pharmaceuticals": 22,
+            "passenger_vehicles": 19,
+            "refined_products": 866,
+            "industrial_automation": 3
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 21843632779.118526,
+              "demandGrowthAnnual": 0.0954979759253245,
+              "unitPriceUSD": 92637.63
+            },
+            "refined_products": {
+              "demandLevelUSD": 193392097071.6073,
+              "demandGrowthAnnual": 0.0060338458695063935,
+              "unitPriceUSD": 3.28
+            },
+            "food_beverage": {
+              "demandLevelUSD": 426357998250.651,
+              "demandGrowthAnnual": -0.02071842673092883,
+              "unitPriceUSD": 10.06
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 343813233273.22754,
+              "demandGrowthAnnual": 0.049293123956854146,
+              "unitPriceUSD": 128.99
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 371851158827.5324,
+              "demandGrowthAnnual": -0.016188640628651108,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 65611054189.360245,
+              "demandGrowthAnnual": 0.01766047939223636
+            },
+            "defense_systems": {
+              "demandLevelUSD": 327651826533.6177,
+              "demandGrowthAnnual": 0.13004325628025537
+            }
+          },
+          "durableGoodsStockUnits": 29679443.26149597
+        },
+        "UK": {
+          "gdpGrowth": 0.009849254116626627,
+          "consumptionComponentUSD": 876096671190.264,
+          "investmentComponentUSD": 93117103213.64604,
+          "governmentSpendingUSD": 15642055847.938107,
+          "fiscalDeficitPctGdp": 0.06700120892907209,
+          "governmentEmployment": 3210696,
+          "totalPrivateEmployment": 7101966,
+          "totalOccupationEmployed": 11102668,
+          "estimatedHouseholdIncomeUSD": 986477091642,
+          "activeContractsCount": 226,
+          "activeContractsBySubUnit": {
+            "refined_products": 199,
+            "pharmaceuticals": 15,
+            "passenger_vehicles": 12
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 4853572942.126763,
+              "demandGrowthAnnual": -0.013897386027494907,
+              "unitPriceUSD": 91080.07
+            },
+            "refined_products": {
+              "demandLevelUSD": 35778859153.58682,
+              "demandGrowthAnnual": -0.06277160480282129,
+              "unitPriceUSD": 3.41
+            },
+            "food_beverage": {
+              "demandLevelUSD": 74817180895.86555,
+              "demandGrowthAnnual": -0.08223759956005194,
+              "unitPriceUSD": 10.07
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 68519258596.55069,
+              "demandGrowthAnnual": -0.03329746676969725,
+              "unitPriceUSD": 126.04
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 65857945656.104546,
+              "demandGrowthAnnual": -0.07855387383036216,
+              "unitPriceUSD": 38296.76
+            },
+            "semiconductors": {
+              "demandLevelUSD": 12509264777.012455,
+              "demandGrowthAnnual": -0.056074184461610166
+            },
+            "defense_systems": {
+              "demandLevelUSD": 74724417107.24432,
+              "demandGrowthAnnual": 0.01767542809502043
+            }
+          },
+          "durableGoodsStockUnits": 5256477.2625210835
+        },
+        "JPN": {
+          "gdpGrowth": -0.04937881085475715,
+          "consumptionComponentUSD": 1374117347277.7395,
+          "investmentComponentUSD": 158060697693.81122,
+          "governmentSpendingUSD": 20511090741.20665,
+          "fiscalDeficitPctGdp": 0.08461853176258716,
+          "governmentEmployment": 3575073,
+          "totalPrivateEmployment": 13399517,
+          "totalOccupationEmployed": 18147128.000000004,
+          "estimatedHouseholdIncomeUSD": 1545082366945,
+          "activeContractsCount": 244,
+          "activeContractsBySubUnit": {
+            "pharmaceuticals": 14,
+            "refined_products": 215,
+            "industrial_automation": 1,
+            "passenger_vehicles": 14
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6605576423.799251,
+              "demandGrowthAnnual": 0.021551971508500856,
+              "unitPriceUSD": 92369.77
+            },
+            "refined_products": {
+              "demandLevelUSD": 54311088644.98588,
+              "demandGrowthAnnual": -0.06308645138721358,
+              "unitPriceUSD": 3.39
+            },
+            "food_beverage": {
+              "demandLevelUSD": 117209729093.62854,
+              "demandGrowthAnnual": -0.09276759545666291,
+              "unitPriceUSD": 9.33
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 99121357061.40341,
+              "demandGrowthAnnual": -0.012383814377577629,
+              "unitPriceUSD": 129.1
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 102553990004.04126,
+              "demandGrowthAnnual": -0.0870019024241131,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 18652589637.627953,
+              "demandGrowthAnnual": -0.05310339336376568
+            },
+            "defense_systems": {
+              "demandLevelUSD": 100132905951.84293,
+              "demandGrowthAnnual": 0.059873412967227146
+            }
+          },
+          "durableGoodsStockUnits": 8185386.156014864
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 72.77,
+          "weeklySupplyUnits": 7475257.762775208,
+          "weeklyDemandUnits": 7556161.540411829
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 76.12,
+          "weeklySupplyUnits": 4375421.722990827,
+          "weeklyDemandUnits": 4303966.360801317
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.85,
+          "weeklySupplyUnits": 68568950.1779555,
+          "weeklyDemandUnits": 68345729.03296243
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 121894.81,
+          "weeklySupplyUnits": 453.7473079590169,
+          "weeklyDemandUnits": 2602.071161588516
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 1466.09,
+          "weeklySupplyUnits": 20556.353180082217,
+          "weeklyDemandUnits": 127393.06607427105
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 232.81,
+          "weeklySupplyUnits": 78294.3023524756,
+          "weeklyDemandUnits": 7500865.025933685
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 306.79,
+          "weeklySupplyUnits": 1049466.1001591452,
+          "weeklyDemandUnits": 11223186.45679609
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 250.32,
+          "weeklySupplyUnits": 935464.4671339788,
+          "weeklyDemandUnits": 10868543.388763865
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 566.22,
+          "weeklySupplyUnits": 231215.5364006103,
+          "weeklyDemandUnits": 3913473.205933735
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 298,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 12,
+        "worstTobinsQ": {
+          "q": 1314.8345254585693,
+          "ticker": "JPEN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4402680860754.187,
+          "holdingsCount": 226
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3424307336142.1445,
+          "holdingsCount": 226
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 1956747049224.083,
+          "holdingsCount": 226
+        }
+      ],
+      "pmi": {
+        "headline": 47.4,
+        "demandComponent": 59.2,
+        "capexComponent": 33.1,
+        "employmentComponent": 50
+      }
+    },
+    {
+      "week": 150,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.04836325708981348,
+          "consumptionComponentUSD": 3943249262072.4834,
+          "investmentComponentUSD": 552542581731.8486,
+          "governmentSpendingUSD": 57109777285.57424,
+          "fiscalDeficitPctGdp": 0.11260153461364855,
+          "governmentEmployment": 10477728,
+          "totalPrivateEmployment": 35364174,
+          "totalOccupationEmployed": 48716968,
+          "estimatedHouseholdIncomeUSD": 4536482279960,
+          "activeContractsCount": 328,
+          "activeContractsBySubUnit": {
+            "refined_products": 308,
+            "pharmaceuticals": 10,
+            "passenger_vehicles": 10
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 20352173222.232094,
+              "demandGrowthAnnual": 0.11229700264438414,
+              "unitPriceUSD": 89149.23
+            },
+            "refined_products": {
+              "demandLevelUSD": 156982520007.75986,
+              "demandGrowthAnnual": 0.001883850704345491,
+              "unitPriceUSD": 3.47
+            },
+            "food_beverage": {
+              "demandLevelUSD": 333773114658.75684,
+              "demandGrowthAnnual": -0.03756888452894769,
+              "unitPriceUSD": 9.69
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 294060779440.4176,
+              "demandGrowthAnnual": 0.06684595734255261,
+              "unitPriceUSD": 132.15
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 293041869504.8147,
+              "demandGrowthAnnual": -0.03002237128817864,
+              "unitPriceUSD": 39298.88
+            },
+            "semiconductors": {
+              "demandLevelUSD": 54491096891.65029,
+              "demandGrowthAnnual": 0.016448102043642443
+            },
+            "defense_systems": {
+              "demandLevelUSD": 305111154303.1965,
+              "demandGrowthAnnual": 0.16153083135770885
+            }
+          },
+          "durableGoodsStockUnits": 23389249.522938136
+        },
+        "EUR": {
+          "gdpGrowth": 0.017284886173480674,
+          "consumptionComponentUSD": 5113680717346.744,
+          "investmentComponentUSD": 642231402746.608,
+          "governmentSpendingUSD": 72466332343.1271,
+          "fiscalDeficitPctGdp": 0.07510278724221003,
+          "governmentEmployment": 16526376,
+          "totalPrivateEmployment": 44682173,
+          "totalOccupationEmployed": 64119351,
+          "estimatedHouseholdIncomeUSD": 5889990967625,
+          "activeContractsCount": 659,
+          "activeContractsBySubUnit": {
+            "refined_products": 618,
+            "pharmaceuticals": 24,
+            "passenger_vehicles": 17
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 25256155086.745647,
+              "demandGrowthAnnual": 0.14014461162763858,
+              "unitPriceUSD": 91106.23
+            },
+            "refined_products": {
+              "demandLevelUSD": 200672158295.09488,
+              "demandGrowthAnnual": 0.04151614857432673,
+              "unitPriceUSD": 3.27
+            },
+            "food_beverage": {
+              "demandLevelUSD": 429015655763.4261,
+              "demandGrowthAnnual": 0.011218984299832258,
+              "unitPriceUSD": 10.07
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 375648646769.1837,
+              "demandGrowthAnnual": 0.09227473977552858,
+              "unitPriceUSD": 119.22
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 376443741146.073,
+              "demandGrowthAnnual": 0.017020584018964335,
+              "unitPriceUSD": 39368.6
+            },
+            "semiconductors": {
+              "demandLevelUSD": 69128469002.76045,
+              "demandGrowthAnnual": 0.05551418818710374
+            },
+            "defense_systems": {
+              "demandLevelUSD": 387032580812.9074,
+              "demandGrowthAnnual": 0.17528775609022063
+            }
+          },
+          "durableGoodsStockUnits": 30046001.985628106
+        },
+        "UK": {
+          "gdpGrowth": 0.005937629296658198,
+          "consumptionComponentUSD": 800297800608.1458,
+          "investmentComponentUSD": 100098983694.04628,
+          "governmentSpendingUSD": 15996257911.784594,
+          "fiscalDeficitPctGdp": 0.0793151590518678,
+          "governmentEmployment": 3232168,
+          "totalPrivateEmployment": 6547137,
+          "totalOccupationEmployed": 10434777,
+          "estimatedHouseholdIncomeUSD": 909155155010,
+          "activeContractsCount": 133,
+          "activeContractsBySubUnit": {
+            "passenger_vehicles": 12,
+            "pharmaceuticals": 12,
+            "refined_products": 109
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 5098127076.08065,
+              "demandGrowthAnnual": 0.10781330544824641,
+              "unitPriceUSD": 90633.98
+            },
+            "refined_products": {
+              "demandLevelUSD": 33971658382.299976,
+              "demandGrowthAnnual": -0.02358661785814764,
+              "unitPriceUSD": 3.43
+            },
+            "food_beverage": {
+              "demandLevelUSD": 68483516115.441696,
+              "demandGrowthAnnual": -0.06763060215292693,
+              "unitPriceUSD": 10.07
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 68463638809.41982,
+              "demandGrowthAnnual": 0.04312758154506824,
+              "unitPriceUSD": 129.41
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 60733364270.99143,
+              "demandGrowthAnnual": -0.05824935732220782,
+              "unitPriceUSD": 38326.51
+            },
+            "semiconductors": {
+              "demandLevelUSD": 12082407855.931295,
+              "demandGrowthAnnual": -0.0001334501974459279
+            },
+            "defense_systems": {
+              "demandLevelUSD": 79113310189.5937,
+              "demandGrowthAnnual": 0.12324733326159087
+            }
+          },
+          "durableGoodsStockUnits": 4847456.828275439
+        },
+        "JPN": {
+          "gdpGrowth": -0.020723317107781747,
+          "consumptionComponentUSD": 1275712148671.9094,
+          "investmentComponentUSD": 181955531080.4074,
+          "governmentSpendingUSD": 21501024691.640217,
+          "fiscalDeficitPctGdp": 0.10588328417099631,
+          "governmentEmployment": 3624354,
+          "totalPrivateEmployment": 12615937,
+          "totalOccupationEmployed": 17063736,
+          "estimatedHouseholdIncomeUSD": 1437261011750,
+          "activeContractsCount": 190,
+          "activeContractsBySubUnit": {
+            "passenger_vehicles": 12,
+            "refined_products": 167,
+            "pharmaceuticals": 11
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 7482588204.355227,
+              "demandGrowthAnnual": 0.10339482196409921,
+              "unitPriceUSD": 91849.32
+            },
+            "refined_products": {
+              "demandLevelUSD": 53029378797.91044,
+              "demandGrowthAnnual": -0.021989593383279882,
+              "unitPriceUSD": 3.35
+            },
+            "food_beverage": {
+              "demandLevelUSD": 108972327924.6993,
+              "demandGrowthAnnual": -0.06839379278596747,
+              "unitPriceUSD": 10.06
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 104492815272.27228,
+              "demandGrowthAnnual": 0.049513627055358,
+              "unitPriceUSD": 129.38
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 96296112143.87737,
+              "demandGrowthAnnual": -0.05926434712686701,
+              "unitPriceUSD": 39034.34
+            },
+            "semiconductors": {
+              "demandLevelUSD": 18622758941.043755,
+              "demandGrowthAnnual": -0.003077287883590518
+            },
+            "defense_systems": {
+              "demandLevelUSD": 116189972548.02301,
+              "demandGrowthAnnual": 0.15460404084751111
+            }
+          },
+          "durableGoodsStockUnits": 7685911.227729782
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 72.61,
+          "weeklySupplyUnits": 8406388.039159061,
+          "weeklyDemandUnits": 8623339.55281934
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 77.9,
+          "weeklySupplyUnits": 4690685.982369797,
+          "weeklyDemandUnits": 4737899.430090201
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.81,
+          "weeklySupplyUnits": 74200999.69846885,
+          "weeklyDemandUnits": 77869293.21951503
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 904566.69,
+          "weeklySupplyUnits": 63.0996998579598,
+          "weeklyDemandUnits": 388.7417272584992
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 10699.48,
+          "weeklySupplyUnits": 3133.467194585673,
+          "weeklyDemandUnits": 19534.867526144106
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 1754.16,
+          "weeklySupplyUnits": 11776.422731529277,
+          "weeklyDemandUnits": 1120739.8149452037
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 2288.98,
+          "weeklySupplyUnits": 156316.47260139184,
+          "weeklyDemandUnits": 1491246.1602609716
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 1910.5,
+          "weeklySupplyUnits": 124554.3179443574,
+          "weeklyDemandUnits": 1397651.4218864944
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 4225.54,
+          "weeklySupplyUnits": 32409.81357512182,
+          "weeklyDemandUnits": 514334.91715037276
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 305,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 12,
+        "worstTobinsQ": {
+          "q": 1644.5160299115475,
+          "ticker": "JPEN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4527946972660.1045,
+          "holdingsCount": 192
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3521736534291.1924,
+          "holdingsCount": 192
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2012420876737.8242,
+          "holdingsCount": 192
+        }
+      ],
+      "pmi": {
+        "headline": 40.9,
+        "demandComponent": 56.4,
+        "capexComponent": 39.8,
+        "employmentComponent": 26.5
+      }
+    },
+    {
+      "week": 200,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.03660310865194771,
+          "consumptionComponentUSD": 3786531281609.2725,
+          "investmentComponentUSD": 649836613784.6686,
+          "governmentSpendingUSD": 59904981301.989944,
+          "fiscalDeficitPctGdp": 0.13195980972977442,
+          "governmentEmployment": 10639496,
+          "totalPrivateEmployment": 33105800,
+          "totalOccupationEmployed": 45494461.00000001,
+          "estimatedHouseholdIncomeUSD": 4325622580569,
+          "activeContractsCount": 183,
+          "activeContractsBySubUnit": {
+            "refined_products": 166,
+            "pharmaceuticals": 7,
+            "passenger_vehicles": 10
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 22133950434.398792,
+              "demandGrowthAnnual": 0.012909557080993395,
+              "unitPriceUSD": 89104.93
+            },
+            "refined_products": {
+              "demandLevelUSD": 156762246145.706,
+              "demandGrowthAnnual": -0.022231334540663727,
+              "unitPriceUSD": 3.46
+            },
+            "food_beverage": {
+              "demandLevelUSD": 321823543222.89124,
+              "demandGrowthAnnual": -0.04151315766314401,
+              "unitPriceUSD": 9.69
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 310639574900.5855,
+              "demandGrowthAnnual": 0.0100750272773249,
+              "unitPriceUSD": 135.18
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 284469013051.5062,
+              "demandGrowthAnnual": -0.03786975726743913,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 54988981318.74344,
+              "demandGrowthAnnual": -0.019818329667874668
+            },
+            "defense_systems": {
+              "demandLevelUSD": 350773306252.5563,
+              "demandGrowthAnnual": 0.07151402992962552
+            }
+          },
+          "durableGoodsStockUnits": 22705003.687864836
+        },
+        "EUR": {
+          "gdpGrowth": -0.023390127147332018,
+          "consumptionComponentUSD": 5144514848247.479,
+          "investmentComponentUSD": 638460494698.3146,
+          "governmentSpendingUSD": 77505002741.01242,
+          "fiscalDeficitPctGdp": 0.09441568893503512,
+          "governmentEmployment": 16883736,
+          "totalPrivateEmployment": 42946755,
+          "totalOccupationEmployed": 62504510,
+          "estimatedHouseholdIncomeUSD": 5856550310315,
+          "activeContractsCount": 590,
+          "activeContractsBySubUnit": {
+            "refined_products": 559,
+            "pharmaceuticals": 20,
+            "passenger_vehicles": 11
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 27892486082.68499,
+              "demandGrowthAnnual": 0.10962946806869489,
+              "unitPriceUSD": 91366.08
+            },
+            "refined_products": {
+              "demandLevelUSD": 207266025221.4148,
+              "demandGrowthAnnual": 0.03346360142147731,
+              "unitPriceUSD": 3.28
+            },
+            "food_beverage": {
+              "demandLevelUSD": 432885174116.7346,
+              "demandGrowthAnnual": 0.007835636541669189,
+              "unitPriceUSD": 10.06
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 402323962670.2681,
+              "demandGrowthAnnual": 0.07458063594541198,
+              "unitPriceUSD": 128.7
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 381529726677.319,
+              "demandGrowthAnnual": 0.013040536958015103,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 72082354271.11227,
+              "demandGrowthAnnual": 0.044757330489137104
+            },
+            "defense_systems": {
+              "demandLevelUSD": 439689589866.0437,
+              "demandGrowthAnnual": 0.13263463810416276
+            }
+          },
+          "durableGoodsStockUnits": 30451941.876952782
+        },
+        "UK": {
+          "gdpGrowth": 0.04629584369341533,
+          "consumptionComponentUSD": 735401897672.2225,
+          "investmentComponentUSD": 110126394545.00598,
+          "governmentSpendingUSD": 16828784085.690228,
+          "fiscalDeficitPctGdp": 0.10486902770626949,
+          "governmentEmployment": 3279792,
+          "totalPrivateEmployment": 6121574,
+          "totalOccupationEmployed": 9830553,
+          "estimatedHouseholdIncomeUSD": 842336881789,
+          "activeContractsCount": 113,
+          "activeContractsBySubUnit": {
+            "refined_products": 97,
+            "passenger_vehicles": 8,
+            "pharmaceuticals": 8
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 5665670202.753298,
+              "demandGrowthAnnual": 0.12638703949466912,
+              "unitPriceUSD": 87512.56
+            },
+            "refined_products": {
+              "demandLevelUSD": 33192446470.667007,
+              "demandGrowthAnnual": 0.0009061301768378272,
+              "unitPriceUSD": 3.18
+            },
+            "food_beverage": {
+              "demandLevelUSD": 63236463464.20591,
+              "demandGrowthAnnual": -0.05562603100836894,
+              "unitPriceUSD": 10.07
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 72087330605.2052,
+              "demandGrowthAnnual": 0.07742041103472985,
+              "unitPriceUSD": 132.63
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 56748270672.02497,
+              "demandGrowthAnnual": -0.04294297408277048,
+              "unitPriceUSD": 39855.78
+            },
+            "semiconductors": {
+              "demandLevelUSD": 12073693108.62237,
+              "demandGrowthAnnual": 0.023517329588242042
+            },
+            "defense_systems": {
+              "demandLevelUSD": 90434684816.97763,
+              "demandGrowthAnnual": 0.15660722377944225
+            }
+          },
+          "durableGoodsStockUnits": 4529385.049945624
+        },
+        "JPN": {
+          "gdpGrowth": -0.05907119670061112,
+          "consumptionComponentUSD": 1155411250522.0593,
+          "investmentComponentUSD": 192862343394.10474,
+          "governmentSpendingUSD": 22814416838.81774,
+          "fiscalDeficitPctGdp": 0.1372159883970976,
+          "governmentEmployment": 3692558,
+          "totalPrivateEmployment": 11722206,
+          "totalOccupationEmployed": 15991850,
+          "estimatedHouseholdIncomeUSD": 1326356007524,
+          "activeContractsCount": 137,
+          "activeContractsBySubUnit": {
+            "refined_products": 126,
+            "passenger_vehicles": 7,
+            "pharmaceuticals": 4
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 8286626648.05877,
+              "demandGrowthAnnual": 0.008299955568799255,
+              "unitPriceUSD": 89980.8
+            },
+            "refined_products": {
+              "demandLevelUSD": 51398911295.12099,
+              "demandGrowthAnnual": -0.06724531664376121,
+              "unitPriceUSD": 3.34
+            },
+            "food_beverage": {
+              "demandLevelUSD": 99876897229.09903,
+              "demandGrowthAnnual": -0.1025996603203918,
+              "unitPriceUSD": 9.44
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 109058069882.40555,
+              "demandGrowthAnnual": -0.018287391270900955,
+              "unitPriceUSD": 129.22
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 89226831055.09712,
+              "demandGrowthAnnual": -0.0955811710239316,
+              "unitPriceUSD": 39057.45
+            },
+            "semiconductors": {
+              "demandLevelUSD": 18458578062.31506,
+              "demandGrowthAnnual": -0.055295601445268794
+            },
+            "defense_systems": {
+              "demandLevelUSD": 133970571344.15588,
+              "demandGrowthAnnual": 0.0631823227709356
+            }
+          },
+          "durableGoodsStockUnits": 7121673.838674521
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 74.89,
+          "weeklySupplyUnits": 9039186.864379575,
+          "weeklyDemandUnits": 9195998.180114511
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 80.3,
+          "weeklySupplyUnits": 5012976.710017554,
+          "weeklyDemandUnits": 5091301.994110686
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.92,
+          "weeklySupplyUnits": 83024333.68307938,
+          "weeklyDemandUnits": 83954700.09286532
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 6560350.64,
+          "weeklySupplyUnits": 8.773860149020416,
+          "weeklyDemandUnits": 58.36487746964172
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 77070.33,
+          "weeklySupplyUnits": 442.28384449076077,
+          "weeklyDemandUnits": 2967.456080384071
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 13047.15,
+          "weeklySupplyUnits": 1350.9421464902084,
+          "weeklyDemandUnits": 164590.71677183628
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 17134.34,
+          "weeklySupplyUnits": 19887.070835433522,
+          "weeklyDemandUnits": 194844.80706222987
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 14085.74,
+          "weeklySupplyUnits": 15479.37481851244,
+          "weeklyDemandUnits": 182543.42829123116
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 31003.6,
+          "weeklySupplyUnits": 2667.546155583527,
+          "weeklyDemandUnits": 68255.86675177277
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 313,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 12,
+        "worstTobinsQ": {
+          "q": 1974.894719399941,
+          "ticker": "JPEN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4653213084566.025,
+          "holdingsCount": 179
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3619165732440.2417,
+          "holdingsCount": 179
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2068094704251.567,
+          "holdingsCount": 179
+        }
+      ],
+      "pmi": {
+        "headline": 35.8,
+        "demandComponent": 46.3,
+        "capexComponent": 34.2,
+        "employmentComponent": 26.8
+      }
+    },
+    {
+      "week": 250,
+      "regions": {
+        "USA": {
+          "gdpGrowth": 0.010809042271787694,
+          "consumptionComponentUSD": 3456919691466.2485,
+          "investmentComponentUSD": 1388011727367.078,
+          "governmentSpendingUSD": 59434009253.45415,
+          "fiscalDeficitPctGdp": 0.10960976479156194,
+          "governmentEmployment": 10603551,
+          "totalPrivateEmployment": 29849692,
+          "totalOccupationEmployed": 40964608.00000001,
+          "estimatedHouseholdIncomeUSD": 3960818248712,
+          "activeContractsCount": 49,
+          "activeContractsBySubUnit": {
+            "refined_products": 49
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 21218420809.06209,
+              "demandGrowthAnnual": -0.03155699281162061,
+              "unitPriceUSD": 85396.07
+            },
+            "refined_products": {
+              "demandLevelUSD": 147370873967.16766,
+              "demandGrowthAnnual": -0.07736812461579268,
+              "unitPriceUSD": 3.18
+            },
+            "food_beverage": {
+              "demandLevelUSD": 297422448932.3989,
+              "demandGrowthAnnual": -0.10063569318732357,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 299068569516.43225,
+              "demandGrowthAnnual": -0.037351355038895306,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 263644873501.47644,
+              "demandGrowthAnnual": -0.09513746904955012,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 51692148998.95686,
+              "demandGrowthAnnual": -0.07369905432887247
+            },
+            "defense_systems": {
+              "demandLevelUSD": 353075895065.6602,
+              "demandGrowthAnnual": 0.002889915402176868
+            }
+          },
+          "durableGoodsStockUnits": 21042916.980394766
+        },
+        "EUR": {
+          "gdpGrowth": -0.04454053745002562,
+          "consumptionComponentUSD": 4892481202985.849,
+          "investmentComponentUSD": 714676649013.9276,
+          "governmentSpendingUSD": 80127920673.72604,
+          "fiscalDeficitPctGdp": 0.11501479772375507,
+          "governmentEmployment": 17062226,
+          "totalPrivateEmployment": 39509965,
+          "totalOccupationEmployed": 58285504,
+          "estimatedHouseholdIncomeUSD": 5538007390816,
+          "activeContractsCount": 399,
+          "activeContractsBySubUnit": {
+            "refined_products": 386,
+            "pharmaceuticals": 9,
+            "passenger_vehicles": 4
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 29113017621.368843,
+              "demandGrowthAnnual": 0.004518903921026052,
+              "unitPriceUSD": 81508.3
+            },
+            "refined_products": {
+              "demandLevelUSD": 204870464565.6302,
+              "demandGrowthAnnual": -0.03878445004936548,
+              "unitPriceUSD": 3.49
+            },
+            "food_beverage": {
+              "demandLevelUSD": 417510011486.67523,
+              "demandGrowthAnnual": -0.05985759528658763,
+              "unitPriceUSD": 9.77
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 411166495114.61536,
+              "demandGrowthAnnual": -0.00867419481908005,
+              "unitPriceUSD": 121.58
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 369567755584.15436,
+              "demandGrowthAnnual": -0.05598204666020212,
+              "unitPriceUSD": 37154.4
+            },
+            "semiconductors": {
+              "demandLevelUSD": 71779938373.90398,
+              "demandGrowthAnnual": -0.03353596560804162
+            },
+            "defense_systems": {
+              "demandLevelUSD": 474444872151.09735,
+              "demandGrowthAnnual": 0.04000161571823746
+            }
+          },
+          "durableGoodsStockUnits": 29497192.553393736
+        },
+        "UK": {
+          "gdpGrowth": -0.023488961994185487,
+          "consumptionComponentUSD": 662298815864.3789,
+          "investmentComponentUSD": 272462889813.61746,
+          "governmentSpendingUSD": 17190973129.015015,
+          "fiscalDeficitPctGdp": 0.10330035469595153,
+          "governmentEmployment": 3292743,
+          "totalPrivateEmployment": 5601702,
+          "totalOccupationEmployed": 8991647,
+          "estimatedHouseholdIncomeUSD": 770996813033,
+          "activeContractsCount": 43,
+          "activeContractsBySubUnit": {
+            "refined_products": 43
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 5940672287.261709,
+              "demandGrowthAnnual": 0.08490313287142826,
+              "unitPriceUSD": 81535.77
+            },
+            "refined_products": {
+              "demandLevelUSD": 32032031374.005375,
+              "demandGrowthAnnual": -0.04365288993548466,
+              "unitPriceUSD": 3.16
+            },
+            "food_beverage": {
+              "demandLevelUSD": 58046791838.54626,
+              "demandGrowthAnnual": -0.12592266622038428,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 73886781968.20082,
+              "demandGrowthAnnual": 0.04353833587118583,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 52645356201.0581,
+              "demandGrowthAnnual": -0.10811749865085751,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 11806704079.470469,
+              "demandGrowthAnnual": -0.020634844741776792
+            },
+            "defense_systems": {
+              "demandLevelUSD": 99025347472.80003,
+              "demandGrowthAnnual": 0.11715834644753453
+            }
+          },
+          "durableGoodsStockUnits": 4201909.353401376
+        },
+        "JPN": {
+          "gdpGrowth": -0.08309339841231267,
+          "consumptionComponentUSD": 1058074363156.036,
+          "investmentComponentUSD": 195476027607.75372,
+          "governmentSpendingUSD": 21975767836.888027,
+          "fiscalDeficitPctGdp": 0.1464839098610466,
+          "governmentEmployment": 3655932,
+          "totalPrivateEmployment": 10568551,
+          "totalOccupationEmployed": 14644187,
+          "estimatedHouseholdIncomeUSD": 1198751386163,
+          "activeContractsCount": 65,
+          "activeContractsBySubUnit": {
+            "refined_products": 62,
+            "passenger_vehicles": 2,
+            "pharmaceuticals": 1
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 7932201053.661374,
+              "demandGrowthAnnual": -0.04420499867823935,
+              "unitPriceUSD": 80191.74
+            },
+            "refined_products": {
+              "demandLevelUSD": 47930922673.77595,
+              "demandGrowthAnnual": -0.08509207929119134,
+              "unitPriceUSD": 3.47
+            },
+            "food_beverage": {
+              "demandLevelUSD": 91704584740.15465,
+              "demandGrowthAnnual": -0.1086455280312082,
+              "unitPriceUSD": 9.98
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 104037612914.53752,
+              "demandGrowthAnnual": -0.058000177183959334,
+              "unitPriceUSD": 124.17
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 82182097253.27228,
+              "demandGrowthAnnual": -0.10399731989204408,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 17260716099.496395,
+              "demandGrowthAnnual": -0.07859271430957593
+            },
+            "defense_systems": {
+              "demandLevelUSD": 133257390594.37381,
+              "demandGrowthAnnual": -0.025679586930382303
+            }
+          },
+          "durableGoodsStockUnits": 6559395.700768871
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 73.36,
+          "weeklySupplyUnits": 8941115.293414054,
+          "weeklyDemandUnits": 9301620.81938736
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 81.74,
+          "weeklySupplyUnits": 5027055.043319379,
+          "weeklyDemandUnits": 4982181.70660578
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.97,
+          "weeklySupplyUnits": 85184045.07790083,
+          "weeklyDemandUnits": 81682911.28882734
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 48214880.53,
+          "weeklySupplyUnits": 1.1482384645742365,
+          "weeklyDemandUnits": 8.00043433768974
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 591037.62,
+          "weeklySupplyUnits": 8.458854778571755,
+          "weeklyDemandUnits": 395.1563837032077
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 50474.29,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 34178.704862212406
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 52813.07,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 44408.050974860416
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 83346.51,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 26349.993100280455
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 136707.66,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 12111.179858272635
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 319,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 8,
+        "worstTobinsQ": {
+          "q": 2327.7269841455586,
+          "ticker": "JPEN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4778479196471.946,
+          "holdingsCount": 97
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3716594930589.291,
+          "holdingsCount": 97
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2123768531765.3096,
+          "holdingsCount": 97
+        }
+      ],
+      "pmi": {
+        "headline": 42.3,
+        "demandComponent": 34.9,
+        "capexComponent": 42,
+        "employmentComponent": 50
+      }
+    },
+    {
+      "week": 300,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.05375750822493153,
+          "consumptionComponentUSD": 3249804430986.7793,
+          "investmentComponentUSD": 1376745868534.267,
+          "governmentSpendingUSD": 61085535808.82126,
+          "fiscalDeficitPctGdp": 0.13231455558984054,
+          "governmentEmployment": 10731566,
+          "totalPrivateEmployment": 26976381,
+          "totalOccupationEmployed": 38172088.00000001,
+          "estimatedHouseholdIncomeUSD": 3675574124471,
+          "activeContractsCount": 14,
+          "activeContractsBySubUnit": {
+            "refined_products": 14
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 21651265140.135277,
+              "demandGrowthAnnual": -0.012216433072387733,
+              "unitPriceUSD": 79823.13
+            },
+            "refined_products": {
+              "demandLevelUSD": 141396097867.84338,
+              "demandGrowthAnnual": -0.046636281287697035,
+              "unitPriceUSD": 3.17
+            },
+            "food_beverage": {
+              "demandLevelUSD": 278404060446.5082,
+              "demandGrowthAnnual": -0.060425724687454,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 297993246222.4487,
+              "demandGrowthAnnual": -0.028252973165111328,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 248159435661.65186,
+              "demandGrowthAnnual": -0.05804797729432165,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 50051960170.9416,
+              "demandGrowthAnnual": -0.04065479660647986
+            },
+            "defense_systems": {
+              "demandLevelUSD": 365644477518.2451,
+              "demandGrowthAnnual": 0.009473521995735368
+            }
+          },
+          "durableGoodsStockUnits": 19806940.80327154
+        },
+        "EUR": {
+          "gdpGrowth": -0.019561743809610954,
+          "consumptionComponentUSD": 4479482483291.269,
+          "investmentComponentUSD": 1241194330095.261,
+          "governmentSpendingUSD": 78450124646.82521,
+          "fiscalDeficitPctGdp": 0.10786557702800624,
+          "governmentEmployment": 16955519,
+          "totalPrivateEmployment": 35621446,
+          "totalOccupationEmployed": 53233000,
+          "estimatedHouseholdIncomeUSD": 5086898027336,
+          "activeContractsCount": 229,
+          "activeContractsBySubUnit": {
+            "refined_products": 227,
+            "pharmaceuticals": 2
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 27942572764.219044,
+              "demandGrowthAnnual": -0.001519460259036265,
+              "unitPriceUSD": 83174.53
+            },
+            "refined_products": {
+              "demandLevelUSD": 190992412246.47476,
+              "demandGrowthAnnual": -0.04472723479872309,
+              "unitPriceUSD": 3.36
+            },
+            "food_beverage": {
+              "demandLevelUSD": 382834594868.4054,
+              "demandGrowthAnnual": -0.05832468060647322,
+              "unitPriceUSD": 9.62
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 391998588552.29724,
+              "demandGrowthAnnual": -0.012265324558432766,
+              "unitPriceUSD": 109.75
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 339868318913.56116,
+              "demandGrowthAnnual": -0.05355273050029474,
+              "unitPriceUSD": 35884.54
+            },
+            "semiconductors": {
+              "demandLevelUSD": 67123518600.4677,
+              "demandGrowthAnnual": -0.039890808033685055
+            },
+            "defense_systems": {
+              "demandLevelUSD": 470085770001.21185,
+              "demandGrowthAnnual": 0.006671404019289895
+            }
+          },
+          "durableGoodsStockUnits": 27126720.592670083
+        },
+        "UK": {
+          "gdpGrowth": -0.05310454636418338,
+          "consumptionComponentUSD": 630410234841.5946,
+          "investmentComponentUSD": 280975182004.9077,
+          "governmentSpendingUSD": 18106980263.518612,
+          "fiscalDeficitPctGdp": 0.1251455321870715,
+          "governmentEmployment": 3356435,
+          "totalPrivateEmployment": 5095622,
+          "totalOccupationEmployed": 8536301,
+          "estimatedHouseholdIncomeUSD": 714751854056,
+          "activeContractsCount": 37,
+          "activeContractsBySubUnit": {
+            "refined_products": 37
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6261258799.060804,
+              "demandGrowthAnnual": 0.02573968240697866,
+              "unitPriceUSD": 79758.12
+            },
+            "refined_products": {
+              "demandLevelUSD": 31506224101.940907,
+              "demandGrowthAnnual": -0.024966194154038224,
+              "unitPriceUSD": 3.16
+            },
+            "food_beverage": {
+              "demandLevelUSD": 54805393340.61507,
+              "demandGrowthAnnual": -0.055743574570702226,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 76136134346.81897,
+              "demandGrowthAnnual": 0.005795185803599168,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 50171237132.72875,
+              "demandGrowthAnnual": -0.048992512961589796,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 11764794085.530916,
+              "demandGrowthAnnual": -0.014157421965664163
+            },
+            "defense_systems": {
+              "demandLevelUSD": 107077388030.45267,
+              "demandGrowthAnnual": 0.0427494598771192
+            }
+          },
+          "durableGoodsStockUnits": 4004436.5883784126
+        },
+        "JPN": {
+          "gdpGrowth": -0.06846844564439336,
+          "consumptionComponentUSD": 955278607245.5895,
+          "investmentComponentUSD": 213262894758.0788,
+          "governmentSpendingUSD": 20710483000.055874,
+          "fiscalDeficitPctGdp": 0.1474748598332279,
+          "governmentEmployment": 3597655,
+          "totalPrivateEmployment": 9520571,
+          "totalOccupationEmployed": 13399536.000000002,
+          "estimatedHouseholdIncomeUSD": 1083622905998,
+          "activeContractsCount": 67,
+          "activeContractsBySubUnit": {
+            "refined_products": 66,
+            "passenger_vehicles": 1
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 7440639736.551856,
+              "demandGrowthAnnual": -0.07891778144600758,
+              "unitPriceUSD": 80464.2
+            },
+            "refined_products": {
+              "demandLevelUSD": 43756964829.275314,
+              "demandGrowthAnnual": -0.0783424591500883,
+              "unitPriceUSD": 3.48
+            },
+            "food_beverage": {
+              "demandLevelUSD": 82443640600.17122,
+              "demandGrowthAnnual": -0.07661388103580213,
+              "unitPriceUSD": 8.31
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 96913294161.88103,
+              "demandGrowthAnnual": -0.07406006992005043,
+              "unitPriceUSD": 104.11
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 74121055211.05334,
+              "demandGrowthAnnual": -0.07647677262785813,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 15818054166.404295,
+              "demandGrowthAnnual": -0.07962724627963569
+            },
+            "defense_systems": {
+              "demandLevelUSD": 127370375116.43236,
+              "demandGrowthAnnual": -0.0638259348471939
+            }
+          },
+          "durableGoodsStockUnits": 5916000.529768381
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 68.1,
+          "weeklySupplyUnits": 9580518.914448405,
+          "weeklyDemandUnits": 9800797.869938053
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 79.63,
+          "weeklySupplyUnits": 5141804.076135998,
+          "weeklyDemandUnits": 4969838.222586619
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.85,
+          "weeklySupplyUnits": 82481228.03944452,
+          "weeklyDemandUnits": 81693705.3955911
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 352234083.29,
+          "weeklySupplyUnits": 0.11849568422033564,
+          "weeklyDemandUnits": 1.0815360888401753
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 643271.74,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 192.3718994107181
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 51048.22,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 21837.238609073614
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 54831.62,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 27948.524521184965
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 86061.16,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 13645.851155059994
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 138050.21,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 6936.626503447628
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 325,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 0,
+        "worstTobinsQ": {
+          "q": 7.705890351888447,
+          "ticker": "ORIN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 4903745308377.867,
+          "holdingsCount": 60
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3814024128738.341,
+          "holdingsCount": 60
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2179442359279.052,
+          "holdingsCount": 60
+        }
+      ],
+      "pmi": {
+        "headline": 39.2,
+        "demandComponent": 42.3,
+        "capexComponent": 49.4,
+        "employmentComponent": 26
+      }
+    },
+    {
+      "week": 350,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.07401393731412753,
+          "consumptionComponentUSD": 3002354152174.7246,
+          "investmentComponentUSD": 1393656764281.981,
+          "governmentSpendingUSD": 57753214713.76988,
+          "fiscalDeficitPctGdp": 0.13472296489326702,
+          "governmentEmployment": 10571413,
+          "totalPrivateEmployment": 24345565,
+          "totalOccupationEmployed": 35326955,
+          "estimatedHouseholdIncomeUSD": 3388672592544,
+          "activeContractsCount": 5,
+          "activeContractsBySubUnit": {
+            "refined_products": 5
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 20772837001.293015,
+              "demandGrowthAnnual": -0.07362893760679334,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 132538409078.08366,
+              "demandGrowthAnnual": -0.08007966719115034,
+              "unitPriceUSD": 3.17
+            },
+            "food_beverage": {
+              "demandLevelUSD": 258378222573.73767,
+              "demandGrowthAnnual": -0.08234733812088457,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 282421722322.80865,
+              "demandGrowthAnnual": -0.07790042726186908,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 230691358954.5369,
+              "demandGrowthAnnual": -0.08217794616243435,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 47125990805.16007,
+              "demandGrowthAnnual": -0.0786099152256674
+            },
+            "defense_systems": {
+              "demandLevelUSD": 355203997242.98114,
+              "demandGrowthAnnual": -0.06393139136505432
+            }
+          },
+          "durableGoodsStockUnits": 18412719.542402115
+        },
+        "EUR": {
+          "gdpGrowth": -0.04983820595423283,
+          "consumptionComponentUSD": 4201580329777.427,
+          "investmentComponentUSD": 1291290544989.0896,
+          "governmentSpendingUSD": 77301237283.47704,
+          "fiscalDeficitPctGdp": 0.11689712174263267,
+          "governmentEmployment": 16911843,
+          "totalPrivateEmployment": 32162631,
+          "totalOccupationEmployed": 49664829,
+          "estimatedHouseholdIncomeUSD": 4695197609823,
+          "activeContractsCount": 186,
+          "activeContractsBySubUnit": {
+            "refined_products": 183,
+            "passenger_vehicles": 1,
+            "pharmaceuticals": 2
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 27581606892.525913,
+              "demandGrowthAnnual": -0.029336265476376244,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 182263549458.69244,
+              "demandGrowthAnnual": -0.06034110990834396,
+              "unitPriceUSD": 3.35
+            },
+            "food_beverage": {
+              "demandLevelUSD": 360501991561.8751,
+              "demandGrowthAnnual": -0.07285323330683946,
+              "unitPriceUSD": 9.62
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 381746140236.0717,
+              "demandGrowthAnnual": -0.04624727209836399,
+              "unitPriceUSD": 119.77
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 320989241410.38025,
+              "demandGrowthAnnual": -0.07063402107909145,
+              "unitPriceUSD": 35171.76
+            },
+            "semiconductors": {
+              "demandLevelUSD": 64385398858.60035,
+              "demandGrowthAnnual": -0.054418869142566884
+            },
+            "defense_systems": {
+              "demandLevelUSD": 468284626609.0381,
+              "demandGrowthAnnual": -0.02317440119879377
+            }
+          },
+          "durableGoodsStockUnits": 25619879.76057004
+        },
+        "UK": {
+          "gdpGrowth": -0.08560296306003923,
+          "consumptionComponentUSD": 587555670292.2533,
+          "investmentComponentUSD": 280345045137.4636,
+          "governmentSpendingUSD": 17142986178.409637,
+          "fiscalDeficitPctGdp": 0.12987051161997054,
+          "governmentEmployment": 3314482,
+          "totalPrivateEmployment": 4600293,
+          "totalOccupationEmployed": 7992592.999999999,
+          "estimatedHouseholdIncomeUSD": 654978991137,
+          "activeContractsCount": 26,
+          "activeContractsBySubUnit": {
+            "refined_products": 26
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6059611349.687566,
+              "demandGrowthAnnual": -0.07051327451170097,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 29890587121.932724,
+              "demandGrowthAnnual": -0.07645454030977517,
+              "unitPriceUSD": 3.17
+            },
+            "food_beverage": {
+              "demandLevelUSD": 51329808045.205055,
+              "demandGrowthAnnual": -0.07951884382556784,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 73063291435.51682,
+              "demandGrowthAnnual": -0.07474367577933538,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 47102469083.22522,
+              "demandGrowthAnnual": -0.0794307629485127,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 11211449936.859734,
+              "demandGrowthAnnual": -0.0746447103787653
+            },
+            "defense_systems": {
+              "demandLevelUSD": 105219867272.17381,
+              "demandGrowthAnnual": -0.058733290547145156
+            }
+          },
+          "durableGoodsStockUnits": 3759501.686211883
+        },
+        "JPN": {
+          "gdpGrowth": -0.11692793184168104,
+          "consumptionComponentUSD": 881812084876.7799,
+          "investmentComponentUSD": 197526157983.0934,
+          "governmentSpendingUSD": 18989035648.214382,
+          "fiscalDeficitPctGdp": 0.14423087862011633,
+          "governmentEmployment": 3507931,
+          "totalPrivateEmployment": 8583049,
+          "totalOccupationEmployed": 12346431,
+          "estimatedHouseholdIncomeUSD": 982610753848,
+          "activeContractsCount": 59,
+          "activeContractsBySubUnit": {
+            "refined_products": 58,
+            "passenger_vehicles": 1
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6848222958.289476,
+              "demandGrowthAnnual": -0.08912045855568174,
+              "unitPriceUSD": 80697.69
+            },
+            "refined_products": {
+              "demandLevelUSD": 40425523731.95734,
+              "demandGrowthAnnual": -0.09111937515325819,
+              "unitPriceUSD": 3.47
+            },
+            "food_beverage": {
+              "demandLevelUSD": 76292583310.78639,
+              "demandGrowthAnnual": -0.0919949211709632,
+              "unitPriceUSD": 8.29
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 89431139800.15828,
+              "demandGrowthAnnual": -0.09203639111345296,
+              "unitPriceUSD": 103.88
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 68566955457.28405,
+              "demandGrowthAnnual": -0.09210215589439219,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 14599701681.100897,
+              "demandGrowthAnnual": -0.09022117995406553
+            },
+            "defense_systems": {
+              "demandLevelUSD": 117896721826.93384,
+              "demandGrowthAnnual": -0.08896834367850381
+            }
+          },
+          "durableGoodsStockUnits": 5472697.921729071
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 59.79,
+          "weeklySupplyUnits": 10858246.385684213,
+          "weeklyDemandUnits": 10489014.064665314
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 71.47,
+          "weeklySupplyUnits": 5401734.080818843,
+          "weeklyDemandUnits": 5260216.372427693
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.53,
+          "weeklySupplyUnits": 88979963.77820298,
+          "weeklyDemandUnits": 87792362.1617185
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 2586414569.77,
+          "weeklySupplyUnits": 0.0036715527986092736,
+          "weeklyDemandUnits": 0.14275876608710658
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 621437.44,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 181.71064067986964
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 51066.14,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 21016.104361591933
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 51086.25,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 27222.844717072832
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 83934.08,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 12841.917693890387
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 136905.17,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 6522.810380404159
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 328,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 0,
+        "worstTobinsQ": {
+          "q": 9.799117206471838,
+          "ticker": "ORIN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 5029011420283.788,
+          "holdingsCount": 48
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 3911453326887.39,
+          "holdingsCount": 48
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2235116186792.7944,
+          "holdingsCount": 48
+        }
+      ],
+      "pmi": {
+        "headline": 37.4,
+        "demandComponent": 35.1,
+        "capexComponent": 50.5,
+        "employmentComponent": 26.7
+      }
+    },
+    {
+      "week": 400,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.04329117880906719,
+          "consumptionComponentUSD": 2769541834924.511,
+          "investmentComponentUSD": 1409743245484.0752,
+          "governmentSpendingUSD": 53801518075.37164,
+          "fiscalDeficitPctGdp": 0.13409952575916095,
+          "governmentEmployment": 10346701,
+          "totalPrivateEmployment": 21958498,
+          "totalOccupationEmployed": 32665518,
+          "estimatedHouseholdIncomeUSD": 3133107649209,
+          "activeContractsCount": 0,
+          "activeContractsBySubUnit": {},
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 19422548268.30495,
+              "demandGrowthAnnual": -0.07586460851371823,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 122657046457.27098,
+              "demandGrowthAnnual": -0.07995570931188789,
+              "unitPriceUSD": 3.18
+            },
+            "food_beverage": {
+              "demandLevelUSD": 238334268037.86395,
+              "demandGrowthAnnual": -0.08039323203753268,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 262238878734.0089,
+              "demandGrowthAnnual": -0.07953430130915384,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 212922584266.87152,
+              "demandGrowthAnnual": -0.08031657510538359,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 43716700561.88929,
+              "demandGrowthAnnual": -0.07877364161777445
+            },
+            "defense_systems": {
+              "demandLevelUSD": 332459329863.7222,
+              "demandGrowthAnnual": -0.07638524088890186
+            }
+          },
+          "durableGoodsStockUnits": 16994497.956561994
+        },
+        "EUR": {
+          "gdpGrowth": -0.01547385210322283,
+          "consumptionComponentUSD": 3843888416468.8926,
+          "investmentComponentUSD": 1641735391438.5686,
+          "governmentSpendingUSD": 72562683051.20154,
+          "fiscalDeficitPctGdp": 0.10420100225330563,
+          "governmentEmployment": 16574744,
+          "totalPrivateEmployment": 29010512,
+          "totalOccupationEmployed": 45996424,
+          "estimatedHouseholdIncomeUSD": 4312669417494,
+          "activeContractsCount": 130,
+          "activeContractsBySubUnit": {
+            "refined_products": 129,
+            "passenger_vehicles": 1
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 25862931052.87031,
+              "demandGrowthAnnual": -0.055775542236365716,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 168681225620.88434,
+              "demandGrowthAnnual": -0.08986972300702112,
+              "unitPriceUSD": 3.35
+            },
+            "food_beverage": {
+              "demandLevelUSD": 331675660866.1899,
+              "demandGrowthAnnual": -0.10216688655843109,
+              "unitPriceUSD": 8.47
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 354868540582.8836,
+              "demandGrowthAnnual": -0.07415670747564729,
+              "unitPriceUSD": 105.96
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 295525845663.9573,
+              "demandGrowthAnnual": -0.09892881304805456,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 59760462178.45778,
+              "demandGrowthAnnual": -0.08331078463149666
+            },
+            "defense_systems": {
+              "demandLevelUSD": 442385969080.4681,
+              "demandGrowthAnnual": -0.06723054406414075
+            }
+          },
+          "durableGoodsStockUnits": 23587509.035455547
+        },
+        "UK": {
+          "gdpGrowth": -0.08405608970595535,
+          "consumptionComponentUSD": 538528281667.52094,
+          "investmentComponentUSD": 284133522518.0532,
+          "governmentSpendingUSD": 16083050996.77588,
+          "fiscalDeficitPctGdp": 0.12827312899241364,
+          "governmentEmployment": 3247719,
+          "totalPrivateEmployment": 4150182,
+          "totalOccupationEmployed": 7467808.999999999,
+          "estimatedHouseholdIncomeUSD": 598179829594,
+          "activeContractsCount": 14,
+          "activeContractsBySubUnit": {
+            "refined_products": 14
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 5692661353.255615,
+              "demandGrowthAnnual": -0.06089636739834381,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 27697217344.779697,
+              "demandGrowthAnnual": -0.08198704525063372,
+              "unitPriceUSD": 3.18
+            },
+            "food_beverage": {
+              "demandLevelUSD": 47214041299.535706,
+              "demandGrowthAnnual": -0.09352155360328851,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 68072846864.86587,
+              "demandGrowthAnnual": -0.07285670986368897,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 43388432881.01441,
+              "demandGrowthAnnual": -0.09081879980298879,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 10428338954.113214,
+              "demandGrowthAnnual": -0.0763175462774317
+            },
+            "defense_systems": {
+              "demandLevelUSD": 98997654853.15347,
+              "demandGrowthAnnual": -0.06632497808708404
+            }
+          },
+          "durableGoodsStockUnits": 3463064.4582569655
+        },
+        "JPN": {
+          "gdpGrowth": -0.11054616172967846,
+          "consumptionComponentUSD": 802735529961.2076,
+          "investmentComponentUSD": 179570299543.10913,
+          "governmentSpendingUSD": 17301383133.11116,
+          "fiscalDeficitPctGdp": 0.14749100222196979,
+          "governmentEmployment": 3411276,
+          "totalPrivateEmployment": 7733441,
+          "totalOccupationEmployed": 11374114,
+          "estimatedHouseholdIncomeUSD": 891614670522,
+          "activeContractsCount": 53,
+          "activeContractsBySubUnit": {
+            "passenger_vehicles": 1,
+            "refined_products": 52
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 6236447009.81274,
+              "demandGrowthAnnual": -0.10300998144213569,
+              "unitPriceUSD": 77857.49
+            },
+            "refined_products": {
+              "demandLevelUSD": 36880327650.863434,
+              "demandGrowthAnnual": -0.10100825197591945,
+              "unitPriceUSD": 3.43
+            },
+            "food_beverage": {
+              "demandLevelUSD": 69566716651.51141,
+              "demandGrowthAnnual": -0.10130364201653341,
+              "unitPriceUSD": 8.35
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 81615939731.98526,
+              "demandGrowthAnnual": -0.10077091845688635,
+              "unitPriceUSD": 104.5
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 62520907846.99463,
+              "demandGrowthAnnual": -0.10125994763121637,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 13310261693.405788,
+              "demandGrowthAnnual": -0.1017332490400511
+            },
+            "defense_systems": {
+              "demandLevelUSD": 107857824095.01332,
+              "demandGrowthAnnual": -0.09976984979245307
+            }
+          },
+          "durableGoodsStockUnits": 4990130.306310894
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 49.38,
+          "weeklySupplyUnits": 12160919.253123313,
+          "weeklyDemandUnits": 11626065.860895174
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 58.17,
+          "weeklySupplyUnits": 5955547.412570724,
+          "weeklyDemandUnits": 5835403.014134081
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 2.05,
+          "weeklySupplyUnits": 101211521.8344965,
+          "weeklyDemandUnits": 99252349.88231842
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 4537409975.13,
+          "weeklySupplyUnits": 0.00011000998019277049,
+          "weeklyDemandUnits": 0.048023910431727095
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 634905.06,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 168.68636692471082
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 50293.41,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 19795.78144643431
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 50528.45,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 25618.671991572366
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 82761.27,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 12017.59362360804
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 133631.46,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 6122.278301142091
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 329,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 0,
+        "worstTobinsQ": {
+          "q": 9.82052069928405,
+          "ticker": "ORIN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 5154277532189.705,
+          "holdingsCount": 40
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 4008882525036.437,
+          "holdingsCount": 40
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2290790014306.5356,
+          "holdingsCount": 40
+        }
+      ],
+      "pmi": {
+        "headline": 37.5,
+        "demandComponent": 35.1,
+        "capexComponent": 51.1,
+        "employmentComponent": 26.3
+      }
+    },
+    {
+      "week": 450,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.051867616350939505,
+          "consumptionComponentUSD": 2566045499737.029,
+          "investmentComponentUSD": 1416249739517.9993,
+          "governmentSpendingUSD": 49934724899.31233,
+          "fiscalDeficitPctGdp": 0.12991976038277092,
+          "governmentEmployment": 10116637,
+          "totalPrivateEmployment": 19805166,
+          "totalOccupationEmployed": 30247684,
+          "estimatedHouseholdIncomeUSD": 2909744522767,
+          "activeContractsCount": 0,
+          "activeContractsBySubUnit": {},
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 18078214416.785126,
+              "demandGrowthAnnual": -0.07049315368478304,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 113612605514.04135,
+              "demandGrowthAnnual": -0.07471873683459318,
+              "unitPriceUSD": 3.19
+            },
+            "food_beverage": {
+              "demandLevelUSD": 220600245049.5334,
+              "demandGrowthAnnual": -0.07431365356246111,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 243009287611.61758,
+              "demandGrowthAnnual": -0.07521486121197007,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 197110783365.31335,
+              "demandGrowthAnnual": -0.07432043565560376,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 40550883399.41917,
+              "demandGrowthAnnual": -0.07326054302413842
+            },
+            "defense_systems": {
+              "demandLevelUSD": 308516023635.0337,
+              "demandGrowthAnnual": -0.0758969115273298
+            }
+          },
+          "durableGoodsStockUnits": 15732472.986142244
+        },
+        "EUR": {
+          "gdpGrowth": -0.0519785462413942,
+          "consumptionComponentUSD": 3569387640732.7334,
+          "investmentComponentUSD": 1699130397557.3918,
+          "governmentSpendingUSD": 71679779368.45691,
+          "fiscalDeficitPctGdp": 0.11430162472058841,
+          "governmentEmployment": 16529591,
+          "totalPrivateEmployment": 26199131,
+          "totalOccupationEmployed": 43089870.99999999,
+          "estimatedHouseholdIncomeUSD": 3971096106031,
+          "activeContractsCount": 50,
+          "activeContractsBySubUnit": {
+            "refined_products": 50
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 25583689075.490387,
+              "demandGrowthAnnual": -0.022686874277840996,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 159130907311.01965,
+              "demandGrowthAnnual": -0.06390987151624472,
+              "unitPriceUSD": 3.49
+            },
+            "food_beverage": {
+              "demandLevelUSD": 307495069773.0192,
+              "demandGrowthAnnual": -0.08059576131829216,
+              "unitPriceUSD": 8.5
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 342442329208.349,
+              "demandGrowthAnnual": -0.04467575945873792,
+              "unitPriceUSD": 106.34
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 275067990703.872,
+              "demandGrowthAnnual": -0.0772468543868019,
+              "unitPriceUSD": 30317.24
+            },
+            "semiconductors": {
+              "demandLevelUSD": 56896985148.46436,
+              "demandGrowthAnnual": -0.05561104771464764
+            },
+            "defense_systems": {
+              "demandLevelUSD": 434089330913.8305,
+              "demandGrowthAnnual": -0.022263832395344796
+            }
+          },
+          "durableGoodsStockUnits": 21954657.473410588
+        },
+        "UK": {
+          "gdpGrowth": -0.044217408858979845,
+          "consumptionComponentUSD": 492036990884.11365,
+          "investmentComponentUSD": 292615634597.64667,
+          "governmentSpendingUSD": 14897915157.316818,
+          "fiscalDeficitPctGdp": 0.13331652776336175,
+          "governmentEmployment": 3176928,
+          "totalPrivateEmployment": 3743124,
+          "totalOccupationEmployed": 6981810,
+          "estimatedHouseholdIncomeUSD": 546734828853,
+          "activeContractsCount": 1,
+          "activeContractsBySubUnit": {
+            "refined_products": 1
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 5313063006.058643,
+              "demandGrowthAnnual": -0.07838289586422942,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 25494919668.262356,
+              "demandGrowthAnnual": -0.08853616431720068,
+              "unitPriceUSD": 3.17
+            },
+            "food_beverage": {
+              "demandLevelUSD": 43163809221.103745,
+              "demandGrowthAnnual": -0.09319208182190097,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 62996327821.06726,
+              "demandGrowthAnnual": -0.08526899554395717,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 39724375780.010635,
+              "demandGrowthAnnual": -0.09213895963843965,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 9636879192.834522,
+              "demandGrowthAnnual": -0.08546151603492413
+            },
+            "defense_systems": {
+              "demandLevelUSD": 92214496715.45978,
+              "demandGrowthAnnual": -0.08104665285464474
+            }
+          },
+          "durableGoodsStockUnits": 3170616.3314876184
+        },
+        "JPN": {
+          "gdpGrowth": -0.07561902559896472,
+          "consumptionComponentUSD": 727380322576.0409,
+          "investmentComponentUSD": 176283389208.2963,
+          "governmentSpendingUSD": 15630802885.762346,
+          "fiscalDeficitPctGdp": 0.14682671197820324,
+          "governmentEmployment": 3307291,
+          "totalPrivateEmployment": 6966876,
+          "totalOccupationEmployed": 10479268.000000002,
+          "estimatedHouseholdIncomeUSD": 808595672749,
+          "activeContractsCount": 51,
+          "activeContractsBySubUnit": {
+            "refined_products": 50,
+            "passenger_vehicles": 1
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 5630987134.054163,
+              "demandGrowthAnnual": -0.0910595673304071,
+              "unitPriceUSD": 76780.25
+            },
+            "refined_products": {
+              "demandLevelUSD": 33373003410.712418,
+              "demandGrowthAnnual": -0.09837020769959359,
+              "unitPriceUSD": 3.44
+            },
+            "food_beverage": {
+              "demandLevelUSD": 63020677556.2053,
+              "demandGrowthAnnual": -0.10043852964033517,
+              "unitPriceUSD": 8.28
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 73737293595.60025,
+              "demandGrowthAnnual": -0.0962175571278241,
+              "unitPriceUSD": 103.74
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 56622691604.333664,
+              "demandGrowthAnnual": -0.0997455500040676,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 12040563123.709167,
+              "demandGrowthAnnual": -0.09649799120064628
+            },
+            "defense_systems": {
+              "demandLevelUSD": 97412406794.29146,
+              "demandGrowthAnnual": -0.09890141805291508
+            }
+          },
+          "durableGoodsStockUnits": 4519361.908358201
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 38.51,
+          "weeklySupplyUnits": 15044428.984691327,
+          "weeklyDemandUnits": 13997500.101991104
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 44.57,
+          "weeklySupplyUnits": 7621893.006965996,
+          "weeklyDemandUnits": 7140494.62935793
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 1.54,
+          "weeklySupplyUnits": 127752133.86429943,
+          "weeklyDemandUnits": 122458195.41208656
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 4319074710.62,
+          "weeklySupplyUnits": 0.000041744983703392295,
+          "weeklyDemandUnits": 0.03910158604448666
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 651250.79,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 157.4625024107626
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 50050.02,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 19118.960578855185
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 49678.9,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 24118.317296756228
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 88577.27,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 10672.649237035903
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 135919.03,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 5641.505394101502
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 330,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 0,
+        "worstTobinsQ": {
+          "q": 9.894069376756114,
+          "ticker": "ORIN"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 5279543644095.621,
+          "holdingsCount": 40
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 4106311723185.4824,
+          "holdingsCount": 40
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2346463841820.276,
+          "holdingsCount": 40
+        }
+      ],
+      "pmi": {
+        "headline": 37.7,
+        "demandComponent": 36.2,
+        "capexComponent": 51.3,
+        "employmentComponent": 25.6
+      }
+    },
+    {
+      "week": 500,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.060570498012785134,
+          "consumptionComponentUSD": 2393315674546.156,
+          "investmentComponentUSD": 1419941232780.1206,
+          "governmentSpendingUSD": 46823191430.29208,
+          "fiscalDeficitPctGdp": 0.12837754617827546,
+          "governmentEmployment": 9923248,
+          "totalPrivateEmployment": 17870910,
+          "totalOccupationEmployed": 28089170.000000004,
+          "estimatedHouseholdIncomeUSD": 2720171479526,
+          "activeContractsCount": 0,
+          "activeContractsBySubUnit": {},
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 17021384174.853102,
+              "demandGrowthAnnual": -0.06732781494683682,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 106084472162.52791,
+              "demandGrowthAnnual": -0.07051184007874856,
+              "unitPriceUSD": 3.18
+            },
+            "food_beverage": {
+              "demandLevelUSD": 205631482575.8039,
+              "demandGrowthAnnual": -0.07000223598256738,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 227250706977.33417,
+              "demandGrowthAnnual": -0.07175946533454036,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 183806428138.3523,
+              "demandGrowthAnnual": -0.07016467274815552,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 37949525053.97464,
+              "demandGrowthAnnual": -0.06918898042706756
+            },
+            "defense_systems": {
+              "demandLevelUSD": 288774294167.2324,
+              "demandGrowthAnnual": -0.07106215353223133
+            }
+          },
+          "durableGoodsStockUnits": 14670580.756642643
+        },
+        "EUR": {
+          "gdpGrowth": -0.06088343143292674,
+          "consumptionComponentUSD": 3271563109393.77,
+          "investmentComponentUSD": 1734845777303.8623,
+          "governmentSpendingUSD": 68237216226.75895,
+          "fiscalDeficitPctGdp": 0.11934823328622289,
+          "governmentEmployment": 16305369,
+          "totalPrivateEmployment": 23645558,
+          "totalOccupationEmployed": 40280314,
+          "estimatedHouseholdIncomeUSD": 3635649494340,
+          "activeContractsCount": 23,
+          "activeContractsBySubUnit": {
+            "refined_products": 23
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 24601242762.04272,
+              "demandGrowthAnnual": -0.05115153901032299,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 148181817025.9712,
+              "demandGrowthAnnual": -0.07968629478630262,
+              "unitPriceUSD": 3.5
+            },
+            "food_beverage": {
+              "demandLevelUSD": 282674402769.4429,
+              "demandGrowthAnnual": -0.09040183168902871,
+              "unitPriceUSD": 8.46
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 323311178309.4524,
+              "demandGrowthAnnual": -0.06847057720843663,
+              "unitPriceUSD": 105.93
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 253490227960.4713,
+              "demandGrowthAnnual": -0.088279117497013,
+              "unitPriceUSD": 30195.77
+            },
+            "semiconductors": {
+              "demandLevelUSD": 53348520202.21015,
+              "demandGrowthAnnual": -0.07320147275633682
+            },
+            "defense_systems": {
+              "demandLevelUSD": 417882989874.06287,
+              "demandGrowthAnnual": -0.05231090466589583
+            }
+          },
+          "durableGoodsStockUnits": 20232420.040906545
+        },
+        "UK": {
+          "gdpGrowth": -0.004393813883135866,
+          "consumptionComponentUSD": 450263557703.4402,
+          "investmentComponentUSD": 303241638711.0268,
+          "governmentSpendingUSD": 13772114588.797138,
+          "fiscalDeficitPctGdp": 0.128120096347451,
+          "governmentEmployment": 3101068,
+          "totalPrivateEmployment": 3375395,
+          "totalOccupationEmployed": 6530845,
+          "estimatedHouseholdIncomeUSD": 501228830135,
+          "activeContractsCount": 0,
+          "activeContractsBySubUnit": {},
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 4916087963.365052,
+              "demandGrowthAnnual": -0.061604476913188044,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 23392025291.54256,
+              "demandGrowthAnnual": -0.07950445356160962,
+              "unitPriceUSD": 3.17
+            },
+            "food_beverage": {
+              "demandLevelUSD": 39481934404.82127,
+              "demandGrowthAnnual": -0.08788774080141692,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 57908401525.12406,
+              "demandGrowthAnnual": -0.07235886453236606,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 36361202444.16345,
+              "demandGrowthAnnual": -0.08563092659196636,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 8866720674.350925,
+              "demandGrowthAnnual": -0.07442073798132443
+            },
+            "defense_systems": {
+              "demandLevelUSD": 84965460590.24988,
+              "demandGrowthAnnual": -0.07222515805464935
+            }
+          },
+          "durableGoodsStockUnits": 2902183.358158769
+        },
+        "JPN": {
+          "gdpGrowth": -0.08635114969670332,
+          "consumptionComponentUSD": 660782988767.0206,
+          "investmentComponentUSD": 178091877813.23346,
+          "governmentSpendingUSD": 14226183668.874496,
+          "fiscalDeficitPctGdp": 0.14361942537051206,
+          "governmentEmployment": 3213403,
+          "totalPrivateEmployment": 6279496,
+          "totalOccupationEmployed": 9678341,
+          "estimatedHouseholdIncomeUSD": 735249008331,
+          "activeContractsCount": 37,
+          "activeContractsBySubUnit": {
+            "refined_products": 37
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 5134763549.577837,
+              "demandGrowthAnnual": -0.07376540626690886,
+              "unitPriceUSD": 76786.35
+            },
+            "refined_products": {
+              "demandLevelUSD": 30308160303.419376,
+              "demandGrowthAnnual": -0.0918266704470505,
+              "unitPriceUSD": 3.19
+            },
+            "food_beverage": {
+              "demandLevelUSD": 57226662312.12019,
+              "demandGrowthAnnual": -0.09761817425344033,
+              "unitPriceUSD": 8.29
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 66915471088.54481,
+              "demandGrowthAnnual": -0.08589026408616496,
+              "unitPriceUSD": 103.86
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 51418824084.74294,
+              "demandGrowthAnnual": -0.0960707728745942,
+              "unitPriceUSD": 29593.06
+            },
+            "semiconductors": {
+              "demandLevelUSD": 10951699653.401394,
+              "demandGrowthAnnual": -0.08734126719973778
+            },
+            "defense_systems": {
+              "demandLevelUSD": 88277475008.95851,
+              "demandGrowthAnnual": -0.08745561384402567
+            }
+          },
+          "durableGoodsStockUnits": 4104013.22079456
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 27.75,
+          "weeklySupplyUnits": 19547328.03955115,
+          "weeklyDemandUnits": 17696205.29914906
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 31.92,
+          "weeklySupplyUnits": 10013556.435648344,
+          "weeklyDemandUnits": 9226559.525682176
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 1.14,
+          "weeklySupplyUnits": 173889291.5885582,
+          "weeklyDemandUnits": 154078926.43536374
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 4358736308.24,
+          "weeklySupplyUnits": 0.000041931819831285117,
+          "weeklyDemandUnits": 0.03735938460918705
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 640170.95,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 149.69719857556137
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 50761.39,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 17980.1745869568
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 48994.73,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 22674.407019761093
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 90266.18,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 9492.824319192483
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 138749.79,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 5077.510562248375
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 332,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 0,
+        "worstTobinsQ": {
+          "q": 5.06769548797024,
+          "ticker": "STHO"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 5404809756001.536,
+          "holdingsCount": 39
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 4203740921334.528,
+          "holdingsCount": 39
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2402137669334.016,
+          "holdingsCount": 39
+        }
+      ],
+      "pmi": {
+        "headline": 38.2,
+        "demandComponent": 36.9,
+        "capexComponent": 50.5,
+        "employmentComponent": 27.4
+      }
+    },
+    {
+      "week": 520,
+      "regions": {
+        "USA": {
+          "gdpGrowth": -0.05529871246919793,
+          "consumptionComponentUSD": 2323347400642.653,
+          "investmentComponentUSD": 1419696432860.0823,
+          "governmentSpendingUSD": 45659692695.83687,
+          "fiscalDeficitPctGdp": 0.12976500837849694,
+          "governmentEmployment": 9847424,
+          "totalPrivateEmployment": 17151525,
+          "totalOccupationEmployed": 27282363,
+          "estimatedHouseholdIncomeUSD": 2646784461885,
+          "activeContractsCount": 0,
+          "activeContractsBySubUnit": {},
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 16619828007.296804,
+              "demandGrowthAnnual": -0.06465373085885462,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 103279604076.53665,
+              "demandGrowthAnnual": -0.07636310309267325,
+              "unitPriceUSD": 3.18
+            },
+            "food_beverage": {
+              "demandLevelUSD": 200057875474.10135,
+              "demandGrowthAnnual": -0.0816402832543992,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 221327943452.4094,
+              "demandGrowthAnnual": -0.07353557553472934,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 178846589638.18817,
+              "demandGrowthAnnual": -0.08093957613267921,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 36976915220.16372,
+              "demandGrowthAnnual": -0.07334098647045728
+            },
+            "defense_systems": {
+              "demandLevelUSD": 281374749567.39044,
+              "demandGrowthAnnual": -0.06891548071432574
+            }
+          },
+          "durableGoodsStockUnits": 14274709.33912185
+        },
+        "EUR": {
+          "gdpGrowth": 0.6794176262771938,
+          "consumptionComponentUSD": 3150990857362.32,
+          "investmentComponentUSD": 4377839295441.4624,
+          "governmentSpendingUSD": 84236717762.94965,
+          "fiscalDeficitPctGdp": 0.10818259346894198,
+          "governmentEmployment": 16389619,
+          "totalPrivateEmployment": 22692675,
+          "totalOccupationEmployed": 39042345.99999999,
+          "estimatedHouseholdIncomeUSD": 3501334872855,
+          "activeContractsCount": 0,
+          "activeContractsBySubUnit": {},
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 24579857895.262703,
+              "demandGrowthAnnual": 0.9513840220408794,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 144558107331.79388,
+              "demandGrowthAnnual": 0.25233496772128206,
+              "unitPriceUSD": 3.51
+            },
+            "food_beverage": {
+              "demandLevelUSD": 273034489961.7954,
+              "demandGrowthAnnual": -0.05439225751121768,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 318960524766.7626,
+              "demandGrowthAnnual": 0.6212659922698727,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 245429475654.316,
+              "demandGrowthAnnual": 0.027478949239990946,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 52306746587.79392,
+              "demandGrowthAnnual": 0.3892248163619101
+            },
+            "defense_systems": {
+              "demandLevelUSD": 414483280491.29663,
+              "demandGrowthAnnual": 0.6110874153717685
+            }
+          },
+          "durableGoodsStockUnits": 19589047.99530141
+        },
+        "UK": {
+          "gdpGrowth": -0.06408696812007209,
+          "consumptionComponentUSD": 434978571104.9811,
+          "investmentComponentUSD": 305302091505.6768,
+          "governmentSpendingUSD": 13322703806.998528,
+          "fiscalDeficitPctGdp": 0.12473790119084299,
+          "governmentEmployment": 3073572,
+          "totalPrivateEmployment": 3239048,
+          "totalOccupationEmployed": 6365472.999999999,
+          "estimatedHouseholdIncomeUSD": 484095103883,
+          "activeContractsCount": 0,
+          "activeContractsBySubUnit": {},
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 4781923812.229665,
+              "demandGrowthAnnual": -0.07609667034001699,
+              "unitPriceUSD": 80000
+            },
+            "refined_products": {
+              "demandLevelUSD": 22653368138.92181,
+              "demandGrowthAnnual": -0.08668275599898623,
+              "unitPriceUSD": 3.18
+            },
+            "food_beverage": {
+              "demandLevelUSD": 38167931558.026886,
+              "demandGrowthAnnual": -0.09137568028082477,
+              "unitPriceUSD": 10
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 56149347849.04379,
+              "demandGrowthAnnual": -0.08418985502676701,
+              "unitPriceUSD": 120
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 35165251761.31841,
+              "demandGrowthAnnual": -0.09055446120855537,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 8598762586.259792,
+              "demandGrowthAnnual": -0.08319157298919722
+            },
+            "defense_systems": {
+              "demandLevelUSD": 82445752815.54558,
+              "demandGrowthAnnual": -0.08033717885146086
+            }
+          },
+          "durableGoodsStockUnits": 2806728.0944264606
+        },
+        "JPN": {
+          "gdpGrowth": -0.0758678899805203,
+          "consumptionComponentUSD": 636160169997.8826,
+          "investmentComponentUSD": 173843774593.28793,
+          "governmentSpendingUSD": 13647493877.241259,
+          "fiscalDeficitPctGdp": 0.14224943637989043,
+          "governmentEmployment": 3178836,
+          "totalPrivateEmployment": 6024468,
+          "totalOccupationEmployed": 9381975,
+          "estimatedHouseholdIncomeUSD": 708545141671,
+          "activeContractsCount": 43,
+          "activeContractsBySubUnit": {
+            "refined_products": 42,
+            "passenger_vehicles": 1
+          },
+          "categoryDemandSample": {
+            "industrial_automation": {
+              "demandLevelUSD": 4962511120.132088,
+              "demandGrowthAnnual": -0.09846652208806095,
+              "unitPriceUSD": 76804.37
+            },
+            "refined_products": {
+              "demandLevelUSD": 29209870936.542057,
+              "demandGrowthAnnual": -0.10082743549063444,
+              "unitPriceUSD": 3.19
+            },
+            "food_beverage": {
+              "demandLevelUSD": 55122950896.96776,
+              "demandGrowthAnnual": -0.10121852999153313,
+              "unitPriceUSD": 8.43
+            },
+            "pharmaceuticals": {
+              "demandLevelUSD": 64510967612.62603,
+              "demandGrowthAnnual": -0.10208562735992022,
+              "unitPriceUSD": 105.51
+            },
+            "passenger_vehicles": {
+              "demandLevelUSD": 49534407484.371346,
+              "demandGrowthAnnual": -0.10142264233950282,
+              "unitPriceUSD": 35000
+            },
+            "semiconductors": {
+              "demandLevelUSD": 10563778705.0815,
+              "demandGrowthAnnual": -0.09972169535421038
+            },
+            "defense_systems": {
+              "demandLevelUSD": 85101646955.71191,
+              "demandGrowthAnnual": -0.10030158367840825
+            }
+          },
+          "durableGoodsStockUnits": 3953607.7850602856
+        }
+      },
+      "commodities": [
+        {
+          "id": "WTI",
+          "spotPrice": 22.6,
+          "weeklySupplyUnits": 21680866.64053885,
+          "weeklyDemandUnits": 21046038.61622934
+        },
+        {
+          "id": "BRENT",
+          "spotPrice": 26.86,
+          "weeklySupplyUnits": 11385013.019621056,
+          "weeklyDemandUnits": 10652019.071295317
+        },
+        {
+          "id": "NATGAS",
+          "spotPrice": 0.96,
+          "weeklySupplyUnits": 179110745.95179245,
+          "weeklyDemandUnits": 175832749.0161201
+        },
+        {
+          "id": "GOLD",
+          "spotPrice": 4339885096.75,
+          "weeklySupplyUnits": 0.000039207430003183125,
+          "weeklyDemandUnits": 0.03688142700471147
+        },
+        {
+          "id": "SILVER",
+          "spotPrice": 644225.64,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 147.9182918798541
+        },
+        {
+          "id": "COPPER",
+          "spotPrice": 49207.05,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 18031.523698313656
+        },
+        {
+          "id": "WHEAT",
+          "spotPrice": 47454.92,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 22438.68120860977
+        },
+        {
+          "id": "CORN",
+          "spotPrice": 87305,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 9415.929803667395
+        },
+        {
+          "id": "SOYBEANS",
+          "spotPrice": 131812.03,
+          "weeklySupplyUnits": 0,
+          "weeklyDemandUnits": 5110.421600321037
+        }
+      ],
+      "companyHealth": {
+        "totalCompanies": 332,
+        "badRevenue": 0,
+        "badLeverage": 0,
+        "badOas": 0,
+        "badCapex": 0,
+        "extremeTobinsQ": 0,
+        "worstTobinsQ": {
+          "q": 5.053576744657426,
+          "ticker": "STHO"
+        },
+        "rawCloneNamesFound": 0
+      },
+      "institutionalHoldingsSample": [
+        {
+          "name": "Prime Mutual",
+          "totalAssetsUSD": 5454916200763.902,
+          "holdingsCount": 35
+        },
+        {
+          "name": "Stellar Equities",
+          "totalAssetsUSD": 4242712600594.146,
+          "holdingsCount": 35
+        },
+        {
+          "name": "US National Pension Fund",
+          "totalAssetsUSD": 2424407200339.512,
+          "holdingsCount": 35
+        }
+      ],
+      "pmi": {
+        "headline": 37.9,
+        "demandComponent": 36,
+        "capexComponent": 50.4,
+        "employmentComponent": 27.2
+      }
+    }
+  ],
+  "crashed": false,
+  "crashWeek": null,
+  "crashMessage": null
+}

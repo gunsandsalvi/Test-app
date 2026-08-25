@@ -196,6 +196,7 @@ export interface InstitutionalEntity {
   assetAllocationTarget: AssetAllocationTarget;
   isDefaulted: boolean;
   historicalPrices: number[];
+  revenueHistory?: number[];
 }
 
 
@@ -235,6 +236,7 @@ export interface HouseholdState {
   standardSpendShare: number;
   luxurySpendShare: number;
   netWorthUSD: number;
+  durableGoodsStockUnits?: number;
   depositsUSD: number;
   equityHoldingsUSD: number;
   mortgageDebtUSD: number;
@@ -618,6 +620,7 @@ export interface Company {
   // Market & Pricing
   stockPrice: number;
   historicalPrices: number[];
+  revenueHistory?: number[];
   forwardPE: number;
   marketCap: number;
   dividendYield: number;
@@ -798,6 +801,7 @@ export interface Commodity {
   unit: string;
   spotPrice: number;
   historicalPrices: number[];
+  revenueHistory?: number[];
   convenienceYield: number; // q
   futures1M: number;
   futures3M: number;
