@@ -252,6 +252,18 @@ export function advanceWeeklyStep(state: GameState): GameState {
     );
     updatedRegions[regionId] = updatedRegion;
 
+    if (updatedRegion.institutionalSector) {
+      const macroSector = updatedRegion.institutionalSector;
+      const investmentIncomeUSD =
+        ((macroSector.equityHoldingsUSD || 0) +
+         (macroSector.corpBondHoldingsUSD || 0) +
+         (macroSector.sovBondHoldingsUSD || 0)) *
+        ((macroSector.investmentIncomeMarginPct || 0.03) / 52);
+
+      macroSector.cashUSD = (macroSector.cashUSD || 0) + investmentIncomeUSD;
+      macroSector.sectorEquityUSD = (macroSector.sectorEquityUSD || 0) + investmentIncomeUSD;
+    }
+
     (['equity', 'corpBond', 'sovBond'] as const).forEach(assetClass => {
       const fieldName = `${assetClass}Ownership` as 'equityOwnership' | 'corpBondOwnership' | 'sovBondOwnership';
       const target = computeTargetOwnershipShares(assetClass, regionId, updatedRegion, state.regions);
@@ -1372,6 +1384,17 @@ export function advanceWeeklyStep(state: GameState): GameState {
       
       const bankMarketCap = bankBookValue * pbMultiple;
       newStockPrice = isDefaulted ? 0.0 : Number((bankMarketCap / comp.sharesOutstanding).toFixed(2));
+    } else if (comp.isInstitutionalEntity) {
+      const instBookValue = reg.institutionalSector.sectorEquityUSD * (comp.institutionalMarketShare ?? 0.33);
+      const cycle = reg.cycleRegime;
+      let pbMultiple = 1.0;
+      if (cycle === 'Boom') pbMultiple = 1.15;
+      else if (cycle === 'Expansion') pbMultiple = 1.05;
+      else if (cycle === 'Slowdown') pbMultiple = 0.85;
+      else if (cycle === 'Recession') pbMultiple = 0.65;
+      
+      const instMarketCap = instBookValue * pbMultiple;
+      newStockPrice = isDefaulted ? 0.0 : Number((instMarketCap / comp.sharesOutstanding).toFixed(2));
     }
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
 
@@ -2503,6 +2526,40 @@ export function advanceWeeklyStep(state: GameState): GameState {
   // News feed strictly displays headlines generated during the current active weekly step
   const updatedNewsFeed = [...newsItems, ...refinanceNews, ...mergerNews];
 
+  const updatedInstitutionalEntities = (state.institutionalEntities || []).map(ent => {
+    const comp = updatedCompanies.find(c => c.id === ent.id);
+    if (!comp) return ent;
+
+    const reg = updatedRegions[comp.region];
+    const share = comp.institutionalMarketShare ?? 0.33;
+    const macroSector = reg.institutionalSector;
+
+    const totalMacroAssetsUSD =
+      (macroSector.equityHoldingsUSD || 0) +
+      (macroSector.corpBondHoldingsUSD || 0) +
+      (macroSector.sovBondHoldingsUSD || 0) +
+      (macroSector.cashUSD || 0);
+
+    const totalAssetsUSD = totalMacroAssetsUSD * share;
+    const equityCapitalUSD = (macroSector.sectorEquityUSD || 0) * share;
+
+    const itemizedHoldings = (macroSector.itemizedHoldings || []).map(h => ({
+      ...h,
+      quantityOrNotionalUSD: h.quantityOrNotionalUSD * share
+    }));
+
+    return {
+      ...ent,
+      totalAssetsUSD,
+      equityCapitalUSD,
+      stockPrice: comp.stockPrice,
+      sharesOutstanding: comp.sharesOutstanding,
+      isDefaulted: comp.isDefaulted,
+      itemizedHoldings,
+      historicalPrices: [...comp.historicalPrices],
+    };
+  });
+
   return {
     ...state,
     currentWeek: nextWeek,
@@ -2510,6 +2567,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     regions: updatedRegions,
     fxPairs: updatedFxPairs,
     companies: updatedCompanies,
+    institutionalEntities: updatedInstitutionalEntities,
     commodities: updatedCommodities,
     compositeIndices: updatedCompositeIndices,
     recentIPOs,

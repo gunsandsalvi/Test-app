@@ -173,6 +173,32 @@ export interface InstitutionalSector {
   itemizedHoldings: ItemizedHolding[];
 }
 
+export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND';
+
+export interface AssetAllocationTarget {
+  equityPct: number;
+  corpBondPct: number;
+  govBondPct: number;
+  cashPct: number;
+}
+
+export interface InstitutionalEntity {
+  id: string;
+  name: string;
+  ticker: string;
+  region: RegionId;
+  entityType: InstitutionalEntityType;
+  totalAssetsUSD: number;
+  equityCapitalUSD: number;
+  sharesOutstanding: number;
+  stockPrice: number;
+  itemizedHoldings: ItemizedHolding[];
+  assetAllocationTarget: AssetAllocationTarget;
+  isDefaulted: boolean;
+  historicalPrices: number[];
+}
+
+
 export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
 
 export interface WeatherAnomaly {
@@ -533,6 +559,8 @@ export interface Company {
   
   // 3-Statement Fundamentals (Vectorized state)
   isBankEntity?: boolean;
+  isInstitutionalEntity?: boolean;
+  institutionalEntityType?: InstitutionalEntityType;
   baselineAnnualRevenue: number;
   annualRevenue: number;
   productLines?: ProductLine[];
@@ -866,6 +894,7 @@ export interface GameState {
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];
+  institutionalEntities: InstitutionalEntity[];
   commodities: Commodity[];
   compositeIndices: CompositeBenchmarkIndices;
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];

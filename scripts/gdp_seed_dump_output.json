@@ -1,0 +1,42 @@
+{
+  "week0": {
+    "USA": {
+      "lastWeekNominalGdpUSD": 19500000000000,
+      "estimatedNominalGdpUSD": 19500000000000
+    },
+    "EUR": {
+      "lastWeekNominalGdpUSD": 14500000000000,
+      "estimatedNominalGdpUSD": 14500000000000
+    },
+    "UK": {
+      "lastWeekNominalGdpUSD": 3200000000000,
+      "estimatedNominalGdpUSD": 3200000000000
+    },
+    "JPN": {
+      "lastWeekNominalGdpUSD": 5500000000000,
+      "estimatedNominalGdpUSD": 5500000000000
+    }
+  },
+  "week1": {
+    "USA": {
+      "gdpGrowth": -0.9999999999928391,
+      "lastWeekNominalGdpUSD": 11905737443395.281,
+      "estimatedNominalGdpUSD": 11905737443395.281
+    },
+    "EUR": {
+      "gdpGrowth": -0.9999960121406564,
+      "lastWeekNominalGdpUSD": 11417334242692.666,
+      "estimatedNominalGdpUSD": 11417334242692.666
+    },
+    "UK": {
+      "gdpGrowth": -0.9999805346348676,
+      "lastWeekNominalGdpUSD": 2597993687317.242,
+      "estimatedNominalGdpUSD": 2597993687317.242
+    },
+    "JPN": {
+      "gdpGrowth": -0.999999981943789,
+      "lastWeekNominalGdpUSD": 3903530227879.1553,
+      "estimatedNominalGdpUSD": 3903530227879.1553
+    }
+  }
+}

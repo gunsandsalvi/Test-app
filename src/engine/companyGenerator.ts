@@ -524,9 +524,30 @@ const SUBUNIT_TO_CATEGORY: Record<string, string> = {
     { ticker: 'DANB', name: 'Danube Community Bank', sector: 'Banks', revBase: 14000, ebitdaMargin: 0.28, debtBase: 3500, cashBase: 5000, shares: 520, initialRating: 'BBB', beta: 1.2, bankMarketShare: 0.15 },
  */
 export function generateInitialCompanies(): Company[] {
-  const companies: Company[] = [];
+  const pensionFundTemplates: Record<RegionId, CompanyTemplate> = {
+    USA: { ticker: 'UPEN', name: 'US National Pension Fund', sector: 'Financials', revBase: 75000, ebitdaMargin: 0.32, debtBase: 42000, cashBase: 30000, shares: 1500, initialRating: 'AA', beta: 0.85, institutionalRole: 'PENSION_FUND' as any, institutionalMarketShare: 0.20 },
+    UK: { ticker: 'KPEN', name: 'UK National Pension Fund', sector: 'Financials', revBase: 50000, ebitdaMargin: 0.32, debtBase: 28000, cashBase: 20000, shares: 1000, initialRating: 'AA', beta: 0.85, institutionalRole: 'PENSION_FUND' as any, institutionalMarketShare: 0.20 },
+    JPN: { ticker: 'JPEN', name: 'Japan Pension Investment', sector: 'Financials', revBase: 60000, ebitdaMargin: 0.32, debtBase: 35000, cashBase: 25000, shares: 1200, initialRating: 'AA', beta: 0.85, institutionalRole: 'PENSION_FUND' as any, institutionalMarketShare: 0.20 },
+    EUR: { ticker: 'EPEN', name: 'Eurozone Pension Authority', sector: 'Financials', revBase: 70000, ebitdaMargin: 0.32, debtBase: 40000, cashBase: 28000, shares: 1400, initialRating: 'AA', beta: 0.85, institutionalRole: 'PENSION_FUND' as any, institutionalMarketShare: 0.20 }
+  };
 
   const regions: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
+  regions.forEach(r => {
+    if (REGION_COMPANIES[r]) {
+      REGION_COMPANIES[r].forEach(t => {
+        if (t.institutionalRole === 'INSURER') {
+          t.institutionalMarketShare = 0.45;
+        } else if (t.institutionalRole === 'ASSET_MANAGER') {
+          t.institutionalMarketShare = 0.35;
+        }
+      });
+      if (!REGION_COMPANIES[r].some(t => t.ticker === pensionFundTemplates[r].ticker)) {
+        REGION_COMPANIES[r].push(pensionFundTemplates[r]);
+      }
+    }
+  });
+
+  const companies: Company[] = [];
 
   regions.forEach((region) => {
     const regionPrefix = region === 'USA' ? 'U' : region === 'UK' ? 'K' : region === 'EUR' ? 'E' : 'J';
@@ -587,6 +608,9 @@ export function generateInitialCompanies(): Company[] {
         cashBase,
         shares,
         beta,
+        bankMarketShare: undefined,
+        institutionalRole: undefined,
+        institutionalMarketShare: undefined,
       });
       cloneIndex++;
     }
@@ -771,6 +795,8 @@ export function generateInitialCompanies(): Company[] {
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         bankMarketShare: tmpl.bankMarketShare,
         isBankEntity: tmpl.sector === 'Banks',
+        isInstitutionalEntity: !!tmpl.institutionalRole,
+        institutionalEntityType: tmpl.institutionalRole as any,
         institutionalRole: tmpl.institutionalRole ?? null,
         institutionalMarketShare: tmpl.institutionalMarketShare,
         beta: tmpl.beta,

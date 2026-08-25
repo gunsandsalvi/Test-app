@@ -1,15 +1,46 @@
 
-import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE } from '../../types';
+import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand } from './core';
 
+function attributeItemizedHoldingsLocal(
+  sectorShareUSD: number,
+  candidates: { id: string; type: string; region: RegionId; outstandingUSD: number }[]
+): ItemizedHolding[] {
+  const sorted = [...candidates].sort((a, b) => b.outstandingUSD - a.outstandingUSD);
+  let remaining = sectorShareUSD;
+  const result: ItemizedHolding[] = [];
+  for (const c of sorted) {
+    if (remaining <= 0) break;
+    const take = Math.min(c.outstandingUSD * 0.4, remaining); // no single sector holds more than 40% of any one issue
+    if (take > 0) {
+      result.push({
+        instrumentId: c.id,
+        instrumentType: c.type as any,
+        issuerRegion: c.region,
+        quantityOrNotionalUSD: take,
+      });
+      remaining -= take;
+    }
+  }
+  return result;
+}
+
 export function createInitialGameState(): GameState {
   const regions = getInitialRegions();
   const fxPairs = getInitialFxPairs();
   const companies = generateInitialCompanies();
+
+  const institutionalEntities: InstitutionalEntity[] = [];
+
+  const allocationTargets: Record<InstitutionalEntityType, AssetAllocationTarget> = {
+    INSURER: { govBondPct: 0.50, corpBondPct: 0.35, equityPct: 0.10, cashPct: 0.05 },
+    ASSET_MANAGER: { govBondPct: 0.10, corpBondPct: 0.20, equityPct: 0.65, cashPct: 0.05 },
+    PENSION_FUND: { govBondPct: 0.25, corpBondPct: 0.30, equityPct: 0.40, cashPct: 0.05 },
+  };
 
   Object.keys(regions).forEach(r => {
     const regionId = r as RegionId;
@@ -51,6 +82,84 @@ export function createInitialGameState(): GameState {
     reg.institutionalSector.equityHoldingsUSD = Number((reg.equityOwnership.institutionalShare * totalMarketCap).toFixed(0));
     reg.institutionalSector.corpBondHoldingsUSD = Number((reg.corpBondOwnership.institutionalShare * totalCorpDebt).toFixed(0));
     reg.institutionalSector.sovBondHoldingsUSD = Number((reg.sovBondOwnership.institutionalShare * totalSovDebt).toFixed(0));
+
+    // Compile holding candidates for individual institutional entities and macro sectors
+    const equityCandidates = regionCompanies.map(c => ({
+      id: c.id,
+      type: 'EQUITY',
+      region: regionId,
+      outstandingUSD: c.marketCap
+    }));
+
+    const corpCandidates: { id: string; type: string; region: RegionId; outstandingUSD: number }[] = [];
+    regionCompanies.forEach(c => {
+      (c.debtTranches || []).forEach(tranche => {
+        corpCandidates.push({
+          id: tranche.id,
+          type: 'CORP_BOND',
+          region: regionId,
+          outstandingUSD: tranche.principalUSD
+        });
+      });
+    });
+
+    const govDebtTranches = reg.govDebtTranches || [];
+    const sovCandidates = govDebtTranches.map(gt => ({
+      id: gt.id,
+      type: 'GOV_BOND',
+      region: regionId,
+      outstandingUSD: gt.principalUSD
+    }));
+
+    reg.institutionalSector.itemizedHoldings = [
+      ...attributeItemizedHoldingsLocal(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
+      ...attributeItemizedHoldingsLocal(reg.institutionalSector.sovBondHoldingsUSD, sovCandidates),
+      ...attributeItemizedHoldingsLocal(reg.institutionalSector.equityHoldingsUSD, equityCandidates),
+    ];
+
+    // Build the individual InstitutionalEntity objects mapping to regional Companies
+    const regionalInstCompanies = regionCompanies.filter(c => c.isInstitutionalEntity);
+    regionalInstCompanies.forEach(comp => {
+      const role = comp.institutionalEntityType;
+      if (!role) return;
+
+      const share = comp.institutionalMarketShare ?? 0.33;
+      const macroSector = reg.institutionalSector;
+      const totalMacroAssetsUSD =
+        (macroSector.equityHoldingsUSD || 0) +
+        (macroSector.corpBondHoldingsUSD || 0) +
+        (macroSector.sovBondHoldingsUSD || 0) +
+        (macroSector.cashUSD || 0);
+
+      const totalAssetsUSD = totalMacroAssetsUSD * share;
+      const equityCapitalUSD = totalAssetsUSD * 0.12; // 12% capital ratio
+
+      const entCorpShareUSD = (macroSector.corpBondHoldingsUSD || 0) * share;
+      const entSovShareUSD = (macroSector.sovBondHoldingsUSD || 0) * share;
+      const entEquityShareUSD = (macroSector.equityHoldingsUSD || 0) * share;
+
+      const itemizedHoldings = [
+        ...attributeItemizedHoldingsLocal(entCorpShareUSD, corpCandidates),
+        ...attributeItemizedHoldingsLocal(entSovShareUSD, sovCandidates),
+        ...attributeItemizedHoldingsLocal(entEquityShareUSD, equityCandidates),
+      ];
+
+      institutionalEntities.push({
+        id: comp.id,
+        name: comp.name,
+        ticker: comp.ticker,
+        region: regionId,
+        entityType: role,
+        totalAssetsUSD,
+        equityCapitalUSD,
+        sharesOutstanding: comp.sharesOutstanding,
+        stockPrice: comp.stockPrice,
+        itemizedHoldings,
+        assetAllocationTarget: allocationTargets[role],
+        isDefaulted: comp.isDefaulted,
+        historicalPrices: [...comp.historicalPrices],
+      });
+    });
 
     // Calibrate initial occupationLaborForceShare from actual week-1 demand across companies & private segments
     // with realistic occupational tightness differentials
@@ -140,6 +249,7 @@ export function createInitialGameState(): GameState {
     regions,
     fxPairs,
     companies,
+    institutionalEntities,
     commodities,
     compositeIndices,
     recentIPOs,

@@ -1,0 +1,167 @@
+{
+  "weeks": [
+    {
+      "week": 1,
+      "investmentComponentUSD": 901288091075.034,
+      "totalTrackedInvestmentUSD": 68349928126.99997,
+      "badFirmCount": 0,
+      "badFirms": []
+    },
+    {
+      "week": 2,
+      "investmentComponentUSD": 847397779176.4629,
+      "totalTrackedInvestmentUSD": 66349737750.49995,
+      "badFirmCount": 0,
+      "badFirms": []
+    },
+    {
+      "week": 3,
+      "investmentComponentUSD": 6.054471062126971e+42,
+      "totalTrackedInvestmentUSD": 3.8412965131039284e+41,
+      "badFirmCount": 93,
+      "badFirms": [
+        {
+          "ticker": "GHRH",
+          "maintenanceCapex": 2.256989496983165e+40,
+          "growthCapex": 1.0614371316699136e+40,
+          "annualRevenue": 1.1525834048774748e+43,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "GWVW",
+          "maintenanceCapex": 1.8055351504356068e+40,
+          "growthCapex": 7.667307895357874e+39,
+          "annualRevenue": 9.220504390543349e+42,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "KHGS",
+          "maintenanceCapex": 1.444485424688845e+40,
+          "growthCapex": 5.568695243996726e+39,
+          "annualRevenue": 7.376555877458125e+42,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "QFLK",
+          "maintenanceCapex": 1.1555654782490334e+40,
+          "growthCapex": 3.999446154845414e+39,
+          "annualRevenue": 5.901186819769599e+42,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "XSFL",
+          "maintenanceCapex": 9.244723838690497e+39,
+          "growthCapex": 3.936004527864887e+39,
+          "annualRevenue": 4.721001775776076e+42,
+          "debtTranches": 2,
+          "activeContracts": "check-region-level"
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "investmentComponentUSD": 1.3298836524988305e+62,
+      "totalTrackedInvestmentUSD": 8.745582446072644e+60,
+      "badFirmCount": 103,
+      "badFirms": [
+        {
+          "ticker": "GHRH",
+          "maintenanceCapex": 5.360268519664596e+58,
+          "growthCapex": 5.465821295734291e+59,
+          "annualRevenue": 5.474687897051073e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "GWVW",
+          "maintenanceCapex": 4.2882062487590813e+58,
+          "growthCapex": 4.2144517246456545e+59,
+          "annualRevenue": 4.3798011392577075e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "KHGS",
+          "maintenanceCapex": 3.4305593758401106e+58,
+          "growthCapex": 2.9222383170380657e+59,
+          "annualRevenue": 3.5037685385123928e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "QFLK",
+          "maintenanceCapex": 2.744450737922878e+58,
+          "growthCapex": 2.250913115325948e+59,
+          "annualRevenue": 2.8030460976867596e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "XSFL",
+          "maintenanceCapex": 2.195559428194484e+58,
+          "growthCapex": 2.1006916995906846e+59,
+          "annualRevenue": 2.2424120266195616e+62,
+          "debtTranches": 2,
+          "activeContracts": "check-region-level"
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "investmentComponentUSD": 3.8481652974401916e+98,
+      "totalTrackedInvestmentUSD": 2.4809539947915704e+97,
+      "badFirmCount": 142,
+      "badFirms": [
+        {
+          "ticker": "GHRH",
+          "maintenanceCapex": 5.297350456934014e+58,
+          "growthCapex": 7.206057207784997e+59,
+          "annualRevenue": 4.1894658777684415e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "GWVW",
+          "maintenanceCapex": 4.2378728224734254e+58,
+          "growthCapex": 5.499444312694608e+59,
+          "annualRevenue": 3.351630454359082e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "KHGS",
+          "maintenanceCapex": 3.390291777052498e+58,
+          "growthCapex": 3.951582716165584e+59,
+          "annualRevenue": 2.6812301108314833e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "QFLK",
+          "maintenanceCapex": 2.712236996092341e+58,
+          "growthCapex": 2.9449491134955607e+59,
+          "annualRevenue": 2.1450156795615177e+62,
+          "debtTranches": 3,
+          "activeContracts": "check-region-level"
+        },
+        {
+          "ticker": "XSFL",
+          "maintenanceCapex": 2.1697881304354482e+58,
+          "growthCapex": 2.748333318992978e+59,
+          "annualRevenue": 1.71598703174726e+62,
+          "debtTranches": 2,
+          "activeContracts": "check-region-level"
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "status": "CRASHED",
+      "error": "importerDemand is NaN!"
+    }
+  ]
+}

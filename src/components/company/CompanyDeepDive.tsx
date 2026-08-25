@@ -178,6 +178,84 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     </div>
                   </div>
                 )}
+
+                {company.isInstitutionalEntity && (() => {
+                  const instEntity = state.institutionalEntities?.find(ent => ent.id === company.id);
+                  if (!instEntity) return null;
+                  return (
+                    <div className="p-3 bg-[var(--bg-elevated)] border border-[var(--border-hairline)] rounded-xl mb-3 space-y-1 text-[var(--text-primary)]">
+                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold border-b border-[var(--border-hairline)] pb-1 mb-2">
+                        Institutional Balance Sheet & Capital Metrics ({instEntity.entityType})
+                      </div>
+                      <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                        <span className="text-[var(--text-secondary)]">Total Assets / AUM</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(instEntity.totalAssetsUSD, { compact: true })}</span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                        <span className="text-[var(--text-secondary)]">Equity Capital / Reserves</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(instEntity.equityCapitalUSD, { compact: true })}</span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                        <span className="text-[var(--text-secondary)]">Cash Reserves</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.cashUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                        <span className="text-[var(--text-secondary)]">Sovereign Bond Holdings</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.sovBondHoldingsUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                        <span className="text-[var(--text-secondary)]">Corporate Bond Holdings</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.corpBondHoldingsUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                      </div>
+                      <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                        <span className="text-[var(--text-secondary)]">Equity Holdings</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.equityHoldingsUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                      </div>
+
+                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold pt-2 pb-1 border-b border-[var(--border-hairline)] mb-2">
+                        Asset Allocation vs Target
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-bold text-[var(--text-secondary)] py-1 border-b border-[var(--border-hairline)]">
+                        <span className="text-left">Asset Class</span>
+                        <span>Actual Pct</span>
+                        <span>Target Pct</span>
+                      </div>
+                      {(() => {
+                        const totalInvested = (reg.institutionalSector.cashUSD || 0) + (reg.institutionalSector.sovBondHoldingsUSD || 0) + (reg.institutionalSector.corpBondHoldingsUSD || 0) + (reg.institutionalSector.equityHoldingsUSD || 0);
+                        const cashPct = totalInvested > 0 ? (reg.institutionalSector.cashUSD || 0) / totalInvested : 0;
+                        const sovPct = totalInvested > 0 ? (reg.institutionalSector.sovBondHoldingsUSD || 0) / totalInvested : 0;
+                        const corpPct = totalInvested > 0 ? (reg.institutionalSector.corpBondHoldingsUSD || 0) / totalInvested : 0;
+                        const eqPct = totalInvested > 0 ? (reg.institutionalSector.equityHoldingsUSD || 0) / totalInvested : 0;
+                        
+                        const t = instEntity.assetAllocationTarget;
+                        return (
+                          <div className="space-y-1 text-xs">
+                            <div className="grid grid-cols-3 text-center py-0.5">
+                              <span className="text-left text-[var(--text-secondary)]">Cash</span>
+                              <span className="font-[var(--font-numeric)]">{(cashPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{(t.cashPct * 100).toFixed(1)}%</span>
+                            </div>
+                            <div className="grid grid-cols-3 text-center py-0.5">
+                              <span className="text-left text-[var(--text-secondary)]">Sovereign Bonds</span>
+                              <span className="font-[var(--font-numeric)]">{(sovPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{(t.govBondPct * 100).toFixed(1)}%</span>
+                            </div>
+                            <div className="grid grid-cols-3 text-center py-0.5">
+                              <span className="text-left text-[var(--text-secondary)]">Corporate Bonds</span>
+                              <span className="font-[var(--font-numeric)]">{(corpPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{(t.corpBondPct * 100).toFixed(1)}%</span>
+                            </div>
+                            <div className="grid grid-cols-3 text-center py-0.5">
+                              <span className="text-left text-[var(--text-secondary)]">Equities</span>
+                              <span className="font-[var(--font-numeric)]">{(eqPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{(t.equityPct * 100).toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })()}
                 <TapToChart label="Total Assets" value={formatCurrency(latestFund.balanceSheet.totalAssets, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.balanceSheet?.totalAssets ?? 0)} />
                 <TapToChart label="Total Debt" value={formatCurrency(latestFund.balanceSheet.shortTermDebt + latestFund.balanceSheet.longTermDebt, { compact: true })} history={(company.historicalFundamentals || []).map(f => (f.balanceSheet?.shortTermDebt ?? 0) + (f.balanceSheet?.longTermDebt ?? 0))} />
                 <TapToChart label="Cash & Equivalents" value={formatCurrency(latestFund.balanceSheet.cash, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.balanceSheet?.cash ?? 0)} />
