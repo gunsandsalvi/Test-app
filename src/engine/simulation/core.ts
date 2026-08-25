@@ -348,7 +348,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const prevLevel = hasPriorDemand ? existingEntry.demandLevelUSD : target;
       const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
       const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 ? ((newLevel / prevLevel) - 1) * 52 : 0;
-      const growthAnnual = Number.isFinite(rawGrowthAnnual) ? Math.max(-0.25, Math.min(0.35, rawGrowthAnnual)) : 0;
+      const growthAnnual = Number.isFinite(rawGrowthAnnual) ? rawGrowthAnnual : 0;
       const prevHistory = existingEntry?.demandHistory ?? [];
       const crowdingIntensity = Math.max(0, Math.min(1, (categorySupplyGrowth[cat] ?? 0) * 8 - (target ? growthAnnual : 0)));
       (reg.categoryDemand as any)[cat] = {
@@ -1698,7 +1698,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? (newDerivedNominalGdpUSD / gdpLevel52WeeksAgo - 1) - reg.inflation
       : 0;
 
-    const finalGdpGrowth = isFinite(gdpGrowthBottomUp) ? Math.max(-0.25, Math.min(0.25, gdpGrowthBottomUp)) : (reg.gdpGrowth || 0.02);
+    const finalGdpGrowth = isFinite(gdpGrowthBottomUp) ? gdpGrowthBottomUp : (reg.gdpGrowth || 0.02);
 
     // Government Debt Tranches: roll-off and new issuance
     const maturedTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);

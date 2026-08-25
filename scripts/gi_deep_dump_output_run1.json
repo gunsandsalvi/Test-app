@@ -1,0 +1,2255 @@
+{
+  "weeks": [
+    {
+      "week": 1,
+      "UK": {
+        "governmentSpendingUSD": 22614609514.7929,
+        "governmentRevenueUSD": 19707720710.059174,
+        "fiscalDeficitPctGdp": 0.0472,
+        "estimatedNominalGdpUSD": 2704101856220.2407,
+        "investmentComponentUSD": 166739524658.28357,
+        "consumptionComponentUSD": 926414141896.8253,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 104692892707.10059,
+        "governmentRevenueUSD": 94870958210.05917,
+        "fiscalDeficitPctGdp": 0.0352,
+        "estimatedNominalGdpUSD": 11111090708875.834,
+        "investmentComponentUSD": 901418907264.9283,
+        "consumptionComponentUSD": 5147929657323.296,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 36382832074.70414,
+        "governmentRevenueUSD": 30689416235.207096,
+        "fiscalDeficitPctGdp": 0.0538,
+        "estimatedNominalGdpUSD": 3928944002079.246,
+        "investmentComponentUSD": 317191728524.4311,
+        "consumptionComponentUSD": 1601175332307.802,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 2,
+      "UK": {
+        "governmentSpendingUSD": 19794330111.00274,
+        "governmentRevenueUSD": 16640882817.152365,
+        "fiscalDeficitPctGdp": 0.06064,
+        "estimatedNominalGdpUSD": 2279235208788.1836,
+        "investmentComponentUSD": 157496688205.70126,
+        "consumptionComponentUSD": 925271035837.98,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 82004911429.11215,
+        "governmentRevenueUSD": 72650137802.64249,
+        "fiscalDeficitPctGdp": 0.04378,
+        "estimatedNominalGdpUSD": 10295984702914.357,
+        "investmentComponentUSD": 866511708647.822,
+        "consumptionComponentUSD": 5140831179318.673,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 26475394439.523056,
+        "governmentRevenueUSD": 21911713434.536777,
+        "fiscalDeficitPctGdp": 0.0604,
+        "estimatedNominalGdpUSD": 3525697929493.6943,
+        "investmentComponentUSD": 301587004407.07184,
+        "consumptionComponentUSD": 1596534675207.8362,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 3,
+      "UK": {
+        "governmentSpendingUSD": 16686759973.813606,
+        "governmentRevenueUSD": 14026170716.102848,
+        "fiscalDeficitPctGdp": 0.0607,
+        "estimatedNominalGdpUSD": 2273266253568.2314,
+        "investmentComponentUSD": 150865929725.67764,
+        "consumptionComponentUSD": 903198541217.8141,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 77092720691.86723,
+        "governmentRevenueUSD": 67319511596.55553,
+        "fiscalDeficitPctGdp": 0.04936,
+        "estimatedNominalGdpUSD": 9720682506773.97,
+        "investmentComponentUSD": 836531025188.4185,
+        "consumptionComponentUSD": 4977873775175.979,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 23904415840.674652,
+        "governmentRevenueUSD": 19662697395.60826,
+        "fiscalDeficitPctGdp": 0.06256,
+        "estimatedNominalGdpUSD": 3380156444095.519,
+        "investmentComponentUSD": 290033662629.989,
+        "consumptionComponentUSD": 1548081047246.5837,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 4,
+      "UK": {
+        "governmentSpendingUSD": 16771523457.898205,
+        "governmentRevenueUSD": 13989384596.307543,
+        "fiscalDeficitPctGdp": 0.06364,
+        "estimatedNominalGdpUSD": 2281972962481.393,
+        "investmentComponentUSD": 145560187718.4914,
+        "consumptionComponentUSD": 878183079508.3618,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 72696868650.6628,
+        "governmentRevenueUSD": 63559286518.271324,
+        "fiscalDeficitPctGdp": 0.04888000000000001,
+        "estimatedNominalGdpUSD": 9277137763490.04,
+        "investmentComponentUSD": 809148608912.5675,
+        "consumptionComponentUSD": 4880021495242.434,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 22991917837.074646,
+        "governmentRevenueUSD": 18851162490.109264,
+        "fiscalDeficitPctGdp": 0.0637,
+        "estimatedNominalGdpUSD": 3229583797881.9863,
+        "investmentComponentUSD": 280552212621.12866,
+        "consumptionComponentUSD": 1515304378141.3599,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 5,
+      "UK": {
+        "governmentSpendingUSD": 16830460646.417149,
+        "governmentRevenueUSD": 14042937543.944221,
+        "fiscalDeficitPctGdp": 0.06352,
+        "estimatedNominalGdpUSD": 2146469126662.4722,
+        "investmentComponentUSD": 141129691936.3549,
+        "consumptionComponentUSD": 865592756458.789,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 69390356429.37413,
+        "governmentRevenueUSD": 60659025006.39483,
+        "fiscalDeficitPctGdp": 0.04894,
+        "estimatedNominalGdpUSD": 8990018209592.283,
+        "investmentComponentUSD": 788566971750.9386,
+        "consumptionComponentUSD": 4782356020276.409,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 21986224181.857925,
+        "governmentRevenueUSD": 18011313595.30734,
+        "fiscalDeficitPctGdp": 0.064,
+        "estimatedNominalGdpUSD": 3095819150357.467,
+        "investmentComponentUSD": 272346844863.4818,
+        "consumptionComponentUSD": 1487034956172.7644,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 6,
+      "UK": {
+        "governmentSpendingUSD": 15833542518.392267,
+        "governmentRevenueUSD": 13209066181.462864,
+        "fiscalDeficitPctGdp": 0.06358,
+        "estimatedNominalGdpUSD": 2056592034625.1875,
+        "investmentComponentUSD": 137150242676.92357,
+        "consumptionComponentUSD": 852190530232.3386,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 67367132987.752686,
+        "governmentRevenueUSD": 58781566534.50678,
+        "fiscalDeficitPctGdp": 0.049659999999999996,
+        "estimatedNominalGdpUSD": 8838913657096.99,
+        "investmentComponentUSD": 765057870975.5948,
+        "consumptionComponentUSD": 4680865207586.252,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 21100754108.071377,
+        "governmentRevenueUSD": 17265444081.430786,
+        "fiscalDeficitPctGdp": 0.06442,
+        "estimatedNominalGdpUSD": 2995876601169.899,
+        "investmentComponentUSD": 265011684015.0301,
+        "consumptionComponentUSD": 1457519838147.713,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 7,
+      "UK": {
+        "governmentSpendingUSD": 15182366000.238409,
+        "governmentRevenueUSD": 12655926643.941572,
+        "fiscalDeficitPctGdp": 0.06387999999999999,
+        "estimatedNominalGdpUSD": 2128220654003.811,
+        "investmentComponentUSD": 132779552251.41705,
+        "consumptionComponentUSD": 833624920251.0605,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 66223733431.132866,
+        "governmentRevenueUSD": 57792785848.524574,
+        "fiscalDeficitPctGdp": 0.049600000000000005,
+        "estimatedNominalGdpUSD": 8679749963490.797,
+        "investmentComponentUSD": 742843789258.8806,
+        "consumptionComponentUSD": 4590189531866.541,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 20453732030.196175,
+        "governmentRevenueUSD": 16707741222.344912,
+        "fiscalDeficitPctGdp": 0.06502,
+        "estimatedNominalGdpUSD": 2992620287422.148,
+        "investmentComponentUSD": 258295689824.46106,
+        "consumptionComponentUSD": 1428065128931.7202,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 8,
+      "UK": {
+        "governmentSpendingUSD": 15711179704.980442,
+        "governmentRevenueUSD": 13096742486.1773,
+        "fiscalDeficitPctGdp": 0.06387999999999999,
+        "estimatedNominalGdpUSD": 2027086013816.4226,
+        "investmentComponentUSD": 130023487750.88637,
+        "consumptionComponentUSD": 816862411412.8202,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 65032107780.585884,
+        "governmentRevenueUSD": 56752866132.95483,
+        "fiscalDeficitPctGdp": 0.049600000000000005,
+        "estimatedNominalGdpUSD": 8332849904631.113,
+        "investmentComponentUSD": 717335578904.4518,
+        "consumptionComponentUSD": 4508161295816.608,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 20428282908.973232,
+        "governmentRevenueUSD": 16689773618.442183,
+        "fiscalDeficitPctGdp": 0.06496,
+        "estimatedNominalGdpUSD": 2859462598631.925,
+        "investmentComponentUSD": 252162503800.20062,
+        "consumptionComponentUSD": 1398953938248.0503,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 9,
+      "UK": {
+        "governmentSpendingUSD": 14945947335.683641,
+        "governmentRevenueUSD": 12474447437.190311,
+        "fiscalDeficitPctGdp": 0.0634,
+        "estimatedNominalGdpUSD": 1855380121817.6475,
+        "investmentComponentUSD": 126856950689.20596,
+        "consumptionComponentUSD": 805253936722.9698,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 62500180184.49693,
+        "governmentRevenueUSD": 54484542491.997734,
+        "fiscalDeficitPctGdp": 0.05002,
+        "estimatedNominalGdpUSD": 8298312402639.122,
+        "investmentComponentUSD": 697706150135.2487,
+        "consumptionComponentUSD": 4425647541394.625,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 19535778789.257378,
+        "governmentRevenueUSD": 15947125623.162304,
+        "fiscalDeficitPctGdp": 0.06526,
+        "estimatedNominalGdpUSD": 2701401293147.8213,
+        "investmentComponentUSD": 247661611627.1622,
+        "consumptionComponentUSD": 1372711298849.5334,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 10,
+      "UK": {
+        "governmentSpendingUSD": 13667146834.014265,
+        "governmentRevenueUSD": 11417833612.376162,
+        "fiscalDeficitPctGdp": 0.06304,
+        "estimatedNominalGdpUSD": 1759791289698.5835,
+        "investmentComponentUSD": 123861671076.03963,
+        "consumptionComponentUSD": 788414806448.7245,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 62251187060.003044,
+        "governmentRevenueUSD": 54259135562.964096,
+        "fiscalDeficitPctGdp": 0.05008,
+        "estimatedNominalGdpUSD": 8129838003016.251,
+        "investmentComponentUSD": 679081175840.9707,
+        "consumptionComponentUSD": 4336153633316.263,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 18468340388.157745,
+        "governmentRevenueUSD": 15065594128.173687,
+        "fiscalDeficitPctGdp": 0.0655,
+        "estimatedNominalGdpUSD": 2703539457381.336,
+        "investmentComponentUSD": 242003723825.11856,
+        "consumptionComponentUSD": 1340487953385.021,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 11,
+      "UK": {
+        "governmentSpendingUSD": 12977032207.994156,
+        "governmentRevenueUSD": 10829422381.886324,
+        "fiscalDeficitPctGdp": 0.06346,
+        "estimatedNominalGdpUSD": 1756173013839.4763,
+        "investmentComponentUSD": 121042048273.98874,
+        "consumptionComponentUSD": 768569262871.0284,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 61080098288.81518,
+        "governmentRevenueUSD": 53156633096.64472,
+        "fiscalDeficitPctGdp": 0.05068,
+        "estimatedNominalGdpUSD": 8117777168583.892,
+        "investmentComponentUSD": 661338777213.2235,
+        "consumptionComponentUSD": 4256609362596.6313,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 18473315447.11919,
+        "governmentRevenueUSD": 15077286613.938322,
+        "fiscalDeficitPctGdp": 0.06532,
+        "estimatedNominalGdpUSD": 2701602081892.3813,
+        "investmentComponentUSD": 235417872584.31857,
+        "consumptionComponentUSD": 1310327748641.6646,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 12,
+      "UK": {
+        "governmentSpendingUSD": 12942518773.447937,
+        "governmentRevenueUSD": 10807384811.605186,
+        "fiscalDeficitPctGdp": 0.06322,
+        "estimatedNominalGdpUSD": 1763564911029.136,
+        "investmentComponentUSD": 118354296826.43983,
+        "consumptionComponentUSD": 751101138334.6486,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 62146506582.597565,
+        "governmentRevenueUSD": 53054561184.89734,
+        "fiscalDeficitPctGdp": 0.05824,
+        "estimatedNominalGdpUSD": 7854317576708.496,
+        "investmentComponentUSD": 644555461917.8866,
+        "consumptionComponentUSD": 4170804523802.9126,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 18444916968.87511,
+        "governmentRevenueUSD": 15066829815.14783,
+        "fiscalDeficitPctGdp": 0.06502,
+        "estimatedNominalGdpUSD": 2548355122819.034,
+        "investmentComponentUSD": 229597302480.10413,
+        "consumptionComponentUSD": 1283257710496.4858,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 13,
+      "UK": {
+        "governmentSpendingUSD": 13013174261.375843,
+        "governmentRevenueUSD": 10852790627.157337,
+        "fiscalDeficitPctGdp": 0.06369999999999999,
+        "estimatedNominalGdpUSD": 1714807825135.098,
+        "investmentComponentUSD": 115808527824.5647,
+        "consumptionComponentUSD": 736473810263.8822,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 60157214522.84497,
+        "governmentRevenueUSD": 51333088998.89237,
+        "fiscalDeficitPctGdp": 0.05842,
+        "estimatedNominalGdpUSD": 7810455181591.213,
+        "investmentComponentUSD": 628665493397.56,
+        "consumptionComponentUSD": 4094965678020.0806,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 17416147468.49088,
+        "governmentRevenueUSD": 14212062484.839764,
+        "fiscalDeficitPctGdp": 0.06538,
+        "estimatedNominalGdpUSD": 2538618539690.042,
+        "investmentComponentUSD": 224685184259.88016,
+        "consumptionComponentUSD": 1255975873262.181,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 14,
+      "UK": {
+        "governmentSpendingUSD": 12663171894.851017,
+        "governmentRevenueUSD": 10552643245.70918,
+        "fiscalDeficitPctGdp": 0.064,
+        "estimatedNominalGdpUSD": 1666931998757.7876,
+        "investmentComponentUSD": 113420078045.57082,
+        "consumptionComponentUSD": 722240170140.4366,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 59883661083.62694,
+        "governmentRevenueUSD": 51045830643.53411,
+        "fiscalDeficitPctGdp": 0.05884,
+        "estimatedNominalGdpUSD": 7650660077770.081,
+        "investmentComponentUSD": 613605589877.6703,
+        "consumptionComponentUSD": 4001205378202.3403,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 17358158935.67706,
+        "governmentRevenueUSD": 14157571412.268948,
+        "fiscalDeficitPctGdp": 0.06556,
+        "estimatedNominalGdpUSD": 2391523382290.709,
+        "investmentComponentUSD": 219939983246.6309,
+        "consumptionComponentUSD": 1224405951340.2363,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 15,
+      "UK": {
+        "governmentSpendingUSD": 12309628010.727352,
+        "governmentRevenueUSD": 10258023342.272793,
+        "fiscalDeficitPctGdp": 0.064,
+        "estimatedNominalGdpUSD": 1531372807122.1926,
+        "investmentComponentUSD": 111168320129.49844,
+        "consumptionComponentUSD": 705437323080.8575,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 58667095625.89551,
+        "governmentRevenueUSD": 50001285137.20524,
+        "fiscalDeficitPctGdp": 0.0589,
+        "estimatedNominalGdpUSD": 7474120187041.169,
+        "investmentComponentUSD": 599513882494.876,
+        "consumptionComponentUSD": 3913982019679.3457,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 16341337530.96617,
+        "governmentRevenueUSD": 13337239344.760185,
+        "fiscalDeficitPctGdp": 0.06532,
+        "estimatedNominalGdpUSD": 2360496858919.021,
+        "investmentComponentUSD": 215382766640.9549,
+        "consumptionComponentUSD": 1196243569570.479,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 16,
+      "UK": {
+        "governmentSpendingUSD": 11308577443.750053,
+        "governmentRevenueUSD": 9423814536.458378,
+        "fiscalDeficitPctGdp": 0.064,
+        "estimatedNominalGdpUSD": 1461763342405.891,
+        "investmentComponentUSD": 109034601910.21385,
+        "consumptionComponentUSD": 688485240217.249,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 57296207702.46986,
+        "governmentRevenueUSD": 48847593476.86923,
+        "fiscalDeficitPctGdp": 0.05878,
+        "estimatedNominalGdpUSD": 7281092671408.791,
+        "investmentComponentUSD": 586002745049.0892,
+        "consumptionComponentUSD": 3821578886005.852,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 16118624007.257086,
+        "governmentRevenueUSD": 13164360037.469175,
+        "fiscalDeficitPctGdp": 0.06508,
+        "estimatedNominalGdpUSD": 2251460033965.2837,
+        "investmentComponentUSD": 210992280662.74997,
+        "consumptionComponentUSD": 1164268117912.8313,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 17,
+      "UK": {
+        "governmentSpendingUSD": 10792956439.090092,
+        "governmentRevenueUSD": 8995535918.395658,
+        "fiscalDeficitPctGdp": 0.06394,
+        "estimatedNominalGdpUSD": 1439869182444.7622,
+        "investmentComponentUSD": 107021351875.90552,
+        "consumptionComponentUSD": 667911376156.7609,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 55816791056.13388,
+        "governmentRevenueUSD": 47586324261.66395,
+        "fiscalDeficitPctGdp": 0.05878,
+        "estimatedNominalGdpUSD": 7179628773420.484,
+        "investmentComponentUSD": 573042815463.888,
+        "consumptionComponentUSD": 3726507089930.9634,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 15381831343.20544,
+        "governmentRevenueUSD": 12556243566.766813,
+        "fiscalDeficitPctGdp": 0.06526,
+        "estimatedNominalGdpUSD": 2244059898281.5737,
+        "investmentComponentUSD": 206756498481.02383,
+        "consumptionComponentUSD": 1135038596416.3674,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 18,
+      "UK": {
+        "governmentSpendingUSD": 10639423363.456581,
+        "governmentRevenueUSD": 8860648231.069399,
+        "fiscalDeficitPctGdp": 0.06423999999999999,
+        "estimatedNominalGdpUSD": 1414963377608.734,
+        "investmentComponentUSD": 105094936702.60786,
+        "consumptionComponentUSD": 649597025100.7279,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 55063504707.053154,
+        "governmentRevenueUSD": 46922925891.25652,
+        "fiscalDeficitPctGdp": 0.05896,
+        "estimatedNominalGdpUSD": 6901991173824.256,
+        "investmentComponentUSD": 560698619988.1879,
+        "consumptionComponentUSD": 3630531702674.066,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 15333745440.523792,
+        "governmentRevenueUSD": 12514877231.092817,
+        "fiscalDeficitPctGdp": 0.06532,
+        "estimatedNominalGdpUSD": 2252012959793.3584,
+        "investmentComponentUSD": 202713094947.21222,
+        "consumptionComponentUSD": 1103540100900.7925,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 19,
+      "UK": {
+        "governmentSpendingUSD": 10447347767.92048,
+        "governmentRevenueUSD": 8707483684.2594,
+        "fiscalDeficitPctGdp": 0.06394,
+        "estimatedNominalGdpUSD": 1457113115111.2192,
+        "investmentComponentUSD": 103242843231.723,
+        "consumptionComponentUSD": 632757793492.0482,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 52933984995.110306,
+        "governmentRevenueUSD": 45108233997.613495,
+        "fiscalDeficitPctGdp": 0.05896,
+        "estimatedNominalGdpUSD": 6681939030432.392,
+        "investmentComponentUSD": 548756590604.1668,
+        "consumptionComponentUSD": 3534563208149.3853,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 15380352778.89957,
+        "governmentRevenueUSD": 12559278892.495565,
+        "fiscalDeficitPctGdp": 0.06514,
+        "estimatedNominalGdpUSD": 2123947364036.502,
+        "investmentComponentUSD": 198884681213.915,
+        "consumptionComponentUSD": 1073815280445.8549,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 20,
+      "UK": {
+        "governmentSpendingUSD": 10760219926.975157,
+        "governmentRevenueUSD": 8966849939.145964,
+        "fiscalDeficitPctGdp": 0.064,
+        "estimatedNominalGdpUSD": 1404289888652.4062,
+        "investmentComponentUSD": 101435077191.14671,
+        "consumptionComponentUSD": 615180055652.3234,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 51222995076.104996,
+        "governmentRevenueUSD": 43669906621.71508,
+        "fiscalDeficitPctGdp": 0.05878,
+        "estimatedNominalGdpUSD": 6527932206317.373,
+        "investmentComponentUSD": 537262545653.1437,
+        "consumptionComponentUSD": 3428802149770.4897,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 14503376557.88359,
+        "governmentRevenueUSD": 11845159405.728966,
+        "fiscalDeficitPctGdp": 0.06508,
+        "estimatedNominalGdpUSD": 2134756502191.1592,
+        "investmentComponentUSD": 195175582562.44244,
+        "consumptionComponentUSD": 1043998576722.0889,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 21,
+      "UK": {
+        "governmentSpendingUSD": 10370060945.889185,
+        "governmentRevenueUSD": 8641717454.907654,
+        "fiscalDeficitPctGdp": 0.064,
+        "estimatedNominalGdpUSD": 1341981139071.189,
+        "investmentComponentUSD": 99601509964.52246,
+        "consumptionComponentUSD": 600299301991.0867,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 50005119908.09216,
+        "governmentRevenueUSD": 42663721037.24329,
+        "fiscalDeficitPctGdp": 0.058480000000000004,
+        "estimatedNominalGdpUSD": 6312494852041.486,
+        "investmentComponentUSD": 526263211458.6664,
+        "consumptionComponentUSD": 3325481689552.9307,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 14584436116.730556,
+        "governmentRevenueUSD": 11905327010.786076,
+        "fiscalDeficitPctGdp": 0.06526,
+        "estimatedNominalGdpUSD": 2083691439788.3018,
+        "investmentComponentUSD": 191594871790.09753,
+        "consumptionComponentUSD": 1010561634769.2386,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 22,
+      "UK": {
+        "governmentSpendingUSD": 9903725577.29916,
+        "governmentRevenueUSD": 8258266064.039324,
+        "fiscalDeficitPctGdp": 0.06376,
+        "estimatedNominalGdpUSD": 1243812459824.281,
+        "investmentComponentUSD": 97899463732.62402,
+        "consumptionComponentUSD": 581977101175.6703,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 48347083002.654755,
+        "governmentRevenueUSD": 41255319653.63251,
+        "fiscalDeficitPctGdp": 0.05842,
+        "estimatedNominalGdpUSD": 6165144617206.395,
+        "investmentComponentUSD": 515850594394.56586,
+        "consumptionComponentUSD": 3226636148444.2207,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 14230729013.136215,
+        "governmentRevenueUSD": 11620519833.89509,
+        "fiscalDeficitPctGdp": 0.06514,
+        "estimatedNominalGdpUSD": 1941079892227.7827,
+        "investmentComponentUSD": 188135740159.97958,
+        "consumptionComponentUSD": 981840851026.1743,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 23,
+      "UK": {
+        "governmentSpendingUSD": 9172071918.541588,
+        "governmentRevenueUSD": 7654156923.625172,
+        "fiscalDeficitPctGdp": 0.06346,
+        "estimatedNominalGdpUSD": 1214583282746.8254,
+        "investmentComponentUSD": 96246071767.57346,
+        "consumptionComponentUSD": 563947818110.8153,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 47176488697.546036,
+        "governmentRevenueUSD": 40292854373.755424,
+        "fiscalDeficitPctGdp": 0.05806,
+        "estimatedNominalGdpUSD": 5961957852455.909,
+        "investmentComponentUSD": 505828070434.3992,
+        "consumptionComponentUSD": 3128168731200.3115,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 13249982567.118996,
+        "governmentRevenueUSD": 10825149156.142971,
+        "fiscalDeficitPctGdp": 0.06496,
+        "estimatedNominalGdpUSD": 1941828762624.9978,
+        "investmentComponentUSD": 184795747078.62018,
+        "consumptionComponentUSD": 952152496567.6447,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 24,
+      "UK": {
+        "governmentSpendingUSD": 8950942792.49192,
+        "governmentRevenueUSD": 7474301167.990748,
+        "fiscalDeficitPctGdp": 0.06322,
+        "estimatedNominalGdpUSD": 1231220567687.1328,
+        "investmentComponentUSD": 94657085048.33472,
+        "consumptionComponentUSD": 545030494132.5253,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 45628205346.17889,
+        "governmentRevenueUSD": 38964609359.747955,
+        "fiscalDeficitPctGdp": 0.058120000000000005,
+        "estimatedNominalGdpUSD": 5786796639414.471,
+        "investmentComponentUSD": 496124530131.8097,
+        "consumptionComponentUSD": 3035365342764.256,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 13243942610.51685,
+        "governmentRevenueUSD": 10829367160.237654,
+        "fiscalDeficitPctGdp": 0.06466,
+        "estimatedNominalGdpUSD": 1909783962912.4314,
+        "investmentComponentUSD": 181560921805.89386,
+        "consumptionComponentUSD": 921054137572.676,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 25,
+      "UK": {
+        "governmentSpendingUSD": 9068044111.086668,
+        "governmentRevenueUSD": 7576829378.943375,
+        "fiscalDeficitPctGdp": 0.06298,
+        "estimatedNominalGdpUSD": 1238638442856.3396,
+        "investmentComponentUSD": 93119963430.51591,
+        "consumptionComponentUSD": 529124239628.10187,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 45069563568.491776,
+        "governmentRevenueUSD": 37787032543.2267,
+        "fiscalDeficitPctGdp": 0.06544,
+        "estimatedNominalGdpUSD": 5684131004541.151,
+        "investmentComponentUSD": 485713325796.08154,
+        "consumptionComponentUSD": 2942557749477.757,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 13018825332.464651,
+        "governmentRevenueUSD": 10650697772.553455,
+        "fiscalDeficitPctGdp": 0.06448,
+        "estimatedNominalGdpUSD": 1840183740981.1416,
+        "investmentComponentUSD": 173112435968.82806,
+        "consumptionComponentUSD": 894564560288.0084,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 26,
+      "UK": {
+        "governmentSpendingUSD": 9131305359.944962,
+        "governmentRevenueUSD": 7622522343.565472,
+        "fiscalDeficitPctGdp": 0.06334,
+        "estimatedNominalGdpUSD": 1224132252625.2234,
+        "investmentComponentUSD": 91617030620.00424,
+        "consumptionComponentUSD": 515576587568.40497,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 44296202978.05269,
+        "governmentRevenueUSD": 37116639244.86783,
+        "fiscalDeficitPctGdp": 0.06568,
+        "estimatedNominalGdpUSD": 5541438043143.049,
+        "investmentComponentUSD": 476771349566.65375,
+        "consumptionComponentUSD": 2857973225762.644,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12542291840.486698,
+        "governmentRevenueUSD": 10262582906.554771,
+        "fiscalDeficitPctGdp": 0.06442,
+        "estimatedNominalGdpUSD": 1745188481557.9297,
+        "investmentComponentUSD": 170313464529.74774,
+        "consumptionComponentUSD": 866913703777.5432,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 27,
+      "UK": {
+        "governmentSpendingUSD": 9035456356.732075,
+        "governmentRevenueUSD": 7533078094.300098,
+        "fiscalDeficitPctGdp": 0.06382,
+        "estimatedNominalGdpUSD": 1132482664500.2368,
+        "investmentComponentUSD": 90181854806.8419,
+        "consumptionComponentUSD": 502295740045.5146,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 43222234194.87494,
+        "governmentRevenueUSD": 36184594346.18651,
+        "fiscalDeficitPctGdp": 0.06604,
+        "estimatedNominalGdpUSD": 5354248560077.875,
+        "investmentComponentUSD": 468129003825.8085,
+        "consumptionComponentUSD": 2776045840912.6606,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11896792755.02099,
+        "governmentRevenueUSD": 9732763199.49246,
+        "fiscalDeficitPctGdp": 0.06448,
+        "estimatedNominalGdpUSD": 1688137884308.7578,
+        "investmentComponentUSD": 167639642842.6416,
+        "consumptionComponentUSD": 840665391276.0919,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 28,
+      "UK": {
+        "governmentSpendingUSD": 8353801931.7115555,
+        "governmentRevenueUSD": 6969124089.232227,
+        "fiscalDeficitPctGdp": 0.06358,
+        "estimatedNominalGdpUSD": 1110849613615.671,
+        "investmentComponentUSD": 88775242044.78687,
+        "consumptionComponentUSD": 488967850677.1577,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 41762510664.16419,
+        "governmentRevenueUSD": 34962549609.25307,
+        "fiscalDeficitPctGdp": 0.06604,
+        "estimatedNominalGdpUSD": 5273514375815.1455,
+        "investmentComponentUSD": 459734456610.7505,
+        "consumptionComponentUSD": 2696857915345.2354,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11506068883.381433,
+        "governmentRevenueUSD": 9414705649.175034,
+        "fiscalDeficitPctGdp": 0.06442,
+        "estimatedNominalGdpUSD": 1669343525595.6963,
+        "investmentComponentUSD": 165044682736.8789,
+        "consumptionComponentUSD": 815116795786.0768,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 29,
+      "UK": {
+        "governmentSpendingUSD": 8194209141.696329,
+        "governmentRevenueUSD": 6835984476.101009,
+        "fiscalDeficitPctGdp": 0.06358,
+        "estimatedNominalGdpUSD": 1081684167811.7878,
+        "investmentComponentUSD": 87411351803.25768,
+        "consumptionComponentUSD": 473370611266.8614,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 41156578995.95389,
+        "governmentRevenueUSD": 34434902294.25164,
+        "fiscalDeficitPctGdp": 0.06628,
+        "estimatedNominalGdpUSD": 5169978845447.504,
+        "investmentComponentUSD": 451611786585.14777,
+        "consumptionComponentUSD": 2619802667026.148,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11387381570.264858,
+        "governmentRevenueUSD": 9309710913.894928,
+        "fiscalDeficitPctGdp": 0.06472,
+        "estimatedNominalGdpUSD": 1614900619558.7568,
+        "investmentComponentUSD": 162519286360.08475,
+        "consumptionComponentUSD": 791881017450.1062,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 30,
+      "UK": {
+        "governmentSpendingUSD": 7977959505.934477,
+        "governmentRevenueUSD": 6656620363.7333975,
+        "fiscalDeficitPctGdp": 0.06352,
+        "estimatedNominalGdpUSD": 1087396688916.7479,
+        "investmentComponentUSD": 86098791979.38152,
+        "consumptionComponentUSD": 461097078284.119,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 40331426601.936195,
+        "governmentRevenueUSD": 33759487002.80398,
+        "fiscalDeficitPctGdp": 0.0661,
+        "estimatedNominalGdpUSD": 4988271289904.863,
+        "investmentComponentUSD": 443754377728.03436,
+        "consumptionComponentUSD": 2551215801586.831,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11006895788.057528,
+        "governmentRevenueUSD": 9006263130.005877,
+        "fiscalDeficitPctGdp": 0.06442,
+        "estimatedNominalGdpUSD": 1567081965228.0579,
+        "investmentComponentUSD": 160063052374.83597,
+        "consumptionComponentUSD": 770969883526.4888,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 31,
+      "UK": {
+        "governmentSpendingUSD": 8031245561.908955,
+        "governmentRevenueUSD": 6691659063.195504,
+        "fiscalDeficitPctGdp": 0.06406,
+        "estimatedNominalGdpUSD": 1015526184290.2802,
+        "investmentComponentUSD": 84828607885.18993,
+        "consumptionComponentUSD": 448985731648.1195,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 38953452537.907616,
+        "governmentRevenueUSD": 32572326961.47593,
+        "fiscalDeficitPctGdp": 0.06652,
+        "estimatedNominalGdpUSD": 4859266980594.922,
+        "investmentComponentUSD": 436160944823.31067,
+        "consumptionComponentUSD": 2484531510564.0806,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 10689827668.110334,
+        "governmentRevenueUSD": 8739428348.421282,
+        "fiscalDeficitPctGdp": 0.06472,
+        "estimatedNominalGdpUSD": 1528016039627.1855,
+        "investmentComponentUSD": 157664027899.71448,
+        "consumptionComponentUSD": 749857135881.9307,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 32,
+      "UK": {
+        "governmentSpendingUSD": 7497070933.694516,
+        "governmentRevenueUSD": 6249512083.938328,
+        "fiscalDeficitPctGdp": 0.06387999999999999,
+        "estimatedNominalGdpUSD": 992989944614.5969,
+        "investmentComponentUSD": 83589378340.84009,
+        "consumptionComponentUSD": 438747250399.7368,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 37924067081.63426,
+        "governmentRevenueUSD": 31730322986.39557,
+        "fiscalDeficitPctGdp": 0.06628,
+        "estimatedNominalGdpUSD": 4675725150953.068,
+        "investmentComponentUSD": 428817996327.55664,
+        "consumptionComponentUSD": 2417466623876.776,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 10414764931.700626,
+        "governmentRevenueUSD": 8521759015.273353,
+        "fiscalDeficitPctGdp": 0.06442,
+        "estimatedNominalGdpUSD": 1481016399711.5269,
+        "investmentComponentUSD": 155302583442.66925,
+        "consumptionComponentUSD": 729778021270.4509,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 33,
+      "UK": {
+        "governmentSpendingUSD": 7340840891.056121,
+        "governmentRevenueUSD": 6110683848.7538595,
+        "fiscalDeficitPctGdp": 0.06442,
+        "estimatedNominalGdpUSD": 927252804589.8577,
+        "investmentComponentUSD": 82385391463.76811,
+        "consumptionComponentUSD": 426064063834.94,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 36502057208.01264,
+        "governmentRevenueUSD": 30531527343.221317,
+        "fiscalDeficitPctGdp": 0.0664,
+        "estimatedNominalGdpUSD": 4582470920176.712,
+        "investmentComponentUSD": 421676390347.1747,
+        "consumptionComponentUSD": 2355569224537.7896,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 10107956366.371416,
+        "governmentRevenueUSD": 8259530420.534547,
+        "fiscalDeficitPctGdp": 0.0649,
+        "estimatedNominalGdpUSD": 1423146362961.5845,
+        "investmentComponentUSD": 153020107145.43726,
+        "consumptionComponentUSD": 710973152055.2867,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 34,
+      "UK": {
+        "governmentSpendingUSD": 6850628221.708389,
+        "governmentRevenueUSD": 5706182078.5743265,
+        "fiscalDeficitPctGdp": 0.06418,
+        "estimatedNominalGdpUSD": 951522506766.2263,
+        "investmentComponentUSD": 81209234380.00314,
+        "consumptionComponentUSD": 415847988914.4603,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 35758254332.30971,
+        "governmentRevenueUSD": 29922653864.346207,
+        "fiscalDeficitPctGdp": 0.06622,
+        "estimatedNominalGdpUSD": 4522076511696.141,
+        "investmentComponentUSD": 414811042486.83356,
+        "consumptionComponentUSD": 2294764316694.0493,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 9713104678.78491,
+        "governmentRevenueUSD": 7936884634.6791315,
+        "fiscalDeficitPctGdp": 0.0649,
+        "estimatedNominalGdpUSD": 1382569702040.5554,
+        "investmentComponentUSD": 150796049564.57343,
+        "consumptionComponentUSD": 692844434125.4398,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 35,
+      "UK": {
+        "governmentSpendingUSD": 7032144341.802303,
+        "governmentRevenueUSD": 5855545639.804155,
+        "fiscalDeficitPctGdp": 0.0643,
+        "estimatedNominalGdpUSD": 947540292099.8511,
+        "investmentComponentUSD": 80060554071.49986,
+        "consumptionComponentUSD": 404243806481.14575,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 35276748460.25043,
+        "governmentRevenueUSD": 29528460346.796577,
+        "fiscalDeficitPctGdp": 0.0661,
+        "estimatedNominalGdpUSD": 4418557568293.302,
+        "investmentComponentUSD": 408179626851.8716,
+        "consumptionComponentUSD": 2239880350006.707,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 9445682511.362864,
+        "governmentRevenueUSD": 7710544188.186766,
+        "fiscalDeficitPctGdp": 0.06526,
+        "estimatedNominalGdpUSD": 1393761861496.537,
+        "investmentComponentUSD": 148635024440.1503,
+        "consumptionComponentUSD": 675106127002.4546,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 36,
+      "UK": {
+        "governmentSpendingUSD": 7001661204.488222,
+        "governmentRevenueUSD": 5831073249.625835,
+        "fiscalDeficitPctGdp": 0.06423999999999999,
+        "estimatedNominalGdpUSD": 918219419028.9478,
+        "investmentComponentUSD": 78939169090.89417,
+        "consumptionComponentUSD": 396733341752.6499,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 34474294870.4052,
+        "governmentRevenueUSD": 28852497654.10289,
+        "fiscalDeficitPctGdp": 0.06616,
+        "estimatedNominalGdpUSD": 4319820501277.569,
+        "investmentComponentUSD": 401760443817.72736,
+        "consumptionComponentUSD": 2188758858984.0918,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 9527044953.250721,
+        "governmentRevenueUSD": 7773022272.233596,
+        "fiscalDeficitPctGdp": 0.06544,
+        "estimatedNominalGdpUSD": 1367094126517.9783,
+        "investmentComponentUSD": 146536816334.78882,
+        "consumptionComponentUSD": 658719594267.1075,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 37,
+      "UK": {
+        "governmentSpendingUSD": 6790310952.556804,
+        "governmentRevenueUSD": 5650646239.190142,
+        "fiscalDeficitPctGdp": 0.06454,
+        "estimatedNominalGdpUSD": 879386961012.7421,
+        "investmentComponentUSD": 78569235874.04182,
+        "consumptionComponentUSD": 388544495235.9455,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 33703932436.436928,
+        "governmentRevenueUSD": 28207759874.768085,
+        "fiscalDeficitPctGdp": 0.06616,
+        "estimatedNominalGdpUSD": 4208330221139.3433,
+        "investmentComponentUSD": 395534285663.41113,
+        "consumptionComponentUSD": 2138939261565.1028,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 9355710049.221346,
+        "governmentRevenueUSD": 7624222768.150931,
+        "fiscalDeficitPctGdp": 0.06586,
+        "estimatedNominalGdpUSD": 1331382041194.9807,
+        "investmentComponentUSD": 144502039024.70966,
+        "consumptionComponentUSD": 644686105731.9601,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 38,
+      "UK": {
+        "governmentSpendingUSD": 6505158480.213981,
+        "governmentRevenueUSD": 5411664102.502142,
+        "fiscalDeficitPctGdp": 0.06466,
+        "estimatedNominalGdpUSD": 844210017355.9233,
+        "investmentComponentUSD": 77527544838.32277,
+        "consumptionComponentUSD": 378822096878.7745,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 33404494663.856113,
+        "governmentRevenueUSD": 27443221582.792927,
+        "fiscalDeficitPctGdp": 0.07366,
+        "estimatedNominalGdpUSD": 4146778834929.513,
+        "investmentComponentUSD": 389499826929.2893,
+        "consumptionComponentUSD": 2091107358835.8728,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 9114316684.44554,
+        "governmentRevenueUSD": 7425000950.865797,
+        "fiscalDeficitPctGdp": 0.06598,
+        "estimatedNominalGdpUSD": 1293597853479.1753,
+        "investmentComponentUSD": 140903490659.79095,
+        "consumptionComponentUSD": 630164673258.9817,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 39,
+      "UK": {
+        "governmentSpendingUSD": 6260514828.451146,
+        "governmentRevenueUSD": 5195178530.948516,
+        "fiscalDeficitPctGdp": 0.06562,
+        "estimatedNominalGdpUSD": 828418979044.5275,
+        "investmentComponentUSD": 76519584648.50491,
+        "consumptionComponentUSD": 370040097564.5592,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 32906727939.322952,
+        "governmentRevenueUSD": 27042146772.5485,
+        "fiscalDeficitPctGdp": 0.07354,
+        "estimatedNominalGdpUSD": 4121194018487.7935,
+        "investmentComponentUSD": 383654994017.64874,
+        "consumptionComponentUSD": 2047892792177.6519,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 8852721205.317896,
+        "governmentRevenueUSD": 7214323468.617405,
+        "fiscalDeficitPctGdp": 0.06586,
+        "estimatedNominalGdpUSD": 1268924373577.9739,
+        "investmentComponentUSD": 139004052225.58545,
+        "consumptionComponentUSD": 615475843856.193,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 40,
+      "UK": {
+        "governmentSpendingUSD": 6147234733.251929,
+        "governmentRevenueUSD": 5098002163.065924,
+        "fiscalDeficitPctGdp": 0.06586,
+        "estimatedNominalGdpUSD": 807427620287.4828,
+        "investmentComponentUSD": 75533859756.35748,
+        "consumptionComponentUSD": 361710656705.22095,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 32722720999.03067,
+        "governmentRevenueUSD": 26875302002.449383,
+        "fiscalDeficitPctGdp": 0.07378,
+        "estimatedNominalGdpUSD": 4003974959715.48,
+        "investmentComponentUSD": 377977195471.52814,
+        "consumptionComponentUSD": 2005413666311.5132,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 8685449611.792938,
+        "governmentRevenueUSD": 7076816103.112925,
+        "fiscalDeficitPctGdp": 0.06592,
+        "estimatedNominalGdpUSD": 1218809587400.4756,
+        "investmentComponentUSD": 137139900193.82796,
+        "consumptionComponentUSD": 601850085874.8243,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 41,
+      "UK": {
+        "governmentSpendingUSD": 5993309837.229227,
+        "governmentRevenueUSD": 4968804466.328184,
+        "fiscalDeficitPctGdp": 0.06598,
+        "estimatedNominalGdpUSD": 788047746932.7594,
+        "investmentComponentUSD": 74577537942.47305,
+        "consumptionComponentUSD": 354451037113.60175,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 31805482257.734333,
+        "governmentRevenueUSD": 26110586921.022884,
+        "fiscalDeficitPctGdp": 0.07396,
+        "estimatedNominalGdpUSD": 3931584689707.4893,
+        "investmentComponentUSD": 372465655951.31433,
+        "consumptionComponentUSD": 1966741640795.007,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 8353613725.312134,
+        "governmentRevenueUSD": 6797272672.111444,
+        "fiscalDeficitPctGdp": 0.0664,
+        "estimatedNominalGdpUSD": 1222197232021.011,
+        "investmentComponentUSD": 135323444058.84297,
+        "consumptionComponentUSD": 589205998608.8552,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 42,
+      "UK": {
+        "governmentSpendingUSD": 5849390953.5909,
+        "governmentRevenueUSD": 4849487292.473931,
+        "fiscalDeficitPctGdp": 0.06598,
+        "estimatedNominalGdpUSD": 810965956535.518,
+        "investmentComponentUSD": 73572715044.51187,
+        "consumptionComponentUSD": 347224342785.4963,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 31220958634.163128,
+        "governmentRevenueUSD": 25638172792.281487,
+        "fiscalDeficitPctGdp": 0.07384,
+        "estimatedNominalGdpUSD": 3816571246688.5674,
+        "investmentComponentUSD": 367126150924.9891,
+        "consumptionComponentUSD": 1925660070779.961,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 8382408828.216233,
+        "governmentRevenueUSD": 6816113055.693998,
+        "fiscalDeficitPctGdp": 0.06664,
+        "estimatedNominalGdpUSD": 1175732864617.3948,
+        "investmentComponentUSD": 133532186066.13972,
+        "consumptionComponentUSD": 576326131279.9629,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 43,
+      "UK": {
+        "governmentSpendingUSD": 6013012221.190386,
+        "governmentRevenueUSD": 4990569329.756519,
+        "fiscalDeficitPctGdp": 0.06556000000000001,
+        "estimatedNominalGdpUSD": 800117335366.7018,
+        "investmentComponentUSD": 72664752320.57568,
+        "consumptionComponentUSD": 340333685086.52576,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 30263942074.222385,
+        "governmentRevenueUSD": 24888448264.463333,
+        "fiscalDeficitPctGdp": 0.07324,
+        "estimatedNominalGdpUSD": 3759486640217.4546,
+        "investmentComponentUSD": 361925568382.5174,
+        "consumptionComponentUSD": 1888306378533.386,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 8063827181.542109,
+        "governmentRevenueUSD": 6557060011.90896,
+        "fiscalDeficitPctGdp": 0.06664,
+        "estimatedNominalGdpUSD": 1161793392895.9456,
+        "investmentComponentUSD": 131766211744.13033,
+        "consumptionComponentUSD": 565598054054.4247,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 44,
+      "UK": {
+        "governmentSpendingUSD": 5933496927.166523,
+        "governmentRevenueUSD": 4923808455.716216,
+        "fiscalDeficitPctGdp": 0.06562,
+        "estimatedNominalGdpUSD": 763530741597.0626,
+        "investmentComponentUSD": 71778804820.3058,
+        "consumptionComponentUSD": 335512506059.06775,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 29798154884.194756,
+        "governmentRevenueUSD": 24516096470.376656,
+        "fiscalDeficitPctGdp": 0.07306,
+        "estimatedNominalGdpUSD": 3708104923163.886,
+        "investmentComponentUSD": 356862709541.93866,
+        "consumptionComponentUSD": 1850196500678.113,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7976219840.908594,
+        "governmentRevenueUSD": 6479282223.707261,
+        "fiscalDeficitPctGdp": 0.067,
+        "estimatedNominalGdpUSD": 1119529218450.879,
+        "investmentComponentUSD": 130010503111.59526,
+        "consumptionComponentUSD": 553793150098.213,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 45,
+      "UK": {
+        "governmentSpendingUSD": 5661286783.272375,
+        "governmentRevenueUSD": 4698650717.520386,
+        "fiscalDeficitPctGdp": 0.06556000000000001,
+        "estimatedNominalGdpUSD": 775398337669.5981,
+        "investmentComponentUSD": 70914112873.64716,
+        "consumptionComponentUSD": 329526333812.0496,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 29365225659.445538,
+        "governmentRevenueUSD": 24181029677.314186,
+        "fiscalDeficitPctGdp": 0.0727,
+        "estimatedNominalGdpUSD": 3615737051604.2275,
+        "investmentComponentUSD": 351936112197.8496,
+        "consumptionComponentUSD": 1816098276253.5398,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7688641344.731896,
+        "governmentRevenueUSD": 6243576360.809392,
+        "fiscalDeficitPctGdp": 0.06712,
+        "estimatedNominalGdpUSD": 1127260872930.5916,
+        "investmentComponentUSD": 130539885195.67653,
+        "consumptionComponentUSD": 543462153726.64545,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 46,
+      "UK": {
+        "governmentSpendingUSD": 5744851182.565118,
+        "governmentRevenueUSD": 4771718783.213512,
+        "fiscalDeficitPctGdp": 0.06526,
+        "estimatedNominalGdpUSD": 741932738198.3445,
+        "investmentComponentUSD": 70071944580.87204,
+        "consumptionComponentUSD": 322801416443.6996,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 28613051116.052864,
+        "governmentRevenueUSD": 23578822924.552917,
+        "fiscalDeficitPctGdp": 0.0724,
+        "estimatedNominalGdpUSD": 3601659395408.5244,
+        "investmentComponentUSD": 347132904341.9463,
+        "consumptionComponentUSD": 1783888876938.1807,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7745627568.710869,
+        "governmentRevenueUSD": 6286683445.077392,
+        "fiscalDeficitPctGdp": 0.0673,
+        "estimatedNominalGdpUSD": 1120418943521.2195,
+        "investmentComponentUSD": 128909667930.00766,
+        "consumptionComponentUSD": 530462188024.1051,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 47,
+      "UK": {
+        "governmentSpendingUSD": 5499444318.356618,
+        "governmentRevenueUSD": 4565748707.643518,
+        "fiscalDeficitPctGdp": 0.06544,
+        "estimatedNominalGdpUSD": 740465565627.9008,
+        "investmentComponentUSD": 69268857751.85406,
+        "consumptionComponentUSD": 318238014677.32587,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 28489071030.90101,
+        "governmentRevenueUSD": 23486929851.644783,
+        "fiscalDeficitPctGdp": 0.07222,
+        "estimatedNominalGdpUSD": 3536105393374.7417,
+        "investmentComponentUSD": 342454321693.9952,
+        "consumptionComponentUSD": 1751319963622.3672,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7715362379.968394,
+        "governmentRevenueUSD": 6248478245.617835,
+        "fiscalDeficitPctGdp": 0.06808,
+        "estimatedNominalGdpUSD": 1073312809602.2634,
+        "investmentComponentUSD": 127336782962.6883,
+        "consumptionComponentUSD": 521927144506.9461,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 48,
+      "UK": {
+        "governmentSpendingUSD": 5488526943.231455,
+        "governmentRevenueUSD": 4556684884.376468,
+        "fiscalDeficitPctGdp": 0.06544,
+        "estimatedNominalGdpUSD": 718889919700.8654,
+        "investmentComponentUSD": 68468437636.38426,
+        "consumptionComponentUSD": 312008278684.906,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 27949978052.07048,
+        "governmentRevenueUSD": 23059309905.739624,
+        "fiscalDeficitPctGdp": 0.07192,
+        "estimatedNominalGdpUSD": 3462738837365.0854,
+        "investmentComponentUSD": 337885237759.7403,
+        "consumptionComponentUSD": 1723641759690.1982,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7388449212.790348,
+        "governmentRevenueUSD": 5985725421.022463,
+        "fiscalDeficitPctGdp": 0.06796,
+        "estimatedNominalGdpUSD": 1056010378254.4869,
+        "investmentComponentUSD": 125781173522.24554,
+        "consumptionComponentUSD": 513098246712.99164,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 49,
+      "UK": {
+        "governmentSpendingUSD": 5323656351.50787,
+        "governmentRevenueUSD": 4423937967.38994,
+        "fiscalDeficitPctGdp": 0.06508,
+        "estimatedNominalGdpUSD": 738566014993.9489,
+        "investmentComponentUSD": 67682073171.63039,
+        "consumptionComponentUSD": 307417267445.70966,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 27342686658.55993,
+        "governmentRevenueUSD": 22581356663.21888,
+        "fiscalDeficitPctGdp": 0.07150000000000001,
+        "estimatedNominalGdpUSD": 3380207732606.023,
+        "investmentComponentUSD": 333092507503.8929,
+        "consumptionComponentUSD": 1694901691364.7866,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7259762918.924015,
+        "governmentRevenueUSD": 5889367926.84336,
+        "fiscalDeficitPctGdp": 0.06748,
+        "estimatedNominalGdpUSD": 1037910411218.5104,
+        "investmentComponentUSD": 124255620208.99858,
+        "consumptionComponentUSD": 503396185772.5955,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 50,
+      "UK": {
+        "governmentSpendingUSD": 5469396958.913295,
+        "governmentRevenueUSD": 4545047852.0106325,
+        "fiscalDeficitPctGdp": 0.06508,
+        "estimatedNominalGdpUSD": 733338410996.5168,
+        "investmentComponentUSD": 66913351007.46896,
+        "consumptionComponentUSD": 302157053971.3449,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 26698851513.24154,
+        "governmentRevenueUSD": 22043193777.1236,
+        "fiscalDeficitPctGdp": 0.07162,
+        "estimatedNominalGdpUSD": 3294275623867.8867,
+        "investmentComponentUSD": 328776819473.4784,
+        "consumptionComponentUSD": 1666687647489.0256,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7141277757.978632,
+        "governmentRevenueUSD": 5788391049.845724,
+        "fiscalDeficitPctGdp": 0.06778,
+        "estimatedNominalGdpUSD": 1028172009186.1716,
+        "investmentComponentUSD": 122760563345.48111,
+        "consumptionComponentUSD": 494910410144.5042,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 51,
+      "UK": {
+        "governmentSpendingUSD": 5532636510.405572,
+        "governmentRevenueUSD": 4510753709.702078,
+        "fiscalDeficitPctGdp": 0.07246,
+        "estimatedNominalGdpUSD": 724373226659.3094,
+        "investmentComponentUSD": 66161851405.810165,
+        "consumptionComponentUSD": 301076278334.50854,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 26479691792.85358,
+        "governmentRevenueUSD": 21444508521.653996,
+        "fiscalDeficitPctGdp": 0.07948,
+        "estimatedNominalGdpUSD": 3313822060627.564,
+        "investmentComponentUSD": 324563479737.3072,
+        "consumptionComponentUSD": 1648634118552.1768,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7077845986.485528,
+        "governmentRevenueUSD": 5734091340.040236,
+        "fiscalDeficitPctGdp": 0.06796,
+        "estimatedNominalGdpUSD": 1027435978094.1165,
+        "investmentComponentUSD": 121266154601.78738,
+        "consumptionComponentUSD": 491979484579.7953,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 52,
+      "UK": {
+        "governmentSpendingUSD": 5547713129.70558,
+        "governmentRevenueUSD": 4455583288.226816,
+        "fiscalDeficitPctGdp": 0.0784,
+        "estimatedNominalGdpUSD": 722148640134.5709,
+        "investmentComponentUSD": 65426086186.47404,
+        "consumptionComponentUSD": 297390166750.5858,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 26912058773.135006,
+        "governmentRevenueUSD": 21571707067.739048,
+        "fiscalDeficitPctGdp": 0.0838,
+        "estimatedNominalGdpUSD": 3254342563193.5684,
+        "investmentComponentUSD": 320451984588.4397,
+        "consumptionComponentUSD": 1624591228860.5774,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 7244553420.852486,
+        "governmentRevenueUSD": 5729887339.898601,
+        "fiscalDeficitPctGdp": 0.07666,
+        "estimatedNominalGdpUSD": 1016086533454.6649,
+        "investmentComponentUSD": 119827977903.99406,
+        "consumptionComponentUSD": 484260815291.6804,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 53,
+      "UK": {
+        "governmentSpendingUSD": 7441891728.515124,
+        "governmentRevenueUSD": 4421945548.617962,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 817760779168.6204,
+        "investmentComponentUSD": 64707281268.78452,
+        "consumptionComponentUSD": 293519458047.84033,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 35222491705.60011,
+        "governmentRevenueUSD": 21087395547.12706,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 3687144318509.135,
+        "investmentComponentUSD": 316433493503.01355,
+        "consumptionComponentUSD": 1604866738711.4202,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 9887462271.42158,
+        "governmentRevenueUSD": 5640864138.165442,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1159461622323.2944,
+        "investmentComponentUSD": 118452940975.01933,
+        "consumptionComponentUSD": 477777010070.5656,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 54,
+      "UK": {
+        "governmentSpendingUSD": 8427536545.559608,
+        "governmentRevenueUSD": 5007612186.920137,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 855644153819.3718,
+        "investmentComponentUSD": 64313657762.1906,
+        "consumptionComponentUSD": 300021561626.66754,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 39893697259.11783,
+        "governmentRevenueUSD": 23884005168.396507,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 3975429544625.2246,
+        "investmentComponentUSD": 312748394414.14954,
+        "consumptionComponentUSD": 1631763957334.9563,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11290633885.28924,
+        "governmentRevenueUSD": 6441383039.687362,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1243313843714.1228,
+        "investmentComponentUSD": 117117557613.17683,
+        "consumptionComponentUSD": 483059467902.5478,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 55,
+      "UK": {
+        "governmentSpendingUSD": 8818340196.492516,
+        "governmentRevenueUSD": 5239826323.818261,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 903647587274.9169,
+        "investmentComponentUSD": 64124641768.25964,
+        "consumptionComponentUSD": 300522229284.64233,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 43014761129.84633,
+        "governmentRevenueUSD": 25752558617.709557,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4078538735376.571,
+        "investmentComponentUSD": 311573869581.299,
+        "consumptionComponentUSD": 1634496467940.436,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12112127147.550037,
+        "governmentRevenueUSD": 6910050505.172944,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1252180440075.5947,
+        "investmentComponentUSD": 116014000824.65825,
+        "consumptionComponentUSD": 479285150978.9897,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 56,
+      "UK": {
+        "governmentSpendingUSD": 9312671836.089527,
+        "governmentRevenueUSD": 5533556422.696382,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 896546160446.6327,
+        "investmentComponentUSD": 63948818339.679855,
+        "consumptionComponentUSD": 299511664409.2819,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 44129650953.25816,
+        "governmentRevenueUSD": 26420033335.12184,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4163588551661.3994,
+        "investmentComponentUSD": 312474761315.6184,
+        "consumptionComponentUSD": 1636263125643.9219,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12197562263.604485,
+        "governmentRevenueUSD": 6958791817.05481,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1254438716706.8281,
+        "investmentComponentUSD": 115151987421.82921,
+        "consumptionComponentUSD": 472927660140.3508,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 57,
+      "UK": {
+        "governmentSpendingUSD": 9239504895.216782,
+        "governmentRevenueUSD": 5490080887.133492,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 922000833694.1173,
+        "investmentComponentUSD": 63740656517.13306,
+        "consumptionComponentUSD": 299300068135.86224,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 45050235322.93918,
+        "governmentRevenueUSD": 26971179088.813076,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4232770087598.0903,
+        "investmentComponentUSD": 314199749559.9302,
+        "consumptionComponentUSD": 1631948785854.252,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12219253701.672619,
+        "governmentRevenueUSD": 6971166929.267114,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1247791728946.0884,
+        "investmentComponentUSD": 114186653370.59462,
+        "consumptionComponentUSD": 466278616140.51434,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 58,
+      "UK": {
+        "governmentSpendingUSD": 9501813890.398912,
+        "governmentRevenueUSD": 5645943957.428324,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 949558325235.9951,
+        "investmentComponentUSD": 63619980711.645424,
+        "consumptionComponentUSD": 297208335839.73694,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 45798605972.03526,
+        "governmentRevenueUSD": 27419222004.835403,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4263489498299.9976,
+        "investmentComponentUSD": 316260868927.6852,
+        "consumptionComponentUSD": 1628111751259.2139,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12154014035.784456,
+        "governmentRevenueUSD": 6933947258.375614,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1237491051079.779,
+        "investmentComponentUSD": 113109858719.38911,
+        "consumptionComponentUSD": 460185220433.6284,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 59,
+      "UK": {
+        "governmentSpendingUSD": 9785603700.25497,
+        "governmentRevenueUSD": 5814570851.263358,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 950046321417.9802,
+        "investmentComponentUSD": 63720956821.96764,
+        "consumptionComponentUSD": 296374339627.3,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 46131346834.08355,
+        "governmentRevenueUSD": 27618431028.187622,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4260155281152.127,
+        "investmentComponentUSD": 318258184681.6702,
+        "consumptionComponentUSD": 1623595047073.5244,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12053564802.43568,
+        "governmentRevenueUSD": 6876640290.970938,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1247468212238.9578,
+        "investmentComponentUSD": 112003270419.11394,
+        "consumptionComponentUSD": 454277353452.0712,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 60,
+      "UK": {
+        "governmentSpendingUSD": 9790519232.70139,
+        "governmentRevenueUSD": 5817491643.128313,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 964550076524.2983,
+        "investmentComponentUSD": 63824619767.70094,
+        "consumptionComponentUSD": 300092771675.29504,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 46095181220.3479,
+        "governmentRevenueUSD": 27596778993.78805,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4270073316521.8374,
+        "investmentComponentUSD": 319858536723.7843,
+        "consumptionComponentUSD": 1642045611671.285,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12150511083.671402,
+        "governmentRevenueUSD": 6931948800.489271,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1231521897239.9768,
+        "investmentComponentUSD": 110917869143.9,
+        "consumptionComponentUSD": 454207601399.1143,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 61,
+      "UK": {
+        "governmentSpendingUSD": 9939888877.845406,
+        "governmentRevenueUSD": 5906246554.048659,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 974641293225.8572,
+        "investmentComponentUSD": 63991965088.68962,
+        "consumptionComponentUSD": 302544531952.988,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 46202316491.54149,
+        "governmentRevenueUSD": 27660919937.01237,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4283602759877.6123,
+        "investmentComponentUSD": 321262972738.06573,
+        "consumptionComponentUSD": 1656718897583.7798,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11994821375.110233,
+        "governmentRevenueUSD": 6843126768.142051,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1224307097250.5212,
+        "investmentComponentUSD": 109875256087.88397,
+        "consumptionComponentUSD": 453382749021.7201,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 62,
+      "UK": {
+        "governmentSpendingUSD": 10043745145.443336,
+        "governmentRevenueUSD": 5967957578.201437,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 995996460046.7002,
+        "investmentComponentUSD": 64192332800.03232,
+        "consumptionComponentUSD": 305171922591.73956,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 46348615889.90361,
+        "governmentRevenueUSD": 27748508098.21785,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4301171527614.6216,
+        "investmentComponentUSD": 322493121397.81445,
+        "consumptionComponentUSD": 1670290422822.484,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11924113111.089573,
+        "governmentRevenueUSD": 6802787225.007823,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1239318288126.2815,
+        "investmentComponentUSD": 108797094782.21361,
+        "consumptionComponentUSD": 451129360338.6091,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 63,
+      "UK": {
+        "governmentSpendingUSD": 10263692634.34968,
+        "governmentRevenueUSD": 6098649592.406965,
+        "fiscalDeficitPctGdp": 0.21843999999999997,
+        "estimatedNominalGdpUSD": 1018663518906.3159,
+        "investmentComponentUSD": 64436659978.36443,
+        "consumptionComponentUSD": 307346289606.53937,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 46538620159.901985,
+        "governmentRevenueUSD": 27862261981.122784,
+        "fiscalDeficitPctGdp": 0.22690000000000002,
+        "estimatedNominalGdpUSD": 4293800706742.802,
+        "investmentComponentUSD": 323596264155.3783,
+        "consumptionComponentUSD": 1682277880791.9578,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12069825035.463211,
+        "governmentRevenueUSD": 6885916863.952493,
+        "fiscalDeficitPctGdp": 0.21832,
+        "estimatedNominalGdpUSD": 1230277891011.338,
+        "investmentComponentUSD": 107823039122.64104,
+        "consumptionComponentUSD": 448315607060.8881,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 64,
+      "UK": {
+        "governmentSpendingUSD": 10637601617.852596,
+        "governmentRevenueUSD": 6231545210.7001,
+        "fiscalDeficitPctGdp": 0.22593999999999997,
+        "estimatedNominalGdpUSD": 1066471909405.344,
+        "investmentComponentUSD": 64626341587.06866,
+        "consumptionComponentUSD": 309670206709.78937,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 47013060605.30791,
+        "governmentRevenueUSD": 27752619451.966698,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": 4333184008071.1787,
+        "investmentComponentUSD": 325685630129.416,
+        "consumptionComponentUSD": 1692867099423.6165,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12154724134.77634,
+        "governmentRevenueUSD": 6831979348.158555,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": 1241525069770.0447,
+        "investmentComponentUSD": 105137974619.27994,
+        "consumptionComponentUSD": 445558076981.1044,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 65,
+      "UK": {
+        "governmentSpendingUSD": 11136872003.636494,
+        "governmentRevenueUSD": 6524019594.790081,
+        "fiscalDeficitPctGdp": 0.22593999999999997,
+        "estimatedNominalGdpUSD": 1122785415820.8032,
+        "investmentComponentUSD": 65054801400.50974,
+        "consumptionComponentUSD": 312285129911.3067,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 47444545604.93112,
+        "governmentRevenueUSD": 28007332479.35941,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": 4343627612973.427,
+        "investmentComponentUSD": 328229835104.0637,
+        "consumptionComponentUSD": 1703361277008.7874,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12265558288.147532,
+        "governmentRevenueUSD": 6894277483.312122,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": 1242013381307.836,
+        "investmentComponentUSD": 104356776221.00284,
+        "consumptionComponentUSD": 442372902428.0379,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 66,
+      "UK": {
+        "governmentSpendingUSD": 11724779866.001598,
+        "governmentRevenueUSD": 6868418130.81965,
+        "fiscalDeficitPctGdp": 0.22593999999999997,
+        "estimatedNominalGdpUSD": 1229495102646.1328,
+        "investmentComponentUSD": 65524777571.63538,
+        "consumptionComponentUSD": 315346556376.4827,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 47558250513.90017,
+        "governmentRevenueUSD": 28074454445.634506,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": 4317637764644.765,
+        "investmentComponentUSD": 330863493647.1139,
+        "consumptionComponentUSD": 1714060670986.9412,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12270287783.181274,
+        "governmentRevenueUSD": 6896935858.116804,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": 1246758333522.7158,
+        "investmentComponentUSD": 103691533210.45041,
+        "consumptionComponentUSD": 439747952522.0339,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 67,
+      "UK": {
+        "governmentSpendingUSD": 12285258312.81195,
+        "governmentRevenueUSD": 7526841470.854974,
+        "fiscalDeficitPctGdp": 0.20201728809290742,
+        "estimatedNominalGdpUSD": 1388337148427.354,
+        "investmentComponentUSD": 66035361512.63239,
+        "consumptionComponentUSD": 318660886871.6028,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 47273140280.17149,
+        "governmentRevenueUSD": 27906148963.78209,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": 4211580902718.54,
+        "investmentComponentUSD": 333379663042.51215,
+        "consumptionComponentUSD": 1723234745930.89,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12316808190.748281,
+        "governmentRevenueUSD": 6923084247.849186,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": 1243727174129.1226,
+        "investmentComponentUSD": 102881020034.72203,
+        "consumptionComponentUSD": 436939646998.5481,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 68,
+      "UK": {
+        "governmentSpendingUSD": 11544730358.84639,
+        "governmentRevenueUSD": 8523275329.704524,
+        "fiscalDeficitPctGdp": 0.1132787475722381,
+        "estimatedNominalGdpUSD": 1935425462424.2876,
+        "investmentComponentUSD": 66587290682.57232,
+        "consumptionComponentUSD": 321951931270.2014,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 46111583836.26132,
+        "governmentRevenueUSD": 27220462187.70823,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": 3888639327958.1333,
+        "investmentComponentUSD": 334263017440.7938,
+        "consumptionComponentUSD": 1730299351677.1133,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 12286293918.205294,
+        "governmentRevenueUSD": 6905932654.976641,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": 1147194330156.4214,
+        "investmentComponentUSD": 102184093901.15709,
+        "consumptionComponentUSD": 434171865359.6461,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 69,
+      "UK": {
+        "governmentSpendingUSD": 9182912656.089287,
+        "governmentRevenueUSD": 11953235322.226288,
+        "fiscalDeficitPctGdp": -0.07405999999999999,
+        "estimatedNominalGdpUSD": 115938904855285.33,
+        "investmentComponentUSD": 110551152100353.98,
+        "consumptionComponentUSD": 321032574701.5862,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 42575527555.925995,
+        "governmentRevenueUSD": 25133067258.610516,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": 1859529565390.505,
+        "investmentComponentUSD": 332702063064.4328,
+        "consumptionComponentUSD": 1732811687241.4407,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 11332399328.24149,
+        "governmentRevenueUSD": 6369763502.415877,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": 660578532770.9857,
+        "investmentComponentUSD": 101481590495.97755,
+        "consumptionComponentUSD": 431083271251.79083,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 70,
+      "UK": {
+        "governmentSpendingUSD": 550091404598.2751,
+        "governmentRevenueUSD": 716044272024.8435,
+        "fiscalDeficitPctGdp": -0.07405999999999999,
+        "estimatedNominalGdpUSD": 1205779903995988.5,
+        "investmentComponentUSD": 1095718560039945.4,
+        "consumptionComponentUSD": 317779990387.2492,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 20359501507.882668,
+        "governmentRevenueUSD": 12018564422.419596,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": -37585170870144.87,
+        "investmentComponentUSD": 328899503057.5302,
+        "consumptionComponentUSD": 1723546628108.7031,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 6525231421.523798,
+        "governmentRevenueUSD": 3667729996.9528437,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": -9737038660458.914,
+        "investmentComponentUSD": 100369153334.97096,
+        "consumptionComponentUSD": 425247679394.66956,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 71,
+      "UK": {
+        "governmentSpendingUSD": 5721045064381.749,
+        "governmentRevenueUSD": 7446983381494.92,
+        "fiscalDeficitPctGdp": -0.07405999999999999,
+        "estimatedNominalGdpUSD": 1193977551452181.5,
+        "investmentComponentUSD": 653216488748399.2,
+        "consumptionComponentUSD": 593161071675.4731,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": -411505406621.7459,
+        "governmentRevenueUSD": -242918729505.36517,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": -140601511885981.9,
+        "investmentComponentUSD": 323213991876.7959,
+        "consumptionComponentUSD": 1623311899032.6084,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": -96179108958.96994,
+        "governmentRevenueUSD": -54060765085.72816,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": -36643513042143.92,
+        "investmentComponentUSD": 99132384736.81982,
+        "consumptionComponentUSD": 405672236857.4874,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 72,
+      "UK": {
+        "governmentSpendingUSD": 5665230904188.858,
+        "governmentRevenueUSD": 7374331074314.838,
+        "fiscalDeficitPctGdp": -0.07405999999999999,
+        "estimatedNominalGdpUSD": 1174874735140486,
+        "investmentComponentUSD": 407356379659905,
+        "consumptionComponentUSD": 593463993401.578,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": -1539406102678.5547,
+        "governmentRevenueUSD": -908737937917.8221,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": -262602539868044.44,
+        "investmentComponentUSD": 41159797362132.8,
+        "consumptionComponentUSD": 1098923349986.025,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": -361961764544.2373,
+        "governmentRevenueUSD": -203453017342.7719,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": -5034557894979.531,
+        "investmentComponentUSD": 81227053326410.61,
+        "consumptionComponentUSD": 298332843330.3133,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 73,
+      "UK": {
+        "governmentSpendingUSD": 5570473883748.56,
+        "governmentRevenueUSD": 7250987533308.29,
+        "fiscalDeficitPctGdp": -0.07405999999999999,
+        "estimatedNominalGdpUSD": -11949529175681516,
+        "investmentComponentUSD": 268667715366184.9,
+        "consumptionComponentUSD": 595524750691.8418,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": -2875233013700.717,
+        "governmentRevenueUSD": -1697299572450.2615,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": 7283589268368515,
+        "investmentComponentUSD": 50850939482583.68,
+        "consumptionComponentUSD": 1096629137039.3143,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": -49733754670.26269,
+        "governmentRevenueUSD": -27954561621.144608,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": -274227876249475.94,
+        "investmentComponentUSD": 288943708740445.56,
+        "consumptionComponentUSD": 297260513956.2217,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 74,
+      "UK": {
+        "governmentSpendingUSD": -124748272557604.97,
+        "governmentRevenueUSD": -73077985839855.31,
+        "fiscalDeficitPctGdp": 0.22593999999999997,
+        "estimatedNominalGdpUSD": 529992678969749250,
+        "investmentComponentUSD": 261087739675007.16,
+        "consumptionComponentUSD": 596406946109.6672,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": 38305692247298.08,
+        "governmentRevenueUSD": 47539031991640.36,
+        "fiscalDeficitPctGdp": -0.06559999999999999,
+        "estimatedNominalGdpUSD": -324568230104697800,
+        "investmentComponentUSD": 85869417762168.53,
+        "consumptionComponentUSD": 1085712400623.6775,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": -2709784762219.3975,
+        "governmentRevenueUSD": -1523127413518.9023,
+        "fiscalDeficitPctGdp": 0.22582,
+        "estimatedNominalGdpUSD": 4415946272987799.5,
+        "investmentComponentUSD": 284987760636070.4,
+        "consumptionComponentUSD": 295242060703.87555,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    },
+    {
+      "week": 75,
+      "UK": {
+        "governmentSpendingUSD": 2514032084826436.5,
+        "governmentRevenueUSD": 3272471191112826.5,
+        "fiscalDeficitPctGdp": -0.07405999999999999,
+        "estimatedNominalGdpUSD": -2.4118178584270977e+32,
+        "investmentComponentUSD": 4.482315927074192e+26,
+        "consumptionComponentUSD": 206570630574.2836,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "EUR": {
+        "governmentSpendingUSD": -3553502543405673,
+        "governmentRevenueUSD": -2097693758691368,
+        "fiscalDeficitPctGdp": 0.23440000000000003,
+        "estimatedNominalGdpUSD": -1.465427368409895e+28,
+        "investmentComponentUSD": 6.868982000001914e+21,
+        "consumptionComponentUSD": 1097359080983.6173,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      },
+      "JPN": {
+        "governmentSpendingUSD": 18415835200218.96,
+        "governmentRevenueUSD": 24749987632881.098,
+        "fiscalDeficitPctGdp": -0.07418,
+        "estimatedNominalGdpUSD": -3.1163148902045506e+30,
+        "investmentComponentUSD": 4.593936928765576e+22,
+        "consumptionComponentUSD": 295797788525.5026,
+        "trackedInvestmentUSD_inputs": "none-NaN-or-infinite"
+      }
+    }
+  ],
+  "firstBadWeek": 75
+}

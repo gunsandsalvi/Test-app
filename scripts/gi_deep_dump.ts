@@ -4,8 +4,14 @@ import * as fs from 'fs';
 let state = createInitialGameState();
 const dump: any = { weeks: [] };
 
-for (let w = 1; w <= 60; w++) {
-  state = advanceWeeklyStep(state);
+for (let w = 1; w <= 520; w++) {
+  try {
+    state = advanceWeeklyStep(state);
+  } catch (err: any) {
+    dump.firstBadWeek = w;
+    dump.error = err.message;
+    break;
+  }
   const weekData: any = { week: w };
   (['UK', 'EUR', 'JPN'] as const).forEach(regionId => {
     const r = state.regions[regionId];

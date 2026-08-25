@@ -755,7 +755,7 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
 export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, regions: Record<RegionId, Region>): number {
   return (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
     const segs = regions[r].privateSectorSegments.filter(seg => (seg.producedCommodityIds || []).includes(commodityId));
-    return s + segs.reduce((s2, seg) => s2 + (seg.annualRevenueUSD * 0.15) / segs.length / 52, 0); // 15% of a tagged segment's revenue is treated as this commodity's real weekly output share
+    return s + segs.reduce((s2, seg) => s2 + (seg.annualRevenueUSD * 0.008) / segs.length / 52, 0); // a tagged segment's real commodity-specific output is a small slice of its total revenue, not 15% of the whole sector
   }, 0);
 }
 
