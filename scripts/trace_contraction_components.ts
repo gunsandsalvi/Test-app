@@ -11,7 +11,6 @@ for (let w = 1; w <= 520; w++) {
     const nx = reg.tradeBalance;
     const gdp = reg.derivedNominalGdpUSD;
     const inc = reg.estimatedHouseholdIncomeUSD;
-    const hs = reg.householdState;
     const trackedFirms = state.companies.filter(c => c.region === 'USA' && !c.isDefaulted);
     const trackedCapex = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
     const trackedRev = trackedFirms.reduce((s, f) => s + f.annualRevenue, 0);

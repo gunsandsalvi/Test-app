@@ -440,8 +440,15 @@ export function evolveRegionMacro(
     const pool = newOccupationPools[occ];
     return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * pool.employed;
   }, 0);
+  const unemploymentReplacementRate = 0.35;
+  const unemploymentTransferIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
+    const pool = newOccupationPools[occ];
+    const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
+    const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
+    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * unemployedInPool * unemploymentReplacementRate;
+  }, 0);
   const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
-  const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
+  const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + unemploymentTransferIncomeUSD + capitalIncomeUSD).toFixed(0));
 
   const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
   
