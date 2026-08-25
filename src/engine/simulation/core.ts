@@ -942,12 +942,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
         let commodityPriceGrowthAdjustment = 0;
         if ((comp as any).producedCommodityId) {
           const ownCommodity = updatedCommodities.find((c: any) => c.id === (comp as any).producedCommodityId || c.symbol === (comp as any).producedCommodityId);
-          if (ownCommodity && ownCommodity.historicalPrices?.length > 0) {
-            const baselinePrice = ownCommodity.historicalPrices[0];
-            if (baselinePrice > 0) {
-              const priceRatioVsBaseline = ownCommodity.spotPrice / baselinePrice;
-              commodityPriceGrowthAdjustment = 0.5 * Math.tanh((priceRatioVsBaseline - 1) * 1.5);
-            }
+          const baselinePrice = (ownCommodity as any)?.allTimeBaselinePrice ?? ownCommodity?.historicalPrices?.[0];
+          if (ownCommodity && baselinePrice > 0) {
+            const priceRatioVsBaseline = ownCommodity.spotPrice / baselinePrice;
+            commodityPriceGrowthAdjustment = 0.5 * Math.tanh((priceRatioVsBaseline - 1) * 1.5);
           }
         }
         categoryDrivenGrowth += commodityPriceGrowthAdjustment;

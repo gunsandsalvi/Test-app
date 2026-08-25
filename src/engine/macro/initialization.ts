@@ -905,7 +905,7 @@ export function getInitialCommodities(): Commodity[] {
       supplyDemandBalance: 'Balanced',
       inventoryLevelPct: 49, 
     },
-  ];
+  ].map(c => ({ ...c, allTimeBaselinePrice: c.spotPrice })) as Commodity[];
 }
 
 /**

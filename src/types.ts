@@ -369,6 +369,7 @@ export interface Region {
   fxReservesUSD: number; // raw USD
   structuralDeficitPctGdp: number;
   cyclicalDeficitComponent?: number;
+  govEmploymentGrowthRate?: number;
   fiscalDeficitPctGdp: number; // e.g. 0.065 = 6.5% deficit
   debtToGdpPct: number; // e.g. 1.224 = 122.4% gross debt
   fiscalStanceScore: number;
@@ -803,6 +804,7 @@ export interface Commodity {
   futures6M: number;
   change1W: number;
   volatility: number;
+  allTimeBaselinePrice?: number; // set once at generation, never rolls forward
   // Cash and carry supply / demand balance
   supplyDemandBalance: 'Deficit (Tight Supply)' | 'Balanced' | 'Surplus (Oversupplied)';
   inventoryLevelPct: number; // e.g. 42% (low = backwardation)

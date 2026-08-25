@@ -182,7 +182,13 @@ export function evolveRegionMacro(
 
   // Government employment responds to real spending growth
   const spendingGrowthRate = region.governmentSpendingUSD > 0 ? (newGovernmentSpendingUSD - region.governmentSpendingUSD) / region.governmentSpendingUSD : 0;
-  const govEmploymentGrowthRate = (spendingGrowthRate * 0.3);
+  // Government spending has its own startup transient (near-zero/degenerate at generation, then jumping to
+  // its real mature value once evolution first runs) — bidirectional, since the transient can show up as
+  // either an anomalous spike or an anomalous collapse depending on which value is compared against which.
+  const isGovSpendingStartupTransition = region.governmentSpendingUSD < newGovernmentSpendingUSD * 0.2 || newGovernmentSpendingUSD < region.governmentSpendingUSD * 0.2;
+  const targetGovEmploymentGrowthRate = isGovSpendingStartupTransition ? 0 : (spendingGrowthRate * 0.3);
+  const prevGovEmploymentGrowthRate = (region as any).govEmploymentGrowthRate ?? targetGovEmploymentGrowthRate;
+  const govEmploymentGrowthRate = prevGovEmploymentGrowthRate * 0.85 + targetGovEmploymentGrowthRate * 0.15;
   const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
   let newPotentialGdpGrowth = region.potentialGdpGrowth;
@@ -656,6 +662,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     balanceSheetStance: newBalanceSheetStance,
     structuralDeficitPctGdp: newStructuralDeficitPctGdp,
     cyclicalDeficitComponent,
+    govEmploymentGrowthRate,
     fiscalDeficitPctGdp: newFiscalDeficitPctGdp,
     fiscalStanceScore: newFiscalStanceScore,
     sovereignRating: newSovereignRating,
