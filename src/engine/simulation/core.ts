@@ -1735,7 +1735,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15; // real EMA smoothing — a single week's noise no longer dominates
     const gdpGrowthBottomUp = Math.pow(1 + smoothedWeeklyRate, 52) - 1;
 
-    const finalGdpGrowth = isFinite(gdpGrowthBottomUp) ? gdpGrowthBottomUp : (reg.gdpGrowth || 0.02);
+    if (!isFinite(gdpGrowthBottomUp)) {
+      throw new Error(`gdpGrowthBottomUp is non-finite for region ${regionId} at week ${nextWeek}: ${gdpGrowthBottomUp}. This must be fixed at its real source, not papered over with an assumed growth rate.`);
+    }
+    const finalGdpGrowth = gdpGrowthBottomUp;
 
     // Government Debt Tranches: roll-off and new issuance
     const maturedTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);
