@@ -1,8 +1,63 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool, CreditTierBook } from '../../types';
+import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS } from '../../types';
 import { generate52WeekHistory } from './utils';
 import { INITIAL_WEATHER } from './weather';
+
+export function deriveSubUnitPrice(subUnitId: string, inflation: number, gdpGrowth: number): number {
+  const basePrices: Record<string, number> = {
+    upstream_extraction: 75.0,
+    refined_products: 3.5,
+    industrial_chemicals: 120.0,
+    household_chemicals: 15.0,
+    agricultural_chemicals: 45.0,
+    specialty_metals: 1500.0,
+    heavy_equipment: 250000.0,
+    industrial_automation: 80000.0,
+    defense_systems: 5000000.0,
+    commercial_aerospace: 12000000.0,
+    passenger_vehicles: 35000.0,
+    commercial_fleet: 90000.0,
+    semiconductors: 25.0,
+    consumer_devices: 800.0,
+    enterprise_software: 5000.0,
+    consumer_software: 100.0,
+    network_infrastructure: 45000.0,
+    pharmaceuticals: 50.0,
+    medtech_devices: 15000.0,
+    food_beverage: 10.0,
+    household_essentials: 12.0,
+    apparel_retail: 40.0,
+    home_furnishings: 200.0,
+    luxury_goods: 2500.0,
+    media_content: 15.0,
+    residential_construction: 350000.0,
+    commercial_construction: 2500000.0,
+  };
+  const base = basePrices[subUnitId] ?? 100.0;
+  const multiplier = 1.0 + (inflation * 0.5) + (gdpGrowth * 0.3);
+  return Number((base * Math.max(0.2, multiplier)).toFixed(2));
+}
+
+export function createInitialCategoryDemand(inflation: number, gdpGrowth: number): Record<string, any> {
+  const cd: Record<string, any> = {};
+  Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+    subUnits.forEach(su => {
+      su.unitPriceUSD = deriveSubUnitPrice(su.unitId, inflation, gdpGrowth);
+      cd[su.unitId] = {
+        demandLevelUSD: 15_000_000_000,
+        demandGrowthAnnual: gdpGrowth,
+        demandHistory: [15_000_000_000],
+        crowdingIntensity: 0.1,
+        inventoryLevelUSD: 1_500_000_000,
+        inputCostPressure: 0,
+        clearedInputPriceIndex: 1.0,
+        lastWeekInventoryLevelUSD: 1_500_000_000,
+      };
+    });
+  });
+  return cd;
+}
 
 function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDebtUSD: number): CreditTierBook[] {
   const totalDebt = creditCardDebtUSD + otherConsumerLoanDebtUSD;
@@ -29,16 +84,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
     USA: {
       id: 'USA',
       name: 'United States',
-      categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-      },
+      categoryDemand: createInitialCategoryDemand(0.026, 0.022),
+      activeContracts: [],
       currency: 'USD',
       symbol: '$',
       centralBank: 'Federal Reserve',
@@ -174,16 +221,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
     UK: {
       id: 'UK',
       name: 'United Kingdom',
-      categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-      },
+      categoryDemand: createInitialCategoryDemand(0.028, 0.018),
+      activeContracts: [],
       currency: 'GBP',
       symbol: '£',
       centralBank: 'Bank of England',
@@ -318,16 +357,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
     },    JPN: {
       id: 'JPN',
       name: 'Japan',
-      categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-      },
+      categoryDemand: createInitialCategoryDemand(0.015, 0.012),
+      activeContracts: [],
       currency: 'JPY',
       symbol: '¥',
       centralBank: 'Bank of Japan',
@@ -463,16 +494,8 @@ export function getInitialRegions(): Record<RegionId, Region> {
     EUR: {
       id: 'EUR',
       name: 'Eurozone',
-      categoryDemand: {
-        StapleHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        StandardHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        LuxuryHousehold: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateIndustrial: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        CorporateTech: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentDefense: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentInfrastructure: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-        GovernmentHealthcare: { demandLevelUSD: 0, demandGrowthAnnual: 0, demandHistory: [], crowdingIntensity: 0, inventoryLevelUSD: 0, inputCostPressure: 0, clearedInputPriceIndex: 1.0, lastWeekInventoryLevelUSD: 0 },
-      },
+      categoryDemand: createInitialCategoryDemand(0.020, 0.015),
+      activeContracts: [],
       currency: 'EUR',
       symbol: '€',
       centralBank: 'European Central Bank',

@@ -464,9 +464,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   function getFxCompetitivenessAdjustment(exporter: RegionId, importer: RegionId, fxPairs: FxPair[]): number {
     const pair = fxPairs.find(f => (f.base === exporter && f.quote === importer) || (f.base === importer && f.quote === exporter));
-    if (!pair) return 0;
+    if (!pair || !isFinite(pair.rate) || pair.rate <= 0 || !isFinite(pair.change1W)) return 0;
     const direction = pair.base === exporter ? -1 : 1; // if exporter is the base currency, a RISING rate means exporter is depreciating (rate = quote-per-base) — cheaper exports, so flip sign
-    return ((pair.change1W / pair.rate) * direction * 5);
+    const ratio = pair.change1W / pair.rate;
+    if (!isFinite(ratio)) return 0;
+    return Math.max(-0.5, Math.min(0.5, (ratio * direction * 5)));
   }
 
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -487,7 +489,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const importerDemand = updatedRegions[importer].categoryDemand[cat as any]?.demandLevelUSD ?? 0;
         const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
         const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, updatedFxPairs);
-        const exportShareCapture = (0.1 + exporterCompetitiveness * 0.5 + fxCompetitiveness);
+        const exportShareCapture = Math.max(0, (0.1 + exporterCompetitiveness * 0.5 + fxCompetitiveness));
+        if (!Number.isFinite(exportShareCapture)) throw new Error(`exportShareCapture is ${exportShareCapture}! exporterCompetitiveness=${exporterCompetitiveness}, fxCompetitiveness=${fxCompetitiveness}`);
+        if (isNaN(importerDemand)) throw new Error(`importerDemand is NaN!`);
         const flow = importerDemand * tradability * exportShareCapture / regionIds.length; // divided since multiple exporters compete for the same import demand
         regionExports[exporter] += flow;
         regionImports[importer] += flow;
@@ -626,9 +630,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
       let categoryDrivenGrowth = 0;
       updatedProductLines = (comp.productLines || []).map((line) => {
-        const catDemand = reg.categoryDemand[line.category as any];
-        const isHouseholdFacing = ['StapleHousehold', 'StandardHousehold', 'LuxuryHousehold'].includes(line.category);
-        const categoryGrowth = (catDemand?.demandGrowthAnnual ?? reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
+        const demandKey = line.subUnitId || line.category || '';
+        const catDemand = reg.categoryDemand[demandKey] || Object.values(reg.categoryDemand)[0];
+        const isHouseholdFacing = ['StapleHousehold', 'StandardHousehold', 'LuxuryHousehold', 'ConsumerStaples', 'ConsumerDiscretionaryRetail', 'LuxuryGoods'].includes(line.category || line.industry || '');
+        const baseDemandGrowth = catDemand?.demandGrowthAnnual ?? reg.gdpGrowth;
+        const categoryGrowth = (isFinite(baseDemandGrowth) ? baseDemandGrowth : reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
         const targetCompetitiveness = (marginEdge * 16 + growthInvestmentSignal * 0.5);
@@ -638,7 +644,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         
         const lineGrowth = categoryGrowth + shareGainRate;
         
-        categoryDrivenGrowth += lineGrowth * line.revenueShare;
+        categoryDrivenGrowth += (isFinite(lineGrowth) ? lineGrowth : 0) * (isFinite(line.revenueShare) ? line.revenueShare : 1);
         const shouldSnapshot = nextWeek % 13 === 0;
         return {
           ...line,
@@ -659,11 +665,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
           if (tradability < 0.1) return s;
           const regionExportsInCat = regionCategoryExports[comp.region]?.[line.category] ?? 0;
           const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue);
-          return s + exportShareOfRev * (reg.gdpGrowth / 52);
+          const nextS = s + exportShareOfRev * (reg.gdpGrowth / 52); if (isNaN(nextS)) throw new Error(`NaN in reduce! regionExportsInCat=${regionExportsInCat}, categoryMarketShare=${line.categoryMarketShare}, revenueShare=${line.revenueShare}, annualRevenue=${comp.annualRevenue}, gdpGrowth=${reg.gdpGrowth}`); return nextS;
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
         const annualGrowthRate = laggedCategoryGrowth + noise + reg.inflation * pricingPowerBeta;
+        
         const weeklyGrowthRate = (annualGrowthRate / 52) + exportRevenueBoost;
+        if (isNaN(weeklyGrowthRate)) throw new Error(`weeklyGrowthRate is NaN, laggedCategoryGrowth=${laggedCategoryGrowth}, noise=${noise}, reg.inflation=${reg.inflation}, pricingPowerBeta=${pricingPowerBeta}`);
         const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
       
       // Smooth transition to target revenue (no exponential weekly compounding)
@@ -802,12 +810,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
     }
 
     // Credit metrics
-    const newLeverage = comp.sector === 'Banks'
-      ? Number((newTotalDebt / Math.max(1, newRevenue * 0.4)).toFixed(2))
-      : Number((newTotalDebt / Math.max(1, newEbitda)).toFixed(2));
-    const newCoverage = comp.sector === 'Banks'
+    const rawLeverage = comp.sector === 'Banks'
+      ? (newTotalDebt / Math.max(1, newRevenue * 0.4))
+      : (newTotalDebt / Math.max(1, newEbitda));
+    const newLeverage = isFinite(rawLeverage) ? Number(Math.max(0, Math.min(100, rawLeverage)).toFixed(2)) : 5.0;
+
+    const rawCoverage = comp.sector === 'Banks'
       ? (reg.bankingSector.bankCapitalRatio < 0.05 ? 0.4 : 3.0)
-      : Number((newEbit / Math.max(0.5, annualInterest)).toFixed(2));
+      : (newEbit / Math.max(0.5, annualInterest));
+    const newCoverage = isFinite(rawCoverage) ? Number(Math.max(-50, Math.min(50, rawCoverage)).toFixed(2)) : 1.5;
 
     // Default trigger: Cash < 0 and Coverage < 0.8x (or previously defaulted)
     let isDefaulted = comp.isDefaulted || (newCash < 0 && newCoverage < 0.8);
@@ -838,7 +849,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const bucket = getRatingBucket(newRating);
     const bucketPeers = state.companies.filter(c => c.region === comp.region && getRatingBucket(c.creditRating) === bucket);
     const targetOasBps = computeExpectedLossSpreadBps(comp) + computeBucketDemandPremiumBps(bucket, reg, bucketPeers);
-    comp.oasSpreadBps = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35;
+    const rawOas = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35;
+    comp.oasSpreadBps = isFinite(rawOas) ? Number(Math.max(10, Math.min(5000, rawOas)).toFixed(2)) : 150;
 
     // PART OF: Pre-refinancing trigger roughly one year before maturity
     let companyTranches = comp.debtTranches.map(t => ({ ...t }));
@@ -963,10 +975,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
     }
 
-    const newOasBps = Math.round(
-      comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35 + refinancingSpreadShockBps + (Math.random() - 0.5) * 5
-    );
-    const newCdsSpreadBps = newOasBps + Math.floor(Math.random() * 8 - 4);
+    const rawNewOas = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35 + refinancingSpreadShockBps + (Math.random() - 0.5) * 5;
+    const newOasBps = isFinite(rawNewOas) ? Math.round(Math.max(10, Math.min(5000, rawNewOas))) : 150;
+    const rawNewCds = newOasBps + Math.floor(Math.random() * 8 - 4);
+    const newCdsSpreadBps = isFinite(rawNewCds) ? Math.round(Math.max(10, Math.min(5000, rawNewCds))) : 150;
 
     const loanPricing = priceLeveragedLoan(
       comp.leveragedLoan.quotedMarginBps,
@@ -1391,11 +1403,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const newDerivedNominalGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
     const newNominalGdpHistory = [...(reg.nominalGdpHistory || []).slice(-51), newDerivedNominalGdpUSD];
     const gdpLevel52WeeksAgo = newNominalGdpHistory.length >= 52 ? newNominalGdpHistory[0] : newDerivedNominalGdpUSD;
-    const gdpGrowthBottomUp = gdpLevel52WeeksAgo > 0
+    const gdpGrowthBottomUp = gdpLevel52WeeksAgo > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevel52WeeksAgo)
       ? (newDerivedNominalGdpUSD / gdpLevel52WeeksAgo - 1) - reg.inflation
       : 0;
 
-    const finalGdpGrowth = (gdpGrowthBottomUp);
+    const finalGdpGrowth = isFinite(gdpGrowthBottomUp) ? Math.max(-0.25, Math.min(0.25, gdpGrowthBottomUp)) : (reg.gdpGrowth || 0.02);
 
     // Government Debt Tranches: roll-off and new issuance
     const maturedTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek <= nextWeek);

@@ -447,8 +447,11 @@ export function evolveRegionMacro(
   
   // Wage-push and monetary inflation add to CPI (scaled for weekly turn)
   newInflation = Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4));
-  const newCoreInflation = Number((newInflation * 0.92 + wagePushInflation * 0.1).toFixed(4));
-  const newExpectedInflation = region.expectedInflation * 0.9 + newInflation * 0.1;
+  newInflation = isFinite(newInflation) ? Number(Math.max(-0.20, Math.min(0.50, newInflation)).toFixed(4)) : 0.025;
+  const rawCore = newInflation * 0.92 + wagePushInflation * 0.1;
+  const newCoreInflation = isFinite(rawCore) ? Number(Math.max(-0.20, Math.min(0.50, rawCore)).toFixed(4)) : 0.025;
+  const rawExp = region.expectedInflation * 0.9 + newInflation * 0.1;
+  const newExpectedInflation = isFinite(rawExp) ? Number(Math.max(-0.20, Math.min(0.50, rawExp)).toFixed(4)) : 0.025;
 
   // Calibrated Inertial Taylor Rule:
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
@@ -713,7 +716,7 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
   const sigmaFx = 0.08;
   const eps = (Math.random() - 0.5) * Math.sqrt(dt) * 2;
 
-  const tradeShock = (((baseRegion.tradeBalance - quoteRegion.tradeBalance) / 1e12) * 0.002);
+  const rawTradeShock = (((baseRegion.tradeBalance - quoteRegion.tradeBalance) / 1e12) * 0.002); const tradeShock = Math.max(-0.05, Math.min(0.05, rawTradeShock));
 
   const drift = rateDiff * dt * 0.3 + sigmaFx * eps + tradeShock;
   const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));
@@ -744,13 +747,13 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
 
   const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
   const totalCategoryDemandUSD = linkage ? (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
-    const catDemand = (regions[r].categoryDemand as any)[linkage.category];
+    const catDemand = (regions[r].categoryDemand as any)[linkage.subUnitId];
     return s + (catDemand?.demandLevelUSD ?? 0);
   }, 0) : 0;
   const weeklyDemandUSD = (totalCategoryDemandUSD * (linkage?.intensityShare ?? 0)) / 52;
   const demandUnits = comm.spotPrice > 0 ? weeklyDemandUSD / comm.spotPrice : 0;
 
-  const ratio = supplyUnits > 0 ? demandUnits / supplyUnits : 1.0;
+  const ratio = supplyUnits > 0.001 ? Math.max(0.2, Math.min(5.0, demandUnits / supplyUnits)) : 1.0;
   return { ratio, supplyUnits, demandUnits };
 }
 
