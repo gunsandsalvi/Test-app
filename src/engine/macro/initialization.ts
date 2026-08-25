@@ -39,20 +39,47 @@ export function deriveSubUnitPrice(subUnitId: string, inflation: number, gdpGrow
   return Number((base * Math.max(0.2, multiplier)).toFixed(2));
 }
 
-export function createInitialCategoryDemand(inflation: number, gdpGrowth: number): Record<string, any> {
+export function createInitialCategoryDemand(
+  inflation: number,
+  gdpGrowth: number,
+  estimatedHouseholdIncome: number,
+  estimatedNominalGdp: number
+): Record<string, any> {
+  const C = estimatedHouseholdIncome * 0.94;
+  const G = estimatedNominalGdp * 0.35;
+  const I = estimatedNominalGdp * 0.15;
+
+  let totalHhWeight = 0;
+  let totalGovWeight = 0;
+  let totalCorpWeight = 0;
+
+  Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+    subUnits.forEach(su => {
+      totalHhWeight += su.buyerMix.HOUSEHOLD;
+      totalGovWeight += su.buyerMix.GOVERNMENT;
+      totalCorpWeight += su.buyerMix.CORPORATE;
+    });
+  });
+
   const cd: Record<string, any> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
       su.unitPriceUSD = deriveSubUnitPrice(su.unitId, inflation, gdpGrowth);
+      
+      const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
+      const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+      const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
+      const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
+
       cd[su.unitId] = {
-        demandLevelUSD: 15_000_000_000,
+        demandLevelUSD,
         demandGrowthAnnual: gdpGrowth,
-        demandHistory: [15_000_000_000],
+        demandHistory: [demandLevelUSD],
         crowdingIntensity: 0.1,
-        inventoryLevelUSD: 1_500_000_000,
+        inventoryLevelUSD: demandLevelUSD * 0.10,
         inputCostPressure: 0,
         clearedInputPriceIndex: 1.0,
-        lastWeekInventoryLevelUSD: 1_500_000_000,
+        lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
       };
     });
   });
@@ -84,7 +111,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
     USA: {
       id: 'USA',
       name: 'United States',
-      categoryDemand: createInitialCategoryDemand(0.026, 0.022),
+      categoryDemand: createInitialCategoryDemand(0.026, 0.022, 12_000_000_000_000, 19_500_000_000_000),
       activeContracts: [],
       currency: 'USD',
       symbol: '$',
@@ -221,7 +248,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
     UK: {
       id: 'UK',
       name: 'United Kingdom',
-      categoryDemand: createInitialCategoryDemand(0.028, 0.018),
+      categoryDemand: createInitialCategoryDemand(0.028, 0.018, 2_000_000_000_000, 3_200_000_000_000),
       activeContracts: [],
       currency: 'GBP',
       symbol: '£',
@@ -357,7 +384,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
     },    JPN: {
       id: 'JPN',
       name: 'Japan',
-      categoryDemand: createInitialCategoryDemand(0.015, 0.012),
+      categoryDemand: createInitialCategoryDemand(0.015, 0.012, 3_500_000_000_000, 5_500_000_000_000),
       activeContracts: [],
       currency: 'JPY',
       symbol: '¥',
@@ -494,7 +521,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
     EUR: {
       id: 'EUR',
       name: 'Eurozone',
-      categoryDemand: createInitialCategoryDemand(0.020, 0.015),
+      categoryDemand: createInitialCategoryDemand(0.020, 0.015, 9_000_000_000_000, 14_500_000_000_000),
       activeContracts: [],
       currency: 'EUR',
       symbol: '€',

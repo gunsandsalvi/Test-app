@@ -9,22 +9,34 @@ export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
 }
 
-function getSegmentDemandSignal(segmentType: PrivateSegmentType, reg: Region, prevHS: HouseholdState): number {
+function getSegmentDemandSignal(segmentType: PrivateSegmentType, reg: Region, _prevHS: HouseholdState): number {
   const cat = reg.categoryDemand as any;
   switch (segmentType) {
-    case 'MANUFACTURING':
-      return cat.CorporateIndustrial?.demandGrowthAnnual ?? 0;
-    case 'PROFESSIONAL_SERVICES':
-      return ((cat.CorporateTech?.demandGrowthAnnual ?? 0) + (cat.LuxuryHousehold?.demandGrowthAnnual ?? 0)) / 2;
-    case 'RETAIL_TRADE':
-      return ((cat.StapleHousehold?.demandGrowthAnnual ?? 0) + (cat.StandardHousehold?.demandGrowthAnnual ?? 0)) / 2;
-    case 'CONSTRUCTION_REALESTATE': {
-      // no direct category exists for housing — mortgage debt growth (S1) is a genuine, already-built proxy for real housing-market activity
-      const mortgageGrowth = prevHS.mortgageDebtUSD > 0 ? 0 : 0; // computed by caller from prevHS vs current — see below
-      return mortgageGrowth;
+    case 'MANUFACTURING': {
+      const g1 = cat.heavy_equipment?.demandGrowthAnnual ?? 0;
+      const g2 = cat.industrial_automation?.demandGrowthAnnual ?? 0;
+      const g3 = cat.industrial_chemicals?.demandGrowthAnnual ?? 0;
+      return (g1 + g2 + g3) / 3;
     }
-    case 'HEALTHCARE_SERVICES':
-      return cat.GovernmentHealthcare?.demandGrowthAnnual ?? 0;
+    case 'PROFESSIONAL_SERVICES': {
+      const g1 = cat.enterprise_software?.demandGrowthAnnual ?? 0;
+      const g2 = cat.network_infrastructure?.demandGrowthAnnual ?? 0;
+      return (g1 + g2) / 2;
+    }
+    case 'RETAIL_TRADE': {
+      const g1 = cat.food_beverage?.demandGrowthAnnual ?? 0;
+      const g2 = cat.apparel_retail?.demandGrowthAnnual ?? 0;
+      const g3 = cat.luxury_goods?.demandGrowthAnnual ?? 0;
+      return (g1 + g2 + g3) / 3;
+    }
+    case 'CONSTRUCTION_REALESTATE': {
+      return 0;
+    }
+    case 'HEALTHCARE_SERVICES': {
+      const g1 = cat.pharmaceuticals?.demandGrowthAnnual ?? 0;
+      const g2 = cat.medtech_devices?.demandGrowthAnnual ?? 0;
+      return (g1 + g2) / 2;
+    }
     default:
       return 0;
   }
@@ -290,11 +302,13 @@ export function evolveRegionMacro(
     const pool = currentOccupationPools[occ];
     const availableSupply = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
     const demandForThisOccupation = occDemandInput[occ] ?? 0;
-    const tightness = availableSupply > 0 ? demandForThisOccupation / availableSupply : 1.0;
+    const rawTightness = availableSupply > 0 ? demandForThisOccupation / availableSupply : 1.0;
+    const tightness = Math.max(0.2, Math.min(2.5, rawTightness));
 
-    const targetWageGrowth = ((tightness - 0.92) * 0.5);
-    const newWageGrowthAnnual = pool.wageGrowthAnnual * 0.9 + targetWageGrowth * 0.1;
-    const newWageIndex = pool.wageIndex * (1 + newWageGrowthAnnual / 52);
+    const targetWageGrowth = ((tightness - 0.92) * 0.4);
+    const rawWageGrowthAnnual = pool.wageGrowthAnnual * 0.9 + targetWageGrowth * 0.1;
+    const newWageGrowthAnnual = Math.max(-0.05, Math.min(0.15, rawWageGrowthAnnual));
+    const newWageIndex = Math.max(0.1, Math.min(10.0, pool.wageIndex * (1 + newWageGrowthAnnual / 52)));
     acc[occ] = {
       employed: Math.min(availableSupply, demandForThisOccupation),
       wageIndex: Number(newWageIndex.toFixed(4)),
@@ -320,7 +334,8 @@ export function evolveRegionMacro(
   }
 
   // Private-Sector Segments evolution driven by specific demand signals & occupational wage costs
-  const mortgageGrowthSignal = prevHS.mortgageDebtUSD > 0 ? (newMortgageDebtUSD / prevHS.mortgageDebtUSD - 1) * 52 : 0;
+  const rawMortgageGrowthSignal = prevHS.mortgageDebtUSD > 0 ? (newMortgageDebtUSD / prevHS.mortgageDebtUSD - 1) * 52 : 0;
+  const mortgageGrowthSignal = Number.isFinite(rawMortgageGrowthSignal) ? Math.max(-0.15, Math.min(0.20, rawMortgageGrowthSignal)) : 0;
   const seedMarginByType: Record<PrivateSegmentType, number> = {
     MANUFACTURING: 0.09,
     PROFESSIONAL_SERVICES: 0.14,
@@ -331,9 +346,9 @@ export function evolveRegionMacro(
 
   const newPrivateSectorSegments: any[] = (region.privateSectorSegments || []).map(seg => {
     const demandSignal = seg.segmentType === 'CONSTRUCTION_REALESTATE' ? mortgageGrowthSignal : getSegmentDemandSignal(seg.segmentType, region, prevHS);
-    const employmentGrowthRate = (demandSignal * 0.05);
+    const employmentGrowthRate = Math.max(-0.04, Math.min(0.04, demandSignal * 0.05));
     const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate)));
-    const revenueGrowthRate = (demandSignal * 0.06);
+    const revenueGrowthRate = Math.max(-0.04, Math.min(0.05, demandSignal * 0.06));
     const newAnnualRevenueUSD = Math.max(1, seg.annualRevenueUSD * (1 + revenueGrowthRate));
 
     const segOccMix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 };

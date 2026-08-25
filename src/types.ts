@@ -5,8 +5,7 @@ export type Industry =
   | 'Energy' | 'MaterialsChemicals' | 'IndustrialsMachinery' | 'AerospaceDefense'
   | 'AutomotiveTransport' | 'TechHardwareSemis' | 'SoftwareDigitalServices' | 'Telecommunications'
   | 'HealthcarePharma' | 'ConsumerStaples' | 'ConsumerDiscretionaryRetail' | 'LuxuryGoods'
-  | 'MediaEntertainment' | 'RealEstateConstruction'
-  | 'StapleHousehold' | 'StandardHousehold' | 'LuxuryHousehold' | 'CorporateIndustrial' | 'CorporateTech' | 'GovernmentDefense' | 'GovernmentInfrastructure' | 'GovernmentHealthcare';
+  | 'MediaEntertainment' | 'RealEstateConstruction';
 
 export type BuyerType = 'HOUSEHOLD' | 'GOVERNMENT' | 'CORPORATE';
 
@@ -73,19 +72,11 @@ export const INDUSTRY_SUBUNITS: Record<Industry, IndustrySubUnit[]> = {
     { unitId: 'residential_construction', label: 'Residential Construction', buyerMix: { HOUSEHOLD: 0.90, GOVERNMENT: 0.05, CORPORATE: 0.05 }, unitPriceUSD: 0 },
     { unitId: 'commercial_construction', label: 'Commercial & Infrastructure Construction', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.45, CORPORATE: 0.55 }, unitPriceUSD: 0 },
   ],
-  StapleHousehold: [{ unitId: 'staple_household', label: 'Staple Household', buyerMix: { HOUSEHOLD: 1.0, GOVERNMENT: 0, CORPORATE: 0 }, unitPriceUSD: 10 }],
-  StandardHousehold: [{ unitId: 'standard_household', label: 'Standard Household', buyerMix: { HOUSEHOLD: 1.0, GOVERNMENT: 0, CORPORATE: 0 }, unitPriceUSD: 20 }],
-  LuxuryHousehold: [{ unitId: 'luxury_household', label: 'Luxury Household', buyerMix: { HOUSEHOLD: 1.0, GOVERNMENT: 0, CORPORATE: 0 }, unitPriceUSD: 100 }],
-  CorporateIndustrial: [{ unitId: 'corporate_industrial', label: 'Corporate Industrial', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0, CORPORATE: 1.0 }, unitPriceUSD: 50 }],
-  CorporateTech: [{ unitId: 'corporate_tech', label: 'Corporate Tech', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0, CORPORATE: 1.0 }, unitPriceUSD: 50 }],
-  GovernmentDefense: [{ unitId: 'gov_defense', label: 'Government Defense', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 1.0, CORPORATE: 0 }, unitPriceUSD: 1000 }],
-  GovernmentInfrastructure: [{ unitId: 'gov_infra', label: 'Government Infrastructure', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 1.0, CORPORATE: 0 }, unitPriceUSD: 1000 }],
-  GovernmentHealthcare: [{ unitId: 'gov_health', label: 'Government Healthcare', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 1.0, CORPORATE: 0 }, unitPriceUSD: 1000 }],
 };
 
 export interface ProductLine {
-  industry?: Industry;
-  subUnitId?: string;
+  industry: Industry;
+  subUnitId: string;
   category?: string;
   revenueShare: number;
   categoryMarketShare: number;

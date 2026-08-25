@@ -151,7 +151,7 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
       {tab === 'supplychain' && (
         <div className="space-y-3">
           {(Object.entries(state.regions) as [RegionId, Region][]).map(([rId, reg]) => {
-            const indDemand = reg.categoryDemand.CorporateIndustrial;
+            const indDemand = (reg.categoryDemand as any).heavy_equipment;
             if (!indDemand) return null;
             return (
               <div key={rId} className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">

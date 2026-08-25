@@ -1,4 +1,4 @@
-import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet } from '../types';
+import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry } from '../types';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
 import { getInitialRegions } from './macro/initialization';
 
@@ -19,14 +19,20 @@ export function getCategoryDemandSeedUSD(category: string, region: RegionId): nu
   const corpBase = income * 0.08;
 
   switch (category) {
-    case 'StapleHousehold': return consumption * 0.25;
-    case 'StandardHousehold': return consumption * 0.50;
-    case 'LuxuryHousehold': return consumption * 0.25;
-    case 'GovernmentDefense': return govBase * 0.30;
-    case 'GovernmentInfrastructure': return govBase * 0.45;
-    case 'GovernmentHealthcare': return govBase * 0.25;
-    case 'CorporateIndustrial': return corpBase * 0.60;
-    case 'CorporateTech': return corpBase * 0.40;
+    case 'Energy': return consumption * 0.10;
+    case 'MaterialsChemicals': return corpBase * 0.15;
+    case 'IndustrialsMachinery': return corpBase * 0.35;
+    case 'AerospaceDefense': return govBase * 0.25;
+    case 'AutomotiveTransport': return consumption * 0.15;
+    case 'TechHardwareSemis': return corpBase * 0.20;
+    case 'SoftwareDigitalServices': return corpBase * 0.30;
+    case 'Telecommunications': return consumption * 0.05;
+    case 'HealthcarePharma': return govBase * 0.30;
+    case 'ConsumerStaples': return consumption * 0.20;
+    case 'ConsumerDiscretionaryRetail': return consumption * 0.15;
+    case 'LuxuryGoods': return consumption * 0.10;
+    case 'MediaEntertainment': return consumption * 0.05;
+    case 'RealEstateConstruction': return consumption * 0.10;
     default: return consumption * 0.20;
   }
 }
@@ -524,24 +530,24 @@ export function generateInitialCompanies(): Company[] {
     // Group templates by primary category to rank them properly
     const categoryGroups: Record<string, CompanyTemplate[]> = {};
     templates.forEach((tmpl) => {
-      let primaryCat = 'StandardHousehold';
-      if (tmpl.sector === 'Tech') primaryCat = 'CorporateTech';
-      else if (tmpl.sector === 'Energy') primaryCat = 'CorporateIndustrial';
-      else if (tmpl.sector === 'Industrials') primaryCat = 'CorporateIndustrial';
-      else if (tmpl.sector === 'Financials' || tmpl.sector === 'Banks') primaryCat = 'CorporateTech';
-      else if (tmpl.sector === 'Consumer') primaryCat = 'StandardHousehold';
+      let primaryCat = 'ConsumerStaples';
+      if (tmpl.sector === 'Tech') primaryCat = 'SoftwareDigitalServices';
+      else if (tmpl.sector === 'Energy') primaryCat = 'Energy';
+      else if (tmpl.sector === 'Industrials') primaryCat = 'IndustrialsMachinery';
+      else if (tmpl.sector === 'Financials' || tmpl.sector === 'Banks') primaryCat = 'SoftwareDigitalServices';
+      else if (tmpl.sector === 'Consumer') primaryCat = 'ConsumerStaples';
 
       if (!categoryGroups[primaryCat]) categoryGroups[primaryCat] = [];
       categoryGroups[primaryCat].push(tmpl);
     });
 
     templates.forEach((rawTmpl) => {
-      let primaryCat: ProductCategory = 'StandardHousehold';
-      if (rawTmpl.sector === 'Tech') primaryCat = 'CorporateTech';
-      else if (rawTmpl.sector === 'Energy') primaryCat = 'CorporateIndustrial';
-      else if (rawTmpl.sector === 'Industrials') primaryCat = 'CorporateIndustrial';
-      else if (rawTmpl.sector === 'Financials' || rawTmpl.sector === 'Banks') primaryCat = 'CorporateTech';
-      else if (rawTmpl.sector === 'Consumer') primaryCat = 'StandardHousehold';
+      let primaryCat: ProductCategory = 'ConsumerStaples';
+      if (rawTmpl.sector === 'Tech') primaryCat = 'SoftwareDigitalServices';
+      else if (rawTmpl.sector === 'Energy') primaryCat = 'Energy';
+      else if (rawTmpl.sector === 'Industrials') primaryCat = 'IndustrialsMachinery';
+      else if (rawTmpl.sector === 'Financials' || rawTmpl.sector === 'Banks') primaryCat = 'SoftwareDigitalServices';
+      else if (rawTmpl.sector === 'Consumer') primaryCat = 'ConsumerStaples';
 
       const group = categoryGroups[primaryCat];
       const rankInCategory = group.findIndex(t => t.ticker === rawTmpl.ticker);
@@ -722,11 +728,12 @@ export function generateInitialCompanies(): Company[] {
 
   
   // G1: Assign Product Lines & Category Market Share
-  const categories = [
-    'StapleHousehold', 'StandardHousehold', 'LuxuryHousehold',
-    'CorporateIndustrial', 'CorporateTech',
-    'GovernmentDefense', 'GovernmentInfrastructure', 'GovernmentHealthcare'
-  ];
+  const categories: string[] = [];
+  Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+    subUnits.forEach(su => {
+      categories.push(su.unitId);
+    });
+  });
 
   const regionMap = new Map<string, Company[]>();
   companies.forEach(c => {
@@ -743,101 +750,46 @@ export function generateInitialCompanies(): Company[] {
 
     sectorComps.forEach((comps, sector) => {
       comps.sort((a, b) => b.baselineAnnualRevenue - a.baselineAnnualRevenue);
-      comps.forEach((c, idx) => {
+      comps.forEach((c) => {
         let lines: any[] = [];
         
         if (sector === 'Tech') {
-          const mgn = c.ebitda / Math.max(1, c.annualRevenue);
-          if (idx < 4) {
-            lines = [
-              { category: 'CorporateTech', revenueShare: 0.55, competitiveness: 0 },
-              { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 },
-              { category: 'LuxuryHousehold', revenueShare: 0.15, competitiveness: 0 }
-            ];
-          } else {
-            lines = [
-              { category: 'CorporateTech', revenueShare: mgn > 0.20 ? 0.65 : 0.50, competitiveness: 0 },
-              { category: 'StandardHousehold', revenueShare: mgn > 0.20 ? 0.25 : 0.40, competitiveness: 0 },
-              { category: 'LuxuryHousehold', revenueShare: 0.10, competitiveness: 0 }
-            ];
-          }
-        } else if (sector === 'Energy' || sector === 'Industrials') {
-          if (idx < 4) {
-            lines = [
-              { category: 'CorporateIndustrial', revenueShare: 0.50, competitiveness: 0 },
-              { category: 'GovernmentInfrastructure', revenueShare: 0.30, competitiveness: 0 },
-              { category: 'GovernmentDefense', revenueShare: 0.20, competitiveness: 0 }
-            ];
-          } else {
-            const mgn = c.ebitda / Math.max(1, c.annualRevenue);
-            if (mgn > 0.20) {
-              lines = [
-                { category: 'CorporateIndustrial', revenueShare: 0.60, competitiveness: 0 },
-                { category: 'GovernmentDefense', revenueShare: 0.40, competitiveness: 0 }
-              ];
-            } else {
-              lines = [
-                { category: 'CorporateIndustrial', revenueShare: 0.50, competitiveness: 0 },
-                { category: 'GovernmentInfrastructure', revenueShare: 0.50, competitiveness: 0 }
-              ];
-            }
-          }
+          lines = [
+            { industry: 'SoftwareDigitalServices', subUnitId: 'enterprise_software', revenueShare: 0.55, competitiveness: 0 },
+            { industry: 'TechHardwareSemis', subUnitId: 'semiconductors', revenueShare: 0.30, competitiveness: 0 },
+            { industry: 'TechHardwareSemis', subUnitId: 'consumer_devices', revenueShare: 0.15, competitiveness: 0 }
+          ];
+        } else if (sector === 'Energy') {
+          lines = [
+            { industry: 'Energy', subUnitId: 'upstream_extraction', revenueShare: 0.60, competitiveness: 0 },
+            { industry: 'Energy', subUnitId: 'refined_products', revenueShare: 0.40, competitiveness: 0 }
+          ];
+        } else if (sector === 'Industrials') {
+          lines = [
+            { industry: 'IndustrialsMachinery', subUnitId: 'heavy_equipment', revenueShare: 0.50, competitiveness: 0 },
+            { industry: 'IndustrialsMachinery', subUnitId: 'industrial_automation', revenueShare: 0.30, competitiveness: 0 },
+            { industry: 'MaterialsChemicals', subUnitId: 'industrial_chemicals', revenueShare: 0.20, competitiveness: 0 }
+          ];
         } else if (sector === 'Consumer') {
-          const mgn = c.ebitda / Math.max(1, c.annualRevenue);
           const isMegaCap = c.baselineAnnualRevenue > 100000;
           if (isMegaCap) {
             lines = [
-              { category: 'StandardHousehold', revenueShare: 0.60, competitiveness: 0 },
-              { category: 'StapleHousehold', revenueShare: 0.10, competitiveness: 0 },
-              { category: 'LuxuryHousehold', revenueShare: 0.15, competitiveness: 0 },
-              { category: 'GovernmentHealthcare', revenueShare: 0.15, competitiveness: 0 }
-            ];
-          } else if (mgn > 0.25) {
-            lines = [
-              { category: 'LuxuryHousehold', revenueShare: 0.35, competitiveness: 0 },
-              { category: 'StandardHousehold', revenueShare: 0.35, competitiveness: 0 },
-              { category: 'StapleHousehold', revenueShare: 0.20, competitiveness: 0 },
-              { category: 'GovernmentHealthcare', revenueShare: 0.10, competitiveness: 0 }
-            ];
-          } else if (mgn >= 0.16) {
-            lines = [
-              { category: 'StandardHousehold', revenueShare: 0.35, competitiveness: 0 },
-              { category: 'StapleHousehold', revenueShare: 0.30, competitiveness: 0 },
-              { category: 'LuxuryHousehold', revenueShare: 0.20, competitiveness: 0 },
-              { category: 'GovernmentHealthcare', revenueShare: 0.15, competitiveness: 0 }
+              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.60, competitiveness: 0 },
+              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.15, competitiveness: 0 },
+              { industry: 'LuxuryGoods', subUnitId: 'luxury_goods', revenueShare: 0.15, competitiveness: 0 },
+              { industry: 'ConsumerStaples', subUnitId: 'household_essentials', revenueShare: 0.10, competitiveness: 0 }
             ];
           } else {
             lines = [
-              { category: 'StapleHousehold', revenueShare: 0.35, competitiveness: 0 },
-              { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 },
-              { category: 'LuxuryHousehold', revenueShare: 0.15, competitiveness: 0 },
-              { category: 'GovernmentHealthcare', revenueShare: 0.20, competitiveness: 0 }
+              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.40, competitiveness: 0 },
+              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.30, competitiveness: 0 },
+              { industry: 'LuxuryGoods', subUnitId: 'luxury_goods', revenueShare: 0.20, competitiveness: 0 },
+              { industry: 'ConsumerStaples', subUnitId: 'household_essentials', revenueShare: 0.10, competitiveness: 0 }
             ];
           }
-        } else if (sector === 'Financials') {
-          if (idx < 4) {
-            lines = [
-              { category: 'CorporateTech', revenueShare: 0.50, competitiveness: 0 },
-              { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 },
-              { category: 'GovernmentHealthcare', revenueShare: 0.20, competitiveness: 0 }
-            ];
-          } else {
-            if (idx % 2 === 0) {
-              lines = [
-                { category: 'CorporateTech', revenueShare: 0.60, competitiveness: 0 },
-                { category: 'GovernmentHealthcare', revenueShare: 0.40, competitiveness: 0 }
-              ];
-            } else {
-              lines = [
-                { category: 'CorporateTech', revenueShare: 0.60, competitiveness: 0 },
-                { category: 'StandardHousehold', revenueShare: 0.40, competitiveness: 0 }
-              ];
-            }
-          }
-        } else if (sector === 'Banks') {
+        } else if (sector === 'Financials' || sector === 'Banks') {
           lines = [
-            { category: 'CorporateTech', revenueShare: 0.70, competitiveness: 0 },
-            { category: 'StandardHousehold', revenueShare: 0.30, competitiveness: 0 }
+            { industry: 'SoftwareDigitalServices', subUnitId: 'enterprise_software', revenueShare: 1.0, competitiveness: 0 }
           ];
         }
 
@@ -851,21 +803,16 @@ export function generateInitialCompanies(): Company[] {
 
     regionComps.forEach(c => {
       (c.productLines || []).forEach(line => {
-        catTotals[line.category] += line.revenueShare * c.annualRevenue;
+        catTotals[line.subUnitId] += line.revenueShare * c.annualRevenue;
       });
     });
 
     regionComps.forEach(c => {
       (c.productLines || []).forEach(line => {
-        const catTotal = catTotals[line.category];
+        const catTotal = catTotals[line.subUnitId];
         line.categoryMarketShare = catTotal > 0 ? (line.revenueShare * c.annualRevenue) / catTotal : 0;
       });
     });
-    
-    // Note: Region categoryDemand is initialized in getInitialRegions but we'll populate it there.
-    // So we don't do it here because macroEngine initializes regions.
-    // Wait, macroEngine creates regions, then simulation creates companies. 
-    // We can just export a function to patch regions with category demands, or do it in createInitialGameState.
   });
 
   return companies;
@@ -906,18 +853,32 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const shares = Math.floor(revBase * 10);
   const { ticker, name } = generateUniqueCompanyName(regionId, category);
   
-  const sectorMap: Record<string, Sector> = {
-    'CorporateTech': 'Tech',
-    'StandardHousehold': 'Consumer',
-    'StapleHousehold': 'Consumer',
-    'LuxuryHousehold': 'Consumer',
-    'CorporateIndustrial': 'Industrials',
-    'GovernmentInfrastructure': 'Industrials',
-    'GovernmentDefense': 'Industrials',
-    'GovernmentHealthcare': 'Consumer'
+  let industry: Industry = 'SoftwareDigitalServices';
+  for (const [ind, subUnits] of Object.entries(INDUSTRY_SUBUNITS)) {
+    if (subUnits.some(su => su.unitId === category)) {
+      industry = ind as Industry;
+      break;
+    }
+  }
+
+  const sectorMap: Record<Industry, Sector> = {
+    Energy: 'Energy',
+    MaterialsChemicals: 'Industrials',
+    IndustrialsMachinery: 'Industrials',
+    AerospaceDefense: 'Industrials',
+    AutomotiveTransport: 'Industrials',
+    TechHardwareSemis: 'Tech',
+    SoftwareDigitalServices: 'Tech',
+    Telecommunications: 'Tech',
+    HealthcarePharma: 'Consumer',
+    ConsumerStaples: 'Consumer',
+    ConsumerDiscretionaryRetail: 'Consumer',
+    LuxuryGoods: 'Consumer',
+    MediaEntertainment: 'Consumer',
+    RealEstateConstruction: 'Industrials',
   };
   
-  const sector = sectorMap[category] ?? 'Tech';
+  const sector = sectorMap[industry] ?? 'Tech';
   const initialRating: CreditRating = Math.random() > 0.5 ? 'BB' : 'B';
   const debtBase = revBase * 1.5;
   
@@ -949,7 +910,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     seniorBondYield: 0.08, stockPrice: 20, historicalPrices: Array(52).fill(20), forwardPE: 15,
     marketCap: shares * 20, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,
     baselineRecoveryRate: 0.40, debtTranches,
-    productLines: [{ category: category as any, revenueShare: 1.0, competitiveness: 0.3, previousCategoryMarketShare: 0.02, categoryMarketShare: 0.02 }],
+    productLines: [{ industry, subUnitId: category, revenueShare: 1.0, competitiveness: 0.3, previousCategoryMarketShare: 0.02, categoryMarketShare: 0.02 }],
     leverage: debtBase / Math.max(1, ebitda),
     interestCoverage: ebit / Math.max(0.5, debtBase * 0.06),
     earningsWeekModulo: week % 13,

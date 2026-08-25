@@ -15,9 +15,10 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
     const parts: string[] = [];
     const primaryLine = c.productLines?.[0];
     if (primaryLine) {
-      if (primaryLine.competitiveness > 0.1) parts.push(`Gaining share in ${primaryLine.category}`);
-      else if (primaryLine.competitiveness < -0.1) parts.push(`Losing share in ${primaryLine.category}`);
-      const catDemand = reg.categoryDemand[primaryLine.category as any] as any;
+      const displayName = primaryLine.subUnitId.replace(/_/g, ' ');
+      if (primaryLine.competitiveness > 0.1) parts.push(`Gaining share in ${displayName}`);
+      else if (primaryLine.competitiveness < -0.1) parts.push(`Losing share in ${displayName}`);
+      const catDemand = reg.categoryDemand[primaryLine.subUnitId as any] as any;
       if (catDemand?.crowdingIntensity > 0.5) parts.push('facing heavy competitive crowding');
     }
     if (c.executionQuality > 1.1) parts.push('execution trending strong');
@@ -184,11 +185,11 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
         {tab === 'exposure' && (
           <>
             {(company.productLines || []).map(line => {
-              const catDemand = reg.categoryDemand[line.category as any] as any;
+              const catDemand = reg.categoryDemand[line.subUnitId as any] as any;
               return (
-                <div key={line.category} className="p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
+                <div key={line.subUnitId} className="p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold">{line.category}</span>
+                    <span className="text-xs font-bold">{line.subUnitId.replace(/_/g, ' ')}</span>
                     <span className="text-[10px] text-[var(--text-tertiary)]">{formatPercent(line.revenueShare, { isDecimal: true })} of revenue</span>
                   </div>
                   <div className="flex justify-between text-[11px] mt-1">

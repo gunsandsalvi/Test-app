@@ -8,11 +8,13 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
   const initialCapital = 25000000;
   const returnPct = (nav - initialCapital) / initialCapital;
 
-  const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('StapleHousehold');
+  const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('ConsumerStaples');
   const categories: ProductCategory[] = [
-    'StapleHousehold', 'StandardHousehold', 'LuxuryHousehold',
-    'GovernmentDefense', 'GovernmentInfrastructure', 'GovernmentHealthcare',
-    'CorporateIndustrial', 'CorporateTech'
+    'Energy', 'MaterialsChemicals', 'IndustrialsMachinery', 'AerospaceDefense',
+    'AutomotiveTransport', 'TechHardwareSemis', 'SoftwareDigitalServices',
+    'Telecommunications', 'HealthcarePharma', 'ConsumerStaples',
+    'ConsumerDiscretionaryRetail', 'LuxuryGoods', 'MediaEntertainment',
+    'RealEstateConstruction'
   ];
 
   const sortedPositions = [...portfolio.positions].sort((a, b) => {
@@ -27,10 +29,10 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
     return pnlB - pnlA;
   });
 
-  const companiesInCategory = state.companies.filter(c => !c.isDefaulted && c.productLines?.some(l => l.category === selectedCategory));
+  const companiesInCategory = state.companies.filter(c => !c.isDefaulted && c.productLines?.some(l => l.industry === selectedCategory));
   const sortedByCategoryShare = [...companiesInCategory].sort((a, b) => {
-    const shareA = (a.productLines || []).find(l => l.category === selectedCategory)?.categoryMarketShare ?? 0;
-    const shareB = (b.productLines || []).find(l => l.category === selectedCategory)?.categoryMarketShare ?? 0;
+    const shareA = (a.productLines || []).find(l => l.industry === selectedCategory)?.categoryMarketShare ?? 0;
+    const shareB = (b.productLines || []).find(l => l.industry === selectedCategory)?.categoryMarketShare ?? 0;
     return shareB - shareA;
   });
 
@@ -140,13 +142,13 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
                   selectedCategory === cat ? 'bg-[var(--text-primary)] text-[var(--bg-void)]' : 'bg-[var(--bg-base)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                {cat.replace('Household', ' HH').replace('Government', 'Gov ')}
+                {cat.replace(/([A-Z])/g, ' $1').trim()}
               </button>
             ))}
           </div>
           <div className="space-y-1">
             {sortedByCategoryShare.slice(0, 10).map((c) => {
-              const line = (c.productLines || []).find(l => l.category === selectedCategory)!;
+              const line = (c.productLines || []).find(l => l.industry === selectedCategory)!;
               return (
                 <div key={c.ticker} className="flex items-center justify-between p-2 border-b border-[var(--border-hairline)] last:border-0 text-[11px]">
                   <span className="font-bold text-[var(--text-primary)]">{c.ticker}</span>

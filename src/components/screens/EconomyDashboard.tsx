@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GameState, RegionId, ProductCategory } from '../../types';
+import { GameState, RegionId, ProductCategory, INDUSTRY_SUBUNITS, Industry } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 
 export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
@@ -15,9 +15,11 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
   const avgLeverage = regionCompanies.length > 0 ? totalDebt / Math.max(1, totalEbitda) : 0;
 
   const categories: ProductCategory[] = [
-    'StapleHousehold', 'StandardHousehold', 'LuxuryHousehold',
-    'GovernmentDefense', 'GovernmentInfrastructure', 'GovernmentHealthcare',
-    'CorporateIndustrial', 'CorporateTech'
+    'Energy', 'MaterialsChemicals', 'IndustrialsMachinery', 'AerospaceDefense',
+    'AutomotiveTransport', 'TechHardwareSemis', 'SoftwareDigitalServices',
+    'Telecommunications', 'HealthcarePharma', 'ConsumerStaples',
+    'ConsumerDiscretionaryRetail', 'LuxuryGoods', 'MediaEntertainment',
+    'RealEstateConstruction'
   ];
 
   const calcShares = (ao: any) => {
@@ -109,17 +111,21 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
         <div className="text-xs font-bold uppercase text-[var(--text-tertiary)]">{selectedRegion} Product Category Demand</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {categories.map(cat => {
-            const dem = reg.categoryDemand[cat];
-            if (!dem) return null;
+            const subUnits = INDUSTRY_SUBUNITS[cat as Industry] || [];
+            if (subUnits.length === 0) return null;
+            const demandLevelUSD = subUnits.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0), 0);
+            const demandGrowthAnnual = subUnits.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandGrowthAnnual ?? 0), 0) / subUnits.length;
+            const crowdingIntensity = subUnits.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.crowdingIntensity ?? 0), 0) / subUnits.length;
+
             return (
               <div key={cat} className="p-2 rounded bg-black/20 border border-[var(--border-hairline)] flex justify-between items-center text-xs">
                 <div>
-                  <div className="font-bold text-[var(--text-primary)]">{cat}</div>
-                  <div className="text-[10px] text-[var(--text-tertiary)]">Growth: {formatPercent(dem.demandGrowthAnnual, { isDecimal: true })}</div>
+                  <div className="font-bold text-[var(--text-primary)]">{cat.replace(/([A-Z])/g, ' $1').trim()}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)]">Growth: {formatPercent(demandGrowthAnnual, { isDecimal: true })}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-[var(--font-numeric)] font-bold">{formatCurrency(dem.demandLevelUSD, { compact: true })}</div>
-                  <div className="text-[10px] text-[var(--text-tertiary)]">Crowding: {dem.crowdingIntensity.toFixed(2)}</div>
+                  <div className="font-[var(--font-numeric)] font-bold">{formatCurrency(demandLevelUSD, { compact: true })}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)]">Crowding: {crowdingIntensity.toFixed(2)}</div>
                 </div>
               </div>
             );

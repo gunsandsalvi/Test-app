@@ -35,6 +35,7 @@ const trackers: Record<string, { history: number[]; extract: (s: GameState) => n
 };
 
 for (let w = 1; w <= 520; w++) {
+  console.log(`Advancing Week ${w}`);
   state = advanceWeeklyStep(state);
   const nan = isNaNAnywhere(state);
   if (nan.length > 0) violations.push({ week: w, message: `NaN detected: ${nan.join(', ')}` });

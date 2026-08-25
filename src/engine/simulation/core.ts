@@ -7,7 +7,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding } from '../../types';
+import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding, INDUSTRY_SUBUNITS, Industry } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { checkForMerger } from './merger';
@@ -72,16 +72,16 @@ export function computeOccupationDemand(companies: Company[], privateSegments: P
 
 
 export function formSupplyRelationships(regionId: RegionId, companies: Company[]): SupplyRelationship[] {
-  const suppliers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => l.category === 'CorporateIndustrial') && !c.isDefaulted);
-  const customers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => ['CorporateTech','StandardHousehold','LuxuryHousehold'].includes(l.category)) && !c.isDefaulted);
+  const suppliers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => l.subUnitId === 'heavy_equipment') && !c.isDefaulted);
+  const customers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => ['enterprise_software', 'food_beverage', 'luxury_goods'].includes(l.subUnitId)) && !c.isDefaulted);
   const relationships: SupplyRelationship[] = [];
   customers.forEach(customer => {
-    const sortedSuppliers = [...suppliers].sort((a, b) => (b.productLines.find(l=>l.category==='CorporateIndustrial')?.categoryMarketShare ?? 0) - (a.productLines.find(l=>l.category==='CorporateIndustrial')?.categoryMarketShare ?? 0));
+    const sortedSuppliers = [...suppliers].sort((a, b) => (b.productLines.find(l=>l.subUnitId === 'heavy_equipment')?.categoryMarketShare ?? 0) - (a.productLines.find(l=>l.subUnitId === 'heavy_equipment')?.categoryMarketShare ?? 0));
     const primarySupplier = sortedSuppliers[0];
     if (primarySupplier) {
       relationships.push({
         supplierCompanyId: primarySupplier.id, customerCompanyId: customer.id,
-        category: 'CorporateIndustrial', weeklyVolumeUSD: customer.annualRevenue * 0.08 / 52,
+        category: 'heavy_equipment', weeklyVolumeUSD: customer.annualRevenue * 0.08 / 52,
         relationshipStrength: 0.6 + Math.random() * 0.3,
       });
     }
@@ -291,53 +291,62 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     const categorySupplyGrowth: Record<string, number> = {};
     (Object.keys(reg.categoryDemand) as string[]).forEach(cat => {
-      const firmsInCat = prevActiveFirms.filter(f => f.region === regionId && (f.productLines || []).some(l => l.category === cat));
+      const firmsInCat = prevActiveFirms.filter(f => f.region === regionId && (f.productLines || []).some(l => l.subUnitId === cat));
       if (firmsInCat.length === 0) { categorySupplyGrowth[cat] = 0; return; }
       categorySupplyGrowth[cat] = firmsInCat.reduce((s, f) => {
-        const line = f.productLines.find(l => l.category === cat)!;
+        const line = f.productLines.find(l => l.subUnitId === cat)!;
         return s + (f.growthCapex / Math.max(1, f.annualRevenue)) * line.revenueShare;
       }, 0) / firmsInCat.length;
     });
 
-    // Household demand (G2)
-    const aggregateConsumptionUSD = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    const householdTargets: Partial<Record<string, number>> = {
-      StapleHousehold: aggregateConsumptionUSD * hs.stapleSpendShare,
-      StandardHousehold: aggregateConsumptionUSD * hs.standardSpendShare,
-      LuxuryHousehold: aggregateConsumptionUSD * hs.luxurySpendShare,
-    };
-
-    // Government demand (G3), tied to fiscalStanceScore
-    const govProcurementBase = reg.governmentSpendingUSD * 52 * 0.35; // annualized spending, ~35% of which is procurement-style (vs. transfers/employee comp)
-    const fiscalMultiplier = 1 + (reg.fiscalStanceScore * 0.25);
-    const govTargets: Partial<Record<string, number>> = {
-      GovernmentDefense: govProcurementBase * 0.30 * fiscalMultiplier,
-      GovernmentInfrastructure: govProcurementBase * 0.45 * fiscalMultiplier,
-      GovernmentHealthcare: govProcurementBase * 0.25 * fiscalMultiplier,
-    };
-
-    // Corporate demand (G3), tied to aggregate CapEx
+    // Compute active GDP components for bottom-up demand targets
+    const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+    const G = reg.governmentSpendingUSD * 52 * 0.35 * (1 + reg.fiscalStanceScore * 0.25);
     const rawCorporateDemandBase = prevActiveFirms.filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
     const newLaggedCorporateDemandBase = reg.laggedCorporateDemandBase * 0.95 + rawCorporateDemandBase * 0.05;
     reg.laggedCorporateDemandBase = newLaggedCorporateDemandBase;
-    const corpTargets = { CorporateIndustrial: newLaggedCorporateDemandBase * 0.6, CorporateTech: newLaggedCorporateDemandBase * 0.4 };
+    const I = newLaggedCorporateDemandBase;
 
-    const allTargets = { ...householdTargets, ...govTargets, ...corpTargets };
-    const smoothingByCategory: Partial<Record<string, number>> = {
-      StapleHousehold: 0.1, StandardHousehold: 0.1, LuxuryHousehold: 0.1,
-      GovernmentDefense: 0.05, GovernmentInfrastructure: 0.05, GovernmentHealthcare: 0.05,
-      CorporateIndustrial: 0.08, CorporateTech: 0.08,
-    };
+    let totalHhWeight = 0;
+    let totalGovWeight = 0;
+    let totalCorpWeight = 0;
+
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        totalHhWeight += su.buyerMix.HOUSEHOLD;
+        totalGovWeight += su.buyerMix.GOVERNMENT;
+        totalCorpWeight += su.buyerMix.CORPORATE;
+      });
+    });
+
+    const allTargets: Record<string, number> = {};
+    const smoothingByCategory: Record<string, number> = {};
+
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
+        const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+        const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
+        allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;
+        
+        if (su.buyerMix.HOUSEHOLD > 0.5) smoothingByCategory[su.unitId] = 0.1;
+        else if (su.buyerMix.GOVERNMENT > 0.5) smoothingByCategory[su.unitId] = 0.05;
+        else smoothingByCategory[su.unitId] = 0.08;
+      });
+    });
 
     Object.keys(allTargets).forEach((cat) => {
-      const target = (allTargets as any)[cat]!;
-      const smoothing = (smoothingByCategory as any)[cat] ?? 0.1;
+      const target = allTargets[cat]!;
+      if (isNaN(target)) {
+        console.error(`[DIAGNOSTIC] NaN target demand for category ${cat} in region ${regionId}. C=${C}, G=${G}, I=${I}, totalHhWeight=${totalHhWeight}, totalGovWeight=${totalGovWeight}, totalCorpWeight=${totalCorpWeight}`);
+      }
+      const smoothing = smoothingByCategory[cat] ?? 0.1;
       const existingEntry = reg.categoryDemand[cat as keyof typeof reg.categoryDemand];
       const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelUSD > 0);
       const prevLevel = hasPriorDemand ? existingEntry.demandLevelUSD : target;
       const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
       const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 ? ((newLevel / prevLevel) - 1) * 52 : 0;
-      const growthAnnual = (rawGrowthAnnual);
+      const growthAnnual = Number.isFinite(rawGrowthAnnual) ? Math.max(-0.25, Math.min(0.35, rawGrowthAnnual)) : 0;
       const prevHistory = existingEntry?.demandHistory ?? [];
       const crowdingIntensity = Math.max(0, Math.min(1, (categorySupplyGrowth[cat] ?? 0) * 8 - (target ? growthAnnual : 0)));
       (reg.categoryDemand as any)[cat] = {
@@ -363,10 +372,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
       if (!requirements) return;
       Object.entries(requirements).forEach(([inputCat, intensity]) => {
         const supplier = reg.categoryDemand[inputCat as any] as any;
-        const demander = reg.categoryDemand[cat as any] as any;
-        if (!supplier || !demander) return;
+        const subUnitsForDemander = INDUSTRY_SUBUNITS[cat as Industry] || [];
+        const demanderDemandLevel = subUnitsForDemander.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0), 0);
+        if (!supplier) return;
 
-        const regionCapacityUtilization = (reg.categoryDemand['CorporateIndustrial'] as any)?.clearedInputPriceIndex ?? 1.0;
+        const regionCapacityUtilization = (reg.categoryDemand['heavy_equipment'] as any)?.clearedInputPriceIndex ?? 1.0;
         const industrialProductionRate = (0.02 * (0.5 + regionCapacityUtilization * 0.5));
 
         const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
@@ -374,12 +384,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const inventoryHoldingDecayRate = (0.015 + currentGlutSeverity * 0.35) / 52; // decay accelerates sharply the more oversupplied the market genuinely is — real obsolescence pressure, not a flat constant
         const decayedInventory = lastWeekInventory * (1 - inventoryHoldingDecayRate);
         const weatherDecay = Math.pow(0.55, Math.max(0, (reg.weather?.weeksActive ?? 1) - 1));
-        const weatherSupplyPenalty = (reg.weather && reg.weather.severity !== 'Normal' && inputCat === 'CorporateIndustrial')
+        const weatherSupplyPenalty = (reg.weather && reg.weather.severity !== 'Normal' && inputCat === 'heavy_equipment')
           ? Math.max(0.80, 1.0 - Math.abs(reg.weather.gdpImpactPct ?? 0.002) * 5 * weatherDecay)
           : 1.0;
-        const supplierFirms = prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.category === inputCat));
+        const supplierFirms = prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.subUnitId === inputCat));
         let weeklyProduction = supplierFirms.reduce((s, c) => {
-          const line = (c.productLines || []).find(l => l.category === inputCat);
+          const line = (c.productLines || []).find(l => l.subUnitId === inputCat);
           const warehouseCap = c.annualRevenue * 0.15;
           const throttle = (c.finishedGoodsInventoryUSD ?? 0) > warehouseCap ? 0.3 : 1.0;
           const priceSignal = (supplier.clearedInputPriceIndex ?? 1.0) - 1.0;
@@ -387,7 +397,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;
         }, 0) * weatherSupplyPenalty;
         
-        if (inputCat === 'CorporateIndustrial') {
+        if (inputCat === 'heavy_equipment') {
            const manufacturingSegment = reg.privateSectorSegments?.find(s => s.segmentType === 'MANUFACTURING');
            if (manufacturingSegment) {
                weeklyProduction += (manufacturingSegment.annualRevenueUSD * 0.02 / 52) * weatherSupplyPenalty;
@@ -395,7 +405,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
         const totalAvailableSupply = decayedInventory + weeklyProduction;
 
-        const bidQuantity = (demander.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
+        const bidQuantity = demanderDemandLevel * (intensity ?? 0) / 52;
         const clearingRatio = totalAvailableSupply > 0 ? bidQuantity / totalAvailableSupply : 1;
 
         const targetPriceIndex = Math.max(0, 1.0 + (clearingRatio - 1.0) * 0.4); // 0 floor only — a price index cannot go negative
@@ -407,8 +417,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         supplier.clearedInputPriceIndex = Number(newPriceIndex.toFixed(4));
         supplier.inventoryLevelUSD = Math.max(0, totalAvailableSupply - quantityFulfilled);
         supplier._fulfillmentRatio = totalAvailableSupply > 0 ? quantityFulfilled / totalAvailableSupply : 1;
-        demander.inputCostPressure = Number(Math.max(0, newPriceIndex - 1.0).toFixed(4));
-        demander._fulfillmentRatio = fulfillmentRatio; // transient, read by AA3 same week, not persisted
+        subUnitsForDemander.forEach(su => {
+          const demanderEntry = reg.categoryDemand[su.unitId as any] as any;
+          if (demanderEntry) {
+            demanderEntry.inputCostPressure = Number(Math.max(0, newPriceIndex - 1.0).toFixed(4));
+            demanderEntry._fulfillmentRatio = fulfillmentRatio;
+          }
+        });
       });
     });
     // after the loop, snapshot this week's inventory as next week's lag anchor:
@@ -454,10 +469,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   // Trade Dynamics (Phase 3: T1)
   function computeRegionalCompetitiveness(companies: Company[], regionId: RegionId, category: string): number {
-    const firms = companies.filter(c => c.region === regionId && !c.isDefaulted && (c.productLines || []).some(l => l.category === category));
+    const firms = companies.filter(c => c.region === regionId && !c.isDefaulted && (c.productLines || []).some(l => l.industry === category));
     if (firms.length === 0) return 0;
     return firms.reduce((s, f) => {
-      const line = f.productLines.find(l => l.category === category)!;
+      const line = f.productLines.find(l => l.industry === category)!;
       return s + line.competitiveness * line.categoryMarketShare;
     }, 0) / firms.length;
   }
@@ -486,7 +501,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
       Object.keys(CATEGORY_TRADABILITY).forEach(cat => {
         const tradability = CATEGORY_TRADABILITY[cat];
         if (tradability < 0.1) return; // not worth computing for near-untradable categories
-        const importerDemand = updatedRegions[importer].categoryDemand[cat as any]?.demandLevelUSD ?? 0;
+        const subUnits = INDUSTRY_SUBUNITS[cat as any] || [];
+        const importerDemand = subUnits.reduce((s, su) => {
+          const dem = updatedRegions[importer].categoryDemand[su.unitId];
+          return s + (dem?.demandLevelUSD ?? 0);
+        }, 0);
         const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
         const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, updatedFxPairs);
         const exportShareCapture = Math.max(0, (0.1 + exporterCompetitiveness * 0.5 + fxCompetitiveness));
@@ -585,11 +604,21 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const compWageGrowth = getBlendedWageGrowth(compOccMix, reg.occupationPools);
       const wageCompression = Math.max(0, compWageGrowth - 0.025) * 0.15 * wageSensitivity;
       const avgCrowdingIntensity = (comp.productLines || []).reduce((s, l) => {
-        const catDemand = reg.categoryDemand[l.category as any];
+        const catDemand = reg.categoryDemand[l.subUnitId as any];
         return s + (catDemand?.crowdingIntensity ?? 0) * l.revenueShare;
       }, 0);
 
-      const compInputCategories = (comp.productLines || []).map(l => l.category).filter(c => CATEGORY_INPUT_REQUIREMENTS[c]);
+      const compInputCategories: string[] = [];
+      (comp.productLines || []).forEach(l => {
+        const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
+        if (reqs) {
+          Object.keys(reqs).forEach(inputSubUnit => {
+            if (!compInputCategories.includes(inputSubUnit)) {
+              compInputCategories.push(inputSubUnit);
+            }
+          });
+        }
+      });
       const relevantFulfillment = compInputCategories.length > 0
         ? compInputCategories.reduce((min, c) => Math.min(min, (reg.categoryDemand[c as any] as any)?._fulfillmentRatio ?? 1), 1)
         : 1;
@@ -630,10 +659,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
       let categoryDrivenGrowth = 0;
       updatedProductLines = (comp.productLines || []).map((line) => {
-        const demandKey = line.subUnitId || line.category || '';
-        const catDemand = reg.categoryDemand[demandKey] || Object.values(reg.categoryDemand)[0];
-        const isHouseholdFacing = ['StapleHousehold', 'StandardHousehold', 'LuxuryHousehold', 'ConsumerStaples', 'ConsumerDiscretionaryRetail', 'LuxuryGoods'].includes(line.category || line.industry || '');
-        const baseDemandGrowth = catDemand?.demandGrowthAnnual ?? reg.gdpGrowth;
+        const catDemand = reg.categoryDemand[line.subUnitId];
+        if (!catDemand) {
+          throw new Error(`subUnitId ${line.subUnitId} does not exist in reg.categoryDemand for region ${reg.id}. Available: ${Object.keys(reg.categoryDemand).join(', ')}`);
+        }
+        const isHouseholdFacing = (INDUSTRY_SUBUNITS[line.industry]?.find(su => su.unitId === line.subUnitId)?.buyerMix.HOUSEHOLD ?? 0) > 0.5;
+        const baseDemandGrowth = catDemand.demandGrowthAnnual ?? reg.gdpGrowth;
         const categoryGrowth = (isFinite(baseDemandGrowth) ? baseDemandGrowth : reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
@@ -661,9 +692,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
         comp.demandShockLagBuffer = updatedBuffer;
 
         const exportRevenueBoost = (comp.productLines || []).reduce((s, line) => {
-          const tradability = CATEGORY_TRADABILITY[line.category] ?? 0;
+          const tradability = CATEGORY_TRADABILITY[line.industry] ?? 0;
           if (tradability < 0.1) return s;
-          const regionExportsInCat = regionCategoryExports[comp.region]?.[line.category] ?? 0;
+          const regionExportsInCat = regionCategoryExports[comp.region]?.[line.industry] ?? 0;
           const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue);
           const nextS = s + exportShareOfRev * (reg.gdpGrowth / 52); if (isNaN(nextS)) throw new Error(`NaN in reduce! regionExportsInCat=${regionExportsInCat}, categoryMarketShare=${line.categoryMarketShare}, revenueShare=${line.revenueShare}, annualRevenue=${comp.annualRevenue}, gdpGrowth=${reg.gdpGrowth}`); return nextS;
         }, 0);
@@ -677,16 +708,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
       // Smooth transition to target revenue (no exponential weekly compounding)
       newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
 
-      const industrialLine = (comp.productLines || []).find(l => l.category === 'CorporateIndustrial');
+      const industrialLine = (comp.productLines || []).find(l => l.subUnitId === 'heavy_equipment' || l.subUnitId === 'industrial_automation' || l.subUnitId === 'industrial_chemicals');
       let unsoldThisWeekUSD = 0;
 
       if (industrialLine && industrialLine.revenueShare > 0) {
         const warehouseCapacityUSD = comp.annualRevenue * 0.15;
         const productionThrottle = (comp.finishedGoodsInventoryUSD ?? 0) > warehouseCapacityUSD ? 0.3 : 1.0;
 
-        const categoryFulfillmentRatio = (reg.categoryDemand['CorporateIndustrial'] as any)?._fulfillmentRatio ?? 1;
+        const categoryFulfillmentRatio = (reg.categoryDemand[industrialLine.subUnitId] as any)?._fulfillmentRatio ?? 1;
         newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;
-        const supplierClearedPrice = (reg.categoryDemand['CorporateIndustrial'] as any)?.clearedInputPriceIndex ?? 1.0;
+        const supplierClearedPrice = (reg.categoryDemand[industrialLine.subUnitId] as any)?.clearedInputPriceIndex ?? 1.0;
         const priceSignal = supplierClearedPrice - 1.0;
         const productionResponseFactor = (1.0 + priceSignal * 1.5);
 
@@ -753,7 +784,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     // Growth — fully discretionary, now disciplined by addressable opportunity:
     // Genuine reinvestment opportunity — bounded by how fast this company's actual addressable categories are growing, not by ambition
     const avgCategoryOpportunity = (comp.productLines || []).reduce((s, l) => {
-      const catDemand = reg.categoryDemand[l.category as any];
+      const catDemand = reg.categoryDemand[l.subUnitId];
       return s + Math.max(0, catDemand?.demandGrowthAnnual ?? 0) * l.revenueShare;
     }, 0);
     const productiveReinvestmentEnvelope = newRevenue * Math.max(0.01, avgCategoryOpportunity) * 1.5; // generous multiple of addressable growth, not arbitrary
@@ -773,7 +804,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
     let newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
     let newRndExpense = comp.rndExpense ?? 0;
-    if ((comp.productLines || []).some(l => l.category === 'CorporateTech')) {
+    if ((comp.productLines || []).some(l => l.industry === 'TechHardwareSemis' || l.industry === 'SoftwareDigitalServices')) {
         newRndExpense = newGrowthCapex * 0.4;
         newGrowthCapex = newGrowthCapex * 0.6;
     }
@@ -1239,13 +1270,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         quantityOrNotionalUSD: proceedsUSDReal * 0.05
       });
       updatedCompanies.push(ipo);
-      recentIPOs.push({ ticker: ipo.ticker, name: ipo.name, category: ipo.productLines?.[0]?.category || 'Unknown', week: nextWeek });
+      recentIPOs.push({ ticker: ipo.ticker, name: ipo.name, category: ipo.productLines?.[0]?.industry || 'Unknown', week: nextWeek });
       if (recentIPOs.length > 20) recentIPOs.shift();
       diagnosticLogs.push({ 
         week: nextWeek,
         timestamp: new Date().toISOString(),
         category: 'MACRO',
-        message: `New IPO: ${ipo.name} enters ${ipo.productLines?.[0]?.category} amid strong demand growth`,
+        message: `New IPO: ${ipo.name} enters ${ipo.productLines?.[0]?.industry} amid strong demand growth`,
         deltaText: '',
         data: { regionId }
       });
@@ -1272,7 +1303,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         // Merge product lines
         if (target.productLines && acquirer.productLines) {
           target.productLines.forEach(tpl => {
-            const existingPl = acquirer.productLines?.find(apl => apl.category === tpl.category);
+            const existingPl = acquirer.productLines?.find(apl => apl.subUnitId === tpl.subUnitId);
             if (existingPl) {
               existingPl.categoryMarketShare = Number((existingPl.categoryMarketShare + tpl.categoryMarketShare).toFixed(4));
             } else {
