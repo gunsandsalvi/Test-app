@@ -152,14 +152,14 @@ export function evolveRegionMacro(
   const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
   let newInflation = Number(baseInflation.toFixed(4));
 
-  const smoothedAnnualizedGrowthForFiscal = Math.max(-0.20, Math.min(0.20, ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52));
-  const outputGap = Math.max(-0.20, Math.min(0.20, potentialGdp - smoothedAnnualizedGrowthForFiscal));
-  const cyclicalDeficitComponent = 0.15 * Math.tanh(outputGap * 2); // saturates toward +-15% of GDP for extreme gaps — a real fiscal stabilizer has a structural ceiling, not an unbounded linear response
-  const rawDeficit = newStructuralDeficitPctGdp + cyclicalDeficitComponent;
-  const newFiscalDeficitPctGdp = Math.max(-0.15, Math.min(0.25, isFinite(rawDeficit) ? rawDeficit : 0.03));
+  const smoothedAnnualizedGrowthForFiscal = ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52;
+  const outputGap = potentialGdp - smoothedAnnualizedGrowthForFiscal;
+  const targetCyclicalDeficitComponent = 0.15 * Math.tanh(outputGap * 2);
+  const prevCyclicalDeficitComponent = (region as any).cyclicalDeficitComponent ?? targetCyclicalDeficitComponent;
+  const cyclicalDeficitComponent = prevCyclicalDeficitComponent * 0.85 + targetCyclicalDeficitComponent * 0.15;
+  const newFiscalDeficitPctGdp = newStructuralDeficitPctGdp + cyclicalDeficitComponent;
 
-  const rawNominalGdp = (region as any).lastWeekNominalGdpUSD > 0 ? (region as any).lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
-  const newEstimatedNominalGdpUSD = Math.max(1e11, isFinite(rawNominalGdp) ? rawNominalGdp : 1e12);
+  const newEstimatedNominalGdpUSD = (region as any).lastWeekNominalGdpUSD > 0 ? (region as any).lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
@@ -355,9 +355,9 @@ export function evolveRegionMacro(
   const newPrivateSectorSegments: any[] = (region.privateSectorSegments || []).map(seg => {
     const demandSignal = seg.segmentType === 'CONSTRUCTION_REALESTATE' ? mortgageGrowthSignal : getSegmentDemandSignal(seg.segmentType, region, prevHS);
     const employmentGrowthRate = Math.max(-0.04, Math.min(0.04, demandSignal * 0.05));
-    const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate)));
+    const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate / 52)));
     const revenueGrowthRate = Math.max(-0.04, Math.min(0.05, demandSignal * 0.06));
-    const newAnnualRevenueUSD = Math.max(1, seg.annualRevenueUSD * (1 + revenueGrowthRate));
+    const newAnnualRevenueUSD = Math.max(1, seg.annualRevenueUSD * (1 + revenueGrowthRate / 52));
 
     const segOccMix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 };
     const segWageGrowth = getBlendedWageGrowth(segOccMix, newOccupationPools);
@@ -655,6 +655,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     centralBankBalanceSheet: newCbBalance,
     balanceSheetStance: newBalanceSheetStance,
     structuralDeficitPctGdp: newStructuralDeficitPctGdp,
+    cyclicalDeficitComponent,
     fiscalDeficitPctGdp: newFiscalDeficitPctGdp,
     fiscalStanceScore: newFiscalStanceScore,
     sovereignRating: newSovereignRating,

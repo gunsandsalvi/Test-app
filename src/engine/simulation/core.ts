@@ -939,6 +939,19 @@ export function advanceWeeklyStep(state: GameState): GameState {
         };
       });
         
+        let commodityPriceGrowthAdjustment = 0;
+        if ((comp as any).producedCommodityId) {
+          const ownCommodity = updatedCommodities.find((c: any) => c.id === (comp as any).producedCommodityId || c.symbol === (comp as any).producedCommodityId);
+          if (ownCommodity && ownCommodity.historicalPrices?.length > 0) {
+            const baselinePrice = ownCommodity.historicalPrices[0];
+            if (baselinePrice > 0) {
+              const priceRatioVsBaseline = ownCommodity.spotPrice / baselinePrice;
+              commodityPriceGrowthAdjustment = 0.5 * Math.tanh((priceRatioVsBaseline - 1) * 1.5);
+            }
+          }
+        }
+        categoryDrivenGrowth += commodityPriceGrowthAdjustment;
+
         const buffer = comp.demandShockLagBuffer || [];
         const updatedBuffer = [...buffer, categoryDrivenGrowth].slice(-8);
         const laggedCategoryGrowth = updatedBuffer.length > 2 ? updatedBuffer[updatedBuffer.length - 1 - 2] : updatedBuffer[0] ?? categoryDrivenGrowth;
@@ -1745,7 +1758,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
       : 0;
     const prevSmoothedWeeklyRate = (reg as any).smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
-    const smoothedWeeklyRate = Math.max(-0.03, Math.min(0.03, prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15)); // real EMA smoothing — a single week's noise no longer dominates
+    const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15; // real EMA smoothing — a single week's noise no longer dominates
     const gdpGrowthBottomUp = Math.pow(1 + smoothedWeeklyRate, 52) - 1;
 
     if (!isFinite(gdpGrowthBottomUp)) {

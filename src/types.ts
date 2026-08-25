@@ -368,6 +368,7 @@ export interface Region {
   currentAccountPctGdp: number; // e.g. -0.031 = -3.1% of GDP
   fxReservesUSD: number; // raw USD
   structuralDeficitPctGdp: number;
+  cyclicalDeficitComponent?: number;
   fiscalDeficitPctGdp: number; // e.g. 0.065 = 6.5% deficit
   debtToGdpPct: number; // e.g. 1.224 = 122.4% gross debt
   fiscalStanceScore: number;
