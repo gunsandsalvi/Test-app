@@ -1,6 +1,6 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
@@ -753,8 +753,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     const weeklyDisp = weeklyInc * (1 - prevData.savingsRate);
     totalTierWeeklyConsumptionUSD += weeklyDisp * tierMpc[t];
   });
-
-  const derivedTierConsumptionUSD = totalTierWeeklyConsumptionUSD * 52;
 
   const updatedRegion: Region = {
     ...region,

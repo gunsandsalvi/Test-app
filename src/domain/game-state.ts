@@ -1,0 +1,57 @@
+/**
+ * Global Game State Domain Model
+ *
+ * Models the complete immutable state tree of the simulation engine for a given week.
+ * Encompasses regions, companies, financial institutions, commodities, market indices,
+ * portfolio positions, news feeds, UI state, and turn summaries.
+ */
+
+import { RegionId, FxPair } from './geography';
+import { Company, CreditRating } from './company';
+import { InstitutionalEntity } from './institutions';
+import { Commodity, Dealer, TradeableInstrument } from './instruments';
+import { CompositeBenchmarkIndices, TabKey } from './markets';
+import { Portfolio, ReturnAttribution } from './portfolio';
+import { NewsItem, DiagnosticsLog, ChartModalData } from './events';
+import { Region } from './region-macro';
+
+export interface GameState {
+  currentWeek: number;
+  year: number;
+  regions: Record<RegionId, Region>;
+  fxPairs: FxPair[];
+  companies: Company[];
+  institutionalEntities: InstitutionalEntity[];
+  commodities: Commodity[];
+  compositeIndices: CompositeBenchmarkIndices;
+  recentIPOs: { ticker: string; name: string; category: string; week: number }[];
+  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];
+  marketVolPremium?: number;
+  dealers: Dealer[];
+  portfolio: Portfolio;
+  newsFeed: NewsItem[];
+  watchlist: string[];
+  turnSummary: {
+    week: number;
+    pnlDeltaUSD: number;
+    pnlDeltaPct: number;
+    interestIncomeUSD: number;
+    financingCostUSD: number;
+    defaultedCompanies: string[];
+    ratingsChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
+    earningsReported: { ticker: string; name: string; actualEps: number; consensusEps: number; surprisePct: number }[];
+    marginAlert: string | null;
+    attribution: ReturnAttribution;
+  } | null;
+  selectedTab: TabKey;
+  isTradeModalOpen: boolean;
+  selectedInstrument: TradeableInstrument | null;
+  isNewsDrawerOpen: boolean;
+  isWatchlistDrawerOpen: boolean;
+  isCheatsheetOpen: boolean;
+  isDiagnosticsOpen: boolean;
+  diagnosticsLogs: DiagnosticsLog[];
+  chartModalData: ChartModalData | null;
+  isGameOver: boolean;
+  gameOverReason: string | null;
+}

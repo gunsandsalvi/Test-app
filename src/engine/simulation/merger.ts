@@ -18,12 +18,12 @@ export function checkForMerger(
   const distressedRatings = ['BB', 'B', 'CCC'];
 
   for (const acquirer of activeCompanies) {
-    if (acquirer.isDefaulted || !igRatings.includes(acquirer.creditRating)) continue;
+    if (acquirer.isDefaulted || acquirer.mergerAcquired || !igRatings.includes(acquirer.creditRating)) continue;
     if (acquirer.cash < 2 * Math.max(1, acquirer.totalDebt) && acquirer.totalDebt > 0) continue;
     if (acquirer.cash < 500) continue; // must have sufficient liquid balance sheet
 
     for (const target of activeCompanies) {
-      if (target.ticker === acquirer.ticker || target.isDefaulted) continue;
+      if (target.ticker === acquirer.ticker || target.isDefaulted || target.mergerAcquired) continue;
       if (target.sector !== acquirer.sector || target.region !== acquirer.region) continue;
       if (acquirer.marketCap < 3 * Math.max(1, target.marketCap)) continue;
 

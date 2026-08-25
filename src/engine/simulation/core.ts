@@ -161,7 +161,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const companyUpdates: Record<string, { finishedGoodsUnits?: number; finishedGoodsInventoryUSD?: number; cashChange?: number; salesUnits?: number; salesUSD?: number; purchasesUnits?: number; purchasesUSD?: number; inputSupplyConstraintFactor?: number; _targetProductionUSD?: number }> = {};
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
-  const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted);
+  const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted && !c.mergerAcquired);
   
   const regionFloatingPrincipal: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
   prevActiveFirms.forEach(f => {
@@ -355,7 +355,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
     Object.keys(allTargets).forEach((cat) => {
       const target = allTargets[cat]!;
       if (isNaN(target)) {
-        console.error(`[DIAGNOSTIC] NaN target demand for category ${cat} in region ${regionId}. C=${C}, G=${G}, I=${I}, totalHhWeight=${totalHhWeight}, totalGovWeight=${totalGovWeight}, totalCorpWeight=${totalCorpWeight}`);
+        diagnosticLogs.push({
+          week: nextWeek,
+          level: 'ERROR',
+          message: `NaN target demand for category ${cat} in region ${regionId}. C=${C}, G=${G}, I=${I}`,
+        });
       }
       const smoothing = smoothingByCategory[cat] ?? 0.1;
       const existingEntry = reg.categoryDemand[cat as keyof typeof reg.categoryDemand];
@@ -1338,8 +1342,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       : (newEbit / Math.max(0.5, annualInterest));
     const newCoverage = isFinite(rawCoverage) ? Number(Math.max(-50, Math.min(50, rawCoverage)).toFixed(2)) : 1.5;
 
-    // Default trigger: Cash < 0 and Coverage < 0.8x (or previously defaulted)
-    let isDefaulted = comp.isDefaulted || (newCash < 0 && newCoverage < 0.8);
+    // Default trigger: Cash < 0 and Coverage < 0.8x (or previously defaulted, provided not merger-acquired)
+    let isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < 0.8));
     let newRating = comp.creditRating;
 
     if (isDefaulted) {
@@ -1899,7 +1903,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
 
         // Target is absorbed and exits active operations
-        target.isDefaulted = true;
+        target.mergerAcquired = true;
+        target.acquiredByTicker = acquirer.ticker;
+        target.isDefaulted = false;
         target.stockPrice = 0;
         target.employeeCount = 0;
         target.annualRevenue = 0;

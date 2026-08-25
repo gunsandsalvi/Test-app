@@ -170,7 +170,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
   const jpnZeros = calculateTenorZeroRates(jpnParams);
   const eurZeros = calculateTenorZeroRates(eurParams);
 
-  const regions: Record<RegionId, Region> = {
+  const regions: Record<RegionId, any> = {
     USA: {
       id: 'USA',
       name: 'United States',
@@ -766,7 +766,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
     reg.lifeCycleDistribution = createLifeCycleDistribution();
   });
 
-  return regions;
+  return regions as Record<RegionId, Region>;
 }
 
 /**

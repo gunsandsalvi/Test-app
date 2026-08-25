@@ -70,6 +70,7 @@ export const CorporatesScreen: React.FC<{
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-[var(--text-primary)]">{c.ticker}</span>
                 {c.isDefaulted && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[var(--signal-negative)]/20 text-[var(--signal-negative)]">DEFAULT</span>}
+                {c.mergerAcquired && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-500/20 text-amber-400">ACQUIRED ({c.acquiredByTicker})</span>}
               </div>
               <div className="text-[10px] text-[var(--text-tertiary)]">{c.name}</div>
             </div>
