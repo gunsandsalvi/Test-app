@@ -80,7 +80,7 @@ export function createInitialCategoryDemand(
         inputCostPressure: 0,
         clearedInputPriceIndex: 1.0,
         lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
-        unitPriceUSD: su.unitId === 'industrial_automation' ? 80000.0 : undefined,
+        unitPriceUSD: su.unitId === 'industrial_automation' ? 80000.0 : su.unitId === 'refined_products' ? 3.50 : su.unitId === 'food_beverage' ? 10.00 : undefined,
       };
     });
   });

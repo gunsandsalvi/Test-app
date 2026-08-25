@@ -86,7 +86,7 @@ export interface ProductLine {
   marginByUnit?: Record<string, number>;
 }
 
-export interface UnitBid { companyId: string; quantityUnits: number; maxPriceUSD: number; }
+export interface UnitBid { companyId?: string; isHouseholdAggregate?: boolean; quantityUnits: number; maxPriceUSD: number; }
 export interface UnitOffer { companyId: string; quantityUnits: number; minPriceUSD: number; }
 export interface SupplyContract {
   supplierCompanyId: string; customerCompanyId: string; subUnitId: string;

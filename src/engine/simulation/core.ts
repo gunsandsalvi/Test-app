@@ -450,26 +450,38 @@ export function advanceWeeklyStep(state: GameState): GameState {
       entry.lastWeekInventoryLevelUSD = entry.inventoryLevelUSD ?? 0;
     });
 
-    // --- PROJ-19 STAGE 1: Industrial Automation Unit-Based Clearing & Bidding System ---
-    const iaDemandState = reg.categoryDemand['industrial_automation'] as any;
-    if (iaDemandState) {
-      if (!iaDemandState.unitPriceUSD) {
-        iaDemandState.unitPriceUSD = 80000.0;
+    // --- PROJ-19: Generalized Real Unit-Based Clearing, Bidding & Contract Market System ---
+    function executeSubUnitBiddingMarket(
+      subUnitId: string,
+      baseUnitPrice: number,
+      targetReg: Region,
+      targetRegionId: RegionId
+    ) {
+      const demandState = targetReg.categoryDemand[subUnitId] as any;
+      if (!demandState) return;
+
+      if (!demandState.unitPriceUSD || demandState.unitPriceUSD <= 0) {
+        demandState.unitPriceUSD = baseUnitPrice;
       }
-      const currentUnitPrice = iaDemandState.unitPriceUSD;
+      const currentUnitPrice = demandState.unitPriceUSD;
 
       // 1. Process active contracts
-      const activeContracts = reg.activeContracts || [];
+      if (!targetReg.activeContracts) targetReg.activeContracts = [];
       const remainingContracts: SupplyContract[] = [];
 
-      activeContracts.forEach(contract => {
-        const supplier = prevActiveFirms.find(c => c.ticker === contract.supplierCompanyId);
-        const customer = prevActiveFirms.find(c => c.ticker === contract.customerCompanyId);
+      targetReg.activeContracts.forEach(contract => {
+        if (contract.subUnitId !== subUnitId) {
+          remainingContracts.push(contract);
+          return;
+        }
+
+        const supplier = prevActiveFirms.find(c => c.ticker === contract.supplierCompanyId || c.id === contract.supplierCompanyId);
+        const customer = prevActiveFirms.find(c => c.ticker === contract.customerCompanyId || c.id === contract.customerCompanyId);
 
         if (supplier && customer && !supplier.isDefaulted && !customer.isDefaulted) {
           contract.weeksRemaining -= 1;
           if (contract.weeksRemaining >= 0) {
-            // Execute weekly transaction
+            // Execute weekly contract transaction
             const supplierUnits = supplier.finishedGoodsUnits ?? ((supplier.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
             const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
             const paymentUSD = actualTransacted * contract.priceUSD;
@@ -493,34 +505,43 @@ export function advanceWeeklyStep(state: GameState): GameState {
           }
         }
       });
-      reg.activeContracts = remainingContracts;
+      targetReg.activeContracts = remainingContracts;
 
       // 2. Open Bidding & Matching
       const bids: UnitBid[] = [];
       const offers: UnitOffer[] = [];
 
-      const regionActiveFirms = prevActiveFirms.filter(c => c.region === regionId && !c.isDefaulted);
-      const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === 'industrial_automation'));
-      const customers = regionActiveFirms.filter(c => c.sector !== 'Banks' && c.sector !== 'Financials' && !(c.productLines || []).some(l => l.subUnitId === 'industrial_automation'));
+      const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && !c.isDefaulted);
+      const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
 
+      let customers: Company[] = [];
+      if (subUnitId === 'industrial_automation') {
+        customers = regionActiveFirms.filter(c => c.sector !== 'Banks' && c.sector !== 'Financials' && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
+      } else if (subUnitId === 'refined_products') {
+        customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Consumer' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
+      } else if (subUnitId === 'food_beverage') {
+        customers = regionActiveFirms.filter(c => c.sector === 'Consumer' && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
+      }
+
+      // Suppliers submit unit offers
       suppliers.forEach(comp => {
-        const line = (comp.productLines || []).find(l => l.subUnitId === 'industrial_automation')!;
+        const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
         const warehouseCapacityUSD = comp.annualRevenue * 0.15;
         const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
         const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
-        const priceSignal = (currentUnitPrice / 80000.0) - 1.0;
-        const productionResponseFactor = (1.0 + priceSignal * 1.5);
-        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * line.revenueShare * productionResponseFactor * productionThrottle;
+        const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
+        const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
+        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
         const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
         const currentUnits = comp.finishedGoodsUnits ?? (currentInvUSD / currentUnitPrice);
         const contractSales = remainingContracts
-          .filter(c => c.supplierCompanyId === comp.ticker)
+          .filter(c => (c.supplierCompanyId === comp.ticker || c.supplierCompanyId === comp.id) && c.subUnitId === subUnitId)
           .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
 
         const openOfferUnits = Math.max(0, targetProductionUnits + currentUnits - contractSales);
 
-        if (openOfferUnits > 0.01) {
+        if (openOfferUnits > 0.001) {
           const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
           const costRate = Math.max(0.40, Math.min(0.98, 1 - baseMargin));
           const ratingPdMap: Record<string, number> = {
@@ -540,18 +561,25 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
       });
 
+      // Corporate Customers submit bids
       customers.forEach(comp => {
-        const weeklyCapex = comp.capex / 52;
-        const demandUSD = weeklyCapex * 0.35;
+        let demandUSD = 0;
+        if (subUnitId === 'industrial_automation') {
+          demandUSD = (comp.capex / 52) * 0.35;
+        } else if (subUnitId === 'refined_products') {
+          demandUSD = (comp.annualRevenue * 0.025 / 52);
+        } else if (subUnitId === 'food_beverage') {
+          demandUSD = (comp.annualRevenue * 0.01 / 52);
+        }
         const demandUnits = demandUSD / currentUnitPrice;
 
         const contractPurchases = remainingContracts
-          .filter(c => c.customerCompanyId === comp.ticker)
+          .filter(c => (c.customerCompanyId === comp.ticker || c.customerCompanyId === comp.id) && c.subUnitId === subUnitId)
           .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
 
         const openBidUnits = Math.max(0, demandUnits - contractPurchases);
 
-        if (openBidUnits > 0.01) {
+        if (openBidUnits > 0.001) {
           const cashRatio = comp.cash / Math.max(1, comp.annualRevenue);
           const cashModifier = cashRatio < 0.02 ? 0.85 : cashRatio > 0.15 ? 1.15 : 1.0;
           const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashModifier;
@@ -563,6 +591,24 @@ export function advanceWeeklyStep(state: GameState): GameState {
           });
         }
       });
+
+      // Household Aggregate Bid (for food_beverage and refined_products)
+      if (subUnitId === 'food_beverage' || subUnitId === 'refined_products') {
+        const hhShare = subUnitId === 'food_beverage' ? 0.95 : 0.60;
+        const hhWeeklyDemandUSD = (demandState.demandLevelUSD * hhShare) / 52;
+        const hhDemandUnits = hhWeeklyDemandUSD / currentUnitPrice;
+
+        if (hhDemandUnits > 0.001) {
+          const priceElasticityPremium = Math.tanh(0.05) * 0.15;
+          const hhMaxPriceUSD = currentUnitPrice * (1.0 + priceElasticityPremium);
+
+          bids.push({
+            isHouseholdAggregate: true,
+            quantityUnits: hhDemandUnits,
+            maxPriceUSD: hhMaxPriceUSD,
+          });
+        }
+      }
 
       // Sort bids desc, offers asc
       bids.sort((a, b) => b.maxPriceUSD - a.maxPriceUSD);
@@ -590,15 +636,17 @@ export function advanceWeeklyStep(state: GameState): GameState {
           openSales[offer.companyId].units += transactQty;
           openSales[offer.companyId].amount += transactQty * matchPrice;
 
-          if (!openPurchases[bid.companyId]) openPurchases[bid.companyId] = { units: 0, amount: 0 };
-          openPurchases[bid.companyId].units += transactQty;
-          openPurchases[bid.companyId].amount += transactQty * matchPrice;
+          if (bid.companyId) {
+            if (!openPurchases[bid.companyId]) openPurchases[bid.companyId] = { units: 0, amount: 0 };
+            openPurchases[bid.companyId].units += transactQty;
+            openPurchases[bid.companyId].amount += transactQty * matchPrice;
+          }
 
           bid.quantityUnits -= transactQty;
           offer.quantityUnits -= transactQty;
 
-          if (bid.quantityUnits <= 0.001) bidIdx++;
-          if (offer.quantityUnits <= 0.001) offerIdx++;
+          if (bid.quantityUnits <= 0.0001) bidIdx++;
+          if (offer.quantityUnits <= 0.0001) offerIdx++;
         } else {
           break;
         }
@@ -611,13 +659,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const supUp = companyUpdates[comp.ticker];
         const initialUnits = comp.finishedGoodsUnits ?? ((comp.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
 
-        const line = (comp.productLines || []).find(l => l.subUnitId === 'industrial_automation')!;
+        const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
         const warehouseCapacityUSD = comp.annualRevenue * 0.15;
         const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
         const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
-        const priceSignal = (currentUnitPrice / 80000.0) - 1.0;
-        const productionResponseFactor = (1.0 + priceSignal * 1.5);
-        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * line.revenueShare * productionResponseFactor * productionThrottle;
+        const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
+        const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
+        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
         const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
         if (sale) {
@@ -643,13 +691,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
       });
 
-      // 4. Contract Formation
-      const matchedBids = bids.filter(b => b.quantityUnits < 0.01);
+      // 4. Contract Formation (B2B corporate matching only)
+      const matchedBids = bids.filter(b => b.companyId && b.quantityUnits < 0.01);
       const matchedOffers = offers.filter(o => o.quantityUnits < 0.01);
 
       matchedBids.forEach(bid => {
         matchedOffers.forEach(offer => {
-          if (Math.random() < 0.15) {
+          if (Math.random() < 0.15 && bid.companyId) {
             const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
             const customerComp = customers.find(c => c.ticker === bid.companyId);
 
@@ -662,26 +710,34 @@ export function advanceWeeklyStep(state: GameState): GameState {
               const contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
               const duration = 12 + Math.floor(Math.random() * 40);
 
+              const baseContractUnits = subUnitId === 'industrial_automation' ? (Math.random() * 2 + 0.5) : subUnitId === 'refined_products' ? (Math.random() * 5000 + 1000) : (Math.random() * 10000 + 2000);
+
               const newContract: SupplyContract = {
                 supplierCompanyId: offer.companyId,
                 customerCompanyId: bid.companyId,
-                subUnitId: 'industrial_automation',
+                subUnitId,
                 priceUSD: Number(contractPrice.toFixed(2)),
-                quantityUnitsPerWeek: Number((Math.random() * 2 + 0.5).toFixed(2)),
+                quantityUnitsPerWeek: Number(baseContractUnits.toFixed(2)),
                 weeksRemaining: duration,
               };
-              reg.activeContracts.push(newContract);
+              targetReg.activeContracts.push(newContract);
             }
           }
         });
       });
 
       // 5. Save Category Demand state metrics
-      iaDemandState.unitPriceUSD = Number(clearedPriceUSD.toFixed(2));
-      iaDemandState.totalUnitsSuppliedThisWeek = openUnitsCleared + remainingContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
-      iaDemandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + openUnitsCleared + remainingContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
-      iaDemandState.clearedInputPriceIndex = Number((clearedPriceUSD / 80000.0).toFixed(4));
+      const activeSubUnitContracts = remainingContracts.filter(c => c.subUnitId === subUnitId);
+      demandState.unitPriceUSD = Number(clearedPriceUSD.toFixed(2));
+      demandState.totalUnitsSuppliedThisWeek = openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+      demandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+      demandState.clearedInputPriceIndex = Number((clearedPriceUSD / baseUnitPrice).toFixed(4));
     }
+
+    // Execute generalized bidding markets for sub-units in scope
+    executeSubUnitBiddingMarket('industrial_automation', 80000.0, reg, regionId);
+    executeSubUnitBiddingMarket('refined_products', 3.50, reg, regionId);
+    executeSubUnitBiddingMarket('food_beverage', 10.00, reg, regionId);
   });
 
   function computeRealizedVol(historicalValues: number[], window: number): number {

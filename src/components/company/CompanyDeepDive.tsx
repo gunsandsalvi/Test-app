@@ -367,31 +367,34 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
             </div>
 
             <div className="pt-3 mt-3 border-t border-[var(--border-hairline)] space-y-3">
-            <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold border-b border-[var(--border-hairline)] pb-1 mb-2">Key Supply Relationships</div>
+            <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold border-b border-[var(--border-hairline)] pb-1 mb-2">Key Supply Relationships (Active Contracts)</div>
             {(() => {
-              const rels = (reg as any).supplyRelationships || [];
-              const asSupplier = rels.filter((r: any) => r.supplierCompanyId === company.id);
-              const asCustomer = rels.filter((r: any) => r.customerCompanyId === company.id);
+              const contracts = reg?.activeContracts || [];
+              const asSupplier = contracts.filter((r: any) => r.supplierCompanyId === company.ticker || r.supplierCompanyId === company.id);
+              const asCustomer = contracts.filter((r: any) => r.customerCompanyId === company.ticker || r.customerCompanyId === company.id);
               
               if (asSupplier.length === 0 && asCustomer.length === 0) {
-                 return <div className="text-[11px] text-[var(--text-tertiary)] italic">No explicit major bilateral supply contracts found. Operates primarily via spot markets.</div>;
+                 return <div className="text-[11px] text-[var(--text-tertiary)] italic">No explicit major bilateral supply contracts found. Operates primarily via open auction spot markets.</div>;
               }
 
               return (
                 <div className="space-y-4">
                   {asSupplier.length > 0 && (
                     <div className="space-y-1">
-                       <div className="text-[9px] text-[var(--text-secondary)] font-bold mb-1">MAJOR CUSTOMERS (Downstream)</div>
+                       <div className="text-[9px] text-[var(--text-secondary)] font-bold mb-1 uppercase tracking-wide">Major Contract Customers (Downstream)</div>
                        {asSupplier.map((r: any, i: number) => {
-                          const cst = state.companies.find(c => c.id === r.customerCompanyId);
+                          const cst = state.companies.find(c => c.ticker === r.customerCompanyId || c.id === r.customerCompanyId);
+                          const weeklyUSD = r.priceUSD * r.quantityUnitsPerWeek;
                           return (
                             <div key={i} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
                                <div>
-                                 <div className="text-[11px] font-bold">{cst?.name || r.customerCompanyId}</div>
-                                 <div className="text-[9px] text-[var(--text-tertiary)]">Contract Strength: {(r.relationshipStrength * 100).toFixed(0)}%</div>
+                                 <div className="text-[11px] font-bold">{cst?.name || r.customerCompanyId} <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span></div>
+                                 <div className="text-[9px] text-[var(--text-tertiary)] font-mono">
+                                   {r.quantityUnitsPerWeek.toFixed(2)} units/wk @ {formatCurrency(r.priceUSD, { compact: true })}/unit • {r.weeksRemaining}w remaining
+                                 </div>
                                </div>
                                <div className="text-right">
-                                 <div className="text-[11px] font-[var(--font-numeric)]">{formatCurrency(r.weeklyVolumeUSD, { compact: true })}/wk</div>
+                                 <div className="text-[11px] font-[var(--font-numeric)] font-bold">{formatCurrency(weeklyUSD, { compact: true })}/wk</div>
                                </div>
                             </div>
                           );
@@ -400,17 +403,20 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                   )}
                   {asCustomer.length > 0 && (
                     <div className="space-y-1">
-                       <div className="text-[9px] text-[var(--text-secondary)] font-bold mb-1">MAJOR SUPPLIERS (Upstream)</div>
+                       <div className="text-[9px] text-[var(--text-secondary)] font-bold mb-1 uppercase tracking-wide">Major Contract Suppliers (Upstream)</div>
                        {asCustomer.map((r: any, i: number) => {
-                          const sup = state.companies.find(c => c.id === r.supplierCompanyId);
+                          const sup = state.companies.find(c => c.ticker === r.supplierCompanyId || c.id === r.supplierCompanyId);
+                          const weeklyUSD = r.priceUSD * r.quantityUnitsPerWeek;
                           return (
                             <div key={i} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
                                <div>
-                                 <div className="text-[11px] font-bold">{sup?.name || r.supplierCompanyId}</div>
-                                 <div className="text-[9px] text-[var(--text-tertiary)]">Contract Strength: {(r.relationshipStrength * 100).toFixed(0)}%</div>
+                                 <div className="text-[11px] font-bold">{sup?.name || r.supplierCompanyId} <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span></div>
+                                 <div className="text-[9px] text-[var(--text-tertiary)] font-mono">
+                                   {r.quantityUnitsPerWeek.toFixed(2)} units/wk @ {formatCurrency(r.priceUSD, { compact: true })}/unit • {r.weeksRemaining}w remaining
+                                 </div>
                                </div>
                                <div className="text-right">
-                                 <div className="text-[11px] font-[var(--font-numeric)]">{formatCurrency(r.weeklyVolumeUSD, { compact: true })}/wk</div>
+                                 <div className="text-[11px] font-[var(--font-numeric)] font-bold">{formatCurrency(weeklyUSD, { compact: true })}/wk</div>
                                </div>
                             </div>
                           );
