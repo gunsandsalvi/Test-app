@@ -7,7 +7,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding, INDUSTRY_SUBUNITS, Industry, UnitBid, UnitOffer, SupplyContract } from '../../types';
+import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding, INDUSTRY_SUBUNITS, Industry, UnitBid, UnitOffer, SupplyContract, SegmentFinancial } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { checkForMerger } from './merger';
@@ -597,6 +597,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
           demandUSD = (comp.annualRevenue * 0.008 / 52);
         } else if (subUnitId === 'passenger_vehicles') {
           demandUSD = (comp.annualRevenue * 0.015 / 52);
+        } else if (subUnitId === 'semiconductors') {
+          demandUSD = (comp.annualRevenue * 0.02 / 52);
         }
         const demandUnits = demandUSD / currentUnitPrice;
 
@@ -1703,8 +1705,29 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? Number((comp.baselineAnnualRevenue * 0.995).toFixed(1))
       : Number((comp.baselineAnnualRevenue * (1 + trendWeeklyGrowth)).toFixed(1));
 
+    const revHist = comp.revenueHistory || [newRevenue];
+    let calculatedRevVol = 0;
+    if (revHist.length > 2) {
+      const meanRev = revHist.reduce((s, v) => s + v, 0) / revHist.length;
+      if (meanRev > 0) {
+        const varRev = revHist.reduce((s, v) => s + Math.pow(v - meanRev, 2), 0) / revHist.length;
+        calculatedRevVol = Math.sqrt(varRev) / meanRev;
+      }
+    }
+    const calculatedSegmentFinancials: SegmentFinancial[] = (updatedProductLines || []).map(line => {
+      const share = line.revenueShare || 1.0;
+      return {
+        subUnitId: line.subUnitId,
+        revenueUSD: Number((newRevenue * share).toFixed(0)),
+        ebitdaUSD: Number((newEbitda * share).toFixed(0)),
+        capexUSD: Number((newCapex * share).toFixed(0)),
+      };
+    });
+
     return {
       ...comp,
+      revenueVolatility: Number(calculatedRevVol.toFixed(4)),
+      segmentFinancials: calculatedSegmentFinancials,
       forwardPE: newForwardPE,
       baselineRecoveryRate: newBaselineRecoveryRate,
       baselineDividendYield: newBaselineDividendYield,

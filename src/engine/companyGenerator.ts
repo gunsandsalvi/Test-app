@@ -911,11 +911,19 @@ export function generateInitialCompanies(): Company[] {
             { industry: 'Energy', subUnitId: 'refined_products', revenueShare: 0.40, competitiveness: 0 }
           ];
         } else if (sector === 'Industrials') {
-          lines = [
-            { industry: 'IndustrialsMachinery', subUnitId: 'heavy_equipment', revenueShare: 0.50, competitiveness: 0 },
-            { industry: 'IndustrialsMachinery', subUnitId: 'industrial_automation', revenueShare: 0.30, competitiveness: 0 },
-            { industry: 'MaterialsChemicals', subUnitId: 'industrial_chemicals', revenueShare: 0.20, competitiveness: 0 }
-          ];
+          if (comps.indexOf(c) % 2 === 1) {
+            lines = [
+              { industry: 'AerospaceDefense', subUnitId: 'defense_systems', revenueShare: 0.50, competitiveness: 0 },
+              { industry: 'AerospaceDefense', subUnitId: 'commercial_aerospace', revenueShare: 0.30, competitiveness: 0 },
+              { industry: 'IndustrialsMachinery', subUnitId: 'heavy_equipment', revenueShare: 0.20, competitiveness: 0 }
+            ];
+          } else {
+            lines = [
+              { industry: 'IndustrialsMachinery', subUnitId: 'heavy_equipment', revenueShare: 0.50, competitiveness: 0 },
+              { industry: 'IndustrialsMachinery', subUnitId: 'industrial_automation', revenueShare: 0.30, competitiveness: 0 },
+              { industry: 'MaterialsChemicals', subUnitId: 'industrial_chemicals', revenueShare: 0.20, competitiveness: 0 }
+            ];
+          }
         } else if (sector === 'Consumer') {
           const isMegaCap = c.baselineAnnualRevenue > 100000;
           if (isMegaCap) {

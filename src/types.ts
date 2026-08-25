@@ -202,6 +202,42 @@ export interface InstitutionalEntity {
 }
 
 
+export type WealthTier = 'BOTTOM_50' | 'NEXT_40' | 'TOP_9' | 'TOP_1';
+
+export interface WealthTierData {
+  shareOfHouseholds: number;
+  shareOfIncomeUSD: number;
+  shareOfNetWorthUSD: number;
+  savingsRate: number;
+  equityExposureShare: number;
+  homeEquityUSD?: number;
+}
+
+export type LifeCycleStage = 'EARLY_CAREER' | 'PEAK_EARNING' | 'PRE_RETIREMENT' | 'RETIRED';
+
+export interface LifeCycleStageData {
+  shareOfPopulation: number;
+  savingsRate: number;
+  consumptionMultiplier: number;
+}
+
+export interface HousingMarket {
+  regionId: RegionId;
+  medianHomePriceUSD: number;
+  baselineHomePriceUSD: number;
+  priceIndex: number;
+  historicalPrices: number[];
+  ownershipRatePct: number;
+  mortgageOriginationVolumeUSD: number;
+}
+
+export interface SegmentFinancial {
+  subUnitId: string;
+  revenueUSD: number;
+  ebitdaUSD: number;
+  capexUSD: number;
+}
+
 export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
 
 export interface WeatherAnomaly {
@@ -417,6 +453,11 @@ export interface Region {
 
   householdState: HouseholdState;
 
+  // Wealth, Demographics & Housing Segmentation
+  wealthDistribution: Record<WealthTier, WealthTierData>;
+  housingMarket: HousingMarket;
+  lifeCycleDistribution: Record<LifeCycleStage, LifeCycleStageData>;
+
   // Central Banking Dot Plot Projections (1Y & 2Y terminal target rates)
   dotPlot1Y: number; // Projected rate in 1 year
   dotPlot2Y: number; // Projected rate in 2 years
@@ -560,6 +601,8 @@ export interface LeveragedLoanInfo {
 export interface Company {
   concentrationRiskFlags?: string[];
   financialStatementProfile?: FinancialStatementProfile;
+  segmentFinancials?: SegmentFinancial[];
+  revenueVolatility?: number;
   technicalReservesUSD?: number;
   aumUSD?: number;
   managementFeeRate?: number;

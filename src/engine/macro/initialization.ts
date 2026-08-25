@@ -1,6 +1,68 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS } from '../../types';
+import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData } from '../../types';
+
+export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): Record<WealthTier, WealthTierData> {
+  const inc = estimatedHouseholdIncomeUSD;
+  const nw = inc * 3.5;
+  return {
+    BOTTOM_50: {
+      shareOfHouseholds: 0.50,
+      shareOfIncomeUSD: Number((inc * 0.15).toFixed(0)),
+      shareOfNetWorthUSD: Number((nw * 0.02).toFixed(0)),
+      savingsRate: 0.01,
+      equityExposureShare: 0.05,
+      homeEquityUSD: Number((nw * 0.01).toFixed(0)),
+    },
+    NEXT_40: {
+      shareOfHouseholds: 0.40,
+      shareOfIncomeUSD: Number((inc * 0.45).toFixed(0)),
+      shareOfNetWorthUSD: Number((nw * 0.28).toFixed(0)),
+      savingsRate: 0.06,
+      equityExposureShare: 0.25,
+      homeEquityUSD: Number((nw * 0.18).toFixed(0)),
+    },
+    TOP_9: {
+      shareOfHouseholds: 0.09,
+      shareOfIncomeUSD: Number((inc * 0.25).toFixed(0)),
+      shareOfNetWorthUSD: Number((nw * 0.38).toFixed(0)),
+      savingsRate: 0.18,
+      equityExposureShare: 0.50,
+      homeEquityUSD: Number((nw * 0.12).toFixed(0)),
+    },
+    TOP_1: {
+      shareOfHouseholds: 0.01,
+      shareOfIncomeUSD: Number((inc * 0.15).toFixed(0)),
+      shareOfNetWorthUSD: Number((nw * 0.32).toFixed(0)),
+      savingsRate: 0.35,
+      equityExposureShare: 0.70,
+      homeEquityUSD: Number((nw * 0.04).toFixed(0)),
+    },
+  };
+}
+
+export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncomeUSD: number): HousingMarket {
+  const basePrice = regionId === 'USA' ? 420000 : regionId === 'EUR' ? 320000 : regionId === 'UK' ? 350000 : 280000;
+  const ownershipRate = regionId === 'USA' ? 0.65 : regionId === 'EUR' ? 0.60 : regionId === 'UK' ? 0.64 : 0.58;
+  return {
+    regionId,
+    medianHomePriceUSD: basePrice,
+    baselineHomePriceUSD: basePrice,
+    priceIndex: 1.0,
+    historicalPrices: Array(52).fill(basePrice),
+    ownershipRatePct: ownershipRate,
+    mortgageOriginationVolumeUSD: estimatedHouseholdIncomeUSD * 0.05,
+  };
+}
+
+export function createLifeCycleDistribution(): Record<LifeCycleStage, LifeCycleStageData> {
+  return {
+    EARLY_CAREER: { shareOfPopulation: 0.28, savingsRate: 0.02, consumptionMultiplier: 1.10 },
+    PEAK_EARNING: { shareOfPopulation: 0.35, savingsRate: 0.12, consumptionMultiplier: 1.00 },
+    PRE_RETIREMENT: { shareOfPopulation: 0.17, savingsRate: 0.20, consumptionMultiplier: 0.85 },
+    RETIRED: { shareOfPopulation: 0.20, savingsRate: -0.05, consumptionMultiplier: 0.75 },
+  };
+}
 import { generate52WeekHistory } from './utils';
 import { INITIAL_WEATHER } from './weather';
 
@@ -698,6 +760,10 @@ export function getInitialRegions(): Record<RegionId, Region> {
       reg.estimatedHouseholdIncomeUSD,
       reg.lastWeekNominalGdpUSD
     );
+
+    reg.wealthDistribution = createWealthDistribution(reg.estimatedHouseholdIncomeUSD);
+    reg.housingMarket = createHousingMarket(reg.id, reg.estimatedHouseholdIncomeUSD);
+    reg.lifeCycleDistribution = createLifeCycleDistribution();
   });
 
   return regions;

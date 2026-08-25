@@ -363,6 +363,26 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 </div>
               );
             })}
+
+            {company.segmentFinancials && company.segmentFinancials.length > 0 && (
+              <div className="mt-3 p-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-2">Segment Financial Reporting (PROJ-15)</div>
+                <div className="space-y-2">
+                  {company.segmentFinancials.map(seg => (
+                    <div key={seg.subUnitId} className="flex justify-between items-center text-xs border-b border-[var(--border-hairline)] pb-1.5">
+                      <div>
+                        <div className="font-bold text-[var(--text-primary)]">{seg.subUnitId.replace(/_/g, ' ')}</div>
+                        <div className="text-[10px] text-[var(--text-tertiary)]">Capex: {formatCurrency(seg.capexUSD, { compact: true })}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-[var(--font-numeric)] font-bold">{formatCurrency(seg.revenueUSD, { compact: true })} Rev</div>
+                        <div className="text-[10px] text-[var(--text-secondary)]">{formatCurrency(seg.ebitdaUSD, { compact: true })} EBITDA</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 

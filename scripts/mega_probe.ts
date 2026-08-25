@@ -64,6 +64,15 @@ for (let w = 1; w <= 520; w++) {
     }
     entry.activeContractsBySubUnit = bySubUnit;
     
+    // Extended metrics (PROJ-11, PROJ-13, PROJ-15, PROJ-17, FIX1, FIX2, PROJ-14)
+    entry.defenseSystemsSuppliers = state.companies.filter(c => c.productLines?.some(l => l.subUnitId === 'defense_systems')).length;
+    entry.semiconductorsContracts = (Object.values(state.regions).flatMap(r => r.activeContracts || [])).filter(c => c.subUnitId === 'semiconductors').length;
+    entry.usaWealthDist = state.regions['USA'].wealthDistribution;
+    entry.usaHousingPrice = state.regions['USA'].housingMarket?.medianHomePriceUSD;
+    entry.usaLifeCycle = state.regions['USA'].lifeCycleDistribution;
+    entry.companiesWithSegmentFinancials = state.companies.filter(c => c.segmentFinancials && c.segmentFinancials.length > 0).length;
+    entry.companiesWithRevVol = state.companies.filter(c => (c.revenueVolatility ?? 0) > 0).length;
+
     report.checkpoints.push(entry);
     console.log(`Passed week ${w}`);
   }

@@ -1,8 +1,9 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
+import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;
@@ -660,8 +661,106 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
+  // PROJ-13: Housing as a real asset class
+  const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD);
+  const resDemand = region.categoryDemand?.['residential_construction']?.demandLevelUSD ?? 1e9;
+  const resSupply = region.categoryDemand?.['residential_construction']?.inventoryLevelUSD ?? (resDemand * 0.1);
+  const supplyDemandRatio = resSupply / Math.max(1, resDemand);
+  const creditFactor = Math.max(0.5, Math.min(1.5, 1.0 + (newPolicyRate < 0.05 ? 0.02 : -0.02)));
+  const priceIndexDelta = (1.0 - supplyDemandRatio) * 0.002 * creditFactor;
+  const newPriceIndex = Math.max(0.5, Math.min(3.0, prevHousing.priceIndex + priceIndexDelta));
+  const newMedianHomePriceUSD = Math.round((prevHousing.baselineHomePriceUSD || 400000) * newPriceIndex);
+  const histPrices = [...(prevHousing.historicalPrices || []).slice(-51), newMedianHomePriceUSD];
+
+  const updatedHousingMarket: HousingMarket = {
+    ...prevHousing,
+    medianHomePriceUSD: newMedianHomePriceUSD,
+    baselineHomePriceUSD: prevHousing.baselineHomePriceUSD || 400000,
+    priceIndex: Number(newPriceIndex.toFixed(4)),
+    historicalPrices: histPrices,
+    mortgageOriginationVolumeUSD: Number((newEstimatedHouseholdIncomeUSD * 0.05 * creditFactor).toFixed(0)),
+  };
+
+  // PROJ-17: Life-cycle household structure
+  const prevLifeCycle = region.lifeCycleDistribution ?? createLifeCycleDistribution();
+  const updatedLifeCycle = { ...prevLifeCycle };
+  const birthDrift = (birthRate / 52) * 0.1;
+  const retirementDrift = 0.0003;
+  const deathDrift = (deathRate / 52) * 0.1;
+
+  let ecShare = Math.max(0.05, prevLifeCycle.EARLY_CAREER.shareOfPopulation + birthDrift - retirementDrift * 0.5);
+  let peShare = Math.max(0.05, prevLifeCycle.PEAK_EARNING.shareOfPopulation + retirementDrift * 0.3 - retirementDrift * 0.5);
+  let prShare = Math.max(0.05, prevLifeCycle.PRE_RETIREMENT.shareOfPopulation + retirementDrift * 0.5 - retirementDrift * 0.3);
+  let retShare = Math.max(0.05, prevLifeCycle.RETIRED.shareOfPopulation + retirementDrift * 0.5 - deathDrift);
+
+  const totalLifeCycleShare = ecShare + peShare + prShare + retShare;
+  updatedLifeCycle.EARLY_CAREER = { ...prevLifeCycle.EARLY_CAREER, shareOfPopulation: ecShare / totalLifeCycleShare };
+  updatedLifeCycle.PEAK_EARNING = { ...prevLifeCycle.PEAK_EARNING, shareOfPopulation: peShare / totalLifeCycleShare };
+  updatedLifeCycle.PRE_RETIREMENT = { ...prevLifeCycle.PRE_RETIREMENT, shareOfPopulation: prShare / totalLifeCycleShare };
+  updatedLifeCycle.RETIRED = { ...prevLifeCycle.RETIRED, shareOfPopulation: retShare / totalLifeCycleShare };
+
+  // PROJ-11: Household wealth/income segmentation
+  const prevWealthDist = region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD);
+  const updatedWealthDist = { ...prevWealthDist };
+
+  const tierOccMixes: Record<WealthTier, Partial<Record<OccupationType, number>>> = {
+    TOP_1: { MANAGERIAL_FINANCIAL: 0.50, SPECIALIZED_PROFESSIONAL: 0.35, TECHNICAL_ENGINEERING: 0.15 },
+    TOP_9: { MANAGERIAL_FINANCIAL: 0.30, SPECIALIZED_PROFESSIONAL: 0.40, TECHNICAL_ENGINEERING: 0.20, SKILLED_TRADES: 0.10 },
+    NEXT_40: { SKILLED_TRADES: 0.35, GENERAL: 0.35, TECHNICAL_ENGINEERING: 0.15, MANAGERIAL_FINANCIAL: 0.15 },
+    BOTTOM_50: { GENERAL: 0.60, SKILLED_TRADES: 0.30, TECHNICAL_ENGINEERING: 0.10 },
+  };
+
+  const tierHomeEquityShares: Record<WealthTier, number> = {
+    TOP_1: 0.05,
+    TOP_9: 0.30,
+    NEXT_40: 0.55,
+    BOTTOM_50: 0.10,
+  };
+
+  const tierMpc: Record<WealthTier, number> = {
+    BOTTOM_50: 0.98,
+    NEXT_40: 0.92,
+    TOP_9: 0.75,
+    TOP_1: 0.45,
+  };
+
+  let totalTierWeeklyConsumptionUSD = 0;
+
+  (Object.keys(updatedWealthDist) as WealthTier[]).forEach(t => {
+    const prevData = updatedWealthDist[t];
+    const mix = tierOccMixes[t];
+    const tierWageGrowth = getBlendedWageGrowth(mix, newOccupationPools);
+    const newIncomeUSD = Math.max(1000, prevData.shareOfIncomeUSD * (1 + tierWageGrowth / 52));
+
+    const equityGain = prevData.shareOfNetWorthUSD * prevData.equityExposureShare * equityReturn;
+    const savingsGain = (newIncomeUSD / 52) * prevData.savingsRate;
+
+    const homeEquityUSD = Math.round(updatedHousingMarket.medianHomePriceUSD * updatedHousingMarket.ownershipRatePct * (newTotalPopulation / 2.5) * prevData.shareOfHouseholds * tierHomeEquityShares[t]);
+    
+    // Retired drawdown for lower/middle tiers
+    const retiredDrawdown = (t === 'BOTTOM_50' || t === 'NEXT_40') ? (prevData.shareOfNetWorthUSD * Math.abs(updatedLifeCycle.RETIRED.savingsRate) / 52) : 0;
+
+    const newNetWorth = Math.max(100, prevData.shareOfNetWorthUSD + equityGain + savingsGain + (homeEquityUSD - (prevData.homeEquityUSD ?? homeEquityUSD)) - retiredDrawdown);
+
+    updatedWealthDist[t] = {
+      ...prevData,
+      shareOfIncomeUSD: Number(newIncomeUSD.toFixed(0)),
+      shareOfNetWorthUSD: Number(newNetWorth.toFixed(0)),
+      homeEquityUSD: Number(homeEquityUSD.toFixed(0)),
+    };
+
+    const weeklyInc = newIncomeUSD / 52;
+    const weeklyDisp = weeklyInc * (1 - prevData.savingsRate);
+    totalTierWeeklyConsumptionUSD += weeklyDisp * tierMpc[t];
+  });
+
+  const derivedTierConsumptionUSD = totalTierWeeklyConsumptionUSD * 52;
+
   const updatedRegion: Region = {
     ...region,
+    wealthDistribution: updatedWealthDist,
+    housingMarket: updatedHousingMarket,
+    lifeCycleDistribution: updatedLifeCycle,
     cycleRegime: newCycleRegime,
     inversionWeeksCount: newInversionCount,
     recessionShockQueue: remainingShocks,

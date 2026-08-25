@@ -5,725 +5,1340 @@
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0114,
-          "unemployment": 0.0431,
+          "inflation": 0.0113,
+          "unemployment": 0.0384,
           "equityIndex": 6727.5,
-          "creditSpread": 283,
+          "creditSpread": 360,
           "centralBankRate": 0.0434
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0099,
-          "unemployment": 0.0671,
+          "inflation": 0.0098,
+          "unemployment": 0.0635,
           "equityIndex": 5773,
-          "creditSpread": 439,
+          "creditSpread": 331,
           "centralBankRate": 0.0314
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0172,
-          "unemployment": 0.0411,
+          "inflation": 0.0166,
+          "unemployment": 0.0333,
           "equityIndex": 9522,
-          "creditSpread": 284,
+          "creditSpread": 404,
           "centralBankRate": 0.0455
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.006,
-          "unemployment": 0.0336,
+          "inflation": 0.0056,
+          "unemployment": 0.03,
           "equityIndex": 44735,
-          "creditSpread": 1440,
+          "creditSpread": 1570,
           "centralBankRate": 0.0038
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 14964258924.4,
+          "annualRevenue": 14963679614.9,
           "eps": 1.6
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 3048049797.9,
-          "eps": 338.92,
-          "technicalReservesUSD": 5176677106490.152,
-          "insurancePremiumsWrittenUSD": 3048049797.9079976
+          "annualRevenue": 3019051568.4,
+          "eps": 340.85,
+          "technicalReservesUSD": 5206325534145.383,
+          "insurancePremiumsWrittenUSD": 3019051568.434514
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 1150991212.8,
-          "eps": 0.83,
-          "aumUSD": 153465495039.96722
+          "annualRevenue": 1155391362.3,
+          "eps": 0.84,
+          "aumUSD": 154052181643.92926
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 55578756956.5,
-          "eps": 2.16
+          "annualRevenue": 55577323246.3,
+          "eps": 2.69
         }
       },
-      "activeContracts": 5159,
+      "activeContracts": 3561,
       "activeContractsBySubUnit": {
-        "industrial_automation": 2429,
-        "refined_products": 1405,
-        "pharmaceuticals": 443,
-        "passenger_vehicles": 882
-      }
+        "industrial_automation": 865,
+        "refined_products": 1518,
+        "pharmaceuticals": 382,
+        "passenger_vehicles": 753,
+        "semiconductors": 43
+      },
+      "defenseSystemsSuppliers": 87,
+      "semiconductorsContracts": 43,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 664847718257,
+          "shareOfNetWorthUSD": 948065092916,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 793229269859
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 1994565766917,
+          "shareOfNetWorthUSD": 5038397532403,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 3490208787381
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1108119346544,
+          "shareOfNetWorthUSD": 4462337067158,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 428343805724
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 664870905289,
+          "shareOfNetWorthUSD": 4352576961619,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 7932292699
+        }
+      },
+      "usaHousingPrice": 420771,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.27987007742277914,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3499386540820996,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.17005934592559258,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.20013192256952855,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 800,
+      "companiesWithRevVol": 0
     },
     {
       "week": 10,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0333,
-          "unemployment": 0.0323,
-          "equityIndex": 3958.8,
-          "creditSpread": 1277,
-          "centralBankRate": 0.0513
+          "inflation": 0.035,
+          "unemployment": 0.0267,
+          "equityIndex": 5193.3,
+          "creditSpread": 1765,
+          "centralBankRate": 0.0549
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0123,
-          "unemployment": 0.0532,
-          "equityIndex": 3333.7,
-          "creditSpread": 1322,
-          "centralBankRate": 0.0405
+          "inflation": 0.0117,
+          "unemployment": 0.0501,
+          "equityIndex": 3514.5,
+          "creditSpread": 1043,
+          "centralBankRate": 0.0408
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0143,
-          "unemployment": 0.0255,
-          "equityIndex": 5241.4,
-          "creditSpread": 1278,
-          "centralBankRate": 0.0568
+          "inflation": 0.0182,
+          "unemployment": 0.0174,
+          "equityIndex": 6484.1,
+          "creditSpread": 1092,
+          "centralBankRate": 0.0592
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.0089,
-          "unemployment": 0.02,
-          "equityIndex": 32770,
-          "creditSpread": 2365,
-          "centralBankRate": 0.024
+          "inflation": 0.0096,
+          "unemployment": 0.0163,
+          "equityIndex": 30285,
+          "creditSpread": 1787,
+          "centralBankRate": 0.023
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 7171377512.8,
-          "eps": 0.73
+          "annualRevenue": 7161398024.2,
+          "eps": 0.75
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 3208065712.6,
-          "eps": 340.55,
-          "technicalReservesUSD": 5204966610464.56,
-          "insurancePremiumsWrittenUSD": 3208065712.577851
+          "annualRevenue": 3166648471.7,
+          "eps": 342.76,
+          "technicalReservesUSD": 5234779244796.034,
+          "insurancePremiumsWrittenUSD": 3166648471.737552
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 836869155.8,
-          "eps": 0.51,
-          "aumUSD": 111582554113.16731
+          "annualRevenue": 997641998.5,
+          "eps": 0.67,
+          "aumUSD": 133018933139.9627
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 56121738049.1,
-          "eps": 0.08
+          "annualRevenue": 56102162691.2,
+          "eps": 2.57
         }
       },
-      "activeContracts": 22666,
+      "activeContracts": 17795,
       "activeContractsBySubUnit": {
-        "industrial_automation": 9187,
-        "refined_products": 10610,
-        "pharmaceuticals": 1327,
-        "passenger_vehicles": 1542
-      }
+        "industrial_automation": 3725,
+        "refined_products": 11295,
+        "pharmaceuticals": 1190,
+        "passenger_vehicles": 1299,
+        "semiconductors": 286
+      },
+      "defenseSystemsSuppliers": 87,
+      "semiconductorsContracts": 286,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 672024475510,
+          "shareOfNetWorthUSD": 945175757639,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 806666889070
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 2017055448244,
+          "shareOfNetWorthUSD": 4828976282399,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 3549334311906
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1121947781189,
+          "shareOfNetWorthUSD": 4069854464811,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 435600120098
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 673142233673,
+          "shareOfNetWorthUSD": 3802131918548,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 8066668891
+        }
+      },
+      "usaHousingPrice": 427544,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.2787007967140745,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3493865514384097,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.17059344898466058,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.2013192028628553,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 800,
+      "companiesWithRevVol": 800
     },
     {
       "week": 52,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0232,
-          "unemployment": 0.0506,
-          "equityIndex": 4046.5,
-          "creditSpread": 856,
-          "centralBankRate": 0.0437
+          "inflation": 0.0243,
+          "unemployment": 0.0387,
+          "equityIndex": 7098.9,
+          "creditSpread": 839,
+          "centralBankRate": 0.0511
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0189,
-          "unemployment": 0.0637,
-          "equityIndex": 3772.7,
-          "creditSpread": 764,
-          "centralBankRate": 0.019
+          "inflation": 0.0183,
+          "unemployment": 0.0625,
+          "equityIndex": 3671.5,
+          "creditSpread": 476,
+          "centralBankRate": 0.021
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0196,
-          "unemployment": 0.0296,
-          "equityIndex": 5298.3,
-          "creditSpread": 576,
-          "centralBankRate": 0.0305
+          "inflation": 0.0203,
+          "unemployment": 0.0214,
+          "equityIndex": 7334.9,
+          "creditSpread": 574,
+          "centralBankRate": 0.0261
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.0158,
-          "unemployment": 0.0422,
-          "equityIndex": 39627,
-          "creditSpread": 680,
-          "centralBankRate": 0.0079
+          "inflation": 0.0176,
+          "unemployment": 0.0314,
+          "equityIndex": 34459,
+          "creditSpread": 1163,
+          "centralBankRate": 0.0095
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 159551060.7,
+          "annualRevenue": 136224506,
           "eps": -0.03
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 3408604085.2,
-          "eps": 350.02,
-          "technicalReservesUSD": 5336984295678.459,
-          "insurancePremiumsWrittenUSD": 3408604085.1698537
+          "annualRevenue": 3130213376,
+          "eps": 351.01,
+          "technicalReservesUSD": 5367563227832.406,
+          "insurancePremiumsWrittenUSD": 3130213376.0030837
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 829519877.5,
-          "eps": 0.5,
-          "aumUSD": 110602650332.68555
+          "annualRevenue": 1398625736.3,
+          "eps": 1.09,
+          "aumUSD": 186483431502.3569
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 51463928738.1,
-          "eps": -0.12
+          "annualRevenue": 53378820556,
+          "eps": 3.08
         }
       },
-      "activeContracts": 17967,
+      "activeContracts": 16399,
       "activeContractsBySubUnit": {
-        "industrial_automation": 4276,
-        "refined_products": 12260,
-        "pharmaceuticals": 915,
-        "passenger_vehicles": 512,
-        "food_beverage": 4
-      }
+        "industrial_automation": 1691,
+        "refined_products": 13211,
+        "pharmaceuticals": 805,
+        "passenger_vehicles": 474,
+        "semiconductors": 218
+      },
+      "defenseSystemsSuppliers": 89,
+      "semiconductorsContracts": 218,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 717064717673,
+          "shareOfNetWorthUSD": 984158983321,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 869790082813
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 2162557899554,
+          "shareOfNetWorthUSD": 5221241704950,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 3827076364379
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1228252396605,
+          "shareOfNetWorthUSD": 4591121134567,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 469686644719
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 737003654595,
+          "shareOfNetWorthUSD": 4367835566185,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 8697900828
+        }
+      },
+      "usaHousingPrice": 459298,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.27324468854463996,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3468103251121063,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.17308568548715889,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.20685930085609489,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 808,
+      "companiesWithRevVol": 804
     },
     {
       "week": 100,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0166,
-          "unemployment": 0.0546,
-          "equityIndex": 6934.6,
-          "creditSpread": 1085,
-          "centralBankRate": 0.0594
+          "inflation": 0.0196,
+          "unemployment": 0.0397,
+          "equityIndex": 11385.1,
+          "creditSpread": 845,
+          "centralBankRate": 0.0743
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0227,
-          "unemployment": 0.079,
-          "equityIndex": 5539.1,
-          "creditSpread": 954,
-          "centralBankRate": 0.0473
+          "inflation": 0.0213,
+          "unemployment": 0.077,
+          "equityIndex": 4857.7,
+          "creditSpread": 612,
+          "centralBankRate": 0.0545
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0162,
-          "unemployment": 0.052,
-          "equityIndex": 3802.8,
-          "creditSpread": 510,
-          "centralBankRate": 0.0296
+          "inflation": 0.0185,
+          "unemployment": 0.0446,
+          "equityIndex": 8041.9,
+          "creditSpread": 515,
+          "centralBankRate": 0.0324
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.0872,
-          "unemployment": 0.0954,
-          "equityIndex": 38521,
-          "creditSpread": 798,
-          "centralBankRate": 0.1127
+          "inflation": 0.0107,
+          "unemployment": 0.0577,
+          "equityIndex": 22583,
+          "creditSpread": 1494,
+          "centralBankRate": 0.0214
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 61858639.3,
+          "annualRevenue": 39445014.2,
           "eps": -0.04
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 3487367613.5,
-          "eps": 362.12,
-          "technicalReservesUSD": 5487861650208.628,
-          "insurancePremiumsWrittenUSD": 3487367613.530366
+          "annualRevenue": 3514009013.7,
+          "eps": 363.21,
+          "technicalReservesUSD": 5519316351302.548,
+          "insurancePremiumsWrittenUSD": 3514009013.708697
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 1314519245,
-          "eps": 1,
-          "aumUSD": 175269232661.73694
+          "annualRevenue": 2510360238,
+          "eps": 2.25,
+          "aumUSD": 334714698400.0896
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 57320197774,
-          "eps": 4.03
+          "annualRevenue": 63375840821.5,
+          "eps": 3.07
         }
       },
-      "activeContracts": 6018,
+      "activeContracts": 5398,
       "activeContractsBySubUnit": {
-        "industrial_automation": 924,
-        "refined_products": 4160,
-        "pharmaceuticals": 609,
-        "passenger_vehicles": 321,
-        "food_beverage": 4
-      }
+        "industrial_automation": 259,
+        "refined_products": 4346,
+        "pharmaceuticals": 461,
+        "passenger_vehicles": 289,
+        "semiconductors": 43
+      },
+      "defenseSystemsSuppliers": 92,
+      "semiconductorsContracts": 43,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 763349530498,
+          "shareOfNetWorthUSD": 1040994981570,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 942503122365
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 2305636135418,
+          "shareOfNetWorthUSD": 6054356562602,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 4147013738408
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1345365425943,
+          "shareOfNetWorthUSD": 6019478732284,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 508951686077
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 809598647329,
+          "shareOfNetWorthUSD": 6204697196879,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 9425031224
+        }
+      },
+      "usaHousingPrice": 495595,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.267010215483648,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3438665759906478,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.17593346285042477,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.21318974567527943,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 812,
+      "companiesWithRevVol": 812
     },
     {
       "week": 150,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0136,
-          "unemployment": 0.0719,
-          "equityIndex": 10309.8,
-          "creditSpread": 859,
-          "centralBankRate": 0.0796
+          "inflation": 0.0242,
+          "unemployment": 0.0506,
+          "equityIndex": 13752.5,
+          "creditSpread": 812,
+          "centralBankRate": 0.1089
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.023,
-          "unemployment": 0.1066,
-          "equityIndex": 6284.1,
-          "creditSpread": 836,
-          "centralBankRate": 0.07
+          "inflation": 0.0269,
+          "unemployment": 0.1009,
+          "equityIndex": 5994.7,
+          "creditSpread": 534,
+          "centralBankRate": 0.0856
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0157,
-          "unemployment": 0.1009,
-          "equityIndex": 2794,
-          "creditSpread": 438,
-          "centralBankRate": 0.0626
+          "inflation": 0.1069,
+          "unemployment": 0.108,
+          "equityIndex": 8742,
+          "creditSpread": 762,
+          "centralBankRate": 0.1717
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.204,
-          "unemployment": 0.2089,
-          "equityIndex": 44597,
-          "creditSpread": 676,
-          "centralBankRate": 0.1997
+          "inflation": 0.0127,
+          "unemployment": 0.119,
+          "equityIndex": 16019,
+          "creditSpread": 1029,
+          "centralBankRate": 0.0854
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 46876839.6,
+          "annualRevenue": 30578350.3,
           "eps": -0.04
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 3740303668.2,
-          "eps": 375.14,
-          "technicalReservesUSD": 5645025561177.555,
-          "insurancePremiumsWrittenUSD": 3740303668.2424107
+          "annualRevenue": 3960968308.9,
+          "eps": 377.05,
+          "technicalReservesUSD": 5677392521583.944,
+          "insurancePremiumsWrittenUSD": 3960968308.891159
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 2354945028.4,
-          "eps": 2.08,
-          "aumUSD": 313992670450.1879
+          "annualRevenue": 3132329535.2,
+          "eps": 2.89,
+          "aumUSD": 417643938020.196
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 64973075559.3,
-          "eps": 1.93
+          "annualRevenue": 78516637857.2,
+          "eps": 0.38
         }
       },
-      "activeContracts": 1709,
+      "activeContracts": 1444,
       "activeContractsBySubUnit": {
-        "refined_products": 1089,
-        "pharmaceuticals": 354,
-        "passenger_vehicles": 213,
-        "industrial_automation": 49,
-        "food_beverage": 4
-      }
+        "refined_products": 892,
+        "pharmaceuticals": 332,
+        "passenger_vehicles": 178,
+        "industrial_automation": 29,
+        "semiconductors": 13
+      },
+      "defenseSystemsSuppliers": 93,
+      "semiconductorsContracts": 13,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 815825291122,
+          "shareOfNetWorthUSD": 1081872707587,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1018879914835
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 2452962072916,
+          "shareOfNetWorthUSD": 6448265526234,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 4483071625274
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1449358153241,
+          "shareOfNetWorthUSD": 6719854659907,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 550195154011
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 874116910780,
+          "shareOfNetWorthUSD": 7060561057379,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 10188799148
+        }
+      },
+      "usaHousingPrice": 533402,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.2605171965083045,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.34080074849932823,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.17889933859907986,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.21978271639328753,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 820,
+      "companiesWithRevVol": 820
     },
     {
       "week": 200,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0186,
-          "unemployment": 0.096,
-          "equityIndex": 10723.4,
-          "creditSpread": 796,
-          "centralBankRate": 0.0952
+          "inflation": 0.029,
+          "unemployment": 0.0868,
+          "equityIndex": 19344.6,
+          "creditSpread": 717,
+          "centralBankRate": 0.1336
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0218,
-          "unemployment": 0.1493,
-          "equityIndex": 5915.7,
-          "creditSpread": 706,
-          "centralBankRate": 0.0966
+          "inflation": 0.0272,
+          "unemployment": 0.1367,
+          "equityIndex": 6695.5,
+          "creditSpread": 421,
+          "centralBankRate": 0.1166
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0296,
-          "unemployment": 0.1579,
-          "equityIndex": 1555.7,
-          "creditSpread": 242,
-          "centralBankRate": 0.1102
+          "inflation": 0.0716,
+          "unemployment": 0.186,
+          "equityIndex": 7363.7,
+          "creditSpread": 591,
+          "centralBankRate": 0.1888
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.0928,
-          "unemployment": 0.25,
-          "equityIndex": 47866,
-          "creditSpread": 893,
-          "centralBankRate": 0.2
+          "inflation": 0.0086,
+          "unemployment": 0.2008,
+          "equityIndex": 14306,
+          "creditSpread": 532,
+          "centralBankRate": 0.1281
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 40701501.4,
+          "annualRevenue": 31136008.4,
           "eps": -0.04
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 3934927680.5,
-          "eps": 388.67,
-          "technicalReservesUSD": 5802189472146.481,
-          "insurancePremiumsWrittenUSD": 3934927680.4587736
+          "annualRevenue": 4577135578.4,
+          "eps": 391.09,
+          "technicalReservesUSD": 5835468691865.343,
+          "insurancePremiumsWrittenUSD": 4577135578.439478
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 2559089742.5,
-          "eps": 2.3,
-          "aumUSD": 341211965671.12573
+          "annualRevenue": 4507743844.6,
+          "eps": 4.32,
+          "aumUSD": 601032512607.849
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 71022545622.7,
-          "eps": 0.08
+          "annualRevenue": 94890542975,
+          "eps": 6.09
         }
       },
-      "activeContracts": 1320,
+      "activeContracts": 1252,
       "activeContractsBySubUnit": {
-        "refined_products": 823,
-        "pharmaceuticals": 288,
-        "passenger_vehicles": 167,
-        "industrial_automation": 40,
-        "food_beverage": 2
-      }
+        "passenger_vehicles": 156,
+        "pharmaceuticals": 351,
+        "refined_products": 723,
+        "semiconductors": 7,
+        "industrial_automation": 15
+      },
+      "defenseSystemsSuppliers": 93,
+      "semiconductorsContracts": 7,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 881376333924,
+          "shareOfNetWorthUSD": 1130010237502,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1095912525169
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 2635957842837,
+          "shareOfNetWorthUSD": 7086297309597,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 4822015110745
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1542624667658,
+          "shareOfNetWorthUSD": 8019493847022,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 591792763591
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 925647467454,
+          "shareOfNetWorthUSD": 8820284210697,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 10959125252
+        }
+      },
+      "usaHousingPrice": 571209,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.2540254260679999,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.33773551053239786,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.18186464404294947,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.22637441935665278,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 828,
+      "companiesWithRevVol": 828
     },
     {
       "week": 250,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0274,
-          "unemployment": 0.1476,
-          "equityIndex": 13957.6,
-          "creditSpread": 981,
-          "centralBankRate": 0.1091
+          "inflation": 0.0496,
+          "unemployment": 0.1518,
+          "equityIndex": 25739.5,
+          "creditSpread": 650,
+          "centralBankRate": 0.1748
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.022,
-          "unemployment": 0.2256,
-          "equityIndex": 6592.5,
-          "creditSpread": 992,
-          "centralBankRate": 0.123
+          "inflation": 0.0207,
+          "unemployment": 0.2196,
+          "equityIndex": 7964.1,
+          "creditSpread": 567,
+          "centralBankRate": 0.1507
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0332,
-          "unemployment": 0.2469,
-          "equityIndex": 1387.1,
-          "creditSpread": 601,
-          "centralBankRate": 0.1449
+          "inflation": 0.0566,
+          "unemployment": 0.25,
+          "equityIndex": 5741.9,
+          "creditSpread": 481,
+          "centralBankRate": 0.1998
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.0498,
+          "inflation": 0.0378,
           "unemployment": 0.25,
-          "equityIndex": 58570,
-          "creditSpread": 90,
-          "centralBankRate": 0.2
+          "equityIndex": 13925,
+          "creditSpread": 624,
+          "centralBankRate": 0.1985
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 36081132.8,
-          "eps": -0.23
+          "annualRevenue": 21477635,
+          "eps": -0.24
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 4297052512.7,
-          "eps": 403.53,
-          "technicalReservesUSD": 5959353383115.409,
-          "insurancePremiumsWrittenUSD": 4297052512.684043
+          "annualRevenue": 4741859454,
+          "eps": 404.87,
+          "technicalReservesUSD": 5993544862146.739,
+          "insurancePremiumsWrittenUSD": 4741859453.980804
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 3484569241.9,
-          "eps": 2.9,
-          "aumUSD": 464609232252.13293
+          "annualRevenue": 6496317925.5,
+          "eps": 6.01,
+          "aumUSD": 866175723398.095
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 70760211681.1,
-          "eps": 0.69
+          "annualRevenue": 101634116306.4,
+          "eps": 6.79
         }
       },
-      "activeContracts": 885,
+      "activeContracts": 871,
       "activeContractsBySubUnit": {
-        "pharmaceuticals": 188,
-        "refined_products": 593,
-        "passenger_vehicles": 97,
-        "industrial_automation": 7
-      }
+        "pharmaceuticals": 177,
+        "passenger_vehicles": 89,
+        "semiconductors": 12,
+        "refined_products": 590,
+        "industrial_automation": 3
+      },
+      "defenseSystemsSuppliers": 95,
+      "semiconductorsContracts": 12,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 957949952198,
+          "shareOfNetWorthUSD": 1175776332809,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1173599440748
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 2870625326502,
+          "shareOfNetWorthUSD": 7692817621293,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 5163837539291
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1639482254234,
+          "shareOfNetWorthUSD": 9403123681623,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 633743698004
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 969926169534,
+          "shareOfNetWorthUSD": 10787273333103,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 11735994407
+        }
+      },
+      "usaHousingPrice": 609013,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.24753490392265415,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3346708619764982,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.18482937929169715,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.23296485480915047,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 836,
+      "companiesWithRevVol": 836
     },
     {
       "week": 300,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0291,
-          "unemployment": 0.25,
-          "equityIndex": 17373.2,
-          "creditSpread": 10,
-          "centralBankRate": 0.1442
+          "inflation": 0.0424,
+          "unemployment": 0.2255,
+          "equityIndex": 29404.6,
+          "creditSpread": 396,
+          "centralBankRate": 0.2
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0179,
+          "inflation": 0.0187,
           "unemployment": 0.25,
-          "equityIndex": 4551,
-          "creditSpread": 250,
-          "centralBankRate": 0.1513
+          "equityIndex": 6648.2,
+          "creditSpread": 244,
+          "centralBankRate": 0.1803
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0225,
+          "inflation": 0.0346,
           "unemployment": 0.25,
-          "equityIndex": 979.6,
-          "creditSpread": 133,
-          "centralBankRate": 0.1593
+          "equityIndex": 4824.9,
+          "creditSpread": 113,
+          "centralBankRate": 0.199
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.0297,
+          "inflation": 0.0235,
           "unemployment": 0.25,
-          "equityIndex": 68969,
-          "creditSpread": 10,
+          "equityIndex": 7921,
+          "creditSpread": 99,
           "centralBankRate": 0.2
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 32077223.4,
+          "annualRevenue": 21937290.7,
           "eps": -0.22
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 4596489401.2,
-          "eps": 422.27,
-          "technicalReservesUSD": 6116517294084.336,
-          "insurancePremiumsWrittenUSD": 4596489401.185944
+          "annualRevenue": 5347222679.5,
+          "eps": 422.82,
+          "technicalReservesUSD": 6151621032428.131,
+          "insurancePremiumsWrittenUSD": 5347222679.456202
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 4403052916.2,
-          "eps": 4.34,
-          "aumUSD": 587073722162.9679
+          "annualRevenue": 8167719273.9,
+          "eps": 8.25,
+          "aumUSD": 1089029236518.5387
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 59017619611.7,
-          "eps": 1.21
+          "annualRevenue": 83088153510.6,
+          "eps": -0.17
         }
       },
-      "activeContracts": 351,
+      "activeContracts": 537,
       "activeContractsBySubUnit": {
-        "refined_products": 281,
-        "pharmaceuticals": 35,
-        "passenger_vehicles": 29,
-        "food_beverage": 6
-      }
+        "passenger_vehicles": 48,
+        "pharmaceuticals": 66,
+        "refined_products": 418,
+        "semiconductors": 5
+      },
+      "defenseSystemsSuppliers": 96,
+      "semiconductorsContracts": 5,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 1015984669810,
+          "shareOfNetWorthUSD": 1214166337482,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1251948799264
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 3084729075915,
+          "shareOfNetWorthUSD": 8093102895152,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 5508574716763
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1761229584076,
+          "shareOfNetWorthUSD": 10399766344925,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 676052351603
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 1040682289890,
+          "shareOfNetWorthUSD": 12197253222877,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 12519487993
+        }
+      },
+      "usaHousingPrice": 646816,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.24104562983223352,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3316068027182924,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.18779354445496524,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.23955402299450893,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 844,
+      "companiesWithRevVol": 844
     },
     {
       "week": 350,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.02,
-          "unemployment": 0.25,
-          "equityIndex": 13947.6,
-          "creditSpread": 10,
-          "centralBankRate": 0.1135
+          "inflation": 0.019,
+          "unemployment": 0.2485,
+          "equityIndex": 47531.5,
+          "creditSpread": 72,
+          "centralBankRate": 0.1999
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0088,
+          "inflation": 0.0102,
           "unemployment": 0.25,
-          "equityIndex": 4065.2,
-          "creditSpread": 10,
-          "centralBankRate": 0.1538
+          "equityIndex": 5654.8,
+          "creditSpread": 105,
+          "centralBankRate": 0.1943
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0094,
+          "inflation": 0.0116,
           "unemployment": 0.25,
-          "equityIndex": 497.4,
-          "creditSpread": 133,
-          "centralBankRate": 0.147
+          "equityIndex": 4932.1,
+          "creditSpread": 109,
+          "centralBankRate": 0.1814
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.0086,
+          "inflation": 0.0049,
           "unemployment": 0.25,
-          "equityIndex": 80528,
+          "equityIndex": 6670,
           "creditSpread": 10,
-          "centralBankRate": 0.192
+          "centralBankRate": 0.2
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 41432204,
+          "annualRevenue": 35567689.9,
           "eps": -0.22
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 4778010458.3,
-          "eps": 444.18,
-          "technicalReservesUSD": 6273681205053.263,
-          "insurancePremiumsWrittenUSD": 4778010458.320703
+          "annualRevenue": 5909589250.1,
+          "eps": 444.21,
+          "technicalReservesUSD": 6309697202709.524,
+          "insurancePremiumsWrittenUSD": 5909589250.119202
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 4344076108.3,
-          "eps": 4.28,
-          "aumUSD": 579210147772.1818
+          "annualRevenue": 13804813418.8,
+          "eps": 14.1,
+          "aumUSD": 1840641789178.341
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 47231243724.9,
-          "eps": -0.18
+          "annualRevenue": 70081937383.2,
+          "eps": 1.55
         }
       },
-      "activeContracts": 267,
+      "activeContracts": 234,
       "activeContractsBySubUnit": {
-        "refined_products": 229,
-        "pharmaceuticals": 21,
-        "passenger_vehicles": 17
-      }
+        "refined_products": 180,
+        "semiconductors": 3,
+        "pharmaceuticals": 23,
+        "passenger_vehicles": 28
+      },
+      "defenseSystemsSuppliers": 96,
+      "semiconductorsContracts": 3,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 1051210410247,
+          "shareOfNetWorthUSD": 1272220423337,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1331462601013
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 3244873552294,
+          "shareOfNetWorthUSD": 9181943131929,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 5858435444459
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 1903773836623,
+          "shareOfNetWorthUSD": 13376961038188,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 718989804547
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 1149201400765,
+          "shareOfNetWorthUSD": 16989114269467,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 13314626010
+        }
+      },
+      "usaHousingPrice": 684874,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.23455760355675212,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3285433326444645,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.19075713964237428,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.246141924156409,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 848,
+      "companiesWithRevVol": 848
     },
     {
       "week": 400,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0113,
-          "unemployment": 0.25,
-          "equityIndex": 10344.3,
-          "creditSpread": 10,
-          "centralBankRate": 0.1057
+          "inflation": 0.0072,
+          "unemployment": 0.2317,
+          "equityIndex": 85065.5,
+          "creditSpread": 67,
+          "centralBankRate": 0.2
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0048,
+          "inflation": 0.0061,
           "unemployment": 0.25,
-          "equityIndex": 4225.7,
-          "creditSpread": 233,
-          "centralBankRate": 0.1637
+          "equityIndex": 5915.1,
+          "creditSpread": 102,
+          "centralBankRate": 0.2
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0023,
+          "inflation": 0.004,
           "unemployment": 0.25,
-          "equityIndex": 260.9,
-          "creditSpread": 128,
-          "centralBankRate": 0.1465
+          "equityIndex": 3105.3,
+          "creditSpread": 102,
+          "centralBankRate": 0.1813
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0.004,
+          "inflation": 0.0018,
           "unemployment": 0.25,
-          "equityIndex": 95067,
+          "equityIndex": 5098,
           "creditSpread": 10,
-          "centralBankRate": 0.1999
+          "centralBankRate": 0.2
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 21418201.2,
+          "annualRevenue": 52099351,
           "eps": -0.22
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 5213221863.5,
-          "eps": 469.45,
-          "technicalReservesUSD": 6430845116022.189,
-          "insurancePremiumsWrittenUSD": 5213221863.509985
+          "annualRevenue": 7414282432.9,
+          "eps": 459.88,
+          "technicalReservesUSD": 6467773372990.917,
+          "insurancePremiumsWrittenUSD": 7414282432.891672
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 2646143357.5,
-          "eps": 2.51,
-          "aumUSD": 352819114332.1555
+          "annualRevenue": 27588631314.6,
+          "eps": 28.41,
+          "aumUSD": 3678484175281.9814
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 38321051268.1,
-          "eps": -0.2
+          "annualRevenue": 63415733059.7,
+          "eps": 0.77
         }
       },
-      "activeContracts": 146,
+      "activeContracts": 120,
       "activeContractsBySubUnit": {
-        "refined_products": 123,
-        "pharmaceuticals": 14,
-        "passenger_vehicles": 9
-      }
+        "refined_products": 86,
+        "semiconductors": 4,
+        "passenger_vehicles": 17,
+        "pharmaceuticals": 13
+      },
+      "defenseSystemsSuppliers": 97,
+      "semiconductorsContracts": 4,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 1102267968224,
+          "shareOfNetWorthUSD": 1341140378327,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1415262431947
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 3399554383418,
+          "shareOfNetWorthUSD": 10668011448658,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 6227154700567
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 2011884813663,
+          "shareOfNetWorthUSD": 18087716287496,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 764241713251
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 1234317118521,
+          "shareOfNetWorthUSD": 25351304511130,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 14152624319
+        }
+      },
+      "usaHousingPrice": 724780,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.22807082485626945,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3254804516417208,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.19372016496352445,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.2527285585384854,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 853,
+      "companiesWithRevVol": 853
     },
     {
       "week": 450,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0052,
-          "unemployment": 0.25,
-          "equityIndex": 5706.1,
-          "creditSpread": 10,
-          "centralBankRate": 0.0982
+          "inflation": 0.0012,
+          "unemployment": 0.243,
+          "equityIndex": 110823.5,
+          "creditSpread": 67,
+          "centralBankRate": 0.2
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0028,
+          "inflation": 0.0024,
           "unemployment": 0.25,
-          "equityIndex": 5077.1,
-          "creditSpread": 26,
-          "centralBankRate": 0.1805
+          "equityIndex": 7868.1,
+          "creditSpread": 10,
+          "centralBankRate": 0.2
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0016,
+          "inflation": 0.0008,
           "unemployment": 0.25,
-          "equityIndex": 262.7,
-          "creditSpread": 89,
-          "centralBankRate": 0.1535
+          "equityIndex": 2311.9,
+          "creditSpread": 86,
+          "centralBankRate": 0.1999
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": -0.0011,
+          "inflation": -0.0021,
           "unemployment": 0.25,
-          "equityIndex": 93969,
+          "equityIndex": 5947,
           "creditSpread": 10,
           "centralBankRate": 0.2
         }
@@ -731,135 +1346,259 @@
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 21418201.2,
+          "annualRevenue": 21752469.2,
           "eps": -0.22
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 5055264731.8,
-          "eps": 494.93,
-          "technicalReservesUSD": 6588009026991.116,
-          "insurancePremiumsWrittenUSD": 5055264731.847167
+          "annualRevenue": 9377782210.7,
+          "eps": 475.65,
+          "technicalReservesUSD": 6625849543272.31,
+          "insurancePremiumsWrittenUSD": 9377782210.68207
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 2096825469,
-          "eps": 1.94,
-          "aumUSD": 279576729206.5185
+          "annualRevenue": 36175411716.7,
+          "eps": 37.33,
+          "aumUSD": 4823388228898.098
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 32455915945.2,
-          "eps": 0.38
+          "annualRevenue": 59631563836.9,
+          "eps": 0.74
         }
       },
-      "activeContracts": 75,
+      "activeContracts": 74,
       "activeContractsBySubUnit": {
-        "refined_products": 65,
-        "pharmaceuticals": 6,
-        "passenger_vehicles": 4
-      }
+        "refined_products": 55,
+        "semiconductors": 1,
+        "passenger_vehicles": 8,
+        "pharmaceuticals": 10
+      },
+      "defenseSystemsSuppliers": 97,
+      "semiconductorsContracts": 1,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 1241036853248,
+          "shareOfNetWorthUSD": 1384547920496,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1499772107099
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 3730783712304,
+          "shareOfNetWorthUSD": 11242721325073,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 6598997271234
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 2096755341284,
+          "shareOfNetWorthUSD": 20295776281734,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 809876937833
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 1266163380344,
+          "shareOfNetWorthUSD": 29342473707126,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 14997721071
+        }
+      },
+      "usaHousingPrice": 764684,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.22158529349089046,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3224181595967895,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.1966826205279945,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.2593139263843256,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 859,
+      "companiesWithRevVol": 859
     },
     {
       "week": 500,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0057,
+          "inflation": -0.0002,
           "unemployment": 0.25,
-          "equityIndex": 4319.2,
-          "creditSpread": 40,
-          "centralBankRate": 0.0971
+          "equityIndex": 152844.3,
+          "creditSpread": 92,
+          "centralBankRate": 0.2
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0056,
+          "inflation": 0.0073,
           "unemployment": 0.25,
-          "equityIndex": 4678.3,
+          "equityIndex": 12503.1,
           "creditSpread": 10,
-          "centralBankRate": 0.1996
+          "centralBankRate": 0.2
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0044,
+          "inflation": 0.0046,
           "unemployment": 0.25,
-          "equityIndex": 212.8,
-          "creditSpread": 204,
-          "centralBankRate": 0.1648
+          "equityIndex": 1791.4,
+          "creditSpread": 110,
+          "centralBankRate": 0.2
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": -0.0007,
+          "inflation": -0.0045,
           "unemployment": 0.25,
-          "equityIndex": 76604,
-          "creditSpread": 10,
+          "equityIndex": 9180,
+          "creditSpread": 35,
           "centralBankRate": 0.2
         }
       },
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 21418201.2,
+          "annualRevenue": 21752469.2,
           "eps": -0.22
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 5136423660.4,
-          "eps": 521.84,
-          "technicalReservesUSD": 6745172937960.043,
-          "insurancePremiumsWrittenUSD": 5136423660.409999
+          "annualRevenue": 12294990523.4,
+          "eps": 495.08,
+          "technicalReservesUSD": 6783925713553.701,
+          "insurancePremiumsWrittenUSD": 12294990523.366777
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 1377809312.9,
-          "eps": 1.01,
-          "aumUSD": 183707908389.72888
+          "annualRevenue": 52515647033.8,
+          "eps": 54.3,
+          "aumUSD": 7002086271172.93
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 29542361680.4,
-          "eps": -0.4
+          "annualRevenue": 57315952287.5,
+          "eps": -0.35
         }
       },
-      "activeContracts": 16,
+      "activeContracts": 21,
       "activeContractsBySubUnit": {
-        "refined_products": 8,
-        "pharmaceuticals": 3,
-        "passenger_vehicles": 5
-      }
+        "refined_products": 12,
+        "semiconductors": 1,
+        "passenger_vehicles": 6,
+        "pharmaceuticals": 2
+      },
+      "defenseSystemsSuppliers": 97,
+      "semiconductorsContracts": 1,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 1418812315418,
+          "shareOfNetWorthUSD": 1437155265805,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1585000124369
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 4147612540978,
+          "shareOfNetWorthUSD": 12209505213813,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 6974000547224
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 2219996667896,
+          "shareOfNetWorthUSD": 24210431422228,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 855900067159
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 1310279913723,
+          "shareOfNetWorthUSD": 37051715525960,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 15850001244
+        }
+      },
+      "usaHousingPrice": 804588,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.21510100922076655,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3193564563964204,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.19964450644534262,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.2658980279374705,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 866,
+      "companiesWithRevVol": 866
     },
     {
       "week": 520,
       "regions": {
         "USA": {
           "gdpUSD": null,
-          "inflation": 0.0084,
+          "inflation": -0.0007,
           "unemployment": 0.25,
-          "equityIndex": 4603.9,
-          "creditSpread": 23,
-          "centralBankRate": 0.1003
+          "equityIndex": 177034.9,
+          "creditSpread": 60,
+          "centralBankRate": 0.2
         },
         "EUR": {
           "gdpUSD": null,
-          "inflation": 0.0078,
+          "inflation": 0.0044,
           "unemployment": 0.25,
-          "equityIndex": 5510.5,
-          "creditSpread": 10,
+          "equityIndex": 16851.5,
+          "creditSpread": 14,
           "centralBankRate": 0.2
         },
         "UK": {
           "gdpUSD": null,
-          "inflation": 0.0049,
+          "inflation": 0.0044,
           "unemployment": 0.25,
-          "equityIndex": 204,
-          "creditSpread": 152,
-          "centralBankRate": 0.1676
+          "equityIndex": 1444.2,
+          "creditSpread": 90,
+          "centralBankRate": 0.2
         },
         "JPN": {
           "gdpUSD": null,
-          "inflation": 0,
+          "inflation": -0.0043,
           "unemployment": 0.25,
-          "equityIndex": 74364,
+          "equityIndex": 10869,
           "creditSpread": 10,
           "centralBankRate": 0.2
         }
@@ -867,35 +1606,95 @@
       "profiles": {
         "STANDARD_OPERATING": {
           "ticker": "TOPE",
-          "annualRevenue": 21418201.2,
+          "annualRevenue": 21752469.2,
           "eps": -0.22
         },
         "INSURER": {
           "ticker": "MDVI",
-          "annualRevenue": 5163971429.4,
-          "eps": 535.11,
-          "technicalReservesUSD": 6808038502347.613,
-          "insurancePremiumsWrittenUSD": 5163971429.358861
+          "annualRevenue": 13740550191.4,
+          "eps": 502.97,
+          "technicalReservesUSD": 6847156181666.261,
+          "insurancePremiumsWrittenUSD": 13740550191.396032
         },
         "ASSET_MANAGER": {
           "ticker": "ZTND",
-          "annualRevenue": 1309371661.8,
-          "eps": 1.07,
-          "aumUSD": 174582888236.32373
+          "annualRevenue": 61897559248.7,
+          "eps": 64.17,
+          "aumUSD": 8253007899826.351
         },
         "BANK": {
           "ticker": "MRDN",
-          "annualRevenue": 28958485308.5,
-          "eps": -0.56
+          "annualRevenue": 56767425963.5,
+          "eps": 0.68
         }
       },
       "activeContracts": 11,
       "activeContractsBySubUnit": {
-        "refined_products": 4,
-        "industrial_automation": 1,
-        "passenger_vehicles": 4,
-        "pharmaceuticals": 2
-      }
+        "passenger_vehicles": 5,
+        "pharmaceuticals": 1,
+        "refined_products": 5
+      },
+      "defenseSystemsSuppliers": 97,
+      "semiconductorsContracts": 0,
+      "usaWealthDist": {
+        "BOTTOM_50": {
+          "shareOfHouseholds": 0.5,
+          "shareOfIncomeUSD": 1498446874756,
+          "shareOfNetWorthUSD": 1459827744534,
+          "savingsRate": 0.01,
+          "equityExposureShare": 0.05,
+          "homeEquityUSD": 1619292346857
+        },
+        "NEXT_40": {
+          "shareOfHouseholds": 0.4,
+          "shareOfIncomeUSD": 4349914459754,
+          "shareOfNetWorthUSD": 12674682367628,
+          "savingsRate": 0.06,
+          "equityExposureShare": 0.25,
+          "homeEquityUSD": 7124886326171
+        },
+        "TOP_9": {
+          "shareOfHouseholds": 0.09,
+          "shareOfIncomeUSD": 2305664997878,
+          "shareOfNetWorthUSD": 26227311566406,
+          "savingsRate": 0.18,
+          "equityExposureShare": 0.5,
+          "homeEquityUSD": 874417867303
+        },
+        "TOP_1": {
+          "shareOfHouseholds": 0.01,
+          "shareOfIncomeUSD": 1353417335268,
+          "shareOfNetWorthUSD": 41228050989127,
+          "savingsRate": 0.35,
+          "equityExposureShare": 0.7,
+          "homeEquityUSD": 16192923469
+        }
+      },
+      "usaHousingPrice": 820549,
+      "usaLifeCycle": {
+        "EARLY_CAREER": {
+          "shareOfPopulation": 0.21250764464567115,
+          "savingsRate": 0.02,
+          "consumptionMultiplier": 1.1
+        },
+        "PEAK_EARNING": {
+          "shareOfPopulation": 0.3181319399673865,
+          "savingsRate": 0.12,
+          "consumptionMultiplier": 1
+        },
+        "PRE_RETIREMENT": {
+          "shareOfPopulation": 0.20082910133562454,
+          "savingsRate": 0.2,
+          "consumptionMultiplier": 0.85
+        },
+        "RETIRED": {
+          "shareOfPopulation": 0.2685313140513179,
+          "savingsRate": -0.05,
+          "consumptionMultiplier": 0.75
+        }
+      },
+      "companiesWithSegmentFinancials": 869,
+      "companiesWithRevVol": 866
     }
   ],
   "crashed": false,
