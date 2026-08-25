@@ -18,6 +18,7 @@ for (let w = 1; w <= 520; w++) {
       const wti = state.commodities.find(c => c.symbol === 'WTI');
       const brent = state.commodities.find(c => c.symbol === 'BRENT');
       const gold = state.commodities.find(c => c.symbol === 'GOLD');
+      const usaIa = (state.regions.USA as any).categoryDemand?.industrial_automation;
       const badCompanies = state.companies.filter(c => 
         !Number.isFinite(c.annualRevenue) || 
         !Number.isFinite(c.ebitda) || 
@@ -26,6 +27,7 @@ for (let w = 1; w <= 520; w++) {
         !Number.isFinite(c.oasSpreadBps)
       ).length;
       console.log(`  Commodities: WTI=$${wti?.spotPrice}, BRENT=$${brent?.spotPrice}, GOLD=$${gold?.spotPrice} | badCompanies=${badCompanies}`);
+      console.log(`  USA IndAuto Demand: Level=$${((usaIa?.demandLevelUSD ?? 0) / 1e9).toFixed(2)}B, Growth=${((usaIa?.demandGrowthAnnual ?? 0) * 100).toFixed(2)}%, UnitPrice=$${usaIa?.unitPriceUSD ?? 80000}`);
     }
   } catch (e: any) {
     console.error(`FAILED at week ${w}:`, e.message);

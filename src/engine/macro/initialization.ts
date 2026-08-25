@@ -692,6 +692,12 @@ export function getInitialRegions(): Record<RegionId, Region> {
     reg.governmentRevenueUSD = Number(((initialGdp * effectiveTaxRate) / 52).toFixed(0));
     reg.governmentSpendingUSD = Number((reg.governmentRevenueUSD + (initialGdp * initialFiscalDeficitPctGdp) / 52).toFixed(0));
     reg.lastWeekNominalGdpUSD = reg.consumptionComponentUSD + reg.investmentComponentUSD + reg.governmentSpendingUSD;
+    reg.categoryDemand = createInitialCategoryDemand(
+      reg.inflation,
+      reg.gdpGrowth,
+      reg.estimatedHouseholdIncomeUSD,
+      reg.lastWeekNominalGdpUSD
+    );
   });
 
   return regions;

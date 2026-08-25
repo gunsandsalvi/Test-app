@@ -362,7 +362,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelUSD > 0);
       const prevLevel = hasPriorDemand ? existingEntry.demandLevelUSD : target;
       const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
-      const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 ? ((newLevel / prevLevel) - 1) * 52 : 0;
+      const isStartupTransition = (state.currentWeek <= 1) || prevLevel < newLevel * 0.2 || newLevel < prevLevel * 0.2;
+      const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 && !isStartupTransition ? ((newLevel / prevLevel) - 1) * 52 : 0;
       const growthAnnual = Number.isFinite(rawGrowthAnnual) ? rawGrowthAnnual : 0;
       const prevHistory = existingEntry?.demandHistory ?? [];
       const crowdingIntensity = Math.max(0, Math.min(1, (categorySupplyGrowth[cat] ?? 0) * 8 - (target ? growthAnnual : 0)));

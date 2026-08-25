@@ -1,5 +1,5 @@
 
-import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding } from '../../types';
+import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
@@ -46,31 +46,43 @@ export function createInitialGameState(): GameState {
     const regionId = r as RegionId;
     const reg = regions[regionId];
     const hs = reg.householdState;
-    const aggregateConsumptionUSD = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    const govBase = reg.estimatedHouseholdIncomeUSD * 0.18;
+    const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+    const G = reg.estimatedHouseholdIncomeUSD * 0.18;
     const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
     reg.laggedCorporateDemandBase = corpBase;
-    const targets: Record<string, number> = {
-      StapleHousehold: aggregateConsumptionUSD * hs.stapleSpendShare,
-      StandardHousehold: aggregateConsumptionUSD * hs.standardSpendShare,
-      LuxuryHousehold: aggregateConsumptionUSD * hs.luxurySpendShare,
-      GovernmentDefense: govBase * 0.30, 
-      GovernmentInfrastructure: govBase * 0.45, 
-      GovernmentHealthcare: govBase * 0.25,
-      CorporateIndustrial: corpBase * 0.6, 
-      CorporateTech: corpBase * 0.4,
-    };
-    Object.keys(targets).forEach(cat => {
-      (regions[regionId].categoryDemand as any)[cat] = {
-        demandLevelUSD: targets[cat],
-        demandGrowthAnnual: 0,
-        demandHistory: [targets[cat]],
-        crowdingIntensity: 0,
-        inventoryLevelUSD: targets[cat] * 0.10,
-        inputCostPressure: 0,
-        clearedInputPriceIndex: 1.0,
-        lastWeekInventoryLevelUSD: targets[cat] * 0.10,
-      };
+    const I = corpBase;
+
+    let totalHhWeight = 0;
+    let totalGovWeight = 0;
+    let totalCorpWeight = 0;
+
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        totalHhWeight += su.buyerMix.HOUSEHOLD;
+        totalGovWeight += su.buyerMix.GOVERNMENT;
+        totalCorpWeight += su.buyerMix.CORPORATE;
+      });
+    });
+
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
+        const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+        const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
+        const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
+
+        (regions[regionId].categoryDemand as any)[su.unitId] = {
+          demandLevelUSD,
+          demandGrowthAnnual: reg.gdpGrowth ?? 0.02,
+          demandHistory: [demandLevelUSD],
+          crowdingIntensity: 0.1,
+          inventoryLevelUSD: demandLevelUSD * 0.10,
+          inputCostPressure: 0,
+          clearedInputPriceIndex: 1.0,
+          lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
+          unitPriceUSD: su.unitId === 'industrial_automation' ? 80000.0 : undefined,
+        };
+      });
     });
 
     // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
