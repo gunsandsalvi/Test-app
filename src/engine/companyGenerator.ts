@@ -1,4 +1,4 @@
-import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry } from '../types';
+import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile } from '../types';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
 import { getInitialRegions } from './macro/initialization';
 
@@ -734,7 +734,20 @@ export function generateInitialCompanies(): Company[] {
       const maintenanceCapex = Math.round(capex * 0.6); // maintenance is the majority baseline for a mature company at generation
       const growthCapex = capex - maintenanceCapex;
 
+      
+      let financialStatementProfile: FinancialStatementProfile = 'STANDARD_OPERATING';
+      if (tmpl.sector === 'Banks') financialStatementProfile = 'BANK';
+      else if (tmpl.institutionalRole === 'INSURER') financialStatementProfile = 'INSURER';
+      else if (tmpl.institutionalRole === 'ASSET_MANAGER' || tmpl.institutionalRole === 'PENSION_FUND') financialStatementProfile = 'ASSET_MANAGER';
+      else if ((tmpl.sector as string) === 'RealEstate' || (tmpl as any).producedCommodityId === 'commercial_construction') financialStatementProfile = 'REIT';
+      
       const company: Company = {
+        financialStatementProfile,
+        technicalReservesUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase * 4 : undefined,
+        insurancePremiumsWrittenUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase : undefined,
+        insuranceClaimsPaidUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase * 0.70 : undefined,
+        aumUSD: financialStatementProfile === 'ASSET_MANAGER' ? tmpl.revBase * 60 : undefined,
+        managementFeeRate: financialStatementProfile === 'ASSET_MANAGER' ? 0.0075 : undefined,
         id: `${region}_${tmpl.ticker}`,
         ticker: tmpl.ticker,
         name: tmpl.name,
@@ -821,6 +834,42 @@ export function generateInitialCompanies(): Company[] {
 
       companies.push(company);
     });
+    const targetCount = 200;
+    const baseCompanies = companies.filter(c => c.region === region);
+    const existingTickers = new Set(companies.map(c => c.ticker));
+    const existingNames = new Set(companies.map(c => c.name));
+    while (companies.filter(c => c.region === region).length < targetCount) {
+      const parent = baseCompanies[Math.floor(Math.random() * baseCompanies.length)];
+      const newTicker = generateUniqueTicker(existingTickers);
+      const newName = generateUniqueName(parent.name, parent.sector, existingNames);
+      const newEmployeeCount = Math.max(10, Math.floor(parent.employeeCount * (0.3 + Math.random() * 1.4)));
+      const revenueScale = newEmployeeCount / Math.max(1, parent.employeeCount);
+
+      
+      const newCompany = {
+        financialStatementProfile: parent.financialStatementProfile,
+        technicalReservesUSD: parent.technicalReservesUSD,
+        aumUSD: parent.aumUSD,
+        managementFeeRate: parent.managementFeeRate,
+        insurancePremiumsWrittenUSD: parent.insurancePremiumsWrittenUSD,
+        insuranceClaimsPaidUSD: parent.insuranceClaimsPaidUSD,
+
+        ...parent,
+        id: parent.id + "-" + Math.random().toString(36).substring(2, 9),
+        ticker: newTicker,
+        name: newName,
+        annualRevenue: parent.annualRevenue * revenueScale,
+        baselineAnnualRevenue: parent.baselineAnnualRevenue * revenueScale,
+        totalDebt: parent.totalDebt * revenueScale,
+        cash: parent.cash * revenueScale,
+        marketCap: parent.marketCap * revenueScale,
+        employeeCount: newEmployeeCount,
+        historicalPrices: [...parent.historicalPrices],
+        historicalFundamentals: [...parent.historicalFundamentals]
+      };
+      companies.push(newCompany as any);
+    }
+
   });
 
   

@@ -22,7 +22,7 @@ export function calculateCompositeIndices(
       const chg = prevP > 0 ? (f.stockPrice - prevP) / prevP : 0;
       return sum + chg * (f.marketCap / Math.max(1, totalCap));
     }, 0);
-    return avgChange;
+    return Math.max(-0.15, Math.min(0.15, avgChange));
   };
 
   const usChange = getCapWeightedAvgPrice(usFirms, 5850);

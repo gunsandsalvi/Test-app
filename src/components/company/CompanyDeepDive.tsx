@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { GameState, Company } from '../../types';
 import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
@@ -55,6 +56,18 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
       </div>
 
       <div className="p-3 space-y-3">
+        {company.concentrationRiskFlags && company.concentrationRiskFlags.length > 0 && (
+          <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200 text-xs space-y-1">
+            <div className="font-bold flex items-center gap-1.5 text-amber-400">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              Counterparty Concentration Risk Alert
+            </div>
+            {company.concentrationRiskFlags.map((flag, idx) => (
+              <div key={idx} className="text-[11px] font-mono text-amber-300">• {flag}</div>
+            ))}
+          </div>
+        )}
+
         {tab === 'performance' && (
           <>
             <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-2">
@@ -368,6 +381,18 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
             <div className="pt-3 mt-3 border-t border-[var(--border-hairline)] space-y-3">
             <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold border-b border-[var(--border-hairline)] pb-1 mb-2">Key Supply Relationships (Active Contracts)</div>
+            {company.concentrationRiskFlags && company.concentrationRiskFlags.length > 0 && (
+              <div className="bg-orange-500/10 border border-orange-500/20 p-2 rounded-lg text-orange-400 text-[11px] space-y-1 mb-3">
+                <div className="font-bold uppercase text-[9px] flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Concentration Risk Flag
+                </div>
+                {company.concentrationRiskFlags.map((flag, idx) => (
+                  <div key={idx}>• {flag}</div>
+                ))}
+              </div>
+            )}
+            
             {(() => {
               const contracts = reg?.activeContracts || [];
               const asSupplier = contracts.filter((r: any) => r.supplierCompanyId === company.ticker || r.supplierCompanyId === company.id);

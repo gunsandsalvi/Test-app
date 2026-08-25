@@ -1,0 +1,904 @@
+{
+  "checkpoints": [
+    {
+      "week": 1,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0114,
+          "unemployment": 0.0431,
+          "equityIndex": 6727.5,
+          "creditSpread": 283,
+          "centralBankRate": 0.0434
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0099,
+          "unemployment": 0.0671,
+          "equityIndex": 5773,
+          "creditSpread": 439,
+          "centralBankRate": 0.0314
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0172,
+          "unemployment": 0.0411,
+          "equityIndex": 9522,
+          "creditSpread": 284,
+          "centralBankRate": 0.0455
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.006,
+          "unemployment": 0.0336,
+          "equityIndex": 44735,
+          "creditSpread": 1440,
+          "centralBankRate": 0.0038
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 14964258924.4,
+          "eps": 1.6
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 3048049797.9,
+          "eps": 338.92,
+          "technicalReservesUSD": 5176677106490.152,
+          "insurancePremiumsWrittenUSD": 3048049797.9079976
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 1150991212.8,
+          "eps": 0.83,
+          "aumUSD": 153465495039.96722
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 55578756956.5,
+          "eps": 2.16
+        }
+      },
+      "activeContracts": 5159,
+      "activeContractsBySubUnit": {
+        "industrial_automation": 2429,
+        "refined_products": 1405,
+        "pharmaceuticals": 443,
+        "passenger_vehicles": 882
+      }
+    },
+    {
+      "week": 10,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0333,
+          "unemployment": 0.0323,
+          "equityIndex": 3958.8,
+          "creditSpread": 1277,
+          "centralBankRate": 0.0513
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0123,
+          "unemployment": 0.0532,
+          "equityIndex": 3333.7,
+          "creditSpread": 1322,
+          "centralBankRate": 0.0405
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0143,
+          "unemployment": 0.0255,
+          "equityIndex": 5241.4,
+          "creditSpread": 1278,
+          "centralBankRate": 0.0568
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.0089,
+          "unemployment": 0.02,
+          "equityIndex": 32770,
+          "creditSpread": 2365,
+          "centralBankRate": 0.024
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 7171377512.8,
+          "eps": 0.73
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 3208065712.6,
+          "eps": 340.55,
+          "technicalReservesUSD": 5204966610464.56,
+          "insurancePremiumsWrittenUSD": 3208065712.577851
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 836869155.8,
+          "eps": 0.51,
+          "aumUSD": 111582554113.16731
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 56121738049.1,
+          "eps": 0.08
+        }
+      },
+      "activeContracts": 22666,
+      "activeContractsBySubUnit": {
+        "industrial_automation": 9187,
+        "refined_products": 10610,
+        "pharmaceuticals": 1327,
+        "passenger_vehicles": 1542
+      }
+    },
+    {
+      "week": 52,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0232,
+          "unemployment": 0.0506,
+          "equityIndex": 4046.5,
+          "creditSpread": 856,
+          "centralBankRate": 0.0437
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0189,
+          "unemployment": 0.0637,
+          "equityIndex": 3772.7,
+          "creditSpread": 764,
+          "centralBankRate": 0.019
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0196,
+          "unemployment": 0.0296,
+          "equityIndex": 5298.3,
+          "creditSpread": 576,
+          "centralBankRate": 0.0305
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.0158,
+          "unemployment": 0.0422,
+          "equityIndex": 39627,
+          "creditSpread": 680,
+          "centralBankRate": 0.0079
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 159551060.7,
+          "eps": -0.03
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 3408604085.2,
+          "eps": 350.02,
+          "technicalReservesUSD": 5336984295678.459,
+          "insurancePremiumsWrittenUSD": 3408604085.1698537
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 829519877.5,
+          "eps": 0.5,
+          "aumUSD": 110602650332.68555
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 51463928738.1,
+          "eps": -0.12
+        }
+      },
+      "activeContracts": 17967,
+      "activeContractsBySubUnit": {
+        "industrial_automation": 4276,
+        "refined_products": 12260,
+        "pharmaceuticals": 915,
+        "passenger_vehicles": 512,
+        "food_beverage": 4
+      }
+    },
+    {
+      "week": 100,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0166,
+          "unemployment": 0.0546,
+          "equityIndex": 6934.6,
+          "creditSpread": 1085,
+          "centralBankRate": 0.0594
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0227,
+          "unemployment": 0.079,
+          "equityIndex": 5539.1,
+          "creditSpread": 954,
+          "centralBankRate": 0.0473
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0162,
+          "unemployment": 0.052,
+          "equityIndex": 3802.8,
+          "creditSpread": 510,
+          "centralBankRate": 0.0296
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.0872,
+          "unemployment": 0.0954,
+          "equityIndex": 38521,
+          "creditSpread": 798,
+          "centralBankRate": 0.1127
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 61858639.3,
+          "eps": -0.04
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 3487367613.5,
+          "eps": 362.12,
+          "technicalReservesUSD": 5487861650208.628,
+          "insurancePremiumsWrittenUSD": 3487367613.530366
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 1314519245,
+          "eps": 1,
+          "aumUSD": 175269232661.73694
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 57320197774,
+          "eps": 4.03
+        }
+      },
+      "activeContracts": 6018,
+      "activeContractsBySubUnit": {
+        "industrial_automation": 924,
+        "refined_products": 4160,
+        "pharmaceuticals": 609,
+        "passenger_vehicles": 321,
+        "food_beverage": 4
+      }
+    },
+    {
+      "week": 150,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0136,
+          "unemployment": 0.0719,
+          "equityIndex": 10309.8,
+          "creditSpread": 859,
+          "centralBankRate": 0.0796
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.023,
+          "unemployment": 0.1066,
+          "equityIndex": 6284.1,
+          "creditSpread": 836,
+          "centralBankRate": 0.07
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0157,
+          "unemployment": 0.1009,
+          "equityIndex": 2794,
+          "creditSpread": 438,
+          "centralBankRate": 0.0626
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.204,
+          "unemployment": 0.2089,
+          "equityIndex": 44597,
+          "creditSpread": 676,
+          "centralBankRate": 0.1997
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 46876839.6,
+          "eps": -0.04
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 3740303668.2,
+          "eps": 375.14,
+          "technicalReservesUSD": 5645025561177.555,
+          "insurancePremiumsWrittenUSD": 3740303668.2424107
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 2354945028.4,
+          "eps": 2.08,
+          "aumUSD": 313992670450.1879
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 64973075559.3,
+          "eps": 1.93
+        }
+      },
+      "activeContracts": 1709,
+      "activeContractsBySubUnit": {
+        "refined_products": 1089,
+        "pharmaceuticals": 354,
+        "passenger_vehicles": 213,
+        "industrial_automation": 49,
+        "food_beverage": 4
+      }
+    },
+    {
+      "week": 200,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0186,
+          "unemployment": 0.096,
+          "equityIndex": 10723.4,
+          "creditSpread": 796,
+          "centralBankRate": 0.0952
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0218,
+          "unemployment": 0.1493,
+          "equityIndex": 5915.7,
+          "creditSpread": 706,
+          "centralBankRate": 0.0966
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0296,
+          "unemployment": 0.1579,
+          "equityIndex": 1555.7,
+          "creditSpread": 242,
+          "centralBankRate": 0.1102
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.0928,
+          "unemployment": 0.25,
+          "equityIndex": 47866,
+          "creditSpread": 893,
+          "centralBankRate": 0.2
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 40701501.4,
+          "eps": -0.04
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 3934927680.5,
+          "eps": 388.67,
+          "technicalReservesUSD": 5802189472146.481,
+          "insurancePremiumsWrittenUSD": 3934927680.4587736
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 2559089742.5,
+          "eps": 2.3,
+          "aumUSD": 341211965671.12573
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 71022545622.7,
+          "eps": 0.08
+        }
+      },
+      "activeContracts": 1320,
+      "activeContractsBySubUnit": {
+        "refined_products": 823,
+        "pharmaceuticals": 288,
+        "passenger_vehicles": 167,
+        "industrial_automation": 40,
+        "food_beverage": 2
+      }
+    },
+    {
+      "week": 250,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0274,
+          "unemployment": 0.1476,
+          "equityIndex": 13957.6,
+          "creditSpread": 981,
+          "centralBankRate": 0.1091
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.022,
+          "unemployment": 0.2256,
+          "equityIndex": 6592.5,
+          "creditSpread": 992,
+          "centralBankRate": 0.123
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0332,
+          "unemployment": 0.2469,
+          "equityIndex": 1387.1,
+          "creditSpread": 601,
+          "centralBankRate": 0.1449
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.0498,
+          "unemployment": 0.25,
+          "equityIndex": 58570,
+          "creditSpread": 90,
+          "centralBankRate": 0.2
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 36081132.8,
+          "eps": -0.23
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 4297052512.7,
+          "eps": 403.53,
+          "technicalReservesUSD": 5959353383115.409,
+          "insurancePremiumsWrittenUSD": 4297052512.684043
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 3484569241.9,
+          "eps": 2.9,
+          "aumUSD": 464609232252.13293
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 70760211681.1,
+          "eps": 0.69
+        }
+      },
+      "activeContracts": 885,
+      "activeContractsBySubUnit": {
+        "pharmaceuticals": 188,
+        "refined_products": 593,
+        "passenger_vehicles": 97,
+        "industrial_automation": 7
+      }
+    },
+    {
+      "week": 300,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0291,
+          "unemployment": 0.25,
+          "equityIndex": 17373.2,
+          "creditSpread": 10,
+          "centralBankRate": 0.1442
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0179,
+          "unemployment": 0.25,
+          "equityIndex": 4551,
+          "creditSpread": 250,
+          "centralBankRate": 0.1513
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0225,
+          "unemployment": 0.25,
+          "equityIndex": 979.6,
+          "creditSpread": 133,
+          "centralBankRate": 0.1593
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.0297,
+          "unemployment": 0.25,
+          "equityIndex": 68969,
+          "creditSpread": 10,
+          "centralBankRate": 0.2
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 32077223.4,
+          "eps": -0.22
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 4596489401.2,
+          "eps": 422.27,
+          "technicalReservesUSD": 6116517294084.336,
+          "insurancePremiumsWrittenUSD": 4596489401.185944
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 4403052916.2,
+          "eps": 4.34,
+          "aumUSD": 587073722162.9679
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 59017619611.7,
+          "eps": 1.21
+        }
+      },
+      "activeContracts": 351,
+      "activeContractsBySubUnit": {
+        "refined_products": 281,
+        "pharmaceuticals": 35,
+        "passenger_vehicles": 29,
+        "food_beverage": 6
+      }
+    },
+    {
+      "week": 350,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.02,
+          "unemployment": 0.25,
+          "equityIndex": 13947.6,
+          "creditSpread": 10,
+          "centralBankRate": 0.1135
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0088,
+          "unemployment": 0.25,
+          "equityIndex": 4065.2,
+          "creditSpread": 10,
+          "centralBankRate": 0.1538
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0094,
+          "unemployment": 0.25,
+          "equityIndex": 497.4,
+          "creditSpread": 133,
+          "centralBankRate": 0.147
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.0086,
+          "unemployment": 0.25,
+          "equityIndex": 80528,
+          "creditSpread": 10,
+          "centralBankRate": 0.192
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 41432204,
+          "eps": -0.22
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 4778010458.3,
+          "eps": 444.18,
+          "technicalReservesUSD": 6273681205053.263,
+          "insurancePremiumsWrittenUSD": 4778010458.320703
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 4344076108.3,
+          "eps": 4.28,
+          "aumUSD": 579210147772.1818
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 47231243724.9,
+          "eps": -0.18
+        }
+      },
+      "activeContracts": 267,
+      "activeContractsBySubUnit": {
+        "refined_products": 229,
+        "pharmaceuticals": 21,
+        "passenger_vehicles": 17
+      }
+    },
+    {
+      "week": 400,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0113,
+          "unemployment": 0.25,
+          "equityIndex": 10344.3,
+          "creditSpread": 10,
+          "centralBankRate": 0.1057
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0048,
+          "unemployment": 0.25,
+          "equityIndex": 4225.7,
+          "creditSpread": 233,
+          "centralBankRate": 0.1637
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0023,
+          "unemployment": 0.25,
+          "equityIndex": 260.9,
+          "creditSpread": 128,
+          "centralBankRate": 0.1465
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0.004,
+          "unemployment": 0.25,
+          "equityIndex": 95067,
+          "creditSpread": 10,
+          "centralBankRate": 0.1999
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 21418201.2,
+          "eps": -0.22
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 5213221863.5,
+          "eps": 469.45,
+          "technicalReservesUSD": 6430845116022.189,
+          "insurancePremiumsWrittenUSD": 5213221863.509985
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 2646143357.5,
+          "eps": 2.51,
+          "aumUSD": 352819114332.1555
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 38321051268.1,
+          "eps": -0.2
+        }
+      },
+      "activeContracts": 146,
+      "activeContractsBySubUnit": {
+        "refined_products": 123,
+        "pharmaceuticals": 14,
+        "passenger_vehicles": 9
+      }
+    },
+    {
+      "week": 450,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0052,
+          "unemployment": 0.25,
+          "equityIndex": 5706.1,
+          "creditSpread": 10,
+          "centralBankRate": 0.0982
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0028,
+          "unemployment": 0.25,
+          "equityIndex": 5077.1,
+          "creditSpread": 26,
+          "centralBankRate": 0.1805
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0016,
+          "unemployment": 0.25,
+          "equityIndex": 262.7,
+          "creditSpread": 89,
+          "centralBankRate": 0.1535
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": -0.0011,
+          "unemployment": 0.25,
+          "equityIndex": 93969,
+          "creditSpread": 10,
+          "centralBankRate": 0.2
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 21418201.2,
+          "eps": -0.22
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 5055264731.8,
+          "eps": 494.93,
+          "technicalReservesUSD": 6588009026991.116,
+          "insurancePremiumsWrittenUSD": 5055264731.847167
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 2096825469,
+          "eps": 1.94,
+          "aumUSD": 279576729206.5185
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 32455915945.2,
+          "eps": 0.38
+        }
+      },
+      "activeContracts": 75,
+      "activeContractsBySubUnit": {
+        "refined_products": 65,
+        "pharmaceuticals": 6,
+        "passenger_vehicles": 4
+      }
+    },
+    {
+      "week": 500,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0057,
+          "unemployment": 0.25,
+          "equityIndex": 4319.2,
+          "creditSpread": 40,
+          "centralBankRate": 0.0971
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0056,
+          "unemployment": 0.25,
+          "equityIndex": 4678.3,
+          "creditSpread": 10,
+          "centralBankRate": 0.1996
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0044,
+          "unemployment": 0.25,
+          "equityIndex": 212.8,
+          "creditSpread": 204,
+          "centralBankRate": 0.1648
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": -0.0007,
+          "unemployment": 0.25,
+          "equityIndex": 76604,
+          "creditSpread": 10,
+          "centralBankRate": 0.2
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 21418201.2,
+          "eps": -0.22
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 5136423660.4,
+          "eps": 521.84,
+          "technicalReservesUSD": 6745172937960.043,
+          "insurancePremiumsWrittenUSD": 5136423660.409999
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 1377809312.9,
+          "eps": 1.01,
+          "aumUSD": 183707908389.72888
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 29542361680.4,
+          "eps": -0.4
+        }
+      },
+      "activeContracts": 16,
+      "activeContractsBySubUnit": {
+        "refined_products": 8,
+        "pharmaceuticals": 3,
+        "passenger_vehicles": 5
+      }
+    },
+    {
+      "week": 520,
+      "regions": {
+        "USA": {
+          "gdpUSD": null,
+          "inflation": 0.0084,
+          "unemployment": 0.25,
+          "equityIndex": 4603.9,
+          "creditSpread": 23,
+          "centralBankRate": 0.1003
+        },
+        "EUR": {
+          "gdpUSD": null,
+          "inflation": 0.0078,
+          "unemployment": 0.25,
+          "equityIndex": 5510.5,
+          "creditSpread": 10,
+          "centralBankRate": 0.2
+        },
+        "UK": {
+          "gdpUSD": null,
+          "inflation": 0.0049,
+          "unemployment": 0.25,
+          "equityIndex": 204,
+          "creditSpread": 152,
+          "centralBankRate": 0.1676
+        },
+        "JPN": {
+          "gdpUSD": null,
+          "inflation": 0,
+          "unemployment": 0.25,
+          "equityIndex": 74364,
+          "creditSpread": 10,
+          "centralBankRate": 0.2
+        }
+      },
+      "profiles": {
+        "STANDARD_OPERATING": {
+          "ticker": "TOPE",
+          "annualRevenue": 21418201.2,
+          "eps": -0.22
+        },
+        "INSURER": {
+          "ticker": "MDVI",
+          "annualRevenue": 5163971429.4,
+          "eps": 535.11,
+          "technicalReservesUSD": 6808038502347.613,
+          "insurancePremiumsWrittenUSD": 5163971429.358861
+        },
+        "ASSET_MANAGER": {
+          "ticker": "ZTND",
+          "annualRevenue": 1309371661.8,
+          "eps": 1.07,
+          "aumUSD": 174582888236.32373
+        },
+        "BANK": {
+          "ticker": "MRDN",
+          "annualRevenue": 28958485308.5,
+          "eps": -0.56
+        }
+      },
+      "activeContracts": 11,
+      "activeContractsBySubUnit": {
+        "refined_products": 4,
+        "industrial_automation": 1,
+        "passenger_vehicles": 4,
+        "pharmaceuticals": 2
+      }
+    }
+  ],
+  "crashed": false,
+  "crashWeek": null,
+  "crashMessage": null
+}

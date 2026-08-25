@@ -1,3 +1,4 @@
+export type FinancialStatementProfile = 'STANDARD_OPERATING' | 'INSURER' | 'ASSET_MANAGER' | 'BANK' | 'REIT';
 export type RegionId = 'USA' | 'UK' | 'JPN' | 'EUR';
 export type NecessityTier = 'Staple' | 'Standard' | 'Luxury';
 
@@ -183,6 +184,7 @@ export interface AssetAllocationTarget {
 }
 
 export interface InstitutionalEntity {
+  financialStatementProfile?: FinancialStatementProfile;
   id: string;
   name: string;
   ticker: string;
@@ -556,6 +558,13 @@ export interface LeveragedLoanInfo {
 }
 
 export interface Company {
+  concentrationRiskFlags?: string[];
+  financialStatementProfile?: FinancialStatementProfile;
+  technicalReservesUSD?: number;
+  aumUSD?: number;
+  managementFeeRate?: number;
+  insurancePremiumsWrittenUSD?: number;
+  insuranceClaimsPaidUSD?: number;
   id: string;
   ticker: string;
   name: string;

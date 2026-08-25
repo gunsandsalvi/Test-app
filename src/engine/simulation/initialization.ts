@@ -80,6 +80,7 @@ export function createInitialGameState(): GameState {
           inputCostPressure: 0,
           clearedInputPriceIndex: 1.0,
           lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
+          
           unitPriceUSD: su.unitId === 'industrial_automation' ? 80000.0 : undefined,
         };
       });
@@ -162,6 +163,7 @@ export function createInitialGameState(): GameState {
         ticker: comp.ticker,
         region: regionId,
         entityType: role,
+        financialStatementProfile: comp.financialStatementProfile,
         totalAssetsUSD,
         equityCapitalUSD,
         sharesOutstanding: comp.sharesOutstanding,
@@ -255,6 +257,7 @@ export function createInitialGameState(): GameState {
     netDV01USD: 0,
   };
 
+  
   return {
     currentWeek: 1,
     year: 2026,

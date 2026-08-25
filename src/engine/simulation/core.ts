@@ -538,6 +538,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
         customers = regionActiveFirms.filter(c => (c.sector === 'Consumer' || c.sector === 'Industrials') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
       } else if (subUnitId === 'passenger_vehicles') {
         customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Consumer' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
+      } else if (subUnitId === 'semiconductors') {
+        customers = regionActiveFirms.filter(c => (c.sector === 'Tech' || c.sector === 'Industrials') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
+      } else if (subUnitId === 'defense_systems') {
+        customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
       }
 
       // Suppliers submit unit offers
@@ -548,7 +552,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
         const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
         const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
-        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
+        const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
         const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
         const currentUnits = comp.finishedGoodsUnits ?? (currentInvUSD / currentUnitPrice);
@@ -614,6 +618,20 @@ export function advanceWeeklyStep(state: GameState): GameState {
           });
         }
       });
+
+      // Government Aggregate Bid (Defense Systems)
+      if (subUnitId === 'defense_systems') {
+        const govShare = 0.90;
+        const govWeeklyDemandUSD = (demandState.demandLevelUSD * govShare) / 52;
+        const govDemandUnits = govWeeklyDemandUSD / currentUnitPrice;
+        if (govDemandUnits > 0.001) {
+          bids.push({
+            isGovernmentAggregate: true,
+            quantityUnits: govDemandUnits,
+            maxPriceUSD: currentUnitPrice * 1.10
+          });
+        }
+      }
 
       // Household Aggregate Bid
       if (subUnitId === 'food_beverage' || subUnitId === 'refined_products' || subUnitId === 'pharmaceuticals' || subUnitId === 'passenger_vehicles') {
@@ -717,7 +735,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
         const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
         const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
-        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
+        const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
         const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
         if (sale) {
@@ -797,11 +815,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
                 quantityUnitsPerWeek: Number(baseContractUnits.toFixed(2)),
                 weeksRemaining: duration,
               };
-              targetReg.activeContracts.push(newContract);
+              remainingContracts.push(newContract);
             }
           }
         });
       });
+
+      targetReg.activeContracts = remainingContracts;
 
       // 5. Save Category Demand state metrics
       const activeSubUnitContracts = remainingContracts.filter(c => c.subUnitId === subUnitId);
@@ -817,6 +837,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     executeSubUnitBiddingMarket('food_beverage', 10.00, reg, regionId);
     executeSubUnitBiddingMarket('pharmaceuticals', 120.00, reg, regionId);
     executeSubUnitBiddingMarket('passenger_vehicles', 35000.0, reg, regionId);
+    executeSubUnitBiddingMarket('semiconductors', 10.00, reg, regionId);
+    executeSubUnitBiddingMarket('defense_systems', 2000000.0, reg, regionId);
   });
 
   function computeRealizedVol(historicalValues: number[], window: number): number {
@@ -890,7 +912,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const subUnits = INDUSTRY_SUBUNITS[cat as any] || [];
         const importerDemand = subUnits.reduce((s, su) => {
           const dem = updatedRegions[importer].categoryDemand[su.unitId];
-          return s + (dem?.demandLevelUSD ?? 0);
+          const val = dem?.demandLevelUSD;
+          return s + (typeof val === 'number' && Number.isFinite(val) ? val : 0);
         }, 0);
         const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
         const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, updatedFxPairs);
@@ -958,24 +981,60 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const executionNoise = (Math.random() - 0.5) * 0.3;
     const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
 
-    if (comp.sector === 'Banks') {
+
+    if (comp.financialStatementProfile === 'BANK' || comp.sector === 'Banks') {
       const bs = reg.bankingSector;
       const share = comp.bankMarketShare ?? 0.25;
-      const totalAssets = Math.max(1e9, (bs.businessLoanBookUSD || 0) + (bs.consumerLoanBookUSD || 0) + (bs.sovereignBondHoldingsUSD || 0));
-      const nim = isFinite(bs.netInterestMarginPct) ? bs.netInterestMarginPct : 0.025;
-      const llp = isFinite(bs.loanLossProvisionRateAnnualPct) ? bs.loanLossProvisionRateAnnualPct : 0.01;
-      const rawNetIncome = (nim * totalAssets - (bs.businessLoanBookUSD || 0) * llp) * share;
-      const annualizedNetIncome = isFinite(rawNetIncome) ? rawNetIncome : 1e7;
-      const impliedRevenue = Math.max(1e7, nim * totalAssets * share * 2.2);
-      const impliedEbitda = Math.max(1e6, annualizedNetIncome * 1.3);
+      const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
+      const weeklyNim = bs.netInterestMarginPct / 52;
+      const impliedNimRev = totalAssets * weeklyNim * share;
+      const loanLosses = Math.random() * 0.05 * totalAssets * share / 52;
+      newRevenue = Math.max(10, comp.annualRevenue * 0.98 + (impliedNimRev * 52) * 0.02);
+      newEbitdaMargin = 0.40;
+      newEbitda = newRevenue * newEbitdaMargin - (loanLosses * 52);
+      newEbit = Math.max(1, newEbitda);
+      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
+      newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
+      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+    } else if (comp.financialStatementProfile === 'INSURER') {
+      const instEnt = state.institutionalEntities.find(e => e.id === comp.id);
+      const floatAssets = instEnt?.totalAssetsUSD ?? (comp.annualRevenue * 5);
+      comp.technicalReservesUSD = floatAssets * 0.85;
       
-      newRevenue = Math.max(10, ((comp.annualRevenue || 1e8) * 0.90) + (impliedRevenue * 0.10));
-      newEbitda = Math.max(5, ((comp.ebitda || 1e7) * 0.90) + (impliedEbitda * 0.10));
-      newEbitdaMargin = newEbitda / Math.max(1, newRevenue);
-      const da = newRevenue * 0.05;
-      newEbit = Math.max(1, newEbitda - da);
-      newNetIncome = annualizedNetIncome;
-      newEps = Number((annualizedNetIncome / Math.max(1, comp.sharesOutstanding)).toFixed(2));
+      const premiumGrowth = reg.gdpGrowth / 52 + (Math.random() - 0.5) * 0.02;
+      const prevPremiums = (comp.insurancePremiumsWrittenUSD || comp.annualRevenue) / 52;
+      const weeklyPremiums = Math.max(10, prevPremiums * (1 + premiumGrowth));
+      comp.insurancePremiumsWrittenUSD = weeklyPremiums * 52;
+      
+      const lossRatio = 0.70 + (Math.random() - 0.5) * 0.20;
+      comp.insuranceClaimsPaidUSD = weeklyPremiums * lossRatio * 52;
+      
+      const underwritingIncome = weeklyPremiums * (1 - lossRatio - 0.20); 
+      const investmentIncome = floatAssets * 0.04 / 52;
+      
+      newRevenue = comp.insurancePremiumsWrittenUSD;
+      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+      newEbitdaMargin = 0.15;
+      newEbitda = (underwritingIncome + investmentIncome) * 52;
+      newEbit = Math.max(1, newEbitda);
+      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
+      newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
+    } else if (comp.financialStatementProfile === 'ASSET_MANAGER') {
+      const instEnt = state.institutionalEntities.find(e => e.id === comp.id);
+      const equityIndex = comp.region === 'USA' ? state.compositeIndices.us500 : comp.region === 'EUR' ? state.compositeIndices.euStoxx : comp.region === 'UK' ? state.compositeIndices.uk100 : state.compositeIndices.jp225;
+      const marketGrowth = equityIndex.value / Math.max(1, equityIndex.historical[equityIndex.historical.length - 2] ?? equityIndex.value);
+      const flows = (Math.random() - 0.4) * 0.01;
+      comp.aumUSD = (comp.aumUSD ?? (instEnt?.totalAssetsUSD ?? comp.annualRevenue * 50)) * marketGrowth * (1 + flows);
+      comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + Math.random() * 0.005);
+      
+      const weeklyFees = comp.aumUSD * comp.managementFeeRate / 52;
+      newRevenue = Math.max(10, weeklyFees * 52);
+      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+      newEbitdaMargin = 0.35;
+      newEbitda = newRevenue * newEbitdaMargin;
+      newEbit = Math.max(1, newEbitda);
+      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
+      newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
     } else {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
@@ -1037,7 +1096,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
       const estCashHealth = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
-      const estTobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
+      const estTobinsQ = Math.max(0.1, Math.min(10.0, comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5)));
       const estQCapexEffect = ((estTobinsQ - 1) * 0.2);
       const estAvgComp = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
       const estCompEffect = (estAvgComp * 0.15);
@@ -1096,12 +1155,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
           if (tradability < 0.1) return s;
           const regionExportsInCat = regionCategoryExports[comp.region]?.[line.industry] ?? 0;
           const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(baseRev, comp.annualRevenue);
-          const nextS = s + exportShareOfRev * (reg.gdpGrowth / 52); if (isNaN(nextS)) throw new Error(`NaN in reduce! regionExportsInCat=${regionExportsInCat}, categoryMarketShare=${line.categoryMarketShare}, revenueShare=${line.revenueShare}, annualRevenue=${comp.annualRevenue}, gdpGrowth=${reg.gdpGrowth}`); return nextS;
+          const nextS = s + Math.max(-0.02, Math.min(0.02, exportShareOfRev * (reg.gdpGrowth / 52))); if (isNaN(nextS)) throw new Error(`NaN in reduce! regionExportsInCat=${regionExportsInCat}, categoryMarketShare=${line.categoryMarketShare}, revenueShare=${line.revenueShare}, annualRevenue=${comp.annualRevenue}, gdpGrowth=${reg.gdpGrowth}`); return nextS;
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
         const annualGrowthRate = laggedCategoryGrowth + noise + reg.inflation * pricingPowerBeta;
         
-        const weeklyGrowthRate = (annualGrowthRate / 52) + exportRevenueBoost;
+        const weeklyGrowthRate = Math.max(-0.05, Math.min(0.05, (annualGrowthRate / 52) + exportRevenueBoost));
         if (isNaN(weeklyGrowthRate)) throw new Error(`weeklyGrowthRate is NaN, laggedCategoryGrowth=${laggedCategoryGrowth}, noise=${noise}, reg.inflation=${reg.inflation}, pricingPowerBeta=${pricingPowerBeta}`);
         const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
       
@@ -1122,7 +1181,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
           const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
 
-          targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
+          targetProductionUSD = (newRevenue / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
           productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
 
           unsoldThisWeekUSD = Math.max(0, targetProductionUSD - salesUSD);
@@ -1138,7 +1197,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const priceSignal = supplierClearedPrice - 1.0;
           const productionResponseFactor = (1.0 + priceSignal * 1.5);
 
-          targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
+          targetProductionUSD = (newRevenue / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
           productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
 
           const soldThisWeekUSD = targetProductionUSD * categoryFulfillmentRatio;
@@ -1658,7 +1717,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       executionQuality: Number(newExecutionQuality.toFixed(3)),
       occupationMixDrift: newOccupationMixDrift,
       inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
-      _targetProductionUSD: targetProductionUSD,
+      _targetProductionUSD: (companyUpdates[comp.ticker]?._targetProductionUSD ?? targetProductionUSD),
       finishedGoodsInventoryUSD: Number(newFinishedGoodsInventoryUSD.toFixed(2)),
       finishedGoodsUnits: (update && update.finishedGoodsUnits !== undefined)
         ? update.finishedGoodsUnits
@@ -1679,6 +1738,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
       netIncome: Number(newNetIncome.toFixed(1)),
       eps: newEps,
       sharesOutstanding: Number(updatedSharesOutstanding.toFixed(3)),
+      technicalReservesUSD: comp.technicalReservesUSD,
+      aumUSD: comp.aumUSD,
+      managementFeeRate: comp.managementFeeRate,
+      insurancePremiumsWrittenUSD: comp.insurancePremiumsWrittenUSD,
+      insuranceClaimsPaidUSD: comp.insuranceClaimsPaidUSD,
       cash: Number(newCash.toFixed(1)),
       leverage: newLeverage,
       interestCoverage: newCoverage,
@@ -1705,6 +1769,51 @@ export function advanceWeeklyStep(state: GameState): GameState {
       },
       treasuryHoldings: newTreasuryHoldings,
     };
+  });
+
+  // PART BAA: Compute concentration risk flags (>40% threshold) from real activeContracts
+  updatedCompanies.forEach(comp => {
+    const flags: string[] = [];
+    const reg = updatedRegions[comp.region];
+    const contracts = reg?.activeContracts || [];
+    
+    // Supplier concentration
+    const asSupplier = contracts.filter(c => c.supplierCompanyId === comp.ticker || c.supplierCompanyId === comp.id);
+    const totalSupplierVal = asSupplier.reduce((s, c) => s + c.quantityUnitsPerWeek * c.priceUSD * 52, 0);
+    if (totalSupplierVal > 0) {
+      const custTotals: Record<string, number> = {};
+      asSupplier.forEach(c => {
+        custTotals[c.customerCompanyId] = (custTotals[c.customerCompanyId] || 0) + (c.quantityUnitsPerWeek * c.priceUSD * 52);
+      });
+      Object.entries(custTotals).forEach(([custTicker, val]) => {
+        const share = val / totalSupplierVal;
+        if (share > 0.40) {
+          const custComp = updatedCompanies.find(x => x.ticker === custTicker || x.id === custTicker);
+          const custName = custComp?.name || custTicker;
+          flags.push(`High Customer Concentration: ${custName} (${(share * 100).toFixed(0)}% of contract revenue)`);
+        }
+      });
+    }
+
+    // Customer concentration
+    const asCustomer = contracts.filter(c => c.customerCompanyId === comp.ticker || c.customerCompanyId === comp.id);
+    const totalCustomerVal = asCustomer.reduce((s, c) => s + c.quantityUnitsPerWeek * c.priceUSD * 52, 0);
+    if (totalCustomerVal > 0) {
+      const supTotals: Record<string, number> = {};
+      asCustomer.forEach(c => {
+        supTotals[c.supplierCompanyId] = (supTotals[c.supplierCompanyId] || 0) + (c.quantityUnitsPerWeek * c.priceUSD * 52);
+      });
+      Object.entries(supTotals).forEach(([supTicker, val]) => {
+        const share = val / totalCustomerVal;
+        if (share > 0.40) {
+          const supComp = updatedCompanies.find(x => x.ticker === supTicker || x.id === supTicker);
+          const supName = supComp?.name || supTicker;
+          flags.push(`High Supplier Concentration: ${supName} (${(share * 100).toFixed(0)}% of input supply)`);
+        }
+      });
+    }
+
+    comp.concentrationRiskFlags = flags;
   });
 
   // 6. Generate Weekly Breaking News & Sentiment Shifts
