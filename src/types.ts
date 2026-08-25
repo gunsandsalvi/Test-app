@@ -371,6 +371,7 @@ export interface Region {
   estimatedNominalGdpUSD: number;    // proxy until Phase 4 — replaced by the true C+I+G+NX sum then
   derivedNominalGdpUSD: number;      // C+I+G+NX, this world's own bottom-up sum
   gdpGrowthBottomUp: number;         // derived % change YoY
+  lastWeekNominalGdpUSD: number;
   nominalGdpHistory: number[];       // rolling 52-week history of derivedNominalGdpUSD for YoY calculation
   consumptionComponentUSD: number;   // C, exposed for inspection
   investmentComponentUSD: number;    // I, exposed for inspection
@@ -531,6 +532,7 @@ export interface Company {
   sector: Sector;
   
   // 3-Statement Fundamentals (Vectorized state)
+  isBankEntity?: boolean;
   baselineAnnualRevenue: number;
   annualRevenue: number;
   productLines?: ProductLine[];

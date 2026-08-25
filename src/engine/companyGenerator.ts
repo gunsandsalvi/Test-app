@@ -770,6 +770,7 @@ export function generateInitialCompanies(): Company[] {
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         bankMarketShare: tmpl.bankMarketShare,
+        isBankEntity: tmpl.sector === 'Banks',
         institutionalRole: tmpl.institutionalRole ?? null,
         institutionalMarketShare: tmpl.institutionalMarketShare,
         beta: tmpl.beta,

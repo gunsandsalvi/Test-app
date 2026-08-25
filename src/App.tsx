@@ -141,7 +141,7 @@ export default function App() {
       const marginUtilizationPct = navUSD > 0 ? Math.round((totalMarginReq / navUSD) * 100) : 100;
 
       const updatedRegions = { ...prev.regions };
-      if (executionDetails && executionDetails.counterpartyFeeUSD > 0) {
+      if (executionDetails) {
         const region = updatedRegions[posData.region];
         if (region) {
           // Find instrument in bank or institutional

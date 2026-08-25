@@ -57,7 +57,29 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
       <div className="p-3 space-y-3">
         {tab === 'performance' && (
           <>
-            <TapToChart label="Stock Price" value={formatCurrency(company.stockPrice, { compact: false })} history={company.historicalPrices} />
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] mb-2">
+              <div className="flex-1 min-w-0 pr-4">
+                <TapToChart label="Stock Price" value={formatCurrency(company.stockPrice, { compact: false })} history={company.historicalPrices} />
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenTrade({
+                    assetType: 'EQUITY',
+                    id: company.id,
+                    symbol: company.ticker,
+                    name: `${company.name} (Equity)`,
+                    region: company.region,
+                    price: company.stockPrice,
+                    quoteUnit: 'USD',
+                    details: { rating: company.creditRating, sector: company.sector }
+                  });
+                }}
+                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-bold text-xs uppercase tracking-wide transition-all shrink-0 cursor-pointer"
+              >
+                Trade
+              </button>
+            </div>
             <TapToChart label="EPS (quarterly)" value={formatCurrency(company.eps, { compact: false })} history={(company.historicalFundamentals || []).map(f => f.eps ?? 0)} />
             <TapToChart label="Revenue (quarterly)" value={formatCurrency(company.annualRevenue / 4, { compact: true })} history={(company.historicalFundamentals || []).map(f => (f.incomeStatement?.revenue ?? (f.annualRevenue ?? 0) / 4))} />
             <TapToChart label="EBITDA Margin" value={formatPercent(company.ebitda / Math.max(1, company.annualRevenue), { isDecimal: true })} history={(company.historicalFundamentals || []).map(f => (f.ebitda ?? 0) / Math.max(1, f.annualRevenue ?? 1))} />
@@ -121,6 +143,41 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
             {finSubTab === 'balance' && latestFund?.balanceSheet && (
               <>
+                {company.isBankEntity && (
+                  <div className="p-3 bg-[var(--bg-elevated)] border border-[var(--border-hairline)] rounded-xl mb-3 space-y-1 text-[var(--text-primary)]">
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold border-b border-[var(--border-hairline)] pb-1 mb-2">
+                      Prorated Bank Balance Sheet & Capital Metrics
+                    </div>
+                    <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">Total Loan Book</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.bankingSector.businessLoanBookUSD + reg.bankingSector.consumerLoanBookUSD) * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">  · Business Loans</span>
+                      <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(reg.bankingSector.businessLoanBookUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">  · Consumer Loans</span>
+                      <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(reg.bankingSector.consumerLoanBookUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">Customer Deposits</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(reg.bankingSector.depositsUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">Sovereign Bond Holdings</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(reg.bankingSector.sovereignBondHoldingsUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">Capital Adequacy Ratio (Tier 1)</span>
+                      <span className="font-bold">{(reg.bankingSector.bankCapitalRatio * 100).toFixed(2)}%</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-1">
+                      <span className="text-[var(--text-secondary)]">Net Interest Margin (NIM)</span>
+                      <span className="font-bold">{(reg.bankingSector.netInterestMarginPct * 100).toFixed(2)}%</span>
+                    </div>
+                  </div>
+                )}
                 <TapToChart label="Total Assets" value={formatCurrency(latestFund.balanceSheet.totalAssets, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.balanceSheet?.totalAssets ?? 0)} />
                 <TapToChart label="Total Debt" value={formatCurrency(latestFund.balanceSheet.shortTermDebt + latestFund.balanceSheet.longTermDebt, { compact: true })} history={(company.historicalFundamentals || []).map(f => (f.balanceSheet?.shortTermDebt ?? 0) + (f.balanceSheet?.longTermDebt ?? 0))} />
                 <TapToChart label="Cash & Equivalents" value={formatCurrency(latestFund.balanceSheet.cash, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.balanceSheet?.cash ?? 0)} />

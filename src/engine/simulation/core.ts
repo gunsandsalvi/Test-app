@@ -1360,7 +1360,19 @@ export function advanceWeeklyStep(state: GameState): GameState {
       { bank: reg.bankingSector.bankEquityUSD, institutional: reg.institutionalSector.sectorEquityUSD },
       totalRegionEquityCapUSD
     );
-    const newStockPrice = isDefaulted ? 0.0 : Number((unadjustedStockPrice * (1 + equityPremium * 0.1)).toFixed(2));
+    let newStockPrice = isDefaulted ? 0.0 : Number((unadjustedStockPrice * (1 + equityPremium * 0.1)).toFixed(2));
+    if (comp.isBankEntity) {
+      const bankBookValue = reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25);
+      const cycle = reg.cycleRegime;
+      let pbMultiple = 1.0;
+      if (cycle === 'Boom') pbMultiple = 1.1;
+      else if (cycle === 'Expansion') pbMultiple = 1.0;
+      else if (cycle === 'Slowdown') pbMultiple = 0.8;
+      else if (cycle === 'Recession') pbMultiple = 0.6;
+      
+      const bankMarketCap = bankBookValue * pbMultiple;
+      newStockPrice = isDefaulted ? 0.0 : Number((bankMarketCap / comp.sharesOutstanding).toFixed(2));
+    }
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
 
     // Company Treasury Holdings (Part MF) - Fixed Cash Leak & Liquidations
@@ -1692,11 +1704,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
 
     const newDerivedNominalGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
-    const newNominalGdpHistory = [...(reg.nominalGdpHistory || []).slice(-51), newDerivedNominalGdpUSD];
-    const gdpLevel52WeeksAgo = newNominalGdpHistory.length >= 52 ? newNominalGdpHistory[0] : newDerivedNominalGdpUSD;
-    const gdpGrowthBottomUp = gdpLevel52WeeksAgo > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevel52WeeksAgo)
-      ? (newDerivedNominalGdpUSD / gdpLevel52WeeksAgo - 1) - reg.inflation
+    const gdpLevelLastWeek = (reg as any).lastWeekNominalGdpUSD > 0 ? (reg as any).lastWeekNominalGdpUSD : newDerivedNominalGdpUSD;
+    const weeklyRealGrowthRate = gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek)
+      ? (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)
       : 0;
+    const gdpGrowthBottomUp = Math.pow(1 + weeklyRealGrowthRate, 52) - 1;
 
     const finalGdpGrowth = isFinite(gdpGrowthBottomUp) ? gdpGrowthBottomUp : (reg.gdpGrowth || 0.02);
 
@@ -1769,7 +1781,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       estimatedNominalGdpUSD: newDerivedNominalGdpUSD,
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
       gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
-      nominalGdpHistory: newNominalGdpHistory,
+      lastWeekNominalGdpUSD: newDerivedNominalGdpUSD,
+      nominalGdpHistory: reg.nominalGdpHistory || [],
       consumptionComponentUSD,
       investmentComponentUSD,
       govDebtTranches: [...liveTranches, ...newTranches],

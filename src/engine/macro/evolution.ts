@@ -73,6 +73,7 @@ export function evolveRegionMacro(
   diagnosticString: string;
 } {
   const { updatedBuffer: newPolicyRateLagBuffer, laggedValue: laggedPolicyRate } = pushAndReadLagged(region.policyRateLagBuffer || [], region.policyRate, 6);
+  const { updatedBuffer: newDemandShockLagBuffer, laggedValue: laggedDemandShock } = pushAndReadLagged(region.demandShockLagBuffer || [], globalShock.gdpShock, 4);
   
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week);
 
@@ -200,7 +201,7 @@ export function evolveRegionMacro(
     : region.nairu;
   const newNairu = Number((baseNairu + hysteresisDelta).toFixed(4));
 
-  const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0);
+  const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0) - laggedDemandShock * 0.1;
   const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
   const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
   const newUnemployment = Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4));
@@ -220,7 +221,7 @@ export function evolveRegionMacro(
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
   const contagionHit = microFeedback.creditContagionBps > 50 ? (microFeedback.creditContagionBps / 100) * 0.5 : 0;
-  const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80;
+  const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80 + laggedDemandShock * 1000;
   const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.08;
   const unempShock = unempDelta > 0 ? cciUnempMultiplier * unempDelta * 100 : 0;
   const newCCI = (Number((prevHS.consumerConfidence + cciReversion + 0.05 * (equityReturn * 100) - unempShock - contagionHit).toFixed(2)));
@@ -422,6 +423,75 @@ export function evolveRegionMacro(
   const newStapleShare = Number((prevHS.stapleSpendShare * 0.95 + targetStapleShare * 0.05).toFixed(4));
   const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
+  const totalWageIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
+    const pool = newOccupationPools[occ];
+    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * pool.employed;
+  }, 0);
+  const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
+  const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
+
+  const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
+  
+  const specializedStress = (newOccupationPools.SPECIALIZED_PROFESSIONAL.wageGrowthAnnual < 0 ? 1 : 0) + (newOccupationPools.TECHNICAL_ENGINEERING.wageGrowthAnnual < 0 ? 1 : 0);
+  const generalStress = (newOccupationPools.GENERAL.wageGrowthAnnual < 0 ? 1 : 0);
+
+  const shiftFraction = Math.max(0, householdStressSignal * 1.5); // fraction of each tier to shift down
+
+  const superPrimePrev = region.householdState.creditTierBooks.find(t => t.tier === 'SUPER_PRIME')?.shareOfHouseholds ?? 0.25;
+  const primePrev = region.householdState.creditTierBooks.find(t => t.tier === 'PRIME')?.shareOfHouseholds ?? 0.50;
+  const nearPrimePrev = region.householdState.creditTierBooks.find(t => t.tier === 'NEAR_PRIME')?.shareOfHouseholds ?? 0.15;
+  const subprimePrev = region.householdState.creditTierBooks.find(t => t.tier === 'SUBPRIME')?.shareOfHouseholds ?? 0.10;
+
+  const superPrimeShift = superPrimePrev * shiftFraction;
+  const newSuperPrime = Math.max(0.01, superPrimePrev - superPrimeShift);
+
+  const primeShift = (primePrev + superPrimeShift) * shiftFraction;
+  const newPrime = Math.max(0.01, (primePrev + superPrimeShift) - primeShift);
+
+  const nearPrimeShift = (nearPrimePrev + primeShift) * shiftFraction;
+  const newNearPrime = Math.max(0.01, (nearPrimePrev + primeShift) - nearPrimeShift);
+
+  const newSubprime = Math.max(0.01, subprimePrev + nearPrimeShift);
+
+  const updatedTiers = region.householdState.creditTierBooks.map(tier => {
+    let newShare = tier.shareOfHouseholds;
+    if (tier.tier === 'SUPER_PRIME') newShare = newSuperPrime;
+    else if (tier.tier === 'PRIME') newShare = newPrime;
+    else if (tier.tier === 'NEAR_PRIME') newShare = newNearPrime;
+    else if (tier.tier === 'SUBPRIME') newShare = newSubprime;
+
+    const tierStress = householdStressSignal + (tier.tier === 'SUBPRIME' || tier.tier === 'NEAR_PRIME' ? generalStress * 0.01 : specializedStress * 0.01);
+    const cci = region.bankingSector.creditConditionsIndex;
+    let newAvgInterestRate = tier.avgInterestRate;
+    let newDelinquency = tier.delinquencyRatePct + tierStress * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
+
+    if (tier.tier === 'SUBPRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.05;
+    } else if (tier.tier === 'NEAR_PRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.03;
+    } else if (tier.tier === 'PRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.01;
+    } else if (tier.tier === 'SUPER_PRIME') {
+      newAvgInterestRate = tier.avgInterestRate + cci * 0.005;
+    }
+    
+    newDelinquency = Math.max(0.001, newDelinquency);
+
+    return {
+      ...tier,
+      shareOfHouseholds: newShare,
+      avgInterestRate: Math.max(0.02, newAvgInterestRate),
+      delinquencyRatePct: newDelinquency
+    };
+  });
+
+  const totalShare = updatedTiers.reduce((s, t) => s + t.shareOfHouseholds, 0);
+  const normalizedTiers = updatedTiers.map(t => ({
+    ...t,
+    shareOfHouseholds: t.shareOfHouseholds / totalShare,
+    debtBalanceUSD: (newCreditCardDebtUSD + newOtherLoanDebtUSD) * (t.shareOfHouseholds / totalShare)
+  }));
+
   // Central bank stance and banking sector evolution
   const targetBalanceSheetStance = (
     (Math.max(0, 0.07 - newUnemployment) * -8) +
@@ -437,7 +507,7 @@ export function evolveRegionMacro(
     region.bankingSector,
     microFeedback.businessLoanBookInputUSD,
     prevHS.householdDebtToIncomeRatio,
-    region.estimatedHouseholdIncomeUSD,
+    newEstimatedHouseholdIncomeUSD,
     newSavingsRate,
     region.policyRate,
     microFeedback.creditContagionBps,
@@ -446,7 +516,8 @@ export function evolveRegionMacro(
     newBalanceSheetStance,
     newGdpGrowth,
     region.creditConditionsSpilloverAdjustment ?? 0,
-    microFeedback.monetizedAmountUSD ?? 0
+    microFeedback.monetizedAmountUSD ?? 0,
+    normalizedTiers
   );
 
   const prevM2 = region.bankingSector.moneySupplyM2USD > 0
@@ -569,60 +640,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
-  const totalWageIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
-    const pool = newOccupationPools[occ];
-    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * pool.employed;
-  }, 0);
-  const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
-  const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
-
-  const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
-  
-  const specializedStress = (newOccupationPools.SPECIALIZED_PROFESSIONAL.wageGrowthAnnual < 0 ? 1 : 0) + (newOccupationPools.TECHNICAL_ENGINEERING.wageGrowthAnnual < 0 ? 1 : 0);
-  const generalStress = (newOccupationPools.GENERAL.wageGrowthAnnual < 0 ? 1 : 0);
-
-  const updatedTiers = region.householdState.creditTierBooks.map(tier => {
-    let newShare = tier.shareOfHouseholds;
-    const tierStress = householdStressSignal + (tier.tier === 'SUBPRIME' || tier.tier === 'NEAR_PRIME' ? generalStress * 0.01 : specializedStress * 0.01);
-    
-    if (tier.tier === 'SUBPRIME') {
-      newShare = tier.shareOfHouseholds + tierStress * 0.5;
-    } else if (tier.tier === 'SUPER_PRIME') {
-      newShare = tier.shareOfHouseholds - tierStress * 0.5;
-    }
-
-    const cci = region.bankingSector.creditConditionsIndex;
-    let newAvgInterestRate = tier.avgInterestRate;
-    let newDelinquency = tier.delinquencyRatePct + tierStress * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
-
-    if (tier.tier === 'SUBPRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.05;
-    } else if (tier.tier === 'NEAR_PRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.03;
-    } else if (tier.tier === 'PRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.01;
-    } else if (tier.tier === 'SUPER_PRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.005;
-    }
-    
-    // Ensure delinquency doesn't fall below 0 mathematically
-    newDelinquency = Math.max(0.001, newDelinquency);
-
-    return {
-      ...tier,
-      shareOfHouseholds: Math.max(0.01, newShare),
-      avgInterestRate: Math.max(0.02, newAvgInterestRate),
-      delinquencyRatePct: newDelinquency
-    };
-  });
-
-  const totalShare = updatedTiers.reduce((s, t) => s + t.shareOfHouseholds, 0);
-  const normalizedTiers = updatedTiers.map(t => ({
-    ...t,
-    shareOfHouseholds: t.shareOfHouseholds / totalShare,
-    debtBalanceUSD: (newCreditCardDebtUSD + newOtherLoanDebtUSD) * (t.shareOfHouseholds / totalShare)
-  }));
-
   const updatedRegion: Region = {
     ...region,
     cycleRegime: newCycleRegime,
@@ -640,6 +657,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     smoothedSlackGap: newSmoothedSlackGap,
     policyRateLagBuffer: newPolicyRateLagBuffer,
     wageGrowthLagBuffer: newWageGrowthLagBuffer,
+    demandShockLagBuffer: newDemandShockLagBuffer,
     potentialGdpGrowth: newPotentialGdpGrowth,
     neutralRate: newNeutralRate,
     nairu: newNairu,
@@ -668,6 +686,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,
     gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,
     nominalGdpHistory: region.nominalGdpHistory ?? [],
+    lastWeekNominalGdpUSD: region.lastWeekNominalGdpUSD ?? (region.derivedNominalGdpUSD || newEstimatedNominalGdpUSD),
+    activeContracts: region.activeContracts ?? [],
     consumptionComponentUSD: region.consumptionComponentUSD ?? 0,
     investmentComponentUSD: region.investmentComponentUSD ?? 0,
     effectiveTaxRate: newEffectiveTaxRate,

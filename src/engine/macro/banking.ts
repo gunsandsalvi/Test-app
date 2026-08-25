@@ -1,4 +1,4 @@
-import { BankingSector } from '../../types';
+import { BankingSector, CreditTierBook } from '../../types';
 
 export function evolveBankingSector(
   prevBanking: BankingSector,
@@ -13,7 +13,8 @@ export function evolveBankingSector(
   balanceSheetStance: number,
   _gdpGrowth: number,
   spilloverAdjustment: number = 0,
-  monetizedAmountUSD: number = 0
+  monetizedAmountUSD: number = 0,
+  creditTierBooks?: CreditTierBook[]
 ): BankingSector {
   const bankedConsumerDebtShare = 0.1167; // Share of total household debt held as bank consumer loans
   const newConsumerLoanBook = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
@@ -67,7 +68,17 @@ export function evolveBankingSector(
   const rawNim = totalAssetsProxy > 0 ? ((weeklyInterestIncome - weeklyInterestExpense) * 52) / totalAssetsProxy : 0.025;
   const netInterestMarginPct = rawNim;
   const businessLossRateAnnual = Math.min(0.12, (creditContagionBps / 10000) * 1.8);
-  const consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
+  let consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
+  if (creditTierBooks && creditTierBooks.length > 0) {
+    const superPrimeShare = creditTierBooks.find(t => t.tier === 'SUPER_PRIME')?.shareOfHouseholds ?? 0.25;
+    const primeShare = creditTierBooks.find(t => t.tier === 'PRIME')?.shareOfHouseholds ?? 0.50;
+    const nearPrimeShare = creditTierBooks.find(t => t.tier === 'NEAR_PRIME')?.shareOfHouseholds ?? 0.15;
+    const subprimeShare = creditTierBooks.find(t => t.tier === 'SUBPRIME')?.shareOfHouseholds ?? 0.10;
+
+    const baselineConsumerLossRate = Math.max(0.005, Math.min(0.12, Math.max(0, unemploymentRate - 0.03) * 1.2));
+    const weightedMultiplier = (superPrimeShare * 0.2) + (primeShare * 1.0) + (nearPrimeShare * 3.0) + (subprimeShare * 10.0);
+    consumerLossRateAnnual = baselineConsumerLossRate * weightedMultiplier;
+  }
   const weeklyLoanLossProvision = (newBusinessLoanBook * businessLossRateAnnual + newConsumerLoanBook * consumerLossRateAnnual) / 52;
   const weeklyNetIncome = (netInterestMarginPct * totalAssetsProxy / 52) - weeklyLoanLossProvision;
   const riskWeightedAssets = newBusinessLoanBook * 1.0 + newConsumerLoanBook * 0.75 + newSovHoldings * 0.0;
