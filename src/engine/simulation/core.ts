@@ -121,10 +121,13 @@ function computeSupplyDemandPremium(
   totalSectorInvestableUSD: { bank: number; institutional: number },
   totalOutstandingUSD: number
 ): number {
-  const impliedBankDemandUSD = ownership.bankShare * totalSectorInvestableUSD.bank;
-  const impliedInstitutionalDemandUSD = ownership.institutionalShare * totalSectorInvestableUSD.institutional;
+  const bankInvestable = Math.max(0, isFinite(totalSectorInvestableUSD.bank) ? totalSectorInvestableUSD.bank : 0);
+  const instInvestable = Math.max(0, isFinite(totalSectorInvestableUSD.institutional) ? totalSectorInvestableUSD.institutional : 0);
+  const impliedBankDemandUSD = (ownership.bankShare || 0) * bankInvestable;
+  const impliedInstitutionalDemandUSD = (ownership.institutionalShare || 0) * instInvestable;
   const totalImpliedDemandUSD = impliedBankDemandUSD + impliedInstitutionalDemandUSD;
-  const demandToSupplyRatio = totalOutstandingUSD > 0 ? totalImpliedDemandUSD / totalOutstandingUSD : 1.0;
+  const safeOutstanding = Math.max(1e9, isFinite(totalOutstandingUSD) ? totalOutstandingUSD : 1e9);
+  const demandToSupplyRatio = Math.max(0.1, Math.min(5.0, totalImpliedDemandUSD / safeOutstanding));
   return (demandToSupplyRatio - 1.0) * 0.3;
 }
 
@@ -755,10 +758,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }, 0);
         const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
         const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, updatedFxPairs);
-        const exportShareCapture = Math.max(0, (0.1 + exporterCompetitiveness * 0.5 + fxCompetitiveness));
+        const exportShareCapture = Math.max(0.05, Math.min(0.80, (0.25 + exporterCompetitiveness * 0.2 + fxCompetitiveness * 0.2)));
         if (!Number.isFinite(exportShareCapture)) throw new Error(`exportShareCapture is ${exportShareCapture}! exporterCompetitiveness=${exporterCompetitiveness}, fxCompetitiveness=${fxCompetitiveness}`);
         if (isNaN(importerDemand)) throw new Error(`importerDemand is NaN!`);
-        const flow = importerDemand * tradability * exportShareCapture / regionIds.length; // divided since multiple exporters compete for the same import demand
+        const flow = importerDemand * tradability * (exportShareCapture / (regionIds.length - 1)); // divided among competitors
         regionExports[exporter] += flow;
         regionImports[importer] += flow;
         regionCategoryExports[exporter][cat] = (regionCategoryExports[exporter][cat] ?? 0) + flow;
@@ -822,13 +825,16 @@ export function advanceWeeklyStep(state: GameState): GameState {
     if (comp.sector === 'Banks') {
       const bs = reg.bankingSector;
       const share = comp.bankMarketShare ?? 0.25;
-      const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
-      const annualizedNetIncome = (bs.netInterestMarginPct * totalAssets - bs.businessLoanBookUSD * bs.loanLossProvisionRateAnnualPct) * share;
-      const impliedRevenue = bs.netInterestMarginPct * totalAssets * share * 2.2;
-      const impliedEbitda = annualizedNetIncome * 1.3;
+      const totalAssets = Math.max(1e9, (bs.businessLoanBookUSD || 0) + (bs.consumerLoanBookUSD || 0) + (bs.sovereignBondHoldingsUSD || 0));
+      const nim = isFinite(bs.netInterestMarginPct) ? bs.netInterestMarginPct : 0.025;
+      const llp = isFinite(bs.loanLossProvisionRateAnnualPct) ? bs.loanLossProvisionRateAnnualPct : 0.01;
+      const rawNetIncome = (nim * totalAssets - (bs.businessLoanBookUSD || 0) * llp) * share;
+      const annualizedNetIncome = isFinite(rawNetIncome) ? rawNetIncome : 1e7;
+      const impliedRevenue = Math.max(1e7, nim * totalAssets * share * 2.2);
+      const impliedEbitda = Math.max(1e6, annualizedNetIncome * 1.3);
       
-      newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (impliedRevenue * 0.10));
-      newEbitda = Math.max(5, (comp.ebitda * 0.90) + (impliedEbitda * 0.10));
+      newRevenue = Math.max(10, ((comp.annualRevenue || 1e8) * 0.90) + (impliedRevenue * 0.10));
+      newEbitda = Math.max(5, ((comp.ebitda || 1e7) * 0.90) + (impliedEbitda * 0.10));
       newEbitdaMargin = newEbitda / Math.max(1, newRevenue);
       const da = newRevenue * 0.05;
       newEbit = Math.max(1, newEbitda - da);
@@ -915,7 +921,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const categoryGrowth = (isFinite(baseDemandGrowth) ? baseDemandGrowth : reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
         const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
         const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
-        const targetCompetitiveness = (marginEdge * 16 + growthInvestmentSignal * 0.5);
+        const targetCompetitiveness = 2.0 * Math.tanh((marginEdge * 16 + growthInvestmentSignal * 0.5) / 2.0);
         const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
         const shareGainRate = (newCompetitiveness * 0.035 - dominanceDrag);
         const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // 0 floor only — a market share literally cannot go negative, this is a math guard not a behavioral clamp
@@ -942,7 +948,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const tradability = CATEGORY_TRADABILITY[line.industry] ?? 0;
           if (tradability < 0.1) return s;
           const regionExportsInCat = regionCategoryExports[comp.region]?.[line.industry] ?? 0;
-          const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(1, comp.annualRevenue);
+          const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(baseRev, comp.annualRevenue);
           const nextS = s + exportShareOfRev * (reg.gdpGrowth / 52); if (isNaN(nextS)) throw new Error(`NaN in reduce! regionExportsInCat=${regionExportsInCat}, categoryMarketShare=${line.categoryMarketShare}, revenueShare=${line.revenueShare}, annualRevenue=${comp.annualRevenue}, gdpGrowth=${reg.gdpGrowth}`); return nextS;
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
@@ -1061,7 +1067,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const growthCapexToRevenueRatio = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
     const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
     const cashHealthFactor = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
-    const tobinsQ = comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5);
+    const safeMarketCap = Math.max(0, isFinite(comp.marketCap) ? comp.marketCap : 0);
+    const safeTotalDebt = Math.max(0, isFinite(comp.totalDebt) ? comp.totalDebt : 0);
+    const safeRev = Math.max(1, isFinite(comp.annualRevenue) ? comp.annualRevenue : 1);
+    const tobinsQ = Math.max(0.1, Math.min(10.0, safeMarketCap / Math.max(1, safeTotalDebt + safeRev * 1.5)));
     const qCapexEffect = ((tobinsQ - 1) * 0.2);
     const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
     const competitivenessCapexEffect = (avgCompetitiveness * 0.15);
@@ -1372,9 +1381,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
       { bank: reg.bankingSector.bankEquityUSD, institutional: reg.institutionalSector.sectorEquityUSD },
       totalRegionEquityCapUSD
     );
-    let newStockPrice = isDefaulted ? 0.0 : Number((unadjustedStockPrice * (1 + equityPremium * 0.1)).toFixed(2));
+    let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((unadjustedStockPrice * (1 + Math.max(-0.5, Math.min(0.5, equityPremium)) * 0.1)).toFixed(2)));
     if (comp.isBankEntity) {
-      const bankBookValue = reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25);
+      const bankBookValue = Math.max(10, reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25));
       const cycle = reg.cycleRegime;
       let pbMultiple = 1.0;
       if (cycle === 'Boom') pbMultiple = 1.1;
@@ -1383,9 +1392,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
       else if (cycle === 'Recession') pbMultiple = 0.6;
       
       const bankMarketCap = bankBookValue * pbMultiple;
-      newStockPrice = isDefaulted ? 0.0 : Number((bankMarketCap / comp.sharesOutstanding).toFixed(2));
+      const safeShares = Math.max(1, comp.sharesOutstanding || 1);
+      newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((bankMarketCap / safeShares).toFixed(2)));
     } else if (comp.isInstitutionalEntity) {
-      const instBookValue = reg.institutionalSector.sectorEquityUSD * (comp.institutionalMarketShare ?? 0.33);
+      const instBookValue = Math.max(10, reg.institutionalSector.sectorEquityUSD * (comp.institutionalMarketShare ?? 0.33));
       const cycle = reg.cycleRegime;
       let pbMultiple = 1.0;
       if (cycle === 'Boom') pbMultiple = 1.15;
@@ -1394,7 +1404,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
       else if (cycle === 'Recession') pbMultiple = 0.65;
       
       const instMarketCap = instBookValue * pbMultiple;
-      newStockPrice = isDefaulted ? 0.0 : Number((instMarketCap / comp.sharesOutstanding).toFixed(2));
+      const safeShares = Math.max(1, comp.sharesOutstanding || 1);
+      newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((instMarketCap / safeShares).toFixed(2)));
     }
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
 
@@ -1726,13 +1737,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
     // NX — net exports, already established in Phase 3 (already annualized-scale)
     const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
 
-    const newDerivedNominalGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
+    const rawGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
+    const newDerivedNominalGdpUSD = Math.max(1e11, isFinite(rawGdpUSD) ? rawGdpUSD : 1e12);
     const gdpLevelLastWeek = (reg as any).lastWeekNominalGdpUSD > 0 ? (reg as any).lastWeekNominalGdpUSD : newDerivedNominalGdpUSD;
-    const rawWeeklyRealGrowthRate = gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek)
-      ? (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)
+    const isStartupTransition = gdpLevelLastWeek < newDerivedNominalGdpUSD * 0.2;
+    const rawWeeklyRealGrowthRate = (!isStartupTransition && gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek))
+      ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
       : 0;
     const prevSmoothedWeeklyRate = (reg as any).smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
-    const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15; // real EMA smoothing — a single week's noise no longer dominates
+    const smoothedWeeklyRate = Math.max(-0.03, Math.min(0.03, prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15)); // real EMA smoothing — a single week's noise no longer dominates
     const gdpGrowthBottomUp = Math.pow(1 + smoothedWeeklyRate, 52) - 1;
 
     if (!isFinite(gdpGrowthBottomUp)) {

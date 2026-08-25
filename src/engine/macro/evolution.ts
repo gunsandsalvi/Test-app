@@ -152,19 +152,21 @@ export function evolveRegionMacro(
   const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
   let newInflation = Number(baseInflation.toFixed(4));
 
-  const smoothedAnnualizedGrowthForFiscal = ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52;
-  const outputGap = potentialGdp - smoothedAnnualizedGrowthForFiscal;
+  const smoothedAnnualizedGrowthForFiscal = Math.max(-0.20, Math.min(0.20, ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52));
+  const outputGap = Math.max(-0.20, Math.min(0.20, potentialGdp - smoothedAnnualizedGrowthForFiscal));
   const cyclicalDeficitComponent = 0.15 * Math.tanh(outputGap * 2); // saturates toward +-15% of GDP for extreme gaps — a real fiscal stabilizer has a structural ceiling, not an unbounded linear response
-  const newFiscalDeficitPctGdp = (newStructuralDeficitPctGdp + cyclicalDeficitComponent);
+  const rawDeficit = newStructuralDeficitPctGdp + cyclicalDeficitComponent;
+  const newFiscalDeficitPctGdp = Math.max(-0.15, Math.min(0.25, isFinite(rawDeficit) ? rawDeficit : 0.03));
 
-  const newEstimatedNominalGdpUSD = (region as any).lastWeekNominalGdpUSD > 0 ? (region as any).lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
+  const rawNominalGdp = (region as any).lastWeekNominalGdpUSD > 0 ? (region as any).lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
+  const newEstimatedNominalGdpUSD = Math.max(1e11, isFinite(rawNominalGdp) ? rawNominalGdp : 1e12);
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
-  const newEffectiveTaxRate = (region.effectiveTaxRate + taxRateDrift);
+  const newEffectiveTaxRate = Math.max(0.10, Math.min(0.50, isFinite(region.effectiveTaxRate + taxRateDrift) ? region.effectiveTaxRate + taxRateDrift : 0.25));
 
-  const newGovernmentRevenueUSD = newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52; // weekly flow
-  const newGovernmentSpendingUSD = newGovernmentRevenueUSD + (newEstimatedNominalGdpUSD * newFiscalDeficitPctGdp) / 52; // spending = revenue + deficit, by definition
+  const newGovernmentRevenueUSD = Math.max(1e8, newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52); // weekly flow
+  const newGovernmentSpendingUSD = Math.max(1e8, newGovernmentRevenueUSD + (newEstimatedNominalGdpUSD * newFiscalDeficitPctGdp) / 52); // spending = revenue + deficit, by definition
 
   let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
   if (newGdpGrowth < 0) newCycleRegime = 'Recession';
@@ -206,7 +208,7 @@ export function evolveRegionMacro(
   const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0) - laggedDemandShock * 0.1;
   const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
   const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
-  const newUnemployment = Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4));
+  const newUnemployment = Math.max(0.015, Math.min(0.25, Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4))));
   const unempDelta = newUnemployment - region.unemploymentRate;
 
   // Consumer & Household Sector Simulation
@@ -226,14 +228,17 @@ export function evolveRegionMacro(
   const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80 + laggedDemandShock * 1000;
   const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.08;
   const unempShock = unempDelta > 0 ? cciUnempMultiplier * unempDelta * 100 : 0;
-  const newCCI = (Number((prevHS.consumerConfidence + cciReversion + 0.05 * (equityReturn * 100) - unempShock - contagionHit).toFixed(2)));
+  const boundedEquityReturn = Math.max(-0.5, Math.min(0.5, isFinite(equityReturn) ? equityReturn : 0));
+  const rawCCI = prevHS.consumerConfidence + cciReversion + 0.05 * (boundedEquityReturn * 100) - unempShock - contagionHit;
+  const newCCI = isFinite(rawCCI) ? Math.max(30, Math.min(170, Number(rawCCI.toFixed(2)))) : 100;
 
   // Population Growth & Net Migration Dynamics (Part AG)
-  const migrationAttractivenessSignal = (((newCCI - 100) / 100) * 0.0006);
+  const migrationAttractivenessSignal = Math.max(-0.01, Math.min(0.01, (((newCCI - 100) / 100) * 0.0006)));
   const birthRate = region.birthRateAnnual ?? 0.010;
   const deathRate = region.deathRateAnnual ?? 0.009;
   const migrationRate = region.netMigrationRateAnnual ?? 0.002;
-  const netPopulationGrowthRate = (birthRate - deathRate + migrationRate + migrationAttractivenessSignal) / 52;
+  const netAnnualGrowthRate = Math.max(-0.03, Math.min(0.04, birthRate - deathRate + migrationRate + migrationAttractivenessSignal));
+  const netPopulationGrowthRate = netAnnualGrowthRate / 52;
   const newTotalPopulation = Math.max(1, Math.round(region.totalPopulation * (1 + netPopulationGrowthRate)));
   const totalLaborForce = newTotalPopulation * (1 - newNonEmployablePct) * newParticipation;
 
@@ -545,17 +550,17 @@ export function evolveRegionMacro(
   // Target: i*_t = r* + pi_t + 0.5(pi_t - pi*) + 0.5(y_t - y*)
   const rStar = region.neutralRate; // US: 1.00%, UK: 0.75%, EU: 0.50%, JP: -0.25%
   
-  const output_gap = (newGdpGrowth - potentialGdp);
-  const inflation_gap = (newExpectedInflation - piStar);
+  const output_gap = Math.max(-0.10, Math.min(0.10, newGdpGrowth - potentialGdp));
+  const inflation_gap = Math.max(-0.10, Math.min(0.10, newExpectedInflation - piStar));
   const taylorTarget = rStar + newExpectedInflation + 0.5 * inflation_gap + 0.5 * output_gap;
+  const clampedTaylorTarget = Math.max(-0.01, Math.min(0.20, taylorTarget));
 
   let rateChanged = false;
   let rateDeltaBps = 0;
   let newInflationDeviationStreak = region.inflationDeviationStreak || 0;
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
-  let newPolicyRate = region.policyRate + 0.15 * (taylorTarget - region.policyRate);
-  newPolicyRate = newPolicyRate;
+  let newPolicyRate = Math.max(-0.01, Math.min(0.20, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate)));
 
   // Update inflation deviation streak
   const isAboveTarget = region.inflation > piStar + 0.01;
@@ -791,9 +796,9 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
   const publicWeeklySupplyUSD = producers.reduce((s, c) => {
     if (commodityId === 'industrial_automation') {
       const line = (c.productLines || []).find(l => l.subUnitId === 'industrial_automation')!;
-      return s + (c.annualRevenue * line.revenueShare * 0.85) / 52;
+      return s + (c.annualRevenue * line.revenueShare * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52;
     }
-    return s + (c.annualRevenue * 0.85) / 52;
+    return s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52;
   }, 0);
   const privateWeeklySupplyUSD = commodityId === 'industrial_automation' ? 0 : computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
@@ -813,12 +818,11 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   }, 0) : 0;
   const baselineWeeklyDemandUSD = (totalCategoryDemandUSD * (linkage?.intensityShare ?? 0)) / 52;
 
-  const referencePrice = comm.historicalPrices.length >= 2
-    ? comm.historicalPrices[Math.max(0, comm.historicalPrices.length - 52)]
-    : comm.spotPrice;
+  const baselineHistoricalPrice = comm.historicalPrices.length > 0 ? comm.historicalPrices[0] : comm.spotPrice;
+  const referencePrice = baselineHistoricalPrice > 0 ? baselineHistoricalPrice : comm.spotPrice;
   const priceRatio = referencePrice > 0 ? comm.spotPrice / referencePrice : 1.0;
-  const demandElasticity = -0.4;
-  const supplyElasticity = 0.3;
+  const demandElasticity = -0.7; // low spot prices stimulate real industrial & consumer demand
+  const supplyElasticity = 0.5; // low spot prices cause real production curtailment
 
   const demandUnits = comm.spotPrice > 0 ? (baselineWeeklyDemandUSD / referencePrice) * Math.pow(priceRatio, demandElasticity) : 0;
   const supplyUnits = comm.spotPrice > 0 ? (weeklySupplyUSD / referencePrice) * Math.pow(priceRatio, supplyElasticity) : 0;
@@ -850,7 +854,7 @@ export function evolveCommodity(
   
   const privateSegmentSupplyUSD = computePrivateSegmentCommoditySupplyUSD(comm.id, regions);
   const { ratio: clearingRatio, supplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyUSD);
-  const supplyDemandDrift = (clearingRatio - 1.0) * 0.15; // no clamp — a genuine imbalance drives a genuine move
+  const supplyDemandDrift = Math.max(-0.04, Math.min(0.04, (clearingRatio - 1.0) * 0.12));
   const rawDriftExponent = drift * 0.4 + supplyDemandDrift;
   const safeDriftExponent = isFinite(rawDriftExponent) ? rawDriftExponent : 0;
   const newSpot = Math.max(0.5, Number((comm.spotPrice * Math.exp(safeDriftExponent)).toFixed(2))); // 0.5 floor stays

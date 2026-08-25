@@ -691,6 +691,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
     const initialGdp = reg.estimatedNominalGdpUSD;
     reg.governmentRevenueUSD = Number(((initialGdp * effectiveTaxRate) / 52).toFixed(0));
     reg.governmentSpendingUSD = Number((reg.governmentRevenueUSD + (initialGdp * initialFiscalDeficitPctGdp) / 52).toFixed(0));
+    reg.lastWeekNominalGdpUSD = reg.consumptionComponentUSD + reg.investmentComponentUSD + reg.governmentSpendingUSD;
   });
 
   return regions;
