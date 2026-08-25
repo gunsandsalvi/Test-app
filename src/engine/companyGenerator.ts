@@ -43,8 +43,12 @@ export function deriveInitialRevenueUSD(
   companyRankInCategory: number,
   totalCompaniesInCategory: number
 ): number {
-  const rankWeight = Math.pow(0.8, companyRankInCategory);
-  const totalRankWeight = Array.from({ length: totalCompaniesInCategory }, (_, i) => Math.pow(0.8, i)).reduce((a, b) => a + b, 0);
+  const minWeightRatio = 0.02;
+  const decayBase = totalCompaniesInCategory > 1
+    ? Math.pow(minWeightRatio, 1 / (totalCompaniesInCategory - 1))
+    : 1;
+  const rankWeight = Math.pow(decayBase, companyRankInCategory);
+  const totalRankWeight = Array.from({ length: totalCompaniesInCategory }, (_, i) => Math.pow(decayBase, i)).reduce((a, b) => a + b, 0);
   return regionCategoryDemandSeedUSD * (rankWeight / totalRankWeight) * 0.35;
 }
 
@@ -660,12 +664,15 @@ export function generateInitialCompanies(): Company[] {
       const derivedDebtBase = derivedRevBase * debtRatio;
       const derivedCashBase = derivedRevBase * cashRatio;
 
+      const rank0RevenueUSD = deriveInitialRevenueUSD(primaryCat, regionDemandSeed, 0, totalInCategory || 1);
+      const revenueScaleVsRank0 = rank0RevenueUSD > 0 ? derivedRevBase / rank0RevenueUSD : 1;
+
       const tmpl: CompanyTemplate = {
         ...rawTmpl,
         revBase: derivedRevBase,
         debtBase: derivedDebtBase,
         cashBase: derivedCashBase,
-        shares: rawTmpl.shares * 1_000_000,
+        shares: Math.max(1_000_000, Math.round(rawTmpl.shares * 1_000_000 * revenueScaleVsRank0)),
       };
 
       const ebitda = tmpl.revBase * tmpl.ebitdaMargin;

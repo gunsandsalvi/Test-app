@@ -152,10 +152,12 @@ export function evolveRegionMacro(
   const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
   let newInflation = Number(baseInflation.toFixed(4));
 
-  const cyclicalDeficitComponent = (potentialGdp - newGdpGrowth) * 0.6; // wider deficit as growth falls below potential
+  const smoothedAnnualizedGrowthForFiscal = ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52;
+  const outputGap = potentialGdp - smoothedAnnualizedGrowthForFiscal;
+  const cyclicalDeficitComponent = 0.15 * Math.tanh(outputGap * 2); // saturates toward +-15% of GDP for extreme gaps — a real fiscal stabilizer has a structural ceiling, not an unbounded linear response
   const newFiscalDeficitPctGdp = (newStructuralDeficitPctGdp + cyclicalDeficitComponent);
 
-  const newEstimatedNominalGdpUSD = region.estimatedNominalGdpUSD * (1 + (newGdpGrowth + newInflation) / 52); // nominal = real + inflation
+  const newEstimatedNominalGdpUSD = (region as any).lastWeekNominalGdpUSD > 0 ? (region as any).lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
