@@ -102,7 +102,7 @@ export function evolveBankingSector(
     ? Math.min(newCentralBankReserves * 0.015, 15e9)
     : 0;
   const newCentralBankReservesFinal = newCentralBankReserves + emergencyReserveInjection;
-  const newCentralBankReservesWithMonetization = newCentralBankReservesFinal + (monetizedAmountUSD ?? 0);
+  const newCentralBankReservesWithMonetization = Math.max(0, newCentralBankReservesFinal + (monetizedAmountUSD ?? 0));
   const newMoneySupplyM2USD = newDeposits + newCentralBankReservesWithMonetization * 0.1;
 
   return {

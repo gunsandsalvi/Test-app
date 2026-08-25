@@ -8,6 +8,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
+import { CORPORATE_DEMAND_INTENSITY } from "../../domain/industry";
 import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding, INDUSTRY_SUBUNITS, Industry, UnitBid, UnitOffer, SupplyContract, SegmentFinancial } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
@@ -532,23 +533,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
       const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
 
-      let customers: Company[] = [];
-      if (subUnitId === 'industrial_automation') {
-        customers = regionActiveFirms.filter(c => c.sector !== 'Banks' && c.sector !== 'Financials' && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
-      } else if (subUnitId === 'refined_products') {
-        customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Consumer' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
-      } else if (subUnitId === 'food_beverage') {
-        customers = regionActiveFirms.filter(c => c.sector === 'Consumer' && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
-      } else if (subUnitId === 'pharmaceuticals') {
-        customers = regionActiveFirms.filter(c => (c.sector === 'Consumer' || c.sector === 'Industrials') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
-      } else if (subUnitId === 'passenger_vehicles') {
-        customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Consumer' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
-      } else if (subUnitId === 'semiconductors') {
-        customers = regionActiveFirms.filter(c => (c.sector === 'Tech' || c.sector === 'Industrials') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
-      } else if (subUnitId === 'defense_systems') {
-        customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
-      }
-
+      const customers = regionActiveFirms.filter(c => !(c.productLines || []).some(l => l.subUnitId === subUnitId) && (CORPORATE_DEMAND_INTENSITY[subUnitId] ?? 0) > 0);
       // Suppliers submit unit offers
       suppliers.forEach(comp => {
         const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
@@ -591,19 +576,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
       customers.forEach(comp => {
         let demandUSD = 0;
         if (subUnitId === 'industrial_automation') {
-          // PART AXA: Real active maintenance + growth capex fields
           const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
           demandUSD = (realCapexUSD / 52) * 0.35;
-        } else if (subUnitId === 'refined_products') {
-          demandUSD = (comp.annualRevenue * 0.025 / 52);
-        } else if (subUnitId === 'food_beverage') {
-          demandUSD = (comp.annualRevenue * 0.01 / 52);
-        } else if (subUnitId === 'pharmaceuticals') {
-          demandUSD = (comp.annualRevenue * 0.008 / 52);
-        } else if (subUnitId === 'passenger_vehicles') {
-          demandUSD = (comp.annualRevenue * 0.015 / 52);
-        } else if (subUnitId === 'semiconductors') {
-          demandUSD = (comp.annualRevenue * 0.02 / 52);
+        } else {
+          demandUSD = (comp.annualRevenue * (CORPORATE_DEMAND_INTENSITY[subUnitId] ?? 0)) / 52;
         }
         const demandUnits = demandUSD / currentUnitPrice;
 
@@ -672,22 +648,6 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
       }
 
-      // Government Aggregate Bid (PART AYA: pharmaceuticals 45%, passenger_vehicles 5%)
-      if (subUnitId === 'pharmaceuticals' || subUnitId === 'passenger_vehicles') {
-        const govShare = subUnitId === 'pharmaceuticals' ? 0.45 : 0.05;
-        const govWeeklyDemandUSD = (demandState.demandLevelUSD * govShare) / 52;
-        const govDemandUnits = govWeeklyDemandUSD / currentUnitPrice;
-
-        if (govDemandUnits > 0.001) {
-          const govMaxPriceUSD = currentUnitPrice * (subUnitId === 'pharmaceuticals' ? 1.08 : 1.04);
-          bids.push({
-            isGovernmentAggregate: true,
-            quantityUnits: govDemandUnits,
-            maxPriceUSD: govMaxPriceUSD,
-          });
-        }
-      }
-
       // Sort bids desc, offers asc
       bids.sort((a, b) => b.maxPriceUSD - a.maxPriceUSD);
       offers.sort((a, b) => a.minPriceUSD - b.minPriceUSD);
@@ -700,12 +660,20 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const openSales: Record<string, { units: number; amount: number }> = {};
       const openPurchases: Record<string, { units: number; amount: number }> = {};
 
+            let loopCounter = 0;
       while (bidIdx < bids.length && offerIdx < offers.length) {
+        if (loopCounter++ > 10000) break;
+        
         const bid = bids[bidIdx];
         const offer = offers[offerIdx];
 
         if (bid.maxPriceUSD >= offer.minPriceUSD) {
-          const transactQty = Math.min(bid.quantityUnits, offer.quantityUnits);
+          let transactQty = Math.min(bid.quantityUnits, offer.quantityUnits);
+          if (!isFinite(transactQty) || isNaN(transactQty) || transactQty <= 0) {
+            bidIdx++;
+            offerIdx++;
+            continue;
+          }
           const matchPrice = (bid.maxPriceUSD + offer.minPriceUSD) / 2;
           clearedPriceUSD = matchPrice;
           openUnitsCleared += transactQty;
@@ -726,8 +694,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
           bid.quantityUnits -= transactQty;
           offer.quantityUnits -= transactQty;
 
-          if (bid.quantityUnits <= 0.0001) bidIdx++;
-          if (offer.quantityUnits <= 0.0001) offerIdx++;
+          if (bid.quantityUnits <= 0.0001 || !isFinite(bid.quantityUnits)) bidIdx++;
+          if (offer.quantityUnits <= 0.0001 || !isFinite(offer.quantityUnits)) offerIdx++;
         } else {
           break;
         }
@@ -2118,18 +2086,17 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     const prevPendingUnfundedDeficitUSD = reg.pendingUnfundedDeficitUSD ?? 0;
     const updatedBankingSector = { ...reg.bankingSector };
-    
-    // Central Bank Monetization directly adds to reserves (QE logic)
-    updatedBankingSector.centralBankReservesUSD += monetizedAmountUSD;
+    const updatedInstitutionalSector = { ...reg.institutionalSector };
 
-    // Market-funded deficit routes to bond holdings (institutional + bank) instead of depleting reserves
+    // Market-funded deficit routes to bond holdings (institutional + bank)
     if (issuanceCalendarWeek) {
       updatedBankingSector.sovereignBondHoldingsUSD += quarterlyFundingNeedUSD * 0.40;
+      updatedInstitutionalSector.sovBondHoldingsUSD += quarterlyFundingNeedUSD * 0.60;
     } else {
       updatedBankingSector.sovereignBondHoldingsUSD += marketFundedDeficitUSD * 0.40;
+      updatedInstitutionalSector.sovBondHoldingsUSD += marketFundedDeficitUSD * 0.60;
     }
-    
-    // Remove the floor clamp since we no longer do double-subtractions
+
     if (updatedBankingSector.centralBankReservesUSD < 0) throw new Error("Invariant Violation: centralBankReservesUSD cannot be negative");
     updatedBankingSector.centralBankReservesUSD = Number(updatedBankingSector.centralBankReservesUSD.toFixed(0));
 
@@ -2151,6 +2118,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       debtToGdpPctBottomUp,
       pendingUnfundedDeficitUSD: nextPendingUnfundedDeficitUSD,
       bankingSector: updatedBankingSector,
+      institutionalSector: updatedInstitutionalSector,
     };
   });
 

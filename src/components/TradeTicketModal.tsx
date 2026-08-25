@@ -20,7 +20,7 @@ interface TradeTicketModalProps {
   instrument: TradeableInstrument;
   state: GameState;
   onClose: () => void;
-  onExecuteTrade: (position: Omit<Position, 'id' | 'openedWeek' | 'unrealizedPnL' | 'realizedPnL' | 'maintenanceMargin' | 'weeklyFinancingCost'>, executionDetails?: { fillPrice: number; counterpartyFeeUSD: number; sourcedFrom: string }) => void;
+  onExecuteTrade: (position: Omit<Position, 'id' | 'openedWeek' | 'unrealizedPnL' | 'realizedPnL' | 'maintenanceMargin' | 'weeklyFinancingCost'>, executionDetails?: { fillPrice: number; counterpartyFeeUSD: number; sourcedFrom: string; spreadCostUSD: number }) => void;
 }
 
 export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
@@ -164,18 +164,18 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   const labels = getDirectionLabels();
 
   
-  const resolveCounterpartyFill = (instrument: any, quantityUSD: number, region: Region) => {
+  const resolveCounterpartyFill = (instrument: any, quantityUSD: number, region: Region, spreadCostUSD: number) => {
     const bankInventory = region.bankingSector.itemizedHoldings.filter((h: any) => h.instrumentId === instrument.id || h.instrumentId === instrument.symbol || (instrument.details && h.instrumentId === instrument.details.trancheId));
     const bankInventoryUSD = bankInventory.reduce((s: number, h: any) => s + h.quantityOrNotionalUSD, 0);
     if (bankInventoryUSD >= quantityUSD) {
-      return { fillPrice: instrument.price, counterpartyFeeUSD: 0, sourcedFrom: 'Bank inventory' };
+      return { fillPrice: instrument.price, counterpartyFeeUSD: 0, sourcedFrom: 'Bank inventory', spreadCostUSD };
     }
     const shortfallUSD = quantityUSD - bankInventoryUSD;
     const intermediationFeeRate = 0.0015; // real, modest, distinct from zero
-    return { fillPrice: instrument.price * (1 + intermediationFeeRate), counterpartyFeeUSD: shortfallUSD * intermediationFeeRate, sourcedFrom: 'Bank intermediated (sourced externally)' };
+    return { fillPrice: instrument.price * (1 + intermediationFeeRate), counterpartyFeeUSD: shortfallUSD * intermediationFeeRate, sourcedFrom: 'Bank intermediated (sourced externally)', spreadCostUSD };
   };
 
-  const executionDetails = useMemo(() => resolveCounterpartyFill(instrument, notionalUSD, region), [instrument, notionalUSD, region]);
+  const executionDetails = useMemo(() => resolveCounterpartyFill(instrument, notionalUSD, region, spreadCostUSD), [instrument, notionalUSD, region, spreadCostUSD]);
 
   const handleConfirm = () => {
     if (!canAfford) return;
