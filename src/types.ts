@@ -154,6 +154,9 @@ export type PrivateSegmentType = 'MANUFACTURING' | 'PROFESSIONAL_SERVICES' | 'RE
 
 export interface PrivateSectorSegment {
   segmentType: PrivateSegmentType;
+  debtUSD: number;
+  defaultRateAnnualPct: number;
+  capexUSD: number;
   employment: number;
   annualRevenueUSD: number;
   marginPct: number;
@@ -193,6 +196,15 @@ export const PRIVATE_SEGMENT_OCCUPATION_MIX: Record<PrivateSegmentType, Partial<
   CONSTRUCTION_REALESTATE: { SKILLED_TRADES: 0.65, GENERAL: 0.35 },
   HEALTHCARE_SERVICES: { SPECIALIZED_PROFESSIONAL: 0.55, GENERAL: 0.45 },
 };
+
+
+export interface SupplyRelationship {
+  supplierCompanyId: string;
+  customerCompanyId: string;
+  category: string;
+  weeklyVolumeUSD: number;
+  relationshipStrength: number;
+}
 
 export interface Region {
   id: RegionId;
@@ -254,7 +266,8 @@ export interface Region {
   netMigrationRateAnnual: number;
   nonEmployablePct: number;             // fraction of population outside the labor force for demographic reasons (children, retired, students, disabled)
   governmentEmployment: number;         // raw headcount employed by government
-  privateSectorSegments: PrivateSectorSegment[]; // 5 real, distinct aggregate entities per region
+  privateSectorSegments: PrivateSectorSegment[];
+  supplyRelationships?: SupplyRelationship[]; // 5 real, distinct aggregate entities per region
   occupationPools: Record<OccupationType, OccupationPool>;
   occupationLaborForceShare: Record<OccupationType, number>;
   unemploymentRateBottomUp: number;     // diagnostic only this phase — residual of the labor-force identity, not yet driving anything
@@ -362,6 +375,7 @@ export interface QuarterlyCashFlowStatement {
   cashFromOperations: number;
   maintenanceCapex: number;
   growthCapex: number;
+  rndExpense?: number;
   treasuryPurchases: number;
   cashFromInvesting: number;
   debtIssuance: number;
@@ -442,6 +456,7 @@ export interface Company {
   previousCapex?: number;
   maintenanceCapex: number;
   growthCapex: number;
+  rndExpense?: number;
   baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;
   executionQuality: number;
@@ -625,6 +640,25 @@ export interface Portfolio {
   netDV01USD: number;
 }
 
+
+export type CommodityQuantityUnit = 'BARREL' | 'MMBTU' | 'TROY_OZ' | 'TONNE';
+export const COMMODITY_QUANTITY_UNIT: Record<string, CommodityQuantityUnit> = {
+  WTI: 'BARREL', BRENT: 'BARREL', NATGAS: 'MMBTU',
+  GOLD: 'TROY_OZ', SILVER: 'TROY_OZ',
+  COPPER: 'TONNE', WHEAT: 'TONNE', CORN: 'TONNE', SOYBEANS: 'TONNE',
+};
+export const COMMODITY_CATEGORY_LINKAGE: Record<string, { category: string; intensityShare: number }> = {
+  WTI: { category: 'CorporateIndustrial', intensityShare: 0.35 },
+  BRENT: { category: 'CorporateIndustrial', intensityShare: 0.30 },
+  NATGAS: { category: 'CorporateIndustrial', intensityShare: 0.20 },
+  GOLD: { category: 'CorporateTech', intensityShare: 0.05 },
+  SILVER: { category: 'CorporateTech', intensityShare: 0.08 },
+  COPPER: { category: 'CorporateIndustrial', intensityShare: 0.15 },
+  WHEAT: { category: 'StapleHousehold', intensityShare: 0.04 },
+  CORN: { category: 'StapleHousehold', intensityShare: 0.04 },
+  SOYBEANS: { category: 'StapleHousehold', intensityShare: 0.03 },
+};
+
 export interface Commodity {
   id: string;
   name: string;
@@ -642,7 +676,8 @@ export interface Commodity {
   // Cash and carry supply / demand balance
   supplyDemandBalance: 'Deficit (Tight Supply)' | 'Balanced' | 'Surplus (Oversupplied)';
   inventoryLevelPct: number; // e.g. 42% (low = backwardation)
-  dailyConsumptionUnits: number;
+  weeklySupplyUnits?: number;
+  weeklyDemandUnits?: number;
 }
 
 export interface IndexMetric {

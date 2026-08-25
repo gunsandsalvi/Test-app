@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GameState, Commodity, Region, RegionId } from '../../types';
+import { COMMODITY_QUANTITY_UNIT, GameState, Commodity, Region, RegionId } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
 import { priceCommodityFutures } from '../../engine/pricing';
@@ -82,10 +82,21 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
 
                 <TapToChart label="Price History" value={formatCurrency(c.spot, { compact: false })} history={c.historicalPrices} />
 
-                <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] pt-1 border-t border-[var(--border-hairline)] font-mono">
-                  <span>S/D Balance: <span className="font-bold text-[var(--text-primary)]">{c.supplyDemandBalance}</span></span>
-                  <span>Inv Level: <span className="font-bold text-[var(--text-secondary)]">{formatPercent(c.inventoryLevelPct, { isDecimal: true })}</span></span>
-                </div>
+                {(() => {
+                  const unitLabel = { BARREL: 'bbl', MMBTU: 'MMBtu', TROY_OZ: 'troy oz', TONNE: 'tonnes' }[COMMODITY_QUANTITY_UNIT[c.id]] ?? 'units';
+                  return (
+                    <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] pt-1 border-t border-[var(--border-hairline)] font-mono">
+                      <div className="flex flex-col">
+                        <span>Supply: {(c.weeklySupplyUnits ?? 0).toLocaleString(undefined, {maximumFractionDigits:0})} {unitLabel}</span>
+                        <span>Demand: {(c.weeklyDemandUnits ?? 0).toLocaleString(undefined, {maximumFractionDigits:0})} {unitLabel}</span>
+                      </div>
+                      <div className="flex flex-col text-right">
+                        <span>Bal: <span className="font-bold text-[var(--text-primary)]">{c.supplyDemandBalance}</span></span>
+                        <span>Inv: <span className="font-bold text-[var(--text-secondary)]">{formatPercent(c.inventoryLevelPct, { isDecimal: true })}</span></span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {activeWeather && activeWeather.weather && (
                   <div className="text-[9px] text-[var(--signal-negative)] font-bold bg-[var(--signal-negative)]/10 p-1.5 rounded">

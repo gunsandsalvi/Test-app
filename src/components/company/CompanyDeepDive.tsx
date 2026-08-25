@@ -229,6 +229,63 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 {(company.inputSupplyConstraintFactor ?? 1) < 1 ? `Constrained (${(((company.inputSupplyConstraintFactor ?? 1)) * 100).toFixed(0)}% capacity)` : 'Unconstrained'}
               </span>
             </div>
+
+            <div className="pt-3 mt-3 border-t border-[var(--border-hairline)] space-y-3">
+            <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold border-b border-[var(--border-hairline)] pb-1 mb-2">Key Supply Relationships</div>
+            {(() => {
+              const rels = (reg as any).supplyRelationships || [];
+              const asSupplier = rels.filter((r: any) => r.supplierCompanyId === company.id);
+              const asCustomer = rels.filter((r: any) => r.customerCompanyId === company.id);
+              
+              if (asSupplier.length === 0 && asCustomer.length === 0) {
+                 return <div className="text-[11px] text-[var(--text-tertiary)] italic">No explicit major bilateral supply contracts found. Operates primarily via spot markets.</div>;
+              }
+
+              return (
+                <div className="space-y-4">
+                  {asSupplier.length > 0 && (
+                    <div className="space-y-1">
+                       <div className="text-[9px] text-[var(--text-secondary)] font-bold mb-1">MAJOR CUSTOMERS (Downstream)</div>
+                       {asSupplier.map((r: any, i: number) => {
+                          const cst = state.companies.find(c => c.id === r.customerCompanyId);
+                          return (
+                            <div key={i} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
+                               <div>
+                                 <div className="text-[11px] font-bold">{cst?.name || r.customerCompanyId}</div>
+                                 <div className="text-[9px] text-[var(--text-tertiary)]">Contract Strength: {(r.relationshipStrength * 100).toFixed(0)}%</div>
+                               </div>
+                               <div className="text-right">
+                                 <div className="text-[11px] font-[var(--font-numeric)]">{formatCurrency(r.weeklyVolumeUSD, { compact: true })}/wk</div>
+                               </div>
+                            </div>
+                          );
+                       })}
+                    </div>
+                  )}
+                  {asCustomer.length > 0 && (
+                    <div className="space-y-1">
+                       <div className="text-[9px] text-[var(--text-secondary)] font-bold mb-1">MAJOR SUPPLIERS (Upstream)</div>
+                       {asCustomer.map((r: any, i: number) => {
+                          const sup = state.companies.find(c => c.id === r.supplierCompanyId);
+                          return (
+                            <div key={i} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
+                               <div>
+                                 <div className="text-[11px] font-bold">{sup?.name || r.supplierCompanyId}</div>
+                                 <div className="text-[9px] text-[var(--text-tertiary)]">Contract Strength: {(r.relationshipStrength * 100).toFixed(0)}%</div>
+                               </div>
+                               <div className="text-right">
+                                 <div className="text-[11px] font-[var(--font-numeric)]">{formatCurrency(r.weeklyVolumeUSD, { compact: true })}/wk</div>
+                               </div>
+                            </div>
+                          );
+                       })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Maintenance Shortfall Streak</span>
               <span className={(company.maintenanceShortfallStreak ?? 0) > 5 ? 'text-[var(--signal-negative)] font-bold' : 'text-[var(--text-tertiary)]'}>

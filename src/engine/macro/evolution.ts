@@ -1,6 +1,6 @@
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE } from '../../types';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 
@@ -329,7 +329,7 @@ export function evolveRegionMacro(
     HEALTHCARE_SERVICES: 0.12,
   };
 
-  const newPrivateSectorSegments = (region.privateSectorSegments || []).map(seg => {
+  const newPrivateSectorSegments: any[] = (region.privateSectorSegments || []).map(seg => {
     const demandSignal = seg.segmentType === 'CONSTRUCTION_REALESTATE' ? mortgageGrowthSignal : getSegmentDemandSignal(seg.segmentType, region, prevHS);
     const employmentGrowthRate = (demandSignal * 0.05);
     const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate)));
@@ -343,11 +343,19 @@ export function evolveRegionMacro(
     const marginReversion = (seedMarginByType[seg.segmentType] - seg.marginPct) * 0.02; // pulls back toward each segment's realistic baseline
     const marginDrift = (demandSignal * 0.01) + marginReversion - wageDrag * 0.02;
     const newMarginPct = (seg.marginPct + marginDrift); // ceiling lowered from 0.30 to 0.22
+    const segmentDebtServiceCoverage = newAnnualRevenueUSD * newMarginPct / Math.max(1, ((seg as any).debtUSD ?? (newAnnualRevenueUSD * 2)) * 0.08);
+    const newDefaultRateAnnualPct = Math.max(0.005, Math.min(0.15, 0.02 + (1 / Math.max(0.5, segmentDebtServiceCoverage)) * 0.03 + region.bankingSector.creditConditionsIndex * 0.02));
+    const formationRate = Math.max(-0.002, Math.min(0.002, (demandSignal - newDefaultRateAnnualPct) * 0.1));
+    const finalEmployment = Math.max(1, Math.round(newEmployment * (1 + formationRate)));
+
     return {
       segmentType: seg.segmentType,
-      employment: newEmployment,
+      employment: finalEmployment,
       annualRevenueUSD: Number(newAnnualRevenueUSD.toFixed(0)),
       marginPct: Number(newMarginPct.toFixed(4)),
+      debtUSD: (seg as any).debtUSD ?? (newAnnualRevenueUSD * 2),
+      defaultRateAnnualPct: newDefaultRateAnnualPct,
+      capexUSD: newAnnualRevenueUSD * 0.05,
     };
   });
 
@@ -554,18 +562,23 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
 
   const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
+  
+  const specializedStress = (newOccupationPools.SPECIALIZED_PROFESSIONAL.wageGrowthAnnual < 0 ? 1 : 0) + (newOccupationPools.TECHNICAL_ENGINEERING.wageGrowthAnnual < 0 ? 1 : 0);
+  const generalStress = (newOccupationPools.GENERAL.wageGrowthAnnual < 0 ? 1 : 0);
 
   const updatedTiers = region.householdState.creditTierBooks.map(tier => {
     let newShare = tier.shareOfHouseholds;
+    const tierStress = householdStressSignal + (tier.tier === 'SUBPRIME' || tier.tier === 'NEAR_PRIME' ? generalStress * 0.01 : specializedStress * 0.01);
+    
     if (tier.tier === 'SUBPRIME') {
-      newShare = tier.shareOfHouseholds + householdStressSignal * 0.5;
+      newShare = tier.shareOfHouseholds + tierStress * 0.5;
     } else if (tier.tier === 'SUPER_PRIME') {
-      newShare = tier.shareOfHouseholds - householdStressSignal * 0.5;
+      newShare = tier.shareOfHouseholds - tierStress * 0.5;
     }
 
     const cci = region.bankingSector.creditConditionsIndex;
     let newAvgInterestRate = tier.avgInterestRate;
-    let newDelinquency = tier.delinquencyRatePct + householdStressSignal * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
+    let newDelinquency = tier.delinquencyRatePct + tierStress * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
 
     if (tier.tier === 'SUBPRIME') {
       newAvgInterestRate = tier.avgInterestRate + cci * 0.05;
@@ -632,7 +645,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     netMigrationRateAnnual: migrationRate,
     nonEmployablePct: newNonEmployablePct,
     governmentEmployment: newGovernmentEmployment,
-    privateSectorSegments: newPrivateSectorSegments,
+    privateSectorSegments: newPrivateSectorSegments as any,
     occupationPools: newOccupationPools,
     occupationLaborForceShare: newLaborForceShares,
     unemploymentRateBottomUp: Number(newUnemploymentRateBottomUp.toFixed(4)),
@@ -724,11 +737,21 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
  * Evolve Commodities with Weather & Supply/Demand shocks
  */
 
-function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity): number {
+function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>): { ratio: number; supplyUnits: number; demandUnits: number } {
   const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && !c.isDefaulted);
-  const totalWeeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
-  const impliedDemandUSD = comm.spotPrice * (comm as any).dailyConsumptionUnits * 7; 
-  return totalWeeklySupplyUSD > 0 ? impliedDemandUSD / totalWeeklySupplyUSD : 1.0;
+  const weeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
+  const supplyUnits = comm.spotPrice > 0 ? weeklySupplyUSD / comm.spotPrice : 0;
+
+  const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
+  const totalCategoryDemandUSD = linkage ? (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
+    const catDemand = (regions[r].categoryDemand as any)[linkage.category];
+    return s + (catDemand?.demandLevelUSD ?? 0);
+  }, 0) : 0;
+  const weeklyDemandUSD = (totalCategoryDemandUSD * (linkage?.intensityShare ?? 0)) / 52;
+  const demandUnits = comm.spotPrice > 0 ? weeklyDemandUSD / comm.spotPrice : 0;
+
+  const ratio = supplyUnits > 0 ? demandUnits / supplyUnits : 1.0;
+  return { ratio, supplyUnits, demandUnits };
 }
 
 export function evolveCommodity(
@@ -752,9 +775,11 @@ export function evolveCommodity(
 
   const drift = demandShock * dt + randomEps + weatherBoost * dt * 4;
   
-  const clearingRatio = computeCommodityClearingRatio(comm.id, allCompanies, comm);
+  const { ratio: clearingRatio } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions);
   const supplyDemandDrift = (clearingRatio - 1.0) * 0.15; // no clamp — a genuine imbalance drives a genuine move
-  const newSpot = Math.max(0.5, Number((comm.spotPrice * Math.exp(drift * 0.4 + supplyDemandDrift)).toFixed(2))); // 0.5 floor stays
+  const rawDriftExponent = drift * 0.4 + supplyDemandDrift;
+  const safeDriftExponent = isFinite(rawDriftExponent) ? rawDriftExponent : 0;
+  const newSpot = Math.max(0.5, Number((comm.spotPrice * Math.exp(safeDriftExponent)).toFixed(2))); // 0.5 floor stays
   
   const change1W = Number((newSpot - comm.spotPrice).toFixed(2));
 

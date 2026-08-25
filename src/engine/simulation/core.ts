@@ -1,5 +1,5 @@
 
-import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche, GovDebtTranche } from '../../types';
+import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche, GovDebtTranche, SupplyRelationship } from '../../types';
 import { SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap } from '../pricing';
 import { calculateNelsonSiegelZeroRate, priceSovereignBond } from '../nelsonSiegel';
 import { EarningsReportEvent, generateWeeklyNews } from '../newsGenerator';
@@ -68,6 +68,25 @@ export function computeOccupationDemand(companies: Company[], privateSegments: P
     });
   }
   return demand;
+}
+
+
+export function formSupplyRelationships(regionId: RegionId, companies: Company[]): SupplyRelationship[] {
+  const suppliers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => l.category === 'CorporateIndustrial') && !c.isDefaulted);
+  const customers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => ['CorporateTech','StandardHousehold','LuxuryHousehold'].includes(l.category)) && !c.isDefaulted);
+  const relationships: SupplyRelationship[] = [];
+  customers.forEach(customer => {
+    const sortedSuppliers = [...suppliers].sort((a, b) => (b.productLines.find(l=>l.category==='CorporateIndustrial')?.categoryMarketShare ?? 0) - (a.productLines.find(l=>l.category==='CorporateIndustrial')?.categoryMarketShare ?? 0));
+    const primarySupplier = sortedSuppliers[0];
+    if (primarySupplier) {
+      relationships.push({
+        supplierCompanyId: primarySupplier.id, customerCompanyId: customer.id,
+        category: 'CorporateIndustrial', weeklyVolumeUSD: customer.annualRevenue * 0.08 / 52,
+        relationshipStrength: 0.6 + Math.random() * 0.3,
+      });
+    }
+  });
+  return relationships;
 }
 
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
@@ -333,6 +352,11 @@ export function advanceWeeklyStep(state: GameState): GameState {
       };
     });
 
+    // Supply Relationships (PROJ-10)
+    if (state.currentWeek % 13 === 0 || !(reg as any).supplyRelationships || (reg as any).supplyRelationships.length === 0) {
+      (reg as any).supplyRelationships = formSupplyRelationships(regionId, prevActiveFirms);
+    }
+    
     // Stage 4: Input-Output Map + Weekly Clearing Bidding
     Object.keys(CATEGORY_INPUT_REQUIREMENTS).forEach(cat => {
       const requirements = CATEGORY_INPUT_REQUIREMENTS[cat];
@@ -354,7 +378,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           ? Math.max(0.80, 1.0 - Math.abs(reg.weather.gdpImpactPct ?? 0.002) * 5 * weatherDecay)
           : 1.0;
         const supplierFirms = prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.category === inputCat));
-        const weeklyProduction = supplierFirms.reduce((s, c) => {
+        let weeklyProduction = supplierFirms.reduce((s, c) => {
           const line = (c.productLines || []).find(l => l.category === inputCat);
           const warehouseCap = c.annualRevenue * 0.15;
           const throttle = (c.finishedGoodsInventoryUSD ?? 0) > warehouseCap ? 0.3 : 1.0;
@@ -362,6 +386,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const responsiveFactor = (1.0 + priceSignal * 1.5);
           return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;
         }, 0) * weatherSupplyPenalty;
+        
+        if (inputCat === 'CorporateIndustrial') {
+           const manufacturingSegment = reg.privateSectorSegments?.find(s => s.segmentType === 'MANUFACTURING');
+           if (manufacturingSegment) {
+               weeklyProduction += (manufacturingSegment.annualRevenueUSD * 0.02 / 52) * weatherSupplyPenalty;
+           }
+        }
         const totalAvailableSupply = decayedInventory + weeklyProduction;
 
         const bidQuantity = (demander.demandLevelUSD ?? 0) * (intensity ?? 0) / 52;
@@ -559,6 +590,18 @@ export function advanceWeeklyStep(state: GameState): GameState {
         ? compInputCategories.reduce((min, c) => Math.min(min, (reg.categoryDemand[c as any] as any)?._fulfillmentRatio ?? 1), 1)
         : 1;
       newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + relevantFulfillment * 0.3);
+      
+      // PROJ-10: Supply relationship shocks
+      const region = updatedRegions[comp.region];
+      const rels = (region as any).supplyRelationships?.filter((r: any) => r.customerCompanyId === comp.id) || [];
+      rels.forEach((rel: any) => {
+          const supplier = prevActiveFirms.find(c => c.id === rel.supplierCompanyId);
+          if (supplier && (supplier.finishedGoodsInventoryUSD ?? 0) > supplier.annualRevenue * 0.15) {
+              const distress = (supplier.finishedGoodsInventoryUSD! / (supplier.annualRevenue * 0.15)) - 1;
+              newInputSupplyConstraintFactor *= (1 - Math.min(0.2, distress * rel.relationshipStrength * 0.1));
+          }
+      });
+
 
       const inputPriceDrag = compInputCategories.length > 0
         ? compInputCategories.reduce((s, c) => s + ((reg.categoryDemand[c as any] as any)?.inputCostPressure ?? 0), 0) / compInputCategories.length
@@ -578,6 +621,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const estCompEffect = (estAvgComp * 0.15);
       const estTargetGrowthCapex = baseRev * growthCapexToRev * (1 - estRateDrag) * estCashHealth * (1 + estQCapexEffect + estCompEffect);
       const estNewGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + estTargetGrowthCapex * 0.10);
+      
       const growthInvestmentSignal = (((estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))) * newExecutionQuality);
 
       let categoryDrivenGrowth = 0;
@@ -719,7 +763,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const competitivenessCapexEffect = (avgCompetitiveness * 0.15);
     const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75); // even at max payout pressure, still reinvests at least 40% — realistic, not zero
     const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
-    const newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
+    let newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
+    let newRndExpense = comp.rndExpense ?? 0;
+    if ((comp.productLines || []).some(l => l.category === 'CorporateTech')) {
+        newRndExpense = newGrowthCapex * 0.4;
+        newGrowthCapex = newGrowthCapex * 0.6;
+    }
 
     const growthCapexIntensity = (newGrowthCapex - (comp.growthCapex ?? 0)) / Math.max(1, comp.growthCapex ?? 1);
     const isAutomating = growthCapexIntensity > 0.05 && newExecutionQuality > 1.0;
@@ -1110,6 +1159,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       previousCapex: comp.capex,
       maintenanceCapex: Number(newMaintenanceCapex.toFixed(1)),
       growthCapex: Number(newGrowthCapex.toFixed(1)),
+      rndExpense: Number(newRndExpense.toFixed(1)),
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,
       executionQuality: Number(newExecutionQuality.toFixed(3)),
       occupationMixDrift: newOccupationMixDrift,
