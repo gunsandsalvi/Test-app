@@ -872,17 +872,17 @@ export function generateInitialCompanies(): Company[] {
           const isMegaCap = c.baselineAnnualRevenue > 100000;
           if (isMegaCap) {
             lines = [
-              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.60, competitiveness: 0 },
-              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.15, competitiveness: 0 },
-              { industry: 'LuxuryGoods', subUnitId: 'luxury_goods', revenueShare: 0.15, competitiveness: 0 },
-              { industry: 'ConsumerStaples', subUnitId: 'household_essentials', revenueShare: 0.10, competitiveness: 0 }
+              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.40, competitiveness: 0 },
+              { industry: 'HealthcarePharma', subUnitId: 'pharmaceuticals', revenueShare: 0.30, competitiveness: 0 },
+              { industry: 'AutomotiveTransport', subUnitId: 'passenger_vehicles', revenueShare: 0.15, competitiveness: 0 },
+              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.15, competitiveness: 0 }
             ];
           } else {
             lines = [
-              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.40, competitiveness: 0 },
-              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.30, competitiveness: 0 },
-              { industry: 'LuxuryGoods', subUnitId: 'luxury_goods', revenueShare: 0.20, competitiveness: 0 },
-              { industry: 'ConsumerStaples', subUnitId: 'household_essentials', revenueShare: 0.10, competitiveness: 0 }
+              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.35, competitiveness: 0 },
+              { industry: 'HealthcarePharma', subUnitId: 'pharmaceuticals', revenueShare: 0.25, competitiveness: 0 },
+              { industry: 'AutomotiveTransport', subUnitId: 'passenger_vehicles', revenueShare: 0.20, competitiveness: 0 },
+              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.20, competitiveness: 0 }
             ];
           }
         } else if (sector === 'Financials' || sector === 'Banks') {
@@ -923,6 +923,10 @@ export function generateInitialCompanies(): Company[] {
         c.primarySubUnitId = maxLine.subUnitId;
         if (c.primarySubUnitId === 'industrial_automation') {
           c.finishedGoodsUnits = 15;
+        } else if (c.primarySubUnitId === 'passenger_vehicles') {
+          c.finishedGoodsUnits = 50;
+        } else if (c.primarySubUnitId === 'pharmaceuticals') {
+          c.finishedGoodsUnits = 5000;
         }
       }
     });

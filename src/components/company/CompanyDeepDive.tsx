@@ -385,10 +385,22 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                        {asSupplier.map((r: any, i: number) => {
                           const cst = state.companies.find(c => c.ticker === r.customerCompanyId || c.id === r.customerCompanyId);
                           const weeklyUSD = r.priceUSD * r.quantityUnitsPerWeek;
+                          const totalSubUnitVol = asSupplier.filter((c: any) => c.subUnitId === r.subUnitId).reduce((s: number, c: any) => s + c.quantityUnitsPerWeek, 0);
+                          const volShare = totalSubUnitVol > 0 ? (r.quantityUnitsPerWeek / totalSubUnitVol) : 0;
+                          const isConcentrated = volShare > 0.40 && asSupplier.length > 1;
+
                           return (
                             <div key={i} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
                                <div>
-                                 <div className="text-[11px] font-bold">{cst?.name || r.customerCompanyId} <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span></div>
+                                 <div className="flex items-center gap-1.5">
+                                   <span className="text-[11px] font-bold">{cst?.name || r.customerCompanyId}</span>
+                                   <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span>
+                                   {isConcentrated && (
+                                     <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--signal-negative-bg)] text-[var(--signal-negative)] border border-[var(--signal-negative)] font-bold">
+                                       CONCENTRATION RISK ({(volShare * 100).toFixed(0)}%)
+                                     </span>
+                                   )}
+                                 </div>
                                  <div className="text-[9px] text-[var(--text-tertiary)] font-mono">
                                    {r.quantityUnitsPerWeek.toFixed(2)} units/wk @ {formatCurrency(r.priceUSD, { compact: true })}/unit • {r.weeksRemaining}w remaining
                                  </div>
@@ -407,10 +419,22 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                        {asCustomer.map((r: any, i: number) => {
                           const sup = state.companies.find(c => c.ticker === r.supplierCompanyId || c.id === r.supplierCompanyId);
                           const weeklyUSD = r.priceUSD * r.quantityUnitsPerWeek;
+                          const totalSubUnitVol = asCustomer.filter((c: any) => c.subUnitId === r.subUnitId).reduce((s: number, c: any) => s + c.quantityUnitsPerWeek, 0);
+                          const volShare = totalSubUnitVol > 0 ? (r.quantityUnitsPerWeek / totalSubUnitVol) : 0;
+                          const isConcentrated = volShare > 0.40 && asCustomer.length > 1;
+
                           return (
                             <div key={i} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
                                <div>
-                                 <div className="text-[11px] font-bold">{sup?.name || r.supplierCompanyId} <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span></div>
+                                 <div className="flex items-center gap-1.5">
+                                   <span className="text-[11px] font-bold">{sup?.name || r.supplierCompanyId}</span>
+                                   <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span>
+                                   {isConcentrated && (
+                                     <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--signal-negative-bg)] text-[var(--signal-negative)] border border-[var(--signal-negative)] font-bold">
+                                       CONCENTRATION RISK ({(volShare * 100).toFixed(0)}%)
+                                     </span>
+                                   )}
+                                 </div>
                                  <div className="text-[9px] text-[var(--text-tertiary)] font-mono">
                                    {r.quantityUnitsPerWeek.toFixed(2)} units/wk @ {formatCurrency(r.priceUSD, { compact: true })}/unit • {r.weeksRemaining}w remaining
                                  </div>

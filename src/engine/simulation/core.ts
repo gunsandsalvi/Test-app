@@ -158,7 +158,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const recentIPOs = [...(state.recentIPOs || [])];
   const recentMergers = [...(state.recentMergers || [])];
 
-  const companyUpdates: Record<string, { finishedGoodsUnits?: number; finishedGoodsInventoryUSD?: number; cashChange?: number; salesUnits?: number; salesUSD?: number; purchasesUnits?: number; purchasesUSD?: number }> = {};
+  const companyUpdates: Record<string, { finishedGoodsUnits?: number; finishedGoodsInventoryUSD?: number; cashChange?: number; salesUnits?: number; salesUSD?: number; purchasesUnits?: number; purchasesUSD?: number; inputSupplyConstraintFactor?: number }> = {};
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
   const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted);
@@ -478,30 +478,43 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const supplier = prevActiveFirms.find(c => c.ticker === contract.supplierCompanyId || c.id === contract.supplierCompanyId);
         const customer = prevActiveFirms.find(c => c.ticker === contract.customerCompanyId || c.id === contract.customerCompanyId);
 
-        if (supplier && customer && !supplier.isDefaulted && !customer.isDefaulted) {
-          contract.weeksRemaining -= 1;
-          if (contract.weeksRemaining >= 0) {
-            // Execute weekly contract transaction
-            const supplierUnits = supplier.finishedGoodsUnits ?? ((supplier.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
-            const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
-            const paymentUSD = actualTransacted * contract.priceUSD;
-
-            if (!companyUpdates[supplier.ticker]) companyUpdates[supplier.ticker] = {};
+        if (supplier && customer) {
+          if (supplier.isDefaulted) {
+            // PART BAB: Supplier default shock propagates directly to named contract counterparties first
             if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
-
-            const supUp = companyUpdates[supplier.ticker];
-            supUp.finishedGoodsUnits = Math.max(0, supplierUnits - actualTransacted);
-            supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * currentUnitPrice;
-            supUp.cashChange = (supUp.cashChange ?? 0) + paymentUSD;
-            supUp.salesUnits = (supUp.salesUnits ?? 0) + actualTransacted;
-            supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentUSD;
-
             const custUp = companyUpdates[customer.ticker];
-            custUp.cashChange = (custUp.cashChange ?? 0) - paymentUSD;
-            custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
-            custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
+            custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
+          } else if (!customer.isDefaulted) {
+            contract.weeksRemaining -= 1;
+            if (contract.weeksRemaining >= 0) {
+              // Execute weekly contract transaction
+              const supplierUnits = supplier.finishedGoodsUnits ?? ((supplier.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
+              const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
+              const paymentUSD = actualTransacted * contract.priceUSD;
+              const fillRate = contract.quantityUnitsPerWeek > 0 ? actualTransacted / contract.quantityUnitsPerWeek : 1.0;
 
-            remainingContracts.push(contract);
+              if (!companyUpdates[supplier.ticker]) companyUpdates[supplier.ticker] = {};
+              if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
+
+              const supUp = companyUpdates[supplier.ticker];
+              supUp.finishedGoodsUnits = Math.max(0, supplierUnits - actualTransacted);
+              supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * currentUnitPrice;
+              supUp.cashChange = (supUp.cashChange ?? 0) + paymentUSD;
+              supUp.salesUnits = (supUp.salesUnits ?? 0) + actualTransacted;
+              supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentUSD;
+
+              const custUp = companyUpdates[customer.ticker];
+              custUp.cashChange = (custUp.cashChange ?? 0) - paymentUSD;
+              custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
+              custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
+
+              if (fillRate < 0.95) {
+                // Named shock propagation: reduced fill rate constrains customer capacity directly
+                custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, Math.max(0.3, fillRate));
+              }
+
+              remainingContracts.push(contract);
+            }
           }
         }
       });
@@ -521,6 +534,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
         customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Consumer' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
       } else if (subUnitId === 'food_beverage') {
         customers = regionActiveFirms.filter(c => c.sector === 'Consumer' && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
+      } else if (subUnitId === 'pharmaceuticals') {
+        customers = regionActiveFirms.filter(c => (c.sector === 'Consumer' || c.sector === 'Industrials') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
+      } else if (subUnitId === 'passenger_vehicles') {
+        customers = regionActiveFirms.filter(c => (c.sector === 'Industrials' || c.sector === 'Consumer' || c.sector === 'Tech') && !(c.productLines || []).some(l => l.subUnitId === subUnitId));
       }
 
       // Suppliers submit unit offers
@@ -565,11 +582,17 @@ export function advanceWeeklyStep(state: GameState): GameState {
       customers.forEach(comp => {
         let demandUSD = 0;
         if (subUnitId === 'industrial_automation') {
-          demandUSD = (comp.capex / 52) * 0.35;
+          // PART AXA: Real active maintenance + growth capex fields
+          const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
+          demandUSD = (realCapexUSD / 52) * 0.35;
         } else if (subUnitId === 'refined_products') {
           demandUSD = (comp.annualRevenue * 0.025 / 52);
         } else if (subUnitId === 'food_beverage') {
           demandUSD = (comp.annualRevenue * 0.01 / 52);
+        } else if (subUnitId === 'pharmaceuticals') {
+          demandUSD = (comp.annualRevenue * 0.008 / 52);
+        } else if (subUnitId === 'passenger_vehicles') {
+          demandUSD = (comp.annualRevenue * 0.015 / 52);
         }
         const demandUnits = demandUSD / currentUnitPrice;
 
@@ -592,9 +615,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
       });
 
-      // Household Aggregate Bid (for food_beverage and refined_products)
-      if (subUnitId === 'food_beverage' || subUnitId === 'refined_products') {
-        const hhShare = subUnitId === 'food_beverage' ? 0.95 : 0.60;
+      // Household Aggregate Bid
+      if (subUnitId === 'food_beverage' || subUnitId === 'refined_products' || subUnitId === 'pharmaceuticals' || subUnitId === 'passenger_vehicles') {
+        const hhShare = subUnitId === 'food_beverage' ? 0.95 : subUnitId === 'passenger_vehicles' ? 0.80 : subUnitId === 'refined_products' ? 0.60 : 0.40;
         const hhWeeklyDemandUSD = (demandState.demandLevelUSD * hhShare) / 52;
         const hhDemandUnits = hhWeeklyDemandUSD / currentUnitPrice;
 
@@ -606,6 +629,22 @@ export function advanceWeeklyStep(state: GameState): GameState {
             isHouseholdAggregate: true,
             quantityUnits: hhDemandUnits,
             maxPriceUSD: hhMaxPriceUSD,
+          });
+        }
+      }
+
+      // Government Aggregate Bid (PART AYA: pharmaceuticals 45%, passenger_vehicles 5%)
+      if (subUnitId === 'pharmaceuticals' || subUnitId === 'passenger_vehicles') {
+        const govShare = subUnitId === 'pharmaceuticals' ? 0.45 : 0.05;
+        const govWeeklyDemandUSD = (demandState.demandLevelUSD * govShare) / 52;
+        const govDemandUnits = govWeeklyDemandUSD / currentUnitPrice;
+
+        if (govDemandUnits > 0.001) {
+          const govMaxPriceUSD = currentUnitPrice * (subUnitId === 'pharmaceuticals' ? 1.08 : 1.04);
+          bids.push({
+            isGovernmentAggregate: true,
+            quantityUnits: govDemandUnits,
+            maxPriceUSD: govMaxPriceUSD,
           });
         }
       }
@@ -710,7 +749,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
               const contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
               const duration = 12 + Math.floor(Math.random() * 40);
 
-              const baseContractUnits = subUnitId === 'industrial_automation' ? (Math.random() * 2 + 0.5) : subUnitId === 'refined_products' ? (Math.random() * 5000 + 1000) : (Math.random() * 10000 + 2000);
+              const baseContractUnits = subUnitId === 'industrial_automation'
+                ? (Math.random() * 2 + 0.5)
+                : subUnitId === 'passenger_vehicles'
+                ? (Math.random() * 15 + 3)
+                : subUnitId === 'pharmaceuticals'
+                ? (Math.random() * 800 + 200)
+                : subUnitId === 'refined_products'
+                ? (Math.random() * 5000 + 1000)
+                : (Math.random() * 10000 + 2000);
 
               const newContract: SupplyContract = {
                 supplierCompanyId: offer.companyId,
@@ -738,6 +785,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
     executeSubUnitBiddingMarket('industrial_automation', 80000.0, reg, regionId);
     executeSubUnitBiddingMarket('refined_products', 3.50, reg, regionId);
     executeSubUnitBiddingMarket('food_beverage', 10.00, reg, regionId);
+    executeSubUnitBiddingMarket('pharmaceuticals', 120.00, reg, regionId);
+    executeSubUnitBiddingMarket('passenger_vehicles', 35000.0, reg, regionId);
   });
 
   function computeRealizedVol(historicalValues: number[], window: number): number {
