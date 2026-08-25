@@ -78,16 +78,11 @@ export function createInitialGameState(): GameState {
   });
 
   const commodities = getInitialCommodities();
-  // Calibrate intensityShare once on startup
-  commodities.forEach(comm => {
-    const linkage = COMMODITY_CATEGORY_LINKAGE[comm.id] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
-    if (linkage) {
-      const newShare = calibrateIntensityShare(comm.id, companies, regions, linkage.subUnitId);
-      COMMODITY_CATEGORY_LINKAGE[comm.id].intensityShare = newShare;
-      if (COMMODITY_CATEGORY_LINKAGE[comm.symbol]) {
-        COMMODITY_CATEGORY_LINKAGE[comm.symbol].intensityShare = newShare;
-      }
-    }
+  const allGeneratedCompanies = companies;
+  Object.keys(COMMODITY_CATEGORY_LINKAGE).forEach(commodityId => {
+    const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId];
+    const calibratedShare = calibrateIntensityShare(commodityId, allGeneratedCompanies, regions, linkage.subUnitId);
+    COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...linkage, intensityShare: calibratedShare };
   });
 
   const dealers = DEALERS;

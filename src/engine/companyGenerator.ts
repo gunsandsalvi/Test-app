@@ -879,6 +879,18 @@ export function generateInitialCompanies(): Company[] {
         const catTotal = catTotals[line.subUnitId];
         line.categoryMarketShare = catTotal > 0 ? (line.revenueShare * c.annualRevenue) / catTotal : 0;
       });
+      let maxLine: any = null;
+      (c.productLines || []).forEach(line => {
+        if (!maxLine || line.revenueShare > maxLine.revenueShare) {
+          maxLine = line;
+        }
+      });
+      if (maxLine) {
+        c.primarySubUnitId = maxLine.subUnitId;
+        if (c.primarySubUnitId === 'industrial_automation') {
+          c.finishedGoodsUnits = 15;
+        }
+      }
     });
   });
 

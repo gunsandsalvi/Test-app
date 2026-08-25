@@ -534,6 +534,7 @@ export interface Company {
   baselineAnnualRevenue: number;
   annualRevenue: number;
   productLines?: ProductLine[];
+  primarySubUnitId?: string;
   finishedGoodsUnits?: number;
   employeeCount: number;
   previousEmployeeCount: number;
@@ -753,6 +754,7 @@ export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; int
   WHEAT: { subUnitId: 'food_beverage', intensityShare: 0.04 },
   CORN: { subUnitId: 'food_beverage', intensityShare: 0.04 },
   SOYBEANS: { subUnitId: 'food_beverage', intensityShare: 0.03 },
+  industrial_automation: { subUnitId: 'industrial_automation', intensityShare: 0.15 },
 };
 
 export interface Commodity {

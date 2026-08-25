@@ -65,7 +65,7 @@ export function evolveBankingSector(
   const weeklyInterestIncome = (newBusinessLoanBook * businessLoanYield + newConsumerLoanBook * consumerLoanYield + newSovHoldings * sovereign10YYield + newCashReserves * reserveYield) / 52;
   const weeklyInterestExpense = (newDeposits * depositRate) / 52;
   const rawNim = totalAssetsProxy > 0 ? ((weeklyInterestIncome - weeklyInterestExpense) * 52) / totalAssetsProxy : 0.025;
-  const netInterestMarginPct = Math.max(0.012, rawNim);
+  const netInterestMarginPct = rawNim;
   const businessLossRateAnnual = Math.min(0.12, (creditContagionBps / 10000) * 1.8);
   const consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
   const weeklyLoanLossProvision = (newBusinessLoanBook * businessLossRateAnnual + newConsumerLoanBook * consumerLossRateAnnual) / 52;

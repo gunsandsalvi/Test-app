@@ -40,6 +40,11 @@ for (let w = 1; w <= 520; w++) {
     console.log(`[Diagnostic Week ${w}] USA bankCapRatio: ${(b.bankCapitalRatio*100).toFixed(2)}%, NIM: ${(b.netInterestMarginPct*100).toFixed(2)}%, deposits: ${b.depositsUSD.toExponential(2)}, equity: ${b.bankEquityUSD.toExponential(2)}, policyRate: ${(state.regions.USA.policyRate*100).toFixed(2)}%`);
   }
   state = advanceWeeklyStep(state);
+  Object.values(state.commodities as any).forEach((c: any) => {
+    if (c.spotPrice <= 0.51 || c.spotPrice > c.historicalPrices[0] * 100) {
+      console.log(`week ${w}: ${c.id} spotPrice=${c.spotPrice} outside sane range (floor-pinned or 100x+ its own starting price)`);
+    }
+  });
   const nan = isNaNAnywhere(state);
   if (nan.length > 0) violations.push({ week: w, message: `NaN detected: ${nan.join(', ')}` });
   const bottomUpGdp = state.regions.USA.gdpGrowthBottomUp;

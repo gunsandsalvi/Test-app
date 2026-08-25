@@ -482,10 +482,7 @@ export function evolveRegionMacro(
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
   let newPolicyRate = region.policyRate + 0.15 * (taylorTarget - region.policyRate);
-  // Effective Lower Bound (ELB) and upper bound to keep rates in plausible zones
-  const elb = region.id === 'JPN' ? -0.0025 : -0.0075;
-  const rateCap = 0.15;
-  newPolicyRate = Math.max(elb, Math.min(rateCap, newPolicyRate));
+  newPolicyRate = newPolicyRate;
 
   // Update inflation deviation streak
   const isAboveTarget = region.inflation > piStar + 0.01;
@@ -763,9 +760,20 @@ export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, reg
 }
 
 export function calibrateIntensityShare(commodityId: string, allCompanies: Company[], regions: Record<RegionId, Region>, subUnitId: string): number {
-  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && !c.isDefaulted);
-  const publicWeeklySupplyUSD = producers.reduce((s, c) => s + c.annualRevenue * 0.85 / 52, 0);
-  const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
+  const producers = allCompanies.filter(c => {
+    if (commodityId === 'industrial_automation') {
+      return (c.productLines || []).some(l => l.subUnitId === 'industrial_automation') && !c.isDefaulted;
+    }
+    return c.producedCommodityId === commodityId && !c.isDefaulted;
+  });
+  const publicWeeklySupplyUSD = producers.reduce((s, c) => {
+    if (commodityId === 'industrial_automation') {
+      const line = (c.productLines || []).find(l => l.subUnitId === 'industrial_automation')!;
+      return s + (c.annualRevenue * line.revenueShare * 0.85) / 52;
+    }
+    return s + (c.annualRevenue * 0.85) / 52;
+  }, 0);
+  const privateWeeklySupplyUSD = commodityId === 'industrial_automation' ? 0 : computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
   const totalCategoryDemandUSD = (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => s + ((regions[r].categoryDemand as any)[subUnitId]?.demandLevelUSD ?? 0), 0);
   return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;
