@@ -486,6 +486,35 @@ const REGION_COMPANIES: Record<RegionId, CompanyTemplate[]> = {
   ],
 };
 
+const SUBUNIT_TO_CATEGORY: Record<string, string> = {
+  food_beverage: 'StapleHousehold',
+  household_essentials: 'StapleHousehold',
+  apparel_retail: 'StandardHousehold',
+  home_furnishings: 'StandardHousehold',
+  consumer_devices: 'StandardHousehold',
+  consumer_software: 'StandardHousehold',
+  passenger_vehicles: 'StandardHousehold',
+  residential_construction: 'StandardHousehold',
+  luxury_goods: 'LuxuryHousehold',
+  media_content: 'LuxuryHousehold',
+  heavy_equipment: 'CorporateIndustrial',
+  industrial_automation: 'CorporateIndustrial',
+  industrial_chemicals: 'CorporateIndustrial',
+  agricultural_chemicals: 'CorporateIndustrial',
+  specialty_metals: 'CorporateIndustrial',
+  refined_products: 'CorporateIndustrial',
+  upstream_extraction: 'CorporateIndustrial',
+  commercial_aerospace: 'CorporateIndustrial',
+  commercial_fleet: 'CorporateIndustrial',
+  enterprise_software: 'CorporateTech',
+  semiconductors: 'CorporateTech',
+  network_infrastructure: 'CorporateTech',
+  defense_systems: 'GovernmentDefense',
+  pharmaceuticals: 'GovernmentHealthcare',
+  medtech_devices: 'GovernmentHealthcare',
+  commercial_construction: 'GovernmentInfrastructure',
+};
+
 /**
  * Generate 200 fully instantiated companies (50 per region across 5 sectors)
     // Banks (4)
@@ -525,7 +554,42 @@ export function generateInitialCompanies(): Company[] {
       { ticker: regionPrefix + 'SYB', name: `${region} Soybean Growers B`, sector: 'Consumer', revBase: 26000, ebitdaMargin: 0.16, debtBase: 9000, cashBase: 5000, shares: 650, initialRating: 'BBB', beta: 0.88, producedCommodityId: 'SOYBEANS' },
     ];
 
-    const templates = [...REGION_COMPANIES[region], ...commodityTemplates];
+    let templates = [...REGION_COMPANIES[region], ...commodityTemplates];
+
+    // Scale up templates to exactly 200 per region
+    const targetCount = 200;
+    const baseTemplates = [...templates];
+    let cloneIndex = 1;
+    while (templates.length < targetCount) {
+      const parent = baseTemplates[templates.length % baseTemplates.length];
+      let newTicker = parent.ticker;
+      if (newTicker.length >= 4) {
+        newTicker = newTicker.substring(0, 3) + cloneIndex;
+      } else {
+        newTicker = newTicker + cloneIndex;
+      }
+      while (templates.some(t => t.ticker === newTicker)) {
+        cloneIndex++;
+        newTicker = parent.ticker.substring(0, 3) + cloneIndex;
+      }
+      const variation = 0.85 + Math.random() * 0.30;
+      const revBase = Math.round(parent.revBase * variation);
+      const debtBase = Math.round(parent.debtBase * variation);
+      const cashBase = Math.round(parent.cashBase * variation);
+      const shares = Math.round(parent.shares * (0.9 + Math.random() * 0.2));
+      const beta = Number((parent.beta * (0.9 + Math.random() * 0.2)).toFixed(2));
+      templates.push({
+        ...parent,
+        ticker: newTicker,
+        name: `${parent.name} clone ${cloneIndex}`,
+        revBase,
+        debtBase,
+        cashBase,
+        shares,
+        beta,
+      });
+      cloneIndex++;
+    }
 
     // Group templates by primary category to rank them properly
     const categoryGroups: Record<string, CompanyTemplate[]> = {};
@@ -793,7 +857,10 @@ export function generateInitialCompanies(): Company[] {
           ];
         }
 
-        c.productLines = lines;
+        c.productLines = lines.map(line => ({
+          ...line,
+          category: SUBUNIT_TO_CATEGORY[line.subUnitId]
+        }));
       });
     });
 

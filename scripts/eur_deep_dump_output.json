@@ -1,0 +1,4586 @@
+{
+  "week0_eurFirmCount": 68,
+  "week0_eurFirms": [
+    {
+      "ticker": "GHRH",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1874608567776084
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.22405804992033423
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.22405804992033423
+        }
+      ],
+      "maintenanceCapex": 611854199,
+      "growthCapex": 407902799,
+      "capex": 1019756998,
+      "annualRevenue": 16995949962.024391,
+      "ebitda": 7138298984.050244,
+      "employeeCount": 21245,
+      "cash": 4651523147.501412,
+      "totalDebt": 2504666310.193068
+    },
+    {
+      "ticker": "GWVW",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.14996868542208674
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.17924643993626743
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.17924643993626743
+        }
+      ],
+      "maintenanceCapex": 489483359,
+      "growthCapex": 326322239,
+      "capex": 815805598,
+      "annualRevenue": 13596759969.619516,
+      "ebitda": 4622898389.670636,
+      "employeeCount": 16996,
+      "cash": 2781155448.331265,
+      "totalDebt": 3399189992.404879
+    },
+    {
+      "ticker": "KHGS",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.11997494833766942
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.14339715194901395
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.14339715194901395
+        }
+      ],
+      "maintenanceCapex": 391586687,
+      "growthCapex": 261057792,
+      "capex": 652644479,
+      "annualRevenue": 10877407975.695614,
+      "ebitda": 3263222392.708684,
+      "employeeCount": 13597,
+      "cash": 2568276883.1503534,
+      "totalDebt": 3625802658.5652046
+    },
+    {
+      "ticker": "QFLK",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.09597995867013555
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.11471772155921117
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.11471772155921117
+        }
+      ],
+      "maintenanceCapex": 313269350,
+      "growthCapex": 208846233,
+      "capex": 522115583,
+      "annualRevenue": 8701926380.556492,
+      "ebitda": 2436539386.555818,
+      "employeeCount": 10877,
+      "cash": 1648786051.052809,
+      "totalDebt": 4350963190.278246
+    },
+    {
+      "ticker": "XSFL",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.07678396693610842
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.09177417724736893
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.09177417724736893
+        }
+      ],
+      "maintenanceCapex": 250615480,
+      "growthCapex": 167076986,
+      "capex": 417692466,
+      "annualRevenue": 6961541104.445192,
+      "ebitda": 2506154797.6002693,
+      "employeeCount": 8702,
+      "cash": 2154762722.8044643,
+      "totalDebt": 2652015658.8362637
+    },
+    {
+      "ticker": "GPXU",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.061427173548886736
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.07341934179789515
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.07341934179789515
+        }
+      ],
+      "maintenanceCapex": 200492384,
+      "growthCapex": 133661589,
+      "capex": 334153973,
+      "annualRevenue": 5569232883.556154,
+      "ebitda": 501230959.52005386,
+      "employeeCount": 6962,
+      "cash": 510513014.3259808,
+      "totalDebt": 8817952065.630577
+    },
+    {
+      "ticker": "EJHE",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0491417388391094
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.05873547343831612
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.05873547343831612
+        }
+      ],
+      "maintenanceCapex": 160393907,
+      "growthCapex": 106929271,
+      "capex": 267323178,
+      "annualRevenue": 4455386306.844924,
+      "ebitda": 1693046796.6010711,
+      "employeeCount": 5569,
+      "cash": 1149020679.133691,
+      "totalDebt": 3751904258.3957253
+    },
+    {
+      "ticker": "GBMG",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.039313391071287514
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.046988378750652905
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.046988378750652905
+        }
+      ],
+      "maintenanceCapex": 128315126,
+      "growthCapex": 85543417,
+      "capex": 213858543,
+      "annualRevenue": 3564309045.4759393,
+      "ebitda": 1104935804.097541,
+      "employeeCount": 4455,
+      "cash": 615653380.5822077,
+      "totalDebt": 4536393330.605741
+    },
+    {
+      "ticker": "ZGNR",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.031450712857030015
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03759070300052233
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03759070300052233
+        }
+      ],
+      "maintenanceCapex": 102652100,
+      "growthCapex": 68434734,
+      "capex": 171086834,
+      "annualRevenue": 2851447236.3807516,
+      "ebitda": 142572361.8190376,
+      "employeeCount": 3564,
+      "cash": 285144723.6380752,
+      "totalDebt": 3258796841.5780015
+    },
+    {
+      "ticker": "WJLX",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.025160570285624018
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03007256240041786
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03007256240041786
+        }
+      ],
+      "maintenanceCapex": 82121680,
+      "growthCapex": 54747787,
+      "capex": 136869467,
+      "annualRevenue": 2281157789.1046014,
+      "ebitda": 364985246.2567362,
+      "employeeCount": 2851,
+      "cash": 348510217.7798697,
+      "totalDebt": 2693033501.0262656
+    },
+    {
+      "ticker": "WBGJ",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.20579254518635562
+        }
+      ],
+      "maintenanceCapex": 2463336766,
+      "growthCapex": 1642224510,
+      "capex": 4105561276,
+      "annualRevenue": 68426021274.46323,
+      "ebitda": 19843546169.594334,
+      "employeeCount": 45617,
+      "cash": 15151476139.345428,
+      "totalDebt": 30302952278.690857
+    },
+    {
+      "ticker": "FGLQ",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.16463403614908445
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1646340361490845
+        }
+      ],
+      "maintenanceCapex": 1970669413,
+      "growthCapex": 1313779608,
+      "capex": 3284449021,
+      "annualRevenue": 54740817019.57059,
+      "ebitda": 13685204254.892647,
+      "employeeCount": 36494,
+      "cash": 9520142090.360102,
+      "totalDebt": 28560426271.080307
+    },
+    {
+      "ticker": "THSH",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1317072289192676
+        }
+      ],
+      "maintenanceCapex": 1576535530,
+      "growthCapex": 1051023687,
+      "capex": 2627559217,
+      "annualRevenue": 43792653615.65647,
+      "ebitda": 16641208373.94946,
+      "employeeCount": 29195,
+      "cash": 7172934643.943732,
+      "totalDebt": 51343111135.59724
+    },
+    {
+      "ticker": "CQYU",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.10536578313541407
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1053657831354141
+        }
+      ],
+      "maintenanceCapex": 1261228424,
+      "growthCapex": 840818950,
+      "capex": 2102047374,
+      "annualRevenue": 35034122892.525185,
+      "ebitda": 11210919325.608059,
+      "employeeCount": 23356,
+      "cash": 5004874698.932169,
+      "totalDebt": 39621924699.87967
+    },
+    {
+      "ticker": "TBSE",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833125
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833128
+        }
+      ],
+      "maintenanceCapex": 1008982739,
+      "growthCapex": 672655160,
+      "capex": 1681637899,
+      "annualRevenue": 28027298314.020145,
+      "ebitda": 10089827393.047253,
+      "employeeCount": 18685,
+      "cash": 5223269231.249209,
+      "totalDebt": 43314915576.21295
+    },
+    {
+      "ticker": "TNKI",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.067434101206665
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.06743410120666503
+        }
+      ],
+      "maintenanceCapex": 807186191,
+      "growthCapex": 538124128,
+      "capex": 1345310319,
+      "annualRevenue": 22421838651.216118,
+      "ebitda": 4708586116.755384,
+      "employeeCount": 14948,
+      "cash": 3094845334.956591,
+      "totalDebt": 15474226674.782953
+    },
+    {
+      "ticker": "UYVI",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965331995
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965332016
+        }
+      ],
+      "maintenanceCapex": 645748953,
+      "growthCapex": 430499302,
+      "capex": 1076248255,
+      "annualRevenue": 17937470920.972893,
+      "ebitda": 3587494184.1945786,
+      "employeeCount": 11958,
+      "cash": 2380164410.667557,
+      "totalDebt": 9658638188.216173
+    },
+    {
+      "ticker": "FKZZ",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.043157824772265596
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.04315782477226562
+        }
+      ],
+      "maintenanceCapex": 516599162,
+      "growthCapex": 344399442,
+      "capex": 860998604,
+      "annualRevenue": 14349976736.778315,
+      "ebitda": 3156994882.0912294,
+      "employeeCount": 9567,
+      "cash": 1826360675.589967,
+      "totalDebt": 18263606755.899673
+    },
+    {
+      "ticker": "QYHS",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0345262598178125
+        }
+      ],
+      "maintenanceCapex": 413279330,
+      "growthCapex": 275519553,
+      "capex": 688798883,
+      "annualRevenue": 11479981389.422655,
+      "ebitda": 918398511.1538124,
+      "employeeCount": 7653,
+      "cash": 1147998138.9422655,
+      "totalDebt": 15579974742.78789
+    },
+    {
+      "ticker": "RAWH",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.027621007854249993
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02762100785425
+        }
+      ],
+      "maintenanceCapex": 330623464,
+      "growthCapex": 220415643,
+      "capex": 551039107,
+      "annualRevenue": 9183985111.538124,
+      "ebitda": 367359404.46152496,
+      "employeeCount": 6123,
+      "cash": 554865767.1554283,
+      "totalDebt": 28699953473.556637
+    },
+    {
+      "ticker": "CKNU",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.036597193142725845
+        }
+      ],
+      "maintenanceCapex": 65697344,
+      "growthCapex": 43798230,
+      "capex": 109495574,
+      "annualRevenue": 1824926231.2836814,
+      "ebitda": 620474918.6364517,
+      "employeeCount": 1825,
+      "cash": 983873272.5181587,
+      "totalDebt": 1555154527.5287023
+    },
+    {
+      "ticker": "IXGB",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02927775451418067
+        }
+      ],
+      "maintenanceCapex": 52557875,
+      "growthCapex": 35038584,
+      "capex": 87596459,
+      "annualRevenue": 1459940985.0269449,
+      "ebitda": 321187016.70592785,
+      "employeeCount": 1460,
+      "cash": 560617338.2503469,
+      "totalDebt": 759169312.2140113
+    },
+    {
+      "ticker": "CUJO",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02342220361134454
+        }
+      ],
+      "maintenanceCapex": 42046300,
+      "growthCapex": 28030867,
+      "capex": 70077167,
+      "annualRevenue": 1167952788.0215561,
+      "ebitda": 373744892.16689795,
+      "employeeCount": 1168,
+      "cash": 517615440.14591694,
+      "totalDebt": 1114864024.9296672
+    },
+    {
+      "ticker": "DIBY",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.018737762889075634
+        }
+      ],
+      "maintenanceCapex": 33637040,
+      "growthCapex": 22424694,
+      "capex": 56061734,
+      "annualRevenue": 934362230.417245,
+      "ebitda": 336370402.9502082,
+      "employeeCount": 934,
+      "cash": 503118124.0708242,
+      "totalDebt": 862488212.6928416
+    },
+    {
+      "ticker": "HJZB",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014990210311260507
+        }
+      ],
+      "maintenanceCapex": 26909632,
+      "growthCapex": 17939755,
+      "capex": 44849387,
+      "annualRevenue": 747489784.333796,
+      "ebitda": 149497956.8667592,
+      "employeeCount": 747,
+      "cash": 283259286.6949122,
+      "totalDebt": 456362184.11958075
+    },
+    {
+      "ticker": "AUNM",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011992168249008409
+        }
+      ],
+      "maintenanceCapex": 21527706,
+      "growthCapex": 14351804,
+      "capex": 35879510,
+      "annualRevenue": 597991827.467037,
+      "ebitda": 143518038.59208888,
+      "employeeCount": 598,
+      "cash": 270965046.8210011,
+      "totalDebt": 728802539.7254514
+    },
+    {
+      "ticker": "FEVV",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.009593734599206725
+        }
+      ],
+      "maintenanceCapex": 17222165,
+      "growthCapex": 11481443,
+      "capex": 28703608,
+      "annualRevenue": 478393461.9736295,
+      "ebitda": 181789515.5499792,
+      "employeeCount": 478,
+      "cash": 219263670.07124683,
+      "totalDebt": 438527340.14249367
+    },
+    {
+      "ticker": "OXQI",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007674987679365379
+        }
+      ],
+      "maintenanceCapex": 13777732,
+      "growthCapex": 9185154,
+      "capex": 22962886,
+      "annualRevenue": 382714769.57890356,
+      "ebitda": 133950169.35261624,
+      "employeeCount": 383,
+      "cash": 170095453.14617935,
+      "totalDebt": 347278216.8401162
+    },
+    {
+      "ticker": "KVFC",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.006139990143492306
+        }
+      ],
+      "maintenanceCapex": 11022185,
+      "growthCapex": 7348124,
+      "capex": 18370309,
+      "annualRevenue": 306171815.66312295,
+      "ebitda": 110221853.63872425,
+      "employeeCount": 306,
+      "cash": 139774089.75925177,
+      "totalDebt": 279548179.51850355
+    },
+    {
+      "ticker": "CVTI",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.004911992114793845
+        }
+      ],
+      "maintenanceCapex": 8817748,
+      "growthCapex": 5878499,
+      "capex": 14696247,
+      "annualRevenue": 244937452.53049836,
+      "ebitda": 34291243.35426977,
+      "employeeCount": 245,
+      "cash": 47922545.0603149,
+      "totalDebt": 638967267.4708652
+    },
+    {
+      "ticker": "GHHF",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863556
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.20579254518635556
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555
+        }
+      ],
+      "maintenanceCapex": 726036100,
+      "growthCapex": 484024066,
+      "capex": 1210060166,
+      "annualRevenue": 20167669428.262848,
+      "ebitda": 3831857191.369941,
+      "employeeCount": 67226,
+      "cash": 4321643448.913467,
+      "totalDebt": 8643286897.826935
+    },
+    {
+      "ticker": "GLVU",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.16463403614908445
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.16463403614908442
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1646340361490844
+        }
+      ],
+      "maintenanceCapex": 580828880,
+      "growthCapex": 387219253,
+      "capex": 968048133,
+      "annualRevenue": 16134135542.610277,
+      "ebitda": 2581461686.8176446,
+      "employeeCount": 53780,
+      "cash": 4225606927.8265014,
+      "totalDebt": 6530483433.913684
+    },
+    {
+      "ticker": "VATF",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1317072289192676
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756
+        }
+      ],
+      "maintenanceCapex": 464663104,
+      "growthCapex": 309775402,
+      "capex": 774438506,
+      "annualRevenue": 12907308434.088224,
+      "ebitda": 2839607855.499409,
+      "employeeCount": 43024,
+      "cash": 2957924849.4785514,
+      "totalDebt": 5646947439.913598
+    },
+    {
+      "ticker": "TKXE",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.10536578313541409
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.10536578313541406
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.10536578313541405
+        }
+      ],
+      "maintenanceCapex": 371730483,
+      "growthCapex": 247820322,
+      "capex": 619550805,
+      "annualRevenue": 10325846747.27058,
+      "ebitda": 1239101609.6724696,
+      "employeeCount": 34419,
+      "cash": 1853357108.4844632,
+      "totalDebt": 8737254939.998182
+    },
+    {
+      "ticker": "YYVG",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833125
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833123
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833122
+        }
+      ],
+      "maintenanceCapex": 297384386,
+      "growthCapex": 198256258,
+      "capex": 495640644,
+      "annualRevenue": 8260677397.8164625,
+      "ebitda": 1239101609.6724694,
+      "employeeCount": 27536,
+      "cash": 2154959321.169512,
+      "totalDebt": 6464877963.508536
+    },
+    {
+      "ticker": "CFFG",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.06743410120666501
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.067434101206665
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.06743410120666499
+        }
+      ],
+      "maintenanceCapex": 237907509,
+      "growthCapex": 158605006,
+      "capex": 396512515,
+      "annualRevenue": 6608541918.253171,
+      "ebitda": 1057366706.9205074,
+      "employeeCount": 22028,
+      "cash": 1789813436.193567,
+      "totalDebt": 5369440308.580702
+    },
+    {
+      "ticker": "RLKE",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.05394728096533201
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965332
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.05394728096533199
+        }
+      ],
+      "maintenanceCapex": 190326007,
+      "growthCapex": 126884005,
+      "capex": 317210012,
+      "annualRevenue": 5286833534.602537,
+      "ebitda": 740156694.8443552,
+      "employeeCount": 17623,
+      "cash": 657282007.0046397,
+      "totalDebt": 2714860463.714816
+    },
+    {
+      "ticker": "NOMX",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.04315782477226561
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0431578247722656
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.043157824772265596
+        }
+      ],
+      "maintenanceCapex": 152260806,
+      "growthCapex": 101507204,
+      "capex": 253768010,
+      "annualRevenue": 4229466827.6820297,
+      "ebitda": 888188033.8132262,
+      "employeeCount": 14098,
+      "cash": 1070583790.7570137,
+      "totalDebt": 2114733413.8410149
+    },
+    {
+      "ticker": "GUCZ",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.034526259817812495
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781248
+        }
+      ],
+      "maintenanceCapex": 121808645,
+      "growthCapex": 81205763,
+      "capex": 203014408,
+      "annualRevenue": 3383573462.1456246,
+      "ebitda": 270685876.97165,
+      "employeeCount": 11279,
+      "cash": 338357346.2145625,
+      "totalDebt": 2582200800.058503
+    },
+    {
+      "ticker": "TLYZ",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.027621007854249993
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02762100785424999
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.027621007854249983
+        }
+      ],
+      "maintenanceCapex": 97446916,
+      "growthCapex": 64964610,
+      "capex": 162411526,
+      "annualRevenue": 2706858769.7164993,
+      "ebitda": 297754464.66881496,
+      "employeeCount": 9023,
+      "cash": 197691932.61974433,
+      "totalDebt": 6386970130.79174
+    },
+    {
+      "ticker": "AMTJ",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.20579254518635562
+        }
+      ],
+      "maintenanceCapex": 4926673532,
+      "growthCapex": 3284449021,
+      "capex": 8211122553,
+      "annualRevenue": 136852042548.92645,
+      "ebitda": 47898214892.12425,
+      "employeeCount": 684260,
+      "cash": 27370408509.785294,
+      "totalDebt": 36493878013.04705
+    },
+    {
+      "ticker": "ZNSW",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.16463403614908445
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.16463403614908445
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.16463403614908445
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1646340361490845
+        }
+      ],
+      "maintenanceCapex": 3941338825,
+      "growthCapex": 2627559217,
+      "capex": 6568898042,
+      "annualRevenue": 109481634039.14117,
+      "ebitda": 24085959488.611057,
+      "employeeCount": 547408,
+      "cash": 18910464061.306202,
+      "totalDebt": 45783228780.004486
+    },
+    {
+      "ticker": "OREP",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1317072289192676
+        }
+      ],
+      "maintenanceCapex": 3153071060,
+      "growthCapex": 2102047374,
+      "capex": 5255118434,
+      "annualRevenue": 87585307231.31294,
+      "ebitda": 21896326807.828236,
+      "employeeCount": 437927,
+      "cash": 17841451473.045227,
+      "totalDebt": 22707301874.784836
+    },
+    {
+      "ticker": "BSPG",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.10536578313541407
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.10536578313541407
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.10536578313541407
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1053657831354141
+        }
+      ],
+      "maintenanceCapex": 2522456848,
+      "growthCapex": 1681637899,
+      "capex": 4204094747,
+      "annualRevenue": 70068245785.05037,
+      "ebitda": 32231393061.123173,
+      "employeeCount": 350341,
+      "cash": 38219043155.48202,
+      "totalDebt": 9554760788.870504
+    },
+    {
+      "ticker": "HWUO",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833125
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833125
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833125
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833128
+        }
+      ],
+      "maintenanceCapex": 2017965479,
+      "growthCapex": 1345310319,
+      "capex": 3363275798,
+      "annualRevenue": 56054596628.04029,
+      "ebitda": 7847643527.925641,
+      "employeeCount": 280273,
+      "cash": 7594493736.702233,
+      "totalDebt": 32547830300.152428
+    },
+    {
+      "ticker": "RXYX",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.067434101206665
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.067434101206665
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.067434101206665
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.06743410120666503
+        }
+      ],
+      "maintenanceCapex": 1614372383,
+      "growthCapex": 1076248255,
+      "capex": 2690620638,
+      "annualRevenue": 44843677302.432236,
+      "ebitda": 12556229644.681026,
+      "employeeCount": 224218,
+      "cash": 15597800800.845995,
+      "totalDebt": 7798900400.422997
+    },
+    {
+      "ticker": "CTKN",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965331995
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965331995
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965331995
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965332016
+        }
+      ],
+      "maintenanceCapex": 1291497907,
+      "growthCapex": 860998604,
+      "capex": 2152496511,
+      "annualRevenue": 35874941841.945786,
+      "ebitda": 10403733134.164278,
+      "employeeCount": 179375,
+      "cash": 7046863576.096494,
+      "totalDebt": 30749950150.239243
+    },
+    {
+      "ticker": "LAJP",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.043157824772265596
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.043157824772265596
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.043157824772265596
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.04315782477226562
+        }
+      ],
+      "maintenanceCapex": 1033198325,
+      "growthCapex": 688798883,
+      "capex": 1721997208,
+      "annualRevenue": 28699953473.55663,
+      "ebitda": 4878992090.504627,
+      "employeeCount": 143500,
+      "cash": 3906382556.1229854,
+      "totalDebt": 17538860456.062386
+    },
+    {
+      "ticker": "FSUT",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0345262598178125
+        }
+      ],
+      "maintenanceCapex": 826558660,
+      "growthCapex": 551039107,
+      "capex": 1377597767,
+      "annualRevenue": 22959962778.84531,
+      "ebitda": 1377597766.7307186,
+      "employeeCount": 114800,
+      "cash": 1695906341.619256,
+      "totalDebt": 7305442702.359871
+    },
+    {
+      "ticker": "NZPR",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.027621007854249993
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.027621007854249993
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.027621007854249993
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02762100785425
+        }
+      ],
+      "maintenanceCapex": 661246928,
+      "growthCapex": 440831285,
+      "capex": 1102078213,
+      "annualRevenue": 18367970223.07625,
+      "ebitda": 551039106.6922874,
+      "employeeCount": 91840,
+      "cash": 489812539.2820333,
+      "totalDebt": 34695054865.81069
+    },
+    {
+      "ticker": "EWTA",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399995
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0220968062834
+        }
+      ],
+      "maintenanceCapex": 264498771,
+      "growthCapex": 176332514,
+      "capex": 440831285,
+      "annualRevenue": 7347188089.230499,
+      "ebitda": 2351100188.55376,
+      "employeeCount": 4898,
+      "cash": 2003778569.790136,
+      "totalDebt": 3339630949.6502266
+    },
+    {
+      "ticker": "EWTB",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.01767744502671999
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.017677445026719998
+        }
+      ],
+      "maintenanceCapex": 211599017,
+      "growthCapex": 141066011,
+      "capex": 352665028,
+      "annualRevenue": 5877750471.384398,
+      "ebitda": 1763325141.4153194,
+      "employeeCount": 3919,
+      "cash": 1469437617.8460996,
+      "totalDebt": 2693968966.0511827
+    },
+    {
+      "ticker": "EBRA",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021376
+        }
+      ],
+      "maintenanceCapex": 169279214,
+      "growthCapex": 112852809,
+      "capex": 282132023,
+      "annualRevenue": 4702200377.107519,
+      "ebitda": 1645770131.9876316,
+      "employeeCount": 3135,
+      "cash": 1365154948.1925056,
+      "totalDebt": 2123574363.8550086
+    },
+    {
+      "ticker": "EBRB",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011313564817100804
+        }
+      ],
+      "maintenanceCapex": 135423371,
+      "growthCapex": 90282247,
+      "capex": 225705618,
+      "annualRevenue": 3761760301.6860166,
+      "ebitda": 1166145693.522665,
+      "employeeCount": 2508,
+      "cash": 1053292884.4720848,
+      "totalDebt": 1805644944.8092878
+    },
+    {
+      "ticker": "ENGA",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.00905085185368064
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.009050851853680644
+        }
+      ],
+      "maintenanceCapex": 108338696,
+      "growthCapex": 72225798,
+      "capex": 180564494,
+      "annualRevenue": 3009408241.3488135,
+      "ebitda": 842634307.5776678,
+      "employeeCount": 2006,
+      "cash": 791949537.1970562,
+      "totalDebt": 1425509166.9547012
+    },
+    {
+      "ticker": "ENGB",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944511
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944515
+        }
+      ],
+      "maintenanceCapex": 86670958,
+      "growthCapex": 57780638,
+      "capex": 144451596,
+      "annualRevenue": 2407526593.0790505,
+      "ebitda": 625956914.2005532,
+      "employeeCount": 1605,
+      "cash": 601881648.2697626,
+      "totalDebt": 1203763296.5395253
+    },
+    {
+      "ticker": "EGDA",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399995
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02209680628339999
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399988
+        }
+      ],
+      "maintenanceCapex": 77957533,
+      "growthCapex": 51971688,
+      "capex": 129929221,
+      "annualRevenue": 2165487015.7731996,
+      "ebitda": 822885065.9938159,
+      "employeeCount": 7218,
+      "cash": 769950938.9415821,
+      "totalDebt": 721829005.2577331
+    },
+    {
+      "ticker": "EGDB",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.017677445026719998
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.017677445026719994
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.01767744502671999
+        }
+      ],
+      "maintenanceCapex": 62366026,
+      "growthCapex": 41577351,
+      "capex": 103943377,
+      "annualRevenue": 1732389612.6185598,
+      "ebitda": 589012468.2903104,
+      "employeeCount": 5775,
+      "cash": 501481203.652741,
+      "totalDebt": 547070403.9848083
+    },
+    {
+      "ticker": "ESLA",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375997
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375992
+        }
+      ],
+      "maintenanceCapex": 49892821,
+      "growthCapex": 33261880,
+      "capex": 83154701,
+      "annualRevenue": 1385911690.0948477,
+      "ebitda": 388055273.2265574,
+      "employeeCount": 4620,
+      "cash": 389787662.83917594,
+      "totalDebt": 606336364.4164958
+    },
+    {
+      "ticker": "ESLB",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011313564817100802
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011313564817100798
+        }
+      ],
+      "maintenanceCapex": 39914257,
+      "growthCapex": 26609504,
+      "capex": 66523761,
+      "annualRevenue": 1108729352.0758786,
+      "ebitda": 266095044.49821085,
+      "employeeCount": 3696,
+      "cash": 277182338.01896966,
+      "totalDebt": 475169722.31823367
+    },
+    {
+      "ticker": "ECPA",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.009050851853680642
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.00905085185368064
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.009050851853680639
+        }
+      ],
+      "maintenanceCapex": 31931405,
+      "growthCapex": 21287604,
+      "capex": 53219009,
+      "annualRevenue": 886983481.660703,
+      "ebitda": 266095044.49821088,
+      "employeeCount": 2957,
+      "cash": 232305197.57780316,
+      "totalDebt": 464610395.1556063
+    },
+    {
+      "ticker": "ECPB",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944514
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944513
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944511
+        }
+      ],
+      "maintenanceCapex": 25545124,
+      "growthCapex": 17030083,
+      "capex": 42575207,
+      "annualRevenue": 709586785.3285624,
+      "ebitda": 191588432.03871185,
+      "employeeCount": 2365,
+      "cash": 182465173.37020174,
+      "totalDebt": 364930346.7404035
+    },
+    {
+      "ticker": "EWHA",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399995
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399995
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399995
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0220968062834
+        }
+      ],
+      "maintenanceCapex": 528997543,
+      "growthCapex": 352665028,
+      "capex": 881662571,
+      "annualRevenue": 14694376178.460999,
+      "ebitda": 2644987712.1229796,
+      "employeeCount": 73472,
+      "cash": 3148794895.3844995,
+      "totalDebt": 5247991492.3075
+    },
+    {
+      "ticker": "EWHB",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.01767744502671999
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.01767744502671999
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.01767744502671999
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.017677445026719998
+        }
+      ],
+      "maintenanceCapex": 423198034,
+      "growthCapex": 282132023,
+      "capex": 705330057,
+      "annualRevenue": 11755500942.768797,
+      "ebitda": 1880880150.8430076,
+      "employeeCount": 58778,
+      "cash": 2449062696.4101663,
+      "totalDebt": 3918500314.2562656
+    },
+    {
+      "ticker": "ECRA",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021376
+        }
+      ],
+      "maintenanceCapex": 338558427,
+      "growthCapex": 225705618,
+      "capex": 564264045,
+      "annualRevenue": 9404400754.215038,
+      "ebitda": 1880880150.8430078,
+      "employeeCount": 47022,
+      "cash": 2212800177.462362,
+      "totalDebt": 3319200266.193543
+    },
+    {
+      "ticker": "ECRB",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011313564817100804
+        }
+      ],
+      "maintenanceCapex": 270846742,
+      "growthCapex": 180564494,
+      "capex": 451411236,
+      "annualRevenue": 7523520603.372033,
+      "ebitda": 1278998502.5732458,
+      "employeeCount": 37618,
+      "cash": 1556590469.6631792,
+      "totalDebt": 2594317449.4386325
+    },
+    {
+      "ticker": "ESYA",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.00905085185368064
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.00905085185368064
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.00905085185368064
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.009050851853680644
+        }
+      ],
+      "maintenanceCapex": 216677393,
+      "growthCapex": 144451596,
+      "capex": 361128989,
+      "annualRevenue": 6018816482.697627,
+      "ebitda": 1143575131.7125492,
+      "employeeCount": 30094,
+      "cash": 1359087592.867206,
+      "totalDebt": 2135709074.5056098
+    },
+    {
+      "ticker": "ESYB",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944511
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944511
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944511
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007240681482944515
+        }
+      ],
+      "maintenanceCapex": 173341915,
+      "growthCapex": 115561276,
+      "capex": 288903191,
+      "annualRevenue": 4815053186.158101,
+      "ebitda": 770408509.7852962,
+      "employeeCount": 24075,
+      "cash": 925971766.5688657,
+      "totalDebt": 1666749179.823958
+    }
+  ],
+  "week1_eurFirms": [
+    {
+      "ticker": "GHRH",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0.001,
+          "categoryMarketShare": 0.18746098295318508,
+          "previousCategoryMarketShare": 0.1874608567776084,
+          "categoryMarketShare13WeeksAgo": 0.1874608567776084
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0.001,
+          "categoryMarketShare": 0.22405820072863708,
+          "previousCategoryMarketShare": 0.22405804992033423,
+          "categoryMarketShare13WeeksAgo": 0.22405804992033423
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0.001,
+          "categoryMarketShare": 0.22405820072863708,
+          "previousCategoryMarketShare": 0.22405804992033423,
+          "categoryMarketShare13WeeksAgo": 0.22405804992033423
+        }
+      ],
+      "maintenanceCapex": 610928272.7,
+      "growthCapex": 236965780.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 16481546481.7,
+      "ebitda": 6924013754.8
+    },
+    {
+      "ticker": "GWVW",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.14996868542208674,
+          "previousCategoryMarketShare": 0.14996868542208674,
+          "categoryMarketShare13WeeksAgo": 0.14996868542208674
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.17924643993626743,
+          "previousCategoryMarketShare": 0.17924643993626743,
+          "categoryMarketShare13WeeksAgo": 0.17924643993626743
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.17924643993626743,
+          "previousCategoryMarketShare": 0.17924643993626743,
+          "categoryMarketShare13WeeksAgo": 0.17924643993626743
+        }
+      ],
+      "maintenanceCapex": 488742745.4,
+      "growthCapex": 187445628.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 13185307947.8,
+      "ebitda": 4471176818.1
+    },
+    {
+      "ticker": "KHGS",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.11997486758530035,
+          "previousCategoryMarketShare": 0.11997494833766942,
+          "categoryMarketShare13WeeksAgo": 0.11997494833766942
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.14339705543170014,
+          "previousCategoryMarketShare": 0.14339715194901395,
+          "categoryMarketShare13WeeksAgo": 0.14339715194901395
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.14339705543170014,
+          "previousCategoryMarketShare": 0.14339715194901395,
+          "categoryMarketShare13WeeksAgo": 0.14339715194901395
+        }
+      ],
+      "maintenanceCapex": 390993922.7,
+      "growthCapex": 149056610.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 10548094456,
+      "ebitda": 3148623349.8
+    },
+    {
+      "ticker": "QFLK",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.09597989406824028,
+          "previousCategoryMarketShare": 0.09597995867013555,
+          "categoryMarketShare13WeeksAgo": 0.09597995867013555
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.11471764434536012,
+          "previousCategoryMarketShare": 0.11471772155921117,
+          "categoryMarketShare13WeeksAgo": 0.11471772155921117
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.11471764434536012,
+          "previousCategoryMarketShare": 0.11471772155921117,
+          "categoryMarketShare13WeeksAgo": 0.11471772155921117
+        }
+      ],
+      "maintenanceCapex": 312795211.3,
+      "growthCapex": 118733486.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 8438515989.5,
+      "ebitda": 2349880938.8
+    },
+    {
+      "ticker": "XSFL",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.07678396693610842,
+          "previousCategoryMarketShare": 0.07678396693610842,
+          "categoryMarketShare13WeeksAgo": 0.07678396693610842
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.09177417724736893,
+          "previousCategoryMarketShare": 0.09177417724736893,
+          "categoryMarketShare13WeeksAgo": 0.09177417724736893
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.09177417724736893,
+          "previousCategoryMarketShare": 0.09177417724736893,
+          "categoryMarketShare13WeeksAgo": 0.09177417724736893
+        }
+      ],
+      "maintenanceCapex": 250236319.4,
+      "growthCapex": 95915004.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 6750896304.4,
+      "ebitda": 2420220642.4
+    },
+    {
+      "ticker": "GPXU",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.061427173548886736,
+          "previousCategoryMarketShare": 0.061427173548886736,
+          "categoryMarketShare13WeeksAgo": 0.061427173548886736
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.07341934179789515,
+          "previousCategoryMarketShare": 0.07341934179789515,
+          "categoryMarketShare13WeeksAgo": 0.07341934179789515
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.07341934179789515,
+          "previousCategoryMarketShare": 0.07341934179789515,
+          "categoryMarketShare13WeeksAgo": 0.07341934179789515
+        }
+      ],
+      "maintenanceCapex": 200189019.8,
+      "growthCapex": 74223128.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 5400697229.6,
+      "ebitda": 490289349.3
+    },
+    {
+      "ticker": "EJHE",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.049141705762939025,
+          "previousCategoryMarketShare": 0.0491417388391094,
+          "categoryMarketShare13WeeksAgo": 0.0491417388391094
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.058735433904824386,
+          "previousCategoryMarketShare": 0.05873547343831612,
+          "categoryMarketShare13WeeksAgo": 0.05873547343831612
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.058735433904824386,
+          "previousCategoryMarketShare": 0.05873547343831612,
+          "categoryMarketShare13WeeksAgo": 0.05873547343831612
+        }
+      ],
+      "maintenanceCapex": 160151178.9,
+      "growthCapex": 60998601.3,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 4320537362,
+      "ebitda": 1632764098.8
+    },
+    {
+      "ticker": "GBMG",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.03931336461035122,
+          "previousCategoryMarketShare": 0.039313391071287514,
+          "categoryMarketShare13WeeksAgo": 0.039313391071287514
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.04698834712385951,
+          "previousCategoryMarketShare": 0.046988378750652905,
+          "categoryMarketShare13WeeksAgo": 0.046988378750652905
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.04698834712385951,
+          "previousCategoryMarketShare": 0.046988378750652905,
+          "categoryMarketShare13WeeksAgo": 0.046988378750652905
+        }
+      ],
+      "maintenanceCapex": 128120986.8,
+      "growthCapex": 48293499.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 3456453939.7,
+      "ebitda": 1063351268.4
+    },
+    {
+      "ticker": "ZGNR",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.031450712857030015,
+          "previousCategoryMarketShare": 0.031450712857030015,
+          "categoryMarketShare13WeeksAgo": 0.031450712857030015
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03759070300052233,
+          "previousCategoryMarketShare": 0.03759070300052233,
+          "categoryMarketShare13WeeksAgo": 0.03759070300052233
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03759070300052233,
+          "previousCategoryMarketShare": 0.03759070300052233,
+          "categoryMarketShare13WeeksAgo": 0.03759070300052233
+        }
+      ],
+      "maintenanceCapex": 102496784.6,
+      "growthCapex": 39947893.6,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 2765160904.3,
+      "ebitda": 138814084.8
+    },
+    {
+      "ticker": "WJLX",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 0.55,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.02516055335062479,
+          "previousCategoryMarketShare": 0.025160570285624018,
+          "categoryMarketShare13WeeksAgo": 0.025160570285624018
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "semiconductors",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.03007254215927009,
+          "previousCategoryMarketShare": 0.03007256240041786,
+          "categoryMarketShare13WeeksAgo": 0.03007256240041786
+        },
+        {
+          "industry": "TechHardwareSemis",
+          "subUnitId": "consumer_devices",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.03007254215927009,
+          "previousCategoryMarketShare": 0.03007256240041786,
+          "categoryMarketShare13WeeksAgo": 0.03007256240041786
+        }
+      ],
+      "maintenanceCapex": 81997386.2,
+      "growthCapex": 31172443.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 2212105661.1,
+      "ebitda": 349755836
+    },
+    {
+      "ticker": "WBGJ",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555,
+          "previousCategoryMarketShare": 0.2057925451863555,
+          "categoryMarketShare13WeeksAgo": 0.2057925451863555
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.20579254518635562,
+          "previousCategoryMarketShare": 0.20579254518635562,
+          "categoryMarketShare13WeeksAgo": 0.20579254518635562
+        }
+      ],
+      "maintenanceCapex": 2463278854,
+      "growthCapex": 1542976192.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 68393847955.1,
+      "ebitda": 19818879177.6
+    },
+    {
+      "ticker": "FGLQ",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.16463392533771395,
+          "previousCategoryMarketShare": 0.16463403614908445,
+          "categoryMarketShare13WeeksAgo": 0.16463403614908445
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.164633925337714,
+          "previousCategoryMarketShare": 0.1646340361490845,
+          "categoryMarketShare13WeeksAgo": 0.1646340361490845
+        }
+      ],
+      "maintenanceCapex": 1970621489.7,
+      "growthCapex": 1231397775.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 54714192967.1,
+      "ebitda": 13596406362.7
+    },
+    {
+      "ticker": "THSH",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756,
+          "previousCategoryMarketShare": 0.13170722891926756,
+          "categoryMarketShare13WeeksAgo": 0.13170722891926756
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1317072289192676,
+          "previousCategoryMarketShare": 0.1317072289192676,
+          "categoryMarketShare13WeeksAgo": 0.1317072289192676
+        }
+      ],
+      "maintenanceCapex": 1576498864.6,
+      "growthCapex": 986204179.1,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 43772283924.8,
+      "ebitda": 16631736039.7
+    },
+    {
+      "ticker": "CQYU",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613696,
+          "previousCategoryMarketShare": 0.10536578313541407,
+          "categoryMarketShare13WeeksAgo": 0.10536578313541407
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613698,
+          "previousCategoryMarketShare": 0.1053657831354141,
+          "categoryMarketShare13WeeksAgo": 0.1053657831354141
+        }
+      ],
+      "maintenanceCapex": 1261198663.6,
+      "growthCapex": 787713471.1,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 35017589349.8,
+      "ebitda": 11156264979.6
+    },
+    {
+      "ticker": "TBSE",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833125,
+          "previousCategoryMarketShare": 0.08429262650833125,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833125
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833128,
+          "previousCategoryMarketShare": 0.08429262650833128,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833128
+        }
+      ],
+      "maintenanceCapex": 1008959138.5,
+      "growthCapex": 629959813.6,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 28014186922.9,
+      "ebitda": 10091527290.9
+    },
+    {
+      "ticker": "TNKI",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.067434101206665,
+          "previousCategoryMarketShare": 0.067434101206665,
+          "categoryMarketShare13WeeksAgo": 0.067434101206665
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.06743410120666503,
+          "previousCategoryMarketShare": 0.06743410120666503,
+          "categoryMarketShare13WeeksAgo": 0.06743410120666503
+        }
+      ],
+      "maintenanceCapex": 807167253.4,
+      "growthCapex": 503182872.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 22411317762.9,
+      "ebitda": 4695801159.8
+    },
+    {
+      "ticker": "UYVI",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.053947208343992234,
+          "previousCategoryMarketShare": 0.053947280965331995,
+          "categoryMarketShare13WeeksAgo": 0.053947280965331995
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.053947208343992255,
+          "previousCategoryMarketShare": 0.053947280965332016,
+          "categoryMarketShare13WeeksAgo": 0.053947280965332016
+        }
+      ],
+      "maintenanceCapex": 645733614.9,
+      "growthCapex": 402637349,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 17928949746.7,
+      "ebitda": 3538062443.3
+    },
+    {
+      "ticker": "FKZZ",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.04315779572372969,
+          "previousCategoryMarketShare": 0.043157824772265596,
+          "categoryMarketShare13WeeksAgo": 0.043157824772265596
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.043157795723729714,
+          "previousCategoryMarketShare": 0.04315782477226562,
+          "categoryMarketShare13WeeksAgo": 0.04315782477226562
+        }
+      ],
+      "maintenanceCapex": 516586967.9,
+      "growthCapex": 321572145.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 14343202231.1,
+      "ebitda": 3141344450.8
+    },
+    {
+      "ticker": "QYHS",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.03452621334015504,
+          "previousCategoryMarketShare": 0.03452625981781249,
+          "categoryMarketShare13WeeksAgo": 0.03452625981781249
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.03452621334015506,
+          "previousCategoryMarketShare": 0.0345262598178125,
+          "categoryMarketShare13WeeksAgo": 0.0345262598178125
+        }
+      ],
+      "maintenanceCapex": 413269611.8,
+      "growthCapex": 255965403.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 11474582408,
+      "ebitda": 898011529.2
+    },
+    {
+      "ticker": "RAWH",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.027620989263187012,
+          "previousCategoryMarketShare": 0.027621007854249993,
+          "categoryMarketShare13WeeksAgo": 0.027621007854249993
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.02762098926318702,
+          "previousCategoryMarketShare": 0.02762100785425,
+          "categoryMarketShare13WeeksAgo": 0.02762100785425
+        }
+      ],
+      "maintenanceCapex": 330615491.5,
+      "growthCapex": 204089034.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 9179555932.8,
+      "ebitda": 370485186.2
+    },
+    {
+      "ticker": "CKNU",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.036597193142725845,
+          "previousCategoryMarketShare": 0.036597193142725845,
+          "categoryMarketShare13WeeksAgo": 0.036597193142725845
+        }
+      ],
+      "maintenanceCapex": 65597928.5,
+      "growthCapex": 24679980.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 1769695383.4,
+      "ebitda": 601920197.3
+    },
+    {
+      "ticker": "IXGB",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02927775451418067,
+          "previousCategoryMarketShare": 0.02927775451418067,
+          "categoryMarketShare13WeeksAgo": 0.02927775451418067
+        }
+      ],
+      "maintenanceCapex": 52478339.7,
+      "growthCapex": 19694824.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 1415754715.5,
+      "ebitda": 310979216.6
+    },
+    {
+      "ticker": "CUJO",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.023422172081455063,
+          "previousCategoryMarketShare": 0.02342220361134454,
+          "categoryMarketShare13WeeksAgo": 0.02342220361134454
+        }
+      ],
+      "maintenanceCapex": 41982665.4,
+      "growthCapex": 15771402.6,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 1132600237.4,
+      "ebitda": 359095787.5
+    },
+    {
+      "ticker": "DIBY",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.018737737665164053,
+          "previousCategoryMarketShare": 0.018737762889075634,
+          "categoryMarketShare13WeeksAgo": 0.018737762889075634
+        }
+      ],
+      "maintenanceCapex": 33586155.1,
+      "growthCapex": 12634719.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 906092827.7,
+      "ebitda": 323414185.2
+    },
+    {
+      "ticker": "HJZB",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.014990200221695874,
+          "previousCategoryMarketShare": 0.014990210311260507,
+          "categoryMarketShare13WeeksAgo": 0.014990210311260507
+        }
+      ],
+      "maintenanceCapex": 26868912,
+      "growthCapex": 10067324.9,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 724867563.4,
+      "ebitda": 144191975.5
+    },
+    {
+      "ticker": "AUNM",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.011992160177356702,
+          "previousCategoryMarketShare": 0.011992168249008409,
+          "categoryMarketShare13WeeksAgo": 0.011992168249008409
+        }
+      ],
+      "maintenanceCapex": 21495130.2,
+      "growthCapex": 8043305.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 579894177.8,
+      "ebitda": 138713667.2
+    },
+    {
+      "ticker": "FEVV",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.00959372814188536,
+          "previousCategoryMarketShare": 0.009593734599206725,
+          "categoryMarketShare13WeeksAgo": 0.009593734599206725
+        }
+      ],
+      "maintenanceCapex": 17196097.5,
+      "growthCapex": 6470447.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 463911519.4,
+      "ebitda": 175865445.4
+    },
+    {
+      "ticker": "OXQI",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.007674987679365379,
+          "previousCategoryMarketShare": 0.007674987679365379,
+          "categoryMarketShare13WeeksAgo": 0.007674987679365379
+        }
+      ],
+      "maintenanceCapex": 13756884,
+      "growthCapex": 5176019.6,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 371132543.2,
+      "ebitda": 129758899.1
+    },
+    {
+      "ticker": "KVFC",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.0061399860108066326,
+          "previousCategoryMarketShare": 0.006139990143492306,
+          "categoryMarketShare13WeeksAgo": 0.006139990143492306
+        }
+      ],
+      "maintenanceCapex": 11005505.3,
+      "growthCapex": 4138962.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 296905316,
+      "ebitda": 106382503.8
+    },
+    {
+      "ticker": "CVTI",
+      "productLines": [
+        {
+          "industry": "SoftwareDigitalServices",
+          "subUnitId": "enterprise_software",
+          "revenueShare": 1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.004911988808645306,
+          "previousCategoryMarketShare": 0.004911992114793845,
+          "categoryMarketShare13WeeksAgo": 0.004911992114793845
+        }
+      ],
+      "maintenanceCapex": 8804404.8,
+      "growthCapex": 3424735.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 237524563.6,
+      "ebitda": 33073310.6
+    },
+    {
+      "ticker": "GHHF",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.20579226815792936,
+          "previousCategoryMarketShare": 0.2057925451863556,
+          "categoryMarketShare13WeeksAgo": 0.2057925451863556
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.20579226815792934,
+          "previousCategoryMarketShare": 0.20579254518635556,
+          "categoryMarketShare13WeeksAgo": 0.20579254518635556
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.20579226815792928,
+          "previousCategoryMarketShare": 0.2057925451863555,
+          "categoryMarketShare13WeeksAgo": 0.2057925451863555
+        }
+      ],
+      "maintenanceCapex": 724937325.8,
+      "growthCapex": 453508194.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 19557239334.7,
+      "ebitda": 3664081133.5
+    },
+    {
+      "ticker": "GLVU",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.16463392533771395,
+          "previousCategoryMarketShare": 0.16463403614908445,
+          "categoryMarketShare13WeeksAgo": 0.16463403614908445
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.16463392533771393,
+          "previousCategoryMarketShare": 0.16463403614908442,
+          "categoryMarketShare13WeeksAgo": 0.16463403614908442
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.1646339253377139,
+          "previousCategoryMarketShare": 0.1646340361490844,
+          "categoryMarketShare13WeeksAgo": 0.1646340361490844
+        }
+      ],
+      "maintenanceCapex": 579949960.6,
+      "growthCapex": 362093402.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 15645846969.7,
+      "ebitda": 2487800012.3
+    },
+    {
+      "ticker": "VATF",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.1317071402701712,
+          "previousCategoryMarketShare": 0.1317072289192676,
+          "categoryMarketShare13WeeksAgo": 0.1317072289192676
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.13170714027017116,
+          "previousCategoryMarketShare": 0.13170722891926756,
+          "categoryMarketShare13WeeksAgo": 0.13170722891926756
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.13170714027017116,
+          "previousCategoryMarketShare": 0.13170722891926756,
+          "categoryMarketShare13WeeksAgo": 0.13170722891926756
+        }
+      ],
+      "maintenanceCapex": 463959651.7,
+      "growthCapex": 290760667.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 12516501600.4,
+      "ebitda": 2742699318.6
+    },
+    {
+      "ticker": "TKXE",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613697,
+          "previousCategoryMarketShare": 0.10536578313541409,
+          "categoryMarketShare13WeeksAgo": 0.10536578313541409
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613694,
+          "previousCategoryMarketShare": 0.10536578313541406,
+          "categoryMarketShare13WeeksAgo": 0.10536578313541406
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613693,
+          "previousCategoryMarketShare": 0.10536578313541405,
+          "categoryMarketShare13WeeksAgo": 0.10536578313541405
+        }
+      ],
+      "maintenanceCapex": 371167683.8,
+      "growthCapex": 235025092.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 10013180511.4,
+      "ebitda": 1193863063.3
+    },
+    {
+      "ticker": "YYVG",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833125,
+          "previousCategoryMarketShare": 0.08429262650833125,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833125
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833123,
+          "previousCategoryMarketShare": 0.08429262650833123,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833123
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.08429262650833122,
+          "previousCategoryMarketShare": 0.08429262650833122,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833122
+        }
+      ],
+      "maintenanceCapex": 296934189.4,
+      "growthCapex": 185227150.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 8010568156.3,
+      "ebitda": 1208458477.7
+    },
+    {
+      "ticker": "CFFG",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.06743410120666501,
+          "previousCategoryMarketShare": 0.06743410120666501,
+          "categoryMarketShare13WeeksAgo": 0.06743410120666501
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.067434101206665,
+          "previousCategoryMarketShare": 0.067434101206665,
+          "categoryMarketShare13WeeksAgo": 0.067434101206665
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.06743410120666499,
+          "previousCategoryMarketShare": 0.06743410120666499,
+          "categoryMarketShare13WeeksAgo": 0.06743410120666499
+        }
+      ],
+      "maintenanceCapex": 237547431,
+      "growthCapex": 148030883.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 6408498572.8,
+      "ebitda": 1027489621.8
+    },
+    {
+      "ticker": "RLKE",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.05394724465466213,
+          "previousCategoryMarketShare": 0.05394728096533201,
+          "categoryMarketShare13WeeksAgo": 0.05394728096533201
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.05394724465466212,
+          "previousCategoryMarketShare": 0.053947280965332,
+          "categoryMarketShare13WeeksAgo": 0.053947280965332
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.05394724465466211,
+          "previousCategoryMarketShare": 0.05394728096533199,
+          "categoryMarketShare13WeeksAgo": 0.05394728096533199
+        }
+      ],
+      "maintenanceCapex": 190038012.5,
+      "growthCapex": 118546327.6,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 5126836598.7,
+      "ebitda": 707436311.7
+    },
+    {
+      "ticker": "NOMX",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.043157766675193804,
+          "previousCategoryMarketShare": 0.04315782477226561,
+          "categoryMarketShare13WeeksAgo": 0.04315782477226561
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.0431577666751938,
+          "previousCategoryMarketShare": 0.0431578247722656,
+          "categoryMarketShare13WeeksAgo": 0.0431578247722656
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.04315776667519379,
+          "previousCategoryMarketShare": 0.043157824772265596,
+          "categoryMarketShare13WeeksAgo": 0.043157824772265596
+        }
+      ],
+      "maintenanceCapex": 152030298.5,
+      "growthCapex": 95142578.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 4101407096.1,
+      "ebitda": 850941514.1
+    },
+    {
+      "ticker": "GUCZ",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.03452621334015505,
+          "previousCategoryMarketShare": 0.034526259817812495,
+          "categoryMarketShare13WeeksAgo": 0.034526259817812495
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.03452621334015504,
+          "previousCategoryMarketShare": 0.03452625981781249,
+          "categoryMarketShare13WeeksAgo": 0.03452625981781249
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.034526213340155036,
+          "previousCategoryMarketShare": 0.03452625981781248,
+          "categoryMarketShare13WeeksAgo": 0.03452625981781248
+        }
+      ],
+      "maintenanceCapex": 121624223.2,
+      "growthCapex": 79229797.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 3281116916.2,
+      "ebitda": 253249972
+    },
+    {
+      "ticker": "TLYZ",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.027620970672124035,
+          "previousCategoryMarketShare": 0.027621007854249993,
+          "categoryMarketShare13WeeksAgo": 0.027621007854249993
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.02762097067212403,
+          "previousCategoryMarketShare": 0.02762100785424999,
+          "categoryMarketShare13WeeksAgo": 0.02762100785424999
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.027620970672124025,
+          "previousCategoryMarketShare": 0.027621007854249983,
+          "categoryMarketShare13WeeksAgo": 0.027621007854249983
+        }
+      ],
+      "maintenanceCapex": 97299415.2,
+      "growthCapex": 60116158.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 2624913875.9,
+      "ebitda": 284024866.8
+    },
+    {
+      "ticker": "AMTJ",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555,
+          "previousCategoryMarketShare": 0.2057925451863555,
+          "categoryMarketShare13WeeksAgo": 0.2057925451863555
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555,
+          "previousCategoryMarketShare": 0.2057925451863555,
+          "categoryMarketShare13WeeksAgo": 0.2057925451863555
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.2057925451863555,
+          "previousCategoryMarketShare": 0.2057925451863555,
+          "categoryMarketShare13WeeksAgo": 0.2057925451863555
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.20579254518635562,
+          "previousCategoryMarketShare": 0.20579254518635562,
+          "categoryMarketShare13WeeksAgo": 0.20579254518635562
+        }
+      ],
+      "maintenanceCapex": 4919215105.4,
+      "growthCapex": 3123574468.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 132708472226,
+      "ebitda": 46300197659.7
+    },
+    {
+      "ticker": "ZNSW",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.16463392533771395,
+          "previousCategoryMarketShare": 0.16463403614908445,
+          "categoryMarketShare13WeeksAgo": 0.16463403614908445
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.16463392533771395,
+          "previousCategoryMarketShare": 0.16463403614908445,
+          "categoryMarketShare13WeeksAgo": 0.16463403614908445
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.16463392533771395,
+          "previousCategoryMarketShare": 0.16463403614908445,
+          "categoryMarketShare13WeeksAgo": 0.16463403614908445
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.164633925337714,
+          "previousCategoryMarketShare": 0.1646340361490845,
+          "categoryMarketShare13WeeksAgo": 0.1646340361490845
+        }
+      ],
+      "maintenanceCapex": 3935371485.3,
+      "growthCapex": 2470958868.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 106166445317,
+      "ebitda": 23130824650.4
+    },
+    {
+      "ticker": "OREP",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756,
+          "previousCategoryMarketShare": 0.13170722891926756,
+          "categoryMarketShare13WeeksAgo": 0.13170722891926756
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756,
+          "previousCategoryMarketShare": 0.13170722891926756,
+          "categoryMarketShare13WeeksAgo": 0.13170722891926756
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.13170722891926756,
+          "previousCategoryMarketShare": 0.13170722891926756,
+          "categoryMarketShare13WeeksAgo": 0.13170722891926756
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.1317072289192676,
+          "previousCategoryMarketShare": 0.1317072289192676,
+          "categoryMarketShare13WeeksAgo": 0.1317072289192676
+        }
+      ],
+      "maintenanceCapex": 3148297117,
+      "growthCapex": 1984231809.9,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 84933116651.7,
+      "ebitda": 21202766683.5
+    },
+    {
+      "ticker": "BSPG",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613696,
+          "previousCategoryMarketShare": 0.10536578313541407,
+          "categoryMarketShare13WeeksAgo": 0.10536578313541407
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613696,
+          "previousCategoryMarketShare": 0.10536578313541407,
+          "categoryMarketShare13WeeksAgo": 0.10536578313541407
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613696,
+          "previousCategoryMarketShare": 0.10536578313541407,
+          "categoryMarketShare13WeeksAgo": 0.10536578313541407
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.10536571221613698,
+          "previousCategoryMarketShare": 0.1053657831354141,
+          "categoryMarketShare13WeeksAgo": 0.1053657831354141
+        }
+      ],
+      "maintenanceCapex": 2518639364.6,
+      "growthCapex": 1617069167.6,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 67947421678.2,
+      "ebitda": 31072271199.7
+    },
+    {
+      "ticker": "HWUO",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.08429251303748787,
+          "previousCategoryMarketShare": 0.08429262650833125,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833125
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.08429251303748787,
+          "previousCategoryMarketShare": 0.08429262650833125,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833125
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.08429251303748787,
+          "previousCategoryMarketShare": 0.08429262650833125,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833125
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.0842925130374879,
+          "previousCategoryMarketShare": 0.08429262650833128,
+          "categoryMarketShare13WeeksAgo": 0.08429262650833128
+        }
+      ],
+      "maintenanceCapex": 2014910052.8,
+      "growthCapex": 1258809496.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 54357137637.7,
+      "ebitda": 7443863611.4
+    },
+    {
+      "ticker": "RXYX",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.06743405581832765,
+          "previousCategoryMarketShare": 0.067434101206665,
+          "categoryMarketShare13WeeksAgo": 0.067434101206665
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.06743405581832765,
+          "previousCategoryMarketShare": 0.067434101206665,
+          "categoryMarketShare13WeeksAgo": 0.067434101206665
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.06743405581832765,
+          "previousCategoryMarketShare": 0.067434101206665,
+          "categoryMarketShare13WeeksAgo": 0.067434101206665
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.06743405581832768,
+          "previousCategoryMarketShare": 0.06743410120666503,
+          "categoryMarketShare13WeeksAgo": 0.06743410120666503
+        }
+      ],
+      "maintenanceCapex": 1611928532.3,
+      "growthCapex": 1019113467.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 43485982496.7,
+      "ebitda": 12098524906.1
+    },
+    {
+      "ticker": "CTKN",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965331995,
+          "previousCategoryMarketShare": 0.053947280965331995,
+          "categoryMarketShare13WeeksAgo": 0.053947280965331995
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965331995,
+          "previousCategoryMarketShare": 0.053947280965331995,
+          "categoryMarketShare13WeeksAgo": 0.053947280965331995
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965331995,
+          "previousCategoryMarketShare": 0.053947280965331995,
+          "categoryMarketShare13WeeksAgo": 0.053947280965331995
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.053947280965332016,
+          "previousCategoryMarketShare": 0.053947280965332016,
+          "categoryMarketShare13WeeksAgo": 0.053947280965332016
+        }
+      ],
+      "maintenanceCapex": 1289543255.9,
+      "growthCapex": 809705183.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 34789024560.4,
+      "ebitda": 10104361508.1
+    },
+    {
+      "ticker": "LAJP",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.04315776667519379,
+          "previousCategoryMarketShare": 0.043157824772265596,
+          "categoryMarketShare13WeeksAgo": 0.043157824772265596
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.04315776667519379,
+          "previousCategoryMarketShare": 0.043157824772265596,
+          "categoryMarketShare13WeeksAgo": 0.043157824772265596
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.04315776667519379,
+          "previousCategoryMarketShare": 0.043157824772265596,
+          "categoryMarketShare13WeeksAgo": 0.043157824772265596
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.04315776667519381,
+          "previousCategoryMarketShare": 0.04315782477226562,
+          "categoryMarketShare13WeeksAgo": 0.04315782477226562
+        }
+      ],
+      "maintenanceCapex": 1031633986.7,
+      "growthCapex": 644310954,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 27830876616.1,
+      "ebitda": 4652708602.8
+    },
+    {
+      "ticker": "FSUT",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249,
+          "previousCategoryMarketShare": 0.03452625981781249,
+          "categoryMarketShare13WeeksAgo": 0.03452625981781249
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249,
+          "previousCategoryMarketShare": 0.03452625981781249,
+          "categoryMarketShare13WeeksAgo": 0.03452625981781249
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.03452625981781249,
+          "previousCategoryMarketShare": 0.03452625981781249,
+          "categoryMarketShare13WeeksAgo": 0.03452625981781249
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0345262598178125,
+          "previousCategoryMarketShare": 0.0345262598178125,
+          "categoryMarketShare13WeeksAgo": 0.0345262598178125
+        }
+      ],
+      "maintenanceCapex": 825307695.6,
+      "growthCapex": 537703608.1,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 22264982581.5,
+      "ebitda": 1346280665.1
+    },
+    {
+      "ticker": "NZPR",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.027620989263187012,
+          "previousCategoryMarketShare": 0.027621007854249993,
+          "categoryMarketShare13WeeksAgo": 0.027621007854249993
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.027620989263187012,
+          "previousCategoryMarketShare": 0.027621007854249993,
+          "categoryMarketShare13WeeksAgo": 0.027621007854249993
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.027620989263187012,
+          "previousCategoryMarketShare": 0.027621007854249993,
+          "categoryMarketShare13WeeksAgo": 0.027621007854249993
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.02762098926318702,
+          "previousCategoryMarketShare": 0.02762100785425,
+          "categoryMarketShare13WeeksAgo": 0.02762100785425
+        }
+      ],
+      "maintenanceCapex": 660245918.5,
+      "growthCapex": 407854449.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 17811853810.5,
+      "ebitda": 526832941.5
+    },
+    {
+      "ticker": "EWTA",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0.001,
+          "categoryMarketShare": 0.022096821156250376,
+          "previousCategoryMarketShare": 0.022096806283399995,
+          "categoryMarketShare13WeeksAgo": 0.022096806283399995
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0.001,
+          "categoryMarketShare": 0.022096821156250383,
+          "previousCategoryMarketShare": 0.0220968062834,
+          "categoryMarketShare13WeeksAgo": 0.0220968062834
+        }
+      ],
+      "maintenanceCapex": 264492357.7,
+      "growthCapex": 165866173.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 7343625136.2,
+      "ebitda": 2355981714.6
+    },
+    {
+      "ticker": "EWTB",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439685,
+          "previousCategoryMarketShare": 0.01767744502671999,
+          "categoryMarketShare13WeeksAgo": 0.01767744502671999
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439692,
+          "previousCategoryMarketShare": 0.017677445026719998,
+          "categoryMarketShare13WeeksAgo": 0.017677445026719998
+        }
+      ],
+      "maintenanceCapex": 211593895.2,
+      "growthCapex": 132533407.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 5874905046.2,
+      "ebitda": 1754217476.6
+    },
+    {
+      "ticker": "EBRA",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995,
+          "previousCategoryMarketShare": 0.014141956021375995,
+          "categoryMarketShare13WeeksAgo": 0.014141956021375995
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021376,
+          "previousCategoryMarketShare": 0.014141956021376,
+          "categoryMarketShare13WeeksAgo": 0.014141956021376
+        }
+      ],
+      "maintenanceCapex": 169275132.7,
+      "growthCapex": 106278748.6,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 4699932985.4,
+      "ebitda": 1643035180.4
+    },
+    {
+      "ticker": "EBRB",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.011313557202201403,
+          "previousCategoryMarketShare": 0.0113135648171008,
+          "categoryMarketShare13WeeksAgo": 0.0113135648171008
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.011313557202201407,
+          "previousCategoryMarketShare": 0.011313564817100804,
+          "categoryMarketShare13WeeksAgo": 0.011313564817100804
+        }
+      ],
+      "maintenanceCapex": 135420203.1,
+      "growthCapex": 84834498.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 3760000336.8,
+      "ebitda": 1160526617.2
+    },
+    {
+      "ticker": "ENGA",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.009050845761761123,
+          "previousCategoryMarketShare": 0.00905085185368064,
+          "categoryMarketShare13WeeksAgo": 0.00905085185368064
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.009050845761761126,
+          "previousCategoryMarketShare": 0.009050851853680644,
+          "categoryMarketShare13WeeksAgo": 0.009050851853680644
+        }
+      ],
+      "maintenanceCapex": 108336190.6,
+      "growthCapex": 67792767.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 3008016339.4,
+      "ebitda": 839117421
+    },
+    {
+      "ticker": "ENGB",
+      "productLines": [
+        {
+          "industry": "Energy",
+          "subUnitId": "upstream_extraction",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.007240676609408898,
+          "previousCategoryMarketShare": 0.007240681482944511,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944511
+        },
+        {
+          "industry": "Energy",
+          "subUnitId": "refined_products",
+          "revenueShare": 0.4,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.0072406766094089015,
+          "previousCategoryMarketShare": 0.007240681482944515,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944515
+        }
+      ],
+      "maintenanceCapex": 86668906.5,
+      "growthCapex": 54179098.7,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 2406386889.5,
+      "ebitda": 622575985.8
+    },
+    {
+      "ticker": "EGDA",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399995,
+          "previousCategoryMarketShare": 0.022096806283399995,
+          "categoryMarketShare13WeeksAgo": 0.022096806283399995
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.02209680628339999,
+          "previousCategoryMarketShare": 0.02209680628339999,
+          "categoryMarketShare13WeeksAgo": 0.02209680628339999
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.022096806283399988,
+          "previousCategoryMarketShare": 0.022096806283399988,
+          "categoryMarketShare13WeeksAgo": 0.022096806283399988
+        }
+      ],
+      "maintenanceCapex": 77839582,
+      "growthCapex": 49309435.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 2099958688.5,
+      "ebitda": 795764425.7
+    },
+    {
+      "ticker": "EGDB",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439692,
+          "previousCategoryMarketShare": 0.017677445026719998,
+          "categoryMarketShare13WeeksAgo": 0.017677445026719998
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.01767743312843969,
+          "previousCategoryMarketShare": 0.017677445026719994,
+          "categoryMarketShare13WeeksAgo": 0.017677445026719994
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439685,
+          "previousCategoryMarketShare": 0.01767744502671999,
+          "categoryMarketShare13WeeksAgo": 0.01767744502671999
+        }
+      ],
+      "maintenanceCapex": 62271603.2,
+      "growthCapex": 39332749.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 1679932517.9,
+      "ebitda": 568846862.6
+    },
+    {
+      "ticker": "ESLA",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.014141936984127506,
+          "previousCategoryMarketShare": 0.014141956021375997,
+          "categoryMarketShare13WeeksAgo": 0.014141956021375997
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.014141936984127504,
+          "previousCategoryMarketShare": 0.014141956021375995,
+          "categoryMarketShare13WeeksAgo": 0.014141956021375995
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.0141419369841275,
+          "previousCategoryMarketShare": 0.014141956021375992,
+          "categoryMarketShare13WeeksAgo": 0.014141956021375992
+        }
+      ],
+      "maintenanceCapex": 49817303.5,
+      "growthCapex": 31320414.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 1343957506,
+      "ebitda": 372723857.2
+    },
+    {
+      "ticker": "ESLB",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011313564817100802,
+          "previousCategoryMarketShare": 0.011313564817100802,
+          "categoryMarketShare13WeeksAgo": 0.011313564817100802
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008,
+          "previousCategoryMarketShare": 0.0113135648171008,
+          "categoryMarketShare13WeeksAgo": 0.0113135648171008
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011313564817100798,
+          "previousCategoryMarketShare": 0.011313564817100798,
+          "categoryMarketShare13WeeksAgo": 0.011313564817100798
+        }
+      ],
+      "maintenanceCapex": 39853846.4,
+      "growthCapex": 24992767.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 1075167933.8,
+      "ebitda": 257870010.1
+    },
+    {
+      "ticker": "ECPA",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.009050839669841609,
+          "previousCategoryMarketShare": 0.009050851853680642,
+          "categoryMarketShare13WeeksAgo": 0.009050851853680642
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.009050839669841607,
+          "previousCategoryMarketShare": 0.00905085185368064,
+          "categoryMarketShare13WeeksAgo": 0.00905085185368064
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.009050839669841606,
+          "previousCategoryMarketShare": 0.009050851853680639,
+          "categoryMarketShare13WeeksAgo": 0.009050851853680639
+        }
+      ],
+      "maintenanceCapex": 31883077,
+      "growthCapex": 20052915.4,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 860134602.4,
+      "ebitda": 255563893.5
+    },
+    {
+      "ticker": "ECPB",
+      "productLines": [
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "heavy_equipment",
+          "revenueShare": 0.5,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.007240676609408901,
+          "previousCategoryMarketShare": 0.007240681482944514,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944514
+        },
+        {
+          "industry": "IndustrialsMachinery",
+          "subUnitId": "industrial_automation",
+          "revenueShare": 0.3,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.0072406766094089,
+          "previousCategoryMarketShare": 0.007240681482944513,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944513
+        },
+        {
+          "industry": "MaterialsChemicals",
+          "subUnitId": "industrial_chemicals",
+          "revenueShare": 0.2,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.007240676609408898,
+          "previousCategoryMarketShare": 0.007240681482944511,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944511
+        }
+      ],
+      "maintenanceCapex": 25506460.1,
+      "growthCapex": 16012284.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 688106833.6,
+      "ebitda": 185136287.3
+    },
+    {
+      "ticker": "EWHA",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.022096776537699227,
+          "previousCategoryMarketShare": 0.022096806283399995,
+          "categoryMarketShare13WeeksAgo": 0.022096806283399995
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.022096776537699227,
+          "previousCategoryMarketShare": 0.022096806283399995,
+          "categoryMarketShare13WeeksAgo": 0.022096806283399995
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.022096776537699227,
+          "previousCategoryMarketShare": 0.022096806283399995,
+          "categoryMarketShare13WeeksAgo": 0.022096806283399995
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.002,
+          "categoryMarketShare": 0.022096776537699234,
+          "previousCategoryMarketShare": 0.0220968062834,
+          "categoryMarketShare13WeeksAgo": 0.0220968062834
+        }
+      ],
+      "maintenanceCapex": 528197006.2,
+      "growthCapex": 330660853.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 14249633490.6,
+      "ebitda": 2531845160.9
+    },
+    {
+      "ticker": "EWHB",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439685,
+          "previousCategoryMarketShare": 0.01767744502671999,
+          "categoryMarketShare13WeeksAgo": 0.01767744502671999
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439685,
+          "previousCategoryMarketShare": 0.01767744502671999,
+          "categoryMarketShare13WeeksAgo": 0.01767744502671999
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439685,
+          "previousCategoryMarketShare": 0.01767744502671999,
+          "categoryMarketShare13WeeksAgo": 0.01767744502671999
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.017677433128439692,
+          "previousCategoryMarketShare": 0.017677445026719998,
+          "categoryMarketShare13WeeksAgo": 0.017677445026719998
+        }
+      ],
+      "maintenanceCapex": 422557616.5,
+      "growthCapex": 264150097.1,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 11399713466.8,
+      "ebitda": 1806920799.9
+    },
+    {
+      "ticker": "ECRA",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995,
+          "previousCategoryMarketShare": 0.014141956021375995,
+          "categoryMarketShare13WeeksAgo": 0.014141956021375995
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995,
+          "previousCategoryMarketShare": 0.014141956021375995,
+          "categoryMarketShare13WeeksAgo": 0.014141956021375995
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021375995,
+          "previousCategoryMarketShare": 0.014141956021375995,
+          "categoryMarketShare13WeeksAgo": 0.014141956021375995
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.014141956021376,
+          "previousCategoryMarketShare": 0.014141956021376,
+          "categoryMarketShare13WeeksAgo": 0.014141956021376
+        }
+      ],
+      "maintenanceCapex": 338045844.9,
+      "growthCapex": 211937130.5,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 9119632935.8,
+      "ebitda": 1828475711.3
+    },
+    {
+      "ticker": "ECRB",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008,
+          "previousCategoryMarketShare": 0.0113135648171008,
+          "categoryMarketShare13WeeksAgo": 0.0113135648171008
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008,
+          "previousCategoryMarketShare": 0.0113135648171008,
+          "categoryMarketShare13WeeksAgo": 0.0113135648171008
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.0113135648171008,
+          "previousCategoryMarketShare": 0.0113135648171008,
+          "categoryMarketShare13WeeksAgo": 0.0113135648171008
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": 0,
+          "categoryMarketShare": 0.011313564817100804,
+          "previousCategoryMarketShare": 0.011313564817100804,
+          "categoryMarketShare13WeeksAgo": 0.011313564817100804
+        }
+      ],
+      "maintenanceCapex": 270436808.5,
+      "growthCapex": 169167101.8,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 7295779755.4,
+      "ebitda": 1240089899.2
+    },
+    {
+      "ticker": "ESYA",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.009050845761761123,
+          "previousCategoryMarketShare": 0.00905085185368064,
+          "categoryMarketShare13WeeksAgo": 0.00905085185368064
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.009050845761761123,
+          "previousCategoryMarketShare": 0.00905085185368064,
+          "categoryMarketShare13WeeksAgo": 0.00905085185368064
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.009050845761761123,
+          "previousCategoryMarketShare": 0.00905085185368064,
+          "categoryMarketShare13WeeksAgo": 0.00905085185368064
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.009050845761761126,
+          "previousCategoryMarketShare": 0.009050851853680644,
+          "categoryMarketShare13WeeksAgo": 0.009050851853680644
+        }
+      ],
+      "maintenanceCapex": 216349323,
+      "growthCapex": 135541983.2,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 5836555346.5,
+      "ebitda": 1101297821.7
+    },
+    {
+      "ticker": "ESYB",
+      "productLines": [
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "food_beverage",
+          "revenueShare": 0.6,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.007240676609408898,
+          "previousCategoryMarketShare": 0.007240681482944511,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944511
+        },
+        {
+          "industry": "ConsumerDiscretionaryRetail",
+          "subUnitId": "apparel_retail",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.007240676609408898,
+          "previousCategoryMarketShare": 0.007240681482944511,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944511
+        },
+        {
+          "industry": "LuxuryGoods",
+          "subUnitId": "luxury_goods",
+          "revenueShare": 0.15,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.007240676609408898,
+          "previousCategoryMarketShare": 0.007240681482944511,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944511
+        },
+        {
+          "industry": "ConsumerStaples",
+          "subUnitId": "household_essentials",
+          "revenueShare": 0.1,
+          "competitiveness": -0.001,
+          "categoryMarketShare": 0.0072406766094089015,
+          "previousCategoryMarketShare": 0.007240681482944515,
+          "categoryMarketShare13WeeksAgo": 0.007240681482944515
+        }
+      ],
+      "maintenanceCapex": 173079543.3,
+      "growthCapex": 108183029.1,
+      "isNaN_maintCapex": false,
+      "isNaN_growthCapex": false,
+      "annualRevenue": 4669291132.6,
+      "ebitda": 742875368.7
+    }
+  ],
+  "week1_investmentComponentUSD": 902562499697.8345,
+  "week1_governmentSpendingUSD": 104692691508.87575,
+  "crashed": false
+}
