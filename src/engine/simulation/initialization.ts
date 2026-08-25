@@ -47,7 +47,7 @@ export function createInitialGameState(): GameState {
     const reg = regions[regionId];
     const hs = reg.householdState;
     const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    const G = reg.estimatedHouseholdIncomeUSD * 0.18;
+    const G = reg.governmentSpendingUSD * 52 * 0.35 * (1 + reg.fiscalStanceScore * 0.25);
     const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
     reg.laggedCorporateDemandBase = corpBase;
     const I = corpBase;

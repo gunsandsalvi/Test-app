@@ -1,3 +1,4 @@
+
 /**
  * Company & Corporate Fundamentals Domain Model
  *
@@ -236,3 +237,4 @@ export interface Company {
   producedCommodityId?: string;
   demandShockLagBuffer?: number[];
 }
+export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && !c.mergerAcquired; }

@@ -1064,12 +1064,18 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const maintenanceCapex = Math.round(capex * 0.3); // newly-public growth-stage company spends more on expansion than upkeep
   const growthCapex = capex - maintenanceCapex;
   
+  const eps = Number(((ebitda * 0.5) / Math.max(1, shares)).toFixed(4));
+  const IPO_POP = 0.08;
+  const stockPrice = Math.max(0.5, Number((eps * SECTOR_BENCHMARKS[sector].basePE * (1 + IPO_POP)).toFixed(2)));
+  const marketCap = shares * stockPrice;
+  const forwardPE = SECTOR_BENCHMARKS[sector].basePE;
+
   return {
     id: `comp_${ticker}_${Date.now()}_${week}`,
     ticker, name, region: regionId, sector,
     baselineAnnualRevenue: revBase, annualRevenue: revBase,
     previousEmployeeCount: employeeCount, employeeCount,
-    ebitda, baselineEbitdaMargin: ebitda / Math.max(1, revBase), ebit, netIncome: ebitda * 0.5, eps: Number(((ebitda * 0.5) / Math.max(1, shares)).toFixed(4)),
+    ebitda, baselineEbitdaMargin: ebitda / Math.max(1, revBase), ebit, netIncome: ebitda * 0.5, eps,
     sharesOutstanding: shares, currentLiabilities: Math.round(debtBase * 0.25 + revBase * 0.08),
     totalDebt: debtBase, cash: revBase * 0.5,
     capex,
@@ -1080,8 +1086,8 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     executionQuality: 1.0,
     occupationMixDrift: {},
     creditRating: initialRating, isDefaulted: false, oasSpreadBps: 300, cdsSpreadBps: 300,
-    seniorBondYield: 0.08, stockPrice: 20, historicalPrices: Array(52).fill(20), forwardPE: 15,
-    marketCap: shares * 20, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,
+    seniorBondYield: 0.08, stockPrice, historicalPrices: Array(52).fill(stockPrice), forwardPE,
+    marketCap, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,
     baselineRecoveryRate: 0.40, debtTranches,
     productLines: [{ industry, subUnitId: category, revenueShare: 1.0, competitiveness: 0.3, previousCategoryMarketShare: 0.02, categoryMarketShare: 0.02 }],
     leverage: debtBase / Math.max(1, ebitda),
@@ -1092,10 +1098,10 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     historicalFundamentals: [],
     baselineEmployeeCount: employeeCount,
     dealerConsensus: {
-      alpha: { eps: 1.0, revenue: revBase },
-      beta: { eps: 1.0, revenue: revBase },
-      gamma: { eps: 1.0, revenue: revBase },
-      consensusEps: 1.0,
+      alpha: { eps, revenue: revBase },
+      beta: { eps, revenue: revBase },
+      gamma: { eps, revenue: revBase },
+      consensusEps: eps,
       consensusRevenue: revBase,
     },
     lastEarningsSurprisePct: 0,

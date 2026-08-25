@@ -52,6 +52,7 @@ export interface WeatherAnomaly {
   gdpImpactPct: number;
   inflationImpactPct: number;
   weeksActive: number;
+  minDurationWeeks?: number;
 }
 
 export type CreditTier = 'SUPER_PRIME' | 'PRIME' | 'NEAR_PRIME' | 'SUBPRIME';

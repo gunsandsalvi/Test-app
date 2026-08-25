@@ -1,4 +1,8 @@
-import { RegionId, WeatherAnomaly } from '../../types';
+import { RegionId, WeatherAnomaly } from '../../domain';
+
+function generateRandomMinDuration(): number {
+  return 2 + Math.floor(Math.random() * 6);
+}
 
 export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
   USA: {
@@ -11,7 +15,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     affectedCommodityId: 'CORN',
     commodityImpactPct: 0.04,
     gdpImpactPct: -0.001,
-    inflationImpactPct: 0.002, weeksActive: 1,
+    inflationImpactPct: 0.002, weeksActive: 1, minDurationWeeks: generateRandomMinDuration()
   },
   UK: {
     region: 'UK',
@@ -23,7 +27,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     affectedCommodityId: 'NATGAS',
     commodityImpactPct: 0.08,
     gdpImpactPct: -0.002,
-    inflationImpactPct: 0.003, weeksActive: 1,
+    inflationImpactPct: 0.003, weeksActive: 1, minDurationWeeks: generateRandomMinDuration()
   },
   EUR: {
     region: 'EUR',
@@ -35,7 +39,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     affectedCommodityId: 'BRENT',
     commodityImpactPct: 0.03,
     gdpImpactPct: -0.001,
-    inflationImpactPct: 0.0015, weeksActive: 1,
+    inflationImpactPct: 0.0015, weeksActive: 1, minDurationWeeks: generateRandomMinDuration()
   },
   JPN: {
     region: 'JPN',
@@ -46,7 +50,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
     economicImpact: 'Maritime transport and port operations encounter localized weather delays.',
     commodityImpactPct: 0.01,
     gdpImpactPct: -0.0005,
-    inflationImpactPct: 0.0005, weeksActive: 1,
+    inflationImpactPct: 0.0005, weeksActive: 1, minDurationWeeks: generateRandomMinDuration()
   },
 };
 
@@ -55,13 +59,17 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
  */
 
 export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomaly, _week: number): WeatherAnomaly {
-  if (Math.random() < 0.28) {
+  const isExpired = current.weeksActive >= (current.minDurationWeeks || 1);
+  if (isExpired && Math.random() < 0.28) {
     const r = Math.random();
     let pick: WeatherAnomaly['type'] = 'Normal';
     if (r > 0.55) {
       const remaining: WeatherAnomaly['type'][] = ['Heatwave', 'Drought', 'Polar Vortex', 'Monsoon'];
       pick = remaining[Math.floor(Math.random() * remaining.length)];
     }
+
+    const variance = 0.6 + Math.random() * 0.8; // [0.6, 1.4]
+    const minDurationWeeks = generateRandomMinDuration();
 
     if (pick === 'Normal') {
       return {
@@ -75,6 +83,7 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         gdpImpactPct: 0.0,
         inflationImpactPct: 0.0,
         weeksActive: 1,
+        minDurationWeeks
       };
     }
 
@@ -84,13 +93,14 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         title: `${regionId} Regional Arid Drought Zone`,
         type: 'Drought',
         severity: 'Severe',
-        tempDeltaC: +3.5,
+        tempDeltaC: Number((+3.5 * variance).toFixed(1)),
         economicImpact: 'Precipitation shortfalls constrain hydro capacity and inland transport waterways.',
         affectedCommodityId: 'CORN',
-        commodityImpactPct: 0.06,
-        gdpImpactPct: -0.003,
-        inflationImpactPct: 0.004,
+        commodityImpactPct: Number((0.06 * variance).toFixed(4)),
+        gdpImpactPct: Number((-0.003 * variance).toFixed(5)),
+        inflationImpactPct: Number((0.004 * variance).toFixed(5)),
         weeksActive: 1,
+        minDurationWeeks
       };
     }
 
@@ -100,12 +110,14 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         title: `${regionId} High-Pressure Heatwave Alert`,
         type: 'Heatwave',
         severity: 'Moderate',
-        tempDeltaC: +4.2,
+        tempDeltaC: Number((+4.2 * variance).toFixed(1)),
         economicImpact: 'Commercial cooling drives wholesale power demand; oil refiners encounter peak summer run throughput.',
         affectedCommodityId: 'BRENT',
-        commodityImpactPct: 0.05,
-        gdpImpactPct: -0.002,
-        inflationImpactPct: 0.003, weeksActive: 1,
+        commodityImpactPct: Number((0.05 * variance).toFixed(4)),
+        gdpImpactPct: Number((-0.002 * variance).toFixed(5)),
+        inflationImpactPct: Number((0.003 * variance).toFixed(5)),
+        weeksActive: 1,
+        minDurationWeeks
       };
     }
 
@@ -115,13 +127,14 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         title: `${regionId} Arctic Vortex Freeze`,
         type: 'Polar Vortex',
         severity: 'Severe',
-        tempDeltaC: -6.0,
+        tempDeltaC: Number((-6.0 * variance).toFixed(1)),
         economicImpact: 'Severe freeze drives record heating gas withdrawals and regional supply bottlenecks.',
         affectedCommodityId: 'NATGAS',
-        commodityImpactPct: 0.12,
-        gdpImpactPct: -0.004,
-        inflationImpactPct: 0.005,
+        commodityImpactPct: Number((0.12 * variance).toFixed(4)),
+        gdpImpactPct: Number((-0.004 * variance).toFixed(5)),
+        inflationImpactPct: Number((0.005 * variance).toFixed(5)),
         weeksActive: 1,
+        minDurationWeeks
       };
     }
 
@@ -131,12 +144,13 @@ export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomal
         title: `${regionId} Typhoon & Heavy Precipitation`,
         type: 'Monsoon',
         severity: 'Moderate',
-        tempDeltaC: -1.0,
+        tempDeltaC: Number((-1.0 * variance).toFixed(1)),
         economicImpact: 'Localized port disruptions and industrial supply chain transit delays.',
-        commodityImpactPct: 0.02,
-        gdpImpactPct: -0.002,
-        inflationImpactPct: 0.001,
+        commodityImpactPct: Number((0.02 * variance).toFixed(4)),
+        gdpImpactPct: Number((-0.002 * variance).toFixed(5)),
+        inflationImpactPct: Number((0.001 * variance).toFixed(5)),
         weeksActive: 1,
+        minDurationWeeks
       };
     }
   }

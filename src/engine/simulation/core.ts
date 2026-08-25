@@ -1,4 +1,5 @@
 
+import { isActiveCompany } from '../../domain/company';
 import { CreditRating, NewsItem, Portfolio, ReturnAttribution, DebtTranche, GovDebtTranche, SupplyRelationship } from '../../types';
 import { SECTOR_BENCHMARKS, priceEquity, priceCorporateBond, priceInterestRateSwap, priceCreditDefaultSwap, priceLeveragedLoan, priceCrossCurrencyBasisSwap } from '../pricing';
 import { calculateNelsonSiegelZeroRate, priceSovereignBond } from '../nelsonSiegel';
@@ -36,7 +37,7 @@ function computeBucketDemandPremiumBps(bucket: RatingBucket, reg: Region, allCom
 
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<OccupationType, number> {
   const demand: Record<OccupationType, number> = { GENERAL: 0, SKILLED_TRADES: 0, TECHNICAL_ENGINEERING: 0, SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0 };
-  companies.filter(c => c.region === regionId && !c.isDefaulted).forEach(c => {
+  companies.filter(c => c.region === regionId && isActiveCompany(c)).forEach(c => {
     const baseMix = SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 };
     const drift = c.occupationMixDrift || {};
     const mix = { ...baseMix };
@@ -72,8 +73,8 @@ export function computeOccupationDemand(companies: Company[], privateSegments: P
 
 
 export function formSupplyRelationships(regionId: RegionId, companies: Company[]): SupplyRelationship[] {
-  const suppliers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => l.subUnitId === 'heavy_equipment') && !c.isDefaulted);
-  const customers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => ['enterprise_software', 'food_beverage', 'luxury_goods'].includes(l.subUnitId)) && !c.isDefaulted);
+  const suppliers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => l.subUnitId === 'heavy_equipment') && isActiveCompany(c));
+  const customers = companies.filter(c => c.region === regionId && (c.productLines||[]).some(l => ['enterprise_software', 'food_beverage', 'luxury_goods'].includes(l.subUnitId)) && isActiveCompany(c));
   const relationships: SupplyRelationship[] = [];
   customers.forEach(customer => {
     const sortedSuppliers = [...suppliers].sort((a, b) => (b.productLines.find(l=>l.subUnitId === 'heavy_equipment')?.categoryMarketShare ?? 0) - (a.productLines.find(l=>l.subUnitId === 'heavy_equipment')?.categoryMarketShare ?? 0));
@@ -161,7 +162,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const companyUpdates: Record<string, { finishedGoodsUnits?: number; finishedGoodsInventoryUSD?: number; cashChange?: number; salesUnits?: number; salesUSD?: number; purchasesUnits?: number; purchasesUSD?: number; inputSupplyConstraintFactor?: number; _targetProductionUSD?: number }> = {};
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
-  const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted && !c.mergerAcquired);
+  const prevActiveFirms = state.companies.filter((c) => isActiveCompany(c));
   
   const regionFloatingPrincipal: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
   prevActiveFirms.forEach(f => {
@@ -483,12 +484,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const customer = prevActiveFirms.find(c => c.ticker === contract.customerCompanyId || c.id === contract.customerCompanyId);
 
         if (supplier && customer) {
-          if (supplier.isDefaulted) {
+          if (!isActiveCompany(supplier)) {
             // PART BAB: Supplier default shock propagates directly to named contract counterparties first
             if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
             const custUp = companyUpdates[customer.ticker];
             custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
-          } else if (!customer.isDefaulted) {
+          } else if (isActiveCompany(customer)) {
             contract.weeksRemaining -= 1;
             if (contract.weeksRemaining >= 0) {
               // Execute weekly contract transaction
@@ -528,7 +529,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const bids: UnitBid[] = [];
       const offers: UnitOffer[] = [];
 
-      const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && !c.isDefaulted);
+      const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
       const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
 
       let customers: Company[] = [];
@@ -625,9 +626,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
         }
       });
 
-      // Government Aggregate Bid (Defense Systems)
-      if (subUnitId === 'defense_systems') {
-        const govShare = 0.90;
+      // Look up buyer mix for this subUnit
+      const allSubUnits = Object.values(INDUSTRY_SUBUNITS).flat();
+      const subUnitDef = allSubUnits.find(su => su.unitId === subUnitId);
+      const govShare = subUnitDef?.buyerMix.GOVERNMENT ?? 0;
+      const hhShare = subUnitDef?.buyerMix.HOUSEHOLD ?? 0;
+
+      // Government Aggregate Bid
+      if (govShare > 0) {
         const govWeeklyDemandUSD = (demandState.demandLevelUSD * govShare) / 52;
         const govDemandUnits = govWeeklyDemandUSD / currentUnitPrice;
         if (govDemandUnits > 0.001) {
@@ -640,8 +646,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       }
 
       // Household Aggregate Bid
-      if (subUnitId === 'food_beverage' || subUnitId === 'refined_products' || subUnitId === 'pharmaceuticals' || subUnitId === 'passenger_vehicles') {
-        const hhShare = subUnitId === 'food_beverage' ? 0.95 : subUnitId === 'passenger_vehicles' ? 0.80 : subUnitId === 'refined_products' ? 0.60 : 0.40;
+      if (hhShare > 0) {
         const hhWeeklyDemandUSD = (demandState.demandLevelUSD * hhShare) / 52;
         let hhDemandUnits = hhWeeklyDemandUSD / currentUnitPrice;
         
@@ -838,13 +843,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
     }
 
     // Execute generalized bidding markets for sub-units in scope
-    executeSubUnitBiddingMarket('industrial_automation', 80000.0, reg, regionId);
-    executeSubUnitBiddingMarket('refined_products', 3.50, reg, regionId);
-    executeSubUnitBiddingMarket('food_beverage', 10.00, reg, regionId);
-    executeSubUnitBiddingMarket('pharmaceuticals', 120.00, reg, regionId);
-    executeSubUnitBiddingMarket('passenger_vehicles', 35000.0, reg, regionId);
-    executeSubUnitBiddingMarket('semiconductors', 10.00, reg, regionId);
-    executeSubUnitBiddingMarket('defense_systems', 2000000.0, reg, regionId);
+    Object.values(INDUSTRY_SUBUNITS).flat().forEach(subUnit => {
+      executeSubUnitBiddingMarket(subUnit.unitId, Math.max(1, subUnit.unitPriceUSD), reg, regionId);
+    });
   });
 
   function computeRealizedVol(historicalValues: number[], window: number): number {
@@ -883,7 +884,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   // Trade Dynamics (Phase 3: T1)
   function computeRegionalCompetitiveness(companies: Company[], regionId: RegionId, category: string): number {
-    const firms = companies.filter(c => c.region === regionId && !c.isDefaulted && (c.productLines || []).some(l => l.industry === category));
+    const firms = companies.filter(c => c.region === regionId && isActiveCompany(c) && (c.productLines || []).some(l => l.industry === category));
     if (firms.length === 0) return 0;
     return firms.reduce((s, f) => {
       const line = f.productLines.find(l => l.industry === category)!;
@@ -953,7 +954,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const earningsReportedThisTurn: EarningsReportEvent[] = [];
 
   const updatedCompanies: Company[] = state.companies.map((comp) => {
-    if (comp.isDefaulted) {
+    if (!isActiveCompany(comp)) {
       return { ...comp, previousEmployeeCount: 0, employeeCount: 0 };
     }
 
@@ -1873,13 +1874,15 @@ export function advanceWeeklyStep(state: GameState): GameState {
     }
   });
 
+  let workingPositions = [...state.portfolio.positions];
+  
   // Check for M&A Consolidation (Part AH)
   if (nextWeek % 13 === 0) {
     const merger = checkForMerger(updatedCompanies, nextWeek);
     if (merger) {
       const acquirer = updatedCompanies.find(c => c.ticker === merger.acquirerTicker);
       const target = updatedCompanies.find(c => c.ticker === merger.targetTicker);
-      if (acquirer && target && !acquirer.isDefaulted && !target.isDefaulted) {
+      if (acquirer && target && isActiveCompany(acquirer) && isActiveCompany(target)) {
         const purchasePrice = target.marketCap * 1.15;
         const cashPaid = purchasePrice * 0.5;
         const stockPaid = purchasePrice * 0.5;
@@ -1901,6 +1904,27 @@ export function advanceWeeklyStep(state: GameState): GameState {
             }
           });
         }
+        target.productLines = [];
+
+        // Transfer debt
+        if (target.debtTranches) {
+          target.debtTranches.forEach(t => {
+            const transferredTranche = { ...t, id: `${t.id}-acq-${nextWeek}` };
+            if (!acquirer.debtTranches) acquirer.debtTranches = [];
+            acquirer.debtTranches.push(transferredTranche);
+
+            // Update any portfolio positions holding this tranche
+            workingPositions = workingPositions.map(p => {
+              if (p.symbol === target.ticker && p.trancheId === t.id) {
+                return { ...p, symbol: acquirer.ticker, trancheId: transferredTranche.id };
+              }
+              return p;
+            });
+          });
+          acquirer.totalDebt = (acquirer.debtTranches || []).reduce((s, t) => s + t.principalUSD, 0);
+        }
+        target.debtTranches = [];
+        target.totalDebt = 0;
 
         // Target is absorbed and exits active operations
         target.mergerAcquired = true;
@@ -1910,6 +1934,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
         target.employeeCount = 0;
         target.annualRevenue = 0;
         target.marketCap = 0;
+        target.capex = 0;
+        target.maintenanceCapex = 0;
+        target.growthCapex = 0;
 
         recentMergers.push({
           acquirerTicker: acquirer.ticker,
@@ -1950,7 +1977,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   // Part ME: Itemized holdings attribution
   (Object.keys(updatedRegions) as RegionId[]).forEach(regionId => {
     const reg = updatedRegions[regionId];
-    const regionCompanies = updatedCompanies.filter(c => c.region === regionId && !c.isDefaulted);
+    const regionCompanies = updatedCompanies.filter(c => c.region === regionId && isActiveCompany(c));
     
     const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
     const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
@@ -2010,7 +2037,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const consumptionComponentUSD = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
 
     // I — tracked company investment, scaled up to represent the whole private sector via Phase 1's employment split
-    const trackedFirms = updatedCompanies.filter(f => f.region === regionId && !f.isDefaulted);
+    const trackedFirms = updatedCompanies.filter(f => f.region === regionId && isActiveCompany(f));
     const trackedInvestmentUSD = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
     const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
     const totalPrivateEmployment = (reg.privateSectorSegments || []).reduce((s, seg) => s + seg.employment, 0);
@@ -2089,15 +2116,22 @@ export function advanceWeeklyStep(state: GameState): GameState {
       }
     }
 
-    // PART OE: Excess unfunded-deficit float held at the central bank between issuance weeks as temporary bridge financing
     const prevPendingUnfundedDeficitUSD = reg.pendingUnfundedDeficitUSD ?? 0;
     const updatedBankingSector = { ...reg.bankingSector };
+    
+    // Central Bank Monetization directly adds to reserves (QE logic)
+    updatedBankingSector.centralBankReservesUSD += monetizedAmountUSD;
+
+    // Market-funded deficit routes to bond holdings (institutional + bank) instead of depleting reserves
     if (issuanceCalendarWeek) {
-      updatedBankingSector.centralBankReservesUSD -= (quarterlyFundingNeedUSD - prevPendingUnfundedDeficitUSD);
+      updatedBankingSector.sovereignBondHoldingsUSD += quarterlyFundingNeedUSD * 0.40;
     } else {
-      updatedBankingSector.centralBankReservesUSD -= marketFundedDeficitUSD;
+      updatedBankingSector.sovereignBondHoldingsUSD += marketFundedDeficitUSD * 0.40;
     }
-    updatedBankingSector.centralBankReservesUSD = Number(Math.max(0, updatedBankingSector.centralBankReservesUSD).toFixed(0));
+    
+    // Remove the floor clamp since we no longer do double-subtractions
+    if (updatedBankingSector.centralBankReservesUSD < 0) throw new Error("Invariant Violation: centralBankReservesUSD cannot be negative");
+    updatedBankingSector.centralBankReservesUSD = Number(updatedBankingSector.centralBankReservesUSD.toFixed(0));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
     const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);
@@ -2161,7 +2195,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   weeklyInterestIncomeUSD = Math.max(0, state.portfolio.cashUSD) * (usdPolicyRate / 52);
   attributionCarry += weeklyInterestIncomeUSD;
 
-  const updatedPositions: Position[] = state.portfolio.positions.map((pos) => {
+  const updatedPositions: Position[] = workingPositions.map((pos) => {
     const fxRateToUsd = getFxToUsd(pos.region);
     let currentPrice = pos.currentPrice;
     let unrealizedPnL = 0;
@@ -2433,7 +2467,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
           attributionCreditSpread += pnlMove;
 
           // Check CDS maturity or default settlement
-          if (comp.isDefaulted) {
+          if (!isActiveCompany(comp)) {
             pos.isClosed = true;
             closedCount++;
             weeklyRealizedPnL += unrealizedPnL;

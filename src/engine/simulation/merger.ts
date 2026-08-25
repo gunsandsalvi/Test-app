@@ -1,4 +1,5 @@
 import { Company } from '../../types';
+import { isActiveCompany } from '../../domain/company';
 import { formatCurrency } from '../formatters';
 
 export interface MergerCandidate {
@@ -18,12 +19,12 @@ export function checkForMerger(
   const distressedRatings = ['BB', 'B', 'CCC'];
 
   for (const acquirer of activeCompanies) {
-    if (acquirer.isDefaulted || acquirer.mergerAcquired || !igRatings.includes(acquirer.creditRating)) continue;
+    if (!isActiveCompany(acquirer) || !igRatings.includes(acquirer.creditRating)) continue;
     if (acquirer.cash < 2 * Math.max(1, acquirer.totalDebt) && acquirer.totalDebt > 0) continue;
     if (acquirer.cash < 500) continue; // must have sufficient liquid balance sheet
 
     for (const target of activeCompanies) {
-      if (target.ticker === acquirer.ticker || target.isDefaulted || target.mergerAcquired) continue;
+      if (target.ticker === acquirer.ticker || !isActiveCompany(target)) continue;
       if (target.sector !== acquirer.sector || target.region !== acquirer.region) continue;
       if (acquirer.marketCap < 3 * Math.max(1, target.marketCap)) continue;
 
@@ -38,7 +39,7 @@ export function checkForMerger(
           acquirerTicker: acquirer.ticker,
           targetTicker: target.ticker,
           title: `M&A: ${acquirer.name} Acquires ${target.name}`,
-          description: `${acquirer.name} (${acquirer.ticker}) has agreed to acquire ${target.name} (${target.ticker}) in a cash-and-stock consolidation valued at ${valStr}.`,
+          description: `${acquirer.name} (${acquirer.ticker}) has agreed to acquire ${target.name} (${target.ticker}) in a 50% cash and 50% stock consolidation valued at ${valStr}.`,
         };
       }
     }

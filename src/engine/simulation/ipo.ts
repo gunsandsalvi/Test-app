@@ -1,3 +1,4 @@
+import { isActiveCompany } from '../../domain/company';
 import { Company, RegionId, Region } from '../../types';
 import { generateIPOCompany } from '../companyGenerator';
 
@@ -7,7 +8,7 @@ export function checkForIPO(regionId: RegionId, reg: Region, companies: Company[
   for (const cat of categories) {
     const demand = reg.categoryDemand[cat];
     if (!demand) continue;
-    const incumbents = companies.filter(c => c.region === regionId && !c.isDefaulted && (c.productLines || []).some(l => l.subUnitId === cat));
+    const incumbents = companies.filter(c => c.region === regionId && isActiveCompany(c) && (c.productLines || []).some(l => l.subUnitId === cat));
     const incumbentGrowthProxy = incumbents.length ? incumbents.reduce((s, c) => s + (c.annualRevenue - c.baselineAnnualRevenue) / Math.max(1, c.baselineAnnualRevenue), 0) / incumbents.length : 0;
     const supplyGap = demand.demandGrowthAnnual - incumbentGrowthProxy;
     const demandTrigger = demand.demandGrowthAnnual >= 0.04 && supplyGap > 0.03;

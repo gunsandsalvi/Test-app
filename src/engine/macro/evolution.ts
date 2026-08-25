@@ -1,3 +1,4 @@
+import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
@@ -574,13 +575,22 @@ export function evolveRegionMacro(
   let newInflationDeviationStreak = region.inflationDeviationStreak || 0;
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
-  let newPolicyRate = Math.max(-0.01, Math.min(0.20, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate)));
+  let targetPolicyRate = Math.max(-0.01, Math.min(0.20, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate)));
 
   // Update inflation deviation streak
   const isAboveTarget = region.inflation > piStar + 0.01;
   newInflationDeviationStreak = isAboveTarget ? (region.inflationDeviationStreak || 0) + 1 : Math.max(0, (region.inflationDeviationStreak || 0) - 2);
 
   const isMeeting = (week % 13 === 0);
+
+  let newPolicyRate = region.policyRate;
+  if (isMeeting) {
+    const rawMove = targetPolicyRate - region.policyRate;
+    // Round to nearest 25 bps (0.0025)
+    const roundedMove = Math.round(rawMove / 0.0025) * 0.0025;
+    newPolicyRate = region.policyRate + roundedMove;
+    newPolicyRate = Math.max(-0.01, Math.min(0.20, newPolicyRate));
+  }
 
   if (Math.abs(newPolicyRate - region.policyRate) > 0.0001) {
     rateChanged = true;
@@ -901,9 +911,9 @@ export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, reg
 export function calibrateIntensityShare(commodityId: string, allCompanies: Company[], regions: Record<RegionId, Region>, subUnitId: string): number {
   const producers = allCompanies.filter(c => {
     if (commodityId === 'industrial_automation') {
-      return (c.productLines || []).some(l => l.subUnitId === 'industrial_automation') && !c.isDefaulted;
+      return (c.productLines || []).some(l => l.subUnitId === 'industrial_automation') && isActiveCompany(c);
     }
-    return c.producedCommodityId === commodityId && !c.isDefaulted;
+    return c.producedCommodityId === commodityId && isActiveCompany(c);
   });
   const publicWeeklySupplyUSD = producers.reduce((s, c) => {
     if (commodityId === 'industrial_automation') {
@@ -919,7 +929,7 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
 }
 
 function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyUSD: number): { ratio: number; supplyUnits: number; demandUnits: number } {
-  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && !c.isDefaulted);
+  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
   const publicWeeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateSegmentSupplyUSD;
 

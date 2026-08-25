@@ -1,3 +1,4 @@
+import { isActiveCompany } from '../../domain/company';
 import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexMetric } from '../../types';
 import { generate52WeekHistory } from './utils';
 type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D'; // Add this locally
@@ -51,7 +52,7 @@ export function calculateCompositeIndices(
   const hyRatings: CreditRating[] = ['BB', 'B', 'CCC', 'D'];
 
   const getDebtWeightedOas = (firms: Company[], ratings: CreditRating[], fallback: number) => {
-    const subset = firms.filter(c => ratings.includes(c.creditRating) && !c.isDefaulted);
+    const subset = firms.filter(c => ratings.includes(c.creditRating) && isActiveCompany(c));
     if (subset.length === 0) return fallback;
     const totalDebt = subset.reduce((sum, c) => sum + c.totalDebt, 0);
     return Math.round(subset.reduce((sum, c) => sum + c.oasSpreadBps * (c.totalDebt / Math.max(1, totalDebt)), 0));
@@ -134,7 +135,7 @@ export function calculateCompositeIndices(
 }
 
 function calculatePmiComposite(regions: Record<RegionId, Region>, companies: Company[]): { headline: number; demandComponent: number; capexComponent: number; employmentComponent: number } {
-  const usaCompanies = companies.filter(c => c.region === 'USA' && !c.isDefaulted);
+  const usaCompanies = companies.filter(c => c.region === 'USA' && isActiveCompany(c));
   const avgCategoryDemandGrowth = Object.values(regions.USA.categoryDemand).reduce((s: number, d: any) => s + d.demandGrowthAnnual, 0) / Math.max(1, Object.keys(regions.USA.categoryDemand).length);
   const avgCapexGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.capex - (c.previousCapex ?? c.capex)) / Math.max(1, c.previousCapex ?? c.capex), 0) / usaCompanies.length : 0;
   const avgHeadcountGrowth = usaCompanies.length ? usaCompanies.reduce((s, c) => s + (c.employeeCount - c.previousEmployeeCount) / Math.max(1, c.previousEmployeeCount), 0) / usaCompanies.length : 0;
