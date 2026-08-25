@@ -397,6 +397,7 @@ export interface Region {
   estimatedNominalGdpUSD: number;    // proxy until Phase 4 — replaced by the true C+I+G+NX sum then
   derivedNominalGdpUSD: number;      // C+I+G+NX, this world's own bottom-up sum
   gdpGrowthBottomUp: number;         // derived % change YoY
+  smoothedWeeklyGrowthRate: number;
   lastWeekNominalGdpUSD: number;
   nominalGdpHistory: number[];       // rolling 52-week history of derivedNominalGdpUSD for YoY calculation
   consumptionComponentUSD: number;   // C, exposed for inspection

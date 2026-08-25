@@ -19,24 +19,24 @@
   },
   "week1": {
     "USA": {
-      "gdpGrowth": -0.9999999999928391,
-      "lastWeekNominalGdpUSD": 11905737443395.281,
-      "estimatedNominalGdpUSD": 11905737443395.281
+      "gdpGrowth": -0.9590552340258018,
+      "lastWeekNominalGdpUSD": 11753186726250.863,
+      "estimatedNominalGdpUSD": 11753186726250.863
     },
     "EUR": {
-      "gdpGrowth": -0.9999960121406564,
-      "lastWeekNominalGdpUSD": 11417334242692.666,
-      "estimatedNominalGdpUSD": 11417334242692.666
+      "gdpGrowth": -0.832312976721165,
+      "lastWeekNominalGdpUSD": 11237723741795.246,
+      "estimatedNominalGdpUSD": 11237723741795.246
     },
     "UK": {
-      "gdpGrowth": -0.9999805346348676,
-      "lastWeekNominalGdpUSD": 2597993687317.242,
-      "estimatedNominalGdpUSD": 2597993687317.242
+      "gdpGrowth": -0.7210430417040814,
+      "lastWeekNominalGdpUSD": 2683059447860.994,
+      "estimatedNominalGdpUSD": 2683059447860.994
     },
     "JPN": {
-      "gdpGrowth": -0.999999981943789,
-      "lastWeekNominalGdpUSD": 3903530227879.1553,
-      "estimatedNominalGdpUSD": 3903530227879.1553
+      "gdpGrowth": -0.8574929838637029,
+      "lastWeekNominalGdpUSD": 4151657716977.5215,
+      "estimatedNominalGdpUSD": 4151657716977.5215
     }
   }
 }

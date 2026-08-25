@@ -1728,10 +1728,12 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     const newDerivedNominalGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
     const gdpLevelLastWeek = (reg as any).lastWeekNominalGdpUSD > 0 ? (reg as any).lastWeekNominalGdpUSD : newDerivedNominalGdpUSD;
-    const weeklyRealGrowthRate = gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek)
+    const rawWeeklyRealGrowthRate = gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek)
       ? (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)
       : 0;
-    const gdpGrowthBottomUp = Math.pow(1 + weeklyRealGrowthRate, 52) - 1;
+    const prevSmoothedWeeklyRate = (reg as any).smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
+    const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15; // real EMA smoothing — a single week's noise no longer dominates
+    const gdpGrowthBottomUp = Math.pow(1 + smoothedWeeklyRate, 52) - 1;
 
     const finalGdpGrowth = isFinite(gdpGrowthBottomUp) ? gdpGrowthBottomUp : (reg.gdpGrowth || 0.02);
 
@@ -1804,6 +1806,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       estimatedNominalGdpUSD: newDerivedNominalGdpUSD,
       derivedNominalGdpUSD: newDerivedNominalGdpUSD,
       gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
+      smoothedWeeklyGrowthRate: smoothedWeeklyRate,
       lastWeekNominalGdpUSD: newDerivedNominalGdpUSD,
       nominalGdpHistory: reg.nominalGdpHistory || [],
       consumptionComponentUSD,
