@@ -103,6 +103,9 @@ export interface CategoryDemandState {
   clearedInputPriceIndex: number; // 1.0 = baseline; rises/falls with genuine scarcity/glut
   lastWeekInventoryLevelUSD: number; // explicit lag anchor — bidders always react to this, never same-week inventory
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
+  unitPriceUSD?: number;
+  totalUnitsSuppliedThisWeek?: number;
+  totalUnitsDemandedThisWeek?: number;
 }
 
 export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = {
@@ -249,6 +252,8 @@ export interface PrivateSectorSegment {
   employment: number;
   annualRevenueUSD: number;
   marginPct: number;
+  producedCommodityIds?: string[];
+  commoditySupplyShareUSD?: Record<string, number>;
 }
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
@@ -529,6 +534,7 @@ export interface Company {
   baselineAnnualRevenue: number;
   annualRevenue: number;
   productLines?: ProductLine[];
+  finishedGoodsUnits?: number;
   employeeCount: number;
   previousEmployeeCount: number;
   baselineEmployeeCount: number;

@@ -7,7 +7,7 @@ import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '.
 import { getUnifiedInitialMarginRate } from '../dealers';
 import { calculateBlackScholesGreeks } from '../blackScholes';
 import { calculateExpectedCarry } from '../carryCalculator';
-import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding, INDUSTRY_SUBUNITS, Industry } from '../../types';
+import { GameState, Company, Region, RegionId, Position, FxPair, CATEGORY_TRADABILITY, OccupationType, OccupationPool, SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, PrivateSectorSegment, CATEGORY_INPUT_REQUIREMENTS, AssetOwnershipShares, ItemizedHolding, INDUSTRY_SUBUNITS, Industry, UnitBid, UnitOffer, SupplyContract } from '../../types';
 import { determineCreditRating } from './credit';
 import { checkForIPO } from './ipo';
 import { checkForMerger } from './merger';
@@ -154,6 +154,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
   const currentWeekMod13 = ((nextWeek - 1) % 13) + 1;
   const recentIPOs = [...(state.recentIPOs || [])];
   const recentMergers = [...(state.recentMergers || [])];
+
+  const companyUpdates: Record<string, { finishedGoodsUnits?: number; finishedGoodsInventoryUSD?: number; cashChange?: number; salesUnits?: number; salesUSD?: number; purchasesUnits?: number; purchasesUSD?: number }> = {};
 
   // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
   const prevActiveFirms = state.companies.filter((c) => !c.isDefaulted);
@@ -431,6 +433,239 @@ export function advanceWeeklyStep(state: GameState): GameState {
       const entry = reg.categoryDemand[cat as any] as any;
       entry.lastWeekInventoryLevelUSD = entry.inventoryLevelUSD ?? 0;
     });
+
+    // --- PROJ-19 STAGE 1: Industrial Automation Unit-Based Clearing & Bidding System ---
+    const iaDemandState = reg.categoryDemand['industrial_automation'] as any;
+    if (iaDemandState) {
+      if (!iaDemandState.unitPriceUSD) {
+        iaDemandState.unitPriceUSD = 80000.0;
+      }
+      const currentUnitPrice = iaDemandState.unitPriceUSD;
+
+      // 1. Process active contracts
+      const activeContracts = reg.activeContracts || [];
+      const remainingContracts: SupplyContract[] = [];
+
+      activeContracts.forEach(contract => {
+        const supplier = prevActiveFirms.find(c => c.ticker === contract.supplierCompanyId);
+        const customer = prevActiveFirms.find(c => c.ticker === contract.customerCompanyId);
+
+        if (supplier && customer && !supplier.isDefaulted && !customer.isDefaulted) {
+          contract.weeksRemaining -= 1;
+          if (contract.weeksRemaining >= 0) {
+            // Execute weekly transaction
+            const supplierUnits = supplier.finishedGoodsUnits ?? ((supplier.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
+            const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
+            const paymentUSD = actualTransacted * contract.priceUSD;
+
+            if (!companyUpdates[supplier.ticker]) companyUpdates[supplier.ticker] = {};
+            if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
+
+            const supUp = companyUpdates[supplier.ticker];
+            supUp.finishedGoodsUnits = Math.max(0, supplierUnits - actualTransacted);
+            supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * currentUnitPrice;
+            supUp.cashChange = (supUp.cashChange ?? 0) + paymentUSD;
+            supUp.salesUnits = (supUp.salesUnits ?? 0) + actualTransacted;
+            supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentUSD;
+
+            const custUp = companyUpdates[customer.ticker];
+            custUp.cashChange = (custUp.cashChange ?? 0) - paymentUSD;
+            custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
+            custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
+
+            remainingContracts.push(contract);
+          }
+        }
+      });
+      reg.activeContracts = remainingContracts;
+
+      // 2. Open Bidding & Matching
+      const bids: UnitBid[] = [];
+      const offers: UnitOffer[] = [];
+
+      const regionActiveFirms = prevActiveFirms.filter(c => c.region === regionId && !c.isDefaulted);
+      const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === 'industrial_automation'));
+      const customers = regionActiveFirms.filter(c => c.sector !== 'Banks' && c.sector !== 'Financials' && !(c.productLines || []).some(l => l.subUnitId === 'industrial_automation'));
+
+      suppliers.forEach(comp => {
+        const line = (comp.productLines || []).find(l => l.subUnitId === 'industrial_automation')!;
+        const warehouseCapacityUSD = comp.annualRevenue * 0.15;
+        const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
+        const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
+        const priceSignal = (currentUnitPrice / 80000.0) - 1.0;
+        const productionResponseFactor = (1.0 + priceSignal * 1.5);
+        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * line.revenueShare * productionResponseFactor * productionThrottle;
+        const targetProductionUnits = targetProductionUSD / currentUnitPrice;
+
+        const currentUnits = comp.finishedGoodsUnits ?? (currentInvUSD / currentUnitPrice);
+        const contractSales = remainingContracts
+          .filter(c => c.supplierCompanyId === comp.ticker)
+          .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+
+        const openOfferUnits = Math.max(0, targetProductionUnits + currentUnits - contractSales);
+
+        if (openOfferUnits > 0.01) {
+          const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
+          const costRate = Math.max(0.40, Math.min(0.98, 1 - baseMargin));
+          const ratingPdMap: Record<string, number> = {
+            'AAA': 0.0002, 'AA': 0.001, 'A': 0.003, 'BBB': 0.01, 'BB': 0.03, 'B': 0.08, 'CCC': 0.20
+          };
+          const pd = ratingPdMap[comp.creditRating] ?? 0.03;
+          const expectedLoss = pd * 0.60;
+          const costOfCapital = 0.05 + expectedLoss;
+          const marginPremium = costOfCapital * 1.5;
+          const minPriceUSD = currentUnitPrice * costRate * (1 + marginPremium);
+
+          offers.push({
+            companyId: comp.ticker,
+            quantityUnits: openOfferUnits,
+            minPriceUSD,
+          });
+        }
+      });
+
+      customers.forEach(comp => {
+        const weeklyCapex = comp.capex / 52;
+        const demandUSD = weeklyCapex * 0.35;
+        const demandUnits = demandUSD / currentUnitPrice;
+
+        const contractPurchases = remainingContracts
+          .filter(c => c.customerCompanyId === comp.ticker)
+          .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+
+        const openBidUnits = Math.max(0, demandUnits - contractPurchases);
+
+        if (openBidUnits > 0.01) {
+          const cashRatio = comp.cash / Math.max(1, comp.annualRevenue);
+          const cashModifier = cashRatio < 0.02 ? 0.85 : cashRatio > 0.15 ? 1.15 : 1.0;
+          const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashModifier;
+
+          bids.push({
+            companyId: comp.ticker,
+            quantityUnits: openBidUnits,
+            maxPriceUSD,
+          });
+        }
+      });
+
+      // Sort bids desc, offers asc
+      bids.sort((a, b) => b.maxPriceUSD - a.maxPriceUSD);
+      offers.sort((a, b) => a.minPriceUSD - b.minPriceUSD);
+
+      let clearedPriceUSD = currentUnitPrice;
+      let openUnitsCleared = 0;
+      let bidIdx = 0;
+      let offerIdx = 0;
+
+      const openSales: Record<string, { units: number; amount: number }> = {};
+      const openPurchases: Record<string, { units: number; amount: number }> = {};
+
+      while (bidIdx < bids.length && offerIdx < offers.length) {
+        const bid = bids[bidIdx];
+        const offer = offers[offerIdx];
+
+        if (bid.maxPriceUSD >= offer.minPriceUSD) {
+          const transactQty = Math.min(bid.quantityUnits, offer.quantityUnits);
+          const matchPrice = (bid.maxPriceUSD + offer.minPriceUSD) / 2;
+          clearedPriceUSD = matchPrice;
+          openUnitsCleared += transactQty;
+
+          if (!openSales[offer.companyId]) openSales[offer.companyId] = { units: 0, amount: 0 };
+          openSales[offer.companyId].units += transactQty;
+          openSales[offer.companyId].amount += transactQty * matchPrice;
+
+          if (!openPurchases[bid.companyId]) openPurchases[bid.companyId] = { units: 0, amount: 0 };
+          openPurchases[bid.companyId].units += transactQty;
+          openPurchases[bid.companyId].amount += transactQty * matchPrice;
+
+          bid.quantityUnits -= transactQty;
+          offer.quantityUnits -= transactQty;
+
+          if (bid.quantityUnits <= 0.001) bidIdx++;
+          if (offer.quantityUnits <= 0.001) offerIdx++;
+        } else {
+          break;
+        }
+      }
+
+      // 3. Save matching results to updates
+      suppliers.forEach(comp => {
+        const sale = openSales[comp.ticker];
+        if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+        const supUp = companyUpdates[comp.ticker];
+        const initialUnits = comp.finishedGoodsUnits ?? ((comp.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
+
+        const line = (comp.productLines || []).find(l => l.subUnitId === 'industrial_automation')!;
+        const warehouseCapacityUSD = comp.annualRevenue * 0.15;
+        const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
+        const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
+        const priceSignal = (currentUnitPrice / 80000.0) - 1.0;
+        const productionResponseFactor = (1.0 + priceSignal * 1.5);
+        const targetProductionUSD = (comp.annualRevenue * 0.02 / 52) * line.revenueShare * productionResponseFactor * productionThrottle;
+        const targetProductionUnits = targetProductionUSD / currentUnitPrice;
+
+        if (sale) {
+          supUp.finishedGoodsUnits = Math.max(0, initialUnits + targetProductionUnits - (supUp.salesUnits ?? 0) - sale.units);
+          supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * clearedPriceUSD;
+          supUp.cashChange = (supUp.cashChange ?? 0) + sale.amount;
+          supUp.salesUnits = (supUp.salesUnits ?? 0) + sale.units;
+          supUp.salesUSD = (supUp.salesUSD ?? 0) + sale.amount;
+        } else {
+          supUp.finishedGoodsUnits = Math.max(0, initialUnits + targetProductionUnits - (supUp.salesUnits ?? 0));
+          supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * clearedPriceUSD;
+        }
+      });
+
+      customers.forEach(comp => {
+        const purchase = openPurchases[comp.ticker];
+        if (purchase) {
+          if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+          const custUp = companyUpdates[comp.ticker];
+          custUp.cashChange = (custUp.cashChange ?? 0) - purchase.amount;
+          custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + purchase.units;
+          custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + purchase.amount;
+        }
+      });
+
+      // 4. Contract Formation
+      const matchedBids = bids.filter(b => b.quantityUnits < 0.01);
+      const matchedOffers = offers.filter(o => o.quantityUnits < 0.01);
+
+      matchedBids.forEach(bid => {
+        matchedOffers.forEach(offer => {
+          if (Math.random() < 0.15) {
+            const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
+            const customerComp = customers.find(c => c.ticker === bid.companyId);
+
+            if (supplierComp && customerComp) {
+              const totalSuppliersRevenue = suppliers.reduce((s, c) => s + c.annualRevenue, 0);
+              const supplierMarketShare = supplierComp.annualRevenue / Math.max(1, totalSuppliersRevenue);
+              const relativeSize = customerComp.annualRevenue / Math.max(1, supplierComp.annualRevenue);
+              const supplierPowerFactor = 0.5 + (supplierMarketShare - 0.25) * 0.5;
+              const customerBargainingPower = (relativeSize > 1.0 ? 0.6 : 0.4) * (1.0 - supplierPowerFactor);
+              const contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
+              const duration = 12 + Math.floor(Math.random() * 40);
+
+              const newContract: SupplyContract = {
+                supplierCompanyId: offer.companyId,
+                customerCompanyId: bid.companyId,
+                subUnitId: 'industrial_automation',
+                priceUSD: Number(contractPrice.toFixed(2)),
+                quantityUnitsPerWeek: Number((Math.random() * 2 + 0.5).toFixed(2)),
+                weeksRemaining: duration,
+              };
+              reg.activeContracts.push(newContract);
+            }
+          }
+        });
+      });
+
+      // 5. Save Category Demand state metrics
+      iaDemandState.unitPriceUSD = Number(clearedPriceUSD.toFixed(2));
+      iaDemandState.totalUnitsSuppliedThisWeek = openUnitsCleared + remainingContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+      iaDemandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + openUnitsCleared + remainingContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+      iaDemandState.clearedInputPriceIndex = Number((clearedPriceUSD / 80000.0).toFixed(4));
+    }
   });
 
   function computeRealizedVol(historicalValues: number[], window: number): number {
@@ -712,22 +947,40 @@ export function advanceWeeklyStep(state: GameState): GameState {
       let unsoldThisWeekUSD = 0;
 
       if (industrialLine && industrialLine.revenueShare > 0) {
-        const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-        const productionThrottle = (comp.finishedGoodsInventoryUSD ?? 0) > warehouseCapacityUSD ? 0.3 : 1.0;
+        if (industrialLine.subUnitId === 'industrial_automation') {
+          const update = companyUpdates[comp.ticker];
+          const salesUSD = update?.salesUSD ?? 0;
+          const currentIAUnitPrice = (reg.categoryDemand['industrial_automation'] as any)?.unitPriceUSD ?? 80000.0;
+          const priceSignal = (currentIAUnitPrice / 80000.0) - 1.0;
+          const productionResponseFactor = (1.0 + priceSignal * 1.5);
+          const warehouseCapacityUSD = comp.annualRevenue * 0.15;
+          const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
+          const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
 
-        const categoryFulfillmentRatio = (reg.categoryDemand[industrialLine.subUnitId] as any)?._fulfillmentRatio ?? 1;
-        newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;
-        const supplierClearedPrice = (reg.categoryDemand[industrialLine.subUnitId] as any)?.clearedInputPriceIndex ?? 1.0;
-        const priceSignal = supplierClearedPrice - 1.0;
-        const productionResponseFactor = (1.0 + priceSignal * 1.5);
+          targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
+          productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
 
-        targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
-        productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
+          unsoldThisWeekUSD = Math.max(0, targetProductionUSD - salesUSD);
+          newFinishedGoodsInventoryUSD = update?.finishedGoodsInventoryUSD ?? 0;
+          newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
+        } else {
+          const warehouseCapacityUSD = comp.annualRevenue * 0.15;
+          const productionThrottle = (comp.finishedGoodsInventoryUSD ?? 0) > warehouseCapacityUSD ? 0.3 : 1.0;
 
-        const soldThisWeekUSD = targetProductionUSD * categoryFulfillmentRatio;
-        unsoldThisWeekUSD = targetProductionUSD - soldThisWeekUSD;
+          const categoryFulfillmentRatio = (reg.categoryDemand[industrialLine.subUnitId] as any)?._fulfillmentRatio ?? 1;
+          newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;
+          const supplierClearedPrice = (reg.categoryDemand[industrialLine.subUnitId] as any)?.clearedInputPriceIndex ?? 1.0;
+          const priceSignal = supplierClearedPrice - 1.0;
+          const productionResponseFactor = (1.0 + priceSignal * 1.5);
 
-        newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) + unsoldThisWeekUSD - carryingCostUSD);
+          targetProductionUSD = (newRevenue * 0.02 / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
+          productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
+
+          const soldThisWeekUSD = targetProductionUSD * categoryFulfillmentRatio;
+          unsoldThisWeekUSD = targetProductionUSD - soldThisWeekUSD;
+
+          newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) + unsoldThisWeekUSD - carryingCostUSD);
+        }
       }
 
       const revenueAdjustmentForUnsold = -unsoldThisWeekUSD * 0.5;
@@ -824,6 +1077,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
       ? (newNetIncome / 52)
       : (newEbitda / 52 - newCapex / 52 - weeklyInterest + weeklyDebtFundedPortion - (productionCostUSD + carryingCostUSD));
     let newCash = comp.cash + weeklyFreeCashFlow;
+    const update = companyUpdates[comp.ticker];
+    if (update && update.cashChange !== undefined) {
+      newCash += update.cashChange;
+    }
     let newTotalDebt = comp.totalDebt;
 
     const newBaselineDividendYield = Number((comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002).toFixed(4));
@@ -1209,6 +1466,9 @@ export function advanceWeeklyStep(state: GameState): GameState {
       inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
       _targetProductionUSD: targetProductionUSD,
       finishedGoodsInventoryUSD: Number(newFinishedGoodsInventoryUSD.toFixed(2)),
+      finishedGoodsUnits: (update && update.finishedGoodsUnits !== undefined)
+        ? update.finishedGoodsUnits
+        : (comp.finishedGoodsUnits ?? ((comp.finishedGoodsInventoryUSD ?? 0) / ((reg.categoryDemand['industrial_automation'] as any)?.unitPriceUSD ?? 80000.0))),
       inventoryCarryingCostRate: comp.inventoryCarryingCostRate ?? 0.02,
       recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,

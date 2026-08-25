@@ -755,20 +755,43 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
  * Evolve Commodities with Weather & Supply/Demand shocks
  */
 
-function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>): { ratio: number; supplyUnits: number; demandUnits: number } {
+export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, regions: Record<RegionId, Region>): number {
+  return (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
+    const segs = regions[r].privateSectorSegments.filter(seg => (seg.producedCommodityIds || []).includes(commodityId));
+    return s + segs.reduce((s2, seg) => s2 + (seg.annualRevenueUSD * 0.15) / segs.length / 52, 0); // 15% of a tagged segment's revenue is treated as this commodity's real weekly output share
+  }, 0);
+}
+
+export function calibrateIntensityShare(commodityId: string, allCompanies: Company[], regions: Record<RegionId, Region>, subUnitId: string): number {
   const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && !c.isDefaulted);
-  const weeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
-  const supplyUnits = comm.spotPrice > 0 ? weeklySupplyUSD / comm.spotPrice : 0;
+  const publicWeeklySupplyUSD = producers.reduce((s, c) => s + c.annualRevenue * 0.85 / 52, 0);
+  const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
+  const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
+  const totalCategoryDemandUSD = (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => s + ((regions[r].categoryDemand as any)[subUnitId]?.demandLevelUSD ?? 0), 0);
+  return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;
+}
+
+function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyUSD: number): { ratio: number; supplyUnits: number; demandUnits: number } {
+  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && !c.isDefaulted);
+  const publicWeeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
+  const weeklySupplyUSD = publicWeeklySupplyUSD + privateSegmentSupplyUSD;
 
   const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
   const totalCategoryDemandUSD = linkage ? (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
     const catDemand = (regions[r].categoryDemand as any)[linkage.subUnitId];
     return s + (catDemand?.demandLevelUSD ?? 0);
   }, 0) : 0;
-  const weeklyDemandUSD = (totalCategoryDemandUSD * (linkage?.intensityShare ?? 0)) / 52;
-  const demandUnits = comm.spotPrice > 0 ? weeklyDemandUSD / comm.spotPrice : 0;
+  const baselineWeeklyDemandUSD = (totalCategoryDemandUSD * (linkage?.intensityShare ?? 0)) / 52;
 
-  const ratio = supplyUnits > 0.001 ? Math.max(0.2, Math.min(5.0, demandUnits / supplyUnits)) : 1.0;
+  const referencePrice = comm.historicalPrices.length >= 52 ? comm.historicalPrices[comm.historicalPrices.length - 52] : comm.spotPrice;
+  const priceRatio = referencePrice > 0 ? comm.spotPrice / referencePrice : 1.0;
+  const demandElasticity = -0.4;
+  const supplyElasticity = 0.3;
+
+  const demandUnits = comm.spotPrice > 0 ? (baselineWeeklyDemandUSD / referencePrice) * Math.pow(priceRatio, demandElasticity) : 0;
+  const supplyUnits = comm.spotPrice > 0 ? (weeklySupplyUSD / referencePrice) * Math.pow(priceRatio, supplyElasticity) : 0;
+
+  const ratio = supplyUnits > 0.001 ? demandUnits / supplyUnits : 1.0;
   return { ratio, supplyUnits, demandUnits };
 }
 
@@ -793,7 +816,8 @@ export function evolveCommodity(
 
   const drift = demandShock * dt + randomEps + weatherBoost * dt * 4;
   
-  const { ratio: clearingRatio } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions);
+  const privateSegmentSupplyUSD = computePrivateSegmentCommoditySupplyUSD(comm.id, regions);
+  const { ratio: clearingRatio, supplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyUSD);
   const supplyDemandDrift = (clearingRatio - 1.0) * 0.15; // no clamp — a genuine imbalance drives a genuine move
   const rawDriftExponent = drift * 0.4 + supplyDemandDrift;
   const safeDriftExponent = isFinite(rawDriftExponent) ? rawDriftExponent : 0;
@@ -813,6 +837,8 @@ export function evolveCommodity(
   return {
     ...comm,
     spotPrice: newSpot,
+    weeklySupplyUnits: supplyUnits,
+    weeklyDemandUnits: demandUnits,
     change1W,
     historicalPrices: hist,
     futures1M: f1M,

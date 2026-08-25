@@ -80,6 +80,7 @@ export function createInitialCategoryDemand(
         inputCostPressure: 0,
         clearedInputPriceIndex: 1.0,
         lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
+        unitPriceUSD: su.unitId === 'industrial_automation' ? 80000.0 : undefined,
       };
     });
   });
@@ -178,7 +179,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       nonEmployablePct: 0.35,
       governmentEmployment: 9_000_000,
       privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 10_650_000, annualRevenueUSD: 2_130_000_000_000, marginPct: 0.09 , debtUSD: 2_130_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 2_130_000_000_000 * 0.05 },
+        { segmentType: 'MANUFACTURING', employment: 10_650_000, annualRevenueUSD: 2_130_000_000_000, marginPct: 0.09 , debtUSD: 2_130_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 2_130_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 79_875_000_000, WHEAT: 79_875_000_000, CORN: 79_875_000_000, SOYBEANS: 79_875_000_000 } },
         { segmentType: 'PROFESSIONAL_SERVICES', employment: 8_520_000, annualRevenueUSD: 1_700_000_000_000, marginPct: 0.14, debtUSD: 1_700_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_700_000_000_000 * 0.05 },
         { segmentType: 'RETAIL_TRADE', employment: 12_780_000, annualRevenueUSD: 1_850_000_000_000, marginPct: 0.05 , debtUSD: 1_850_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_850_000_000_000 * 0.05 },
         { segmentType: 'CONSTRUCTION_REALESTATE', employment: 6_390_000, annualRevenueUSD: 1_250_000_000_000, marginPct: 0.10 , debtUSD: 1_250_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_250_000_000_000 * 0.05 },
@@ -315,7 +316,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       nonEmployablePct: 0.36,
       governmentEmployment: 2_800_000,
       privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 2_025_000, annualRevenueUSD: 360_000_000_000, marginPct: 0.09 , debtUSD: 360_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 360_000_000_000 * 0.05 },
+        { segmentType: 'MANUFACTURING', employment: 2_025_000, annualRevenueUSD: 360_000_000_000, marginPct: 0.09 , debtUSD: 360_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 360_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 13_500_000_000, WHEAT: 13_500_000_000, CORN: 13_500_000_000, SOYBEANS: 13_500_000_000 } },
         { segmentType: 'PROFESSIONAL_SERVICES', employment: 1_620_000, annualRevenueUSD: 300_000_000_000, marginPct: 0.14, debtUSD: 300_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 300_000_000_000 * 0.05 },
         { segmentType: 'RETAIL_TRADE', employment: 2_430_000, annualRevenueUSD: 320_000_000_000, marginPct: 0.05 , debtUSD: 320_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 320_000_000_000 * 0.05 },
         { segmentType: 'CONSTRUCTION_REALESTATE', employment: 1_215_000, annualRevenueUSD: 220_000_000_000, marginPct: 0.10 , debtUSD: 220_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 220_000_000_000 * 0.05 },
@@ -451,7 +452,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       nonEmployablePct: 0.40,
       governmentEmployment: 3_200_000,
       privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 4_050_000, annualRevenueUSD: 700_000_000_000, marginPct: 0.09 , debtUSD: 700_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 700_000_000_000 * 0.05 },
+        { segmentType: 'MANUFACTURING', employment: 4_050_000, annualRevenueUSD: 700_000_000_000, marginPct: 0.09 , debtUSD: 700_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 700_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 26_250_000_000, WHEAT: 26_250_000_000, CORN: 26_250_000_000, SOYBEANS: 26_250_000_000 } },
         { segmentType: 'PROFESSIONAL_SERVICES', employment: 3_240_000, annualRevenueUSD: 580_000_000_000, marginPct: 0.14, debtUSD: 580_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 580_000_000_000 * 0.05 },
         { segmentType: 'RETAIL_TRADE', employment: 4_860_000, annualRevenueUSD: 620_000_000_000, marginPct: 0.05 , debtUSD: 620_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 620_000_000_000 * 0.05 },
         { segmentType: 'CONSTRUCTION_REALESTATE', employment: 2_430_000, annualRevenueUSD: 420_000_000_000, marginPct: 0.10 , debtUSD: 420_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 420_000_000_000 * 0.05 },
@@ -588,7 +589,7 @@ export function getInitialRegions(): Record<RegionId, Region> {
       nonEmployablePct: 0.37,
       governmentEmployment: 14_000_000,
       privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 12_150_000, annualRevenueUSD: 2_200_000_000_000, marginPct: 0.09 , debtUSD: 2_200_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 2_200_000_000_000 * 0.05 },
+        { segmentType: 'MANUFACTURING', employment: 12_150_000, annualRevenueUSD: 2_200_000_000_000, marginPct: 0.09 , debtUSD: 2_200_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 2_200_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 82_500_000_000, WHEAT: 82_500_000_000, CORN: 82_500_000_000, SOYBEANS: 82_500_000_000 } },
         { segmentType: 'PROFESSIONAL_SERVICES', employment: 9_720_000, annualRevenueUSD: 1_800_000_000_000, marginPct: 0.14, debtUSD: 1_800_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_800_000_000_000 * 0.05 },
         { segmentType: 'RETAIL_TRADE', employment: 14_580_000, annualRevenueUSD: 1_950_000_000_000, marginPct: 0.05 , debtUSD: 1_950_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_950_000_000_000 * 0.05 },
         { segmentType: 'CONSTRUCTION_REALESTATE', employment: 7_290_000, annualRevenueUSD: 1_350_000_000_000, marginPct: 0.10 , debtUSD: 1_350_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_350_000_000_000 * 0.05 },

@@ -1,9 +1,9 @@
 
-import { RegionId, Portfolio, OccupationType } from '../../types';
+import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
-import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices } from '../macroEngine';
+import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand } from './core';
 
 export function createInitialGameState(): GameState {
@@ -78,6 +78,18 @@ export function createInitialGameState(): GameState {
   });
 
   const commodities = getInitialCommodities();
+  // Calibrate intensityShare once on startup
+  commodities.forEach(comm => {
+    const linkage = COMMODITY_CATEGORY_LINKAGE[comm.id] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
+    if (linkage) {
+      const newShare = calibrateIntensityShare(comm.id, companies, regions, linkage.subUnitId);
+      COMMODITY_CATEGORY_LINKAGE[comm.id].intensityShare = newShare;
+      if (COMMODITY_CATEGORY_LINKAGE[comm.symbol]) {
+        COMMODITY_CATEGORY_LINKAGE[comm.symbol].intensityShare = newShare;
+      }
+    }
+  });
+
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
