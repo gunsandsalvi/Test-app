@@ -78,6 +78,39 @@ function checkNavIdentity(state: GameState, week: number) {
 }
 
 
+function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
+  let seedState = createInitialGameState();
+  const company = seedState.companies[0];
+  const posData = {
+    assetType: 'EQUITY' as any,
+    symbol: company.ticker,
+    name: company.name,
+    region: company.region,
+    dealerId: 'invariants-test-dealer',
+    direction: 'LONG' as any,
+    quantity: 1000,
+    entryPrice: company.stockPrice,
+    currentPrice: company.stockPrice,
+    notional: company.stockPrice * 1000,
+    marginRequirement: company.stockPrice * 1000 * 0.2,
+    expectedWeeklyCarryUSD: 0,
+  };
+  let state = executeTrade(seedState, posData);
+  const preNav = state.portfolio.navUSD;
+  state = advanceWeeklyStep(state);
+  const postNav = state.portfolio.navUSD;
+  const postPosition = state.portfolio.positions[0];
+  const postCompany = state.companies.find(c => c.ticker === company.ticker);
+
+  if (postCompany && postCompany.stockPrice !== company.stockPrice && postNav === preNav) {
+    return { week: state.currentWeek, message: `Portfolio NAV frozen: navUSD unchanged after weekly advance despite ${company.ticker} price moving ${company.stockPrice} -> ${postCompany.stockPrice} (nav=${preNav})` };
+  }
+  if (postCompany && postCompany.stockPrice !== company.stockPrice && postPosition.unrealizedPnL === 0) {
+    return { week: state.currentWeek, message: `Position unrealizedPnL still zero for ${postPosition.symbol} after ${company.ticker} price moved ${company.stockPrice} -> ${postCompany.stockPrice}` };
+  }
+  return null;
+}
+
 function runInvariantsHarness() {
   console.log('--- STARTING INVARIANTS HARNESS (260 WEEKS) ---');
   let state = createInitialGameState();
@@ -88,6 +121,12 @@ function runInvariantsHarness() {
   const tradeFeeViolation = checkTradeFeeConservation(state);
   if (tradeFeeViolation) {
     violations.push(tradeFeeViolation);
+  }
+
+  // Assert mark-to-market flows through to NAV/positions after a weekly advance
+  const frozenPortfolioViolation = checkMarkToMarketUnfreezesPortfolio();
+  if (frozenPortfolioViolation) {
+    violations.push(frozenPortfolioViolation);
   }
 
   for (let w = 1; w <= 260; w++) {

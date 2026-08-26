@@ -1,4 +1,4 @@
-import { GameState, Company, Region, Position, FxPair, AssetOwnershipShares, ItemizedHolding, PrivateSectorSegment, SupplyContract, SegmentFinancial, NewsItem, DebtTranche, GovDebtTranche } from '../../types';
+import { GameState, Company, Region, Position, FxPair, AssetOwnershipShares, ItemizedHolding, PrivateSectorSegment, SupplyContract, SegmentFinancial, NewsItem, DebtTranche, GovDebtTranche, Portfolio } from '../../types';
 import { RegionId, OccupationType, OccupationPool, Sector } from '../../types';
 import { Industry, INDUSTRY_SUBUNITS, CORPORATE_DEMAND_INTENSITY } from '../../domain/industry';
 import { CATEGORY_TRADABILITY, PRIVATE_SEGMENT_OCCUPATION_MIX, SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
@@ -827,7 +827,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     // Execute generalized bidding markets for sub-units in scope
     Object.values(INDUSTRY_SUBUNITS).flat().forEach(subUnit => {
-      executeSubUnitBiddingMarket(subUnit.unitId, Math.max(1, subUnit.unitPriceUSD), reg, regionId);
+      const seed = reg.categoryDemand[subUnit.unitId]?.unitPriceUSD;
+      executeSubUnitBiddingMarket(subUnit.unitId, Math.max(1, seed || 1), reg, regionId);
     });
   });
 
@@ -2818,21 +2819,43 @@ export function advanceWeeklyStep(state: GameState): GameState {
     }
   });
 
-  workingPositions = [...state.portfolio.positions];
-  
-        
-    
-    
-    
-    
-    
-  const updatedPortfolio = { ...state.portfolio };
+  const cashAfterWeek = state.portfolio.cashUSD + weeklyRealizedPnL + weeklyRealizedCashUSD - weeklyFinancingCostUSD;
+  const navUSD = cashAfterWeek + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
+  const updatedPortfolio: Portfolio = {
+    ...state.portfolio,
+    cashUSD: cashAfterWeek,
+    positions: updatedPositions,
+    navUSD,
+    totalRequiredMarginUSD,
+    maintenanceMarginUSD,
+    marginUtilizationPct: navUSD > 0 ? Math.round((totalRequiredMarginUSD / navUSD) * 100) : 100,
+    isMarginCall: navUSD < maintenanceMarginUSD,
+  };
   const updatedNewsFeed = [...state.newsFeed, ...newsItems].slice(-100);
   const updatedDiagnosticsLogs = [...state.diagnosticsLogs, ...diagnosticLogs].slice(-100);
   const year = state.year + (currentWeekMod13 === 13 && nextWeek % 52 === 0 ? 1 : 0);
-  const turnSummary: any = { turn: nextWeek };
-  const isGameOver = false;
-  const gameOverReason = null;
+
+  const pnlDeltaUSD = navUSD - state.portfolio.navUSD;
+  const turnSummary: GameState['turnSummary'] = {
+    week: nextWeek,
+    pnlDeltaUSD,
+    pnlDeltaPct: state.portfolio.navUSD > 0 ? Number(((pnlDeltaUSD / state.portfolio.navUSD) * 100).toFixed(2)) : 0,
+    interestIncomeUSD: weeklyInterestIncomeUSD,
+    financingCostUSD: weeklyFinancingCostUSD,
+    defaultedCompanies: defaultedTickers,
+    ratingsChanges: ratingChanges,
+    earningsReported: earningsReportedThisTurn,
+    marginAlert: updatedPortfolio.isMarginCall ? 'ACCOUNT IN MARGIN CALL: required maintenance margin exceeds NAV.' : null,
+    attribution: {
+      carryUSD: attributionCarry,
+      macroRatesUSD: attributionMacroRates,
+      creditSpreadUSD: attributionCreditSpread,
+      equityDeltaUSD: attributionEquityDelta,
+      volThetaUSD: attributionVolTheta,
+    },
+  };
+  const isGameOver = navUSD <= 0;
+  const gameOverReason = isGameOver ? 'Portfolio wiped out — NAV reached zero or below.' : null;
 
   return { 
     ...state, 
