@@ -671,7 +671,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histDebt = [...(region.historicalDebtToGdp || [1.0]).slice(-51), newDebtToGdpPct];
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
-  // PROJ-13: Housing as a real asset class
+  // Housing market evolution as a real asset class
   const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD);
   const resDemand = region.categoryDemand?.['residential_construction']?.demandLevelUSD ?? 1e9;
   const resSupply = region.categoryDemand?.['residential_construction']?.inventoryLevelUSD ?? (resDemand * 0.1);
@@ -691,7 +691,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     mortgageOriginationVolumeUSD: Number((newEstimatedHouseholdIncomeUSD * 0.05 * creditFactor).toFixed(0)),
   };
 
-  // PROJ-17: Life-cycle household structure
+  // Life-cycle demographic distribution evolution
   const prevLifeCycle = region.lifeCycleDistribution ?? createLifeCycleDistribution();
   const updatedLifeCycle = { ...prevLifeCycle };
   const birthDrift = (birthRate / 52) * 0.1;
@@ -709,7 +709,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   updatedLifeCycle.PRE_RETIREMENT = { ...prevLifeCycle.PRE_RETIREMENT, shareOfPopulation: prShare / totalLifeCycleShare };
   updatedLifeCycle.RETIRED = { ...prevLifeCycle.RETIRED, shareOfPopulation: retShare / totalLifeCycleShare };
 
-  // PROJ-11: Household wealth/income segmentation
+  // Household wealth and income distribution segmentation
   const prevWealthDist = region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD);
   const updatedWealthDist = { ...prevWealthDist };
 

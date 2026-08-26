@@ -33,7 +33,7 @@ export function formatSimulationDateShort(week: number): string {
 /**
  * Returns formatted quarter filing label (e.g. "Q1 '25 (Mar 31)", "Q2 '25 (Jun 30)")
  */
-export function formatQuarterFilingDate(quarterIndex: number, startYear: number = 2025): string {
+export function formatQuarterFilingDate(quarterIndex: number, startYear: number = SIMULATION_START_DATE.getFullYear()): string {
   const totalQuarters = Math.max(0, quarterIndex);
   const yearOffset = Math.floor(totalQuarters / 4);
   const qNum = (totalQuarters % 4) + 1;
@@ -52,7 +52,7 @@ export function formatQuarterFilingDate(quarterIndex: number, startYear: number 
 
 export function formatBondName(ticker: string, couponRate: number | undefined, maturityWeek: number, currentWeek: number, rateType: 'FIXED' | 'FLOATING'): string {
   const yearsRemaining = Math.max(0, (maturityWeek - currentWeek) / 52);
-  const maturityYear = new Date().getFullYear() + Math.round(yearsRemaining);
+  const maturityYear = getSimulationDate(currentWeek).getFullYear() + Math.round(yearsRemaining);
   if (rateType === 'FIXED') {
     return `${ticker} ${((couponRate ?? 0) * 100).toFixed(2)} '${String(maturityYear).slice(-2)}`;
   }

@@ -126,7 +126,7 @@ export function createInitialCategoryDemand(
   const cd: Record<string, any> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
-      su.unitPriceUSD = deriveSubUnitPrice(su.unitId, inflation, gdpGrowth);
+      const unitPriceUSD = deriveSubUnitPrice(su.unitId, inflation, gdpGrowth);
       
       const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
       const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
@@ -142,7 +142,7 @@ export function createInitialCategoryDemand(
         inputCostPressure: 0,
         clearedInputPriceIndex: 1.0,
         lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
-        unitPriceUSD: su.unitId === 'industrial_automation' ? 80000.0 : su.unitId === 'refined_products' ? 3.50 : su.unitId === 'food_beverage' ? 10.00 : undefined,
+        unitPriceUSD,
       };
     });
   });

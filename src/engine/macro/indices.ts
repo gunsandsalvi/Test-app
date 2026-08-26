@@ -31,15 +31,36 @@ export function calculateCompositeIndices(
   const ukChange = getCapWeightedAvgPrice(ukFirms, 8280);
   const jpChange = getCapWeightedAvgPrice(jpFirms, 38900);
 
+  // Sector-filtered sub-indices
+  const techFirms = companies.filter(c => c.sector === 'Tech');
+  const finFirms = companies.filter(c => c.sector === 'Financials' || c.sector === 'Banks');
+  const energyFirms = companies.filter(c => c.sector === 'Energy');
+  const indFirms = companies.filter(c => c.sector === 'Industrials');
+
+  const techChange = getCapWeightedAvgPrice(techFirms, 1000);
+  const finChange = getCapWeightedAvgPrice(finFirms, 1000);
+  const energyChange = getCapWeightedAvgPrice(energyFirms, 1000);
+  const indChange = getCapWeightedAvgPrice(indFirms, 1000);
+
   const prevUS = prevIndices?.us500?.value ?? 5850;
   const prevEU = prevIndices?.euStoxx?.value ?? 5020;
   const prevUK = prevIndices?.uk100?.value ?? 8280;
   const prevJP = prevIndices?.jp225?.value ?? 38900;
 
+  const prevTech = prevIndices?.techIndex?.value ?? 1000;
+  const prevFin = prevIndices?.financialsIndex?.value ?? 1000;
+  const prevEnergy = prevIndices?.energyIndex?.value ?? 1000;
+  const prevInd = prevIndices?.industrialsIndex?.value ?? 1000;
+
   const newUS = Number((prevUS * (1 + (prevIndices ? usChange : 0))).toFixed(1));
   const newEU = Number((prevEU * (1 + (prevIndices ? euChange : 0))).toFixed(1));
   const newUK = Number((prevUK * (1 + (prevIndices ? ukChange : 0))).toFixed(1));
   const newJP = Number((prevJP * (1 + (prevIndices ? jpChange : 0))).toFixed(0));
+
+  const newTech = Number((prevTech * (1 + (prevIndices ? techChange : 0))).toFixed(1));
+  const newFin = Number((prevFin * (1 + (prevIndices ? finChange : 0))).toFixed(1));
+  const newEnergy = Number((prevEnergy * (1 + (prevIndices ? energyChange : 0))).toFixed(1));
+  const newInd = Number((prevInd * (1 + (prevIndices ? indChange : 0))).toFixed(1));
 
 
   const advancingCompanies = companies.filter((c) => {
@@ -124,11 +145,11 @@ export function calculateCompositeIndices(
     global10YBenchmark: makeIndexMetric('Global 10Y Benchmark Yield', 'G10Y Yield', global10Y, prevIndices?.global10YBenchmark, '%'),
     gsciCommodity: makeIndexMetric('S&P GSCI Commodity Index', 'GSCI Index', newGsci, prevIndices?.gsciCommodity, 'pts'),
 
-    techIndex: makeIndexMetric('Global Tech Composite', 'TECH', 1000, prevIndices?.techIndex),
-    financialsIndex: makeIndexMetric('Global Financials Composite', 'FIN', 1000, prevIndices?.financialsIndex),
-    energyIndex: makeIndexMetric('Global Energy Composite', 'NRG', 1000, prevIndices?.energyIndex),
-    industrialsIndex: makeIndexMetric('Global Industrials Composite', 'IND', 1000, prevIndices?.industrialsIndex),
-    globalCreditComposite: makeIndexMetric('Global Credit Index', 'GCI', 100, prevIndices?.globalCreditComposite),
+    techIndex: makeIndexMetric('Global Tech Composite', 'TECH', newTech, prevIndices?.techIndex),
+    financialsIndex: makeIndexMetric('Global Financials Composite', 'FIN', newFin, prevIndices?.financialsIndex),
+    energyIndex: makeIndexMetric('Global Energy Composite', 'NRG', newEnergy, prevIndices?.energyIndex),
+    industrialsIndex: makeIndexMetric('Global Industrials Composite', 'IND', newInd, prevIndices?.industrialsIndex),
+    globalCreditComposite: makeIndexMetric('Global Credit Index', 'GCI', Number(((usIgOas + euIgOas + ukIgOas + jpIgOas) / 4).toFixed(1)), prevIndices?.globalCreditComposite, 'bps'),
     marketBreadth,
     pmiComposite: calculatePmiComposite(regions, companies),
   };

@@ -4,8 +4,7 @@ export const SECTOR_PRICING_POWER: Record<string, number> = {
   Industrials: 0.70,
   Energy: 0.90,
   Consumer: 0.50,
-  Healthcare: 0.65,
-  Utilities: 0.95,
+  Banks: 0.80,
 };
 
 export const SECTOR_WAGE_SENSITIVITY: Record<string, number> = {
@@ -14,10 +13,5 @@ export const SECTOR_WAGE_SENSITIVITY: Record<string, number> = {
   Industrials: 1.3,
   Energy: 0.9,
   Consumer: 1.4,
-  Healthcare: 1.0,
-  Utilities: 0.7,
+  Banks: 0.5,
 };
-
-/**
- * Create initial Game State
- */

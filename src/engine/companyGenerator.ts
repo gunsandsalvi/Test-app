@@ -213,11 +213,19 @@ export function buildQuarterlyFundamentalSnapshot(
   };
 }
 
-function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating): DebtTranche[] {
+const REGIONAL_BASE_POLICY_RATES: Record<RegionId, number> = {
+  USA: 0.0475,
+  EUR: 0.0325,
+  UK: 0.045,
+  JPN: 0.005,
+};
+
+function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, regionId?: RegionId): DebtTranche[] {
   const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
   const trancheWeights = [0.35, 0.35, 0.30];
   const maturityWeeks = [260, 520, 780]; // 5, 10, 15 years out
   const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;
+  const basePolicyRate = regionId ? REGIONAL_BASE_POLICY_RATES[regionId] ?? 0.045 : 0.045;
   let cumulativePrincipalAssigned = 0;
   return maturityWeeks.map((maturityWeek, i) => {
     const principalUSD = debtBase * trancheWeights[i];
@@ -229,7 +237,7 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
           id: `${ticker}-T${i + 1}`,
           principalUSD,
           rateType: 'FIXED' as const,
-          couponRate: 0.045 + baseSpreadBps / 10000, // 0.045 approximates the initial policy rate across regions at game start — documented simplification
+          couponRate: basePolicyRate + baseSpreadBps / 10000,
           originationWeek: 0,
           maturityWeek,
           seniority: 'SENIOR' as const,
@@ -765,7 +773,7 @@ export function generateInitialCompanies(): Company[] {
         cash: tmpl.cashBase,
         totalDebt: tmpl.debtBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
-        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating),
+        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, tmpl.region),
         capex,
         maintenanceCapex,
         growthCapex,
@@ -1059,7 +1067,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const da = revBase * 0.05;
   const ebit = Math.max(10, ebitda - da);
   const employeeCount = Math.max(100, Math.round(revBase / 500_000));
-  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating);
+  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating, regionId);
   const capex = Math.round(revBase * 0.06);
   const maintenanceCapex = Math.round(capex * 0.3); // newly-public growth-stage company spends more on expansion than upkeep
   const growthCapex = capex - maintenanceCapex;

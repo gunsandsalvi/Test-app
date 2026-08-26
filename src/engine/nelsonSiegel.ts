@@ -72,21 +72,13 @@ export function priceSovereignBond(
   const spread = spreadBps / 10000;
   const annualCoupon = 100 * couponRate;
 
-  for (let year = 1; year <= maturityYears; year++) {
-    const baseZeroRate = calculateNelsonSiegelZeroRate(year, params);
+  for (let t = maturityYears; t > 0; t -= 1) {
+    const baseZeroRate = calculateNelsonSiegelZeroRate(t, params);
     const effectiveRate = baseZeroRate + spread;
-    const df = Math.exp(-effectiveRate * year);
-    const cashFlow = year === maturityYears ? annualCoupon + 100 : annualCoupon;
+    const df = Math.exp(-effectiveRate * t);
+    const cashFlow = t === maturityYears ? annualCoupon + 100 : annualCoupon;
     pv += cashFlow * df;
-    weightedTime += year * cashFlow * df;
-  }
-
-  // Handle fractional periods if needed
-  if (maturityYears < 1) {
-    const effectiveRate = calculateNelsonSiegelZeroRate(maturityYears, params) + spread;
-    const df = Math.exp(-effectiveRate * maturityYears);
-    pv = (100 + annualCoupon * maturityYears) * df;
-    weightedTime = maturityYears * pv;
+    weightedTime += t * cashFlow * df;
   }
 
   const macaulayDuration = pv > 0 ? weightedTime / pv : maturityYears;

@@ -29,6 +29,8 @@ export function calculateExpectedCarry(
     thetaPerContractUSD?: number; // Black Scholes theta per week
     quantity?: number;
     basisSpreadBps?: number; // e.g. -20 bps
+    baseRate?: number;
+    quoteRate?: number;
   }
 ): CarryEstimate {
   const isBuyOrLong = direction === 'LONG' || direction === 'BUY' || direction === 'PAY_FIXED' || direction === 'BUY_PROTECTION';
@@ -204,8 +206,13 @@ export function calculateExpectedCarry(
     }
 
     case 'FX_SPOT': {
-      weeklyCarryUSD = 0;
-      description = `FX Spot Exchange Rate`;
+      const baseRate = params.baseRate ?? rf;
+      const quoteRate = params.quoteRate ?? rf;
+      const rateDiff = isBuyOrLong ? (baseRate - quoteRate) : (quoteRate - baseRate);
+      weeklyCarryUSD = (notionalUSD * rateDiff) / 52;
+      incomeOrYieldUSD = Math.max(0, weeklyCarryUSD);
+      financingCostUSD = Math.max(0, -weeklyCarryUSD);
+      description = `FX Interest Rate Differential (${(baseRate * 100).toFixed(2)}% vs ${(quoteRate * 100).toFixed(2)}%)`;
       break;
     }
   }

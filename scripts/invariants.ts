@@ -207,6 +207,15 @@ function runInvariantsHarness() {
           (global as any).sovAccumulator[rId].growth = 0;
           (global as any).sovAccumulator[rId].expected = 0;
        }
+
+       if (w % 13 !== 0 && w > 1) {
+         if (preState.regions[rId as RegionId]?.policyRate !== state.regions[rId as RegionId]?.policyRate) {
+           violations.push({
+             week: w,
+             message: `Policy rate changed on non-meeting week ${w} for region ${rId}: ${preState.regions[rId as RegionId]?.policyRate} -> ${state.regions[rId as RegionId]?.policyRate}`
+           });
+         }
+       }
     });
     checkNaNAndPurity(state, w);
 

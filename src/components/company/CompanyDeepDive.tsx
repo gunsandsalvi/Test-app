@@ -366,7 +366,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
             {company.segmentFinancials && company.segmentFinancials.length > 0 && (
               <div className="mt-3 p-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-2">Segment Financial Reporting (PROJ-15)</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-2">Segment Financial Reporting</div>
                 <div className="space-y-2">
                   {company.segmentFinancials.map(seg => (
                     <div key={seg.subUnitId} className="flex justify-between items-center text-xs border-b border-[var(--border-hairline)] pb-1.5">
@@ -548,7 +548,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
               <span className="font-bold">{isNaN(company.oasSpreadBps) ? '—' : `${company.oasSpreadBps.toFixed(0)}bps`}</span>
             </div>
 
-            {/* PART ME: Debt Tranche & Corporate Ownership Breakdown */}
+            {/* Debt Tranche & Corporate Ownership Breakdown */}
             <div className="pt-3 border-t border-[var(--border-hairline)] space-y-2">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Ownership Breakdown</div>
               {(() => {

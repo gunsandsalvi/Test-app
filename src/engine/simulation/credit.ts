@@ -9,7 +9,3 @@ export function determineCreditRating(leverage: number, interestCoverage: number
   if (interestCoverage < 12.0 || leverage > 1.8) return 'AA';
   return 'AAA';
 }
-
-/**
- * Create initial Game State
- */

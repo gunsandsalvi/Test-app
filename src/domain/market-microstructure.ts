@@ -37,8 +37,8 @@ export interface CategoryDemandState {
   inputCostPressure: number;
   clearedInputPriceIndex: number; // 1.0 = baseline; rises/falls with genuine scarcity/glut
   lastWeekInventoryLevelUSD: number; // explicit lag anchor — bidders always react to this, never same-week inventory
+  unitPriceUSD?: number; // Per-region sub-unit price level
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
-  unitPriceUSD?: number;
   totalUnitsSuppliedThisWeek?: number;
   totalUnitsDemandedThisWeek?: number;
 }

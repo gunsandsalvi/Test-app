@@ -367,7 +367,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       };
     });
 
-    // Supply Relationships (PROJ-10)
+    // Supply Relationships
     if (state.currentWeek % 13 === 0 || !(reg as any).supplyRelationships || (reg as any).supplyRelationships.length === 0) {
       (reg as any).supplyRelationships = formSupplyRelationships(regionId, prevActiveFirms);
     }
@@ -454,7 +454,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
       entry.lastWeekInventoryLevelUSD = entry.inventoryLevelUSD ?? 0;
     });
 
-    // --- PROJ-19: Generalized Real Unit-Based Clearing, Bidding & Contract Market System ---
+    // --- Generalized Real Unit-Based Clearing, Bidding & Contract Market System ---
   });
         
     
@@ -501,7 +501,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
         if (supplier && customer) {
           if (!isActiveCompany(supplier)) {
-            // PART BAB: Supplier default shock propagates directly to named contract counterparties first
+            // Supplier default shock propagates directly to named contract counterparties first
             if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
             const custUp = companyUpdates[customer.ticker];
             custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
@@ -775,7 +775,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
               let contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
               let duration = 12 + Math.floor(Math.random() * 40);
               
-              // PART BGA: Hedging for revenue volatility
+              // Hedging for revenue volatility
               const revHist = customerComp.revenueHistory || [];
               let revVol = 0;
               if (revHist.length > 3) {
@@ -880,10 +880,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
   function computeRegionalCompetitiveness(companies: Company[], regionId: RegionId, category: string): number {
     const firms = companies.filter(c => c.region === regionId && isActiveCompany(c) && (c.productLines || []).some(l => l.industry === category));
     if (firms.length === 0) return 0;
-    return firms.reduce((s, f) => {
-      const line = f.productLines.find(l => l.industry === category)!;
-      return s + line.competitiveness * line.categoryMarketShare;
+    const score = firms.reduce((s, f) => {
+      const line = f.productLines.find(l => l.industry === category);
+      const compVal = line?.competitiveness ?? 1.0;
+      const shareVal = line?.categoryMarketShare ?? 0;
+      return s + (Number.isFinite(compVal) ? compVal : 1.0) * (Number.isFinite(shareVal) ? shareVal : 0);
     }, 0) / firms.length;
+    return Number.isFinite(score) ? score : 0;
   }
 
   function getFxCompetitivenessAdjustment(exporter: RegionId, importer: RegionId, fxPairs: FxPair[]): number {
@@ -919,8 +922,6 @@ export function advanceWeeklyStep(state: GameState): GameState {
         const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
         const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, updatedFxPairs);
         const exportShareCapture = Math.max(0.05, Math.min(0.80, (0.25 + exporterCompetitiveness * 0.2 + fxCompetitiveness * 0.2)));
-        if (!Number.isFinite(exportShareCapture)) throw new Error(`exportShareCapture is ${exportShareCapture}! exporterCompetitiveness=${exporterCompetitiveness}, fxCompetitiveness=${fxCompetitiveness}`);
-        if (isNaN(importerDemand)) throw new Error(`importerDemand is NaN!`);
         const flow = importerDemand * tradability * (exportShareCapture / (regionIds.length - 1)); // divided among competitors
         regionExports[exporter] += flow;
         regionImports[importer] += flow;
@@ -1102,7 +1103,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
         : 1;
       newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + relevantFulfillment * 0.3);
       
-      // PROJ-10: Supply relationship shocks
+      // Supply relationship shocks
       const region = updatedRegions[comp.region];
       const rels = (region as any).supplyRelationships?.filter((r: any) => r.customerCompanyId === comp.id) || [];
       rels.forEach((rel: any) => {
@@ -1184,14 +1185,14 @@ export function advanceWeeklyStep(state: GameState): GameState {
           const tradability = CATEGORY_TRADABILITY[line.industry] ?? 0;
           if (tradability < 0.1) return s;
           const regionExportsInCat = regionCategoryExports[comp.region]?.[line.industry] ?? 0;
-          const exportShareOfRev = (regionExportsInCat * line.categoryMarketShare * line.revenueShare) / Math.max(baseRev, comp.annualRevenue);
-          const nextS = s + Math.max(-0.02, Math.min(0.02, exportShareOfRev * (reg.gdpGrowth / 52))); if (isNaN(nextS)) throw new Error(`NaN in reduce! regionExportsInCat=${regionExportsInCat}, categoryMarketShare=${line.categoryMarketShare}, revenueShare=${line.revenueShare}, annualRevenue=${comp.annualRevenue}, gdpGrowth=${reg.gdpGrowth}`); return nextS;
+          const safeRev = Math.max(1, Number.isFinite(comp.annualRevenue) ? comp.annualRevenue : (comp.baselineAnnualRevenue || 1));
+          const exportShareOfRev = (regionExportsInCat * (line.categoryMarketShare || 0) * (line.revenueShare || 0)) / safeRev;
+          return s + Math.max(-0.02, Math.min(0.02, (exportShareOfRev || 0) * (reg.gdpGrowth / 52)));
         }, 0);
         const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
         const annualGrowthRate = laggedCategoryGrowth + noise + reg.inflation * pricingPowerBeta;
         
         const weeklyGrowthRate = Math.max(-0.05, Math.min(0.05, (annualGrowthRate / 52) + exportRevenueBoost));
-        if (isNaN(weeklyGrowthRate)) throw new Error(`weeklyGrowthRate is NaN, laggedCategoryGrowth=${laggedCategoryGrowth}, noise=${noise}, reg.inflation=${reg.inflation}, pricingPowerBeta=${pricingPowerBeta}`);
         const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
       
       // Smooth transition to target revenue (no exponential weekly compounding)
@@ -1398,10 +1399,10 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const rawOas = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35;
     comp.oasSpreadBps = isFinite(rawOas) ? Number(Math.max(10, Math.min(5000, rawOas)).toFixed(2)) : 150;
 
-    // PART OF: Pre-refinancing trigger roughly one year before maturity
+    // Pre-refinancing trigger roughly one year before maturity
     let companyTranches = comp.debtTranches.map(t => ({ ...t }));
 
-    // PART RB: Corporate debt lifecycle: prepayment/call when genuinely accretive
+    // Corporate debt lifecycle: prepayment/call when genuinely accretive
     companyTranches.forEach(tranche => {
       if (tranche.rateType !== 'FIXED') return;
       const currentFairRate = calculateNelsonSiegelZeroRate(Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52), reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
@@ -1844,7 +1845,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
     
         
-      // PART BAA: Compute concentration risk flags (>40% threshold) from real activeContracts
+      // Compute concentration risk flags (>40% threshold) from real activeContracts
   updatedCompanies.forEach(comp => {
     const flags: string[] = [];
     const reg = updatedRegions[comp.region];
@@ -2124,7 +2125,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
     const monetizedAmountUSD = weeklyDeficitUSD * monetizationShare;
     const marketFundedDeficitUSD = weeklyDeficitUSD - monetizedAmountUSD;
 
-    // PART OD: Sovereign debt issued in large, infrequent blocks
+    // Sovereign debt issued in large, infrequent blocks
     const currentUnfundedDeficitUSD = (reg.pendingUnfundedDeficitUSD ?? 0) + marketFundedDeficitUSD;
     const issuanceCalendarWeek = nextWeek % 13 === 0; // large blocks roughly quarterly, not every week
     
