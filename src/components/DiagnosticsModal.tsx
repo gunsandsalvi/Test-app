@@ -280,7 +280,7 @@ export const DiagnosticsModal: React.FC<DiagnosticsModalProps> = ({ state, onClo
               <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-500 block uppercase text-[9px]">Margin Utilization</span>
                 <span className={`text-sm font-bold mt-0.5 block ${state.portfolio.marginUtilizationPct > 80 ? 'text-rose-400' : 'text-white'}`}>
-                  {state.portfolio.marginUtilizationPct.toFixed(1)}%
+                  {formatPercent(state.portfolio.marginUtilizationPct, { isDecimal: false, precision: 1 })}
                 </span>
                 <span className="text-[9px] text-slate-500">Maint: {formatCurrency(state.portfolio.maintenanceMarginUSD, { compact: true })}</span>
               </div>

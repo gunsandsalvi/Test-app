@@ -183,11 +183,11 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Capital Adequacy Ratio (Tier 1)</span>
-                      <span className="font-bold">{(reg.bankingSector.bankCapitalRatio * 100).toFixed(2)}%</span>
+                      <span className="font-bold">{formatPercent(reg.bankingSector.bankCapitalRatio)}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1">
                       <span className="text-[var(--text-secondary)]">Net Interest Margin (NIM)</span>
-                      <span className="font-bold">{(reg.bankingSector.netInterestMarginPct * 100).toFixed(2)}%</span>
+                      <span className="font-bold">{formatPercent(reg.bankingSector.netInterestMarginPct)}</span>
                     </div>
                   </div>
                 )}
@@ -245,23 +245,23 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                           <div className="space-y-1 text-xs">
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Cash</span>
-                              <span className="font-[var(--font-numeric)]">{(cashPct * 100).toFixed(1)}%</span>
-                              <span className="font-[var(--font-numeric)]">{(t.cashPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(cashPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.cashPct, 1)}</span>
                             </div>
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Sovereign Bonds</span>
-                              <span className="font-[var(--font-numeric)]">{(sovPct * 100).toFixed(1)}%</span>
-                              <span className="font-[var(--font-numeric)]">{(t.govBondPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(sovPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.govBondPct, 1)}</span>
                             </div>
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Corporate Bonds</span>
-                              <span className="font-[var(--font-numeric)]">{(corpPct * 100).toFixed(1)}%</span>
-                              <span className="font-[var(--font-numeric)]">{(t.corpBondPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(corpPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.corpBondPct, 1)}</span>
                             </div>
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Equities</span>
-                              <span className="font-[var(--font-numeric)]">{(eqPct * 100).toFixed(1)}%</span>
-                              <span className="font-[var(--font-numeric)]">{(t.equityPct * 100).toFixed(1)}%</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(eqPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.equityPct, 1)}</span>
                             </div>
                           </div>
                         );
@@ -395,7 +395,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Input Supply Constraint</span>
               <span className={(company.inputSupplyConstraintFactor ?? 1) < 1 ? 'text-[var(--signal-negative)] font-bold' : 'text-[var(--text-tertiary)]'}>
-                {(company.inputSupplyConstraintFactor ?? 1) < 1 ? `Constrained (${(((company.inputSupplyConstraintFactor ?? 1)) * 100).toFixed(0)}% capacity)` : 'Unconstrained'}
+                {(company.inputSupplyConstraintFactor ?? 1) < 1 ? `Constrained (${formatPercent(company.inputSupplyConstraintFactor ?? 1, 0)} capacity)` : 'Unconstrained'}
               </span>
             </div>
 
@@ -442,7 +442,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                                    <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span>
                                    {isConcentrated && (
                                      <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--signal-negative-bg)] text-[var(--signal-negative)] border border-[var(--signal-negative)] font-bold">
-                                       CONCENTRATION RISK ({(volShare * 100).toFixed(0)}%)
+                                       CONCENTRATION RISK ({formatPercent(volShare, 0)})
                                      </span>
                                    )}
                                  </div>
@@ -476,7 +476,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                                    <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span>
                                    {isConcentrated && (
                                      <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--signal-negative-bg)] text-[var(--signal-negative)] border border-[var(--signal-negative)] font-bold">
-                                       CONCENTRATION RISK ({(volShare * 100).toFixed(0)}%)
+                                       CONCENTRATION RISK ({formatPercent(volShare, 0)})
                                      </span>
                                    )}
                                  </div>
@@ -555,10 +555,10 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 const cb = reg.corpBondOwnership;
                 const foreignSum = (Object.values(cb.foreignShare) as number[]).reduce((a, b) => a + b, 0);
                 const hhShare = Math.max(0, 1 - cb.bankShare - cb.institutionalShare - foreignSum);
-                const bankPct = (cb.bankShare * 100).toFixed(0);
-                const instPct = (cb.institutionalShare * 100).toFixed(0);
-                const hhPct = (hhShare * 100).toFixed(0);
-                const forPct = (foreignSum * 100).toFixed(0);
+                const bankPct = formatPercent(cb.bankShare, 0);
+                const instPct = formatPercent(cb.institutionalShare, 0);
+                const hhPct = formatPercent(hhShare, 0);
+                const forPct = formatPercent(foreignSum, 0);
 
                 const trancheIds = new Set((company.debtTranches || []).map(t => t.id));
                 const bankHoldings = (reg.bankingSector.itemizedHoldings || [])
@@ -578,16 +578,16 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 return (
                   <>
                     <div className="h-2 rounded overflow-hidden flex bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-                      <div style={{ width: `${cb.bankShare * 100}%` }} className="bg-blue-500" title={`Bank: ${bankPct}%`} />
-                      <div style={{ width: `${cb.institutionalShare * 100}%` }} className="bg-purple-500" title={`Institutional: ${instPct}%`} />
-                      <div style={{ width: `${hhShare * 100}%` }} className="bg-emerald-500" title={`Household: ${hhPct}%`} />
-                      <div style={{ width: `${foreignSum * 100}%` }} className="bg-amber-500" title={`Foreign: ${forPct}%`} />
+                      <div style={{ width: `${cb.bankShare * 100}%` }} className="bg-blue-500" title={`Bank: ${bankPct}`} />
+                      <div style={{ width: `${cb.institutionalShare * 100}%` }} className="bg-purple-500" title={`Institutional: ${instPct}`} />
+                      <div style={{ width: `${hhShare * 100}%` }} className="bg-emerald-500" title={`Household: ${hhPct}`} />
+                      <div style={{ width: `${foreignSum * 100}%` }} className="bg-amber-500" title={`Foreign: ${forPct}`} />
                     </div>
                     <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] font-mono">
-                      <span className="text-blue-400">Bank {bankPct}%</span>
-                      <span className="text-purple-400">Inst {instPct}%</span>
-                      <span className="text-emerald-400">Household {hhPct}%</span>
-                      <span className="text-amber-400">Foreign {forPct}%</span>
+                      <span className="text-blue-400">Bank {bankPct}</span>
+                      <span className="text-purple-400">Inst {instPct}</span>
+                      <span className="text-emerald-400">Household {hhPct}</span>
+                      <span className="text-amber-400">Foreign {forPct}</span>
                     </div>
 
                     {companyHoldings.length > 0 && (

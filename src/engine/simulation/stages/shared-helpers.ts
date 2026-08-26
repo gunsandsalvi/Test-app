@@ -40,7 +40,7 @@ export function computeBucketDemandPremiumBps(bucket: 'IG' | 'HY', reg: Region, 
   return (1 - ratio) * 200;
 }
 
-export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: string, governmentEmployment?: number): Record<string, number> {
+export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<string, number> {
   const demand: Record<string, number> = {
     GENERAL: 0,
     SKILLED_TRADES: 0,
@@ -106,7 +106,7 @@ export function formSupplyRelationships(regionId: RegionId, companies: Company[]
   return relationships;
 }
 
-export function computeTargetOwnershipShares(assetClass: string, regionId: string, region: Region, allRegions: Record<string, Region>): { bankShare: number; institutionalShare: number; foreignShare: Record<string, number>; centralBankShare: number } {
+export function computeTargetOwnershipShares(assetClass: string, regionId: RegionId, region: Region, allRegions: Record<RegionId, Region>): { bankShare: number; institutionalShare: number; foreignShare: Record<string, number>; centralBankShare: number } {
   if (assetClass !== 'equity') {
     const current = (region as any)[`${assetClass}Ownership`] ?? region.equityOwnership;
     return {

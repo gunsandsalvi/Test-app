@@ -4,7 +4,7 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react';
-import { formatCurrency, formatSimulationDate, formatSimulationDateShort } from '../engine/formatters';
+import { formatCurrency, formatPercent, formatSimulationDate, formatSimulationDateShort } from '../engine/formatters';
 
 interface InteractiveChartModalProps {
   data: {
@@ -139,7 +139,7 @@ export const InteractiveChartModal: React.FC<InteractiveChartModalProps> = ({ da
               {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
               <span>
                 {isPositive ? '+' : ''}
-                {pctSinceStart.toFixed(2)}% ({isPositive ? '+' : ''}
+                {formatPercent(pctSinceStart, { isDecimal: false })} ({isPositive ? '+' : ''}
                 {changeSinceStart.toFixed(2)})
               </span>
               <span className="text-slate-500 font-normal">in period</span>

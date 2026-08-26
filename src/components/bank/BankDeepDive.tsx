@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GameState, RegionId } from '../../types';
-import { formatCurrency } from '../../engine/formatters';
+import { formatCurrency, formatPercent } from '../../engine/formatters';
 
 interface BankDeepDiveProps {
   regionId: RegionId;
@@ -95,19 +95,19 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Capital Ratio</div>
               <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">
-                {(bank.bankCapitalRatio * 100).toFixed(1)}%
+                {formatPercent(bank.bankCapitalRatio, 1)}
               </div>
             </div>
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Net Interest Margin</div>
               <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">
-                {(bank.netInterestMarginPct * 100).toFixed(2)}%
+                {formatPercent(bank.netInterestMarginPct)}
               </div>
             </div>
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Loan Loss Provision Rate</div>
               <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">
-                {(bank.loanLossProvisionRateAnnualPct * 100).toFixed(2)}% / yr
+                {formatPercent(bank.loanLossProvisionRateAnnualPct)} / yr
               </div>
             </div>
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
@@ -167,22 +167,22 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Equities</div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{(eqOwnership.bankShare * 100).toFixed(1)}%</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{(eqOwnership.institutionalShare * 100).toFixed(1)}%</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{(getHouseholdShare(eqOwnership) * 100).toFixed(1)}%</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(eqOwnership.bankShare, 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(eqOwnership.institutionalShare, 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(eqOwnership), 1)}</span></div>
               </div>
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Corporate Bonds</div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{(corpOwnership.bankShare * 100).toFixed(1)}%</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{(corpOwnership.institutionalShare * 100).toFixed(1)}%</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{(getHouseholdShare(corpOwnership) * 100).toFixed(1)}%</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(corpOwnership.bankShare, 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(corpOwnership.institutionalShare, 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(corpOwnership), 1)}</span></div>
               </div>
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Sovereign Bonds</div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{(sovOwnership.bankShare * 100).toFixed(1)}%</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{(sovOwnership.institutionalShare * 100).toFixed(1)}%</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Central Bank:</span> <span className="font-bold">{(sovOwnership.centralBankShare * 100).toFixed(1)}%</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{(getHouseholdShare(sovOwnership) * 100).toFixed(1)}%</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(sovOwnership.bankShare, 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(sovOwnership.institutionalShare, 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Central Bank:</span> <span className="font-bold">{formatPercent(sovOwnership.centralBankShare, 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(sovOwnership), 1)}</span></div>
               </div>
             </div>
           </div>
@@ -267,7 +267,7 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
                         </div>
                         <div className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-2 mt-0.5">
                           <span>Tranche ID: {h.instrumentId}</span>
-                          {tranche && <span>Coupon: {(tranche.couponRate * 100).toFixed(2)}%</span>}
+                          {tranche && <span>Coupon: {formatPercent(tranche.couponRate)}</span>}
                           {tranche && <span>Maturity Wk: {tranche.maturityWeek}</span>}
                         </div>
                       </div>

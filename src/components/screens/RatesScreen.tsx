@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GameState, RegionId, GovDebtTranche } from '../../types';
 import { calculateNelsonSiegelZeroRate } from '../../engine/nelsonSiegel';
 import { calculateParSwapRate, priceCorporateBond } from '../../engine/pricing';
-import { formatBondName } from '../../engine/formatters';
+import { formatBondName, formatPercent } from '../../engine/formatters';
 
 export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => void }> = ({ state, onOpenTrade }) => {
   const [selectedRegion, setSelectedRegion] = useState<RegionId>('USA');
@@ -108,9 +108,9 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
          <h3 className="text-sm font-bold text-[var(--text-primary)]">{selectedRegion} Yield Curve</h3>
          <div className="relative mx-auto ml-8" style={{ width: width - 32, height }}>
             <div className="absolute left-[-32px] top-0 h-full flex flex-col justify-between text-[9px] text-[var(--text-tertiary)]">
-               <span>{(maxRate * 100).toFixed(1)}%</span>
-               <span>{(((maxRate + minRate) / 2) * 100).toFixed(1)}%</span>
-               <span>{(minRate * 100).toFixed(1)}%</span>
+               <span>{formatPercent(maxRate, 1)}</span>
+               <span>{formatPercent((maxRate + minRate) / 2, 1)}</span>
+               <span>{formatPercent(minRate, 1)}</span>
             </div>
             <svg width={chartWidth} height={height} className="overflow-visible">
                <polyline points={pts} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinejoin="round" />
@@ -161,14 +161,14 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
             </div>
          </div>
          <div className="flex justify-between text-[10px] pt-4 mt-6 border-t border-[var(--border-hairline)]">
-            <span>2Y: {(rates[tenors.indexOf(2)] * 100).toFixed(2)}%</span>
-            <span>10Y: {(rates[tenors.indexOf(10)] * 100).toFixed(2)}%</span>
+            <span>2Y: {formatPercent(rates[tenors.indexOf(2)])}</span>
+            <span>10Y: {formatPercent(rates[tenors.indexOf(10)])}</span>
             <span className={rates[tenors.indexOf(2)] > rates[tenors.indexOf(10)] ? 'text-[var(--signal-negative)]' : 'text-[var(--signal-positive)]'}>
-               2s10s: {((rates[tenors.indexOf(10)] - rates[tenors.indexOf(2)]) * 100).toFixed(2)}%
+               2s10s: {formatPercent(rates[tenors.indexOf(10)] - rates[tenors.indexOf(2)])}
             </span>
          </div>
          <div className="pt-2 flex justify-between text-xs text-[var(--text-secondary)]">
-            <span>Policy Rate: {(reg.policyRate * 100).toFixed(2)}%</span>
+            <span>Policy Rate: {formatPercent(reg.policyRate)}</span>
             <span>Regime: {reg.cycleRegime}</span>
          </div>
       </div>
@@ -212,7 +212,7 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 2Y Zero</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> 10Y Zero</span>
               </div>
-              <span>2s10s Change: {((currentSlope - initialSlope) * 100).toFixed(2)}%</span>
+              <span>2s10s Change: {formatPercent(currentSlope - initialSlope)}</span>
             </div>
           </div>
         );
@@ -254,7 +254,7 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
                      {a.price.toFixed(2)}
                   </div>
                   <div className="text-[9px] text-[var(--text-tertiary)]">
-                     YTM {(a.ytm * 100).toFixed(2)}% · Dur {a.duration.toFixed(1)}y
+                     YTM {formatPercent(a.ytm)} · Dur {a.duration.toFixed(1)}y
                   </div>
                </div>
             </div>
