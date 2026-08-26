@@ -2,6 +2,7 @@ import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapsh
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
 import { getInitialRegions } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
+import { getRegionProductivityPerCapitaUSD } from './bootstrap/population';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -254,6 +255,7 @@ export function generateInitialCompanies(): Company[] {
 
   regions.forEach((region) => {
     const regionPolicyRate = getInitialRegions()[region]?.policyRate ?? 0.045;
+    const regionProductivityPerCapita = getRegionProductivityPerCapitaUSD(region);
     let templates: FirmSeedTemplate[] = generateFirmSeeds(region);
 
 
@@ -318,16 +320,21 @@ export function generateInitialCompanies(): Company[] {
       const da = tmpl.revBase * 0.05; // 5% depreciation & amortization
       const ebit = Math.max(10, ebitda - da);
 
-      const revPerEmployee: Record<string, number> = {
-        Tech: 800_000,
-        Financials: 1_000_000,
-        Industrials: 300_000,
-        Energy: 1_500_000,
-        Consumer: 200_000,
-        Healthcare: 400_000,
-        Utilities: 1_200_000,
+      // Revenue-per-employee scales off the region's own generated productivity-per-worker
+      // primitive (not a fixed real-world dollar figure) via a structural per-sector
+      // capital-intensity multiple, so headcount stays consistent with the population/labor
+      // primitives regardless of the region's absolute economic scale.
+      const revPerEmployeeMultiple: Record<string, number> = {
+        Tech: 4.0,
+        Financials: 5.0,
+        Industrials: 1.5,
+        Energy: 7.5,
+        Consumer: 1.0,
+        Healthcare: 2.0,
+        Utilities: 6.0,
       };
-      const employeeCount = Math.max(100, Math.round(tmpl.revBase / (revPerEmployee[tmpl.sector] ?? 500_000)));
+      const revPerEmployee = regionProductivityPerCapita * (revPerEmployeeMultiple[tmpl.sector] ?? 2.5);
+      const employeeCount = Math.max(100, Math.round(tmpl.revBase / revPerEmployee));
       
       const interestRate = 0.045;
       const interestExpense = Math.max(1, tmpl.debtBase * interestRate);

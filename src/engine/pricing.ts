@@ -260,7 +260,8 @@ export function priceLeveragedLoan(
   oasSpreadBps: number,
   tenorYears: number = 5,
   isDefaulted: boolean = false,
-  recoveryRate: number = 0.65
+  recoveryRate: number = 0.65,
+  bucketDemandPremiumBps: number = 0
 ): { pricePar: number; discountMarginBps: number; effectiveYield: number; duration: number } {
   if (isDefaulted) {
     return {
@@ -273,8 +274,12 @@ export function priceLeveragedLoan(
 
   // Floating rate loans have low interest rate duration (approx 0.25y) but credit spread duration ~ 3.5y
   const creditDuration = Math.min(4.0, tenorYears * 0.7);
-  // Discount margin reflects current credit risk (approx 85-90% of unsecured OAS due to senior lien collateral)
-  const discountMarginBps = Math.round(oasSpreadBps * 0.85);
+  // Senior-lien discount off the unsecured OAS is no longer a fixed multiple: it responds to
+  // the loan bucket's own demand/supply premium (computeBucketDemandPremiumBps) — strong
+  // relative demand for loans (a negative premium) prices them even tighter versus bonds;
+  // weak demand widens the discount back out.
+  const seniorLienDiscount = Math.max(0.65, Math.min(0.95, 0.85 + bucketDemandPremiumBps / 2000));
+  const discountMarginBps = Math.round(oasSpreadBps * seniorLienDiscount);
   const marginDeltaBps = discountMarginBps - quotedMarginBps;
   // Price in points of par
   const pricePar = (100 - (marginDeltaBps / 10000) * creditDuration * 100);

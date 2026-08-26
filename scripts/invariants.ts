@@ -111,6 +111,58 @@ function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
   return null;
 }
 
+function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
+  let state = createInitialGameState();
+  const ticker = state.companies.find(c => c.region === 'USA' && !c.isBankEntity && !c.isInstitutionalEntity)?.ticker;
+  if (!ticker) return null;
+  // Force a large institutional under-allocation so the holder-class rebalancing flow
+  // produces a sustained multi-week inflow into USA equities.
+  state.regions.USA.equityOwnership.institutionalShare = 0.05;
+
+  const startComp = state.companies.find(c => c.ticker === ticker)!;
+  const startPrice = startComp.stockPrice;
+  const startEps = startComp.eps;
+
+  for (let w = 0; w < 20; w++) {
+    state = advanceWeeklyStep(state);
+  }
+
+  const endComp = state.companies.find(c => c.ticker === ticker);
+  if (!endComp || endComp.isDefaulted) return null; // company left the sample; not a flow-mechanism failure
+
+  const priceRatio = Math.max(0.01, endComp.stockPrice) / Math.max(0.01, startPrice);
+  const epsRatio = (Math.abs(endComp.eps) > 0.01 && Math.abs(startEps) > 0.01) ? endComp.eps / startEps : 1;
+  const priceMoveExEpsLog = Math.abs(Math.log(priceRatio) - Math.log(Math.max(0.01, Math.abs(epsRatio))));
+
+  if (priceMoveExEpsLog < 0.02) {
+    return {
+      week: 20,
+      message: `Sustained institutional equity demand did not visibly move ${ticker}'s price beyond what EPS explains (price ${startPrice} -> ${endComp.stockPrice}, eps ${startEps} -> ${endComp.eps})`
+    };
+  }
+  return null;
+}
+
+function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
+  const baseline = createInitialGameState();
+  const shocked = createInitialGameState();
+  // Force heavy under-absorption: shrink USA bank/institutional balance-sheet capacity to a
+  // fraction of outstanding sovereign debt, well below the baseline run.
+  shocked.regions.USA.bankingSector.bankEquityUSD *= 0.01;
+  shocked.regions.USA.institutionalSector.sectorEquityUSD *= 0.01;
+
+  const baselineNext = advanceWeeklyStep(baseline);
+  const shockedNext = advanceWeeklyStep(shocked);
+
+  if (shockedNext.regions.USA.zeroRates.tenor10Y <= baselineNext.regions.USA.zeroRates.tenor10Y) {
+    return {
+      week: shockedNext.currentWeek,
+      message: `Under-subscribed sovereign auction did not raise USA's 10Y yield the following week (baseline=${baselineNext.regions.USA.zeroRates.tenor10Y}, shocked=${shockedNext.regions.USA.zeroRates.tenor10Y})`
+    };
+  }
+  return null;
+}
+
 function runInvariantsHarness() {
   console.log('--- STARTING INVARIANTS HARNESS (260 WEEKS) ---');
   let state = createInitialGameState();
@@ -127,6 +179,18 @@ function runInvariantsHarness() {
   const frozenPortfolioViolation = checkMarkToMarketUnfreezesPortfolio();
   if (frozenPortfolioViolation) {
     violations.push(frozenPortfolioViolation);
+  }
+
+  // Assert the equity holder-class rebalancing flow visibly moves price beyond EPS
+  const equityFlowViolation = checkSustainedEquityDemandMovesPriceBeyondEps();
+  if (equityFlowViolation) {
+    violations.push(equityFlowViolation);
+  }
+
+  // Assert an under-subscribed sovereign auction raises the following week's yield
+  const auctionViolation = checkUndersubscribedSovereignAuctionRaisesYield();
+  if (auctionViolation) {
+    violations.push(auctionViolation);
   }
 
   for (let w = 1; w <= 260; w++) {
