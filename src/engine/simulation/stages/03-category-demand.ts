@@ -7,6 +7,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
+import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
@@ -38,8 +39,15 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     let totalGovWeight = 0;
     let totalCorpWeight = 0;
 
+    // Capital-goods categories (heavy_equipment, industrial_automation, commercial_construction,
+    // enterprise_software, commercial_fleet) are excluded from the abstract CORPORATE pool here —
+    // their demand now comes from the real, named bilateral capex settlement in
+    // 08b-capex-settlement.ts (each buyer's actual weekly capex $, routed to real supplier
+    // companies or the private sector), not from an anonymous share of aggregate I. Leaving them
+    // in both channels would double-count the same capex dollars.
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
+        if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) return;
         totalHhWeight += su.buyerMix.HOUSEHOLD;
         totalGovWeight += su.buyerMix.GOVERNMENT;
         totalCorpWeight += su.buyerMix.CORPORATE;
@@ -51,6 +59,15 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
+        if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) {
+          // Left unchanged here — 08b-capex-settlement.ts (which runs after this week's real
+          // capex figures exist) overwrites demandLevelUSD/demandGrowthAnnual/crowdingIntensity
+          // for these categories directly from actual routed capex volume. This placeholder only
+          // matters on the very first tick before that stage has ever run.
+          allTargets[su.unitId] = reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId]);
+          smoothingByCategory[su.unitId] = 0.08;
+          return;
+        }
         const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
         const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;

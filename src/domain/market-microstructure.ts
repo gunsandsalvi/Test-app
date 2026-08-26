@@ -60,3 +60,31 @@ export interface SupplyRelationship {
   weeklyVolumeUSD: number;
   relationshipStrength: number;
 }
+
+// Every company's capex (equipment, automation/software, fleet, construction) is a purchase
+// from real capital-goods-producing sub-units, not an abstract demand signal — this is the
+// basket weighting used to split any buyer's weekly capex dollars across those categories.
+export const CAPEX_SUPPLIER_WEIGHTS: Record<string, number> = {
+  heavy_equipment: 0.30,
+  industrial_automation: 0.20,
+  commercial_construction: 0.25,
+  enterprise_software: 0.15,
+  commercial_fleet: 0.10,
+};
+
+// Real, non-public counterparty for the share of capex a region's public companies can't supply
+// (insufficient in-region public capacity in a given category) — private/non-traded firms in
+// this segment are a genuine seller of the same goods, not a residual write-off.
+export const CAPEX_CATEGORY_PRIVATE_SEGMENT: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = {
+  heavy_equipment: 'MANUFACTURING',
+  industrial_automation: 'MANUFACTURING',
+  commercial_construction: 'CONSTRUCTION_REALESTATE',
+  enterprise_software: 'PROFESSIONAL_SERVICES',
+  commercial_fleet: 'MANUFACTURING',
+};
+
+// Share of each capex category's demand met by real in-region public companies before falling
+// back to the private-sector segment above — public capital-goods producers are typically the
+// large/anchor suppliers, but plenty of real-world capex (small contractors, private IT
+// consultancies, regional construction firms) genuinely goes to non-public firms.
+export const CAPEX_PUBLIC_SUPPLY_SHARE = 0.65;

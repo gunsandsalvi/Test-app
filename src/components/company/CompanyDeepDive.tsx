@@ -146,6 +146,30 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                   {[
                     ['Revenue', latestFund.incomeStatement.revenue],
                     ['Cost of Goods Sold (COGS)', -latestFund.incomeStatement.cogs],
+                  ].map(([label, val]) => (
+                    <div key={label as string} className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">{label}</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(val as number, { compact: true })}</span>
+                    </div>
+                  ))}
+                  {latestFund.incomeStatement.cogsBreakdown && (
+                    <div className="pl-3 space-y-0.5 border-b border-[var(--border-hairline)] pb-1.5">
+                      <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold pt-0.5">Where the cost is going</div>
+                      {[
+                        ['Base production cost', latestFund.incomeStatement.cogsBreakdown.baseCostUSD],
+                        ['Wage pressure', latestFund.incomeStatement.cogsBreakdown.wagePressureUSD],
+                        ['Input price pressure', latestFund.incomeStatement.cogsBreakdown.inputPriceCostUSD],
+                        ['Capacity decay (deferred maintenance)', latestFund.incomeStatement.cogsBreakdown.capacityDecayCostUSD],
+                        ['Competitive crowding', latestFund.incomeStatement.cogsBreakdown.crowdingCostUSD],
+                      ].map(([label, val]) => (
+                        <div key={label as string} className="flex justify-between text-[11px] py-0.5">
+                          <span className="text-[var(--text-tertiary)]">{label}</span>
+                          <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(-(val as number), { compact: true })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {[
                     ['Gross Profit', latestFund.incomeStatement.grossProfit],
                     ['SG&A Expense', -latestFund.incomeStatement.sgaExpense],
                     ['EBITDA', latestFund.incomeStatement.ebitda],
@@ -163,6 +187,34 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     </div>
                   ))}
                 </div>
+
+                {(company.historicalFundamentals || []).length > 1 && (
+                  <div className="pt-3">
+                    <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold mb-1">Quarterly Trend ({(company.historicalFundamentals || []).length} quarters)</div>
+                    <div className="overflow-x-auto no-scrollbar">
+                      <table className="w-full text-[10px] border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--border-hairline)]">
+                            <th className="text-left text-[var(--text-tertiary)] font-bold py-1 pr-2">Period</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 px-2">Revenue</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 px-2">EBITDA</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 pl-2">Net Income</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(company.historicalFundamentals || []).slice().reverse().map(f => (
+                            <tr key={f.week} className="border-b border-[var(--border-hairline)]">
+                              <td className="py-1 pr-2 text-[var(--text-secondary)] whitespace-nowrap">{f.filingPeriod}</td>
+                              <td className="text-right py-1 px-2 font-[var(--font-numeric)]">{formatCurrency(f.incomeStatement.revenue, { compact: true })}</td>
+                              <td className="text-right py-1 px-2 font-[var(--font-numeric)]">{formatCurrency(f.incomeStatement.ebitda, { compact: true })}</td>
+                              <td className="text-right py-1 pl-2 font-[var(--font-numeric)]">{formatCurrency(f.incomeStatement.netIncome, { compact: true })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -290,8 +342,59 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     ['Cash', latestFund.balanceSheet.cash],
                     ['Treasury Holdings', latestFund.balanceSheet.treasuryHoldingsUSD],
                     ['Accounts Receivable', latestFund.balanceSheet.accountsReceivable],
-                    ['Finished Goods Inventory', latestFund.balanceSheet.finishedGoodsInventoryUSD],
-                    ['Net PPE', latestFund.balanceSheet.netPPE],
+                  ].map(([label, val]) => (
+                    <div key={label as string} className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">{label}</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(val as number, { compact: true })}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                    <span className="text-[var(--text-secondary)]">Finished Goods Inventory</span>
+                    <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(latestFund.balanceSheet.finishedGoodsInventoryUSD, { compact: true })}</span>
+                  </div>
+                  {(company.finishedGoodsUnits ?? 0) > 0 && (
+                    <div className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
+                      <span>· {Math.round(company.finishedGoodsUnits ?? 0).toLocaleString()} units on hand</span>
+                      <span className="font-[var(--font-numeric)]">{formatCurrency((latestFund.balanceSheet.finishedGoodsInventoryUSD) / Math.max(1, company.finishedGoodsUnits ?? 1), { compact: true })}/unit</span>
+                    </div>
+                  )}
+
+                  <div className="pl-3 space-y-0.5 border-b border-[var(--border-hairline)] pb-1.5 pt-1">
+                    <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold">Property, Plant & Equipment roll-forward</div>
+                    {(() => {
+                      const hist = company.historicalFundamentals || [];
+                      const prevFund = hist.length > 1 ? hist[hist.length - 2] : undefined;
+                      const beginningNetPPE = prevFund?.balanceSheet.netPPE ?? latestFund.balanceSheet.netPPE;
+                      const capexAdded = latestFund.balanceSheet.grossPPE - (prevFund?.balanceSheet.grossPPE ?? latestFund.balanceSheet.grossPPE);
+                      const depreciation = latestFund.balanceSheet.accumulatedDepreciation - (prevFund?.balanceSheet.accumulatedDepreciation ?? 0);
+                      return (
+                        <>
+                          <div className="flex justify-between text-[11px] py-0.5">
+                            <span className="text-[var(--text-tertiary)]">Beginning Net PP&E</span>
+                            <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(beginningNetPPE, { compact: true })}</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] py-0.5">
+                            <span className="text-[var(--text-tertiary)]">+ Capital expenditure</span>
+                            <span className="font-[var(--font-numeric)] text-[var(--signal-positive)]">{formatCurrency(capexAdded, { compact: true })}</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] py-0.5">
+                            <span className="text-[var(--text-tertiary)]">− Depreciation</span>
+                            <span className="font-[var(--font-numeric)] text-[var(--signal-negative)]">{formatCurrency(-depreciation, { compact: true })}</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] py-0.5 font-bold">
+                            <span className="text-[var(--text-secondary)]">= Ending Net PP&E</span>
+                            <span className="font-[var(--font-numeric)]">{formatCurrency(latestFund.balanceSheet.netPPE, { compact: true })}</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] pt-1 mt-0.5 border-t border-[var(--border-hairline)]/50">
+                            <span className="text-[var(--text-tertiary)]">Gross PP&E / Accum. Depreciation</span>
+                            <span className="font-[var(--font-numeric)] text-[var(--text-tertiary)]">{formatCurrency(latestFund.balanceSheet.grossPPE, { compact: true })} / {formatCurrency(latestFund.balanceSheet.accumulatedDepreciation, { compact: true })}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {[
                     ['Total Assets', latestFund.balanceSheet.totalAssets],
                     ['Accounts Payable', latestFund.balanceSheet.accountsPayable],
                     ['Short-Term Debt', latestFund.balanceSheet.shortTermDebt],
@@ -305,6 +408,34 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     </div>
                   ))}
                 </div>
+
+                {(company.historicalFundamentals || []).length > 1 && (
+                  <div className="pt-3">
+                    <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold mb-1">Quarterly Trend ({(company.historicalFundamentals || []).length} quarters)</div>
+                    <div className="overflow-x-auto no-scrollbar">
+                      <table className="w-full text-[10px] border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--border-hairline)]">
+                            <th className="text-left text-[var(--text-tertiary)] font-bold py-1 pr-2">Period</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 px-2">Total Assets</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 px-2">Net PP&E</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 pl-2">Equity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(company.historicalFundamentals || []).slice().reverse().map(f => (
+                            <tr key={f.week} className="border-b border-[var(--border-hairline)]">
+                              <td className="py-1 pr-2 text-[var(--text-secondary)] whitespace-nowrap">{f.filingPeriod}</td>
+                              <td className="text-right py-1 px-2 font-[var(--font-numeric)]">{formatCurrency(f.balanceSheet.totalAssets, { compact: true })}</td>
+                              <td className="text-right py-1 px-2 font-[var(--font-numeric)]">{formatCurrency(f.balanceSheet.netPPE, { compact: true })}</td>
+                              <td className="text-right py-1 pl-2 font-[var(--font-numeric)]">{formatCurrency(f.balanceSheet.shareholdersEquity, { compact: true })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -337,6 +468,34 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     </div>
                   ))}
                 </div>
+
+                {(company.historicalFundamentals || []).length > 1 && (
+                  <div className="pt-3">
+                    <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold mb-1">Quarterly Trend ({(company.historicalFundamentals || []).length} quarters)</div>
+                    <div className="overflow-x-auto no-scrollbar">
+                      <table className="w-full text-[10px] border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--border-hairline)]">
+                            <th className="text-left text-[var(--text-tertiary)] font-bold py-1 pr-2">Period</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 px-2">Operations</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 px-2">Investing</th>
+                            <th className="text-right text-[var(--text-tertiary)] font-bold py-1 pl-2">Financing</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(company.historicalFundamentals || []).slice().reverse().map(f => (
+                            <tr key={f.week} className="border-b border-[var(--border-hairline)]">
+                              <td className="py-1 pr-2 text-[var(--text-secondary)] whitespace-nowrap">{f.filingPeriod}</td>
+                              <td className="text-right py-1 px-2 font-[var(--font-numeric)]">{formatCurrency(f.cashFlowStatement.cashFromOperations, { compact: true })}</td>
+                              <td className="text-right py-1 px-2 font-[var(--font-numeric)]">{formatCurrency(f.cashFlowStatement.cashFromInvesting, { compact: true })}</td>
+                              <td className="text-right py-1 pl-2 font-[var(--font-numeric)]">{formatCurrency(f.cashFlowStatement.cashFromFinancing, { compact: true })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
