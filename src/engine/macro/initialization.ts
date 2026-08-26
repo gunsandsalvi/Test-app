@@ -197,7 +197,7 @@ const PRIVATE_SEGMENT_PROFILE: Record<PrivateSegmentType, { employmentShare: num
   HEALTHCARE_SERVICES: { employmentShare: 0.060, revenueToGdp: 0.050, marginPct: 0.12 },
 };
 const MANUFACTURING_COMMODITY_SUPPLY_SHARE = 0.0375; // share of MANUFACTURING segment revenue, per linked commodity
-const MANUFACTURING_LINKED_COMMODITIES = ['METAL_GAMMA', 'AGRI_ALPHA', 'AGRI_BETA', 'AGRI_GAMMA'];
+const MANUFACTURING_LINKED_COMMODITIES = ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'];
 
 const GOV_DEBT_TENOR_WEIGHTS: { tenorYears: number; tenorWeeks: number; weight: number }[] = [
   { tenorYears: 2, tenorWeeks: 104, weight: 0.30 },

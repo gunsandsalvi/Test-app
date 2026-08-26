@@ -33,6 +33,13 @@ export const INDUSTRY_SUBUNITS: Record<Industry, IndustrySubUnit[]> = {
     { unitId: 'household_chemicals', label: 'Household Chemicals', buyerMix: { HOUSEHOLD: 0.90, GOVERNMENT: 0, CORPORATE: 0.10 } },
     { unitId: 'agricultural_chemicals', label: 'Agricultural Chemicals', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 } },
     { unitId: 'specialty_metals', label: 'Specialty Metals & Mining', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 } },
+    // 1$ is 1$: the raw-crop counterpart to specialty_metals — a raw-input sub-unit, not a
+    // downstream consumer product, so it belongs alongside the other raw-material categories
+    // here rather than under ConsumerStaples (whose OWN demand, as a CATEGORY_INPUT_REQUIREMENTS
+    // demander of this same category, would otherwise self-referentially inflate its own bid).
+    // Real supply comes from the WHEAT/CORN/SOYBEANS commodity producers (see
+    // COMMODITY_CATEGORY_LINKAGE and companyGenerator.ts).
+    { unitId: 'agricultural_commodities', label: 'Agricultural Commodities', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 } },
   ],
   IndustrialsMachinery: [
     { unitId: 'heavy_equipment', label: 'Heavy Equipment', buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.20, CORPORATE: 0.80 } },

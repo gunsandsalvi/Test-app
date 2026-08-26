@@ -61,7 +61,11 @@ export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, 
   AutomotiveTransport: { upstream_extraction: 0.025, specialty_metals: 0.030 },
   AerospaceDefense: { upstream_extraction: 0.020, specialty_metals: 0.025 },
   IndustrialsMachinery: { upstream_extraction: 0.015, specialty_metals: 0.030 },
-  ConsumerStaples: { upstream_extraction: 0.001 },
+  // 1$ is 1$: food/beverage production's real dominant input is raw crops, not energy — the
+  // agricultural_commodities entry is the literal recipe requirement fed by real WHEAT/CORN/
+  // SOYBEANS producer companies (see COMMODITY_CATEGORY_LINKAGE); upstream_extraction stays as
+  // the (much smaller) energy cost of processing/transport.
+  ConsumerStaples: { upstream_extraction: 0.001, agricultural_commodities: 0.12 },
   ConsumerDiscretionaryRetail: { upstream_extraction: 0.002 },
 };
 

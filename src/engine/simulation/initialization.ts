@@ -193,7 +193,7 @@ export function createInitialGameState(): GameState {
     .sort((a, b) => b.marketCap - a.marketCap)
     .slice(0, 2)
     .map(c => c.id);
-  const watchlist = [...topUsaCompanyIds, 'ENERGY_BETA', 'METAL_ALPHA'];
+  const watchlist = [...topUsaCompanyIds, 'HEAVY_CRUDE_OIL', 'GOLD'];
 
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);

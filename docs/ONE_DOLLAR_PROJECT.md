@@ -484,5 +484,47 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   industry `productLines` entry — unifying "the company you can trade" and "the company that
   really supplies this industrial input" into the same named actor.
 
+- **Base commodities linked to the real modeled commodities (landed).** The user asked directly:
+  "shouldn't [base commodities] come from the actual commodities we model?" Investigating found
+  that the codebase already had a full, real commodities model (9 tradable instruments with real
+  spot/futures prices and a real supply/demand clearing function) that was completely
+  disconnected from the industry input-output layer — `companyGenerator.ts` assigned a company's
+  real `productLines` purely from its `sector` string, blind to `producedCommodityId`, so the
+  dedicated commodity-producer companies never actually produced their linked industry category
+  as an output line. specialty_metals in particular had ZERO real producers anywhere, guaranteed
+  by generation — the true root cause of that category's earlier depletion-to-zero, independent
+  of any auction mechanics. Fixed in three parts:
+  1. **Renamed all 9 commodities** to real, understandable category names (Crude Oil, Heavy
+     Crude Oil, Natural Gas, Gold, Silver, Copper, Wheat, Corn, Soybeans) instead of invented
+     tickers (`ENERGY_ALPHA` etc.) — prices/scarcity indices stay entirely synthetic, only the
+     labeling changed.
+  2. **`companyGenerator.ts` now gives every `producedCommodityId`-tagged company the matching
+     real industry `productLines` entry** (upstream_extraction for Energy commodities,
+     specialty_metals for Metals commodities, a new `agricultural_commodities` category for
+     Agriculture commodities) instead of the generic per-sector template — unifying "the company
+     you can trade" and "the company that really supplies this industrial input" into the same
+     named actor. Added `agricultural_commodities` as a new raw-input sub-unit under
+     MaterialsChemicals (alongside specialty_metals, not under ConsumerStaples — ConsumerStaples
+     is itself a `CATEGORY_INPUT_REQUIREMENTS` demander of this category, so nesting the supply
+     sub-unit there created a real, confirmed self-referential demand-inflation bug, fixed by
+     moving it) and gave ConsumerStaples a real `agricultural_commodities: 0.12` input
+     requirement (food/beverage production's real dominant input is crops, not energy).
+  3. **`04-input-output.ts` now sources each category's real weekly supply from the actual linked
+     commodities' own `weeklySupplyUnits`/`spotPrice`** (evolution.ts's `computeCommodityClearingRatio`,
+     already real) instead of an independently invented per-company formula — with each region's
+     share allocated proportional to its real share of GLOBAL demand for that category (a truly
+     global commodity like copper trades in one global market; crediting the same global supply
+     figure in full to every region independently would have quadruple-counted it across the 4
+     regions).
+  Verified via `tsc`, hygiene, a 30-week targeted trace (both specialty_metals and
+  agricultural_commodities now show real, price-responsive recovery — inventory bottoms out then
+  rebuilds as the linked commodities' own supply responds to price, instead of permanent
+  depletion), a 60-week revenue-ratio diagnostic (**0 violations through all 60 weeks — the first
+  time this session**, vs. 85-118 before this fix), and a full 260-week `npm run verify` run.
+  **`npm run verify` still fails**, but on a pre-existing, unrelated issue confirmed via A/B test
+  (`git stash`): USA bank capital ratio collapses to exactly 0.0000 starting ~week 149, present
+  at the last-committed baseline (103 violations) at essentially the same magnitude as with this
+  fix applied (112 violations) — not a regression from this work. Tracked separately as task #67.
+
 Each phase will be built, verified (`tsc`, hygiene, targeted diagnostics, then the full
 invariants harness), and committed independently rather than as one large, unreviewable change.

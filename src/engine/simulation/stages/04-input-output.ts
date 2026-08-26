@@ -6,10 +6,9 @@
  * index and each demander's input-cost pressure / fulfillment ratio.
  */
 
-import { GameState, RegionId, Industry } from '../../../types';
+import { GameState, RegionId, Industry, COMMODITY_CATEGORY_LINKAGE } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
-import { getOutputInventoryUSD } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 
 export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -35,8 +34,62 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
     });
   });
 
-  Object.keys(ctx.updatedRegions).forEach((regionIdKey) => {
-    const regionId = regionIdKey as RegionId;
+  // 1$ is 1$: an input category's real weekly supply now comes from the actual modeled
+  // commodities linked to it (see COMMODITY_CATEGORY_LINKAGE and companyGenerator.ts, which
+  // gives every producedCommodityId-tagged company the matching real productLines entry) rather
+  // than an independently invented formula. Previously stage04 derived "weeklyProduction" from a
+  // generic industrialProductionRate/throttle/price-response formula applied to whichever
+  // companies happened to carry this subUnitId as a product line — completely disconnected from
+  // the real commodity's own price/supply-demand clearing the trading desk already computes
+  // every week (evolution.ts's computeCommodityClearingRatio). Worse, for specialty_metals this
+  // company set was EMPTY (no company anywhere had it as an output line before the company-
+  // generation fix), so its real weekly production was always zero regardless of any formula —
+  // the true root cause of that category's guaranteed depletion to zero. Grouping commodities by
+  // linked subUnitId here makes every category's real supply the sum of its real commodities'
+  // own weeklySupplyUnits (last week's cleared figure — commodities evolve later this same week,
+  // in stage07, so this is a one-week lag, the same convention used elsewhere in this pipeline).
+  const commoditiesByInputCat: Record<string, { spotPrice: number; weeklySupplyUnits?: number }[]> = {};
+  state.commodities.forEach(comm => {
+    const linkage = COMMODITY_CATEGORY_LINKAGE[comm.id] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
+    if (!linkage) return;
+    if (!commoditiesByInputCat[linkage.subUnitId]) commoditiesByInputCat[linkage.subUnitId] = [];
+    commoditiesByInputCat[linkage.subUnitId].push({ spotPrice: comm.spotPrice, weeklySupplyUnits: comm.weeklySupplyUnits });
+  });
+  const globalWeeklyProductionByInputCat: Record<string, number> = {};
+  Object.entries(commoditiesByInputCat).forEach(([inputCat, commodities]) => {
+    globalWeeklyProductionByInputCat[inputCat] = commodities.reduce((s, c) => s + (c.weeklySupplyUnits ?? 0) * c.spotPrice, 0);
+  });
+
+  const regionIds = Object.keys(ctx.updatedRegions) as RegionId[];
+
+  // A real commodity (gold, copper, crude oil...) trades in ONE global market, not four separate
+  // regional ones — computeCommodityClearingRatio already sums real producers across every
+  // region into a single weeklySupplyUnits. Crediting that SAME global figure in full to every
+  // region independently would quadruple-count the same physical supply. Instead, each region's
+  // real demand share of the GLOBAL total determines its real share of that global supply — the
+  // same "ration proportionally to who actually wants it" principle already used for pro-rata
+  // auction allocation elsewhere in this pipeline, not an arbitrary per-region split.
+  const bidQuantitiesByRegionAndInputCat: Record<RegionId, Record<string, { demanderIndustry: string; bidQuantity: number }[]>> = {} as any;
+  regionIds.forEach(regionId => {
+    const reg = ctx.updatedRegions[regionId];
+    bidQuantitiesByRegionAndInputCat[regionId] = {};
+    Object.entries(demandersByInputCat).forEach(([inputCat, demanders]) => {
+      bidQuantitiesByRegionAndInputCat[regionId][inputCat] = demanders.map(d => {
+        const subUnitsForDemander = INDUSTRY_SUBUNITS[d.demanderIndustry as Industry] || [];
+        const demanderDemandLevel = subUnitsForDemander.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0), 0);
+        return { demanderIndustry: d.demanderIndustry, bidQuantity: demanderDemandLevel * d.intensity / 52 };
+      });
+    });
+  });
+  const globalBidQuantityByInputCat: Record<string, number> = {};
+  Object.keys(demandersByInputCat).forEach(inputCat => {
+    globalBidQuantityByInputCat[inputCat] = regionIds.reduce(
+      (s, r) => s + bidQuantitiesByRegionAndInputCat[r][inputCat].reduce((s2, d) => s2 + d.bidQuantity, 0),
+      0
+    );
+  });
+
+  regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
 
     // A demander industry that needs MULTIPLE input categories (e.g. TechHardwareSemis needs
@@ -52,47 +105,17 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
       const supplier = reg.categoryDemand[inputCat as any] as any;
       if (!supplier) return;
 
-      const regionCapacityUtilization = (reg.categoryDemand['heavy_equipment'] as any)?.clearedInputPriceIndex ?? 1.0;
-      const industrialProductionRate = (0.02 * (0.5 + regionCapacityUtilization * 0.5));
-
       const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
       const currentGlutSeverity = Math.max(0, 1.0 - (supplier.upstreamScarcityIndex ?? 1.0)); // how far below fair value the price currently sits
       const inventoryHoldingDecayRate = (0.015 + currentGlutSeverity * 0.35) / 52; // decay accelerates sharply the more oversupplied the market genuinely is — real obsolescence pressure, not a flat constant
       const decayedInventory = lastWeekInventory * (1 - inventoryHoldingDecayRate);
-      const weatherDecay = Math.pow(0.55, Math.max(0, (reg.weather?.weeksActive ?? 1) - 1));
-      const weatherSupplyPenalty = (reg.weather && reg.weather.severity !== 'Normal' && inputCat === 'heavy_equipment')
-        ? Math.max(0.80, 1.0 - Math.abs(reg.weather.gdpImpactPct ?? 0.002) * 5 * weatherDecay)
-        : 1.0;
-      const supplierFirms = ctx.prevActiveFirms.filter(c => c.region === regionId && (c.productLines || []).some(l => l.subUnitId === inputCat));
-      let weeklyProduction = supplierFirms.reduce((s, c) => {
-        const line = (c.productLines || []).find(l => l.subUnitId === inputCat);
-        const warehouseCap = c.annualRevenue * 0.15;
-        // Smooth, not a hard on/off switch — see the same fix (and its rationale) in
-        // 05-unit-bidding.ts's supplier-offer construction. Also scoped to this specific
-        // sub-unit's own inventory, not the company's whole (multi-line) inventory.
-        const invToCapRatio = getOutputInventoryUSD(c, inputCat) / Math.max(1, warehouseCap);
-        const throttle = Math.max(0.3, Math.min(1.0, 1.0 - (invToCapRatio - 1.0) * 0.7));
-        const priceSignal = (supplier.upstreamScarcityIndex ?? 1.0) - 1.0;
-        const responsiveFactor = (1.0 + priceSignal * 1.5);
-        return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;
-      }, 0) * weatherSupplyPenalty;
 
-      if (inputCat === 'heavy_equipment') {
-        const manufacturingSegment = reg.privateSectorSegments?.find(s => s.segmentType === 'MANUFACTURING');
-        if (manufacturingSegment) {
-          weeklyProduction += (manufacturingSegment.annualRevenueUSD * 0.02 / 52) * weatherSupplyPenalty;
-        }
-      }
-      const totalAvailableSupply = decayedInventory + weeklyProduction;
-
-      // Pool every demander industry's bid against the SAME shared supply, instead of each one
-      // independently pretending it's the only consumer of this input category.
-      const demanderBidQuantities = demanders.map(d => {
-        const subUnitsForDemander = INDUSTRY_SUBUNITS[d.demanderIndustry as Industry] || [];
-        const demanderDemandLevel = subUnitsForDemander.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0), 0);
-        return { demanderIndustry: d.demanderIndustry, bidQuantity: demanderDemandLevel * d.intensity / 52 };
-      });
+      const demanderBidQuantities = bidQuantitiesByRegionAndInputCat[regionId][inputCat];
       const totalBidQuantity = demanderBidQuantities.reduce((s, d) => s + d.bidQuantity, 0);
+      const globalBidQuantity = globalBidQuantityByInputCat[inputCat] ?? 0;
+      const regionShareOfGlobalDemand = globalBidQuantity > 0.001 ? totalBidQuantity / globalBidQuantity : 1 / regionIds.length;
+      const weeklyProduction = (globalWeeklyProductionByInputCat[inputCat] ?? 0) * regionShareOfGlobalDemand;
+      const totalAvailableSupply = decayedInventory + weeklyProduction;
 
       const clearingRatio = totalAvailableSupply > 0 ? totalBidQuantity / totalAvailableSupply : 1;
       const targetPriceIndex = Math.max(0, 1.0 + (clearingRatio - 1.0) * 0.4); // 0 floor only — a price index cannot go negative

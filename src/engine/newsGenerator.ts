@@ -202,23 +202,23 @@ export function generateWeeklyNews(
     if (r.weather && r.weather.severity !== 'Normal' && Math.random() < 0.4) {
       const w = r.weather;
       let tradeShortcut: TradeableInstrument | undefined;
-      if (w.affectedCommodityId === 'ENERGY_GAMMA') {
+      if (w.affectedCommodityId === 'NATURAL_GAS') {
         tradeShortcut = {
           assetType: 'COMMODITY',
-          id: 'ENERGY_GAMMA',
-          symbol: 'ENERGY_GAMMA',
-          name: 'Energy Gamma Gas Index',
+          id: 'NATURAL_GAS',
+          symbol: 'NATURAL_GAS',
+          name: 'Natural Gas',
           region: 'USA',
           price: 2.85,
           quoteUnit: '$/mmbtu',
           details: {},
         };
-      } else if (w.affectedCommodityId === 'ENERGY_BETA') {
+      } else if (w.affectedCommodityId === 'HEAVY_CRUDE_OIL') {
         tradeShortcut = {
           assetType: 'COMMODITY',
-          id: 'ENERGY_BETA',
-          symbol: 'ENERGY_BETA',
-          name: 'Energy Beta Crude Stream',
+          id: 'HEAVY_CRUDE_OIL',
+          symbol: 'HEAVY_CRUDE_OIL',
+          name: 'Heavy Crude Oil',
           region: 'USA',
           price: 78.50,
           quoteUnit: '$/bbl',
