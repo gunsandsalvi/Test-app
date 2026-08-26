@@ -14,7 +14,7 @@ import { calculateDynamicSpreadBps, getUnifiedInitialMarginRate } from '../engin
 import { calculateExpectedCarry } from '../engine/carryCalculator';
 import { calculateBlackScholesGreeks } from '../engine/blackScholes';
 import { calculateNelsonSiegelZeroRate } from '../engine/nelsonSiegel';
-import { formatCurrency as formatCurrencyCentral } from '../engine/formatters';
+import { formatCurrency as formatCurrencyCentral, formatPercent } from '../engine/formatters';
 
 interface TradeTicketModalProps {
   instrument: TradeableInstrument;
@@ -109,7 +109,6 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
     const isLong = direction === 'BUY';
 
     return scenarios.map((pct) => {
-      const shockPct = pct * 100;
       let estPnLUSD = 0;
 
       if (instrument.assetType === 'OPTION') {
@@ -139,7 +138,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
       }
 
       return {
-        label: `${shockPct > 0 ? '+' : ''}${shockPct.toFixed(0)}%`,
+        label: formatPercent(pct, { isDecimal: true, showSign: true, precision: 0 }),
         pnlUSD: estPnLUSD,
       };
     });

@@ -69,7 +69,7 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
                       {fx.rate > 10 ? fx.rate.toFixed(2) : fx.rate.toFixed(4)}
                     </div>
                     <div className={`text-[10px] font-bold ${change1W > 0 ? 'text-[var(--signal-positive)]' : change1W < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                      {change1W > 0 ? '+' : ''}{change1W.toFixed(4)} ({changePct.toFixed(2)}%)
+                      {change1W > 0 ? '+' : ''}{change1W.toFixed(4)} ({formatPercent(changePct, { isDecimal: false })})
                     </div>
                   </div>
                 </div>

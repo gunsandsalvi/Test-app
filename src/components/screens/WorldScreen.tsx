@@ -36,8 +36,8 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
   const generateRegionStatus = (r: typeof reg): string => {
     const parts: string[] = [];
-    if (r.cycleRegime === 'Recession' || r.cycleRegime === 'Slowdown') parts.push(`${r.cycleRegime} with unemployment at ${(r.unemploymentRate * 100).toFixed(1)}%`);
-    else parts.push(`${r.cycleRegime}, GDP growing at ${(r.gdpGrowth * 100).toFixed(1)}%`);
+    if (r.cycleRegime === 'Recession' || r.cycleRegime === 'Slowdown') parts.push(`${r.cycleRegime} with unemployment at ${formatPercent(r.unemploymentRate, 1)}`);
+    else parts.push(`${r.cycleRegime}, GDP growing at ${formatPercent(r.gdpGrowth, 1)}`);
     if (r.inflation > r.targetInflation * 1.3) parts.push('inflation running hot');
     if (r.bankingSector.creditConditionsIndex > 0.5) parts.push('credit conditions tight');
     return parts.join(' · ');
@@ -90,6 +90,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
           <>
             <div className="grid grid-cols-2 gap-2">
               {[
+                { label: 'Nominal GDP', value: formatCurrency(reg.estimatedNominalGdpUSD, { compact: true }), signal: 'positive' },
                 { label: 'GDP Growth', value: formatPercent(reg.gdpGrowth, { isDecimal: true, precision: 2, showSign: true }), signal: reg.gdpGrowth >= 0 ? 'positive' : 'negative' },
                 { label: 'Inflation', value: formatPercent(reg.inflation, { isDecimal: true, precision: 2 }), signal: reg.inflation <= reg.targetInflation * 1.2 ? 'positive' : 'negative' },
                 { label: 'Unemployment', value: formatPercent(reg.unemploymentRate, { isDecimal: true, precision: 2 }), signal: reg.unemploymentRate <= 0.06 ? 'positive' : 'negative' },

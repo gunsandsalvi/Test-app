@@ -13,6 +13,11 @@ import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand, computeSupplyDemandPremium, computeTargetOwnershipShares } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
+// Bank/institutional/foreign/central-bank ownership is capped well under 100% so household
+// (the implicit residual everywhere ownership is displayed) always retains a real floor,
+// rather than being squeezed to exactly 0.
+const MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE = 0.85;
+
 export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): void {
   const globalInflationShock = (Math.random() - 0.5) * 0.0008;
   const globalGdpShock = (Math.random() - 0.5) * 0.001;
@@ -113,14 +118,23 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         ctx.regionEquityNetFlowUSD[regionId] = shareDelta * totalRegionEquityCapUSD;
       }
 
+      // Bank/institutional/foreign/central-bank shares are meant to leave a real residual for
+      // household ownership (every other ownership display in the app computes household as
+      // 1 - these four) — only rescale them down when they'd otherwise exceed a cap that
+      // guarantees household keeps a minimum floor, rather than always normalizing to exactly
+      // 1.0. Forcing the sum to 1.0 unconditionally (the previous behavior) made household's
+      // share exactly 0 by construction on every run, and inflated institutional/bank/foreign
+      // shares well above their calibrated starting values (e.g. equity institutionalShare
+      // divided by a pre-normalization sum of ~0.6 jumps to ~0.42/0.6 ≈ 0.70 immediately).
       const totalSharesSum = updatedShares.bankShare + updatedShares.institutionalShare + Object.values(updatedShares.foreignShare).reduce((a, b) => a + b, 0) + updatedShares.centralBankShare;
-      if (totalSharesSum > 0) {
-        updatedShares.bankShare /= totalSharesSum;
-        updatedShares.institutionalShare /= totalSharesSum;
+      if (totalSharesSum > MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE) {
+        const scale = MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE / totalSharesSum;
+        updatedShares.bankShare *= scale;
+        updatedShares.institutionalShare *= scale;
         Object.keys(updatedShares.foreignShare).forEach(r => {
-          updatedShares.foreignShare[r as RegionId] /= totalSharesSum;
+          updatedShares.foreignShare[r as RegionId] *= scale;
         });
-        updatedShares.centralBankShare /= totalSharesSum;
+        updatedShares.centralBankShare *= scale;
       }
       updatedRegion[fieldName] = updatedShares;
     });

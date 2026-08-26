@@ -1,9 +1,8 @@
-import { isActiveCompany } from '../../domain/company';
+import { isActiveCompany, CreditRating } from '../../domain/company';
 import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexMetric } from '../../types';
 import { generate52WeekHistory } from './utils';
 import { getRegionPopulation, getRegionProductivityPerCapitaUSD, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
 import { RATING_OAS_SPREADS } from '../pricing';
-type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D'; // Add this locally
 
 // Index base level = a shared reference unit scaled by each region's generated economic size
 // (population x productivity, relative to the same reference primitives), not a quoted real

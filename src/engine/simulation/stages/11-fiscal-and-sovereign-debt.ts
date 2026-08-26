@@ -102,8 +102,22 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
       : 0;
     const prevSmoothedWeeklyRate = (reg as any).smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
-    const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15; // real EMA smoothing — a single week's noise no longer dominates
-    const gdpGrowthBottomUp = Math.pow(1 + smoothedWeeklyRate, 52) - 1;
+    // Kept for the fiscal output-gap signal in macro/evolution.ts, which wants a rough weekly
+    // growth impulse — not used for the headline growth rate below any more (see next block).
+    const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15;
+
+    // Headline GDP growth: a genuine trailing-52-week (year-over-year) comparison once a full
+    // year of history exists, rather than extrapolating one already-smoothed week's rate via
+    // (1+x)^52. That exponential annualization amplified tiny (~0.2-0.6%/week) residual noise
+    // in smoothedWeeklyRate into wild-looking +/-10-40% headline swings even though the
+    // underlying weekly activity was actually stable — nominalGdpHistory was tracked but never
+    // actually populated, so there was no real trailing window to compare against.
+    const gdpHistory = (reg as any).nominalGdpHistory ?? [];
+    const updatedGdpHistory = [...gdpHistory.slice(-51), newDerivedNominalGdpUSD];
+    const yearAgoGdpLevel = updatedGdpHistory.length >= 52 ? updatedGdpHistory[0] : null;
+    const gdpGrowthBottomUp = (!isStartupTransition && yearAgoGdpLevel && yearAgoGdpLevel > 0 && isFinite(newDerivedNominalGdpUSD))
+      ? (newDerivedNominalGdpUSD / yearAgoGdpLevel - 1) - reg.inflation
+      : Math.pow(1 + smoothedWeeklyRate, 52) - 1; // first year: no trailing-year level yet to compare against
 
     if (!isFinite(gdpGrowthBottomUp)) {
       throw new Error(`gdpGrowthBottomUp is non-finite for region ${regionId} at week ${nextWeek}: ${gdpGrowthBottomUp}. This must be fixed at its real source, not papered over with an assumed growth rate.`);
@@ -186,7 +200,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       gdpGrowthBottomUp: Number(gdpGrowthBottomUp.toFixed(4)),
       smoothedWeeklyGrowthRate: smoothedWeeklyRate,
       lastWeekNominalGdpUSD: newDerivedNominalGdpUSD,
-      nominalGdpHistory: reg.nominalGdpHistory || [],
+      nominalGdpHistory: updatedGdpHistory,
       consumptionComponentUSD,
       investmentComponentUSD,
       govDebtTranches: [...liveTranches, ...newTranches],

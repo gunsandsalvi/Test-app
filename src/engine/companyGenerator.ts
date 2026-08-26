@@ -179,10 +179,19 @@ export function buildQuarterlyFundamentalSnapshot(
   };
 }
 
-function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045): DebtTranche[] {
+// Ladder shape scales with the firm's relative size (rank within its sector, 0 = largest) —
+// a small firm realistically carries a simpler capital structure (one or two tranches) than a
+// large anchor firm's fully laddered public debt stack, rather than every company regardless
+// of size getting the same fixed 3-tranche, 5/10/15yr ladder.
+function debtLadderShape(rank: number): { weights: number[]; maturityWeeks: number[] } {
+  if (rank < 2) return { weights: [0.35, 0.35, 0.30], maturityWeeks: [260, 520, 780] }; // 5/10/15y
+  if (rank < 5) return { weights: [0.60, 0.40], maturityWeeks: [260, 520] }; // 5/10y
+  return { weights: [1.0], maturityWeeks: [364] }; // single blended 7y tranche
+}
+
+function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045, rank: number = 0): DebtTranche[] {
   const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
-  const trancheWeights = [0.35, 0.35, 0.30];
-  const maturityWeeks = [260, 520, 780]; // 5, 10, 15 years out
+  const { weights: trancheWeights, maturityWeeks } = debtLadderShape(rank);
   const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;
   const basePolicyRate = policyRate;
   let cumulativePrincipalAssigned = 0;
@@ -417,7 +426,7 @@ export function generateInitialCompanies(): Company[] {
         cash: tmpl.cashBase,
         totalDebt: tmpl.debtBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
-        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, regionPolicyRate),
+        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, regionPolicyRate, tmpl.rank),
         capex,
         maintenanceCapex,
         growthCapex,
@@ -486,6 +495,10 @@ export function generateInitialCompanies(): Company[] {
 
       companies.push(company);
     });
+    // Flat per region rather than scaled to region size, matching SECTOR_FIRM_COUNT's
+    // rationale in bootstrap/firms.ts: this pads out the *number* of tradable names available
+    // per region (breadth of the roster a player can pick from), not the region's economic
+    // scale, which is already carried by each firm's own (region-scaled) revenue.
     const targetCount = 200;
     const baseCompanies = companies.filter(c => c.region === region);
     // Reuse the same globally-shared sets as seed generation (not a fresh rebuild from
@@ -631,13 +644,11 @@ export function generateInitialCompanies(): Company[] {
       });
       if (maxLine) {
         c.primarySubUnitId = maxLine.subUnitId;
-        if (c.primarySubUnitId === 'industrial_automation') {
-          c.finishedGoodsUnits = 15;
-        } else if (c.primarySubUnitId === 'passenger_vehicles') {
-          c.finishedGoodsUnits = 50;
-        } else if (c.primarySubUnitId === 'pharmaceuticals') {
-          c.finishedGoodsUnits = 5000;
-        }
+        // finishedGoodsUnits is intentionally left unset here (every company starts with
+        // finishedGoodsInventoryUSD: 0 above) rather than hardcoding a flat starting unit
+        // count for a few specific sub-units regardless of company size — stage05/08 already
+        // derive units from finishedGoodsInventoryUSD / unitPriceUSD once production starts,
+        // consistent with every other sub-unit.
       }
     });
   });
@@ -646,40 +657,12 @@ export function generateInitialCompanies(): Company[] {
 }
 
 
-const USED_NAMES = new Set<string>();
 
-export function generateUniqueCompanyName(_region: string, _category: string): { ticker: string, name: string } {
-  const prefixes = ['Global', 'Quantum', 'Nexus', 'Aero', 'Stratos', 'Nova', 'Titan', 'Zenith', 'Horizon', 'Apex', 'Pearl', 'Obsidian', 'Astral', 'Galactic', 'Orion', 'Meridian', 'Crown', 'Heritage'];
-  const suffixes = ['Industries', 'Tech', 'Systems', 'Holdings', 'Group', 'Networks', 'Dynamics', 'Logistics', 'Stores', 'Brands'];
-  
-  let attempts = 0;
-  while (attempts < 100) {
-    const p = prefixes[Math.floor(Math.random() * prefixes.length)];
-    const s = suffixes[Math.floor(Math.random() * suffixes.length)];
-    const name = `${p} ${s}`;
-    const ticker = (p.substring(0,2) + s.substring(0,2)).toUpperCase();
-    
-    if (!USED_NAMES.has(name) && !USED_NAMES.has(ticker)) {
-      USED_NAMES.add(name);
-      USED_NAMES.add(ticker);
-      return { ticker, name };
-    }
-    attempts++;
-  }
-  
-  const fbName = `NewEntrant ${Math.floor(Math.random()*1000)}`;
-  const fbTicker = `NEW${Math.floor(Math.random()*1000)}`;
-  USED_NAMES.add(fbName);
-  USED_NAMES.add(fbTicker);
-  return { ticker: fbTicker, name: fbName };
-}
-
-export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number, policyRate: number = 0.045): Company {
-  const revBase = categoryDemandUSD * (0.02 + Math.random() * 0.03); 
+export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number, policyRate: number = 0.045, existingCompanies: Company[] = []): Company {
+  const revBase = categoryDemandUSD * (0.02 + Math.random() * 0.03);
   const ebitdaMargin = 0.15 + Math.random() * 0.15;
   const shares = Math.floor(revBase * 10);
-  const { ticker, name } = generateUniqueCompanyName(regionId, category);
-  
+
   let industry: Industry = 'SoftwareDigitalServices';
   for (const [ind, subUnits] of Object.entries(INDUSTRY_SUBUNITS)) {
     if (subUnits.some(su => su.unitId === category)) {
@@ -704,8 +687,16 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     MediaEntertainment: 'Consumer',
     RealEstateConstruction: 'Industrials',
   };
-  
+
   const sector = sectorMap[industry] ?? 'Tech';
+  // Same name/ticker generator used for initial company generation (bootstrap/firms.ts),
+  // seeded from the live company roster so a fresh IPO can never collide with an existing
+  // ticker/name — previously IPOs used a separate generator with its own module-level
+  // tracking Set, disconnected from the rest of the roster.
+  const existingTickers = new Set(existingCompanies.map(c => c.ticker));
+  const existingNames = new Set(existingCompanies.map(c => c.name));
+  const ticker = generateUniqueTicker(existingTickers);
+  const name = generateUniqueName(`${regionId} ${sector}`, sector, existingNames);
   const initialRating: CreditRating = Math.random() > 0.5 ? 'BB' : 'B';
   const debtBase = revBase * 1.5;
   
@@ -713,7 +704,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const da = revBase * 0.05;
   const ebit = Math.max(10, ebitda - da);
   const employeeCount = Math.max(100, Math.round(revBase / 500_000));
-  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating, policyRate);
+  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating, policyRate, 6); // newly-public IPO companies start with a simple, single-tranche capital structure
   const capex = Math.round(revBase * 0.06);
   const maintenanceCapex = Math.round(capex * 0.3); // newly-public growth-stage company spends more on expansion than upkeep
   const growthCapex = capex - maintenanceCapex;

@@ -75,7 +75,7 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
                       {formatCurrency(c.spot, { compact: false })}
                     </div>
                     <div className={`text-[10px] font-bold ${c.change1W > 0 ? 'text-[var(--signal-positive)]' : c.change1W < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                      {c.change1W > 0 ? '+' : ''}{formatCurrency(c.change1W, { compact: false })} ({c.changePct.toFixed(2)}%)
+                      {c.change1W > 0 ? '+' : ''}{formatCurrency(c.change1W, { compact: false })} ({formatPercent(c.changePct, { isDecimal: false })})
                     </div>
                   </div>
                 </div>

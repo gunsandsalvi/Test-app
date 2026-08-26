@@ -77,7 +77,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const weeklyNim = bs.netInterestMarginPct / 52;
       const impliedNimRev = totalAssets * weeklyNim * share;
       const loanLosses = Math.random() * 0.05 * totalAssets * share / 52;
-      newRevenue = Math.max(10, comp.annualRevenue * 0.98 + (impliedNimRev * 52) * 0.02);
+      // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
+      // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this
+      // company's original generation-time seed — that seed comes from the same small-scale
+      // Pareto firm curve every company uses and has no relation to the region's actual
+      // banking-sector balance sheet, so anchoring on it made bank revenue climb for years
+      // before converging on its true (much larger) NIM-implied scale, blowing through the
+      // revenue-growth-ceiling invariant on the way.
+      newRevenue = Math.max(10, comp.annualRevenue * 0.85 + (impliedNimRev * 52) * 0.15);
       newEbitdaMargin = 0.40;
       newEbitda = newRevenue * newEbitdaMargin - (loanLosses * 52);
       newEbit = Math.max(1, newEbitda);

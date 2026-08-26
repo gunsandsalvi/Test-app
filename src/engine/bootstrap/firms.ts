@@ -22,21 +22,47 @@ export interface FirmSeedTemplate {
   shares: number;
   initialRating: CreditRating;
   beta: number;
+  rank: number;
   bankMarketShare?: number;
   institutionalRole?: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | null;
   institutionalMarketShare?: number;
   producedCommodityId?: string;
 }
 
-const NAME_PREFIXES = ['Apex', 'Meridian', 'Quantum', 'Summit', 'Pinnacle', 'Vanguard', 'Stellar', 'Nexus', 'Horizon', 'Nova', 'Echo', 'Strata', 'Zenith', 'Aegis', 'Omni'];
+const NAME_PREFIXES = [
+  'Apex', 'Meridian', 'Quantum', 'Summit', 'Pinnacle', 'Vanguard', 'Stellar', 'Nexus', 'Horizon', 'Nova',
+  'Echo', 'Strata', 'Zenith', 'Aegis', 'Omni', 'Atlas', 'Cobalt', 'Lumen', 'Ridge', 'Beacon',
+  'Sterling', 'Crestline', 'Ironclad', 'Northgate', 'Fulcrum', 'Anchor', 'Cardinal', 'Keystone', 'Halcyon', 'Bastion',
+];
 const NAME_SUFFIXES = ['Systems', 'Technologies', 'Group', 'Holdings', 'Dynamics', 'Solutions', 'Corp', 'Enterprises', 'Innovations', 'Global', 'Industries', 'Partners', 'Capital', 'Ventures', 'Networks'];
+// Optional middle qualifier, inserted about a third of the time, purely to widen the
+// combinatorial space (globally-unique naming across 800+ companies needs far more room than
+// a bare prefix x suffix product gives) without resorting to a numeric fallback as the common
+// case — that fallback should stay a rare last resort, not the outcome for most companies.
+const NAME_QUALIFIERS = ['North', 'First', 'United', 'Prime', 'Continental', 'National', 'Allied', 'Union'];
 
-export function generateUniqueName(baseName: string, _sector: string, existingNames: Set<string>): string {
+// Biases the suffix toward words that plausibly describe each sector's actual business,
+// rather than every sector drawing from the same fully generic pool — a name still won't
+// describe the company's specific product line, but it stops reading as pure noise (e.g. an
+// Energy company never landing on "Technologies", a bank never landing on "Industries").
+const SECTOR_NAME_SUFFIXES: Partial<Record<Sector, string[]>> = {
+  Tech: ['Systems', 'Technologies', 'Networks', 'Dynamics', 'Solutions', 'Innovations', 'Digital', 'Cybernetics'],
+  Financials: ['Capital', 'Holdings', 'Group', 'Partners', 'Ventures', 'Trust', 'Advisors'],
+  Banks: ['Capital', 'Holdings', 'Group', 'Partners', 'Trust', 'Financial'],
+  Energy: ['Industries', 'Dynamics', 'Global', 'Holdings', 'Resources', 'Power'],
+  Industrials: ['Industries', 'Dynamics', 'Systems', 'Enterprises', 'Manufacturing', 'Works'],
+  Consumer: ['Group', 'Enterprises', 'Global', 'Holdings', 'Ventures', 'Brands', 'Retail'],
+};
+
+export function generateUniqueName(baseName: string, sector: string, existingNames: Set<string>): string {
+  const suffixPool = SECTOR_NAME_SUFFIXES[sector as Sector] ?? NAME_SUFFIXES;
   let attempt = 0;
-  while (attempt < 50) {
+  while (attempt < 200) {
     const p = NAME_PREFIXES[Math.floor(Math.random() * NAME_PREFIXES.length)];
-    const s = NAME_SUFFIXES[Math.floor(Math.random() * NAME_SUFFIXES.length)];
-    const name = `${p} ${s}`;
+    const s = suffixPool[Math.floor(Math.random() * suffixPool.length)];
+    const useQualifier = attempt > 30 || Math.random() < 0.3; // widen the space more aggressively once early attempts are exhausted
+    const q = useQualifier ? NAME_QUALIFIERS[Math.floor(Math.random() * NAME_QUALIFIERS.length)] : null;
+    const name = q ? `${p} ${q} ${s}` : `${p} ${s}`;
     if (!existingNames.has(name)) {
       existingNames.add(name);
       return name;
@@ -124,10 +150,17 @@ function buildTemplate(
     shares,
     initialRating: ratingFor(revBase, ebitdaMargin, debtBase),
     beta: Number((profile.beta * (0.9 + 0.2 * scale)).toFixed(2)),
+    rank,
     ...extra,
   };
 }
 
+// Deliberately flat across all 4 regions rather than scaled to relative region size: firm
+// COUNT models market structure (how many distinct competitors exist in a sector), while each
+// firm's actual scale (revBase, further downstream reshaped by deriveInitialRevenueUSD against
+// the region's own generated demand) is what carries the region's real economic size — so a
+// smaller region gets the same number of firms, just each proportionally smaller, matching how
+// e.g. the UK and USA both have several major banks despite very different GDP.
 const SECTOR_FIRM_COUNT: Partial<Record<Sector, number>> = {
   Tech: 10,
   Energy: 10,

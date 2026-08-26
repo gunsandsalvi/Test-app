@@ -29,6 +29,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
     return {
       bank: ao.bankShare * 100,
       inst: ao.institutionalShare * 100,
+      cb: cbShare * 100,
       hh: hhShare * 100,
       foreign: foreignSum * 100
     };
@@ -89,11 +90,11 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
       {/* Regional Corporate Sector Financial Aggregates */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <div className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-          <div className="text-[10px] uppercase text-[var(--text-tertiary)]">Total Corporate Revenue</div>
+          <div className="text-[10px] uppercase text-[var(--text-tertiary)]">Total Corporate Revenue (Annual)</div>
           <div className="text-base font-bold font-[var(--font-numeric)] mt-1">{formatCurrency(totalRev, { compact: true })}</div>
         </div>
         <div className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-          <div className="text-[10px] uppercase text-[var(--text-tertiary)]">Total EBITDA</div>
+          <div className="text-[10px] uppercase text-[var(--text-tertiary)]">Total EBITDA (Annual)</div>
           <div className="text-base font-bold font-[var(--font-numeric)] mt-1">{formatCurrency(totalEbitda, { compact: true })}</div>
         </div>
         <div className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
@@ -108,7 +109,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
 
       {/* Product Category Demand breakdown */}
       <div className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
-        <div className="text-xs font-bold uppercase text-[var(--text-tertiary)]">{selectedRegion} Product Category Demand</div>
+        <div className="text-xs font-bold uppercase text-[var(--text-tertiary)]">{selectedRegion} Product Category Demand (Annual)</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {categories.map(cat => {
             const subUnits = INDUSTRY_SUBUNITS[cat as Industry] || [];
@@ -141,7 +142,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
         <div className="space-y-1">
           <div className="flex justify-between text-xs">
             <span className="font-bold">Corporate Bonds</span>
-            <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / HH / Foreign</span>
+            <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / CB / HH / Foreign</span>
           </div>
           {(() => {
             const sh = calcShares(reg.corpBondOwnership);
@@ -149,6 +150,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
               <div className="h-3 rounded overflow-hidden flex bg-black/30">
                 <div style={{ width: `${sh.bank}%` }} className="bg-blue-500" title="Bank" />
                 <div style={{ width: `${sh.inst}%` }} className="bg-purple-500" title="Institutional" />
+                <div style={{ width: `${sh.cb}%` }} className="bg-slate-400" title="Central Bank" />
                 <div style={{ width: `${sh.hh}%` }} className="bg-emerald-500" title="Household" />
                 <div style={{ width: `${sh.foreign}%` }} className="bg-amber-500" title="Foreign" />
               </div>
@@ -160,7 +162,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
         <div className="space-y-1">
           <div className="flex justify-between text-xs">
             <span className="font-bold">Sovereign Bonds</span>
-            <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / HH / Foreign</span>
+            <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / CB / HH / Foreign</span>
           </div>
           {(() => {
             const sh = calcShares(reg.sovBondOwnership);
@@ -168,6 +170,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
               <div className="h-3 rounded overflow-hidden flex bg-black/30">
                 <div style={{ width: `${sh.bank}%` }} className="bg-blue-500" title="Bank" />
                 <div style={{ width: `${sh.inst}%` }} className="bg-purple-500" title="Institutional" />
+                <div style={{ width: `${sh.cb}%` }} className="bg-slate-400" title="Central Bank" />
                 <div style={{ width: `${sh.hh}%` }} className="bg-emerald-500" title="Household" />
                 <div style={{ width: `${sh.foreign}%` }} className="bg-amber-500" title="Foreign" />
               </div>
@@ -179,7 +182,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
         <div className="space-y-1">
           <div className="flex justify-between text-xs">
             <span className="font-bold">Equities</span>
-            <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / HH / Foreign</span>
+            <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / CB / HH / Foreign</span>
           </div>
           {(() => {
             const sh = calcShares(reg.equityOwnership);
@@ -187,6 +190,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
               <div className="h-3 rounded overflow-hidden flex bg-black/30">
                 <div style={{ width: `${sh.bank}%` }} className="bg-blue-500" title="Bank" />
                 <div style={{ width: `${sh.inst}%` }} className="bg-purple-500" title="Institutional" />
+                <div style={{ width: `${sh.cb}%` }} className="bg-slate-400" title="Central Bank" />
                 <div style={{ width: `${sh.hh}%` }} className="bg-emerald-500" title="Household" />
                 <div style={{ width: `${sh.foreign}%` }} className="bg-amber-500" title="Foreign" />
               </div>

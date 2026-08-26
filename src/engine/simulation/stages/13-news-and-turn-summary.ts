@@ -47,7 +47,7 @@ export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepCont
     }
   });
 
-  const cashAfterWeek = state.portfolio.cashUSD + ctx.weeklyRealizedPnL + ctx.weeklyRealizedCashUSD - ctx.weeklyFinancingCostUSD;
+  const cashAfterWeek = state.portfolio.cashUSD + ctx.weeklyInterestIncomeUSD + ctx.weeklyRealizedPnL + ctx.weeklyRealizedCashUSD - ctx.weeklyFinancingCostUSD;
   const navUSD = cashAfterWeek + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
   const updatedPortfolio: Portfolio = {
     ...state.portfolio,
