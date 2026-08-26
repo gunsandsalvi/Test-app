@@ -41,10 +41,11 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     // Capital-goods categories (heavy_equipment, industrial_automation, commercial_construction,
     // enterprise_software, commercial_fleet) are excluded from the abstract CORPORATE pool here —
-    // their demand now comes from the real, named bilateral capex settlement in
-    // 08b-capex-settlement.ts (each buyer's actual weekly capex $, routed to real supplier
-    // companies or the private sector), not from an anonymous share of aggregate I. Leaving them
-    // in both channels would double-count the same capex dollars.
+    // their demand comes from real, named per-company capex bids in 05-unit-bidding.ts instead
+    // (each buyer's actual weekly capex $, bid directly against real supplier companies or the
+    // private sector — see PRIVATE_SEGMENT_SUPPLY_CATEGORIES/CAPEX_CATEGORY_PRIVATE_SEGMENT),
+    // not an anonymous share of aggregate I. Leaving them in both channels would double-count
+    // the same capex dollars.
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) return;
@@ -61,12 +62,14 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) {
-          // Left unchanged here — 08b-capex-settlement.ts (which runs after this week's real
-          // capex figures exist) overwrites demandLevelUSD/demandGrowthAnnual/crowdingIntensity
-          // for these categories directly from actual routed capex volume. This placeholder only
-          // matters on the very first tick before that stage has ever run. No corporateDemandUSD
-          // here either, for the same reason — real capex bids are that stage's job, not
-          // stage05's generic corporate-bid distribution, to avoid double-counting.
+          // These categories' real demand/growth signal now comes entirely from stage05's real
+          // per-company capex bids and Phase 1's real-sales revenue reconciliation, not from
+          // this stage's statistical demandLevelUSD/demandGrowthAnnual — this placeholder just
+          // carries the level forward unchanged (no growth signal from here) so the field stays
+          // a sane, non-zero number for anything that still reads it (e.g. the commodities UI).
+          // No corporateDemandUSD here either — these categories' real bids in stage05 are
+          // sized directly from each buyer's own capex, not from a generic corporate-demand
+          // share, to avoid double-counting.
           allTargets[su.unitId] = reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId]);
           smoothingByCategory[su.unitId] = 0.08;
           return;

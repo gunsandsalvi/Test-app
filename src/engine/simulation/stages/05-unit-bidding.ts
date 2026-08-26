@@ -9,7 +9,7 @@
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE } from '../../../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, getInputInventoryUnits, getInputInventoryUSD } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 
@@ -155,13 +155,21 @@ function executeSubUnitBiddingMarket(
   // so what a company bids to buy here matches exactly what 08-company-fundamentals.ts later
   // draws down from its input inventory.
   const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => (reqs as any)?.[subUnitId] !== undefined);
+  // 1$ is 1$ Phase 4: a capital-goods category (heavy_equipment, industrial_automation,
+  // commercial_construction, enterprise_software, commercial_fleet) is bought by every company
+  // for the same literal, computable reason — its own real weekly capex — replacing
+  // 08b-capex-settlement.ts's parallel abstract demand-growth injection (retired) with real,
+  // named, per-company bids sized directly from each buyer's own maintenanceCapex+growthCapex.
+  const capexSupplierWeight = CAPEX_SUPPLIER_WEIGHTS[subUnitId];
+  const isCapexSupplierCategory = capexSupplierWeight !== undefined;
   // Real, complete corporate demand for every OTHER category (see 03-category-demand.ts's
   // corporateDemandUSD — the same buyerMix/aggregate-investment math that feeds the region's
   // C+I+G identity, not a hand-picked per-category intensity list that only covered a handful
   // of categories and let every other one starve for real corporate buyers).
-  const hasCorporateDemand = subUnitId === 'industrial_automation' || (demandState.corporateDemandUSD ?? 0) > 0;
+  const hasCorporateDemand = (demandState.corporateDemandUSD ?? 0) > 0;
   const customers = regionActiveFirms.filter(c => {
     if ((c.productLines || []).some(l => l.subUnitId === subUnitId)) return false;
+    if (isCapexSupplierCategory) return (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0;
     return isRecipeInputCategory ? computeRecipeInputNeedUSD(c, subUnitId) > 0 : hasCorporateDemand;
   });
   const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
@@ -229,12 +237,35 @@ function executeSubUnitBiddingMarket(
     }
   }
 
+  // 1$ is 1$ Phase 4: for capital-goods categories, the private segment is a real seller of
+  // whatever share of the region's aggregate real capex demand in-region public producers don't
+  // cover — replacing 08b-capex-settlement.ts's identical economics (same
+  // CAPEX_PUBLIC_SUPPLY_SHARE split) with a real, price-competing offer in the actual auction
+  // instead of a direct, un-auctioned credit to the segment's revenue.
+  const capexPrivateSegmentType = isCapexSupplierCategory ? CAPEX_CATEGORY_PRIVATE_SEGMENT[subUnitId] : undefined;
+  if (capexPrivateSegmentType) {
+    const capexSegment = targetReg.privateSectorSegments?.find(s => s.segmentType === capexPrivateSegmentType);
+    if (capexSegment) {
+      const totalRegionCapexUSD = regionActiveFirms.reduce((s, c) => s + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)), 0);
+      const totalCategoryCapexDemandUSD = totalRegionCapexUSD * capexSupplierWeight!;
+      const privateShareUSD = (1 - CAPEX_PUBLIC_SUPPLY_SHARE) * totalCategoryCapexDemandUSD;
+      const capexSegmentOfferUnits = (privateShareUSD / 52) / currentUnitPrice;
+      if (capexSegmentOfferUnits > 0.001) {
+        offers.push({
+          companyId: privateSegmentOfferId(capexPrivateSegmentType),
+          quantityUnits: capexSegmentOfferUnits,
+          minPriceUSD: currentUnitPrice * 0.90,
+        });
+      }
+    }
+  }
+
   // Corporate Customers submit bids
   customers.forEach(comp => {
     let demandUSD = 0;
-    if (subUnitId === 'industrial_automation') {
+    if (isCapexSupplierCategory) {
       const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
-      demandUSD = (realCapexUSD / 52) * 0.35;
+      demandUSD = (realCapexUSD / 52) * capexSupplierWeight!;
     } else if (isRecipeInputCategory) {
       demandUSD = computeRecipeInputNeedUSD(comp, subUnitId);
     } else {
@@ -427,17 +458,35 @@ function executeSubUnitBiddingMarket(
   });
 
   // Credit the private segment's real cleared sale — not a Company, so it isn't in
-  // companyUpdates; annualRevenueUSD is a run-rate (not an accumulator), so replace last week's
-  // contribution rather than stacking another annualized figure on top, same as
-  // 08b-capex-settlement.ts's identical pattern for its own capex-derived contribution.
+  // companyUpdates; annualRevenueUSD is a run-rate (not an accumulator), so replace THIS
+  // category's own prior contribution rather than stacking another annualized figure on top.
+  // Tracked per sub-unit category (not one shared scalar) since multiple categories can route
+  // to the same segment within the same week — see the field's own doc comment for why a
+  // shared scalar corrupted annualRevenueUSD.
   if (privateSegmentType) {
     const segment = targetReg.privateSectorSegments?.find(s => s.segmentType === privateSegmentType);
     if (segment) {
       const sale = openSales[privateSegmentOfferId(privateSegmentType)];
       const newAnnualizedContribution = (sale?.amount ?? 0) * 52;
-      const priorContribution = segment.realSupplySalesDerivedAnnualRevenueUSD ?? 0;
+      const priorContribution = segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit?.[subUnitId] ?? 0;
       segment.annualRevenueUSD = Math.max(1, segment.annualRevenueUSD - priorContribution + newAnnualizedContribution);
-      segment.realSupplySalesDerivedAnnualRevenueUSD = newAnnualizedContribution;
+      if (!segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit) segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit = {};
+      segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit[subUnitId] = newAnnualizedContribution;
+    }
+  }
+
+  // Same real-crediting treatment for the capex private-segment offer, per sub-unit category
+  // for the identical reason (heavy_equipment, industrial_automation, and commercial_fleet all
+  // route to MANUFACTURING and must not clobber each other's contribution).
+  if (capexPrivateSegmentType) {
+    const capexSegment = targetReg.privateSectorSegments?.find(s => s.segmentType === capexPrivateSegmentType);
+    if (capexSegment) {
+      const sale = openSales[privateSegmentOfferId(capexPrivateSegmentType)];
+      const newAnnualizedContribution = (sale?.amount ?? 0) * 52;
+      const priorContribution = capexSegment.capexDerivedAnnualRevenueUSDBySubUnit?.[subUnitId] ?? 0;
+      capexSegment.annualRevenueUSD = Math.max(1, capexSegment.annualRevenueUSD - priorContribution + newAnnualizedContribution);
+      if (!capexSegment.capexDerivedAnnualRevenueUSDBySubUnit) capexSegment.capexDerivedAnnualRevenueUSDBySubUnit = {};
+      capexSegment.capexDerivedAnnualRevenueUSDBySubUnit[subUnitId] = newAnnualizedContribution;
     }
   }
 

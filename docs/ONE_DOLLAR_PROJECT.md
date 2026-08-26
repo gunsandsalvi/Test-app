@@ -369,9 +369,37 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   **Not yet done:** private-segment *demand-side* participation (as a real bidder/buyer for
   categories it plausibly consumes) and retiring `08b-capex-settlement.ts`'s residual credit
   mechanism — left for a follow-up pass.
-- **Phase 4 — Generalize capex into real bids.** Fold `CAPEX_SUPPLIER_WEIGHTS` into
-  `CORPORATE_DEMAND_INTENSITY`-style real per-company bids for all 5 capital-goods categories,
-  removing the parallel abstract injection entirely.
+- **Phase 4 — Generalize capex into real bids, retire 08b (landed).** Generalized the real
+  per-company capex bid pattern (previously only industrial_automation had one, hardcoded 0.35)
+  to all 5 capital-goods categories, sized from each buyer's own real capex via
+  `CAPEX_SUPPLIER_WEIGHTS[subUnitId]`. Extended the private-segment offer mechanism (Phase 3) to
+  these categories too — the segment covers whatever share of aggregate real capex demand
+  in-region public producers don't (`1 - CAPEX_PUBLIC_SUPPLY_SHARE`), replacing
+  `08b-capex-settlement.ts`'s identical economics with a real, price-competing auction offer
+  instead of a direct, un-auctioned credit. `08b-capex-settlement.ts` is now fully retired
+  (deleted; its invocation removed from `core.ts`).
+  **Real bug found and fixed while landing this:** several capex categories route to the *same*
+  private segment (heavy_equipment, industrial_automation, and commercial_fleet all → MANUFACTURING),
+  and — the identical issue for specialty_metals/upstream_extraction sharing MANUFACTURING from
+  Phase 3 — each category's weekly crediting step used one shared scalar field on the segment,
+  so each category wrongly subtracted a *different* category's just-written contribution as its
+  own "prior week's value," corrupting `annualRevenueUSD`. Fixed by keying both contribution
+  fields (`capexDerivedAnnualRevenueUSDBySubUnit`, `realSupplySalesDerivedAnnualRevenueUSDBySubUnit`)
+  per sub-unit category instead of one field per segment.
+  **Known, understood exposure — not a new bug, confirmed by direct A/B test:** a 60-week
+  diagnostic showed violations rising to ~110-118 (vs. Phase 3's 20-26) after this change. Direct
+  instrumentation of a sample heavy_equipment producer showed the same `inputSupplyConstraintFactor`
+  collapse (an IndustrialsMachinery company losing the upstream_extraction/specialty_metals
+  input-fulfillment auction) **at an identical or faster rate in the Phase 3 baseline with
+  Phase 4's changes fully stashed out** — i.e. this exact collapse mechanism already existed and
+  is not new. What changed is exposure: heavy_equipment/commercial_construction/enterprise_software/
+  commercial_fleet producers previously got a smooth, guaranteed statistical demand-growth
+  injection from 08b regardless of real market conditions; with 08b retired, their revenue is now
+  fully subject to the real (still-imperfect) auction mechanics — including the same
+  auction-fairness residual already tracked under task #18/#49's continuation — so more companies
+  now cross the violation threshold. This is the same category of tradeoff already accepted for
+  Phase 2 (real mechanics over statistical insulation, with the underlying residual issue tracked
+  separately rather than blocking this phase).
 - **Phase 5 — Full validation.** Re-run the invariants harness and multi-hundred-week
   diagnostics; this phase touches nearly every company's revenue/cost determination, so it
   carries the largest verification burden of anything done this session.
