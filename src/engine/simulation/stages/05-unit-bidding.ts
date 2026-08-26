@@ -7,14 +7,45 @@
  * long-term B2B supply contracts from matched participants.
  */
 
-import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract } from '../../../types';
+import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD } from '../../../domain/company';
+import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
+import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, getInputInventoryUnits, getInputInventoryUSD } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+
+// 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal
+// recipe (CATEGORY_INPUT_REQUIREMENTS) that 08-company-fundamentals.ts uses to draw down input
+// inventory — bidding to this real, recipe-derived need (instead of a generic revenue-share
+// slice of aggregate corporate demand) is what makes what a company buys here actually match
+// what it consumes there, rather than two independently-sized, unrelated numbers.
+function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): number {
+  return (comp.productLines || []).reduce((sum, line) => {
+    const reqs = CATEGORY_INPUT_REQUIREMENTS[line.industry];
+    const intensity = reqs?.[inputSubUnitId];
+    if (!intensity) return sum;
+    return sum + (comp.annualRevenue / 52) * (line.revenueShare ?? 1.0) * intensity;
+  }, 0);
+}
 
 function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, unitPriceUSD: number) {
   if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
   update.outputInventoryBySubUnit[subUnitId] = { unitsHeld, valueUSD: unitsHeld * unitPriceUSD };
+}
+
+// 1$ is 1$ Phase 2: credit a real purchase onto the buyer's persisted input inventory —
+// accumulate on top of whatever this same company already holds (and whatever it already
+// bought this same week via a different subUnitId's auction pass), not a fresh snapshot like
+// output inventory, since input stock is genuinely carried and drawn down over many weeks.
+function addInputInventory(update: any, baseComp: Company, subUnitId: string, addedUnits: number, addedValueUSD: number) {
+  if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
+  const existing = update.inputInventoryBySubUnit[subUnitId] ?? {
+    unitsHeld: getInputInventoryUnits(baseComp, subUnitId),
+    valueUSD: getInputInventoryUSD(baseComp, subUnitId),
+  };
+  update.inputInventoryBySubUnit[subUnitId] = {
+    unitsHeld: existing.unitsHeld + addedUnits,
+    valueUSD: existing.valueUSD + addedValueUSD,
+  };
 }
 
 function executeSubUnitBiddingMarket(
@@ -92,6 +123,7 @@ function executeSubUnitBiddingMarket(
           custUp.cashChange = (custUp.cashChange ?? 0) - paymentUSD;
           custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
           custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
+          addInputInventory(custUp, customer, subUnitId, actualTransacted, paymentUSD);
 
           if (fillRate < 0.95) {
             // Named shock propagation: reduced fill rate constrains customer capacity directly
@@ -112,12 +144,22 @@ function executeSubUnitBiddingMarket(
   const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
   const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
 
-  // Real, complete corporate demand for every category (see 03-category-demand.ts's
+  // A recipe-input category (upstream_extraction, specialty_metals) is bought by named
+  // companies for a literal, computable reason — their own production recipe — not a generic
+  // share of aggregate corporate demand; every company whose recipe actually needs this
+  // category becomes a real customer, sized to that same real need (computeRecipeInputNeedUSD),
+  // so what a company bids to buy here matches exactly what 08-company-fundamentals.ts later
+  // draws down from its input inventory.
+  const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => (reqs as any)?.[subUnitId] !== undefined);
+  // Real, complete corporate demand for every OTHER category (see 03-category-demand.ts's
   // corporateDemandUSD — the same buyerMix/aggregate-investment math that feeds the region's
   // C+I+G identity, not a hand-picked per-category intensity list that only covered a handful
   // of categories and let every other one starve for real corporate buyers).
   const hasCorporateDemand = subUnitId === 'industrial_automation' || (demandState.corporateDemandUSD ?? 0) > 0;
-  const customers = regionActiveFirms.filter(c => !(c.productLines || []).some(l => l.subUnitId === subUnitId) && hasCorporateDemand);
+  const customers = regionActiveFirms.filter(c => {
+    if ((c.productLines || []).some(l => l.subUnitId === subUnitId)) return false;
+    return isRecipeInputCategory ? computeRecipeInputNeedUSD(c, subUnitId) > 0 : hasCorporateDemand;
+  });
   const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
   // Suppliers submit unit offers
   suppliers.forEach(comp => {
@@ -170,6 +212,8 @@ function executeSubUnitBiddingMarket(
     if (subUnitId === 'industrial_automation') {
       const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
       demandUSD = (realCapexUSD / 52) * 0.35;
+    } else if (isRecipeInputCategory) {
+      demandUSD = computeRecipeInputNeedUSD(comp, subUnitId);
     } else {
       // This company's real named bid is its revenue share of the category's real total
       // corporate demand — every company that could plausibly buy this category gets a bid
@@ -340,6 +384,7 @@ function executeSubUnitBiddingMarket(
       custUp.cashChange = (custUp.cashChange ?? 0) - purchase.amount;
       custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + purchase.units;
       custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + purchase.amount;
+      addInputInventory(custUp, comp, subUnitId, purchase.units, purchase.amount);
     }
   });
 

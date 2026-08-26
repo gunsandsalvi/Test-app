@@ -359,6 +359,20 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                       <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit</span>
                     </div>
                   ))}
+                  {Object.values(company.inputInventoryBySubUnit || {}).some(inv => inv.unitsHeld > 0) && (
+                    <div className="flex justify-between text-xs py-1 pt-2 border-b border-[var(--border-hairline)]">
+                      <span className="text-[var(--text-secondary)]">Input Inventory (Raw Materials Held)</span>
+                      <span className="font-[var(--font-numeric)] font-bold">
+                        {formatCurrency(Object.values(company.inputInventoryBySubUnit || {}).reduce((s, inv) => s + inv.valueUSD, 0), { compact: true })}
+                      </span>
+                    </div>
+                  )}
+                  {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, inv]) => inv.unitsHeld > 0).map(([subUnitId, inv]) => (
+                    <div key={`in-${subUnitId}`} className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
+                      <span>· {Math.round(inv.unitsHeld).toLocaleString()} {subUnitId.replace(/_/g, ' ')} units bought</span>
+                      <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit avg cost</span>
+                    </div>
+                  ))}
 
                   <div className="pl-3 space-y-0.5 border-b border-[var(--border-hairline)] pb-1.5 pt-1">
                     <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold">Property, Plant & Equipment roll-forward</div>

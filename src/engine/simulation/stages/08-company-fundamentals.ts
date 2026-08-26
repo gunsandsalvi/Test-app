@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial,
 } from '../../../types';
-import { isActiveCompany, getOutputInventoryUSD } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUSD, getInputInventoryUnits, getInputInventoryUSD } from '../../../domain/company';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
@@ -74,6 +74,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const costThisSubUnit = inv.valueUSD * carryingCostRate;
       carryingCostUSD += costThisSubUnit;
       newOutputInventoryBySubUnit[su] = { unitsHeld: inv.unitsHeld, valueUSD: Math.max(0, inv.valueUSD - costThisSubUnit) };
+    });
+    // 1$ is 1$ Phase 2: this week's real input inventory baseline is last week's held stock
+    // plus whatever stage05 (which runs before this stage) already credited from real
+    // purchases that cleared this week — consumption below draws down from that real total.
+    const newInputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = {};
+    Object.keys(comp.inputInventoryBySubUnit || {}).forEach(su => {
+      newInputInventoryBySubUnit[su] = {
+        unitsHeld: getInputInventoryUnits(comp, su),
+        valueUSD: getInputInventoryUSD(comp, su),
+      };
+    });
+    Object.entries(companyUpdates[comp.ticker]?.inputInventoryBySubUnit || {}).forEach(([su, inv]) => {
+      newInputInventoryBySubUnit[su] = inv as { unitsHeld: number; valueUSD: number };
     });
 
     const executionNoise = (Math.random() - 0.5) * 0.3;
@@ -176,7 +189,51 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const relevantFulfillment = linesNeedingInputs.length > 0
         ? linesNeedingInputs.reduce((min, l) => Math.min(min, (reg.categoryDemand[l.subUnitId as any] as any)?._fulfillmentRatio ?? 1), 1)
         : 1;
-      newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + relevantFulfillment * 0.3);
+
+      // 1$ is 1$ Phase 2: a real physical check on top of the regional market signal above —
+      // draw down this company's actual held input inventory (real units bought at a real
+      // price, credited by 05-unit-bidding.ts) by what its lines genuinely need this week
+      // (estimated from last week's revenue, since this week's isn't final yet). Two real-world
+      // wrinkles this has to account for, both confirmed by direct instrumentation:
+      // 1. Even when a region's aggregate bid/offer auction clears in full, an individual
+      //    company can still be filled 0% that one week purely from where its bid landed in
+      //    the matching order — a real but noisy outcome. Folding it into the SAME smoothed
+      //    0.7/0.3 EMA as relevantFulfillment (rather than a separate hard multiply on top)
+      //    means one unlucky week nudges the factor down, it doesn't hard-crash it — the same
+      //    smoothing principle already used for prices/production elsewhere in this pipeline.
+      // 2. An input category can have zero real supplier companies anywhere in the region at
+      //    all (confirmed: specialty_metals) — a company-generation gap (no seller exists yet
+      //    for this good; giving the private sector a real supply role here is Phase 3's job),
+      //    not a real scarcity signal. Enforcing it as a physical constraint would be
+      //    penalizing every company that needs it for a modeling gap that isn't there yet, not
+      //    a real economic condition — so it's excluded from the fulfillment computation below
+      //    until Phase 3 gives it a genuine supply source.
+      let physicalFulfillment = 1.0;
+      linesNeedingInputs.forEach(l => {
+        const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
+        if (!reqs) return;
+        const lineProductionUSD = (comp.annualRevenue / 52) * (l.revenueShare ?? 1.0);
+        Object.entries(reqs).forEach(([inputSubUnit, intensity]) => {
+          const neededUSD = lineProductionUSD * (intensity ?? 0);
+          if (neededUSD <= 0) return;
+          const hasRealSupply = prevActiveFirms.some(c => c.region === comp.region && (c.productLines || []).some(pl => pl.subUnitId === inputSubUnit));
+          if (!hasRealSupply) return;
+          const inputUnitPrice = (reg.categoryDemand[inputSubUnit as any] as any)?.unitPriceUSD ?? 1;
+          const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
+          const availableEntry = newInputInventoryBySubUnit[inputSubUnit] ?? { unitsHeld: 0, valueUSD: 0 };
+          const availableUnits = availableEntry.unitsHeld;
+          const lineFulfillment = neededUnits > 0 ? Math.min(1, availableUnits / neededUnits) : 1;
+          physicalFulfillment = Math.min(physicalFulfillment, lineFulfillment);
+          const consumedUnits = Math.min(availableUnits, neededUnits);
+          const avgUnitCost = availableUnits > 0 ? availableEntry.valueUSD / availableUnits : inputUnitPrice;
+          newInputInventoryBySubUnit[inputSubUnit] = {
+            unitsHeld: availableUnits - consumedUnits,
+            valueUSD: Math.max(0, availableEntry.valueUSD - consumedUnits * avgUnitCost),
+          };
+        });
+      });
+      const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
+      newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + combinedFulfillment * 0.3);
 
       // Supply relationship shocks
       const region = updatedRegions[comp.region];
@@ -874,6 +931,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // sub-units it actually processed (it runs first and has the complete, real
       // production/sales picture for those lines).
       outputInventoryBySubUnit: { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) },
+      // Already reflects this week's real purchases (credited by stage05) minus this week's
+      // real consumption (drawn down above) — no further overlay needed, unlike output
+      // inventory, since this stage (not stage05) is the one authoritative writer of the
+      // post-consumption balance.
+      inputInventoryBySubUnit: newInputInventoryBySubUnit,
       inventoryCarryingCostRate: comp.inventoryCarryingCostRate ?? 0.02,
       recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,

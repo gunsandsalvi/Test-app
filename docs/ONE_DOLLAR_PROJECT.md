@@ -291,9 +291,47 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   landed), but a genuine, direct feedback from the real bid/offer market into every company's
   revenue. Verified via a 60-week diagnostic (0 violations, avgRatio tracking the same healthy
   dip-and-recover pattern seen in the pre-Phase-1 baseline).
-- **Phase 2 — Input inventory + literal recipes.** Add per-company (and per-private-segment)
-  input inventory tracking; replace `CATEGORY_INPUT_REQUIREMENTS` with literal unit recipes;
-  wire production to draw down input inventory and add to output inventory.
+- **Phase 2 — Input inventory + literal recipes (landed, with a known tracked regression).**
+  Added real per-company input inventory (`Company.inputInventoryBySubUnit`): credited at the
+  real price paid when a purchase clears in `05-unit-bidding.ts` (both contract and open-market
+  purchases), drawn down in `08-company-fundamentals.ts` by each line's real recipe-based need
+  (still `CATEGORY_INPUT_REQUIREMENTS`'s $ intensities, converted to units via the input
+  category's real price — not yet literal physical unit recipes, which would need a company's
+  own "unit" of output independently defined; left for a future pass), and surfaced in
+  `CompanyDeepDive.tsx`. Two real bugs were found and fixed while landing this:
+  1. Input-category bid sizing (`05-unit-bidding.ts`) originally used Phase 1b's generic
+     revenue-share-of-aggregate-corporate-demand formula for every category, including
+     recipe-input categories (upstream_extraction, specialty_metals) — completely unrelated to
+     what a company's recipe actually needs. Fixed by sizing a recipe-input category's bid
+     directly from `computeRecipeInputNeedUSD` (the same formula stage08 uses to consume), so
+     what a company bids to buy matches what it will actually consume.
+  2. The real per-company physical-stock check was originally a hard, unsmoothed multiply on
+     top of the existing smoothed regional fulfillment signal. Direct instrumentation showed two
+     real-world wrinkles: (a) even when a region's aggregate auction clears in full, an
+     individual company can still be filled 0% purely from where its bid landed in the matching
+     order — real but noisy, and (b) specialty_metals has **zero real supplier companies**
+     anywhere in the sampled region — a company-generation gap (giving the private sector a real
+     supply role here is Phase 3's job), not real scarcity. Fixed by folding the physical check
+     into the *same* smoothed 0.7/0.3 EMA as the regional signal (so one unlucky week doesn't
+     hard-crash a company), and by excluding any input category with zero real region-wide
+     suppliers from the physical check entirely until Phase 3 gives it a genuine supply source.
+  **Known regression, landed anyway on the user's explicit instruction, tracked as follow-up
+  work:** even after both fixes, a 60-week diagnostic shows a small, real subset of companies
+  still spiraling toward the revenue floor (0 violations through week 37, 72 violations by week
+  39) — worse than Phase 1 alone (0 violations through 60 weeks). Root cause: the bid/offer
+  auction (`05-unit-bidding.ts`'s matching loop) allocates strictly by price priority
+  (`bids.sort(...).offers.sort(...)`, greedy sequential match), not pro-rata — a company with a
+  structurally lower bid price (e.g. persistently low cash → lower `cashModifier` → lower
+  `maxPriceUSD`) can be shut out of an auction indefinitely even when the region's aggregate
+  supply and demand balance exactly. Phase 2's hard physical-stock consumption turns that
+  matching-order bias into a real, compounding death spiral for whichever companies keep losing.
+  **The real fix is pro-rata allocation among all bids that clear at the market price** (how many
+  real double auctions / oversubscribed IPO allocations actually work — also consistent with the
+  user's own noted future idea of finding a real clearing level via demand), not a clamp on the
+  symptom — this is a nontrivial change to the core matching algorithm shared by every category's
+  weekly auction and needs its own dedicated implementation + verification pass before this
+  specific collapse pattern is resolved. Tracked as a new prerequisite, effectively continuing
+  task #18's original finding at a now-more-exposed scale.
 - **Phase 3 — Private sector as a real participant.** Add private-segment bidders/offerers to
   stage 05's auction for every category they plausibly produce or consume; retire the residual
   credit mechanism in `08b-capex-settlement.ts`.

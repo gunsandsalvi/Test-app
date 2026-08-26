@@ -247,6 +247,13 @@ export interface Company {
   // overwritten by whichever line's weekly bidding pass ran last. See getOutputInventoryUSD /
   // getOutputInventoryUnits below for the aggregate reads most call sites actually want.
   outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }>;
+  // 1$ is 1$ Phase 2: real input inventory, keyed by the input sub-unit category (e.g.
+  // upstream_extraction, specialty_metals) a company has actually bought and holds — credited
+  // at the real price paid when a bid clears in 05-unit-bidding.ts, drawn down at that same real
+  // cost basis when 08-company-fundamentals.ts consumes it for this week's production. Real
+  // physical stock, not a cost-pressure statistic: a company that hasn't bought enough of an
+  // input genuinely cannot produce as much output, no matter how strong its own demand is.
+  inputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueUSD: number }>;
   inventoryCarryingCostRate: number;
   recentFulfillmentEMA: number;
   _targetProductionUSD?: number;
@@ -265,6 +272,20 @@ export function getOutputInventoryUSD(comp: Company, subUnitId?: string): number
 
 export function getOutputInventoryUnits(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
+  if (!inv) return 0;
+  if (subUnitId) return inv[subUnitId]?.unitsHeld ?? 0;
+  return Object.values(inv).reduce((s, entry) => s + entry.unitsHeld, 0);
+}
+
+export function getInputInventoryUSD(comp: Company, subUnitId?: string): number {
+  const inv = comp.inputInventoryBySubUnit;
+  if (!inv) return 0;
+  if (subUnitId) return inv[subUnitId]?.valueUSD ?? 0;
+  return Object.values(inv).reduce((s, entry) => s + entry.valueUSD, 0);
+}
+
+export function getInputInventoryUnits(comp: Company, subUnitId?: string): number {
+  const inv = comp.inputInventoryBySubUnit;
   if (!inv) return 0;
   if (subUnitId) return inv[subUnitId]?.unitsHeld ?? 0;
   return Object.values(inv).reduce((s, entry) => s + entry.unitsHeld, 0);
