@@ -5,11 +5,11 @@ import { formatCurrency, formatPercent, formatBondName } from '../../engine/form
 import { TapToChart } from '../shared/TapToChart';
 import { priceCorporateBond, priceLeveragedLoan } from '../../engine/pricing';
 
-type DeepDiveTab = 'performance' | 'financials' | 'exposure' | 'supplychain' | 'credit' | 'management';
+type DeepDiveTab = 'performance' | 'financials' | 'supplychain' | 'credit' | 'management';
 
 export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onOpenTrade: (i: any) => void }> = ({ company, state, onOpenTrade }) => {
   const [tab, setTab] = useState<DeepDiveTab>('performance');
-  const [finSubTab, setFinSubTab] = useState<'income' | 'balance' | 'cashflow'>('income');
+  const [finSubTab, setFinSubTab] = useState<'income' | 'balance' | 'cashflow' | 'segments'>('income');
   const reg = state.regions[company.region];
 
   const generateStatusLine = (c: Company): string => {
@@ -47,7 +47,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
       </div>
 
       <div className="flex overflow-x-auto no-scrollbar border-b border-[var(--border-hairline)]">
-        {(['performance', 'financials', 'exposure', 'supplychain', 'credit', 'management'] as DeepDiveTab[]).map(t => (
+        {(['performance', 'financials', 'supplychain', 'credit', 'management'] as DeepDiveTab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-3 py-2 text-[11px] font-bold uppercase whitespace-nowrap ${tab === t ? 'text-[var(--text-primary)] border-b-2 border-[var(--region-usa)]' : 'text-[var(--text-tertiary)]'}`}>
             {t === 'supplychain' ? 'Supply Chain' : t}
@@ -108,29 +108,41 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
         {tab === 'financials' && (
           <>
-            <div className="flex space-x-2 border-b border-[var(--border-hairline)] pb-2 mb-2">
-              {[
-                ['income', 'Income Statement'],
-                ['balance', 'Balance Sheet'],
-                ['cashflow', 'Cash Flow'],
-              ].map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setFinSubTab(key as any)}
-                  className={`px-2 py-1 text-[11px] font-bold rounded ${finSubTab === key ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-hairline)]' : 'text-[var(--text-tertiary)]'}`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-2 mb-2">
+              <div className="flex space-x-2">
+                {[
+                  ['income', 'Income Statement'],
+                  ['balance', 'Balance Sheet'],
+                  ['cashflow', 'Cash Flow'],
+                  ['segments', 'Revenue Streams'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFinSubTab(key as any)}
+                    className={`px-2 py-1 text-[11px] font-bold rounded ${finSubTab === key ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-hairline)]' : 'text-[var(--text-tertiary)]'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {latestFund && finSubTab !== 'segments' && (
+                <span className="text-[10px] text-[var(--text-tertiary)] font-mono">
+                  {finSubTab === 'balance' ? `As of ${latestFund.filingDate}` : `${latestFund.filingPeriod} (quarterly)`}
+                </span>
+              )}
+              {finSubTab === 'segments' && (
+                <span className="text-[10px] text-[var(--text-tertiary)] font-mono">Annual</span>
+              )}
             </div>
 
             {finSubTab === 'income' && latestFund?.incomeStatement && (
               <>
                 <TapToChart label="Quarterly Revenue" value={formatCurrency(latestFund.incomeStatement.revenue, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.incomeStatement?.revenue ?? 0)} />
-                <TapToChart label="Gross Profit" value={formatCurrency(latestFund.incomeStatement.grossProfit, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.incomeStatement?.grossProfit ?? 0)} />
-                <TapToChart label="EBITDA" value={formatCurrency(latestFund.incomeStatement.ebitda, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.incomeStatement?.ebitda ?? 0)} />
-                <TapToChart label="Net Income" value={formatCurrency(latestFund.incomeStatement.netIncome, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.incomeStatement?.netIncome ?? 0)} />
-                <div className="space-y-1 pt-2 border-t border-[var(--border-hairline)]">
+                <TapToChart label="Quarterly Gross Profit" value={formatCurrency(latestFund.incomeStatement.grossProfit, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.incomeStatement?.grossProfit ?? 0)} />
+                <TapToChart label="Quarterly EBITDA" value={formatCurrency(latestFund.incomeStatement.ebitda, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.incomeStatement?.ebitda ?? 0)} />
+                <TapToChart label="Quarterly Net Income" value={formatCurrency(latestFund.incomeStatement.netIncome, { compact: true })} history={(company.historicalFundamentals || []).map(f => f.incomeStatement?.netIncome ?? 0)} />
+                <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold pt-2">Quarterly Income Statement Detail ({latestFund.filingPeriod})</div>
+                <div className="space-y-1 pt-1 border-t border-[var(--border-hairline)]">
                   {[
                     ['Revenue', latestFund.incomeStatement.revenue],
                     ['Cost of Goods Sold (COGS)', -latestFund.incomeStatement.cogs],
@@ -327,61 +339,61 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 </div>
               </>
             )}
-          </>
-        )}
 
-        {tab === 'exposure' && (
-          <>
-            {(company.productLines || []).map(line => {
-              const catDemand = reg.categoryDemand[line.subUnitId as any] as any;
-              return (
-                <div key={line.subUnitId} className="p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold">{line.subUnitId.replace(/_/g, ' ')}</span>
-                    <span className="text-[10px] text-[var(--text-tertiary)]">{formatPercent(line.revenueShare, { isDecimal: true })} of revenue</span>
-                  </div>
-                  <div className="flex justify-between text-[11px] mt-1">
-                    <span className="text-[var(--text-secondary)]">Category share</span>
-                    <span className={`font-bold ${line.competitiveness > 0 ? 'text-[var(--signal-positive)]' : line.competitiveness < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                      {formatPercent(line.categoryMarketShare, { isDecimal: true })} {line.competitiveness > 0 ? '▲' : line.competitiveness < 0 ? '▼' : ''}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[11px]">
-                    <span className="text-[var(--text-secondary)]">Category demand growth</span>
-                    <span className={catDemand?.demandGrowthAnnual >= 0 ? 'text-[var(--signal-positive)]' : 'text-[var(--signal-negative)]'}>
-                      {formatPercent(catDemand?.demandGrowthAnnual ?? 0, { isDecimal: true })}
-                    </span>
-                  </div>
-                  {catDemand?.crowdingIntensity !== undefined && (
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-[var(--text-secondary)]">Crowding intensity</span>
-                      <span className={catDemand.crowdingIntensity > 0.5 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}>
-                        {isNaN(catDemand.crowdingIntensity) ? '—' : catDemand.crowdingIntensity.toFixed(2)}
-                      </span>
+            {finSubTab === 'segments' && (
+              <>
+                {(company.productLines || []).map(line => {
+                  const catDemand = reg.categoryDemand[line.subUnitId as any] as any;
+                  return (
+                    <div key={line.subUnitId} className="p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold">{line.subUnitId.replace(/_/g, ' ')}</span>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">{formatPercent(line.revenueShare, { isDecimal: true })} of revenue</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] mt-1">
+                        <span className="text-[var(--text-secondary)]">Category share</span>
+                        <span className={`font-bold ${line.competitiveness > 0 ? 'text-[var(--signal-positive)]' : line.competitiveness < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
+                          {formatPercent(line.categoryMarketShare, { isDecimal: true })} {line.competitiveness > 0 ? '▲' : line.competitiveness < 0 ? '▼' : ''}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-[var(--text-secondary)]">Category demand growth</span>
+                        <span className={catDemand?.demandGrowthAnnual >= 0 ? 'text-[var(--signal-positive)]' : 'text-[var(--signal-negative)]'}>
+                          {formatPercent(catDemand?.demandGrowthAnnual ?? 0, { isDecimal: true })}
+                        </span>
+                      </div>
+                      {catDemand?.crowdingIntensity !== undefined && (
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-[var(--text-secondary)]">Crowding intensity</span>
+                          <span className={catDemand.crowdingIntensity > 0.5 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}>
+                            {isNaN(catDemand.crowdingIntensity) ? '—' : catDemand.crowdingIntensity.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
 
-            {company.segmentFinancials && company.segmentFinancials.length > 0 && (
-              <div className="mt-3 p-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-2">Segment Financial Reporting</div>
-                <div className="space-y-2">
-                  {company.segmentFinancials.map(seg => (
-                    <div key={seg.subUnitId} className="flex justify-between items-center text-xs border-b border-[var(--border-hairline)] pb-1.5">
-                      <div>
-                        <div className="font-bold text-[var(--text-primary)]">{seg.subUnitId.replace(/_/g, ' ')}</div>
-                        <div className="text-[10px] text-[var(--text-tertiary)]">Capex: {formatCurrency(seg.capexUSD, { compact: true })}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-[var(--font-numeric)] font-bold">{formatCurrency(seg.revenueUSD, { compact: true })} Rev</div>
-                        <div className="text-[10px] text-[var(--text-secondary)]">{formatCurrency(seg.ebitdaUSD, { compact: true })} EBITDA</div>
-                      </div>
+                {company.segmentFinancials && company.segmentFinancials.length > 0 && (
+                  <div className="mt-3 p-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-2">Segment Financial Reporting (Annual)</div>
+                    <div className="space-y-2">
+                      {company.segmentFinancials.map(seg => (
+                        <div key={seg.subUnitId} className="flex justify-between items-center text-xs border-b border-[var(--border-hairline)] pb-1.5">
+                          <div>
+                            <div className="font-bold text-[var(--text-primary)]">{seg.subUnitId.replace(/_/g, ' ')}</div>
+                            <div className="text-[10px] text-[var(--text-tertiary)]">Annual Capex: {formatCurrency(seg.capexUSD, { compact: true })}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-[var(--font-numeric)] font-bold">{formatCurrency(seg.revenueUSD, { compact: true })} Annual Rev</div>
+                            <div className="text-[10px] text-[var(--text-secondary)]">{formatCurrency(seg.ebitdaUSD, { compact: true })} Annual EBITDA</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
