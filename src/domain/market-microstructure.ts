@@ -100,3 +100,20 @@ export const CAPEX_CATEGORY_PRIVATE_SEGMENT: Record<string, 'MANUFACTURING' | 'C
 // large/anchor suppliers, but plenty of real-world capex (small contractors, private IT
 // consultancies, regional construction firms) genuinely goes to non-public firms.
 export const CAPEX_PUBLIC_SUPPLY_SHARE = 0.65;
+
+// 1$ is 1$ Phase 3: real non-public counterparty allowed to submit a genuine, sellable offer in
+// 05-unit-bidding.ts's auction for these categories — not every category needs this (most have
+// plenty of real public suppliers), but a few (confirmed: specialty_metals) can end up with
+// literally zero real public-company suppliers generated in a region, permanently starving
+// every company whose recipe needs them. Distinct from CAPEX_CATEGORY_PRIVATE_SEGMENT above
+// (that's for capital-goods purchases settled in 08b-capex-settlement.ts; this is a real named
+// seller inside the actual per-unit auction).
+export const PRIVATE_SEGMENT_SUPPLY_CATEGORIES: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = {
+  upstream_extraction: 'MANUFACTURING',
+  specialty_metals: 'MANUFACTURING',
+};
+
+// Share of the segment's real annual revenue treated as this category's real weekly production
+// capacity when it participates as a seller — modest, since a segment plausibly does many
+// things besides this one category, mirroring CAPEX_SUPPLIER_WEIGHTS' basket-share approach.
+export const PRIVATE_SEGMENT_SUPPLY_SHARE = 0.08;

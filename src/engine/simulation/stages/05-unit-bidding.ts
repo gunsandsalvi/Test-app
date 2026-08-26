@@ -9,9 +9,13 @@
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, getInputInventoryUnits, getInputInventoryUSD } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+
+// 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
+// real ticker so the post-clearing crediting step can tell it apart from a real company sale.
+const privateSegmentOfferId = (segmentType: string) => `PRIVATE:${segmentType}`;
 
 // 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal
 // recipe (CATEGORY_INPUT_REQUIREMENTS) that 08-company-fundamentals.ts uses to draw down input
@@ -205,6 +209,25 @@ function executeSubUnitBiddingMarket(
       });
     }
   });
+
+  // 1$ is 1$ Phase 3: a real, sellable private-sector offer for categories where public company
+  // supply can be sparse or entirely absent (confirmed: specialty_metals had zero real
+  // suppliers in a sampled region) — a genuine named counterparty, not a residual write-off.
+  const privateSegmentType = PRIVATE_SEGMENT_SUPPLY_CATEGORIES[subUnitId];
+  if (privateSegmentType) {
+    const segment = targetReg.privateSectorSegments?.find(s => s.segmentType === privateSegmentType);
+    if (segment) {
+      const segmentOfferUSD = (segment.annualRevenueUSD / 52) * PRIVATE_SEGMENT_SUPPLY_SHARE;
+      const segmentOfferUnits = segmentOfferUSD / currentUnitPrice;
+      if (segmentOfferUnits > 0.001) {
+        offers.push({
+          companyId: privateSegmentOfferId(privateSegmentType),
+          quantityUnits: segmentOfferUnits,
+          minPriceUSD: currentUnitPrice * 0.90,
+        });
+      }
+    }
+  }
 
   // Corporate Customers submit bids
   customers.forEach(comp => {
@@ -402,6 +425,21 @@ function executeSubUnitBiddingMarket(
     }
     supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + targetProductionUSD;
   });
+
+  // Credit the private segment's real cleared sale — not a Company, so it isn't in
+  // companyUpdates; annualRevenueUSD is a run-rate (not an accumulator), so replace last week's
+  // contribution rather than stacking another annualized figure on top, same as
+  // 08b-capex-settlement.ts's identical pattern for its own capex-derived contribution.
+  if (privateSegmentType) {
+    const segment = targetReg.privateSectorSegments?.find(s => s.segmentType === privateSegmentType);
+    if (segment) {
+      const sale = openSales[privateSegmentOfferId(privateSegmentType)];
+      const newAnnualizedContribution = (sale?.amount ?? 0) * 52;
+      const priorContribution = segment.realSupplySalesDerivedAnnualRevenueUSD ?? 0;
+      segment.annualRevenueUSD = Math.max(1, segment.annualRevenueUSD - priorContribution + newAnnualizedContribution);
+      segment.realSupplySalesDerivedAnnualRevenueUSD = newAnnualizedContribution;
+    }
+  }
 
   customers.forEach(comp => {
     const purchase = openPurchases[comp.ticker];

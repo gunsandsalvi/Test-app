@@ -351,9 +351,24 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   pattern changed from monotonic decay to one that stabilizes and partially recovers (minRatio
   0.008 at week 48 → ~0.02-0.03 for the remainder). Real improvement, not a full resolution — the
   residual is still tracked under task #18/#49's continuation.
-- **Phase 3 — Private sector as a real participant.** Add private-segment bidders/offerers to
-  stage 05's auction for every category they plausibly produce or consume; retire the residual
-  credit mechanism in `08b-capex-settlement.ts`.
+- **Phase 3 — Private sector as a real participant (partially landed: supply-side only).**
+  Gave the region's private sector a real, sellable offer in `05-unit-bidding.ts`'s auction for
+  categories confirmed to have zero real public-company suppliers (specialty_metals) via a new
+  `PRIVATE_SEGMENT_SUPPLY_CATEGORIES`/`PRIVATE_SEGMENT_SUPPLY_SHARE` mapping — a genuine named
+  counterparty (`PRIVATE:<segmentType>`), not a residual write-off: it submits a real offer sized
+  from a share of the segment's own real revenue, and its cleared sale is credited back to that
+  same segment's `annualRevenueUSD` (replace-don't-stack, mirroring `08b-capex-settlement.ts`'s
+  existing pattern for capex). Also updated `08-company-fundamentals.ts`'s Phase 2
+  `hasRealSupply` check to recognize this as real supply too, so specialty_metals is no longer
+  excluded from the physical fulfillment computation. Verified via a 60-week diagnostic:
+  specialty_metals now clears in full (supplied units == demanded units, vs. zero supply before);
+  aggregate violations were comparable to the pro-rata-only baseline (26 vs. 20, same
+  stabilize-and-partially-recover pattern) but max ratio dropped further (7.79x vs. 12.31x) — a
+  real, genuine improvement, though the dominant residual driver is still the auction-fairness
+  issue tracked under task #18/#49's continuation, not the supply gap this phase closed.
+  **Not yet done:** private-segment *demand-side* participation (as a real bidder/buyer for
+  categories it plausibly consumes) and retiring `08b-capex-settlement.ts`'s residual credit
+  mechanism — left for a follow-up pass.
 - **Phase 4 — Generalize capex into real bids.** Fold `CAPEX_SUPPLIER_WEIGHTS` into
   `CORPORATE_DEMAND_INTENSITY`-style real per-company bids for all 5 capital-goods categories,
   removing the parallel abstract injection entirely.

@@ -14,7 +14,7 @@ import {
 import { isActiveCompany, getOutputInventoryUSD, getInputInventoryUnits, getInputInventoryUSD } from '../../../domain/company';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
-import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS, priceLeveragedLoan } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
@@ -201,13 +201,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       //    0.7/0.3 EMA as relevantFulfillment (rather than a separate hard multiply on top)
       //    means one unlucky week nudges the factor down, it doesn't hard-crash it — the same
       //    smoothing principle already used for prices/production elsewhere in this pipeline.
-      // 2. An input category can have zero real supplier companies anywhere in the region at
-      //    all (confirmed: specialty_metals) — a company-generation gap (no seller exists yet
-      //    for this good; giving the private sector a real supply role here is Phase 3's job),
-      //    not a real scarcity signal. Enforcing it as a physical constraint would be
-      //    penalizing every company that needs it for a modeling gap that isn't there yet, not
-      //    a real economic condition — so it's excluded from the fulfillment computation below
-      //    until Phase 3 gives it a genuine supply source.
+      // 2. An input category can have zero real *public-company* suppliers anywhere in the
+      //    region (confirmed: specialty_metals) — Phase 3 now gives such categories a real
+      //    private-segment seller (PRIVATE_SEGMENT_SUPPLY_CATEGORIES in 05-unit-bidding.ts), so
+      //    hasRealSupply below checks for that too; only a category with truly no real seller of
+      //    any kind is excluded from the fulfillment computation, since enforcing a physical
+      //    constraint nothing in the model can ever satisfy would be penalizing a company for a
+      //    modeling gap, not a real economic condition.
       let physicalFulfillment = 1.0;
       linesNeedingInputs.forEach(l => {
         const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
@@ -216,7 +216,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         Object.entries(reqs).forEach(([inputSubUnit, intensity]) => {
           const neededUSD = lineProductionUSD * (intensity ?? 0);
           if (neededUSD <= 0) return;
-          const hasRealSupply = prevActiveFirms.some(c => c.region === comp.region && (c.productLines || []).some(pl => pl.subUnitId === inputSubUnit));
+          // A private-segment offer (05-unit-bidding.ts's PRIVATE_SEGMENT_SUPPLY_CATEGORIES) is
+          // just as real a supply source as a public company's product line.
+          const hasRealSupply = prevActiveFirms.some(c => c.region === comp.region && (c.productLines || []).some(pl => pl.subUnitId === inputSubUnit))
+            || PRIVATE_SEGMENT_SUPPLY_CATEGORIES[inputSubUnit] !== undefined;
           if (!hasRealSupply) return;
           const inputUnitPrice = (reg.categoryDemand[inputSubUnit as any] as any)?.unitPriceUSD ?? 1;
           const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);

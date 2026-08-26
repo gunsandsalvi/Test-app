@@ -126,6 +126,11 @@ export interface PrivateSectorSegment {
   // — tracked separately so next week's settlement can replace it rather than stack another
   // annualized figure on top, since annualRevenueUSD is a run-rate, not an accumulator.
   capexDerivedAnnualRevenueUSD?: number;
+  // 1$ is 1$ Phase 3: this week's real annualized contribution from acting as a named seller in
+  // 05-unit-bidding.ts's auction (e.g. specialty_metals, which can otherwise have zero real
+  // public-company suppliers in a region) — tracked separately for the same
+  // replace-don't-stack reason as capexDerivedAnnualRevenueUSD above.
+  realSupplySalesDerivedAnnualRevenueUSD?: number;
 }
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
