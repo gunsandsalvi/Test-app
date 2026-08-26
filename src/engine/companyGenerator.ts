@@ -252,11 +252,16 @@ const SUBUNIT_TO_CATEGORY: Record<string, string> = {
 export function generateInitialCompanies(): Company[] {
   const regions: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
   const companies: Company[] = [];
+  // Shared across every region's seed generation so tickers/names are globally unique, not
+  // just unique within one region — a per-region Set let e.g. USA and UK each independently
+  // generate a firm named "TCGP".
+  const existingSeedTickers = new Set<string>();
+  const existingSeedNames = new Set<string>();
 
   regions.forEach((region) => {
     const regionPolicyRate = getInitialRegions()[region]?.policyRate ?? 0.045;
     const regionProductivityPerCapita = getRegionProductivityPerCapitaUSD(region);
-    let templates: FirmSeedTemplate[] = generateFirmSeeds(region);
+    let templates: FirmSeedTemplate[] = generateFirmSeeds(region, existingSeedTickers, existingSeedNames);
 
 
 
@@ -483,12 +488,14 @@ export function generateInitialCompanies(): Company[] {
     });
     const targetCount = 200;
     const baseCompanies = companies.filter(c => c.region === region);
-    const existingTickers = new Set(companies.map(c => c.ticker));
-    const existingNames = new Set(companies.map(c => c.name));
+    // Reuse the same globally-shared sets as seed generation (not a fresh rebuild from
+    // `companies`) — a per-call rebuild here would still miss a subsequent region's seed
+    // tickers colliding with this region's padding clones, since seed generation and padding
+    // used to track uniqueness in two disconnected sets.
     while (companies.filter(c => c.region === region).length < targetCount) {
       const parent = baseCompanies[Math.floor(Math.random() * baseCompanies.length)];
-      const newTicker = generateUniqueTicker(existingTickers);
-      const newName = generateUniqueName(parent.name, parent.sector, existingNames);
+      const newTicker = generateUniqueTicker(existingSeedTickers);
+      const newName = generateUniqueName(parent.name, parent.sector, existingSeedNames);
       const newEmployeeCount = Math.max(10, Math.floor(parent.employeeCount * (0.3 + Math.random() * 1.4)));
       const revenueScale = newEmployeeCount / Math.max(1, parent.employeeCount);
 

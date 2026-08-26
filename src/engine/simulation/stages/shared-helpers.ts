@@ -4,9 +4,10 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
-import { Company, Region, PrivateSectorSegment } from '../../../types';
+import { Company, Region, PrivateSectorSegment, RegionId, ItemizedHolding, SupplyRelationship } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 
 // Holder-class rebalancing coefficients (see computeTargetOwnershipShares below).
 const EQUITY_ATTRACTIVENESS_SENSITIVITY = 0.6;
@@ -72,8 +73,37 @@ export function computeOccupationDemand(companies: Company[], privateSegments: P
   return demand;
 }
 
-export function formSupplyRelationships(regionId: string, companies: Company[]): Company[] {
-  return companies;
+export function formSupplyRelationships(regionId: RegionId, companies: Company[]): SupplyRelationship[] {
+  const regionFirms = companies.filter(c => c.region === regionId && isActiveCompany(c));
+  const relationships: SupplyRelationship[] = [];
+
+  regionFirms.forEach(customer => {
+    (customer.productLines || []).forEach(line => {
+      const reqs = CATEGORY_INPUT_REQUIREMENTS[line.industry];
+      if (!reqs) return;
+      Object.entries(reqs).forEach(([inputSubUnitId, intensity]) => {
+        if (!intensity) return;
+        const suppliers = regionFirms.filter(s =>
+          s.id !== customer.id && (s.productLines || []).some(l => l.subUnitId === inputSubUnitId)
+        );
+        if (suppliers.length === 0) return;
+        const totalSupplierRevenue = suppliers.reduce((sum, s) => sum + s.annualRevenue, 0) || 1;
+        const weeklyDemandUSD = (customer.annualRevenue / 52) * intensity * line.revenueShare;
+        suppliers.forEach(supplier => {
+          const relationshipStrength = supplier.annualRevenue / totalSupplierRevenue;
+          relationships.push({
+            supplierCompanyId: supplier.id,
+            customerCompanyId: customer.id,
+            category: inputSubUnitId,
+            weeklyVolumeUSD: weeklyDemandUSD * relationshipStrength,
+            relationshipStrength,
+          });
+        });
+      });
+    });
+  });
+
+  return relationships;
 }
 
 export function computeTargetOwnershipShares(assetClass: string, regionId: string, region: Region, allRegions: Record<string, Region>): { bankShare: number; institutionalShare: number; foreignShare: Record<string, number>; centralBankShare: number } {
@@ -115,6 +145,25 @@ export function computeSupplyDemandPremium(
   return (1 - ratio) * 200;
 }
 
-export function attributeItemizedHoldings(entities: any, portfolio: any): any[] {
-  return [];
+export function attributeItemizedHoldings(
+  sectorShareUSD: number,
+  candidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[]
+): ItemizedHolding[] {
+  const sorted = [...candidates].sort((a, b) => b.outstandingUSD - a.outstandingUSD);
+  let remaining = sectorShareUSD;
+  const result: ItemizedHolding[] = [];
+  for (const c of sorted) {
+    if (remaining <= 0) break;
+    const take = Math.min(c.outstandingUSD * 0.4, remaining); // no single sector holds more than 40% of any one issue
+    if (take > 0) {
+      result.push({
+        instrumentId: c.id,
+        instrumentType: c.type,
+        issuerRegion: c.region,
+        quantityOrNotionalUSD: take,
+      });
+      remaining -= take;
+    }
+  }
+  return result;
 }

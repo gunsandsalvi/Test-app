@@ -1005,8 +1005,11 @@ export function evolveCommodity(
 
   const hist = [...comm.historicalPrices.slice(-51), newSpot];
 
-  const inventoryLevelPct = (Math.round(comm.inventoryLevelPct + (Math.random() - 0.5) * 3 - (weatherBoost > 0 ? 4 : 0)));
-  const supplyDemandBalance = inventoryLevelPct < 40 ? 'Deficit (Tight Supply)' : inventoryLevelPct > 60 ? 'Surplus (Oversupplied)' : 'Balanced';
+  const inventoryLevelPct = Math.max(0, Math.min(100, Math.round(comm.inventoryLevelPct + (Math.random() - 0.5) * 3 - (weatherBoost > 0 ? 4 : 0))));
+  // Derived from the same clearing ratio actually driving price/supply/demand above, not the
+  // independent inventoryLevelPct random walk — previously the two could (and regularly did)
+  // disagree, e.g. showing "Balanced" next to a ~2x demand/supply gap.
+  const supplyDemandBalance = clearingRatio > 1.15 ? 'Deficit (Tight Supply)' : clearingRatio < 0.85 ? 'Surplus (Oversupplied)' : 'Balanced';
 
   return {
     ...comm,

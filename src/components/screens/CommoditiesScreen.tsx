@@ -92,7 +92,7 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
                       </div>
                       <div className="flex flex-col text-right">
                         <span>Bal: <span className="font-bold text-[var(--text-primary)]">{c.supplyDemandBalance}</span></span>
-                        <span>Inv: <span className="font-bold text-[var(--text-secondary)]">{formatPercent(c.inventoryLevelPct, { isDecimal: true })}</span></span>
+                        <span>Inv: <span className="font-bold text-[var(--text-secondary)]">{formatPercent(c.inventoryLevelPct, { isDecimal: false })}</span></span>
                       </div>
                     </div>
                   );

@@ -4,31 +4,8 @@ import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
-import { computeOccupationDemand } from './stages/shared-helpers';
+import { computeOccupationDemand, attributeItemizedHoldings } from './stages/shared-helpers';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
-
-function attributeItemizedHoldingsLocal(
-  sectorShareUSD: number,
-  candidates: { id: string; type: string; region: RegionId; outstandingUSD: number }[]
-): ItemizedHolding[] {
-  const sorted = [...candidates].sort((a, b) => b.outstandingUSD - a.outstandingUSD);
-  let remaining = sectorShareUSD;
-  const result: ItemizedHolding[] = [];
-  for (const c of sorted) {
-    if (remaining <= 0) break;
-    const take = Math.min(c.outstandingUSD * 0.4, remaining); // no single sector holds more than 40% of any one issue
-    if (take > 0) {
-      result.push({
-        instrumentId: c.id,
-        instrumentType: c.type as any,
-        issuerRegion: c.region,
-        quantityOrNotionalUSD: take,
-      });
-      remaining -= take;
-    }
-  }
-  return result;
-}
 
 export function createInitialGameState(): GameState {
   const regions = getInitialRegions();
@@ -99,14 +76,14 @@ export function createInitialGameState(): GameState {
     reg.institutionalSector.sovBondHoldingsUSD = Number((reg.sovBondOwnership.institutionalShare * totalSovDebt).toFixed(0));
 
     // Compile holding candidates for individual institutional entities and macro sectors
-    const equityCandidates = regionCompanies.map(c => ({
+    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies.map(c => ({
       id: c.id,
       type: 'EQUITY',
       region: regionId,
       outstandingUSD: c.marketCap
     }));
 
-    const corpCandidates: { id: string; type: string; region: RegionId; outstandingUSD: number }[] = [];
+    const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
     regionCompanies.forEach(c => {
       (c.debtTranches || []).forEach(tranche => {
         corpCandidates.push({
@@ -119,7 +96,7 @@ export function createInitialGameState(): GameState {
     });
 
     const govDebtTranches = reg.govDebtTranches || [];
-    const sovCandidates = govDebtTranches.map(gt => ({
+    const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = govDebtTranches.map(gt => ({
       id: gt.id,
       type: 'GOV_BOND',
       region: regionId,
@@ -127,9 +104,9 @@ export function createInitialGameState(): GameState {
     }));
 
     reg.institutionalSector.itemizedHoldings = [
-      ...attributeItemizedHoldingsLocal(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
-      ...attributeItemizedHoldingsLocal(reg.institutionalSector.sovBondHoldingsUSD, sovCandidates),
-      ...attributeItemizedHoldingsLocal(reg.institutionalSector.equityHoldingsUSD, equityCandidates),
+      ...attributeItemizedHoldings(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
+      ...attributeItemizedHoldings(reg.institutionalSector.sovBondHoldingsUSD, sovCandidates),
+      ...attributeItemizedHoldings(reg.institutionalSector.equityHoldingsUSD, equityCandidates),
     ];
 
     // Build the individual InstitutionalEntity objects mapping to regional Companies
@@ -154,9 +131,9 @@ export function createInitialGameState(): GameState {
       const entEquityShareUSD = (macroSector.equityHoldingsUSD || 0) * share;
 
       const itemizedHoldings = [
-        ...attributeItemizedHoldingsLocal(entCorpShareUSD, corpCandidates),
-        ...attributeItemizedHoldingsLocal(entSovShareUSD, sovCandidates),
-        ...attributeItemizedHoldingsLocal(entEquityShareUSD, equityCandidates),
+        ...attributeItemizedHoldings(entCorpShareUSD, corpCandidates),
+        ...attributeItemizedHoldings(entSovShareUSD, sovCandidates),
+        ...attributeItemizedHoldings(entEquityShareUSD, equityCandidates),
       ];
 
       institutionalEntities.push({

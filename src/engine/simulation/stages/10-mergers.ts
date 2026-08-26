@@ -7,10 +7,51 @@
  * the sequence — see that file's header comment for why.)
  */
 
-import { GameState } from '../../../types';
+import { GameState, DebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { checkForMerger } from '../merger';
 import { WeeklyStepContext } from './context';
+
+/**
+ * Consolidates a set of debt tranches into at most one tranche per (rateType, ~5-year tenor
+ * bucket) combination, weighting coupon/margin/maturity by principal. Tranches referenced by
+ * an open portfolio position are excluded by the caller and passed through untouched instead —
+ * rewriting their id here would orphan the position's trancheId. Without this, every merger
+ * appends the target's entire ladder onto the acquirer's with no consolidation, so tranche
+ * count compounds indefinitely across repeated M&A (observed: a single merger turning two
+ * ordinary 3-tranche companies into one 6-tranche one).
+ */
+function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix: string): DebtTranche[] {
+  const buckets = new Map<string, DebtTranche[]>();
+  tranches.forEach(t => {
+    const tenorBucket = Math.round((t.maturityWeek - nextWeek) / 260); // nearest 5-year bucket
+    const key = `${t.rateType}-${tenorBucket}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(t);
+  });
+
+  const result: DebtTranche[] = [];
+  let bucketIndex = 0;
+  buckets.forEach(group => {
+    if (group.length === 1) { result.push(group[0]); return; }
+    const totalPrincipal = group.reduce((s, t) => s + t.principalUSD, 0);
+    if (totalPrincipal <= 0) return;
+    const weightedCoupon = group.reduce((s, t) => s + (t.couponRate ?? 0) * t.principalUSD, 0) / totalPrincipal;
+    const weightedMarginBps = group.reduce((s, t) => s + (t.floatingMarginBps ?? 0) * t.principalUSD, 0) / totalPrincipal;
+    const weightedMaturityWeek = Math.round(group.reduce((s, t) => s + t.maturityWeek * t.principalUSD, 0) / totalPrincipal);
+    result.push({
+      id: `${idPrefix}-ASSUMED-${nextWeek}-${bucketIndex++}`,
+      principalUSD: totalPrincipal,
+      rateType: group[0].rateType,
+      couponRate: group[0].rateType === 'FIXED' ? weightedCoupon : undefined,
+      floatingMarginBps: group[0].rateType === 'FLOATING' ? Math.round(weightedMarginBps) : undefined,
+      originationWeek: nextWeek,
+      maturityWeek: weightedMaturityWeek,
+      seniority: group[0].seniority,
+    });
+  });
+  return result;
+}
 
 export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void {
   if (ctx.nextWeek % 13 !== 0) return;
@@ -45,14 +86,27 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   }
   target.productLines = [];
 
-  // Transfer debt
-  if (target.debtTranches) {
-    target.debtTranches.forEach(t => {
-      const transferredTranche = { ...t, id: `${t.id}-acq-${ctx.nextWeek}` };
-      if (!acquirer.debtTranches) acquirer.debtTranches = [];
-      acquirer.debtTranches.push(transferredTranche);
+  // Transfer debt. Tranches held by an open portfolio position (either side) are transferred
+  // individually with a renamed id and remapped position, exactly as before. Tranches with no
+  // open position are pooled across both companies and consolidated by (rateType, tenor
+  // bucket) so the combined entity's ladder doesn't grow without bound across repeated mergers.
+  if (target.debtTranches && target.debtTranches.length > 0) {
+    if (!acquirer.debtTranches) acquirer.debtTranches = [];
 
-      // Update any portfolio positions holding this tranche
+    const heldTrancheIds = new Set(
+      ctx.workingPositions
+        .filter(p => (p.symbol === target.ticker || p.symbol === acquirer.ticker) && p.trancheId)
+        .map(p => p.trancheId!)
+    );
+
+    const protectedTargetTranches = target.debtTranches.filter(t => heldTrancheIds.has(t.id));
+    const mergeableTargetTranches = target.debtTranches.filter(t => !heldTrancheIds.has(t.id));
+    const protectedAcquirerTranches = acquirer.debtTranches.filter(t => heldTrancheIds.has(t.id));
+    const mergeableAcquirerTranches = acquirer.debtTranches.filter(t => !heldTrancheIds.has(t.id));
+
+    protectedTargetTranches.forEach(t => {
+      const transferredTranche = { ...t, id: `${t.id}-acq-${ctx.nextWeek}` };
+      protectedAcquirerTranches.push(transferredTranche);
       ctx.workingPositions = ctx.workingPositions.map(p => {
         if (p.symbol === target.ticker && p.trancheId === t.id) {
           return { ...p, symbol: acquirer.ticker, trancheId: transferredTranche.id };
@@ -60,7 +114,15 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
         return p;
       });
     });
-    acquirer.totalDebt = (acquirer.debtTranches || []).reduce((s, t) => s + t.principalUSD, 0);
+
+    const consolidatedTranches = consolidateTranches(
+      [...mergeableAcquirerTranches, ...mergeableTargetTranches],
+      ctx.nextWeek,
+      acquirer.ticker
+    );
+
+    acquirer.debtTranches = [...protectedAcquirerTranches, ...consolidatedTranches];
+    acquirer.totalDebt = acquirer.debtTranches.reduce((s, t) => s + t.principalUSD, 0);
   }
   target.debtTranches = [];
   target.totalDebt = 0;

@@ -85,8 +85,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
       comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
     } else if (comp.financialStatementProfile === 'INSURER') {
-      const instEnt = state.institutionalEntities.find(e => e.id === comp.id);
-      const floatAssets = instEnt?.totalAssetsUSD ?? (comp.annualRevenue * 5);
+      // Float scales with this insurer's own premium base, not the region's aggregate
+      // institutional-sector balance sheet — instEnt.totalAssetsUSD is a macro-level slice
+      // (potentially trillions) meant for portfolio-composition bookkeeping, not a per-firm
+      // P&L input; using it here inflated investment income, and hence EBITDA, by orders of
+      // magnitude relative to this company's actual revenue.
+      const floatAssets = comp.annualRevenue * 5;
       comp.technicalReservesUSD = floatAssets * 0.85;
 
       const premiumGrowth = reg.gdpGrowth / 52 + (Math.random() - 0.5) * 0.02;
@@ -162,8 +166,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
       // Supply relationship shocks
       const region = updatedRegions[comp.region];
-      const rels = (region as any).supplyRelationships?.filter((r: any) => r.customerCompanyId === comp.id) || [];
-      rels.forEach((rel: any) => {
+      const rels = region.supplyRelationships?.filter((r) => r.customerCompanyId === comp.id) || [];
+      rels.forEach((rel) => {
         const supplier = prevActiveFirms.find(c => c.id === rel.supplierCompanyId);
         if (supplier && (supplier.finishedGoodsInventoryUSD ?? 0) > supplier.annualRevenue * 0.15) {
           const distress = (supplier.finishedGoodsInventoryUSD! / (supplier.annualRevenue * 0.15)) - 1;

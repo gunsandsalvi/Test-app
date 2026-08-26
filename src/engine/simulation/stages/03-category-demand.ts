@@ -94,8 +94,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     });
 
     // Supply Relationships
-    if (state.currentWeek % 13 === 0 || !(reg as any).supplyRelationships || (reg as any).supplyRelationships.length === 0) {
-      (reg as any).supplyRelationships = formSupplyRelationships(regionId, ctx.prevActiveFirms);
+    if (state.currentWeek % 13 === 0 || !reg.supplyRelationships || reg.supplyRelationships.length === 0) {
+      reg.supplyRelationships = formSupplyRelationships(regionId, ctx.prevActiveFirms);
     }
   });
 }

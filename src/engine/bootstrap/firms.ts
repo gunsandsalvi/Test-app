@@ -139,9 +139,11 @@ const SECTOR_FIRM_COUNT: Partial<Record<Sector, number>> = {
 const BANKS_PER_REGION = 4;
 const COMMODITY_PRODUCERS_PER_CATEGORY = 2; // per generic commodity id, per region
 
-export function generateFirmSeeds(region: RegionId): FirmSeedTemplate[] {
-  const existingTickers = new Set<string>();
-  const existingNames = new Set<string>();
+export function generateFirmSeeds(
+  region: RegionId,
+  existingTickers: Set<string> = new Set<string>(),
+  existingNames: Set<string> = new Set<string>()
+): FirmSeedTemplate[] {
   const seeds: FirmSeedTemplate[] = [];
 
   (Object.keys(SECTOR_FIRM_COUNT) as Sector[]).forEach((sector) => {
