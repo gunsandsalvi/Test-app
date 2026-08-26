@@ -247,7 +247,9 @@ function runInvariantsHarness() {
           (global as any).sovAccumulator[rId].expected = 0;
        }
 
-       if (w % 13 !== 0 && w > 1) {
+       // advanceWeeklyStep gates meetings on nextWeek (= w + 1, since state.currentWeek === w
+       // going into this call), not on the harness's own loop index w.
+       if ((w + 1) % 13 !== 0 && w > 1) {
          if (preState.regions[rId as RegionId]?.policyRate !== state.regions[rId as RegionId]?.policyRate) {
            violations.push({
              week: w,
@@ -335,14 +337,14 @@ function checkTradeFeeConservation(state: GameState): Violation | null {
   
   // Take a snapshot of pre-trade balances
   const preCash = state.portfolio.cashUSD;
-  const preBankEquity = state.regions['NA']?.bankingSector.bankEquityUSD || 0;
+  const preBankEquity = state.regions['USA']?.bankingSector.bankEquityUSD || 0;
 
   // Let's create a fake position
   const posData = {
     assetType: 'EQUITY' as any,
     symbol: 'TEST',
     name: 'Test Equity',
-    region: 'NA' as RegionId,
+    region: 'USA' as RegionId,
     dealerId: 'alpha',
     direction: 'LONG' as any,
     quantity: 1000,
@@ -363,7 +365,7 @@ function checkTradeFeeConservation(state: GameState): Violation | null {
   const postState = executeTrade(state, posData, executionDetails);
 
   const postCash = postState.portfolio.cashUSD;
-  const postBankEquity = postState.regions['NA']?.bankingSector.bankEquityUSD || 0;
+  const postBankEquity = postState.regions['USA']?.bankingSector.bankEquityUSD || 0;
 
   const userDebit = preCash - postCash;
   const bankCredit = postBankEquity - preBankEquity;
