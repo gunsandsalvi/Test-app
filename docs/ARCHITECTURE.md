@@ -11,7 +11,7 @@
 8. `simulation/constants.ts` — Sector pricing-power and wage-sensitivity constant tables used by `core.ts`.
 9. `companyGenerator.ts` — Initial and IPO company generation (financial templates, debt tranches, ratings).
 10. `dealers.ts` — Static dealer/counterparty roster (`DEALERS`) used for trade sourcing and spreads.
-11. `pricing.ts` — Closed-form pricing functions: corporate bonds, leveraged loans, IRS, CDS, XCS, equities, commodity futures; sector P/E and rating-spread reference tables.
+11. `pricing.ts` — Closed-form pricing functions: corporate bonds, leveraged loans, IRS, CDS, XCS, commodity futures; sector P/E (Gordon growth model) and rating-spread (geometric progression off `credit.ts`'s cutoffs) tables generated from a shared discount-rate primitive rather than quoted multiples.
 12. `nelsonSiegel.ts` — Nelson-Siegel sovereign yield curve model (zero rates, discount factors, bond pricing).
 13. `blackScholes.ts` — Black-Scholes-Merton option pricing and Greeks.
 14. `carryCalculator.ts` — Expected weekly carry/financing cost estimation per asset type.
@@ -24,6 +24,12 @@
 21. `macro/indices.ts` — Composite benchmark index calculation from constituent company prices.
 22. `macro/weather.ts` — Regional weather anomaly generation (commodity supply-shock driver).
 23. `macro/utils.ts` — Shared helpers (e.g. synthetic 52-week history generation).
+24. `bootstrap/population.ts` — Per-region population and productivity-per-capita as relative multiples of a shared reference unit.
+25. `bootstrap/labor-and-wages.ts` — Per-region occupation wage table derived from productivity, replacing a flat wage constant.
+26. `bootstrap/firms.ts` — Generative per-region firm seeding (Pareto-ranked revenue/margin/leverage by sector, bank/insurer/asset-manager/pension-fund roles, commodity producers); computed credit ratings.
+27. `bootstrap/category-demand.ts` — Sub-unit unit price as dollar demand ÷ estimated physical volume (population and firm-count based).
+28. `bootstrap/commodities-and-fx.ts` — Generic (non-real-ticker) commodity definitions priced off a cost-of-production primitive; FX rates from relative purchasing power.
+29. `bootstrap/yield-curves.ts` — Neutral rate from generated productivity growth plus an inflation-target primitive; policy rate and Nelson-Siegel parameters derived from it.
 
 ## Domain Models (`src/domain/`)
 1. `banking.ts` — Banking sector balance sheet, capital ratios, and loan books.
@@ -52,3 +58,5 @@
 9. **IPO EPS Accuracy**: Asserts newly issued IPO companies' stored EPS is consistent with `netIncome / sharesOutstanding`.
 10. **Revenue Growth Ceiling**: Asserts no company's revenue grows beyond 20x its initial baseline over a 260-week run.
 11. **Sovereign Debt Absorption**: Asserts bank/institutional sovereign bond holdings growth tracks the expected market-funded portion of each region's deficit over rolling 13-week windows.
+12. **Equity Demand Moves Price Beyond EPS**: Asserts that a sustained institutional equity under-allocation, once corrected by the holder-class rebalancing flow, visibly moves a company's stock price beyond what its EPS change alone explains.
+13. **Sovereign Auction Outcome Moves Yields**: Asserts that a region with sharply reduced bank/institutional absorption capacity sees its 10Y yield rise the following week relative to a baseline run.
