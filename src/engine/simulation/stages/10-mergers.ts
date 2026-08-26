@@ -72,6 +72,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   acquirer.sharesOutstanding = Number((acquirer.sharesOutstanding + newShares).toFixed(3));
   acquirer.annualRevenue = Number((acquirer.annualRevenue + target.annualRevenue * 0.85).toFixed(1));
   acquirer.employeeCount += Math.round(target.employeeCount * 0.75);
+  acquirer.grossPPEUSD = (acquirer.grossPPEUSD ?? 0) + (target.grossPPEUSD ?? 0);
+  acquirer.accumulatedDepreciationUSD = (acquirer.accumulatedDepreciationUSD ?? 0) + (target.accumulatedDepreciationUSD ?? 0);
 
   // Merge product lines
   if (target.productLines && acquirer.productLines) {
@@ -138,6 +140,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   target.capex = 0;
   target.maintenanceCapex = 0;
   target.growthCapex = 0;
+  target.grossPPEUSD = 0;
+  target.accumulatedDepreciationUSD = 0;
 
   ctx.recentMergers.push({
     acquirerTicker: acquirer.ticker,

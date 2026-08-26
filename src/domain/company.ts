@@ -48,9 +48,18 @@ export interface DebtTranche {
   _refinanceInitiated?: boolean;
 }
 
+export interface CogsBreakdown {
+  baseCostUSD: number;
+  wagePressureUSD: number;
+  inputPriceCostUSD: number;
+  capacityDecayCostUSD: number;
+  crowdingCostUSD: number;
+}
+
 export interface QuarterlyIncomeStatement {
   revenue: number;
   cogs: number;
+  cogsBreakdown: CogsBreakdown;
   grossProfit: number;
   sgaExpense: number;
   ebitda: number;
@@ -68,6 +77,8 @@ export interface QuarterlyBalanceSheet {
   treasuryHoldingsUSD: number;
   accountsReceivable: number;
   finishedGoodsInventoryUSD: number;
+  grossPPE: number;
+  accumulatedDepreciation: number;
   netPPE: number;
   totalAssets: number;
   accountsPayable: number;
@@ -179,6 +190,8 @@ export interface Company {
   previousCapex?: number;
   maintenanceCapex: number;
   growthCapex: number;
+  grossPPEUSD: number;
+  accumulatedDepreciationUSD: number;
   rndExpense?: number;
   baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;

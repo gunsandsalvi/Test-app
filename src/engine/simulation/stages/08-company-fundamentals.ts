@@ -20,8 +20,8 @@ import { SECTOR_BENCHMARKS, priceLeveragedLoan } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
 import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
-import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY } from '../constants';
-import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot } from '../../companyGenerator';
+import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
+import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
 import { computeExpectedLossSpreadBps, getRatingBucket, computeBucketDemandPremiumBps } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
@@ -63,6 +63,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let newRecentFulfillmentEMA = comp.recentFulfillmentEMA ?? 1.0;
     let targetProductionUSD = 0;
     let productionCostUSD = 0;
+    let costDriversUSD: CogsCostDrivers | undefined;
     let carryingCostUSD = (comp.finishedGoodsInventoryUSD ?? 0) * (comp.inventoryCarryingCostRate ?? 0.02) / 52;
     let newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) - carryingCostUSD);
 
@@ -316,6 +317,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
       newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
+
+      // Quarterly dollar impact of the same cost drivers that moved targetMargin above —
+      // this is what backs the COGS breakdown shown in the deep financials drill-down, so it
+      // reconciles to the actual weekly margin mechanics rather than an invented split.
+      const revQ = newRevenue / 4;
+      costDriversUSD = {
+        wagePressureUSD: wageCompression * revQ,
+        inputPriceCostUSD: inputPriceDrag * 0.03 * revQ,
+        capacityDecayCostUSD: capacityDecayPenalty * revQ,
+        crowdingCostUSD: avgCrowdingIntensity * 0.08 * revQ,
+      };
     }
 
     // Maintenance — funded, not assumed:
@@ -398,6 +410,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     }
 
     const newCapex = comp.sector === 'Banks' ? 0 : (newMaintenanceCapex + newGrowthCapex);
+
+    // PP&E roll-forward: a genuine stock (gross cost less accumulated depreciation), not a
+    // static totalDebt-derived formula — grows with actual weekly capex spend and runs down on
+    // a sector-appropriate straight-line useful life, so "how is PPE being depreciated" has a
+    // real, inspectable mechanism behind it.
+    const priorGrossPPE = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+    const priorAccumulatedDepreciation = comp.accumulatedDepreciationUSD ?? (priorGrossPPE * 0.45);
+    const usefulLifeYears = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
+    const weeklyDepreciation = priorGrossPPE / (usefulLifeYears * 52);
+    const newGrossPPEUSD = priorGrossPPE + newCapex / 52;
+    const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
 
     // Weekly Cash flow and debt amortization / prepayment
     const weeklyFreeCashFlow = comp.sector === 'Banks'
@@ -763,6 +786,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
     const prevSnapshot = comp.historicalFundamentals ? comp.historicalFundamentals[comp.historicalFundamentals.length - 1] : undefined;
     const currentTreasuryHoldingsUSD = (newTreasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
+    // Real current-portion-of-debt: tranches actually maturing within a year, from this
+    // company's own updated ladder — not a flat 15% guess.
+    const newShortTermDebtUSD = updatedTranches.filter(t => t.maturityWeek - nextWeek <= 52).reduce((s, t) => s + t.principalUSD, 0);
 
     const currentSnapshot = buildQuarterlyFundamentalSnapshot(
       nextWeek,
@@ -784,10 +810,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       prevSnapshot,
       debtIssuanceThisWeek,
       debtRepaymentThisWeek,
-      buybacksThisWeek
+      buybacksThisWeek,
+      newGrossPPEUSD,
+      newAccumulatedDepreciationUSD,
+      weeklyDepreciation * 13,
+      costDriversUSD,
+      newShortTermDebtUSD,
+      annualInterest
     );
     const histFundamentals = isReportingThisWeek
-      ? [...(comp.historicalFundamentals || []).slice(-3), currentSnapshot]
+      ? [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot]
       : comp.historicalFundamentals || [];
 
     const systemicStressFactor = systemicStressFactorGlobal + Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.3;
@@ -828,6 +860,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       previousCapex: comp.capex,
       maintenanceCapex: Number(newMaintenanceCapex.toFixed(1)),
       growthCapex: Number(newGrowthCapex.toFixed(1)),
+      grossPPEUSD: Number(newGrossPPEUSD.toFixed(1)),
+      accumulatedDepreciationUSD: Number(newAccumulatedDepreciationUSD.toFixed(1)),
       rndExpense: Number(newRndExpense.toFixed(1)),
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,
       executionQuality: Number(newExecutionQuality.toFixed(3)),

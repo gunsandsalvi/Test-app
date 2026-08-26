@@ -3,10 +3,18 @@ import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
 import { getInitialRegions } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaUSD } from './bootstrap/population';
+import { SECTOR_PPE_INTENSITY } from './simulation/constants';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
 };
+
+// Generic (sector-unaware) fallback used only by buildQuarterlyFundamentalSnapshot when a
+// caller hasn't wired up a real PP&E figure — every real call site below passes one explicitly.
+const DEFAULT_PPE_INTENSITY = 0.5;
+// A freshly-generated company is seeded partway through its asset life, not brand new — this is
+// the accumulated-depreciation fraction of gross PP&E used at that seed point.
+const INITIAL_ACCUM_DEPRECIATION_FRACTION = 0.45;
 
 export function getCategoryDemandSeedUSD(category: string, region: RegionId): number {
   const income = getInitialRegions()[region]?.estimatedHouseholdIncomeUSD ?? 10_000_000_000_000;
@@ -52,6 +60,17 @@ export function deriveInitialRevenueUSD(
 // generateUniqueName / generateUniqueTicker now live in ./bootstrap/firms (imported above)
 // so the padding-clone loop below and the generative firm seeds share one implementation.
 
+// Real cost-driver dollar impacts this quarter (wage pressure, input-price shocks, capacity
+// decay from deferred maintenance, competitive crowding) — passed through from the same
+// per-week locals stage 08 already computes to move the blended EBITDA margin, so "where the
+// costs are going" reconciles to genuine simulation signals rather than a flat formula.
+export interface CogsCostDrivers {
+  wagePressureUSD: number;
+  inputPriceCostUSD: number;
+  capacityDecayCostUSD: number;
+  crowdingCostUSD: number;
+}
+
 export function buildQuarterlyFundamentalSnapshot(
   week: number,
   filingPeriod: string,
@@ -73,6 +92,23 @@ export function buildQuarterlyFundamentalSnapshot(
   debtIssuance: number = 0,
   debtRepayment: number = 0,
   buybacks: number = 0,
+  // Real PP&E stock roll-forward (gross cost less accumulated depreciation) — a genuine asset
+  // the company actually purchased and is running down, not a financing-side (debt) proxy.
+  // Callers always seed/carry this from the company's own PP&E history; the fallback below only
+  // covers a caller that hasn't been wired up yet, and is revenue-scaled (what this company
+  // actually produces), never debt-scaled (an unrelated financing decision).
+  grossPPEUSD?: number,
+  accumulatedDepreciationUSD?: number,
+  daQuarterlyOverride?: number,
+  costDrivers?: CogsCostDrivers,
+  // Real current-portion-of-debt split from this company's own debt tranche maturities, when
+  // the caller has them (it always does once tranches exist) — replaces a flat 15/85 guess.
+  shortTermDebtUSD?: number,
+  // Real per-tranche interest (sum of each tranche's own coupon/floating rate x principal) —
+  // the same figure the caller already used to compute net income, so this statement's interest
+  // expense actually reconciles to it instead of re-deriving a second, disconnected number from
+  // a flat spread-over-totalDebt formula.
+  annualInterestOverride?: number,
 ): FundamentalSnapshot {
   const revQ = annualRevenue / 4;
   const ebitdaQ = ebitda / 4;
@@ -80,16 +116,37 @@ export function buildQuarterlyFundamentalSnapshot(
   const cogs = revQ * (1 - ebitdaMargin - 0.12);
   const sgaExpense = revQ * 0.12;
   const grossProfit = revQ - cogs;
-  const daQuarterly = Math.max(1, (maintenanceCapex + growthCapex) / 4 * 0.8);
-  const interestExpense = totalDebt * (oasSpreadBps / 10000 + 0.03) / 4;
+  const daQuarterly = daQuarterlyOverride ?? Math.max(1, (maintenanceCapex + growthCapex) / 4 * 0.8);
+  const interestExpense = annualInterestOverride !== undefined ? annualInterestOverride / 4 : totalDebt * (oasSpreadBps / 10000 + 0.03) / 4;
   const pretaxIncome = ebitdaQ - daQuarterly - interestExpense;
   const taxExpense = Math.max(0, pretaxIncome * 0.21);
   const netIncQ = netIncome / 4;
   const epsQ = eps / 4;
 
+  // Decompose COGS into the real drivers that moved this company's margin this quarter, plus a
+  // residual "base cost of production" — never invented, always reconciles exactly to `cogs`.
+  const rawDriverSum = costDrivers
+    ? (costDrivers.wagePressureUSD + costDrivers.inputPriceCostUSD + costDrivers.capacityDecayCostUSD + costDrivers.crowdingCostUSD)
+    : 0;
+  const driverScale = rawDriverSum > 0 && rawDriverSum > cogs * 0.9 ? (cogs * 0.9) / rawDriverSum : 1;
+  const cogsBreakdown: QuarterlyIncomeStatement['cogsBreakdown'] = costDrivers ? {
+    wagePressureUSD: costDrivers.wagePressureUSD * driverScale,
+    inputPriceCostUSD: costDrivers.inputPriceCostUSD * driverScale,
+    capacityDecayCostUSD: costDrivers.capacityDecayCostUSD * driverScale,
+    crowdingCostUSD: costDrivers.crowdingCostUSD * driverScale,
+    baseCostUSD: cogs - rawDriverSum * driverScale,
+  } : {
+    wagePressureUSD: 0,
+    inputPriceCostUSD: 0,
+    capacityDecayCostUSD: 0,
+    crowdingCostUSD: 0,
+    baseCostUSD: cogs,
+  };
+
   const incomeStatement: QuarterlyIncomeStatement = {
     revenue: revQ,
     cogs,
+    cogsBreakdown,
     grossProfit,
     sgaExpense,
     ebitda: ebitdaQ,
@@ -105,10 +162,12 @@ export function buildQuarterlyFundamentalSnapshot(
   const workingCapitalUSD = annualRevenue * 0.08;
   const accountsReceivable = workingCapitalUSD * 0.6;
   const accountsPayable = workingCapitalUSD * 0.4;
-  const netPPE = totalDebt * 0.7;
+  const grossPPE = grossPPEUSD ?? (annualRevenue * DEFAULT_PPE_INTENSITY / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION));
+  const accumulatedDepreciation = accumulatedDepreciationUSD ?? (grossPPE * INITIAL_ACCUM_DEPRECIATION_FRACTION);
+  const netPPE = grossPPE - accumulatedDepreciation;
   const totalAssets = cash + accountsReceivable + finishedGoodsInventoryUSD + netPPE;
-  const shortTermDebt = totalDebt * 0.15;
-  const longTermDebt = totalDebt * 0.85;
+  const shortTermDebt = shortTermDebtUSD ?? (totalDebt * 0.15);
+  const longTermDebt = totalDebt - shortTermDebt;
   const totalLiabilities = accountsPayable + totalDebt;
   const shareholdersEquity = totalAssets - totalLiabilities;
 
@@ -117,6 +176,8 @@ export function buildQuarterlyFundamentalSnapshot(
     treasuryHoldingsUSD,
     accountsReceivable,
     finishedGoodsInventoryUSD,
+    grossPPE,
+    accumulatedDepreciation,
     netPPE,
     totalAssets,
     accountsPayable,
@@ -369,10 +430,28 @@ export function generateInitialCompanies(): Company[] {
       const historicalPrices: number[] = [stockPrice];
       const marketCap = tmpl.shares * stockPrice;
 
-      const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap);
-      const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1);
-      const snapQ3 = buildQuarterlyFundamentalSnapshot(-1, "Q3 '25", 'Sep 30, 2025', tmpl.revBase * 0.98, ebitda * 0.97, netIncome * 0.97, eps * 0.98, tmpl.cashBase * 0.99, tmpl.debtBase * 1.00, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ2);
-      const snapQ4 = buildQuarterlyFundamentalSnapshot(1, "Q4 '25", 'Dec 31, 2025', tmpl.revBase, ebitda, netIncome, eps, tmpl.cashBase, tmpl.debtBase, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ3);
+      // Real PP&E seed: sized off this company's own production scale (sector capital
+      // intensity x revenue), not off its debt — debt is a financing choice, unrelated to what
+      // the asset side of the balance sheet actually is.
+      const ppeIntensity = SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY;
+      const initialGrossPPEUSD = tmpl.revBase * ppeIntensity / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
+      const initialAccumulatedDepreciationUSD = initialGrossPPEUSD * INITIAL_ACCUM_DEPRECIATION_FRACTION;
+
+      // Real debt tranches (with genuine maturities) generated once and reused for both the
+      // seed snapshots' short/long-term split and the company's own capital structure — so a
+      // freshly-generated company's "current portion of long-term debt" reflects its actual
+      // ladder rather than a flat 15% guess.
+      const debtTranches = generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, regionPolicyRate, tmpl.rank);
+      const initialShortTermDebtUSD = debtTranches.filter(t => t.maturityWeek <= 52).reduce((s, t) => s + t.principalUSD, 0);
+      // Real per-tranche interest from the same ladder, not a flat spread-over-totalDebt guess.
+      const initialAnnualInterest = debtTranches.reduce((s, t) => s + (t.rateType === 'FIXED'
+        ? t.principalUSD * (t.couponRate ?? 0.05)
+        : t.principalUSD * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
+
+      const snapQ1 = buildQuarterlyFundamentalSnapshot(-3, "Q1 '25", 'Mar 31, 2025', tmpl.revBase * 0.94, ebitda * 0.93, netIncome * 0.91, eps * 0.92, tmpl.cashBase * 0.95, tmpl.debtBase * 1.02, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, undefined, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
+      const snapQ2 = buildQuarterlyFundamentalSnapshot(-2, "Q2 '25", 'Jun 30, 2025', tmpl.revBase * 0.96, ebitda * 0.95, netIncome * 0.94, eps * 0.95, tmpl.cashBase * 0.97, tmpl.debtBase * 1.01, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ1, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
+      const snapQ3 = buildQuarterlyFundamentalSnapshot(-1, "Q3 '25", 'Sep 30, 2025', tmpl.revBase * 0.98, ebitda * 0.97, netIncome * 0.97, eps * 0.98, tmpl.cashBase * 0.99, tmpl.debtBase * 1.00, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ2, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
+      const snapQ4 = buildQuarterlyFundamentalSnapshot(1, "Q4 '25", 'Dec 31, 2025', tmpl.revBase, ebitda, netIncome, eps, tmpl.cashBase, tmpl.debtBase, 0, 0, tmpl.revBase * 0.02, tmpl.revBase * 0.03, oasSpreadBps, 0.02, marketCap, snapQ3, 0, 0, 0, initialGrossPPEUSD, initialAccumulatedDepreciationUSD, undefined, undefined, initialShortTermDebtUSD, initialAnnualInterest);
 
       const historicalFundamentals = [snapQ1, snapQ2, snapQ3, snapQ4];
 
@@ -426,8 +505,10 @@ export function generateInitialCompanies(): Company[] {
         cash: tmpl.cashBase,
         totalDebt: tmpl.debtBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
-        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, regionPolicyRate, tmpl.rank),
+        debtTranches,
         capex,
+        grossPPEUSD: initialGrossPPEUSD,
+        accumulatedDepreciationUSD: initialAccumulatedDepreciationUSD,
         maintenanceCapex,
         growthCapex,
         baselineGrowthCapexToRevenueRatio: growthCapex / Math.max(1, tmpl.revBase),
@@ -530,6 +611,8 @@ export function generateInitialCompanies(): Company[] {
         totalDebt: parent.totalDebt * revenueScale,
         cash: parent.cash * revenueScale,
         marketCap: parent.marketCap * revenueScale,
+        grossPPEUSD: parent.grossPPEUSD * revenueScale,
+        accumulatedDepreciationUSD: parent.accumulatedDepreciationUSD * revenueScale,
         employeeCount: newEmployeeCount,
         historicalPrices: [...parent.historicalPrices],
         historicalFundamentals: [...parent.historicalFundamentals]
@@ -708,6 +791,11 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const capex = Math.round(revBase * 0.06);
   const maintenanceCapex = Math.round(capex * 0.3); // newly-public growth-stage company spends more on expansion than upkeep
   const growthCapex = capex - maintenanceCapex;
+  // Newly-public growth-stage company: freshly-bought equipment, not a mature asset base —
+  // scaled off its own production (revenue), not off its debt.
+  const ipoAccumDeprFraction = 0.15;
+  const initialGrossPPEUSD = revBase * (SECTOR_PPE_INTENSITY[sector] ?? DEFAULT_PPE_INTENSITY) / (1 - ipoAccumDeprFraction);
+  const initialAccumulatedDepreciationUSD = initialGrossPPEUSD * ipoAccumDeprFraction;
   
   const eps = Number(((ebitda * 0.5) / Math.max(1, shares)).toFixed(4));
   const IPO_POP = 0.08;
@@ -724,6 +812,8 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     sharesOutstanding: shares, currentLiabilities: Math.round(debtBase * 0.25 + revBase * 0.08),
     totalDebt: debtBase, cash: revBase * 0.5,
     capex,
+    grossPPEUSD: initialGrossPPEUSD,
+    accumulatedDepreciationUSD: initialAccumulatedDepreciationUSD,
     maintenanceCapex,
     growthCapex,
     baselineGrowthCapexToRevenueRatio: growthCapex / Math.max(1, revBase),
