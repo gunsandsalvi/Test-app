@@ -28,6 +28,19 @@ function executeSubUnitBiddingMarket(
   }
   const currentUnitPrice = demandState.unitPriceUSD;
 
+  // Suppliers price their NEXT offer off the price this same clearing produces — a one-period
+  // feedback loop. Combined with how elastic productionResponseFactor is (up to 2x production
+  // for a ~33% price move), reacting to the raw, single-week cleared price is the textbook
+  // cobweb-cycle setup: overproduce this week because last week's price was high, crash the
+  // price, underproduce next week because it was low, repeat — with the swings growing, not
+  // damping. Suppliers instead react to a slow-moving average of price (an "expectation"),
+  // which is what breaks a cobweb cycle in practice.
+  if (!demandState.smoothedUnitPriceUSD || demandState.smoothedUnitPriceUSD <= 0) {
+    demandState.smoothedUnitPriceUSD = currentUnitPrice;
+  }
+  demandState.smoothedUnitPriceUSD = demandState.smoothedUnitPriceUSD * 0.75 + currentUnitPrice * 0.25;
+  const supplierExpectedUnitPrice = demandState.smoothedUnitPriceUSD;
+
   // 1. Process active contracts
   if (!targetReg.activeContracts) targetReg.activeContracts = [];
   const remainingContracts: SupplyContract[] = [];
@@ -96,8 +109,15 @@ function executeSubUnitBiddingMarket(
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
     const warehouseCapacityUSD = comp.annualRevenue * 0.15;
     const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
-    const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
-    const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
+    // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
+    // crosses one threshold) is a bang-bang controller with no hysteresis — it doesn't damp
+    // toward equilibrium, it oscillates around the threshold forever (backlog clears -> snap
+    // back to full production -> oversupply -> throttle again), producing multi-x week-to-week
+    // swings in real cleared sales even when underlying demand is stable. A continuous response
+    // that scales down smoothly as the inventory/capacity ratio grows converges instead.
+    const inventoryToCapacityRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
+    const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
+    const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
     const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
     const targetProductionUnits = targetProductionUSD / currentUnitPrice;
@@ -268,8 +288,15 @@ function executeSubUnitBiddingMarket(
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
     const warehouseCapacityUSD = comp.annualRevenue * 0.15;
     const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
-    const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
-    const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
+    // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
+    // crosses one threshold) is a bang-bang controller with no hysteresis — it doesn't damp
+    // toward equilibrium, it oscillates around the threshold forever (backlog clears -> snap
+    // back to full production -> oversupply -> throttle again), producing multi-x week-to-week
+    // swings in real cleared sales even when underlying demand is stable. A continuous response
+    // that scales down smoothly as the inventory/capacity ratio grows converges instead.
+    const inventoryToCapacityRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
+    const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
+    const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
     const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
     const targetProductionUnits = targetProductionUSD / currentUnitPrice;

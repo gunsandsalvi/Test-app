@@ -279,7 +279,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           const productionResponseFactor = (1.0 + priceSignal * 1.5);
           const warehouseCapacityUSD = comp.annualRevenue * 0.15;
           const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
-          const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
+          // Smooth, not a hard on/off switch — see the same fix (and its rationale) in
+          // 05-unit-bidding.ts's supplier-offer construction.
+          const invToCapRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
+          const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (invToCapRatio - 1.0) * 0.7));
 
           targetProductionUSD = (newRevenue / 52) * industrialLine.revenueShare * productionResponseFactor * productionThrottle;
           productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
@@ -289,7 +292,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
         } else {
           const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-          const productionThrottle = (comp.finishedGoodsInventoryUSD ?? 0) > warehouseCapacityUSD ? 0.3 : 1.0;
+          const invToCapRatioOther = (comp.finishedGoodsInventoryUSD ?? 0) / Math.max(1, warehouseCapacityUSD);
+          const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (invToCapRatioOther - 1.0) * 0.7));
 
           const categoryFulfillmentRatio = (reg.categoryDemand[industrialLine.subUnitId] as any)?._fulfillmentRatio ?? 1;
           newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;

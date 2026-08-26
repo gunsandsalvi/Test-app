@@ -101,6 +101,31 @@ target from stage 03. The real transaction layer exists but isn't the source of 
    bid/offer clearing stage 05 already has for them, so their dollars land on real named
    suppliers, never an anonymous pool.
 
+## Phase 1 finding: output inventory is already corrupted for multi-line companies
+
+While instrumenting stage 05 to compare its real cleared sales against stage 08's statistical
+revenue target, the numbers showed what looked like a growing-amplitude 2-3 week oscillation.
+Root cause, confirmed by direct instrumentation (not a cobweb/price-elasticity effect, though
+two real related bugs were fixed along the way — see below): **`Company.finishedGoodsInventoryUSD`
+/ `finishedGoodsUnits` are single scalar fields, but a company can have multiple product lines**
+(e.g. one sampled company produces `semiconductors`, `consumer_devices`, and
+`enterprise_software` simultaneously). Stage 05 runs its bidding pass once per sub-unit, and
+**each pass overwrites that same shared field for the company** — so whichever sub-unit is
+processed last each week (a fixed iteration order) clobbers the other lines' inventory numbers.
+A multi-line company's "inventory" is therefore whichever business happened to run last, not a
+real figure for any of its actual lines. This has to become a per-sub-unit structure (a
+`Record<subUnitId, { units, valueUSD }>`, or equivalent) before stage 05's output can be trusted
+as an authoritative revenue source — it directly blocks Phase 1, and is the same shape of
+problem Phase 2 already anticipated needing for input inventory, just discovered to already
+affect the existing output side too. Elevated to its own prerequisite phase below (Phase 1a).
+
+Two smaller, real bugs were fixed in the same pass and are worth keeping regardless of the above:
+- `05-unit-bidding.ts`'s production throttle was a hard on/off switch at one inventory/capacity
+  threshold (a bang-bang controller with no hysteresis) — smoothed into a continuous response.
+- Suppliers were pricing next week's production off the raw, single-week cleared price (a
+  textbook cobweb-cycle setup given how price-elastic production response is) — now react to a
+  slow-moving price expectation instead.
+
 ## Target UI (per company, an Inventory view)
 
 - **Output inventory**: units of finished product currently held, ready to sell, with current
@@ -124,6 +149,15 @@ target from stage 03. The real transaction layer exists but isn't the source of 
 ## Phased plan
 
 - **Phase 0 (done):** this document; audit of existing mechanisms.
+- **Phase 1a — Per-sub-unit output inventory (new prerequisite, found during Phase 1 work).**
+  Replace the single `finishedGoodsInventoryUSD`/`finishedGoodsUnits` scalars with a per-sub-unit
+  structure so a multi-line company's inventory is no longer clobbered every week by whichever
+  line's bidding pass runs last. Touches: `Company` domain type, `05-unit-bidding.ts` (both the
+  offer-construction and save-results blocks), `08-company-fundamentals.ts` (the
+  industrial_automation/heavy_equipment special case and the general branch), `04-input-output.ts`
+  (supplier distress checks), company generation/seeding, merger consolidation, and any UI reading
+  these fields. Must land and be verified before Phase 1's revenue-source swap, since that swap
+  would otherwise adopt a corrupted signal.
 - **Phase 1 — Reconcile the demand layers.** Make stage 03/04's outputs into *inputs* to stage
   05's bidding logic (price-setting, bid aggressiveness) instead of independent revenue/cost
   determinants. Verify no invariant regressions (revenue growth ceilings, GDP stability,

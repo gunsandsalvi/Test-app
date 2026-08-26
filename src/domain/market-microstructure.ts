@@ -38,6 +38,7 @@ export interface CategoryDemandState {
   clearedInputPriceIndex: number; // 1.0 = baseline; rises/falls with genuine scarcity/glut
   lastWeekInventoryLevelUSD: number; // explicit lag anchor — bidders always react to this, never same-week inventory
   unitPriceUSD?: number; // Per-region sub-unit price level
+  smoothedUnitPriceUSD?: number; // Slow-moving average of unitPriceUSD suppliers use to set production (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
   totalUnitsSuppliedThisWeek?: number;
   totalUnitsDemandedThisWeek?: number;
