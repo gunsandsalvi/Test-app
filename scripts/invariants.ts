@@ -1,5 +1,5 @@
 import { createInitialGameState } from '../src/engine/simulation/initialization';
-import { advanceWeeklyStep } from '../src/engine/simulation/core';
+import { advanceWeeklyStep } from '../src/engine/simulation';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
 
@@ -78,18 +78,17 @@ function checkNavIdentity(state: GameState, week: number) {
 }
 
 
-// NEW: Sovereign Debt Absorption Check
-function checkSovereignDebtAbsorption(prevState: GameState, nextState: GameState): Violation | null {
-  // Check over 13 weeks. But easier: just accumulate deficits and absorption.
-  // Actually, wait: we can just check it at week 13.
-  return null;
-}
-
 function runInvariantsHarness() {
   console.log('--- STARTING INVARIANTS HARNESS (260 WEEKS) ---');
   let state = createInitialGameState();
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
   let knownTickers = new Set(state.companies.map(c => c.ticker));
+
+  // Assert trade fee conservation invariant on initial state
+  const tradeFeeViolation = checkTradeFeeConservation(state);
+  if (tradeFeeViolation) {
+    violations.push(tradeFeeViolation);
+  }
 
   for (let w = 1; w <= 260; w++) {
     if (true) {
@@ -318,24 +317,16 @@ function checkTradeFeeConservation(state: GameState): Violation | null {
   const postCash = postState.portfolio.cashUSD;
   const postBankEquity = postState.regions['NA']?.bankingSector.bankEquityUSD || 0;
 
-  const userDebit = preCash - postCash; // Should be 150 (spreadCostUSD)
-  const bankCredit = postBankEquity - preBankEquity; // Should be 150 + 150 = 300
+  const userDebit = preCash - postCash;
+  const bankCredit = postBankEquity - preBankEquity;
 
-  // The assertion: user is debited spreadCostUSD, bank is credited spreadCostUSD + counterpartyFeeUSD.
-  // Wait, the specification says: 
-  // "asserting the sum of (spreadCostUSD + counterpartyFeeUSD) debited from the user's cash across the sequence exactly equals the sum credited to bankEquityUSD for the same sequence."
-  // Actually, wait! The user is only debited spreadCostUSD in handleExecuteTrade! 
-  // Look at handleExecuteTrade: `const updatedCash = prev.portfolio.cashUSD - (executionDetails?.spreadCostUSD ?? 0);`
-  // And the bank gets `counterpartyFeeUSD + spreadCostUSD`. 
-  // Where does counterpartyFeeUSD come from? The dealer / counterparty fee is a markup built into the fillPrice. The user pays for it via the fillPrice being worse than the mid price! So it is captured in the unrealized PnL immediately on day 1 (mark to market). The cash isn't explicitly debited for it! The cash only pays the spread/commission. 
-  
   if (Math.abs(userDebit - executionDetails.spreadCostUSD) > 0.01) {
-    return { week: state.currentWeek, severity: 'ERROR', message: `Trade Fee mismatch: user debited ${userDebit} but spreadCostUSD was ${executionDetails.spreadCostUSD}` };
+    return { week: state.currentWeek, message: `Trade Fee mismatch: user debited ${userDebit} but spreadCostUSD was ${executionDetails.spreadCostUSD}` };
   }
   
   const expectedBankCredit = executionDetails.spreadCostUSD + executionDetails.counterpartyFeeUSD;
   if (Math.abs(bankCredit - expectedBankCredit) > 0.01) {
-    return { week: state.currentWeek, severity: 'ERROR', message: `Trade Fee mismatch: bank credited ${bankCredit} but expected ${expectedBankCredit}` };
+    return { week: state.currentWeek, message: `Trade Fee mismatch: bank credited ${bankCredit} but expected ${expectedBankCredit}` };
   }
   
   return null;

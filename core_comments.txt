@@ -1,0 +1,19 @@
+105:  // Banks: heavier in sovBond and corpBond, driven by their own capital/reserve capacity
+108:  // Institutional: driven by sector equity health
+110:  // Foreign share by counterpart region: driven by interest-rate differential
+165:  // 1. Calculate Micro -> Macro Feedback metrics from previous corporate state
+192:  // 2. Evolve Multi-Region Macro States
+308:  // V7: Cross-border reserve / balance-sheet stance spillover effect
+843:  // 3. Evolve FX Pairs
+863:  // Trade Dynamics (Phase 3: T1)
+922:  // 4. Evolve Commodities (Part QB - Dynamic Feedback Loop)
+927:  // 5. Evolve 200 Company Fundamentals + Asynchronous Earnings + Debt Prepayment + M&A
+1780:  // PART BAA: Compute concentration risk flags (>40% threshold) from real activeContracts
+1825:  // 6. Generate Weekly Breaking News & Sentiment Shifts
+1857:  // Check for M&A Consolidation (Part AH)
+1955:  // Part ME: Itemized holdings attribution
+2009:  // Phase 4a: Derived nominal GDP parallel diagnostic
+2144:  // 7. Calculate Updated Composite Benchmark Indices
+2152:  // 8. Portfolio Mark-to-Market, Accruals, Attribution, and Margin Engine
+2698:  // 60/40 benchmark & Cash hurdle update
+2842:  // News feed strictly displays headlines generated during the current active weekly step

@@ -4,7 +4,7 @@ import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
-import { computeOccupationDemand } from './core';
+import { computeOccupationDemand } from './pipeline';
 
 function attributeItemizedHoldingsLocal(
   sectorShareUSD: number,

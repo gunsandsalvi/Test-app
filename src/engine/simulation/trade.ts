@@ -77,7 +77,7 @@ export function executeTrade(
       navUSD,
       positions: updatedPositions,
       totalRequiredMarginUSD: totalMarginReq,
-      totalMaintenanceMarginUSD: totalMaintMargin,
+      maintenanceMarginUSD: totalMaintMargin,
       marginUtilizationPct,
       isMarginCall: navUSD < totalMaintMargin,
     }

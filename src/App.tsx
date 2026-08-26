@@ -19,6 +19,7 @@ import {
 
 import { Company, GameState, Position } from './types';
 import { advanceWeeklyStep, createInitialGameState } from './engine/simulation';
+import { executeTrade } from './engine/simulation/trade';
 import { StatusBar } from './components/StatusBar';
 import { OverflowMenu } from './components/OverflowMenu';
 import { BriefingScreen } from './components/screens/BriefingScreen';

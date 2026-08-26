@@ -4,6 +4,7 @@ import { formatCurrency, formatPercent } from '../../engine/formatters';
 
 export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | null, onNavigate?: (dest: any, payload?: any) => void }> = ({ state }) => {
   const portfolio = state.portfolio;
+  const nav = portfolio.navUSD;
 
   const initialCapital = 25000000;
   const returnPct = (nav - initialCapital) / initialCapital;
