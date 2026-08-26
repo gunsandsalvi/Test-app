@@ -578,6 +578,26 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
               <span className="text-[var(--text-secondary)]">Finished Goods Inventory</span>
               <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(getOutputInventoryUSD(company), { compact: true })}</span>
             </div>
+            {Object.entries(company.outputInventoryBySubUnit || {}).filter(([, inv]) => inv.unitsHeld > 0).map(([subUnitId, inv]) => (
+              <div key={`sc-out-${subUnitId}`} className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
+                <span>· {Math.round(inv.unitsHeld).toLocaleString()} {subUnitId.replace(/_/g, ' ')} units to sell</span>
+                <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit</span>
+              </div>
+            ))}
+            {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, inv]) => inv.unitsHeld > 0).map(([subUnitId, inv]) => (
+              <div key={`sc-in-${subUnitId}`} className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
+                <span>· {Math.round(inv.unitsHeld).toLocaleString()} {subUnitId.replace(/_/g, ' ')} units bought (input stock)</span>
+                <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit avg cost</span>
+              </div>
+            ))}
+            <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+              <span className="text-[var(--text-secondary)]">This Week's Real Sales (settled)</span>
+              <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(company.lastWeekSalesUSD ?? 0, { compact: true })}</span>
+            </div>
+            <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+              <span className="text-[var(--text-secondary)]">This Week's Real Purchases (settled)</span>
+              <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(company.lastWeekPurchasesUSD ?? 0, { compact: true })}</span>
+            </div>
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Input Supply Constraint</span>
               <span className={(company.inputSupplyConstraintFactor ?? 1) < 1 ? 'text-[var(--signal-negative)] font-bold' : 'text-[var(--text-tertiary)]'}>

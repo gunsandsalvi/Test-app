@@ -257,6 +257,11 @@ export interface Company {
   inventoryCarryingCostRate: number;
   recentFulfillmentEMA: number;
   _targetProductionUSD?: number;
+  // 1$ is 1$ Phase 6: this week's real settled sales/purchases (from 05-unit-bidding.ts's
+  // actual bid/offer clearing — open-market plus active-contract volume) — persisted onto the
+  // company so the UI can show real weekly production/purchasing activity, not just the target.
+  lastWeekSalesUSD?: number;
+  lastWeekPurchasesUSD?: number;
   treasuryHoldings: ItemizedHolding[];
   producedCommodityId?: string;
   demandShockLagBuffer?: number[];

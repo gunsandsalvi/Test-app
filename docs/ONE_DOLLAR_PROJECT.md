@@ -403,11 +403,24 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
 - **Phase 5 — Full validation.** Re-run the invariants harness and multi-hundred-week
   diagnostics; this phase touches nearly every company's revenue/cost determination, so it
   carries the largest verification burden of anything done this session.
-- **Phase 6 — Inventory UI.** Build the per-company Inventory view described above (output
-  inventory, input lots with provenance/price, weekly production, active contracts as both
-  buyer and seller, capex/COGS destination) in `CompanyDeepDive.tsx`, and confirm the existing
-  Financials tab's quarterly statements reconcile exactly to this real underlying data rather
-  than to the formulas they were originally built from.
+- **Phase 6 — Inventory UI (partially landed).** `CompanyDeepDive.tsx`'s "supplychain" tab
+  already had active contracts (as both buyer and seller, with concentration-risk flags) from
+  earlier work — this pass added the remaining real data that already existed in the simulation
+  but wasn't surfaced: output inventory by sub-unit (units held, price/unit), input inventory by
+  sub-unit (units bought, avg cost/unit), and this week's real settled sales/purchases (added
+  `Company.lastWeekSalesUSD`/`lastWeekPurchasesUSD`, populated in `08-company-fundamentals.ts`
+  from `05-unit-bidding.ts`'s real cleared amounts — previously only visible transiently within
+  a single week's `companyUpdates`, never persisted for the UI to read). Purely additive (no
+  simulation-mechanics changes); verified via a 5-week smoke test.
+  **Not yet done:** input inventory is still a blended average per category, not itemized lots
+  with named seller provenance ("bought Y from N, Z from L at such prices") — the underlying
+  model tracks one aggregate (units, value) per category, not a list of individual purchase
+  lots; a real lot-level model would need its own design pass. Capex/COGS destination (which
+  specific supplier or private-segment counterparty a company's capex/COGS dollars went to this
+  week) is also not yet surfaced, though the data is real since Phase 4 (the private-segment
+  offer IDs make the counterparty identifiable). Reconciling the existing quarterly financials
+  to this real underlying data (rather than the statistical formulas they were built from) is
+  also not yet done.
 
 Each phase will be built, verified (`tsc`, hygiene, targeted diagnostics, then the full
 invariants harness), and committed independently rather than as one large, unreviewable change.

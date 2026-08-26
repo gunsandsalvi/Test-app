@@ -929,6 +929,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       occupationMixDrift: newOccupationMixDrift,
       inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
       _targetProductionUSD: (companyUpdates[comp.ticker]?._targetProductionUSD ?? targetProductionUSD),
+      lastWeekSalesUSD: update?.salesUSD ?? 0,
+      lastWeekPurchasesUSD: update?.purchasesUSD ?? 0,
       // Start from this company's carrying-cost-decayed baseline (every sub-unit it held
       // inventory for), then overlay whatever stage 05 settled fresh this week for the
       // sub-units it actually processed (it runs first and has the complete, real
