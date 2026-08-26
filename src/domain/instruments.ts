@@ -91,21 +91,21 @@ export interface Dealer {
 export type CommodityQuantityUnit = 'BARREL' | 'MMBTU' | 'TROY_OZ' | 'TONNE';
 
 export const COMMODITY_QUANTITY_UNIT: Record<string, CommodityQuantityUnit> = {
-  WTI: 'BARREL', BRENT: 'BARREL', NATGAS: 'MMBTU',
-  GOLD: 'TROY_OZ', SILVER: 'TROY_OZ',
-  COPPER: 'TONNE', WHEAT: 'TONNE', CORN: 'TONNE', SOYBEANS: 'TONNE',
+  ENERGY_ALPHA: 'BARREL', ENERGY_BETA: 'BARREL', ENERGY_GAMMA: 'MMBTU',
+  METAL_ALPHA: 'TROY_OZ', METAL_BETA: 'TROY_OZ',
+  METAL_GAMMA: 'TONNE', AGRI_ALPHA: 'TONNE', AGRI_BETA: 'TONNE', AGRI_GAMMA: 'TONNE',
 };
 
 export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; intensityShare: number }> = {
-  WTI: { subUnitId: 'upstream_extraction', intensityShare: 0.35 },
-  BRENT: { subUnitId: 'upstream_extraction', intensityShare: 0.30 },
-  NATGAS: { subUnitId: 'upstream_extraction', intensityShare: 0.20 },
-  GOLD: { subUnitId: 'specialty_metals', intensityShare: 0.05 },
-  SILVER: { subUnitId: 'specialty_metals', intensityShare: 0.08 },
-  COPPER: { subUnitId: 'specialty_metals', intensityShare: 0.15 },
-  WHEAT: { subUnitId: 'food_beverage', intensityShare: 0.04 },
-  CORN: { subUnitId: 'food_beverage', intensityShare: 0.04 },
-  SOYBEANS: { subUnitId: 'food_beverage', intensityShare: 0.03 },
+  ENERGY_ALPHA: { subUnitId: 'upstream_extraction', intensityShare: 0.35 },
+  ENERGY_BETA: { subUnitId: 'upstream_extraction', intensityShare: 0.30 },
+  ENERGY_GAMMA: { subUnitId: 'upstream_extraction', intensityShare: 0.20 },
+  METAL_ALPHA: { subUnitId: 'specialty_metals', intensityShare: 0.05 },
+  METAL_BETA: { subUnitId: 'specialty_metals', intensityShare: 0.08 },
+  METAL_GAMMA: { subUnitId: 'specialty_metals', intensityShare: 0.15 },
+  AGRI_ALPHA: { subUnitId: 'food_beverage', intensityShare: 0.04 },
+  AGRI_BETA: { subUnitId: 'food_beverage', intensityShare: 0.04 },
+  AGRI_GAMMA: { subUnitId: 'food_beverage', intensityShare: 0.03 },
   industrial_automation: { subUnitId: 'industrial_automation', intensityShare: 0.15 },
 };
 

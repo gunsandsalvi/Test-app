@@ -1,7 +1,8 @@
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
@@ -63,6 +64,7 @@ export function evolveRegionMacro(
     publicCompanyEmployment: number;
     occupationDemand?: Record<OccupationType, number>;
     monetizedAmountUSD?: number;
+    sovereignAuctionPremiumBps?: number;
   },
   week: number,
   equityReturn: number = 0,
@@ -97,9 +99,6 @@ export function evolveRegionMacro(
   // 1. Margin compression forces hiring freezes, cooling wage inflation
   const laborCooling = microFeedback.marginCompression * 0.15;
   
-  // 3. Fiscal deficit > 6% injects supply-side term premium
-  const fiscalDeficitTermPremium = region.fiscalDeficitPctGdp > 0.06 ? (region.fiscalDeficitPctGdp - 0.06) * 0.4 : 0;
-
   const infNoise = (Math.random() - 0.5) * 0.0008 + globalShock.inflationShock + weatherInfShock * 0.20 - laborCooling * 0.0008;
 
   // GDP Growth is derived bottom-up from C+I+G+NX identity in simulation core (Phase 4)
@@ -438,16 +437,17 @@ export function evolveRegionMacro(
   const newStapleShare = Number((prevHS.stapleSpendShare * 0.95 + targetStapleShare * 0.05).toFixed(4));
   const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
+  const baseAnnualWageUSD = getBaseAnnualWageUSD(region.id);
   const totalWageIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
-    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * pool.employed;
+    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * pool.employed;
   }, 0);
   const unemploymentReplacementRate = 0.35;
   const unemploymentTransferIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
     const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
     const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
-    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * unemployedInPool * unemploymentReplacementRate;
+    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * unemploymentReplacementRate;
   }, 0);
   const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
   const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + unemploymentTransferIncomeUSD + capitalIncomeUSD).toFixed(0));
@@ -615,8 +615,13 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   const qePremium = (cbChangePct * -0.5);
 
-  // Update Nelson-Siegel yield curve parameters
-  const targetBeta0 = 0.035 + (newInflation - piStar) * 0.4 + fiscalDeficitTermPremium * 0.4 + (microFeedback.creditContagionBps / 10000) * 0.2 + qePremium * 2;
+  // Update Nelson-Siegel yield curve parameters. The long-run level (beta0) is driven by an
+  // auction-outcome signal (issuance supply vs. absorbed bank/institutional demand, computed
+  // in core.ts's sovereign-debt section from the same 40/60 split used to allocate holdings)
+  // rather than an ad-hoc macro formula: under-absorption (a positive premium) raises yields,
+  // over-subscription (a negative premium) lowers them, anchored on the region's own
+  // generated neutral rate instead of a flat literal.
+  const targetBeta0 = region.neutralRate + (microFeedback.sovereignAuctionPremiumBps ?? 0) / 10000 + qePremium * 2;
   const newBeta0 = Math.max(
     0.012,
     region.yieldCurveParams.beta0 * 0.98 + targetBeta0 * 0.02 + (Math.random() - 0.5) * 0.0003
@@ -672,7 +677,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
   // Housing market evolution as a real asset class
-  const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD);
+  const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD, region.totalPopulation);
   const resDemand = region.categoryDemand?.['residential_construction']?.demandLevelUSD ?? 1e9;
   const resSupply = region.categoryDemand?.['residential_construction']?.inventoryLevelUSD ?? (resDemand * 0.1);
   const supplyDemandRatio = resSupply / Math.max(1, resDemand);
@@ -877,9 +882,20 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
   const sigmaFx = 0.08;
   const eps = (Math.random() - 0.5) * Math.sqrt(dt) * 2;
 
-  const rawTradeShock = (((baseRegion.tradeBalance - quoteRegion.tradeBalance) / 1e12) * 0.002); const tradeShock = Math.max(-0.05, Math.min(0.05, rawTradeShock));
+  // Trade-balance term is now the dominant driver: a sustained current-account imbalance
+  // (as a share of each region's own GDP) should actually clear over time rather than being
+  // squeezed into a small capped nudge.
+  const tradeImbalancePctGdp = baseRegion.currentAccountPctGdp - quoteRegion.currentAccountPctGdp;
+  const tradeTerm = tradeImbalancePctGdp * 0.15;
 
-  const drift = rateDiff * dt * 0.3 + sigmaFx * eps + tradeShock;
+  // Capital-flow term: reuses the same growth/yield attractiveness signal that drives
+  // cross-border equity ownership rebalancing (computeTargetOwnershipShares in core.ts) —
+  // capital flows toward, and appreciates the currency of, the relatively more attractive region.
+  const baseAttractiveness = (baseRegion.gdpGrowth + baseRegion.inflation) - baseRegion.zeroRates.tenor10Y;
+  const quoteAttractiveness = (quoteRegion.gdpGrowth + quoteRegion.inflation) - quoteRegion.zeroRates.tenor10Y;
+  const capitalFlowTerm = (baseAttractiveness - quoteAttractiveness) * 0.5;
+
+  const drift = rateDiff * dt * 0.3 + sigmaFx * eps + tradeTerm + capitalFlowTerm;
   const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));
   const change1W = Number((newRate - fx.rate).toFixed(4));
 

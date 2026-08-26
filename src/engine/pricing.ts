@@ -1,31 +1,55 @@
 import { NelsonSiegelParams, calculateDiscountFactor, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
-import { CreditRating } from '../types';
+import { CreditRating, Sector } from '../types';
+import { INFLATION_TARGET } from './bootstrap/yield-curves';
 
 /**
- * Base OAS credit spread table by rating (in basis points)
+ * OAS credit spread by rating: a geometric progression anchored on the CCC/default-boundary
+ * spread, using the same proportional risk step (RATING_NOTCH_SPREAD_DECAY) between adjacent
+ * notches as simulation/credit.ts's rating cutoffs — not a table copied from observed market
+ * spreads.
  */
-export const RATING_OAS_SPREADS: Record<CreditRating, { baseBps: number; minBps: number; maxBps: number }> = {
-  AAA: { baseBps: 45, minBps: 25, maxBps: 70 },
-  AA: { baseBps: 75, minBps: 50, maxBps: 110 },
-  A: { baseBps: 120, minBps: 85, maxBps: 180 },
-  BBB: { baseBps: 190, minBps: 140, maxBps: 280 },
-  BB: { baseBps: 340, minBps: 250, maxBps: 520 },
-  B: { baseBps: 580, minBps: 420, maxBps: 850 },
-  CCC: { baseBps: 1100, minBps: 800, maxBps: 1800 },
-  D: { baseBps: 4000, minBps: 2500, maxBps: 6000 },
-};
+const CCC_BASE_SPREAD_BPS = 1100;
+const RATING_NOTCH_SPREAD_DECAY = 0.60;
+const RATING_SPREAD_ORDER: CreditRating[] = ['D', 'CCC', 'B', 'BB', 'BBB', 'A', 'AA', 'AAA'];
+
+function buildRatingOasSpreads(): Record<CreditRating, { baseBps: number; minBps: number; maxBps: number }> {
+  const table = {} as Record<CreditRating, { baseBps: number; minBps: number; maxBps: number }>;
+  RATING_SPREAD_ORDER.forEach((rating, index) => {
+    const notch = index - 1; // CCC sits at notch 0, D one notch worse, AAA six notches better
+    const baseBps = Math.round(CCC_BASE_SPREAD_BPS * Math.pow(RATING_NOTCH_SPREAD_DECAY, notch));
+    table[rating] = { baseBps, minBps: Math.round(baseBps * 0.7), maxBps: Math.round(baseBps * 1.6) };
+  });
+  return table;
+}
+export const RATING_OAS_SPREADS = buildRatingOasSpreads();
 
 /**
- * Benchmark sector PE multiples
+ * Benchmark sector PE multiples, derived via the Gordon growth model (PE = 1 / (r - g))
+ * from each sector's growth-rate coefficient and a shared discount rate primitive
+ * (inflation target + a structural equity risk premium) — an output of the model, not an
+ * independently chosen multiple.
  */
-export const SECTOR_BENCHMARKS = {
-  Tech: { basePE: 28.5, growthRate: 0.12, vol: 0.28 },
-  Energy: { basePE: 12.0, growthRate: 0.04, vol: 0.32 },
-  Financials: { basePE: 13.5, growthRate: 0.06, vol: 0.22 },
-  Industrials: { basePE: 18.0, growthRate: 0.07, vol: 0.20 },
-  Consumer: { basePE: 21.0, growthRate: 0.05, vol: 0.18 },
-  Banks: { basePE: 10.0, growthRate: 0.03, vol: 0.24 },
+const EQUITY_RISK_PREMIUM = 0.045;
+const SECTOR_DISCOUNT_RATE = INFLATION_TARGET + EQUITY_RISK_PREMIUM;
+const SECTOR_GROWTH_AND_VOL: Record<Sector, { growthRate: number; vol: number }> = {
+  Tech: { growthRate: 0.12, vol: 0.28 },
+  Energy: { growthRate: 0.04, vol: 0.32 },
+  Financials: { growthRate: 0.06, vol: 0.22 },
+  Industrials: { growthRate: 0.07, vol: 0.20 },
+  Consumer: { growthRate: 0.05, vol: 0.18 },
+  Banks: { growthRate: 0.03, vol: 0.24 },
 };
+
+function buildSectorBenchmarks(): Record<Sector, { basePE: number; growthRate: number; vol: number }> {
+  const table = {} as Record<Sector, { basePE: number; growthRate: number; vol: number }>;
+  (Object.keys(SECTOR_GROWTH_AND_VOL) as Sector[]).forEach((sector) => {
+    const { growthRate, vol } = SECTOR_GROWTH_AND_VOL[sector];
+    const basePE = Number((1 / Math.max(0.01, SECTOR_DISCOUNT_RATE - growthRate)).toFixed(1));
+    table[sector] = { basePE, growthRate, vol };
+  });
+  return table;
+}
+export const SECTOR_BENCHMARKS = buildSectorBenchmarks();
 
 /**
  * Equities Pricing: Forward P/E multiple hybrid
@@ -236,7 +260,8 @@ export function priceLeveragedLoan(
   oasSpreadBps: number,
   tenorYears: number = 5,
   isDefaulted: boolean = false,
-  recoveryRate: number = 0.65
+  recoveryRate: number = 0.65,
+  bucketDemandPremiumBps: number = 0
 ): { pricePar: number; discountMarginBps: number; effectiveYield: number; duration: number } {
   if (isDefaulted) {
     return {
@@ -249,8 +274,12 @@ export function priceLeveragedLoan(
 
   // Floating rate loans have low interest rate duration (approx 0.25y) but credit spread duration ~ 3.5y
   const creditDuration = Math.min(4.0, tenorYears * 0.7);
-  // Discount margin reflects current credit risk (approx 85-90% of unsecured OAS due to senior lien collateral)
-  const discountMarginBps = Math.round(oasSpreadBps * 0.85);
+  // Senior-lien discount off the unsecured OAS is no longer a fixed multiple: it responds to
+  // the loan bucket's own demand/supply premium (computeBucketDemandPremiumBps) — strong
+  // relative demand for loans (a negative premium) prices them even tighter versus bonds;
+  // weak demand widens the discount back out.
+  const seniorLienDiscount = Math.max(0.65, Math.min(0.95, 0.85 + bucketDemandPremiumBps / 2000));
+  const discountMarginBps = Math.round(oasSpreadBps * seniorLienDiscount);
   const marginDeltaBps = discountMarginBps - quotedMarginBps;
   // Price in points of par
   const pricePar = (100 - (marginDeltaBps / 10000) * creditDuration * 100);

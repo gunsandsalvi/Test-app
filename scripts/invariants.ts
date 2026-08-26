@@ -111,6 +111,58 @@ function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
   return null;
 }
 
+function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
+  let state = createInitialGameState();
+  const ticker = state.companies.find(c => c.region === 'USA' && !c.isBankEntity && !c.isInstitutionalEntity)?.ticker;
+  if (!ticker) return null;
+  // Force a large institutional under-allocation so the holder-class rebalancing flow
+  // produces a sustained multi-week inflow into USA equities.
+  state.regions.USA.equityOwnership.institutionalShare = 0.05;
+
+  const startComp = state.companies.find(c => c.ticker === ticker)!;
+  const startPrice = startComp.stockPrice;
+  const startEps = startComp.eps;
+
+  for (let w = 0; w < 20; w++) {
+    state = advanceWeeklyStep(state);
+  }
+
+  const endComp = state.companies.find(c => c.ticker === ticker);
+  if (!endComp || endComp.isDefaulted) return null; // company left the sample; not a flow-mechanism failure
+
+  const priceRatio = Math.max(0.01, endComp.stockPrice) / Math.max(0.01, startPrice);
+  const epsRatio = (Math.abs(endComp.eps) > 0.01 && Math.abs(startEps) > 0.01) ? endComp.eps / startEps : 1;
+  const priceMoveExEpsLog = Math.abs(Math.log(priceRatio) - Math.log(Math.max(0.01, Math.abs(epsRatio))));
+
+  if (priceMoveExEpsLog < 0.02) {
+    return {
+      week: 20,
+      message: `Sustained institutional equity demand did not visibly move ${ticker}'s price beyond what EPS explains (price ${startPrice} -> ${endComp.stockPrice}, eps ${startEps} -> ${endComp.eps})`
+    };
+  }
+  return null;
+}
+
+function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
+  const baseline = createInitialGameState();
+  const shocked = createInitialGameState();
+  // Force heavy under-absorption: shrink USA bank/institutional balance-sheet capacity to a
+  // fraction of outstanding sovereign debt, well below the baseline run.
+  shocked.regions.USA.bankingSector.bankEquityUSD *= 0.01;
+  shocked.regions.USA.institutionalSector.sectorEquityUSD *= 0.01;
+
+  const baselineNext = advanceWeeklyStep(baseline);
+  const shockedNext = advanceWeeklyStep(shocked);
+
+  if (shockedNext.regions.USA.zeroRates.tenor10Y <= baselineNext.regions.USA.zeroRates.tenor10Y) {
+    return {
+      week: shockedNext.currentWeek,
+      message: `Under-subscribed sovereign auction did not raise USA's 10Y yield the following week (baseline=${baselineNext.regions.USA.zeroRates.tenor10Y}, shocked=${shockedNext.regions.USA.zeroRates.tenor10Y})`
+    };
+  }
+  return null;
+}
+
 function runInvariantsHarness() {
   console.log('--- STARTING INVARIANTS HARNESS (260 WEEKS) ---');
   let state = createInitialGameState();
@@ -127,6 +179,18 @@ function runInvariantsHarness() {
   const frozenPortfolioViolation = checkMarkToMarketUnfreezesPortfolio();
   if (frozenPortfolioViolation) {
     violations.push(frozenPortfolioViolation);
+  }
+
+  // Assert the equity holder-class rebalancing flow visibly moves price beyond EPS
+  const equityFlowViolation = checkSustainedEquityDemandMovesPriceBeyondEps();
+  if (equityFlowViolation) {
+    violations.push(equityFlowViolation);
+  }
+
+  // Assert an under-subscribed sovereign auction raises the following week's yield
+  const auctionViolation = checkUndersubscribedSovereignAuctionRaisesYield();
+  if (auctionViolation) {
+    violations.push(auctionViolation);
   }
 
   for (let w = 1; w <= 260; w++) {
@@ -247,7 +311,9 @@ function runInvariantsHarness() {
           (global as any).sovAccumulator[rId].expected = 0;
        }
 
-       if (w % 13 !== 0 && w > 1) {
+       // advanceWeeklyStep gates meetings on nextWeek (= w + 1, since state.currentWeek === w
+       // going into this call), not on the harness's own loop index w.
+       if ((w + 1) % 13 !== 0 && w > 1) {
          if (preState.regions[rId as RegionId]?.policyRate !== state.regions[rId as RegionId]?.policyRate) {
            violations.push({
              week: w,
@@ -335,14 +401,14 @@ function checkTradeFeeConservation(state: GameState): Violation | null {
   
   // Take a snapshot of pre-trade balances
   const preCash = state.portfolio.cashUSD;
-  const preBankEquity = state.regions['NA']?.bankingSector.bankEquityUSD || 0;
+  const preBankEquity = state.regions['USA']?.bankingSector.bankEquityUSD || 0;
 
   // Let's create a fake position
   const posData = {
     assetType: 'EQUITY' as any,
     symbol: 'TEST',
     name: 'Test Equity',
-    region: 'NA' as RegionId,
+    region: 'USA' as RegionId,
     dealerId: 'alpha',
     direction: 'LONG' as any,
     quantity: 1000,
@@ -363,7 +429,7 @@ function checkTradeFeeConservation(state: GameState): Violation | null {
   const postState = executeTrade(state, posData, executionDetails);
 
   const postCash = postState.portfolio.cashUSD;
-  const postBankEquity = postState.regions['NA']?.bankingSector.bankEquityUSD || 0;
+  const postBankEquity = postState.regions['USA']?.bankingSector.bankEquityUSD || 0;
 
   const userDebit = preCash - postCash;
   const bankCredit = postBankEquity - preBankEquity;
