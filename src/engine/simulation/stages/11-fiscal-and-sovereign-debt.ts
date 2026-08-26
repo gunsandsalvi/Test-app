@@ -95,8 +95,15 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
 
     const rawGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
-    const newDerivedNominalGdpUSD = Math.max(1e11, isFinite(rawGdpUSD) ? rawGdpUSD : 1e12);
-    const gdpLevelLastWeek = (reg as any).lastWeekNominalGdpUSD > 0 ? (reg as any).lastWeekNominalGdpUSD : newDerivedNominalGdpUSD;
+    const instantaneousNominalGdpUSD = Math.max(1e11, isFinite(rawGdpUSD) ? rawGdpUSD : 1e12);
+    const gdpLevelLastWeek = (reg as any).lastWeekNominalGdpUSD > 0 ? (reg as any).lastWeekNominalGdpUSD : instantaneousNominalGdpUSD;
+    // Real GDP is inherently a flow measured over a full quarter, not an instantaneous
+    // snapshot — smoothing the level itself (not just the growth-rate metrics derived from it)
+    // is what makes it behave that way. Without this, a single week's noise in any bottom-up
+    // component (e.g. investmentComponentUSD, which scales tracked-firm capex up by a
+    // total-private/tracked employment ratio that itself jumps whenever a company defaults or
+    // merges) showed up directly as a 30-50% swing in the displayed absolute GDP number.
+    const newDerivedNominalGdpUSD = gdpLevelLastWeek > 0 ? gdpLevelLastWeek * 0.9 + instantaneousNominalGdpUSD * 0.1 : instantaneousNominalGdpUSD;
     const isStartupTransition = gdpLevelLastWeek < newDerivedNominalGdpUSD * 0.2;
     const rawWeeklyRealGrowthRate = (!isStartupTransition && gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek))
       ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)))

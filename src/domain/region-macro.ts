@@ -122,6 +122,10 @@ export interface PrivateSectorSegment {
   marginPct: number;
   producedCommodityIds?: string[];
   commoditySupplyShareUSD?: Record<string, number>;
+  // This week's real capex-derived contribution to annualRevenueUSD (see 08b-capex-settlement.ts)
+  // — tracked separately so next week's settlement can replace it rather than stack another
+  // annualized figure on top, since annualRevenueUSD is a run-rate, not an accumulator.
+  capexDerivedAnnualRevenueUSD?: number;
 }
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
