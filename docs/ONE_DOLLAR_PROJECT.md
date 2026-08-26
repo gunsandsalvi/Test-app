@@ -80,7 +80,11 @@ target from stage 03. The real transaction layer exists but isn't the source of 
    aggregate is willing to pay, how aggressively a supplier prices its offer) rather than
    independent revenue/cost determinants computed in parallel.
 2. **Real input inventory**, symmetric with the existing output inventory: a company holds
-   units of each input category it has bought but not yet consumed.
+   units of each input category it has bought but not yet consumed. Tracked as **lots**, not one
+   blended figure — each lot remembers which supplier (a real company, or a private-sector
+   segment) it came from and the price paid for that specific lot, consumed oldest-first, so the
+   UI can show "holding Y units bought from N at $p1 and Z units bought from L at $p2," not just
+   a single average cost.
 3. **A literal per-unit production recipe** per sub-unit (units of input -> units of output),
    replacing `CATEGORY_INPUT_REQUIREMENTS`'s dollar-intensity ratio. Production draws down input
    inventory and adds to output inventory; unconsumed input carries over.
@@ -96,6 +100,26 @@ target from stage 03. The real transaction layer exists but isn't the source of 
    households individually isn't tractable) but continue to route through the same real
    bid/offer clearing stage 05 already has for them, so their dollars land on real named
    suppliers, never an anonymous pool.
+
+## Target UI (per company, an Inventory view)
+
+- **Output inventory**: units of finished product currently held, ready to sell, with current
+  unit value.
+- **Input inventory, by lot**: for each input category, the specific lots currently held —
+  quantity, source (a named company or a private-sector segment), and the price paid for that
+  lot — consumed oldest-first, not collapsed into one blended average cost.
+- **This week's production**: units produced, and which input lots were consumed to make them.
+- **Active contracts**: real `SupplyContract`s this company holds, both as buyer (who it buys
+  from, quantity/week, price, weeks remaining) and as seller (who buys from it) — `reg.
+  activeContracts` already carries this; it is not yet surfaced anywhere in the UI.
+- **Capex destination**: which real supplier(s) — company or private-sector segment — this
+  company's capex dollars went to this week/quarter, once phase 4 folds capex into real bids.
+- **COGS destination**: the same traceability for ordinary input/raw-material purchases.
+- **Reconciliation**: the quarterly income statement, balance sheet, and cash flow already built
+  in `CompanyDeepDive.tsx` must be *derived from* these real holdings and transactions — COGS
+  ties to real input lots consumed at their real acquisition cost, capex ties to real
+  contracts/purchases, and the balance sheet's inventory line ties to real lot valuations — not
+  merely consistent with them by construction.
 
 ## Phased plan
 
@@ -116,6 +140,11 @@ target from stage 03. The real transaction layer exists but isn't the source of 
 - **Phase 5 — Full validation.** Re-run the invariants harness and multi-hundred-week
   diagnostics; this phase touches nearly every company's revenue/cost determination, so it
   carries the largest verification burden of anything done this session.
+- **Phase 6 — Inventory UI.** Build the per-company Inventory view described above (output
+  inventory, input lots with provenance/price, weekly production, active contracts as both
+  buyer and seller, capex/COGS destination) in `CompanyDeepDive.tsx`, and confirm the existing
+  Financials tab's quarterly statements reconcile exactly to this real underlying data rather
+  than to the formulas they were originally built from.
 
 Each phase will be built, verified (`tsc`, hygiene, targeted diagnostics, then the full
 invariants harness), and committed independently rather than as one large, unreviewable change.
