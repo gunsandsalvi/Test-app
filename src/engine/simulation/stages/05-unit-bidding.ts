@@ -9,8 +9,13 @@
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract } from '../../../types';
 import { INDUSTRY_SUBUNITS, CORPORATE_DEMAND_INTENSITY } from '../../../domain/industry';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+
+function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, unitPriceUSD: number) {
+  if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
+  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld, valueUSD: unitsHeld * unitPriceUSD };
+}
 
 function executeSubUnitBiddingMarket(
   ctx: WeeklyStepContext,
@@ -44,6 +49,10 @@ function executeSubUnitBiddingMarket(
   // 1. Process active contracts
   if (!targetReg.activeContracts) targetReg.activeContracts = [];
   const remainingContracts: SupplyContract[] = [];
+  // supUp.salesUnits/salesUSD are deliberately cross-sub-unit totals (other consumers want a
+  // company's whole-business sales) — but the inventory formula below needs THIS sub-unit's
+  // sales specifically, so track that separately rather than reading the contaminated total.
+  const contractSalesUnitsBySupplier: Record<string, number> = {};
 
   targetReg.activeContracts.forEach(contract => {
     if (contract.subUnitId !== subUnitId) {
@@ -64,7 +73,7 @@ function executeSubUnitBiddingMarket(
         contract.weeksRemaining -= 1;
         if (contract.weeksRemaining >= 0) {
           // Execute weekly contract transaction
-          const supplierUnits = supplier.finishedGoodsUnits ?? ((supplier.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
+          const supplierUnits = getOutputInventoryUnits(supplier, subUnitId);
           const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
           const paymentUSD = actualTransacted * contract.priceUSD;
           const fillRate = contract.quantityUnitsPerWeek > 0 ? actualTransacted / contract.quantityUnitsPerWeek : 1.0;
@@ -73,11 +82,11 @@ function executeSubUnitBiddingMarket(
           if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
 
           const supUp = companyUpdates[supplier.ticker];
-          supUp.finishedGoodsUnits = Math.max(0, supplierUnits - actualTransacted);
-          supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * currentUnitPrice;
+          setOutputInventory(supUp, subUnitId, Math.max(0, supplierUnits - actualTransacted), currentUnitPrice);
           supUp.cashChange = (supUp.cashChange ?? 0) + paymentUSD;
           supUp.salesUnits = (supUp.salesUnits ?? 0) + actualTransacted;
           supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentUSD;
+          contractSalesUnitsBySupplier[supplier.ticker] = (contractSalesUnitsBySupplier[supplier.ticker] ?? 0) + actualTransacted;
 
           const custUp = companyUpdates[customer.ticker];
           custUp.cashChange = (custUp.cashChange ?? 0) - paymentUSD;
@@ -108,7 +117,7 @@ function executeSubUnitBiddingMarket(
   suppliers.forEach(comp => {
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
     const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-    const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
+    const currentInvUSD = getOutputInventoryUSD(comp, subUnitId);
     // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
     // crosses one threshold) is a bang-bang controller with no hysteresis — it doesn't damp
     // toward equilibrium, it oscillates around the threshold forever (backlog clears -> snap
@@ -122,7 +131,7 @@ function executeSubUnitBiddingMarket(
     const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
     const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
-    const currentUnits = comp.finishedGoodsUnits ?? (currentInvUSD / currentUnitPrice);
+    const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     const contractSales = remainingContracts
       .filter(c => (c.supplierCompanyId === comp.ticker || c.supplierCompanyId === comp.id) && c.subUnitId === subUnitId)
       .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
@@ -283,11 +292,11 @@ function executeSubUnitBiddingMarket(
     const sale = openSales[comp.ticker];
     if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
     const supUp = companyUpdates[comp.ticker];
-    const initialUnits = comp.finishedGoodsUnits ?? ((comp.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
+    const initialUnits = getOutputInventoryUnits(comp, subUnitId);
 
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
     const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-    const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
+    const currentInvUSD = getOutputInventoryUSD(comp, subUnitId);
     // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
     // crosses one threshold) is a bang-bang controller with no hysteresis — it doesn't damp
     // toward equilibrium, it oscillates around the threshold forever (backlog clears -> snap
@@ -301,15 +310,14 @@ function executeSubUnitBiddingMarket(
     const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
     const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
+    const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
     if (sale) {
-      supUp.finishedGoodsUnits = Math.max(0, initialUnits + targetProductionUnits - (supUp.salesUnits ?? 0) - sale.units);
-      supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * clearedPriceUSD;
+      setOutputInventory(supUp, subUnitId, Math.max(0, initialUnits + targetProductionUnits - contractSalesUnitsThisSubUnit - sale.units), clearedPriceUSD);
       supUp.cashChange = (supUp.cashChange ?? 0) + sale.amount;
       supUp.salesUnits = (supUp.salesUnits ?? 0) + sale.units;
       supUp.salesUSD = (supUp.salesUSD ?? 0) + sale.amount;
     } else {
-      supUp.finishedGoodsUnits = Math.max(0, initialUnits + targetProductionUnits - (supUp.salesUnits ?? 0));
-      supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * clearedPriceUSD;
+      setOutputInventory(supUp, subUnitId, Math.max(0, initialUnits + targetProductionUnits - contractSalesUnitsThisSubUnit), clearedPriceUSD);
     }
     supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + targetProductionUSD;
   });

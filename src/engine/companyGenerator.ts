@@ -567,7 +567,7 @@ export function generateInitialCompanies(): Company[] {
         cdsSpreadBps,
         sentiment: 0.0,
         inputSupplyConstraintFactor: 1.0,
-        finishedGoodsInventoryUSD: 0,
+        outputInventoryBySubUnit: {},
         inventoryCarryingCostRate: 0.02,
         recentFulfillmentEMA: 1.0,
         treasuryHoldings: [],
@@ -727,11 +727,6 @@ export function generateInitialCompanies(): Company[] {
       });
       if (maxLine) {
         c.primarySubUnitId = maxLine.subUnitId;
-        // finishedGoodsUnits is intentionally left unset here (every company starts with
-        // finishedGoodsInventoryUSD: 0 above) rather than hardcoding a flat starting unit
-        // count for a few specific sub-units regardless of company size — stage05/08 already
-        // derive units from finishedGoodsInventoryUSD / unitPriceUSD once production starts,
-        // consistent with every other sub-unit.
       }
     });
   });
@@ -854,7 +849,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     institutionalRole: null,
     sentiment: 0.0,
     inputSupplyConstraintFactor: 1.0,
-    finishedGoodsInventoryUSD: 0,
+    outputInventoryBySubUnit: {},
     inventoryCarryingCostRate: 0.02,
     recentFulfillmentEMA: 1.0,
     treasuryHoldings: [],

@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial,
 } from '../../../types';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUSD } from '../../../domain/company';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
@@ -64,8 +64,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let targetProductionUSD = 0;
     let productionCostUSD = 0;
     let costDriversUSD: CogsCostDrivers | undefined;
-    let carryingCostUSD = (comp.finishedGoodsInventoryUSD ?? 0) * (comp.inventoryCarryingCostRate ?? 0.02) / 52;
-    let newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) - carryingCostUSD);
+    // Carrying-cost decay applies per sub-unit — each line's own held inventory decays against
+    // its own value, rather than one shared scalar standing in for a multi-line company's
+    // entire output inventory (see domain/company.ts's outputInventoryBySubUnit).
+    const carryingCostRate = (comp.inventoryCarryingCostRate ?? 0.02) / 52;
+    let carryingCostUSD = 0;
+    const newOutputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = {};
+    Object.entries(comp.outputInventoryBySubUnit || {}).forEach(([su, inv]) => {
+      const costThisSubUnit = inv.valueUSD * carryingCostRate;
+      carryingCostUSD += costThisSubUnit;
+      newOutputInventoryBySubUnit[su] = { unitsHeld: inv.unitsHeld, valueUSD: Math.max(0, inv.valueUSD - costThisSubUnit) };
+    });
 
     const executionNoise = (Math.random() - 0.5) * 0.3;
     const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
@@ -177,8 +186,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const rels = region.supplyRelationships?.filter((r) => r.customerCompanyId === comp.id) || [];
       rels.forEach((rel) => {
         const supplier = prevActiveFirms.find(c => c.id === rel.supplierCompanyId);
-        if (supplier && (supplier.finishedGoodsInventoryUSD ?? 0) > supplier.annualRevenue * 0.15) {
-          const distress = (supplier.finishedGoodsInventoryUSD! / (supplier.annualRevenue * 0.15)) - 1;
+        if (!supplier) return;
+        // The relationship's own category — a supplier's OTHER lines being backed up isn't this
+        // customer's problem, only a glut in the specific good it actually buys from them.
+        const supplierInvUSD = getOutputInventoryUSD(supplier, rel.category);
+        if (supplierInvUSD > supplier.annualRevenue * 0.15) {
+          const distress = (supplierInvUSD / (supplier.annualRevenue * 0.15)) - 1;
           newInputSupplyConstraintFactor *= (1 - Math.min(0.2, distress * rel.relationshipStrength * 0.1));
         }
       });
@@ -271,14 +284,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       let unsoldThisWeekUSD = 0;
 
       if (industrialLine && industrialLine.revenueShare > 0) {
-        if (industrialLine.subUnitId === 'industrial_automation') {
+        const lineSubUnitId = industrialLine.subUnitId;
+        if (lineSubUnitId === 'industrial_automation') {
           const update = companyUpdates[comp.ticker];
           const salesUSD = update?.salesUSD ?? 0;
           const currentIAUnitPrice = (reg.categoryDemand['industrial_automation'] as any)?.unitPriceUSD ?? 80000.0;
           const priceSignal = (currentIAUnitPrice / 80000.0) - 1.0;
           const productionResponseFactor = (1.0 + priceSignal * 1.5);
           const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-          const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
+          const currentInvUSD = getOutputInventoryUSD(comp, lineSubUnitId);
           // Smooth, not a hard on/off switch — see the same fix (and its rationale) in
           // 05-unit-bidding.ts's supplier-offer construction.
           const invToCapRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
@@ -288,16 +302,21 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
 
           unsoldThisWeekUSD = Math.max(0, targetProductionUSD - salesUSD);
-          newFinishedGoodsInventoryUSD = update?.finishedGoodsInventoryUSD ?? 0;
+          // Stage 05 already settled this sub-unit's real production/sales this week (it runs
+          // before this stage) — defer to its per-sub-unit figure, falling back to this
+          // company's own already-decayed holding only if stage 05 had nothing for this line.
+          newOutputInventoryBySubUnit[lineSubUnitId] = update?.outputInventoryBySubUnit?.[lineSubUnitId]
+            ?? newOutputInventoryBySubUnit[lineSubUnitId]
+            ?? { unitsHeld: 0, valueUSD: 0 };
           newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
         } else {
           const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-          const invToCapRatioOther = (comp.finishedGoodsInventoryUSD ?? 0) / Math.max(1, warehouseCapacityUSD);
+          const invToCapRatioOther = getOutputInventoryUSD(comp, lineSubUnitId) / Math.max(1, warehouseCapacityUSD);
           const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (invToCapRatioOther - 1.0) * 0.7));
 
-          const categoryFulfillmentRatio = (reg.categoryDemand[industrialLine.subUnitId] as any)?._fulfillmentRatio ?? 1;
+          const categoryFulfillmentRatio = (reg.categoryDemand[lineSubUnitId] as any)?._fulfillmentRatio ?? 1;
           newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + categoryFulfillmentRatio * 0.15;
-          const supplierClearedPrice = (reg.categoryDemand[industrialLine.subUnitId] as any)?.clearedInputPriceIndex ?? 1.0;
+          const supplierClearedPrice = (reg.categoryDemand[lineSubUnitId] as any)?.clearedInputPriceIndex ?? 1.0;
           const priceSignal = supplierClearedPrice - 1.0;
           const productionResponseFactor = (1.0 + priceSignal * 1.5);
 
@@ -307,7 +326,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           const soldThisWeekUSD = targetProductionUSD * categoryFulfillmentRatio;
           unsoldThisWeekUSD = targetProductionUSD - soldThisWeekUSD;
 
-          newFinishedGoodsInventoryUSD = Math.max(0, (comp.finishedGoodsInventoryUSD ?? 0) + unsoldThisWeekUSD - carryingCostUSD);
+          // The top-of-function pass already applied this sub-unit's own carrying-cost decay —
+          // just add this week's unsold production on top of that, not subtract it again.
+          const decayedValueUSD = newOutputInventoryBySubUnit[lineSubUnitId]?.valueUSD ?? 0;
+          const newValueUSD = Math.max(0, decayedValueUSD + unsoldThisWeekUSD);
+          const unitPriceUSD = (reg.categoryDemand[lineSubUnitId] as any)?.unitPriceUSD ?? 80000.0;
+          newOutputInventoryBySubUnit[lineSubUnitId] = { unitsHeld: newValueUSD / unitPriceUSD, valueUSD: newValueUSD };
         }
       }
 
@@ -805,7 +829,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newCash,
       newTotalDebt,
       currentTreasuryHoldingsUSD,
-      newFinishedGoodsInventoryUSD,
+      Object.values(newOutputInventoryBySubUnit).reduce((s, inv) => s + inv.valueUSD, 0),
       newMaintenanceCapex,
       newGrowthCapex,
       newOasBps,
@@ -872,10 +896,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       occupationMixDrift: newOccupationMixDrift,
       inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
       _targetProductionUSD: (companyUpdates[comp.ticker]?._targetProductionUSD ?? targetProductionUSD),
-      finishedGoodsInventoryUSD: Number(newFinishedGoodsInventoryUSD.toFixed(2)),
-      finishedGoodsUnits: (update && update.finishedGoodsUnits !== undefined)
-        ? update.finishedGoodsUnits
-        : (comp.finishedGoodsUnits ?? ((comp.finishedGoodsInventoryUSD ?? 0) / ((reg.categoryDemand['industrial_automation'] as any)?.unitPriceUSD ?? 80000.0))),
+      // Start from this company's carrying-cost-decayed baseline (every sub-unit it held
+      // inventory for), then overlay whatever stage 05 settled fresh this week for the
+      // sub-units it actually processed (it runs first and has the complete, real
+      // production/sales picture for those lines).
+      outputInventoryBySubUnit: { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) },
       inventoryCarryingCostRate: comp.inventoryCarryingCostRate ?? 0.02,
       recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,

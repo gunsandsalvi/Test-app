@@ -172,7 +172,6 @@ export interface Company {
   annualRevenue: number;
   productLines?: ProductLine[];
   primarySubUnitId?: string;
-  finishedGoodsUnits?: number;
   employeeCount: number;
   previousEmployeeCount: number;
   baselineEmployeeCount: number;
@@ -242,7 +241,12 @@ export interface Company {
   // Sentiment & Production
   sentiment: number;
   inputSupplyConstraintFactor: number;
-  finishedGoodsInventoryUSD: number;
+  // Output (finished-goods) inventory, keyed by sub-unit — a company producing multiple
+  // product lines (e.g. semiconductors + consumer_devices + enterprise_software at once) holds
+  // a genuinely separate inventory for each; a single shared scalar here was silently
+  // overwritten by whichever line's weekly bidding pass ran last. See getOutputInventoryUSD /
+  // getOutputInventoryUnits below for the aggregate reads most call sites actually want.
+  outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }>;
   inventoryCarryingCostRate: number;
   recentFulfillmentEMA: number;
   _targetProductionUSD?: number;
@@ -251,3 +255,17 @@ export interface Company {
   demandShockLagBuffer?: number[];
 }
 export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && !c.mergerAcquired; }
+
+export function getOutputInventoryUSD(comp: Company, subUnitId?: string): number {
+  const inv = comp.outputInventoryBySubUnit;
+  if (!inv) return 0;
+  if (subUnitId) return inv[subUnitId]?.valueUSD ?? 0;
+  return Object.values(inv).reduce((s, entry) => s + entry.valueUSD, 0);
+}
+
+export function getOutputInventoryUnits(comp: Company, subUnitId?: string): number {
+  const inv = comp.outputInventoryBySubUnit;
+  if (!inv) return 0;
+  if (subUnitId) return inv[subUnitId]?.unitsHeld ?? 0;
+  return Object.values(inv).reduce((s, entry) => s + entry.unitsHeld, 0);
+}

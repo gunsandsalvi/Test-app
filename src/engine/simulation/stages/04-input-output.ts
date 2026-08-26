@@ -9,6 +9,7 @@
 import { GameState, RegionId, Industry } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
+import { getOutputInventoryUSD } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 
 export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -40,7 +41,11 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
         let weeklyProduction = supplierFirms.reduce((s, c) => {
           const line = (c.productLines || []).find(l => l.subUnitId === inputCat);
           const warehouseCap = c.annualRevenue * 0.15;
-          const throttle = (c.finishedGoodsInventoryUSD ?? 0) > warehouseCap ? 0.3 : 1.0;
+          // Smooth, not a hard on/off switch — see the same fix (and its rationale) in
+          // 05-unit-bidding.ts's supplier-offer construction. Also scoped to this specific
+          // sub-unit's own inventory, not the company's whole (multi-line) inventory.
+          const invToCapRatio = getOutputInventoryUSD(c, inputCat) / Math.max(1, warehouseCap);
+          const throttle = Math.max(0.3, Math.min(1.0, 1.0 - (invToCapRatio - 1.0) * 0.7));
           const priceSignal = (supplier.clearedInputPriceIndex ?? 1.0) - 1.0;
           const responsiveFactor = (1.0 + priceSignal * 1.5);
           return s + (c.annualRevenue * industrialProductionRate / 52) * (line?.revenueShare ?? 0) * throttle * responsiveFactor;

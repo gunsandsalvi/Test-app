@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { GameState, Company } from '../../types';
+import { getOutputInventoryUSD } from '../../domain/company';
 import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
 import { priceCorporateBond, priceLeveragedLoan } from '../../engine/pricing';
@@ -352,12 +353,12 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     <span className="text-[var(--text-secondary)]">Finished Goods Inventory</span>
                     <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(latestFund.balanceSheet.finishedGoodsInventoryUSD, { compact: true })}</span>
                   </div>
-                  {(company.finishedGoodsUnits ?? 0) > 0 && (
-                    <div className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
-                      <span>· {Math.round(company.finishedGoodsUnits ?? 0).toLocaleString()} units on hand</span>
-                      <span className="font-[var(--font-numeric)]">{formatCurrency((latestFund.balanceSheet.finishedGoodsInventoryUSD) / Math.max(1, company.finishedGoodsUnits ?? 1), { compact: true })}/unit</span>
+                  {Object.entries(company.outputInventoryBySubUnit || {}).filter(([, inv]) => inv.unitsHeld > 0).map(([subUnitId, inv]) => (
+                    <div key={subUnitId} className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
+                      <span>· {Math.round(inv.unitsHeld).toLocaleString()} {subUnitId.replace(/_/g, ' ')} units</span>
+                      <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit</span>
                     </div>
-                  )}
+                  ))}
 
                   <div className="pl-3 space-y-0.5 border-b border-[var(--border-hairline)] pb-1.5 pt-1">
                     <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold">Property, Plant & Equipment roll-forward</div>
@@ -561,7 +562,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
           <>
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Finished Goods Inventory</span>
-              <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(company.finishedGoodsInventoryUSD ?? 0, { compact: true })}</span>
+              <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(getOutputInventoryUSD(company), { compact: true })}</span>
             </div>
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Input Supply Constraint</span>
