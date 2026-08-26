@@ -422,5 +422,67 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   to this real underlying data (rather than the statistical formulas they were built from) is
   also not yet done.
 
+- **Phase 3 (demand-side) + auction cash-rationing fix + stage04 pooling fix (landed).**
+  Three related fixes, verified together:
+  1. **Phase 3 demand-side landed.** The private/non-public sector now also bids as a real
+     buyer in `05-unit-bidding.ts`: every segment bids for capital-goods categories from its own
+     real `capexUSD` (same mechanism as public companies), and the MANUFACTURING segment bids
+     for its real recipe inputs (upstream_extraction/specialty_metals), closing the loop with its
+     existing supply-side role. Other segment types' generic-category demand is deliberately left
+     unmodeled rather than guessed.
+  2. **Root-caused and fixed the task #18/#49 auction-fairness residual's proximate mechanism.**
+     `cashModifier` was discounting a cash-strapped buyer's bid PRICE by up to 15%. Under
+     pro-rata clearing, any bid either clears in full alongside everyone else or misses the
+     clearing price entirely — there is no partial credit for being close — so a temporary cash
+     dip could permanently price a company out of its own input auction with no way back (low
+     cash -> lower price -> shut out -> can't produce -> less cash -> repeat). Fixed: cash-
+     constrained buyers now scale back QUANTITY ordered (real capital rationing) instead of
+     underpricing themselves, so whatever they do bid for still clears at a normal price.
+  3. **Root-caused and fixed a deeper, pre-existing bug in `04-input-output.ts` this
+     investigation surfaced: a shared input category's supplier state was being clobbered.**
+     specialty_metals/upstream_extraction are needed by MULTIPLE demander industries at once
+     (Tech, Auto, Aerospace, Industrials for specialty_metals). The old code looped per demander
+     industry and, for each one, independently recomputed and OVERWROTE the shared supplier's
+     `inventoryLevelUSD`/`upstreamScarcityIndex` as if that industry were the only consumer that
+     week — so the persisted state each week reflected only whichever industry's pass ran last,
+     silently discarding every other industry's simultaneous draw on the same pool. Confirmed by
+     direct trace: specialty_metals inventory drained monotonically toward zero over ~45 weeks,
+     and every industry needing it collapsed in lockstep the moment it hit empty — dozens of
+     companies sharing the exact same product-line template hitting the identical revenue ratio
+     in the same week, confirmed via A/B test (`git stash`) to already exist at the last-committed
+     baseline, not something introduced this session. Fixed by pooling every demander industry's
+     bid against the ONE real supply figure before clearing (mirroring the pro-rata principle
+     already used in the real auction), and by combining a demander industry's OWN multiple input
+     needs correctly (MIN for fulfillment — a real bottleneck, can't ship missing either of two
+     needed inputs; SUM for cost pressure — each scarce input adds its own real cost) instead of
+     one silently overwriting the other.
+  All three verified via `tsc`, hygiene, and a 60-week revenue-ratio diagnostic; the mass
+  synchronized-cohort collapse pattern is gone (0 violations through week 32 in the post-fix run,
+  vs. onset at week ~30 pre-fix). **Not fully resolved — see next section.**
+
+- **Deeper root cause found, not yet fixed: base commodities have no real link to the actual
+  modeled commodities.** Investigating why specialty_metals' real supply never recovers (even
+  after the pooling fix above) found the true root: the codebase already has a full, real
+  commodities model (9 tradable instruments — `ENERGY_ALPHA/BETA/GAMMA`, `METAL_ALPHA/BETA/
+  GAMMA`, `AGRI_ALPHA/BETA/GAMMA` — with real spot/futures prices, a real supply/demand clearing
+  function `computeCommodityClearingRatio`, and dedicated producer companies seeded specifically
+  for them via `producedCommodityId`), and a `COMMODITY_CATEGORY_LINKAGE` table that already maps
+  each commodity to an industry category for DEMAND purposes. But `companyGenerator.ts` assigns a
+  company's real `productLines` (what it actually produces as an industry output) purely from its
+  `sector` string, completely blind to `producedCommodityId` — so the dedicated METAL_ALPHA/BETA/
+  GAMMA producer companies (seeded specifically to produce specialty_metals) get `sector:
+  'Industrials'`'s generic product-line template instead, which never includes `specialty_metals`
+  at all. Net effect: specialty_metals has ZERO real producing companies anywhere, guaranteed by
+  generation, independent of any auction/pooling mechanics — its stage04 supply can only ever
+  decay. (`upstream_extraction` survives only by coincidence, since Energy sector's generic
+  template happens to include it.) Even where supply exists, stage04 computes it from an invented
+  formula entirely disconnected from the real commodity's own price/clearing that the trading
+  desk already computes weekly — two parallel, unreconciled mechanisms for the same physical
+  resource. Proposed fix (pending scope confirmation before implementing): retire stage04's
+  invented supply proxy for these categories in favor of the real commodity's own clearing, and
+  fix company generation so a `producedCommodityId`-tagged company also gets the matching
+  industry `productLines` entry — unifying "the company you can trade" and "the company that
+  really supplies this industrial input" into the same named actor.
+
 Each phase will be built, verified (`tsc`, hygiene, targeted diagnostics, then the full
 invariants harness), and committed independently rather than as one large, unreviewable change.

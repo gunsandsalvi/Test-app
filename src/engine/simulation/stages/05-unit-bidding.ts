@@ -285,16 +285,76 @@ function executeSubUnitBiddingMarket(
 
     if (openBidUnits > 0.001) {
       const cashRatio = comp.cash / Math.max(1, comp.annualRevenue);
-      const cashModifier = cashRatio < 0.02 ? 0.85 : cashRatio > 0.15 ? 1.15 : 1.0;
-      const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashModifier;
+      // A cash-strapped buyer discounting its OWN bid price used to be the mechanism here —
+      // but under pro-rata clearing every in-the-money bid gets the same fill ratio regardless
+      // of how far above the clearing price it sits, so a discounted bid is either fully in the
+      // money like everyone else, or (once the clearing price rises past it) shut out entirely.
+      // Confirmed by direct A/B instrumentation (docs/ONE_DOLLAR_PROJECT.md, Phase 4 section):
+      // this produced a real, compounding death spiral with no recovery path — low cash -> lower
+      // bid price -> shut out -> can't get inputs -> less revenue -> less cash -> an even lower
+      // price next week. A capital-constrained real buyer instead orders LESS at a normal market
+      // price (real capital rationing), so whatever it does order actually clears — giving it a
+      // path back up as its cash position recovers, instead of a one-way ratchet toward zero.
+      const cashConstrainedQtyModifier = cashRatio < 0.02 ? 0.70 : 1.0;
+      const cashRichPricePremium = cashRatio > 0.15 ? 1.15 : 1.0;
+      const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashRichPricePremium;
 
       bids.push({
         companyId: comp.ticker,
-        quantityUnits: openBidUnits,
+        quantityUnits: openBidUnits * cashConstrainedQtyModifier,
         maxPriceUSD,
       });
     }
   });
+
+  // 1$ is 1$ Phase 3 (demand-side): the private sector spends real capex too — every segment
+  // bids for capital-goods categories from its own real capexUSD, the same mechanism already
+  // used for public companies, so a segment's capex dollars land on a real named supplier
+  // (a public company, or another segment's own supply offer above) instead of only ever being
+  // credited as an ambient revenue bump with no corresponding purchase anywhere in the auction.
+  if (isCapexSupplierCategory) {
+    (targetReg.privateSectorSegments || []).forEach(segment => {
+      const segCapexUSD = segment.capexUSD ?? 0;
+      if (segCapexUSD <= 0) return;
+      const demandUSD = (segCapexUSD / 52) * capexSupplierWeight!;
+      const demandUnits = demandUSD / currentUnitPrice;
+      if (demandUnits > 0.001) {
+        bids.push({
+          companyId: privateSegmentOfferId(segment.segmentType),
+          quantityUnits: demandUnits,
+          maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+        });
+      }
+    });
+  }
+
+  // 1$ is 1$ Phase 3 (demand-side): the MANUFACTURING segment is the private-sector stand-in
+  // for real industrial production — it already sells upstream_extraction/specialty_metals
+  // output and heavy_equipment/industrial_automation/commercial_fleet capacity (above) — so it
+  // also consumes the same literal recipe inputs a real IndustrialsMachinery company would,
+  // proportional to its own revenue, closing the loop on its supply-side role with a real
+  // purchase instead of leaving it a pure seller with no input demand of its own. (Other segment
+  // types — PROFESSIONAL_SERVICES, RETAIL_TRADE, CONSTRUCTION_REALESTATE, HEALTHCARE_SERVICES —
+  // aren't given a recipe-input demand here: which of these categories they'd plausibly consume
+  // isn't well-grounded in the existing data, so this is deliberately left for a future pass
+  // rather than guessed.)
+  if (isRecipeInputCategory) {
+    const manufacturingSegment = targetReg.privateSectorSegments?.find(s => s.segmentType === 'MANUFACTURING');
+    if (manufacturingSegment) {
+      const intensity = CATEGORY_INPUT_REQUIREMENTS['IndustrialsMachinery']?.[subUnitId];
+      if (intensity) {
+        const demandUSD = (manufacturingSegment.annualRevenueUSD / 52) * intensity;
+        const demandUnits = demandUSD / currentUnitPrice;
+        if (demandUnits > 0.001) {
+          bids.push({
+            companyId: privateSegmentOfferId('MANUFACTURING'),
+            quantityUnits: demandUnits,
+            maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+          });
+        }
+      }
+    }
+  }
 
   // Look up buyer mix for this subUnit
   const allSubUnits = Object.values(INDUSTRY_SUBUNITS).flat();
