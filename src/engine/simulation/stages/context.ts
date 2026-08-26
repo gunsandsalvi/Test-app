@@ -1,0 +1,138 @@
+/**
+ * Shared Weekly-Step Context
+ *
+ * advanceWeeklyStep (core.ts) is split into thirteen ordered stage functions, each named
+ * for the concern it owns (macro feedback, region evolution, demand, bidding, FX, company
+ * fundamentals, IPO/M&A, portfolio marking, etc). All thirteen read and write a single
+ * shared, mutable WeeklyStepContext instead of closing over a 2,900-line function's local
+ * variables — this is the explicit, typed equivalent of what the closure captured
+ * implicitly before the split, so every cross-stage dependency is visible at a glance
+ * instead of being an accident of variable scope.
+ */
+
+import {
+  GameState, Company, Region, Position, FxPair, Commodity, CompositeBenchmarkIndices,
+  InstitutionalEntity, NewsItem, RegionId,
+} from '../../../types';
+import { isActiveCompany, CreditRating } from '../../../domain/company';
+
+export interface WeeklyStepContext {
+  // Time bookkeeping
+  nextWeek: number;
+  currentWeekMod13: number;
+
+  // Cross-stage accumulators
+  companyUpdates: Record<string, any>;
+  prevActiveFirms: Company[];
+  recentIPOs: { ticker: string; name: string; category: string; week: number }[];
+  recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];
+  diagnosticLogs: any[];
+  newsItems: NewsItem[];
+  rateChanges: { region: RegionId; deltaBps: number }[];
+  regionEquityNetFlowUSD: Partial<Record<RegionId, number>>;
+  ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
+  earningsReportedThisTurn: any[];
+  defaultedTickers: string[];
+
+  // Main working state, threaded and reassigned stage to stage
+  updatedRegions: Record<RegionId, Region>;
+  updatedFxPairs: FxPair[];
+  updatedCompanies: Company[];
+  updatedInstitutionalEntities: InstitutionalEntity[];
+  updatedCommodities: Commodity[];
+  updatedCompositeIndices: CompositeBenchmarkIndices;
+  marketVolPremium: number;
+  workingPositions: Position[];
+
+  // Stage 01 (macro-feedback) outputs, read by stage 02
+  regionFloatingPrincipal: Record<RegionId, number>;
+  regionTrackedHealthSignal: Record<RegionId, number>;
+  regionPublicCompanyEmployment: Record<RegionId, number>;
+  avgMargin: number;
+  marginCompression: number;
+  recentDefaultsCount: number;
+  creditContagionBps: number;
+  systemicStressFactorGlobal: number;
+
+  // Stage 05/06 boundary outputs, read by stage 08/12
+  marketVolComponent: number;
+  getFxToUsd: (regionId: RegionId) => number;
+  regionCategoryExports: Record<RegionId, Record<string, number>>;
+
+  // Stage 11 output, read by stage 13
+  weeklyInterestIncomeUSD: number;
+  weeklyFinancingCostUSD: number;
+  weeklyRealizedCashUSD: number;
+  weeklyRealizedPnL: number;
+  totalRequiredMarginUSD: number;
+  maintenanceMarginUSD: number;
+  netDeltaUSD: number;
+  netGammaUSD: number;
+  netVegaUSD: number;
+  netDV01USD: number;
+  attributionCarry: number;
+  attributionMacroRates: number;
+  attributionCreditSpread: number;
+  attributionEquityDelta: number;
+  attributionVolTheta: number;
+  updatedPositions: Position[];
+}
+
+export function createInitialContext(state: GameState): WeeklyStepContext {
+  const nextWeek = state.currentWeek + 1;
+  return {
+    nextWeek,
+    currentWeekMod13: ((nextWeek - 1) % 13) + 1,
+
+    companyUpdates: {},
+    prevActiveFirms: state.companies.filter(isActiveCompany),
+    recentIPOs: [],
+    recentMergers: [],
+    diagnosticLogs: [],
+    newsItems: [],
+    rateChanges: [],
+    regionEquityNetFlowUSD: {},
+    ratingChanges: [],
+    earningsReportedThisTurn: [],
+    defaultedTickers: [],
+
+    updatedRegions: { ...state.regions },
+    updatedFxPairs: [...state.fxPairs],
+    updatedCompanies: [...state.companies],
+    updatedInstitutionalEntities: [...state.institutionalEntities],
+    updatedCommodities: [...state.commodities],
+    updatedCompositeIndices: { ...state.compositeIndices },
+    marketVolPremium: state.marketVolPremium || 0,
+    workingPositions: [...state.portfolio.positions],
+
+    regionFloatingPrincipal: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+    regionTrackedHealthSignal: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+    regionPublicCompanyEmployment: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+    avgMargin: 0,
+    marginCompression: 0,
+    recentDefaultsCount: 0,
+    creditContagionBps: 0,
+    systemicStressFactorGlobal: 0,
+
+    marketVolComponent: 0,
+    getFxToUsd: () => 1.0,
+    regionCategoryExports: { USA: {}, EUR: {}, UK: {}, JPN: {} },
+
+    weeklyInterestIncomeUSD: 0,
+    weeklyFinancingCostUSD: 0,
+    weeklyRealizedCashUSD: 0,
+    weeklyRealizedPnL: 0,
+    totalRequiredMarginUSD: 0,
+    maintenanceMarginUSD: 0,
+    netDeltaUSD: 0,
+    netGammaUSD: 0,
+    netVegaUSD: 0,
+    netDV01USD: 0,
+    attributionCarry: 0,
+    attributionMacroRates: 0,
+    attributionCreditSpread: 0,
+    attributionEquityDelta: 0,
+    attributionVolTheta: 0,
+    updatedPositions: [],
+  };
+}

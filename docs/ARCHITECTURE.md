@@ -2,7 +2,22 @@
 
 ## Simulation Engine (`src/engine/`)
 1. `simulation.ts` — Public entry point; re-exports `advanceWeeklyStep` and `createInitialGameState`.
-2. `simulation/core.ts` — The weekly simulation tick (`advanceWeeklyStep`): macro feedback, region evolution, category demand, sub-unit bidding markets, FX/commodity evolution, per-company fundamentals, IPO/M&A checks, sovereign debt issuance, portfolio mark-to-market, and turn-summary assembly, all in one file.
+2. `simulation/core.ts` — Thin orchestrator: builds a `WeeklyStepContext` (`stages/context.ts`) and runs the thirteen weekly-step stages below against it in order, returning the final `GameState` from the last stage.
+   - `simulation/stages/context.ts` — Defines `WeeklyStepContext`, the single mutable object every stage reads and writes, and `createInitialContext`, which seeds it from the incoming `GameState`. The stages share one context rather than each taking a narrow, minimal interface — this is the explicit, typed equivalent of what a single closure-based function used to capture implicitly, so every cross-stage dependency is visible instead of an accident of variable scope.
+   - `simulation/stages/shared-helpers.ts` — Pure helper functions used by two or more stages: expected-loss/rating-bucket/demand-premium credit math, occupation labor demand, holder-class ownership-share targets, and itemized-holdings attribution.
+   - `simulation/stages/01-macro-feedback.ts` — Cross-region macro feedback signals (credit contagion, systemic stress, floating-principal/health tracking) consumed by later stages.
+   - `simulation/stages/02-region-macro.ts` — Per-region macro evolution (`macro/evolution.ts`), equity/bond ownership-share drift, cross-border spillover.
+   - `simulation/stages/03-category-demand.ts` — C+I+G demand targets per industry sub-unit, smoothed toward target; quarterly supplier/customer relationship formation.
+   - `simulation/stages/04-input-output.ts` — Inter-industry input-cost clearing (`CATEGORY_INPUT_REQUIREMENTS`).
+   - `simulation/stages/05-unit-bidding.ts` — Per-sub-unit bidding markets that clear price from firm-level bids/offers.
+   - `simulation/stages/06-fx-and-trade.ts` — FX pair evolution and cross-border category trade flows.
+   - `simulation/stages/07-commodities.ts` — Commodity spot/futures curve evolution.
+   - `simulation/stages/08-company-fundamentals.ts` — The full per-company weekly update: revenue, margins, capex/debt funding, credit rating, bond/loan/equity pricing, earnings, buybacks. By far the largest stage.
+   - `simulation/stages/09-concentration-risk.ts` — Flags >40% supplier/customer concentration per company from active supply contracts.
+   - `simulation/stages/10-mergers.ts` — Quarterly M&A consolidation (cash/stock consideration, debt/product-line transfer, target wind-down).
+   - `simulation/stages/11-fiscal-and-sovereign-debt.ts` — Itemized bank/institutional holdings attribution, bottom-up GDP derivation, government deficit/debt-tranche issuance, and weekly news generation.
+   - `simulation/stages/12-portfolio-and-positions.ts` — Composite index recomputation and full portfolio mark-to-market (carry, financing, margin, greeks, P&L attribution) across every asset type.
+   - `simulation/stages/13-news-and-turn-summary.ts` — IPO checks (their original execution point — see the file's header for why it isn't adjacent to stage 10's merger logic), cash/NAV/margin settlement, and final turn-summary/`GameState` assembly.
 3. `simulation/initialization.ts` — Builds the initial `GameState` (`createInitialGameState`): regions, FX pairs, commodities, composite indices, companies, dealers, and the starting portfolio.
 4. `simulation/credit.ts` — `determineCreditRating`: maps leverage/interest-coverage to a letter rating.
 5. `simulation/ipo.ts` — `checkForIPO`: periodic per-region IPO issuance of new companies.
