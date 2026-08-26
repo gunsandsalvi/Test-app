@@ -4,7 +4,7 @@ import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
-import { computeOccupationDemand } from './pipeline';
+import { computeOccupationDemand } from './core';
 
 function attributeItemizedHoldingsLocal(
   sectorShareUSD: number,
@@ -177,7 +177,7 @@ export function createInitialGameState(): GameState {
 
     // Calibrate initial occupationLaborForceShare from actual week-1 demand across companies & private segments
     // with realistic occupational tightness differentials
-    const week1OccDemand = computeOccupationDemand(regionCompanies, reg.privateSectorSegments, regionId, reg.governmentEmployment);
+    const week1OccDemand = computeOccupationDemand(regionCompanies, reg.privateSectorSegments, regionId, reg.governmentEmployment) as Record<OccupationType, number>;
     const week1DemandTotal = Object.values(week1OccDemand).reduce((s, v) => s + v, 0);
     const slackMultipliers: Record<OccupationType, number> = {
       GENERAL: 1.12,

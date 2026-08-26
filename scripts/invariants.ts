@@ -1,5 +1,5 @@
 import { createInitialGameState } from '../src/engine/simulation/initialization';
-import { advanceWeeklyStep } from '../src/engine/simulation';
+import { advanceWeeklyStep } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
 
