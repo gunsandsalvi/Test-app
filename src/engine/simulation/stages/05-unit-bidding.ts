@@ -8,7 +8,7 @@
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract } from '../../../types';
-import { INDUSTRY_SUBUNITS, CORPORATE_DEMAND_INTENSITY } from '../../../domain/industry';
+import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 
@@ -112,7 +112,13 @@ function executeSubUnitBiddingMarket(
   const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
   const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
 
-  const customers = regionActiveFirms.filter(c => !(c.productLines || []).some(l => l.subUnitId === subUnitId) && (CORPORATE_DEMAND_INTENSITY[subUnitId] ?? 0) > 0);
+  // Real, complete corporate demand for every category (see 03-category-demand.ts's
+  // corporateDemandUSD — the same buyerMix/aggregate-investment math that feeds the region's
+  // C+I+G identity, not a hand-picked per-category intensity list that only covered a handful
+  // of categories and let every other one starve for real corporate buyers).
+  const hasCorporateDemand = subUnitId === 'industrial_automation' || (demandState.corporateDemandUSD ?? 0) > 0;
+  const customers = regionActiveFirms.filter(c => !(c.productLines || []).some(l => l.subUnitId === subUnitId) && hasCorporateDemand);
+  const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
   // Suppliers submit unit offers
   suppliers.forEach(comp => {
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
@@ -165,7 +171,11 @@ function executeSubUnitBiddingMarket(
       const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
       demandUSD = (realCapexUSD / 52) * 0.35;
     } else {
-      demandUSD = (comp.annualRevenue * (CORPORATE_DEMAND_INTENSITY[subUnitId] ?? 0)) / 52;
+      // This company's real named bid is its revenue share of the category's real total
+      // corporate demand — every company that could plausibly buy this category gets a bid
+      // sized to its own scale, and the bids sum exactly to the real regional total.
+      const totalCorpDemandUSD = demandState.corporateDemandUSD ?? 0;
+      demandUSD = (totalCorpDemandUSD / 52) * (comp.annualRevenue / totalCustomerRevenueUSD);
     }
     const demandUnits = demandUSD / currentUnitPrice;
 

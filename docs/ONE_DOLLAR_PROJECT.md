@@ -160,6 +160,37 @@ today. That work is now **Phase 1b** (prerequisite, before Phase 1 is retried):
   scratchpad, or equivalent) after Phase 1b lands, *before* re-attempting Phase 1's swap, since
   this is exactly the failure mode that must not recur.
 
+## Phase 1b landed — with one more gap found: the 5 capex-supplier categories
+
+Implemented: `03-category-demand.ts` now stores a real `corporateDemandUSD` per category (the
+same buyerMix/aggregate-investment math that already feeds the region's C+I+G identity, just
+persisted instead of discarded after being summed into the blended target). `05-unit-bidding.ts`
+now distributes that real total as named corporate bids across every potential buyer company,
+weighted by revenue share — replacing the old 7-entry `CORPORATE_DEMAND_INTENSITY` list (removed
+entirely, along with the now-dead import in `domain/industry.ts`) with coverage for every
+sub-unit that has a real corporate buyer share.
+
+**Verifying this exposed a further, related gap**: the 5 capex-supplier categories
+(`heavy_equipment`, `industrial_automation`, `commercial_construction`, `enterprise_software`,
+`commercial_fleet`) are deliberately excluded from `corporateDemandUSD` (their real demand comes
+from `08b-capex-settlement.ts`'s capex routing instead, feeding `categoryDemand.demandLevelUSD`
+directly) — but that mechanism only feeds stage 08's *statistical* revenue formula
+(`categoryDrivenGrowth`), not stage 05's real auction. Confirmed by inspection: only
+`industrial_automation` has a real corporate bid in stage 05 today (a pre-existing special case
+using real per-company capex), and even that one appears to **double-count cash** — the buyer's
+capex already reduces its own cash via the ordinary capex-funding flow in stage 08
+(`weeklyFreeCashFlow -= newCapex/52`), and a *cleared* bid in stage 05 deducts the same dollars
+again via `custUp.cashChange -= paymentUSD`. This is a pre-existing bug, not introduced this
+session, but it means naively extending the same pattern to the other 4 categories (as originally
+planned for Phase 4) would spread the double-count rather than just add coverage.
+
+**Net effect**: Phase 1's revenue-source swap is now safe for every STANDARD_OPERATING company
+*except* those whose primary line is one of the 5 capex-supplier categories — those still have no
+trustworthy real settled-sales figure in stage 05. Phase 4 needs to both (a) add real bids for
+the remaining 4 capex-supplier categories and (b) fix the cash double-count (likely: capex-bid
+clearing should be the *only* place capex cash leaves the buyer, with the ordinary capex-funding
+flow in stage 08 no longer separately debiting it) before those companies can join the swap.
+
 ## Target UI (per company, an Inventory view)
 
 - **Output inventory**: units of finished product currently held, ready to sell, with current
@@ -200,6 +231,52 @@ today. That work is now **Phase 1b** (prerequisite, before Phase 1 is retried):
   uncovered category toward zero (confirmed: a 260-week diagnostic showed 28,323 violations,
   dozens of companies collapsing to <0.02x their starting revenue, when Phase 1 was attempted
   against the current sparse coverage). Must land and be verified before Phase 1 is retried.
+- **Phase 1c — Fix two pre-existing bugs uncovered while re-testing Phase 1b (landed).**
+  Re-running the 260-week revenue-ratio diagnostic against Phase 1b alone (no revenue-swap code)
+  produced an even worse collapse than the original Phase 1 attempt (67,753 violations, then
+  confirmed present at committed HEAD with no Phase 1a/1b changes at all — this was always a
+  latent, pre-existing bug, just not previously visible at this diagnostic's scale). Root cause
+  was **two separate, pre-existing bugs**, neither one specific to Phase 1b:
+  1. **Field collision**: `CategoryDemandState.clearedInputPriceIndex` was written by *both*
+     `04-input-output.ts` (a smoothed, self-referential upstream_extraction/specialty_metals
+     scarcity index, blended 0.85/0.15 week over week) *and* `05-unit-bidding.ts` (an unrelated,
+     unsmoothed same-week auction-clearing-price ratio, written unconditionally for *every*
+     category). Since stage 05 runs after stage 04, it silently clobbered stage 04's own
+     next-week self-reference for those two categories every week. Fixed by giving stage 04 its
+     own field, `upstreamScarcityIndex`, and leaving `clearedInputPriceIndex` exclusively owned
+     by stage 05.
+  2. **Wrong-field read, not a magnitude problem (the real cause of the mass collapse — first
+     attempted as a production-response clamp, which the user correctly rejected: "if something
+     explodes, the economic mechanic that should compensate isn't working, don't clamp it, fix
+     the real mechanism").** A sector breakdown of a failing run showed `inputSupplyConstraintFactor`
+     decayed to ~0.005 for every sector mapped through `CATEGORY_INPUT_REQUIREMENTS`
+     (Tech/Industrials/Consumer), while sectors outside that map (Energy, Banks) stayed exactly
+     1.0 — pointing straight at `08-company-fundamentals.ts`'s `relevantFulfillment` computation.
+     Instrumenting `04-input-output.ts` directly showed the true picture: for
+     upstream_extraction/specialty_metals, real supply vastly *exceeds* real demand (inventory
+     grows every week; `bidQuantity` is only ~1.6% of `totalAvailableSupply`) — there is no real
+     scarcity at all. But stage08 was reading `reg.categoryDemand['upstream_extraction']._fulfillmentRatio`
+     (the *input category's own* field, `quantityFulfilled / totalAvailableSupply` — a
+     supply-utilization stat that reads LOW exactly when supply is abundant relative to demand)
+     instead of `reg.categoryDemand[line.subUnitId]._fulfillmentRatio` (the company's *own
+     product line's* field, correctly set by stage04's `demanderEntry` loop as
+     `quantityFulfilled / bidQuantity` — "was my actual input demand met," which was ~1.0 the
+     whole time). Reading the supplier-side field as if it were the demand-side field meant every
+     company touching an input category had its revenue crushed by an abundant-supply signal
+     misread as a shortage — a real, structural fix (two lines changed: iterate the company's own
+     product lines and read `_fulfillmentRatio`/`inputCostPressure` off each line's own
+     `subUnitId`), not a clamp. The identical bug affected `inputPriceDrag`'s cost-pressure
+     lookup and was fixed the same way. Verified: 60-week and 150-week diagnostics with this fix
+     (no clamps anywhere) show `avgRatio` stable near 1.0 across the whole run, versus universal
+     collapse toward ~0.01x by week ~50 before the fix.
+  A residual, much smaller issue remains: a stable (not growing) subset of ~300 companies (out
+  of ~1,000+) still collapse toward the `Math.max(10, ...)` revenue floor by week ~130 in a
+  150-week run, while the rest of the economy stays healthy (avgRatio ~0.98). This looks like the
+  same phenomenon task #18 already tracked at a much smaller, pre-Phase-1b scale ("8 companies
+  over 260 weeks") — plausibly a genuine "loses every real bid to more competitive rivals, goes
+  to zero" case now surfacing for more companies because Phase 1b's revenue-share bid sizing
+  makes losing companies' disadvantage compound for real, rather than a bug in today's fixes.
+  Not yet root-caused; tracked as a continuation of task #18, not a blocker for landing Phase 1c/1b.
 - **Phase 1 — Reconcile the demand layers.** Make stage 03/04's outputs into *inputs* to stage
   05's bidding logic (price-setting, bid aggressiveness) instead of independent revenue/cost
   determinants. Verify no invariant regressions (revenue growth ceilings, GDP stability,

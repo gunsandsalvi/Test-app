@@ -56,6 +56,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     const allTargets: Record<string, number> = {};
     const smoothingByCategory: Record<string, number> = {};
+    const corporateDemandByCategory: Record<string, number> = {};
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
@@ -63,7 +64,9 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           // Left unchanged here — 08b-capex-settlement.ts (which runs after this week's real
           // capex figures exist) overwrites demandLevelUSD/demandGrowthAnnual/crowdingIntensity
           // for these categories directly from actual routed capex volume. This placeholder only
-          // matters on the very first tick before that stage has ever run.
+          // matters on the very first tick before that stage has ever run. No corporateDemandUSD
+          // here either, for the same reason — real capex bids are that stage's job, not
+          // stage05's generic corporate-bid distribution, to avoid double-counting.
           allTargets[su.unitId] = reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId]);
           smoothingByCategory[su.unitId] = 0.08;
           return;
@@ -72,6 +75,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
         const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
         allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;
+        corporateDemandByCategory[su.unitId] = suCorpDemand;
 
         if (su.buyerMix.HOUSEHOLD > 0.5) smoothingByCategory[su.unitId] = 0.1;
         else if (su.buyerMix.GOVERNMENT > 0.5) smoothingByCategory[su.unitId] = 0.05;
@@ -106,7 +110,9 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         inventoryLevelUSD: existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
         inputCostPressure: existingEntry?.inputCostPressure ?? 0,
         clearedInputPriceIndex: existingEntry?.clearedInputPriceIndex ?? 1.0,
+        upstreamScarcityIndex: existingEntry?.upstreamScarcityIndex ?? 1.0,
         lastWeekInventoryLevelUSD: existingEntry?.lastWeekInventoryLevelUSD ?? existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
+        corporateDemandUSD: corporateDemandByCategory[cat] ?? 0,
       };
     });
 

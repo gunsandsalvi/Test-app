@@ -81,12 +81,4 @@ export const INDUSTRY_SUBUNITS: Record<Industry, IndustrySubUnit[]> = {
   ],
 };
 
-export const CORPORATE_DEMAND_INTENSITY: Record<string, number> = {
-  industrial_automation: 0.10, // derived from (realCapexUSD/52)*0.35 equivalent
-  refined_products: 0.025,
-  food_beverage: 0.01,
-  pharmaceuticals: 0.008,
-  passenger_vehicles: 0.015,
-  semiconductors: 0.02,
-  defense_systems: 0.03, // estimate
-};
+

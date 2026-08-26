@@ -59,6 +59,7 @@ export function createInitialGameState(): GameState {
           inventoryLevelUSD: demandLevelUSD * 0.10,
           inputCostPressure: 0,
           clearedInputPriceIndex: 1.0,
+          upstreamScarcityIndex: 1.0,
           lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
           unitPriceUSD: deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, reg.totalPopulation, regionFirmCount),
         };

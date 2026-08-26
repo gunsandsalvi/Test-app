@@ -35,10 +35,21 @@ export interface CategoryDemandState {
   crowdingIntensity: number;
   inventoryLevelUSD: number;
   inputCostPressure: number;
-  clearedInputPriceIndex: number; // 1.0 = baseline; rises/falls with genuine scarcity/glut
+  clearedInputPriceIndex: number; // 1.0 = baseline; this category's own real auction clearing price vs its baseline unit price — set unconditionally every week by 05-unit-bidding.ts for every category
+  // 04-input-output.ts's OWN smoothed upstream scarcity/glut index for its input-category
+  // categories (upstream_extraction, specialty_metals) — kept separate from
+  // clearedInputPriceIndex above (used to collide: 05-unit-bidding.ts overwrote the very same
+  // field with an unrelated same-week auction price ratio for every category, corrupting
+  // stage04's own smoothed self-reference the following week).
+  upstreamScarcityIndex?: number;
   lastWeekInventoryLevelUSD: number; // explicit lag anchor — bidders always react to this, never same-week inventory
   unitPriceUSD?: number; // Per-region sub-unit price level
   smoothedUnitPriceUSD?: number; // Slow-moving average of unitPriceUSD suppliers use to set production (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price
+  // This category's real corporate-only demand share this week (see 03-category-demand.ts) —
+  // stage05-unit-bidding.ts distributes this as real named corporate bids across every
+  // potential buyer company, weighted by revenue share, instead of a hand-picked per-category
+  // intensity constant that only covered a handful of categories.
+  corporateDemandUSD?: number;
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
   totalUnitsSuppliedThisWeek?: number;
   totalUnitsDemandedThisWeek?: number;
