@@ -292,53 +292,80 @@ function executeSubUnitBiddingMarket(
   bids.sort((a, b) => b.maxPriceUSD - a.maxPriceUSD);
   offers.sort((a, b) => a.minPriceUSD - b.minPriceUSD);
 
+  // Discover the market-clearing price and total cleared quantity via the standard sequential
+  // double-auction walk — this correctly finds how much trades in aggregate and at what price.
+  // Crucially, this pass only DISCOVERS clearedPriceUSD/openUnitsCleared; it does not decide who
+  // gets how much (that used to double as the allocation mechanism too, via bidIdx/offerIdx
+  // walking through the sorted arrays and draining bid.quantityUnits/offer.quantityUnits in
+  // order) — a company sorted near the back of the queue could be shut out completely even when
+  // the region's aggregate supply and demand balanced exactly, confirmed by direct
+  // instrumentation (see docs/ONE_DOLLAR_PROJECT.md's Phase 2 section). Allocation below is
+  // pro-rata among everyone who clears at the market price instead, the way real double auctions
+  // and oversubscribed IPO allocations actually work.
   let clearedPriceUSD = currentUnitPrice;
   let openUnitsCleared = 0;
-  let bidIdx = 0;
-  let offerIdx = 0;
+  {
+    let bidIdx = 0;
+    let offerIdx = 0;
+    let remainingBidQty = bids.map(b => b.quantityUnits);
+    let remainingOfferQty = offers.map(o => o.quantityUnits);
+    let loopCounter = 0;
+    while (bidIdx < bids.length && offerIdx < offers.length) {
+      if (loopCounter++ > 10000) break;
+      const bid = bids[bidIdx];
+      const offer = offers[offerIdx];
+      if (bid.maxPriceUSD >= offer.minPriceUSD) {
+        const transactQty = Math.min(remainingBidQty[bidIdx], remainingOfferQty[offerIdx]);
+        if (!isFinite(transactQty) || isNaN(transactQty) || transactQty <= 0) {
+          bidIdx++;
+          offerIdx++;
+          continue;
+        }
+        clearedPriceUSD = (bid.maxPriceUSD + offer.minPriceUSD) / 2;
+        openUnitsCleared += transactQty;
+        remainingBidQty[bidIdx] -= transactQty;
+        remainingOfferQty[offerIdx] -= transactQty;
+        if (remainingBidQty[bidIdx] <= 0.0001) bidIdx++;
+        if (remainingOfferQty[offerIdx] <= 0.0001) offerIdx++;
+      } else {
+        break;
+      }
+    }
+  }
 
   const openSales: Record<string, { units: number; amount: number }> = {};
   const openPurchases: Record<string, { units: number; amount: number }> = {};
+  // Every bid/offer that would trade at all at the clearing price is "in the money"; everyone
+  // on the constrained side (whichever of demand/supply is smaller) gets the same fill ratio —
+  // no one is shut out just because of where their entry happened to land in a sorted array.
+  const inMoneyBids = bids.filter(b => b.maxPriceUSD >= clearedPriceUSD);
+  const inMoneyOffers = offers.filter(o => o.minPriceUSD <= clearedPriceUSD);
+  if (openUnitsCleared > 0.0001) {
+    const totalInMoneyBidQty = inMoneyBids.reduce((s, b) => s + b.quantityUnits, 0);
+    const totalInMoneyOfferQty = inMoneyOffers.reduce((s, o) => s + o.quantityUnits, 0);
+    const bidFillRatio = totalInMoneyBidQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyBidQty) : 0;
+    const offerFillRatio = totalInMoneyOfferQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyOfferQty) : 0;
 
-  let loopCounter = 0;
-  while (bidIdx < bids.length && offerIdx < offers.length) {
-    if (loopCounter++ > 10000) break;
-
-    const bid = bids[bidIdx];
-    const offer = offers[offerIdx];
-
-    if (bid.maxPriceUSD >= offer.minPriceUSD) {
-      let transactQty = Math.min(bid.quantityUnits, offer.quantityUnits);
-      if (!isFinite(transactQty) || isNaN(transactQty) || transactQty <= 0) {
-        bidIdx++;
-        offerIdx++;
-        continue;
-      }
-      const matchPrice = (bid.maxPriceUSD + offer.minPriceUSD) / 2;
-      clearedPriceUSD = matchPrice;
-      openUnitsCleared += transactQty;
-
+    inMoneyOffers.forEach(offer => {
+      const filledQty = offer.quantityUnits * offerFillRatio;
+      if (filledQty <= 0.0001) return;
       if (!openSales[offer.companyId]) openSales[offer.companyId] = { units: 0, amount: 0 };
-      openSales[offer.companyId].units += transactQty;
-      openSales[offer.companyId].amount += transactQty * matchPrice;
+      openSales[offer.companyId].units += filledQty;
+      openSales[offer.companyId].amount += filledQty * clearedPriceUSD;
+    });
 
+    inMoneyBids.forEach(bid => {
+      const filledQty = bid.quantityUnits * bidFillRatio;
+      if (filledQty <= 0.0001) return;
       if (bid.companyId) {
         if (!openPurchases[bid.companyId]) openPurchases[bid.companyId] = { units: 0, amount: 0 };
-        openPurchases[bid.companyId].units += transactQty;
-        openPurchases[bid.companyId].amount += transactQty * matchPrice;
+        openPurchases[bid.companyId].units += filledQty;
+        openPurchases[bid.companyId].amount += filledQty * clearedPriceUSD;
       }
       if (bid.isHouseholdAggregate && subUnitId === 'passenger_vehicles') {
-        targetReg.householdState.durableGoodsStockUnits = (targetReg.householdState.durableGoodsStockUnits ?? 0) + transactQty;
+        targetReg.householdState.durableGoodsStockUnits = (targetReg.householdState.durableGoodsStockUnits ?? 0) + filledQty;
       }
-
-      bid.quantityUnits -= transactQty;
-      offer.quantityUnits -= transactQty;
-
-      if (bid.quantityUnits <= 0.0001 || !isFinite(bid.quantityUnits)) bidIdx++;
-      if (offer.quantityUnits <= 0.0001 || !isFinite(offer.quantityUnits)) offerIdx++;
-    } else {
-      break;
-    }
+    });
   }
 
   // 3. Save matching results to updates
@@ -388,15 +415,24 @@ function executeSubUnitBiddingMarket(
     }
   });
 
-  // 4. Contract Formation (B2B corporate matching only)
-  const matchedBids = bids.filter(b => b.companyId && b.quantityUnits < 0.01);
-  const matchedOffers = offers.filter(o => o.quantityUnits < 0.01);
+  // 4. Contract Formation (B2B corporate matching only) — candidates are whoever actually
+  // transacted this week (in the money at the clearing price), not "fully drained" as before
+  // (that concept no longer applies now that allocation is pro-rata, not sequential). Pro-rata
+  // allocation means most of both sides typically clear at once, so both pools can be as large
+  // as the whole supplier/customer base — pairing every bid with every offer here (as the old
+  // "usually only a couple of fully-filled entries" code did) is O(n²) and was confirmed to
+  // make a week's simulation step hang. One random candidate partner per bid keeps the same
+  // "each active bidder has some chance of striking a new long-term deal this week" behavior
+  // at O(n) instead.
+  const matchedBids = inMoneyBids.filter(b => b.companyId);
+  const matchedOffers = inMoneyOffers;
 
   matchedBids.forEach(bid => {
-    matchedOffers.forEach(offer => {
-      if (Math.random() < 0.15 && bid.companyId) {
-        const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
-        const customerComp = customers.find(c => c.ticker === bid.companyId);
+    if (matchedOffers.length === 0) return;
+    const offer = matchedOffers[Math.floor(Math.random() * matchedOffers.length)];
+    if (Math.random() < 0.15 && bid.companyId) {
+      const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
+      const customerComp = customers.find(c => c.ticker === bid.companyId);
 
         if (supplierComp && customerComp) {
           const totalSuppliersRevenue = suppliers.reduce((s, c) => s + c.annualRevenue, 0);
@@ -443,8 +479,7 @@ function executeSubUnitBiddingMarket(
           };
           remainingContracts.push(newContract);
         }
-      }
-    });
+    }
   });
 
   targetReg.activeContracts = remainingContracts;
@@ -453,7 +488,10 @@ function executeSubUnitBiddingMarket(
   const activeSubUnitContracts = remainingContracts.filter(c => c.subUnitId === subUnitId);
   demandState.unitPriceUSD = Number(clearedPriceUSD.toFixed(2));
   demandState.totalUnitsSuppliedThisWeek = openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
-  demandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+  // bid.quantityUnits is each bid's original requested amount (no longer drained down during
+  // matching — allocation is pro-rata, computed separately above), so this sum already is the
+  // full open-market demand; adding openUnitsCleared again would double-count the filled share.
+  demandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
   demandState.clearedInputPriceIndex = Number((clearedPriceUSD / baseUnitPrice).toFixed(4));
 }
 

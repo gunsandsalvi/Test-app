@@ -332,6 +332,25 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   weekly auction and needs its own dedicated implementation + verification pass before this
   specific collapse pattern is resolved. Tracked as a new prerequisite, effectively continuing
   task #18's original finding at a now-more-exposed scale.
+- **Pro-rata auction allocation (landed).** Rewrote `executeSubUnitBiddingMarket`'s matching in
+  `05-unit-bidding.ts`: the sequential bid/offer walk now only *discovers* the clearing price and
+  total cleared quantity (unchanged), instead of also deciding allocation as a side effect of
+  which order bids/offers happened to sort into. Allocation is now pro-rata — every bid/offer
+  that clears at the market price gets the same fill ratio, computed from the ORIGINAL
+  (never-mutated) requested quantities, so a structurally lower-priced bidder can no longer be
+  shut out indefinitely just from queue position. Also fixed a real double-count this rewrite
+  exposed (`totalUnitsDemandedThisWeek` summed `bid.quantityUnits`, which used to mean
+  "unfilled leftover" but now means "original requested amount," so adding `openUnitsCleared` on
+  top would double-count the cleared share), and a real O(n²) performance regression in step 4's
+  contract-formation loop (pairing every in-the-money bid with every in-the-money offer — cheap
+  before, since only a couple of entries were ever "fully filled," but pro-rata routinely puts
+  most of both sides in the money at once; fixed by sampling one random partner per bid instead
+  of the full cross product, preserving the same "each bidder has some chance of a new long-term
+  deal" behavior at O(n)). Verified via a 60-week diagnostic: total violations dropped from 72
+  (by week 39, still climbing) to 20 (by week 57, then flat through week 60) — and critically the
+  pattern changed from monotonic decay to one that stabilizes and partially recovers (minRatio
+  0.008 at week 48 → ~0.02-0.03 for the remainder). Real improvement, not a full resolution — the
+  residual is still tracked under task #18/#49's continuation.
 - **Phase 3 — Private sector as a real participant.** Add private-segment bidders/offerers to
   stage 05's auction for every category they plausibly produce or consume; retire the residual
   credit mechanism in `08b-capex-settlement.ts`.
