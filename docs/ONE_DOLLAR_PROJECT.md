@@ -126,6 +126,40 @@ Two smaller, real bugs were fixed in the same pass and are worth keeping regardl
   textbook cobweb-cycle setup given how price-elastic production response is) — now react to a
   slow-moving price expectation instead.
 
+## Phase 1 attempt (reverted): stage 05's demand-side coverage is too sparse to be authoritative
+
+After Phase 1a landed, tried the core Phase 1 swap — replacing the statistical
+`targetAnnualRevenue` with stage 05's real settled sales (annualized), falling back to the
+statistical estimate only when real sales were exactly zero. Verified with a 260-week
+diagnostic tracking each company's revenue ratio vs. its starting value: **catastrophic
+failure** — 28,323 violations, with dozens of companies collapsing from hundreds of millions in
+revenue to literally hundreds of dollars (ratios of 0.00x-0.02x) by week 260. Reverted
+immediately (not committed).
+
+Root cause: stage 05's real auction has real corporate-buyer-side bids for only **7 categories**
+(`CORPORATE_DEMAND_INTENSITY` in `domain/industry.ts`: industrial_automation, refined_products,
+food_beverage, pharmaceuticals, passenger_vehicles, semiconductors, defense_systems). Every
+other category that has real corporate demand in reality (e.g. `enterprise_software`, 90%
+corporate buyerMix) gets **no corporate bids at all** in stage 05 — only whatever thin
+household/government aggregate share it has (confirmed by instrumentation:
+`enterprise_software` cleared with a single bid, the government aggregate, most weeks). Making
+stage 05 authoritative for revenue while its demand side is this incomplete starves any company
+in an uncovered category down toward zero over time, since the "real" number it's smoothing
+toward is chronically near-zero for reasons that have nothing to do with the company's actual
+health.
+
+**This reorders the plan.** Phase 1's revenue-source swap cannot safely proceed until stage 05's
+corporate demand-side coverage is complete — every sub-unit with `buyerMix.CORPORATE > 0` needs
+a real corporate bid, not just the 7 categories `CORPORATE_DEMAND_INTENSITY` happens to cover
+today. That work is now **Phase 1b** (prerequisite, before Phase 1 is retried):
+- Generalize `CORPORATE_DEMAND_INTENSITY` (or replace it) so every sub-unit's real corporate
+  demand is represented as real bids in stage 05, sized consistently with what stage 03's
+  aggregate corporate demand share (`I`, or the relevant slice of it) already implies for that
+  category — not a hand-picked list of 7.
+- Re-run the 260-week revenue-ratio diagnostic (`diag-revenue-growth-ceiling.ts` in the
+  scratchpad, or equivalent) after Phase 1b lands, *before* re-attempting Phase 1's swap, since
+  this is exactly the failure mode that must not recur.
+
 ## Target UI (per company, an Inventory view)
 
 - **Output inventory**: units of finished product currently held, ready to sell, with current
@@ -158,6 +192,14 @@ Two smaller, real bugs were fixed in the same pass and are worth keeping regardl
   (supplier distress checks), company generation/seeding, merger consolidation, and any UI reading
   these fields. Must land and be verified before Phase 1's revenue-source swap, since that swap
   would otherwise adopt a corrupted signal.
+- **Phase 1b — Complete stage 05's corporate demand-side coverage (new prerequisite, found
+  while attempting Phase 1).** Generalize `CORPORATE_DEMAND_INTENSITY` (7 categories today) so
+  every sub-unit with `buyerMix.CORPORATE > 0` gets real corporate bids in stage 05's auction,
+  sized consistently with what stage 03's aggregate corporate demand already implies for that
+  category. Without this, making stage 05 authoritative for revenue starves any company in an
+  uncovered category toward zero (confirmed: a 260-week diagnostic showed 28,323 violations,
+  dozens of companies collapsing to <0.02x their starting revenue, when Phase 1 was attempted
+  against the current sparse coverage). Must land and be verified before Phase 1 is retried.
 - **Phase 1 — Reconcile the demand layers.** Make stage 03/04's outputs into *inputs* to stage
   05's bidding logic (price-setting, bid aggressiveness) instead of independent revenue/cost
   determinants. Verify no invariant regressions (revenue growth ceilings, GDP stability,
