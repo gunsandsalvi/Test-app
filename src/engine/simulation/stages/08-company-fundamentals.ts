@@ -283,26 +283,29 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const industrialLine = (comp.productLines || []).find(l => l.subUnitId === 'heavy_equipment' || l.subUnitId === 'industrial_automation' || l.subUnitId === 'industrial_chemicals');
       let unsoldThisWeekUSD = 0;
 
+      // 1$ is 1$ Phase 1: stage 05 already ran this week's real per-unit auction for every one
+      // of this company's product lines (it runs before this stage) — production, sales, and
+      // inventory (per sub-unit) are already fully reconciled there against real named buyers.
+      // Read that real, company-wide aggregate directly instead of only doing so for the
+      // industrial-goods special case: every company's revenue now feels the same real
+      // shortfall/surplus signal from the actual bid/offer market, not just three sub-units.
+      // (Previously the statistical revenue formula above was the sole authority for every
+      // non-industrial company, with stage05's real settled sales having no effect on revenue
+      // at all.) Recomputing an independent production estimate from a raw, unsmoothed price
+      // signal — rather than reading stage05's own smoothed-price-based figure — is what
+      // previously duplicated this model with a second, inconsistent one and caused a collapse;
+      // reading stage05's own figures directly keeps one authoritative production number.
+      const update = companyUpdates[comp.ticker];
+      const salesUSD = update?.salesUSD ?? 0;
+      targetProductionUSD = update?._targetProductionUSD ?? newRevenue / 52;
+      productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
+      unsoldThisWeekUSD = Math.max(0, targetProductionUSD - salesUSD);
+      newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
       if (industrialLine && industrialLine.revenueShare > 0) {
         const lineSubUnitId = industrialLine.subUnitId;
-        const update = companyUpdates[comp.ticker];
-        // Stage 05 already ran this week's real per-unit auction for this line — production,
-        // sales, and inventory are already fully reconciled there (smoothed price expectation,
-        // real settled cash sales, real inventory carry). Recomputing an independent production
-        // estimate here from a raw, unsmoothed price signal duplicated that model with a second,
-        // inconsistent one: the two would diverge (this branch reacting to one week's auction
-        // price noise while stage 05's own throttle already damped it), manufacturing "unsold"
-        // inventory out of that inconsistency rather than real oversupply, which crashed revenue
-        // and cascaded into every other category via stage03's shared capex/investment term.
-        // Reading stage 05's own figures directly keeps one authoritative production number.
-        const salesUSD = update?.salesUSD ?? 0;
-        targetProductionUSD = update?._targetProductionUSD ?? (newRevenue / 52) * industrialLine.revenueShare;
-        productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
-        unsoldThisWeekUSD = Math.max(0, targetProductionUSD - salesUSD);
         newOutputInventoryBySubUnit[lineSubUnitId] = update?.outputInventoryBySubUnit?.[lineSubUnitId]
           ?? newOutputInventoryBySubUnit[lineSubUnitId]
           ?? { unitsHeld: 0, valueUSD: 0 };
-        newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
       }
 
       const revenueAdjustmentForUnsold = -unsoldThisWeekUSD * 0.5;

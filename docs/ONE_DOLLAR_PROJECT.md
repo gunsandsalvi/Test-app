@@ -277,10 +277,20 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   to zero" case now surfacing for more companies because Phase 1b's revenue-share bid sizing
   makes losing companies' disadvantage compound for real, rather than a bug in today's fixes.
   Not yet root-caused; tracked as a continuation of task #18, not a blocker for landing Phase 1c/1b.
-- **Phase 1 — Reconcile the demand layers.** Make stage 03/04's outputs into *inputs* to stage
-  05's bidding logic (price-setting, bid aggressiveness) instead of independent revenue/cost
-  determinants. Verify no invariant regressions (revenue growth ceilings, GDP stability,
-  ownership convergence) — this alone is a meaningful, isolated, testable step.
+- **Phase 1 — Reconcile the demand layers (landed).** Household/government aggregate demand
+  already fed stage 05's bidding as real bids (pre-existing); Phase 1b did the same for corporate
+  demand. What remained was the revenue side: every non-institutional company's revenue was
+  still purely a statistical formula (`targetAnnualRevenue`, driven by category growth rates),
+  with stage 05's real settled sales having zero effect except for the three industrial-goods
+  lines' `unsoldThisWeekUSD` penalty. Generalized that same, already-safe mechanism to every
+  company: `08-company-fundamentals.ts` now reads stage 05's real, company-wide aggregate
+  `_targetProductionUSD`/`salesUSD` (summed across every product line the company actually
+  auctioned this week) unconditionally, and every company's revenue absorbs a real penalty when
+  its real settled sales fall short of that real target — not a full override of the statistical
+  anchor (which is what caused the two earlier catastrophic collapses before Phase 1b/1c's fixes
+  landed), but a genuine, direct feedback from the real bid/offer market into every company's
+  revenue. Verified via a 60-week diagnostic (0 violations, avgRatio tracking the same healthy
+  dip-and-recover pattern seen in the pre-Phase-1 baseline).
 - **Phase 2 — Input inventory + literal recipes.** Add per-company (and per-private-segment)
   input inventory tracking; replace `CATEGORY_INPUT_REQUIREMENTS` with literal unit recipes;
   wire production to draw down input inventory and add to output inventory.
