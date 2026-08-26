@@ -1,6 +1,13 @@
-import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
+import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, BASE_ANNUAL_WAGE_USD, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData } from '../../types';
+import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, PrivateSectorSegment, PrivateSegmentType, GovDebtTranche } from '../../types';
+import { generate52WeekHistory } from './utils';
+import { INITIAL_WEATHER } from './weather';
+import { getRegionPopulation, getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
+import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
+import { deriveSubUnitUnitPrice, TARGET_FIRMS_PER_REGION } from '../bootstrap/category-demand';
+import { GENERATED_COMMODITIES, GENERATED_FX_PAIR_LEGS, getInitialFxRate, getCommodityBaseSpotPrice } from '../bootstrap/commodities-and-fx';
+import { getRegionYieldCurveParams, getRegionNeutralRate, getRegionInitialPolicyRate, getRegionProductivityGrowth, INFLATION_TARGET } from '../bootstrap/yield-curves';
 
 export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): Record<WealthTier, WealthTierData> {
   const inc = estimatedHouseholdIncomeUSD;
@@ -41,16 +48,23 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
   };
 }
 
-export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncomeUSD: number): HousingMarket {
-  const basePrice = regionId === 'USA' ? 420000 : regionId === 'EUR' ? 320000 : regionId === 'UK' ? 350000 : 280000;
-  const ownershipRate = regionId === 'USA' ? 0.65 : regionId === 'EUR' ? 0.60 : regionId === 'UK' ? 0.64 : 0.58;
+// Structural house-price-to-income and household-size coefficients, applied to the region's
+// own generated income primitive — replacing the previous per-region literal base prices.
+const AVG_HOUSEHOLD_SIZE = 2.5;
+const HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE = 4.2;
+const HOME_OWNERSHIP_RATE = 0.62;
+
+export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncomeUSD: number, population: number): HousingMarket {
+  const households = Math.max(1, population / AVG_HOUSEHOLD_SIZE);
+  const perHouseholdIncome = estimatedHouseholdIncomeUSD / households;
+  const basePrice = Number((perHouseholdIncome * HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE).toFixed(0));
   return {
     regionId,
     medianHomePriceUSD: basePrice,
     baselineHomePriceUSD: basePrice,
     priceIndex: 1.0,
     historicalPrices: Array(52).fill(basePrice),
-    ownershipRatePct: ownershipRate,
+    ownershipRatePct: HOME_OWNERSHIP_RATE,
     mortgageOriginationVolumeUSD: estimatedHouseholdIncomeUSD * 0.05,
   };
 }
@@ -63,49 +77,13 @@ export function createLifeCycleDistribution(): Record<LifeCycleStage, LifeCycleS
     RETIRED: { shareOfPopulation: 0.20, savingsRate: -0.05, consumptionMultiplier: 0.75 },
   };
 }
-import { generate52WeekHistory } from './utils';
-import { INITIAL_WEATHER } from './weather';
-
-export function deriveSubUnitPrice(subUnitId: string, inflation: number, gdpGrowth: number): number {
-  const basePrices: Record<string, number> = {
-    upstream_extraction: 75.0,
-    refined_products: 3.5,
-    industrial_chemicals: 120.0,
-    household_chemicals: 15.0,
-    agricultural_chemicals: 45.0,
-    specialty_metals: 1500.0,
-    heavy_equipment: 250000.0,
-    industrial_automation: 80000.0,
-    defense_systems: 5000000.0,
-    commercial_aerospace: 12000000.0,
-    passenger_vehicles: 35000.0,
-    commercial_fleet: 90000.0,
-    semiconductors: 25.0,
-    consumer_devices: 800.0,
-    enterprise_software: 5000.0,
-    consumer_software: 100.0,
-    network_infrastructure: 45000.0,
-    pharmaceuticals: 50.0,
-    medtech_devices: 15000.0,
-    food_beverage: 10.0,
-    household_essentials: 12.0,
-    apparel_retail: 40.0,
-    home_furnishings: 200.0,
-    luxury_goods: 2500.0,
-    media_content: 15.0,
-    residential_construction: 350000.0,
-    commercial_construction: 2500000.0,
-  };
-  const base = basePrices[subUnitId] ?? 100.0;
-  const multiplier = 1.0 + (inflation * 0.5) + (gdpGrowth * 0.3);
-  return Number((base * Math.max(0.2, multiplier)).toFixed(2));
-}
 
 export function createInitialCategoryDemand(
-  inflation: number,
   gdpGrowth: number,
   estimatedHouseholdIncome: number,
-  estimatedNominalGdp: number
+  estimatedNominalGdp: number,
+  population: number,
+  firmCount: number
 ): Record<string, any> {
   const C = estimatedHouseholdIncome * 0.94;
   const G = estimatedNominalGdp * 0.35;
@@ -126,12 +104,11 @@ export function createInitialCategoryDemand(
   const cd: Record<string, any> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
-      const unitPriceUSD = deriveSubUnitPrice(su.unitId, inflation, gdpGrowth);
-      
       const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
       const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
       const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
       const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
+      const unitPriceUSD = deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, population, firmCount);
 
       cd[su.unitId] = {
         demandLevelUSD,
@@ -159,827 +136,347 @@ function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDeb
   ];
 }
 
-export function getInitialRegions(): Record<RegionId, Region> {
-  const usaParams: NelsonSiegelParams = { beta0: 0.044, beta1: -0.004, beta2: 0.010, lambda: 1.8 };
-  const ukParams: NelsonSiegelParams = { beta0: 0.046, beta1: -0.005, beta2: 0.012, lambda: 1.9 };
-  const jpnParams: NelsonSiegelParams = { beta0: 0.012, beta1: -0.010, beta2: 0.006, lambda: 2.5 };
-  const eurParams: NelsonSiegelParams = { beta0: 0.030, beta1: -0.003, beta2: 0.008, lambda: 2.0 };
+// Structural region identifiers (currency/central-bank labels), not numeric data.
+const REGION_IDENTITY: Record<RegionId, { name: string; currency: string; symbol: string; centralBank: string; sovereignRating: Region['sovereignRating'] }> = {
+  USA: { name: 'United States', currency: 'USD', symbol: '$', centralBank: 'Federal Reserve', sovereignRating: 'AA' },
+  UK: { name: 'United Kingdom', currency: 'GBP', symbol: '£', centralBank: 'Bank of England', sovereignRating: 'AA' },
+  JPN: { name: 'Japan', currency: 'JPY', symbol: '¥', centralBank: 'Bank of Japan', sovereignRating: 'A' },
+  EUR: { name: 'Eurozone', currency: 'EUR', symbol: '€', centralBank: 'European Central Bank', sovereignRating: 'AAA' },
+};
 
-  const usaZeros = calculateTenorZeroRates(usaParams);
-  const ukZeros = calculateTenorZeroRates(ukParams);
-  const jpnZeros = calculateTenorZeroRates(jpnParams);
-  const eurZeros = calculateTenorZeroRates(eurParams);
+// Structural fiscal/demographic/ownership coefficients shared across regions. These are
+// modeling ratios (out of the "no real-world data" scope, same category as sector demand
+// intensities elsewhere), not observed per-region statistics.
+const LABOR_FORCE_PARTICIPATION = 0.63;
+const NON_EMPLOYABLE_PCT = 0.36;
+const UNEMPLOYMENT_RATE = 0.045;
+const BIRTH_RATE_ANNUAL = 0.010;
+const DEATH_RATE_ANNUAL = 0.0095;
+const NET_MIGRATION_RATE_ANNUAL = 0.002;
+const EFFECTIVE_TAX_RATE = 0.31;
+const FISCAL_DEFICIT_PCT_GDP = 0.05;
+const DEBT_TO_GDP_PCT = 1.0;
+const GOV_EMPLOYMENT_SHARE_OF_POPULATION = 0.055;
 
-  const regions: Record<RegionId, any> = {
-    USA: {
-      id: 'USA',
-      name: 'United States',
-      categoryDemand: createInitialCategoryDemand(0.026, 0.022, 12_000_000_000_000, 19_500_000_000_000),
-      activeContracts: [],
-      currency: 'USD',
-      symbol: '$',
-      centralBank: 'Federal Reserve',
-      cycleRegime: 'Expansion',
-      laggedCorporateDemandBase: 0,
-      inversionWeeksCount: 0,
-      recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 12_000_000_000_000,
-      bankingSector: { businessLoanBookUSD: 800_000_000_000, consumerLoanBookUSD: 1_400_000_000_000, depositsUSD: 2_100_000_000_000, sovereignBondHoldingsUSD: 400_000_000_000, cashReservesUSD: 210_000_000_000, bankEquityUSD: 280_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.028, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0, centralBankReservesUSD: 1_200_000_000_000, moneySupplyM2USD: 0, itemizedHoldings: [] },
-      equityOwnership: {
-        bankShare: 0.03, institutionalShare: 0.42,
-        foreignShare: { USA: 0, EUR: 0.06, UK: 0.05, JPN: 0.04 },
-        centralBankShare: 0,
-      },
-      corpBondOwnership: {
-        bankShare: 0.28, institutionalShare: 0.45,
-        foreignShare: { USA: 0, EUR: 0.05, UK: 0.04, JPN: 0.03 },
-        centralBankShare: 0,
-      },
-      sovBondOwnership: {
-        bankShare: 0.22, institutionalShare: 0.30,
-        foreignShare: { USA: 0, EUR: 0.10, UK: 0.06, JPN: 0.08 },
-        centralBankShare: 0.15,
-      },
-      institutionalSector: {
-        corpBondHoldingsUSD: 0, sovBondHoldingsUSD: 0, equityHoldingsUSD: 0,
-        cashUSD: 180_000_000_000, sectorEquityUSD: 220_000_000_000, investmentIncomeMarginPct: 0.032,
-        itemizedHoldings: [],
-      },
-      centralBankBalanceSheet: 8.5e12,
-      balanceSheetStance: 0,
-      policyRate: 0.0450,
-      neutralRate: 0.0100, // r* = 1.00%
-      inflation: 0.0260,
-      coreInflation: 0.0240,
-      expectedInflation: 0.0240,
-      wagePushInflation: 0.012,
-      monetaryInflationPressure: 0.005,
-      targetInflation: 0.0200, // pi* = 2.00%
-      gdpGrowth: 0.0220,
-      potentialGdpGrowth: 0.0210,
-      nairu: 0.045,
-      weeksAboveNairu: 0,
-      unemploymentRate: 0.040,
-      wageGrowth: 0.0360,
-      tradeBalance: 0,
-      exportsUSD: 0,
-      importsUSD: 0,
-      currentAccountPctGdp: -0.030,
-      fxReservesUSD: 38_500_000_000,
-      structuralDeficitPctGdp: 0.062,
-      fiscalDeficitPctGdp: 0.062, // 6.2% of GDP (generates supply term premium)
-      debtToGdpPct: 1.210, // 121.0% gross debt to GDP
-      fiscalStanceScore: 0,
-      sovereignRating: 'AA',
-      laggedPolicyRateEMA: 0.0550,
-      laborForceParticipation: 0.63,
-      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
-      totalPopulation: 145_000_000,
-      birthRateAnnual: 0.011,
-      deathRateAnnual: 0.009,
-      netMigrationRateAnnual: 0.003,
-      nonEmployablePct: 0.35,
-      governmentEmployment: 9_000_000,
-      privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 10_650_000, annualRevenueUSD: 2_130_000_000_000, marginPct: 0.09 , debtUSD: 2_130_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 2_130_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 79_875_000_000, WHEAT: 79_875_000_000, CORN: 79_875_000_000, SOYBEANS: 79_875_000_000 } },
-        { segmentType: 'PROFESSIONAL_SERVICES', employment: 8_520_000, annualRevenueUSD: 1_700_000_000_000, marginPct: 0.14, debtUSD: 1_700_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_700_000_000_000 * 0.05 },
-        { segmentType: 'RETAIL_TRADE', employment: 12_780_000, annualRevenueUSD: 1_850_000_000_000, marginPct: 0.05 , debtUSD: 1_850_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_850_000_000_000 * 0.05 },
-        { segmentType: 'CONSTRUCTION_REALESTATE', employment: 6_390_000, annualRevenueUSD: 1_250_000_000_000, marginPct: 0.10 , debtUSD: 1_250_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_250_000_000_000 * 0.05 },
-        { segmentType: 'HEALTHCARE_SERVICES', employment: 4_260_000, annualRevenueUSD: 1_000_000_000_000, marginPct: 0.12, debtUSD: 1_000_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_000_000_000_000 * 0.05 },
-      ],
-      occupationPools: {
-        GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-      },
-      occupationLaborForceShare: {
-        GENERAL: 0.55,
-        SKILLED_TRADES: 0.15,
-        TECHNICAL_ENGINEERING: 0.12,
-        SPECIALIZED_PROFESSIONAL: 0.08,
-        MANAGERIAL_FINANCIAL: 0.10,
-      },
-      unemploymentRateBottomUp: 0.040,
-      estimatedNominalGdpUSD: 19_500_000_000_000,
-      derivedNominalGdpUSD: 19_500_000_000_000,
-      gdpGrowthBottomUp: 0,
-      smoothedWeeklyGrowthRate: 0,
-      lastWeekNominalGdpUSD: 19_500_000_000_000,
-      nominalGdpHistory: [],
-      consumptionComponentUSD: 0,
-      investmentComponentUSD: 0,
-      effectiveTaxRate: 0.30,
-      governmentRevenueUSD: 0,
-      governmentSpendingUSD: 0,
-      govDebtTranches: [
-        { id: 'USA-GOV-2Y-INIT', principalUSD: 6_900_000_000_000, couponRate: 0.042, originationWeek: -50, maturityWeek: 54, tenorAtIssuanceYears: 2 },
-        { id: 'USA-GOV-5Y-INIT', principalUSD: 6_900_000_000_000, couponRate: 0.044, originationWeek: -130, maturityWeek: 130, tenorAtIssuanceYears: 5 },
-        { id: 'USA-GOV-10Y-INIT', principalUSD: 5_750_000_000_000, couponRate: 0.045, originationWeek: -260, maturityWeek: 260, tenorAtIssuanceYears: 10 },
-        { id: 'USA-GOV-30Y-INIT', principalUSD: 3_450_000_000_000, couponRate: 0.048, originationWeek: -780, maturityWeek: 780, tenorAtIssuanceYears: 30 },
-      ],
-      debtToGdpPctBottomUp: 0,
-      householdState: {
-        consumerConfidence: 100,
-        creditTierBooks: generateCreditTierBooks(900_000_000_000, 1_600_000_000_000),
-        wageGrowth: 0.0360,
-        savingsRate: 0.055,
-        realConsumptionGrowth: 0.02,
-        householdDebtToIncomeRatio: 1.05,
-        stapleSpendShare: 0.35,
-        standardSpendShare: 0.50,
-        luxurySpendShare: 0.15,
-        depositsUSD: 8_000_000_000_000,
-        equityHoldingsUSD: 22_000_000_000_000,
-        mortgageDebtUSD: 11_000_000_000_000,
-        creditCardDebtUSD: 900_000_000_000,
-        otherConsumerLoanDebtUSD: 1_600_000_000_000,
-        netWorthUSD: 0,
-      },
-      dotPlot1Y: 0.0400,
-      dotPlot2Y: 0.0325,
-      historicalPolicyRates: generate52WeekHistory(0.0450, 0.008, 0.005),
-      historicalInflation: generate52WeekHistory(0.0260, 0.006, 0.005),
-      historicalCoreInflation: generate52WeekHistory(0.0240, 0.005, 0.005),
-      historicalGdpGrowth: generate52WeekHistory(0.0220, 0.010, -0.01),
-      historicalWageGrowth: generate52WeekHistory(0.0360, 0.006, 0.01),
-      historicalDebtToGdp: generate52WeekHistory(1.210, 0.004, 0.8),
-      weather: INITIAL_WEATHER.USA,
-      yieldCurveParams: usaParams,
-      zeroRates: usaZeros,
-      historicalZeroCurves: [{ week: 1, ...usaZeros }],
-    },
-    UK: {
-      id: 'UK',
-      name: 'United Kingdom',
-      categoryDemand: createInitialCategoryDemand(0.028, 0.018, 2_000_000_000_000, 3_200_000_000_000),
-      activeContracts: [],
-      currency: 'GBP',
-      symbol: '£',
-      centralBank: 'Bank of England',
-      cycleRegime: 'Expansion',
-      laggedCorporateDemandBase: 0,
-      inversionWeeksCount: 0,
-      recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 2_000_000_000_000,
-      bankingSector: { businessLoanBookUSD: 150_000_000_000, consumerLoanBookUSD: 260_000_000_000, depositsUSD: 400_000_000_000, sovereignBondHoldingsUSD: 80_000_000_000, cashReservesUSD: 40_000_000_000, bankEquityUSD: 55_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.025, loanLossProvisionRateAnnualPct: 0.008, creditConditionsIndex: 0, centralBankReservesUSD: 200_000_000_000, moneySupplyM2USD: 0, itemizedHoldings: [] },
-      equityOwnership: {
-        bankShare: 0.03, institutionalShare: 0.42,
-        foreignShare: { UK: 0, USA: 0.06, EUR: 0.05, JPN: 0.04 },
-        centralBankShare: 0,
-      },
-      corpBondOwnership: {
-        bankShare: 0.28, institutionalShare: 0.45,
-        foreignShare: { UK: 0, USA: 0.05, EUR: 0.04, JPN: 0.03 },
-        centralBankShare: 0,
-      },
-      sovBondOwnership: {
-        bankShare: 0.22, institutionalShare: 0.30,
-        foreignShare: { UK: 0, USA: 0.10, EUR: 0.06, JPN: 0.08 },
-        centralBankShare: 0.15,
-      },
-      institutionalSector: {
-        corpBondHoldingsUSD: 0, sovBondHoldingsUSD: 0, equityHoldingsUSD: 0,
-        cashUSD: 40_000_000_000, sectorEquityUSD: 50_000_000_000, investmentIncomeMarginPct: 0.030,
-        itemizedHoldings: [],
-      },
-      centralBankBalanceSheet: 1.2e12,
-      balanceSheetStance: 0,
-      policyRate: 0.0475,
-      neutralRate: 0.0075, // r* = 0.75%
-      inflation: 0.0280,
-      coreInflation: 0.0260,
-      expectedInflation: 0.0260,
-      wagePushInflation: 0.015,
-      monetaryInflationPressure: 0.006,
-      targetInflation: 0.0200, // pi* = 2.00%
-      gdpGrowth: 0.0130,
-      potentialGdpGrowth: 0.0150,
-      nairu: 0.050,
-      weeksAboveNairu: 0,
-      unemploymentRate: 0.042,
-      wageGrowth: 0.0420,
-      tradeBalance: 0,
-      exportsUSD: 0,
-      importsUSD: 0,
-      currentAccountPctGdp: -0.034,
-      fxReservesUSD: 185_200_000_000,
-      structuralDeficitPctGdp: 0.046,
-      fiscalDeficitPctGdp: 0.046,
-      debtToGdpPct: 0.975,
-      fiscalStanceScore: 0,
-      sovereignRating: 'AA',
-      laggedPolicyRateEMA: 0.0450,
-      laborForceParticipation: 0.65,
-      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
-      totalPopulation: 38_000_000,
-      birthRateAnnual: 0.010,
-      deathRateAnnual: 0.009,
-      netMigrationRateAnnual: 0.002,
-      nonEmployablePct: 0.36,
-      governmentEmployment: 2_800_000,
-      privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 2_025_000, annualRevenueUSD: 360_000_000_000, marginPct: 0.09 , debtUSD: 360_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 360_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 13_500_000_000, WHEAT: 13_500_000_000, CORN: 13_500_000_000, SOYBEANS: 13_500_000_000 } },
-        { segmentType: 'PROFESSIONAL_SERVICES', employment: 1_620_000, annualRevenueUSD: 300_000_000_000, marginPct: 0.14, debtUSD: 300_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 300_000_000_000 * 0.05 },
-        { segmentType: 'RETAIL_TRADE', employment: 2_430_000, annualRevenueUSD: 320_000_000_000, marginPct: 0.05 , debtUSD: 320_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 320_000_000_000 * 0.05 },
-        { segmentType: 'CONSTRUCTION_REALESTATE', employment: 1_215_000, annualRevenueUSD: 220_000_000_000, marginPct: 0.10 , debtUSD: 220_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 220_000_000_000 * 0.05 },
-        { segmentType: 'HEALTHCARE_SERVICES', employment: 810_000, annualRevenueUSD: 170_000_000_000, marginPct: 0.12, debtUSD: 170_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 170_000_000_000 * 0.05 },
-      ],
-      occupationPools: {
-        GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-      },
-      occupationLaborForceShare: {
-        GENERAL: 0.55,
-        SKILLED_TRADES: 0.15,
-        TECHNICAL_ENGINEERING: 0.12,
-        SPECIALIZED_PROFESSIONAL: 0.08,
-        MANAGERIAL_FINANCIAL: 0.10,
-      },
-      unemploymentRateBottomUp: 0.042,
-      estimatedNominalGdpUSD: 3_200_000_000_000,
-      derivedNominalGdpUSD: 3_200_000_000_000,
-      gdpGrowthBottomUp: 0,
-      smoothedWeeklyGrowthRate: 0,
-      lastWeekNominalGdpUSD: 3_200_000_000_000,
-      nominalGdpHistory: [],
-      consumptionComponentUSD: 0,
-      investmentComponentUSD: 0,
-      effectiveTaxRate: 0.32,
-      governmentRevenueUSD: 0,
-      governmentSpendingUSD: 0,
-      govDebtTranches: [
-        { id: 'UK-GOV-2Y-INIT', principalUSD: 936_000_000_000, couponRate: 0.045, originationWeek: -50, maturityWeek: 54, tenorAtIssuanceYears: 2 },
-        { id: 'UK-GOV-5Y-INIT', principalUSD: 936_000_000_000, couponRate: 0.047, originationWeek: -130, maturityWeek: 130, tenorAtIssuanceYears: 5 },
-        { id: 'UK-GOV-10Y-INIT', principalUSD: 780_000_000_000, couponRate: 0.048, originationWeek: -260, maturityWeek: 260, tenorAtIssuanceYears: 10 },
-        { id: 'UK-GOV-30Y-INIT', principalUSD: 468_000_000_000, couponRate: 0.050, originationWeek: -780, maturityWeek: 780, tenorAtIssuanceYears: 30 },
-      ],
-      debtToGdpPctBottomUp: 0,
-      householdState: {
-        consumerConfidence: 100,
-        creditTierBooks: generateCreditTierBooks(100_000_000_000, 180_000_000_000),
-        wageGrowth: 0.0420,
-        savingsRate: 0.060,
-        realConsumptionGrowth: 0.015,
-        householdDebtToIncomeRatio: 1.10,
-        stapleSpendShare: 0.35,
-        standardSpendShare: 0.50,
-        luxurySpendShare: 0.15,
-        depositsUSD: 900_000_000_000,
-        equityHoldingsUSD: 2_200_000_000_000,
-        mortgageDebtUSD: 1_200_000_000_000,
-        creditCardDebtUSD: 100_000_000_000,
-        otherConsumerLoanDebtUSD: 180_000_000_000,
-        netWorthUSD: 0,
-      },
-      dotPlot1Y: 0.0425,
-      dotPlot2Y: 0.0350,
-      historicalPolicyRates: generate52WeekHistory(0.0475, 0.008, 0.005),
-      historicalInflation: generate52WeekHistory(0.0280, 0.006, 0.005),
-      historicalCoreInflation: generate52WeekHistory(0.0260, 0.005, 0.005),
-      historicalGdpGrowth: generate52WeekHistory(0.0130, 0.010, -0.01),
-      historicalWageGrowth: generate52WeekHistory(0.0420, 0.006, 0.01),
-      historicalDebtToGdp: generate52WeekHistory(0.975, 0.004, 0.6),
-      weather: INITIAL_WEATHER.UK,
-      yieldCurveParams: ukParams,
-      zeroRates: ukZeros,
-      historicalZeroCurves: [{ week: 1, ...ukZeros }],
-    },    JPN: {
-      id: 'JPN',
-      name: 'Japan',
-      categoryDemand: createInitialCategoryDemand(0.015, 0.012, 3_500_000_000_000, 5_500_000_000_000),
-      activeContracts: [],
-      currency: 'JPY',
-      symbol: '¥',
-      centralBank: 'Bank of Japan',
-      cycleRegime: 'Expansion',
-      laggedCorporateDemandBase: 0,
-      inversionWeeksCount: 0,
-      recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 3_500_000_000_000,
-      bankingSector: { businessLoanBookUSD: 300_000_000_000, consumerLoanBookUSD: 420_000_000_000, depositsUSD: 900_000_000_000, sovereignBondHoldingsUSD: 260_000_000_000, cashReservesUSD: 90_000_000_000, bankEquityUSD: 90_000_000_000, bankCapitalRatio: 0.11, netInterestMarginPct: 0.012, loanLossProvisionRateAnnualPct: 0.004, creditConditionsIndex: 0, centralBankReservesUSD: 1_500_000_000_000, moneySupplyM2USD: 0, itemizedHoldings: [] },
-      equityOwnership: {
-        bankShare: 0.03, institutionalShare: 0.42,
-        foreignShare: { JPN: 0, USA: 0.06, EUR: 0.05, UK: 0.04 },
-        centralBankShare: 0,
-      },
-      corpBondOwnership: {
-        bankShare: 0.28, institutionalShare: 0.45,
-        foreignShare: { JPN: 0, USA: 0.05, EUR: 0.04, UK: 0.03 },
-        centralBankShare: 0,
-      },
-      sovBondOwnership: {
-        bankShare: 0.22, institutionalShare: 0.30,
-        foreignShare: { JPN: 0, USA: 0.10, EUR: 0.06, UK: 0.08 },
-        centralBankShare: 0.15,
-      },
-      institutionalSector: {
-        corpBondHoldingsUSD: 0, sovBondHoldingsUSD: 0, equityHoldingsUSD: 0,
-        cashUSD: 60_000_000_000, sectorEquityUSD: 140_000_000_000, investmentIncomeMarginPct: 0.018,
-        itemizedHoldings: [],
-      },
-      centralBankBalanceSheet: 4.8e12,
-      balanceSheetStance: 0,
-      policyRate: 0.0025,
-      neutralRate: -0.0025, // r* = -0.25%
-      inflation: 0.0180,
-      coreInflation: 0.0160,
-      expectedInflation: 0.0160,
-      wagePushInflation: 0.005,
-      monetaryInflationPressure: 0.002,
-      targetInflation: 0.0200, // pi* = 2.00%
-      gdpGrowth: 0.0100,
-      potentialGdpGrowth: 0.0080,
-      nairu: 0.028,
-      weeksAboveNairu: 0,
-      unemploymentRate: 0.024,
-      wageGrowth: 0.0250,
-      tradeBalance: 0,
-      exportsUSD: 0,
-      importsUSD: 0,
-      currentAccountPctGdp: 0.036,
-      fxReservesUSD: 1_240_000_000_000,
-      structuralDeficitPctGdp: 0.055,
-      fiscalDeficitPctGdp: 0.055,
-      debtToGdpPct: 2.550,
-      fiscalStanceScore: 0,
-      sovereignRating: 'A',
-      laggedPolicyRateEMA: 0.0525,
-      laborForceParticipation: 0.64,
-      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
-      totalPopulation: 65_000_000,
-      birthRateAnnual: 0.007,
-      deathRateAnnual: 0.011,
-      netMigrationRateAnnual: 0.0005,
-      nonEmployablePct: 0.40,
-      governmentEmployment: 3_200_000,
-      privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 4_050_000, annualRevenueUSD: 700_000_000_000, marginPct: 0.09 , debtUSD: 700_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 700_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 26_250_000_000, WHEAT: 26_250_000_000, CORN: 26_250_000_000, SOYBEANS: 26_250_000_000 } },
-        { segmentType: 'PROFESSIONAL_SERVICES', employment: 3_240_000, annualRevenueUSD: 580_000_000_000, marginPct: 0.14, debtUSD: 580_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 580_000_000_000 * 0.05 },
-        { segmentType: 'RETAIL_TRADE', employment: 4_860_000, annualRevenueUSD: 620_000_000_000, marginPct: 0.05 , debtUSD: 620_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 620_000_000_000 * 0.05 },
-        { segmentType: 'CONSTRUCTION_REALESTATE', employment: 2_430_000, annualRevenueUSD: 420_000_000_000, marginPct: 0.10 , debtUSD: 420_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 420_000_000_000 * 0.05 },
-        { segmentType: 'HEALTHCARE_SERVICES', employment: 1_620_000, annualRevenueUSD: 330_000_000_000, marginPct: 0.12, debtUSD: 330_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 330_000_000_000 * 0.05 },
-      ],
-      occupationPools: {
-        GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-      },
-      occupationLaborForceShare: {
-        GENERAL: 0.55,
-        SKILLED_TRADES: 0.15,
-        TECHNICAL_ENGINEERING: 0.12,
-        SPECIALIZED_PROFESSIONAL: 0.08,
-        MANAGERIAL_FINANCIAL: 0.10,
-      },
-      unemploymentRateBottomUp: 0.024,
-      estimatedNominalGdpUSD: 5_500_000_000_000,
-      derivedNominalGdpUSD: 5_500_000_000_000,
-      gdpGrowthBottomUp: 0,
-      smoothedWeeklyGrowthRate: 0,
-      lastWeekNominalGdpUSD: 5_500_000_000_000,
-      nominalGdpHistory: [],
-      consumptionComponentUSD: 0,
-      investmentComponentUSD: 0,
-      effectiveTaxRate: 0.29,
-      governmentRevenueUSD: 0,
-      governmentSpendingUSD: 0,
-      govDebtTranches: [
-        { id: 'JPN-GOV-2Y-INIT', principalUSD: 4_207_500_000_000, couponRate: 0.002, originationWeek: -50, maturityWeek: 54, tenorAtIssuanceYears: 2 },
-        { id: 'JPN-GOV-5Y-INIT', principalUSD: 4_207_500_000_000, couponRate: 0.005, originationWeek: -130, maturityWeek: 130, tenorAtIssuanceYears: 5 },
-        { id: 'JPN-GOV-10Y-INIT', principalUSD: 3_506_250_000_000, couponRate: 0.009, originationWeek: -260, maturityWeek: 260, tenorAtIssuanceYears: 10 },
-        { id: 'JPN-GOV-30Y-INIT', principalUSD: 2_103_750_000_000, couponRate: 0.015, originationWeek: -780, maturityWeek: 780, tenorAtIssuanceYears: 30 },
-      ],
-      debtToGdpPctBottomUp: 0,
-      householdState: {
-        consumerConfidence: 100,
-        creditTierBooks: generateCreditTierBooks(120_000_000_000, 200_000_000_000),
-        wageGrowth: 0.0250,
-        savingsRate: 0.080,
-        realConsumptionGrowth: 0.01,
-        householdDebtToIncomeRatio: 0.80,
-        stapleSpendShare: 0.35,
-        standardSpendShare: 0.50,
-        luxurySpendShare: 0.15,
-        depositsUSD: 2_500_000_000_000,
-        equityHoldingsUSD: 2_800_000_000_000,
-        mortgageDebtUSD: 1_800_000_000_000,
-        creditCardDebtUSD: 120_000_000_000,
-        otherConsumerLoanDebtUSD: 200_000_000_000,
-        netWorthUSD: 0,
-      },
-      dotPlot1Y: 0.0050,
-      dotPlot2Y: 0.0075,
-      historicalPolicyRates: generate52WeekHistory(0.0025, 0.004, -0.001),
-      historicalInflation: generate52WeekHistory(0.0180, 0.006, 0.002),
-      historicalCoreInflation: generate52WeekHistory(0.0160, 0.005, 0.002),
-      historicalGdpGrowth: generate52WeekHistory(0.0100, 0.008, -0.01),
-      historicalWageGrowth: generate52WeekHistory(0.0250, 0.005, 0.005),
-      historicalDebtToGdp: generate52WeekHistory(2.550, 0.004, 1.5),
-      weather: INITIAL_WEATHER.JPN,
-      yieldCurveParams: jpnParams,
-      zeroRates: jpnZeros,
-      historicalZeroCurves: [{ week: 1, ...jpnZeros }],
-    },
-    EUR: {
-      id: 'EUR',
-      name: 'Eurozone',
-      categoryDemand: createInitialCategoryDemand(0.020, 0.015, 9_000_000_000_000, 14_500_000_000_000),
-      activeContracts: [],
-      currency: 'EUR',
-      symbol: '€',
-      centralBank: 'European Central Bank',
-      cycleRegime: 'Expansion',
-      laggedCorporateDemandBase: 0,
-      inversionWeeksCount: 0,
-      recessionShockQueue: [],
-      estimatedHouseholdIncomeUSD: 9_000_000_000_000,
-      bankingSector: { businessLoanBookUSD: 650_000_000_000, consumerLoanBookUSD: 1_000_000_000_000, depositsUSD: 1_600_000_000_000, sovereignBondHoldingsUSD: 350_000_000_000, cashReservesUSD: 160_000_000_000, bankEquityUSD: 200_000_000_000, bankCapitalRatio: 0.13, netInterestMarginPct: 0.022, loanLossProvisionRateAnnualPct: 0.007, creditConditionsIndex: 0, centralBankReservesUSD: 800_000_000_000, moneySupplyM2USD: 0, itemizedHoldings: [] },
-      equityOwnership: {
-        bankShare: 0.03, institutionalShare: 0.42,
-        foreignShare: { EUR: 0, USA: 0.06, UK: 0.05, JPN: 0.04 },
-        centralBankShare: 0,
-      },
-      corpBondOwnership: {
-        bankShare: 0.28, institutionalShare: 0.45,
-        foreignShare: { EUR: 0, USA: 0.05, UK: 0.04, JPN: 0.03 },
-        centralBankShare: 0,
-      },
-      sovBondOwnership: {
-        bankShare: 0.22, institutionalShare: 0.30,
-        foreignShare: { EUR: 0, USA: 0.10, UK: 0.06, JPN: 0.08 },
-        centralBankShare: 0.15,
-      },
-      institutionalSector: {
-        corpBondHoldingsUSD: 0, sovBondHoldingsUSD: 0, equityHoldingsUSD: 0,
-        cashUSD: 140_000_000_000, sectorEquityUSD: 170_000_000_000, investmentIncomeMarginPct: 0.028,
-        itemizedHoldings: [],
-      },
-      centralBankBalanceSheet: 7.2e12,
-      balanceSheetStance: 0,
-      policyRate: 0.0325,
-      neutralRate: 0.0050, // r* = 0.50%
-      inflation: 0.0230,
-      coreInflation: 0.0220,
-      expectedInflation: 0.0220,
-      wagePushInflation: 0.010,
-      monetaryInflationPressure: 0.004,
-      targetInflation: 0.0200, // pi* = 2.00%
-      gdpGrowth: 0.0120,
-      potentialGdpGrowth: 0.0140,
-      nairu: 0.070,
-      weeksAboveNairu: 0,
-      unemploymentRate: 0.063,
-      wageGrowth: 0.0320,
-      tradeBalance: 0,
-      exportsUSD: 0,
-      importsUSD: 0,
-      currentAccountPctGdp: 0.022,
-      fxReservesUSD: 890_500_000_000,
-      structuralDeficitPctGdp: 0.034,
-      fiscalDeficitPctGdp: 0.034,
-      debtToGdpPct: 0.880,
-      fiscalStanceScore: 0,
-      sovereignRating: 'AAA',
-      laggedPolicyRateEMA: 0.0010,
-      laborForceParticipation: 0.62,
-      inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
-      totalPopulation: 190_000_000,
-      birthRateAnnual: 0.009,
-      deathRateAnnual: 0.010,
-      netMigrationRateAnnual: 0.002,
-      nonEmployablePct: 0.37,
-      governmentEmployment: 14_000_000,
-      privateSectorSegments: [
-        { segmentType: 'MANUFACTURING', employment: 12_150_000, annualRevenueUSD: 2_200_000_000_000, marginPct: 0.09 , debtUSD: 2_200_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 2_200_000_000_000 * 0.05, producedCommodityIds: ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'], commoditySupplyShareUSD: { COPPER: 82_500_000_000, WHEAT: 82_500_000_000, CORN: 82_500_000_000, SOYBEANS: 82_500_000_000 } },
-        { segmentType: 'PROFESSIONAL_SERVICES', employment: 9_720_000, annualRevenueUSD: 1_800_000_000_000, marginPct: 0.14, debtUSD: 1_800_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_800_000_000_000 * 0.05 },
-        { segmentType: 'RETAIL_TRADE', employment: 14_580_000, annualRevenueUSD: 1_950_000_000_000, marginPct: 0.05 , debtUSD: 1_950_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_950_000_000_000 * 0.05 },
-        { segmentType: 'CONSTRUCTION_REALESTATE', employment: 7_290_000, annualRevenueUSD: 1_350_000_000_000, marginPct: 0.10 , debtUSD: 1_350_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_350_000_000_000 * 0.05 },
-        { segmentType: 'HEALTHCARE_SERVICES', employment: 4_860_000, annualRevenueUSD: 1_100_000_000_000, marginPct: 0.12, debtUSD: 1_100_000_000_000 * 2, defaultRateAnnualPct: 0.02, capexUSD: 1_100_000_000_000 * 0.05 },
-      ],
-      occupationPools: {
-        GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-        MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-      },
-      occupationLaborForceShare: {
-        GENERAL: 0.55,
-        SKILLED_TRADES: 0.15,
-        TECHNICAL_ENGINEERING: 0.12,
-        SPECIALIZED_PROFESSIONAL: 0.08,
-        MANAGERIAL_FINANCIAL: 0.10,
-      },
-      unemploymentRateBottomUp: 0.063,
-      estimatedNominalGdpUSD: 14_500_000_000_000,
-      derivedNominalGdpUSD: 14_500_000_000_000,
-      gdpGrowthBottomUp: 0,
-      smoothedWeeklyGrowthRate: 0,
-      lastWeekNominalGdpUSD: 14_500_000_000_000,
-      nominalGdpHistory: [],
-      consumptionComponentUSD: 0,
-      investmentComponentUSD: 0,
-      effectiveTaxRate: 0.34,
-      governmentRevenueUSD: 0,
-      governmentSpendingUSD: 0,
-      govDebtTranches: [
-        { id: 'EUR-GOV-2Y-INIT', principalUSD: 3_828_000_000_000, couponRate: 0.031, originationWeek: -50, maturityWeek: 54, tenorAtIssuanceYears: 2 },
-        { id: 'EUR-GOV-5Y-INIT', principalUSD: 3_828_000_000_000, couponRate: 0.033, originationWeek: -130, maturityWeek: 130, tenorAtIssuanceYears: 5 },
-        { id: 'EUR-GOV-10Y-INIT', principalUSD: 3_190_000_000_000, couponRate: 0.034, originationWeek: -260, maturityWeek: 260, tenorAtIssuanceYears: 10 },
-        { id: 'EUR-GOV-30Y-INIT', principalUSD: 1_914_000_000_000, couponRate: 0.036, originationWeek: -780, maturityWeek: 780, tenorAtIssuanceYears: 30 },
-      ],
-      debtToGdpPctBottomUp: 0,
-      householdState: {
-        consumerConfidence: 100,
-        creditTierBooks: generateCreditTierBooks(350_000_000_000, 700_000_000_000),
-        wageGrowth: 0.0320,
-        savingsRate: 0.070,
-        realConsumptionGrowth: 0.008,
-        householdDebtToIncomeRatio: 0.95,
-        stapleSpendShare: 0.35,
-        standardSpendShare: 0.50,
-        luxurySpendShare: 0.15,
-        depositsUSD: 4_500_000_000_000,
-        equityHoldingsUSD: 9_000_000_000_000,
-        mortgageDebtUSD: 5_500_000_000_000,
-        creditCardDebtUSD: 350_000_000_000,
-        otherConsumerLoanDebtUSD: 700_000_000_000,
-        netWorthUSD: 0,
-      },
-      dotPlot1Y: 0.0275,
-      dotPlot2Y: 0.0225,
-      historicalPolicyRates: generate52WeekHistory(0.0325, 0.008, 0.002),
-      historicalInflation: generate52WeekHistory(0.0230, 0.006, 0.002),
-      historicalCoreInflation: generate52WeekHistory(0.0220, 0.005, 0.002),
-      historicalGdpGrowth: generate52WeekHistory(0.0120, 0.008, -0.01),
-      historicalWageGrowth: generate52WeekHistory(0.0320, 0.006, 0.005),
-      historicalDebtToGdp: generate52WeekHistory(0.880, 0.004, 0.5),
-      weather: INITIAL_WEATHER.EUR,
-      yieldCurveParams: eurParams,
-      zeroRates: eurZeros,
-      historicalZeroCurves: [{ week: 1, ...eurZeros }],
-    },
+const BANK_BALANCE_SHEET_RATIOS = {
+  businessLoanBookToGdp: 0.040,
+  consumerLoanBookToGdp: 0.070,
+  depositsToGdp: 0.110,
+  sovereignBondHoldingsToGdp: 0.020,
+  cashReservesToGdp: 0.011,
+  bankEquityToGdp: 0.014,
+  centralBankReservesToGdp: 0.060,
+  centralBankBalanceSheetToGdp: 0.44,
+};
+const NIM_TO_POLICY_RATE_RATIO = 0.55;
+const NIM_FLOOR = 0.008;
+const BANK_CAPITAL_RATIO = 0.13;
+const LOAN_LOSS_PROVISION_RATE = 0.008;
+
+const OWNERSHIP_SHARES = {
+  equity: { bankShare: 0.03, institutionalShare: 0.42, foreignShareEach: 0.05, centralBankShare: 0 },
+  corpBond: { bankShare: 0.28, institutionalShare: 0.45, foreignShareEach: 0.04, centralBankShare: 0 },
+  sovBond: { bankShare: 0.22, institutionalShare: 0.30, foreignShareEach: 0.08, centralBankShare: 0.15 },
+};
+
+function buildForeignShare(regionId: RegionId, each: number): Record<RegionId, number> {
+  const all: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
+  const result = {} as Record<RegionId, number>;
+  all.forEach((r) => { result[r] = r === regionId ? 0 : each; });
+  return result;
+}
+
+const INSTITUTIONAL_SECTOR_RATIOS = { cashToGdp: 0.010, sectorEquityToGdp: 0.012, investmentIncomeMargin: 0.028 };
+
+const PRIVATE_SEGMENT_PROFILE: Record<PrivateSegmentType, { employmentShare: number; revenueToGdp: number; marginPct: number }> = {
+  MANUFACTURING: { employmentShare: 0.150, revenueToGdp: 0.110, marginPct: 0.09 },
+  PROFESSIONAL_SERVICES: { employmentShare: 0.120, revenueToGdp: 0.090, marginPct: 0.14 },
+  RETAIL_TRADE: { employmentShare: 0.180, revenueToGdp: 0.095, marginPct: 0.05 },
+  CONSTRUCTION_REALESTATE: { employmentShare: 0.090, revenueToGdp: 0.065, marginPct: 0.10 },
+  HEALTHCARE_SERVICES: { employmentShare: 0.060, revenueToGdp: 0.050, marginPct: 0.12 },
+};
+const MANUFACTURING_COMMODITY_SUPPLY_SHARE = 0.0375; // share of MANUFACTURING segment revenue, per linked commodity
+const MANUFACTURING_LINKED_COMMODITIES = ['METAL_GAMMA', 'AGRI_ALPHA', 'AGRI_BETA', 'AGRI_GAMMA'];
+
+const GOV_DEBT_TENOR_WEIGHTS: { tenorYears: number; tenorWeeks: number; weight: number }[] = [
+  { tenorYears: 2, tenorWeeks: 104, weight: 0.30 },
+  { tenorYears: 5, tenorWeeks: 260, weight: 0.30 },
+  { tenorYears: 10, tenorWeeks: 520, weight: 0.25 },
+  { tenorYears: 30, tenorWeeks: 1560, weight: 0.15 },
+];
+
+const HOUSEHOLD_DEBT_RATIOS = { creditCardToIncome: 0.075, otherConsumerLoanToIncome: 0.133, mortgageToIncome: 0.90, depositsToIncome: 0.65, equityHoldingsToIncome: 1.8 };
+const HOUSEHOLD_SAVINGS_RATE = 0.065;
+const HOUSEHOLD_SPEND_SHARES = { staple: 0.35, standard: 0.50, luxury: 0.15 };
+
+function buildRegion(regionId: RegionId): Region {
+  const identity = REGION_IDENTITY[regionId];
+  const totalPopulation = getRegionPopulation(regionId);
+  const productivityPerCapita = getRegionProductivityPerCapitaUSD(regionId);
+
+  const yieldCurveParams = getRegionYieldCurveParams(regionId);
+  const zeroRates = calculateTenorZeroRates(yieldCurveParams);
+  const neutralRate = getRegionNeutralRate(regionId);
+  const policyRate = getRegionInitialPolicyRate(regionId);
+  const gdpGrowth = getRegionProductivityGrowth(regionId);
+  const targetInflation = INFLATION_TARGET;
+  const wageGrowth = Number((gdpGrowth + targetInflation).toFixed(4));
+
+  const totalLaborForce = totalPopulation * (1 - NON_EMPLOYABLE_PCT) * LABOR_FORCE_PARTICIPATION;
+  const totalEmployed = totalLaborForce * (1 - UNEMPLOYMENT_RATE);
+  const estimatedNominalGdpUSD = Number((totalEmployed * productivityPerCapita).toFixed(0));
+  const governmentEmployment = Math.round(totalPopulation * GOV_EMPLOYMENT_SHARE_OF_POPULATION);
+
+  const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
+  const occupationLaborForceShare: Record<OccupationType, number> = {
+    GENERAL: 0.55,
+    SKILLED_TRADES: 0.15,
+    TECHNICAL_ENGINEERING: 0.12,
+    SPECIALIZED_PROFESSIONAL: 0.08,
+    MANAGERIAL_FINANCIAL: 0.10,
+  };
+  const occupationPools: Record<OccupationType, OccupationPool> = {} as Record<OccupationType, OccupationPool>;
+  (Object.keys(occupationLaborForceShare) as OccupationType[]).forEach((occ) => {
+    occupationPools[occ] = {
+      employed: Math.round(totalEmployed * occupationLaborForceShare[occ]),
+      wageIndex: 1.0,
+      wageGrowthAnnual: wageGrowth,
+    };
+  });
+  const estimatedHouseholdIncomeUSD = Number(((Object.keys(occupationPools) as OccupationType[]).reduce(
+    (sum, occ) => sum + baseAnnualWageUSD[occ] * occupationPools[occ].employed, 0
+  ) * 1.15).toFixed(0)); // wage income + 15% capital income, matching the downstream capital-income convention
+
+  const governmentRevenueUSD = Number(((estimatedNominalGdpUSD * EFFECTIVE_TAX_RATE) / 52).toFixed(0));
+  const governmentSpendingUSD = Number((governmentRevenueUSD + (estimatedNominalGdpUSD * FISCAL_DEFICIT_PCT_GDP) / 52).toFixed(0));
+  const lastWeekNominalGdpUSD = estimatedNominalGdpUSD;
+
+  const netInterestMarginPct = Number(Math.max(NIM_FLOOR, policyRate * NIM_TO_POLICY_RATE_RATIO + 0.005).toFixed(4));
+  const bankingSector = {
+    businessLoanBookUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.businessLoanBookToGdp).toFixed(0)),
+    consumerLoanBookUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.consumerLoanBookToGdp).toFixed(0)),
+    depositsUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.depositsToGdp).toFixed(0)),
+    sovereignBondHoldingsUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp).toFixed(0)),
+    cashReservesUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp).toFixed(0)),
+    bankEquityUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp).toFixed(0)),
+    bankCapitalRatio: BANK_CAPITAL_RATIO,
+    netInterestMarginPct,
+    loanLossProvisionRateAnnualPct: LOAN_LOSS_PROVISION_RATE,
+    creditConditionsIndex: 0,
+    centralBankReservesUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp).toFixed(0)),
+    moneySupplyM2USD: 0,
+    itemizedHoldings: [],
   };
 
-  Object.values(regions).forEach(reg => {
-    const totalLaborForce = reg.totalPopulation * (1 - reg.nonEmployablePct) * reg.laborForceParticipation;
-    const totalEmployed = totalLaborForce * (1 - reg.unemploymentRate);
-    const shares = reg.occupationLaborForceShare;
-    const pools: Record<OccupationType, OccupationPool> = { ...reg.occupationPools };
-    (Object.keys(shares) as OccupationType[]).forEach(occ => {
-      pools[occ] = {
-        employed: Math.round(totalEmployed * shares[occ]),
-        wageIndex: 1.0,
-        wageGrowthAnnual: reg.wageGrowth || 0.03,
-      };
-    });
-    reg.occupationPools = pools;
-    const totalWageIncomeUSD = (Object.keys(pools) as OccupationType[]).reduce((sum, occ) => {
-      return sum + BASE_ANNUAL_WAGE_USD[occ] * pools[occ].wageIndex * pools[occ].employed;
-    }, 0);
-    const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
-    reg.estimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + capitalIncomeUSD).toFixed(0));
+  const institutionalSector = {
+    corpBondHoldingsUSD: 0,
+    sovBondHoldingsUSD: 0,
+    equityHoldingsUSD: 0,
+    cashUSD: Number((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.cashToGdp).toFixed(0)),
+    sectorEquityUSD: Number((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.sectorEquityToGdp).toFixed(0)),
+    investmentIncomeMarginPct: INSTITUTIONAL_SECTOR_RATIOS.investmentIncomeMargin,
+    itemizedHoldings: [],
+  };
 
-    // Dynamically calculate non-zero starting government spending and revenue to avoid week-52 YoY spike
-    const effectiveTaxRate = reg.effectiveTaxRate || 0.30;
-    const initialFiscalDeficitPctGdp = reg.fiscalDeficitPctGdp || 0.05;
-    const initialGdp = reg.estimatedNominalGdpUSD;
-    reg.governmentRevenueUSD = Number(((initialGdp * effectiveTaxRate) / 52).toFixed(0));
-    reg.governmentSpendingUSD = Number((reg.governmentRevenueUSD + (initialGdp * initialFiscalDeficitPctGdp) / 52).toFixed(0));
-    reg.lastWeekNominalGdpUSD = reg.consumptionComponentUSD + reg.investmentComponentUSD + reg.governmentSpendingUSD;
-    reg.categoryDemand = createInitialCategoryDemand(
-      reg.inflation,
-      reg.gdpGrowth,
-      reg.estimatedHouseholdIncomeUSD,
-      reg.lastWeekNominalGdpUSD
-    );
+  const totalGovDebtUSD = estimatedNominalGdpUSD * DEBT_TO_GDP_PCT;
+  const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
+    id: `${regionId}-GOV-${tenorYears}Y-INIT`,
+    principalUSD: Number((totalGovDebtUSD * weight).toFixed(0)),
+    couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
+    originationWeek: -Math.round(tenorWeeks / 2),
+    maturityWeek: Math.round(tenorWeeks / 2),
+    tenorAtIssuanceYears: tenorYears,
+  }));
 
-    reg.wealthDistribution = createWealthDistribution(reg.estimatedHouseholdIncomeUSD);
-    reg.housingMarket = createHousingMarket(reg.id, reg.estimatedHouseholdIncomeUSD);
-    reg.lifeCycleDistribution = createLifeCycleDistribution();
+  const creditCardDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome).toFixed(0));
+  const otherConsumerLoanDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome).toFixed(0));
+  const mortgageDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.mortgageToIncome).toFixed(0));
+  const depositsUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.depositsToIncome).toFixed(0));
+  const equityHoldingsUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.equityHoldingsToIncome).toFixed(0));
+  const householdDebtToIncomeRatio = Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / Math.max(1, estimatedHouseholdIncomeUSD)).toFixed(3));
+
+  const privateSectorSegments: PrivateSectorSegment[] = (Object.keys(PRIVATE_SEGMENT_PROFILE) as PrivateSegmentType[]).map((segmentType) => {
+    const profile = PRIVATE_SEGMENT_PROFILE[segmentType];
+    const annualRevenueUSD = Number((estimatedNominalGdpUSD * profile.revenueToGdp).toFixed(0));
+    const segment: PrivateSectorSegment = {
+      segmentType,
+      employment: Math.round(totalEmployed * profile.employmentShare),
+      annualRevenueUSD,
+      marginPct: profile.marginPct,
+      debtUSD: annualRevenueUSD * 2,
+      defaultRateAnnualPct: 0.02,
+      capexUSD: annualRevenueUSD * 0.05,
+    };
+    if (segmentType === 'MANUFACTURING') {
+      segment.producedCommodityIds = MANUFACTURING_LINKED_COMMODITIES;
+      segment.commoditySupplyShareUSD = MANUFACTURING_LINKED_COMMODITIES.reduce((acc, id) => {
+        acc[id] = Number((annualRevenueUSD * MANUFACTURING_COMMODITY_SUPPLY_SHARE).toFixed(0));
+        return acc;
+      }, {} as Record<string, number>);
+    }
+    return segment;
   });
 
-  return regions as Record<RegionId, Region>;
+  const region: Region = {
+    id: regionId,
+    name: identity.name,
+    categoryDemand: {},
+    activeContracts: [],
+    currency: identity.currency,
+    symbol: identity.symbol,
+    centralBank: identity.centralBank,
+    cycleRegime: 'Expansion',
+    laggedCorporateDemandBase: 0,
+    inversionWeeksCount: 0,
+    recessionShockQueue: [],
+    estimatedHouseholdIncomeUSD,
+    bankingSector,
+    equityOwnership: { bankShare: OWNERSHIP_SHARES.equity.bankShare, institutionalShare: OWNERSHIP_SHARES.equity.institutionalShare, foreignShare: buildForeignShare(regionId, OWNERSHIP_SHARES.equity.foreignShareEach), centralBankShare: OWNERSHIP_SHARES.equity.centralBankShare },
+    corpBondOwnership: { bankShare: OWNERSHIP_SHARES.corpBond.bankShare, institutionalShare: OWNERSHIP_SHARES.corpBond.institutionalShare, foreignShare: buildForeignShare(regionId, OWNERSHIP_SHARES.corpBond.foreignShareEach), centralBankShare: OWNERSHIP_SHARES.corpBond.centralBankShare },
+    sovBondOwnership: { bankShare: OWNERSHIP_SHARES.sovBond.bankShare, institutionalShare: OWNERSHIP_SHARES.sovBond.institutionalShare, foreignShare: buildForeignShare(regionId, OWNERSHIP_SHARES.sovBond.foreignShareEach), centralBankShare: OWNERSHIP_SHARES.sovBond.centralBankShare },
+    institutionalSector,
+    centralBankBalanceSheet: estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankBalanceSheetToGdp,
+    balanceSheetStance: 0,
+    policyRate,
+    neutralRate,
+    inflation: targetInflation,
+    coreInflation: targetInflation,
+    expectedInflation: targetInflation,
+    wagePushInflation: Number((targetInflation * 0.5).toFixed(4)),
+    monetaryInflationPressure: Number((targetInflation * 0.2).toFixed(4)),
+    targetInflation,
+    gdpGrowth,
+    potentialGdpGrowth: gdpGrowth,
+    nairu: UNEMPLOYMENT_RATE,
+    weeksAboveNairu: 0,
+    unemploymentRate: UNEMPLOYMENT_RATE,
+    wageGrowth,
+    tradeBalance: 0,
+    exportsUSD: 0,
+    importsUSD: 0,
+    currentAccountPctGdp: 0,
+    fxReservesUSD: Number((estimatedNominalGdpUSD * 0.002).toFixed(0)),
+    structuralDeficitPctGdp: FISCAL_DEFICIT_PCT_GDP,
+    fiscalDeficitPctGdp: FISCAL_DEFICIT_PCT_GDP,
+    debtToGdpPct: DEBT_TO_GDP_PCT,
+    fiscalStanceScore: 0,
+    sovereignRating: identity.sovereignRating,
+    laggedPolicyRateEMA: policyRate,
+    laborForceParticipation: LABOR_FORCE_PARTICIPATION,
+    inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
+    totalPopulation,
+    birthRateAnnual: BIRTH_RATE_ANNUAL,
+    deathRateAnnual: DEATH_RATE_ANNUAL,
+    netMigrationRateAnnual: NET_MIGRATION_RATE_ANNUAL,
+    nonEmployablePct: NON_EMPLOYABLE_PCT,
+    governmentEmployment,
+    privateSectorSegments,
+    occupationPools,
+    occupationLaborForceShare,
+    unemploymentRateBottomUp: UNEMPLOYMENT_RATE,
+    estimatedNominalGdpUSD,
+    derivedNominalGdpUSD: estimatedNominalGdpUSD,
+    gdpGrowthBottomUp: 0,
+    smoothedWeeklyGrowthRate: 0,
+    lastWeekNominalGdpUSD,
+    nominalGdpHistory: [],
+    consumptionComponentUSD: 0,
+    investmentComponentUSD: 0,
+    effectiveTaxRate: EFFECTIVE_TAX_RATE,
+    governmentRevenueUSD,
+    governmentSpendingUSD,
+    govDebtTranches,
+    debtToGdpPctBottomUp: 0,
+    householdState: {
+      consumerConfidence: 100,
+      creditTierBooks: generateCreditTierBooks(creditCardDebtUSD, otherConsumerLoanDebtUSD),
+      wageGrowth,
+      savingsRate: HOUSEHOLD_SAVINGS_RATE,
+      realConsumptionGrowth: Number((gdpGrowth * 0.7).toFixed(4)),
+      householdDebtToIncomeRatio,
+      stapleSpendShare: HOUSEHOLD_SPEND_SHARES.staple,
+      standardSpendShare: HOUSEHOLD_SPEND_SHARES.standard,
+      luxurySpendShare: HOUSEHOLD_SPEND_SHARES.luxury,
+      depositsUSD,
+      equityHoldingsUSD,
+      mortgageDebtUSD,
+      creditCardDebtUSD,
+      otherConsumerLoanDebtUSD,
+      netWorthUSD: 0,
+    },
+    dotPlot1Y: policyRate,
+    dotPlot2Y: neutralRate,
+    historicalPolicyRates: generate52WeekHistory(policyRate, 0.008, 0.001),
+    historicalInflation: generate52WeekHistory(targetInflation, 0.006, 0.001),
+    historicalCoreInflation: generate52WeekHistory(targetInflation, 0.005, 0.001),
+    historicalGdpGrowth: generate52WeekHistory(gdpGrowth, 0.010, -0.01),
+    historicalWageGrowth: generate52WeekHistory(wageGrowth, 0.006, 0.005),
+    historicalDebtToGdp: generate52WeekHistory(DEBT_TO_GDP_PCT, 0.004, 0.5),
+    weather: INITIAL_WEATHER[regionId],
+    yieldCurveParams,
+    zeroRates,
+    historicalZeroCurves: [{ week: 1, ...zeroRates }],
+    wealthDistribution: createWealthDistribution(estimatedHouseholdIncomeUSD),
+    housingMarket: createHousingMarket(regionId, estimatedHouseholdIncomeUSD, totalPopulation),
+    lifeCycleDistribution: createLifeCycleDistribution(),
+  };
+
+  region.categoryDemand = createInitialCategoryDemand(gdpGrowth, estimatedHouseholdIncomeUSD, lastWeekNominalGdpUSD, totalPopulation, TARGET_FIRMS_PER_REGION);
+
+  return region;
+}
+
+export function getInitialRegions(): Record<RegionId, Region> {
+  const regionIds: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
+  const regions = {} as Record<RegionId, Region>;
+  regionIds.forEach((regionId) => {
+    regions[regionId] = buildRegion(regionId);
+  });
+  return regions;
 }
 
 /**
- * Initial FX Pairs Matrix
+ * Initial FX Pairs Matrix — derived from relative purchasing power (see bootstrap/commodities-and-fx.ts)
  */
-
 export function getInitialFxPairs(): FxPair[] {
-  return [
-    {
-      pair: 'EUR/USD',
-      base: 'EUR',
-      quote: 'USA',
-      rate: 1.0860,
-      historicalRates: generate52WeekHistory(1.0860, 0.015, 0.95),
-      change1W: 0.0010,
-      basisSpreadBps: -18,
-    },
-    {
-      pair: 'GBP/USD',
-      base: 'UK',
-      quote: 'USA',
-      rate: 1.2940,
-      historicalRates: generate52WeekHistory(1.2940, 0.015, 1.10),
-      change1W: 0.0015,
-      basisSpreadBps: -12,
-    },
-    {
-      pair: 'USD/JPY',
-      base: 'USA',
-      quote: 'JPN',
-      rate: 154.20,
-      historicalRates: generate52WeekHistory(154.20, 0.02, 130.0),
-      change1W: 0.30,
-      basisSpreadBps: -34,
-    },
-    {
-      pair: 'EUR/GBP',
-      base: 'EUR',
-      quote: 'UK',
-      rate: 0.8390,
-      historicalRates: generate52WeekHistory(0.8390, 0.01, 0.78),
-      change1W: 0.0,
-      basisSpreadBps: -6,
-    },
-  ];
+  return GENERATED_FX_PAIR_LEGS.map(({ base, quote }) => {
+    const rate = getInitialFxRate(base, quote);
+    return {
+      pair: `${base}/${quote}`,
+      base,
+      quote,
+      rate,
+      historicalRates: generate52WeekHistory(rate, 0.015, rate * 0.8),
+      change1W: 0,
+      basisSpreadBps: -15,
+    };
+  });
 }
 
 /**
- * Initial Commodities (9 Coverage assets across Energy, Metals, Agriculture)
+ * Initial Commodities — generic, non-real-ticker names/ids (see bootstrap/commodities-and-fx.ts)
  */
-
 export function getInitialCommodities(): Commodity[] {
-  const rf = 0.0475;
-  return [
-    // 1. Energy
-    {
-      id: 'WTI',
-      name: 'WTI Light Sweet Crude',
-      symbol: 'WTI',
-      category: 'Energy',
-      unit: '$/bbl',
-      spotPrice: 73.80,
-      historicalPrices: generate52WeekHistory(73.80, 0.035, 45.0),
-      convenienceYield: 0.032,
-      futures1M: priceCommodityFutures(73.80, rf, 0.032, 1 / 12),
-      futures3M: priceCommodityFutures(73.80, rf, 0.032, 3 / 12),
-      futures6M: priceCommodityFutures(73.80, rf, 0.032, 6 / 12),
-      change1W: 0.65,
-      volatility: 0.30,
-      supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 46, 
-    },
-    {
-      id: 'BRENT',
-      name: 'Brent Crude Oil',
-      symbol: 'BRENT',
-      category: 'Energy',
-      unit: '$/bbl',
-      spotPrice: 78.50,
-      historicalPrices: generate52WeekHistory(78.50, 0.035, 50.0),
-      convenienceYield: 0.035,
-      futures1M: priceCommodityFutures(78.50, rf, 0.035, 1 / 12),
-      futures3M: priceCommodityFutures(78.50, rf, 0.035, 3 / 12),
-      futures6M: priceCommodityFutures(78.50, rf, 0.035, 6 / 12),
-      change1W: 0.50,
-      volatility: 0.28,
-      supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 48, 
-    },
-    {
-      id: 'NATGAS',
-      name: 'Henry Hub Natural Gas',
-      symbol: 'NATGAS',
-      category: 'Energy',
-      unit: '$/MMBtu',
-      spotPrice: 2.85,
-      historicalPrices: generate52WeekHistory(2.85, 0.06, 1.8),
-      convenienceYield: 0.060,
-      futures1M: priceCommodityFutures(2.85, rf, 0.060, 1 / 12),
-      futures3M: priceCommodityFutures(2.85, rf, 0.060, 3 / 12),
-      futures6M: priceCommodityFutures(2.85, rf, 0.060, 6 / 12),
-      change1W: 0.05,
-      volatility: 0.45,
-      supplyDemandBalance: 'Deficit (Tight Supply)',
-      inventoryLevelPct: 38, 
-    },
-    // 2. Metals
-    {
-      id: 'GOLD',
-      name: 'Gold Spot',
-      symbol: 'GOLD',
-      category: 'Metals',
-      unit: '$/oz',
-      spotPrice: 2680.0,
-      historicalPrices: generate52WeekHistory(2680.0, 0.015, 2000.0),
-      convenienceYield: 0.005,
-      futures1M: priceCommodityFutures(2680.0, rf, 0.005, 1 / 12),
-      futures3M: priceCommodityFutures(2680.0, rf, 0.005, 3 / 12),
-      futures6M: priceCommodityFutures(2680.0, rf, 0.005, 6 / 12),
-      change1W: 15.0,
-      volatility: 0.16,
-      supplyDemandBalance: 'Deficit (Tight Supply)',
-      inventoryLevelPct: 35, 
-    },
-    {
-      id: 'SILVER',
-      name: 'Silver Spot',
-      symbol: 'SILVER',
-      category: 'Metals',
-      unit: '$/oz',
-      spotPrice: 31.50,
-      historicalPrices: generate52WeekHistory(31.50, 0.03, 22.0),
-      convenienceYield: 0.010,
-      futures1M: priceCommodityFutures(31.50, rf, 0.010, 1 / 12),
-      futures3M: priceCommodityFutures(31.50, rf, 0.010, 3 / 12),
-      futures6M: priceCommodityFutures(31.50, rf, 0.010, 6 / 12),
-      change1W: 0.42,
-      volatility: 0.26,
-      supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 44, 
-    },
-    {
-      id: 'COPPER',
-      name: 'LME High Grade Copper',
-      symbol: 'COPPER',
-      category: 'Metals',
-      unit: '$/lb',
-      spotPrice: 4.45,
-      historicalPrices: generate52WeekHistory(4.45, 0.025, 3.2),
-      convenienceYield: 0.020,
-      futures1M: priceCommodityFutures(4.45, rf, 0.020, 1 / 12),
-      futures3M: priceCommodityFutures(4.45, rf, 0.020, 3 / 12),
-      futures6M: priceCommodityFutures(4.45, rf, 0.020, 6 / 12),
-      change1W: 0.04,
-      volatility: 0.22,
-      supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 52, 
-    },
-    // 3. Agriculture
-    {
-      id: 'WHEAT',
-      name: 'Chicago SRW Wheat',
-      symbol: 'WHEAT',
-      category: 'Agriculture',
-      unit: '$/bu',
-      spotPrice: 5.85,
-      historicalPrices: generate52WeekHistory(5.85, 0.035, 4.5),
-      convenienceYield: 0.040,
-      futures1M: priceCommodityFutures(5.85, rf, 0.040, 1 / 12),
-      futures3M: priceCommodityFutures(5.85, rf, 0.040, 3 / 12),
-      futures6M: priceCommodityFutures(5.85, rf, 0.040, 6 / 12),
-      change1W: -0.08,
-      volatility: 0.28,
-      supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 54, 
-    },
-    {
-      id: 'CORN',
-      name: 'US Corn Futures Proxy',
-      symbol: 'CORN',
-      category: 'Agriculture',
-      unit: '$/bu',
-      spotPrice: 4.30,
-      historicalPrices: generate52WeekHistory(4.30, 0.03, 3.6),
-      convenienceYield: 0.035,
-      futures1M: priceCommodityFutures(4.30, rf, 0.035, 1 / 12),
-      futures3M: priceCommodityFutures(4.30, rf, 0.035, 3 / 12),
-      futures6M: priceCommodityFutures(4.30, rf, 0.035, 6 / 12),
-      change1W: 0.06,
-      volatility: 0.25,
-      supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 51, 
-    },
-    {
-      id: 'SOYBEANS',
-      name: 'Chicago Soybeans',
-      symbol: 'SOYBEANS',
-      category: 'Agriculture',
-      unit: '$/bu',
-      spotPrice: 10.25,
-      historicalPrices: generate52WeekHistory(10.25, 0.03, 8.5),
-      convenienceYield: 0.030,
-      futures1M: priceCommodityFutures(10.25, rf, 0.030, 1 / 12),
-      futures3M: priceCommodityFutures(10.25, rf, 0.030, 3 / 12),
-      futures6M: priceCommodityFutures(10.25, rf, 0.030, 6 / 12),
-      change1W: 0.12,
-      volatility: 0.24,
-      supplyDemandBalance: 'Balanced',
-      inventoryLevelPct: 49, 
-    },
-  ].map(c => ({ ...c, allTimeBaselinePrice: c.spotPrice })) as Commodity[];
+  const rf = 0.045;
+  return GENERATED_COMMODITIES.map((def) => {
+    const spotPrice = getCommodityBaseSpotPrice(def);
+    return {
+      id: def.id,
+      name: def.name,
+      symbol: def.id,
+      category: def.category,
+      unit: def.unit,
+      spotPrice,
+      historicalPrices: generate52WeekHistory(spotPrice, def.volatility * 0.1, spotPrice * 0.6),
+      convenienceYield: def.convenienceYield,
+      futures1M: priceCommodityFutures(spotPrice, rf, def.convenienceYield, 1 / 12),
+      futures3M: priceCommodityFutures(spotPrice, rf, def.convenienceYield, 3 / 12),
+      futures6M: priceCommodityFutures(spotPrice, rf, def.convenienceYield, 6 / 12),
+      change1W: 0,
+      volatility: def.volatility,
+      supplyDemandBalance: 'Balanced' as const,
+      inventoryLevelPct: 48,
+      allTimeBaselinePrice: spotPrice,
+    };
+  });
 }
-
-/**
- * Weekly Central Bank Inertial Taylor Rule & Yield Curve Evolution with Micro Feedback
- */

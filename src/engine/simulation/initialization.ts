@@ -5,6 +5,7 @@ import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand } from './core';
+import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 
 function attributeItemizedHoldingsLocal(
   sectorShareUSD: number,
@@ -64,6 +65,8 @@ export function createInitialGameState(): GameState {
       });
     });
 
+    const regionFirmCount = companies.filter(c => c.region === regionId).length;
+
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
@@ -80,8 +83,7 @@ export function createInitialGameState(): GameState {
           inputCostPressure: 0,
           clearedInputPriceIndex: 1.0,
           lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
-          
-          unitPriceUSD: su.unitId === 'industrial_automation' ? 80000.0 : undefined,
+          unitPriceUSD: deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, reg.totalPopulation, regionFirmCount),
         };
       });
     });
@@ -208,6 +210,13 @@ export function createInitialGameState(): GameState {
     COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...linkage, intensityShare: calibratedShare };
   });
 
+  const topUsaCompanyIds = companies
+    .filter(c => c.region === 'USA')
+    .sort((a, b) => b.marketCap - a.marketCap)
+    .slice(0, 2)
+    .map(c => c.id);
+  const watchlist = [...topUsaCompanyIds, 'ENERGY_BETA', 'METAL_ALPHA'];
+
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
@@ -271,7 +280,7 @@ export function createInitialGameState(): GameState {
     recentMergers,
     dealers,
     portfolio,
-    watchlist: ['USA_NVST', 'USA_TXEN', 'BRENT', 'GOLD'],
+    watchlist,
     newsFeed: [
       {
         id: 'init_welcome',

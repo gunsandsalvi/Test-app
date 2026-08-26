@@ -126,13 +126,8 @@ export interface PrivateSectorSegment {
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
 
-export const BASE_ANNUAL_WAGE_USD: Record<OccupationType, number> = {
-  GENERAL: 42_000,
-  SKILLED_TRADES: 62_000,
-  TECHNICAL_ENGINEERING: 98_000,
-  SPECIALIZED_PROFESSIONAL: 145_000,
-  MANAGERIAL_FINANCIAL: 118_000,
-};
+// Base annual wage by occupation is generated per-region from productivity — see
+// engine/bootstrap/labor-and-wages.ts's getBaseAnnualWageUSD(regionId).
 
 export interface OccupationPool {
   employed: number;

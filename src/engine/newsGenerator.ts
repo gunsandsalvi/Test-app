@@ -202,23 +202,23 @@ export function generateWeeklyNews(
     if (r.weather && r.weather.severity !== 'Normal' && Math.random() < 0.4) {
       const w = r.weather;
       let tradeShortcut: TradeableInstrument | undefined;
-      if (w.affectedCommodityId === 'NATGAS') {
+      if (w.affectedCommodityId === 'ENERGY_GAMMA') {
         tradeShortcut = {
           assetType: 'COMMODITY',
-          id: 'NATGAS',
-          symbol: 'NG',
-          name: 'Henry Hub Natural Gas',
+          id: 'ENERGY_GAMMA',
+          symbol: 'ENERGY_GAMMA',
+          name: 'Energy Gamma Gas Index',
           region: 'USA',
           price: 2.85,
-          quoteUnit: '$/MMBtu',
+          quoteUnit: '$/mmbtu',
           details: {},
         };
-      } else if (w.affectedCommodityId === 'BRENT') {
+      } else if (w.affectedCommodityId === 'ENERGY_BETA') {
         tradeShortcut = {
           assetType: 'COMMODITY',
-          id: 'BRENT',
-          symbol: 'OIL',
-          name: 'Brent Crude Oil',
+          id: 'ENERGY_BETA',
+          symbol: 'ENERGY_BETA',
+          name: 'Energy Beta Crude Stream',
           region: 'USA',
           price: 78.50,
           quoteUnit: '$/bbl',

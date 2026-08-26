@@ -1,7 +1,8 @@
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, BASE_ANNUAL_WAGE_USD, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
@@ -438,16 +439,17 @@ export function evolveRegionMacro(
   const newStapleShare = Number((prevHS.stapleSpendShare * 0.95 + targetStapleShare * 0.05).toFixed(4));
   const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
+  const baseAnnualWageUSD = getBaseAnnualWageUSD(region.id);
   const totalWageIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
-    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * pool.employed;
+    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * pool.employed;
   }, 0);
   const unemploymentReplacementRate = 0.35;
   const unemploymentTransferIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
     const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
     const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
-    return sum + BASE_ANNUAL_WAGE_USD[occ] * pool.wageIndex * unemployedInPool * unemploymentReplacementRate;
+    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * unemploymentReplacementRate;
   }, 0);
   const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
   const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + unemploymentTransferIncomeUSD + capitalIncomeUSD).toFixed(0));
@@ -672,7 +674,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const histCurves = [...region.historicalZeroCurves.slice(-51), { week, ...newZeroRates }];
 
   // Housing market evolution as a real asset class
-  const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD);
+  const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD, region.totalPopulation);
   const resDemand = region.categoryDemand?.['residential_construction']?.demandLevelUSD ?? 1e9;
   const resSupply = region.categoryDemand?.['residential_construction']?.inventoryLevelUSD ?? (resDemand * 0.1);
   const supplyDemandRatio = resSupply / Math.max(1, resDemand);

@@ -1,7 +1,24 @@
 import { isActiveCompany } from '../../domain/company';
 import { Company, RegionId, Region, Commodity, CompositeBenchmarkIndices, IndexMetric } from '../../types';
 import { generate52WeekHistory } from './utils';
+import { getRegionPopulation, getRegionProductivityPerCapitaUSD, POPULATION_UNIT, PRODUCTIVITY_UNIT_USD } from '../bootstrap/population';
+import { RATING_OAS_SPREADS } from '../pricing';
 type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D'; // Add this locally
+
+// Index base level = a shared reference unit scaled by each region's generated economic size
+// (population x productivity, relative to the same reference primitives), not a quoted real
+// index level.
+const INDEX_BASE_UNIT = 1000;
+const REFERENCE_ECONOMIC_SIZE = POPULATION_UNIT * PRODUCTIVITY_UNIT_USD;
+function regionIndexBase(regionId: RegionId): number {
+  const economicSize = getRegionPopulation(regionId) * getRegionProductivityPerCapitaUSD(regionId);
+  return Number((INDEX_BASE_UNIT * (economicSize / REFERENCE_ECONOMIC_SIZE)).toFixed(1));
+}
+// Fallback OAS spreads (used only when a region/rating bucket has no companies yet) come
+// straight from the generated rating-spread table — a representative investment-grade and
+// high-yield notch — rather than a separate per-region literal table.
+const IG_OAS_FALLBACK = RATING_OAS_SPREADS.BBB.baseBps;
+const HY_OAS_FALLBACK = RATING_OAS_SPREADS.B.baseBps;
 
 export function calculateCompositeIndices(
   companies: Company[],
@@ -26,10 +43,10 @@ export function calculateCompositeIndices(
     return Math.max(-0.15, Math.min(0.15, avgChange));
   };
 
-  const usChange = getCapWeightedAvgPrice(usFirms, 5850);
-  const euChange = getCapWeightedAvgPrice(euFirms, 5020);
-  const ukChange = getCapWeightedAvgPrice(ukFirms, 8280);
-  const jpChange = getCapWeightedAvgPrice(jpFirms, 38900);
+  const usChange = getCapWeightedAvgPrice(usFirms, regionIndexBase('USA'));
+  const euChange = getCapWeightedAvgPrice(euFirms, regionIndexBase('EUR'));
+  const ukChange = getCapWeightedAvgPrice(ukFirms, regionIndexBase('UK'));
+  const jpChange = getCapWeightedAvgPrice(jpFirms, regionIndexBase('JPN'));
 
   // Sector-filtered sub-indices
   const techFirms = companies.filter(c => c.sector === 'Tech');
@@ -42,10 +59,10 @@ export function calculateCompositeIndices(
   const energyChange = getCapWeightedAvgPrice(energyFirms, 1000);
   const indChange = getCapWeightedAvgPrice(indFirms, 1000);
 
-  const prevUS = prevIndices?.us500?.value ?? 5850;
-  const prevEU = prevIndices?.euStoxx?.value ?? 5020;
-  const prevUK = prevIndices?.uk100?.value ?? 8280;
-  const prevJP = prevIndices?.jp225?.value ?? 38900;
+  const prevUS = prevIndices?.us500?.value ?? regionIndexBase('USA');
+  const prevEU = prevIndices?.euStoxx?.value ?? regionIndexBase('EUR');
+  const prevUK = prevIndices?.uk100?.value ?? regionIndexBase('UK');
+  const prevJP = prevIndices?.jp225?.value ?? regionIndexBase('JPN');
 
   const prevTech = prevIndices?.techIndex?.value ?? 1000;
   const prevFin = prevIndices?.financialsIndex?.value ?? 1000;
@@ -79,14 +96,14 @@ export function calculateCompositeIndices(
     return Math.round(subset.reduce((sum, c) => sum + c.oasSpreadBps * (c.totalDebt / Math.max(1, totalDebt)), 0));
   };
 
-  const usIgOas = getDebtWeightedOas(usFirms, igRatings, 120);
-  const usHyOas = getDebtWeightedOas(usFirms, hyRatings, 380);
-  const euIgOas = getDebtWeightedOas(euFirms, igRatings, 118);
-  const euHyOas = getDebtWeightedOas(euFirms, hyRatings, 390);
-  const ukIgOas = getDebtWeightedOas(ukFirms, igRatings, 130);
-  const ukHyOas = getDebtWeightedOas(ukFirms, hyRatings, 410);
-  const jpIgOas = getDebtWeightedOas(jpFirms, igRatings, 90);
-  const jpHyOas = getDebtWeightedOas(jpFirms, hyRatings, 320);
+  const usIgOas = getDebtWeightedOas(usFirms, igRatings, IG_OAS_FALLBACK);
+  const usHyOas = getDebtWeightedOas(usFirms, hyRatings, HY_OAS_FALLBACK);
+  const euIgOas = getDebtWeightedOas(euFirms, igRatings, IG_OAS_FALLBACK);
+  const euHyOas = getDebtWeightedOas(euFirms, hyRatings, HY_OAS_FALLBACK);
+  const ukIgOas = getDebtWeightedOas(ukFirms, igRatings, IG_OAS_FALLBACK);
+  const ukHyOas = getDebtWeightedOas(ukFirms, hyRatings, HY_OAS_FALLBACK);
+  const jpIgOas = getDebtWeightedOas(jpFirms, igRatings, IG_OAS_FALLBACK);
+  const jpHyOas = getDebtWeightedOas(jpFirms, hyRatings, HY_OAS_FALLBACK);
 
   // 4. Global 10Y Benchmark Average
   const global10Y = Number(
@@ -100,8 +117,8 @@ export function calculateCompositeIndices(
     ).toFixed(2)
   );
 
-  // 5. Global Commodity Index (S&P GSCI Commodity Proxy)
-  const prevGsci = prevIndices?.gsciCommodity?.value ?? 540.0;
+  // 5. Global Commodity Composite Index
+  const prevGsci = prevIndices?.gsciCommodity?.value ?? INDEX_BASE_UNIT;
   let commChange = 0;
   if (commodities && commodities.length > 0) {
     commChange = commodities.reduce((sum, c) => {
