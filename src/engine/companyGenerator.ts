@@ -213,19 +213,12 @@ export function buildQuarterlyFundamentalSnapshot(
   };
 }
 
-const REGIONAL_BASE_POLICY_RATES: Record<RegionId, number> = {
-  USA: 0.0475,
-  EUR: 0.0325,
-  UK: 0.045,
-  JPN: 0.005,
-};
-
-function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, regionId?: RegionId): DebtTranche[] {
+function generateDebtTranches(ticker: string, debtBase: number, initialRating: CreditRating, policyRate: number = 0.045): DebtTranche[] {
   const fixedShare = FIXED_SHARE_BY_RATING[initialRating] ?? 0.5;
   const trancheWeights = [0.35, 0.35, 0.30];
   const maturityWeeks = [260, 520, 780]; // 5, 10, 15 years out
   const baseSpreadBps = RATING_OAS_SPREADS[initialRating]?.baseBps ?? 150;
-  const basePolicyRate = regionId ? REGIONAL_BASE_POLICY_RATES[regionId] ?? 0.045 : 0.045;
+  const basePolicyRate = policyRate;
   let cumulativePrincipalAssigned = 0;
   return maturityWeeks.map((maturityWeek, i) => {
     const principalUSD = debtBase * trancheWeights[i];
@@ -596,6 +589,7 @@ export function generateInitialCompanies(): Company[] {
   const companies: Company[] = [];
 
   regions.forEach((region) => {
+    const regionPolicyRate = getInitialRegions()[region]?.policyRate ?? 0.045;
     const regionPrefix = region === 'USA' ? 'U' : region === 'UK' ? 'K' : region === 'EUR' ? 'E' : 'J';
     const commodityTemplates: any[] = [
       // 1. Energy
@@ -773,7 +767,7 @@ export function generateInitialCompanies(): Company[] {
         cash: tmpl.cashBase,
         totalDebt: tmpl.debtBase,
         currentLiabilities: Math.round(tmpl.debtBase * 0.25 + tmpl.revBase * 0.08),
-        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, tmpl.region),
+        debtTranches: generateDebtTranches(tmpl.ticker, tmpl.debtBase, tmpl.initialRating, regionPolicyRate),
         capex,
         maintenanceCapex,
         growthCapex,
@@ -1028,7 +1022,7 @@ export function generateUniqueCompanyName(_region: string, _category: string): {
   return { ticker: fbTicker, name: fbName };
 }
 
-export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number): Company {
+export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number, policyRate: number = 0.045): Company {
   const revBase = categoryDemandUSD * (0.02 + Math.random() * 0.03); 
   const ebitdaMargin = 0.15 + Math.random() * 0.15;
   const shares = Math.floor(revBase * 10);
@@ -1067,7 +1061,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const da = revBase * 0.05;
   const ebit = Math.max(10, ebitda - da);
   const employeeCount = Math.max(100, Math.round(revBase / 500_000));
-  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating, regionId);
+  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating, policyRate);
   const capex = Math.round(revBase * 0.06);
   const maintenanceCapex = Math.round(capex * 0.3); // newly-public growth-stage company spends more on expansion than upkeep
   const growthCapex = capex - maintenanceCapex;

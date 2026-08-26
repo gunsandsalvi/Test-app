@@ -17,7 +17,7 @@ export function checkForIPO(regionId: RegionId, reg: Region, companies: Company[
     const concentrationTrigger = maxShareInCategory > 0.40;
 
     if ((demandTrigger || concentrationTrigger) && Math.random() < (concentrationTrigger ? 0.5 : 0.35)) {
-      return generateIPOCompany(regionId, cat, demand.demandLevelUSD, week);
+      return generateIPOCompany(regionId, cat, demand.demandLevelUSD, week, reg.policyRate);
     }
   }
   return null;
