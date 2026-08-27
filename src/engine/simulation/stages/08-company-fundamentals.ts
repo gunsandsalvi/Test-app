@@ -551,7 +551,22 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     } else {
       const calculatedRating = determineCreditRating(newLeverage, newCoverage);
-      if (calculatedRating !== comp.creditRating && Math.random() < 0.25) {
+      // Wall Street: rating migration is deliberately sticky (a 25%/week chance to move even one
+      // notch) to mirror how real rating agencies don't instantly re-rate every week — but the
+      // bond-implied spread (computeExpectedLossSpreadBps below) reacts to this company's real
+      // leverage/coverage every week with NO such lag, so a company whose fundamentals actually
+      // deteriorated fast could sit at a stale investment-grade rating for dozens of weeks while
+      // its own spread already prices default risk (confirmed: an A-rated company observed at
+      // the 5000bps spread ceiling — CCC/distressed pricing under a rating three-plus notches
+      // stale). Real rating agencies don't let this go on indefinitely either — a severe,
+      // multi-notch gap (or crossing the investment-grade/high-yield line) triggers a real
+      // "fallen angel" cliff downgrade, not another 25% coin flip. Force an immediate update once
+      // the gap is that large; keep the stochastic lag only for ordinary single-notch drift.
+      const RATING_ORDER: typeof calculatedRating[] = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC'];
+      const notchGap = Math.abs(RATING_ORDER.indexOf(calculatedRating) - RATING_ORDER.indexOf(comp.creditRating));
+      const crossesIgHyLine = getRatingBucket(calculatedRating) !== getRatingBucket(comp.creditRating);
+      const forceUpdate = notchGap >= 2 || crossesIgHyLine;
+      if (calculatedRating !== comp.creditRating && (forceUpdate || Math.random() < 0.25)) {
         ctx.ratingChanges.push({
           ticker: comp.ticker,
           from: comp.creditRating,

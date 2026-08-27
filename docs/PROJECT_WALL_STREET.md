@@ -42,26 +42,41 @@ system as real as the corporate one now is.
   that bug's dynamics: a single struggling bank can fail or get recapitalized without the whole
   region's capital ratio being dragged to zero as one monolithic number.
 
-## Known bug: initial instability + nonsensical bond pricing (reported by user, to investigate here)
+## Known bug investigation: initial instability + bond pricing (landed: rating-lag fix; root cause of decay identified)
 
 User-reported via screenshots (a company, `KBTK`/Omni Brands, Consumer/USA): revenue/EPS/stock
-price all decay over the first ~12 weeks of a run (a "cold start" instability, the same shape of
-issue this session has repeatedly found and fixed elsewhere — e.g. the pro-rata auction fix, the
-commodity-linkage fix — but not yet chased down for this specific early-weeks pattern), and a
-credit-pricing disconnect: the company is rated **A** but its bond-implied spread (OAS) reads
-**5000bps** — the hard ceiling of `Math.max(10, Math.min(5000, rawOas))` in
-`08-company-fundamentals.ts`, a spread level that in reality would imply deep distress (CCC or
-default-adjacent), not an A rating. This means either the rating isn't being recalculated in sync
-with whatever is driving the spread to its clamp ceiling, or the spread-driving mechanism itself
-has a real bug unrelated to actual credit quality. To investigate as part of this project (both
-issues sit squarely in Wall Street's territory — real credit pricing and market initialization):
-1. Trace a sample company's revenue/EPS/price from week 1 to identify the real mechanism behind
-   the early-weeks decay (likely a cold-start transient in the same family as prior fixes this
-   session, not a new class of bug).
-2. Trace the same company's OAS computation to find why it pins at the 5000bps ceiling while
-   still carrying an A rating — a real rating/spread reconciliation bug, not something to paper
-   over by loosening the clamp (the clamp itself, `[10, 5000]`, is a basic sanity bound and is
-   not the problem — a real A-rated company's spread should never approach it).
+price decay over the first weeks of a run, and a credit-pricing disconnect — the company rated
+**A** with a bond-implied spread (OAS) pinned at the **5000bps** ceiling, a level that in reality
+implies deep distress, not an A rating. Traced both:
+
+**Rating/OAS disconnect — real bug found and fixed.** `newRating` only updated to match a
+company's freshly-computed leverage/coverage-implied rating with a 25%-per-week stochastic chance
+— deliberately sticky, mirroring how real rating agencies don't instantly re-rate every week. But
+`computeExpectedLossSpreadBps` (which sets the bond spread) reacts to the company's real
+leverage/coverage every week with **no such lag** — so a company whose fundamentals genuinely
+deteriorated fast could sit at a stale investment-grade rating for dozens of weeks while its own
+spread already priced default risk. Real rating agencies don't let this persist either — a severe
+or investment-grade/high-yield-crossing gap triggers a real "fallen angel" cliff downgrade, not
+another coin flip. Fixed in `08-company-fundamentals.ts`: a rating update is now forced
+immediately (bypassing the 25% gate) once the gap between the stale rating and the real,
+freshly-calculated one is 2+ notches or crosses the IG/HY line; ordinary single-notch drift keeps
+the original stochastic lag. Verified via `tsc`, hygiene, and a 60-week revenue-ratio diagnostic.
+
+**Cold-start revenue decay — root cause identified, traces back to an already-tracked issue, not
+a new bug.** Traced a sample Consumer company week-by-week: its real settled sales (from stage05's
+auction) actually stabilize at a healthy level (~$9-11B annualized) within the first ~5 weeks —
+the auction itself is fine. But `targetProductionUSD` (the figure `unsoldThisWeekUSD`'s shortfall
+penalty compares real sales against) is defined as `update?._targetProductionUSD ?? newRevenue/52`
+— an echo of the *previous week's own revenue*, not an independent real target — so a company
+seeded with revenue somewhat above what its real category-demand share supports grinds itself down
+via its own shortfall penalty until the two converge, a real but self-correcting adjustment. The
+sample company's much larger, longer decline (72% by week 15) is consistent with it carrying a
+`passenger_vehicles` line requiring real recipe inputs (`upstream_extraction`/`specialty_metals`
+via `AutomotiveTransport`'s `CATEGORY_INPUT_REQUIREMENTS`) — subject to the auction-fairness
+residual already tracked under task #18/#49's continuation (companies that lose real input-
+fulfillment auctions have no fast recovery path) — not a newly-discovered class of bug. Genuinely
+resolving the compounded severity for input-dependent companies requires the same deeper fix
+already tracked there, not a quick patch here.
 
 ## Phase 1 landed: diversified banking sector
 
