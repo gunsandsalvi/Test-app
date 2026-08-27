@@ -6,7 +6,8 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
   const portfolio = state.portfolio;
   const nav = portfolio.navUSD;
 
-  const initialCapital = 25000000;
+  // S6: the portfolio's real starting capital, not a duplicated literal that drifts.
+  const initialCapital = state.portfolio.startingCapitalUSD;
   const returnPct = (nav - initialCapital) / initialCapital;
 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('ConsumerStaples');

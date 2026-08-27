@@ -15,54 +15,101 @@ const EQUITY_BANK_SENSITIVITY = 0.10;
 const FOREIGN_GROWTH_SENSITIVITY = 3.0;
 
 /**
- * Annual default probability of a borrower in the worst state this model produces.
- *
- * This has to be consistent with CREDIT_RECOVERY_RATE, because the two together decide whether a
- * distressed bond has a price at all. At 30% a year the expected loss on the worst names came to
- * ~1,800bp, which is MORE than the recovery-value price floor lets the bond pay (about 1,745bp on
- * five-year paper at a 40% recovery) — so no holder's reservation level was reachable, B and CCC
- * had no bid anywhere inside the range where the market exists, and both cohorts printed the
- * ceiling with no dispersion between them. An asset whose expected loss exceeds what its price
- * floor can compensate is not a market; it is an arithmetic contradiction.
- *
- * 15% is also simply the more honest number. Observed one-year default rates for the weakest
- * rating cohort run around 10-13%, reaching the mid-20s only in a genuine credit crisis, and this
- * is the steady-state worst case rather than the crisis one.
+ * The default trigger, defined once. A company defaults the week its cash goes negative while
+ * its coverage sits below this floor (see stage 08's check, which imports this constant, and
+ * credit.ts's rating ladder, which anchors its CCC boundary to the same number). Everything the
+ * market charges for credit risk is priced off the probability of ENTERING this state — so the
+ * trigger and the hazard priced against it must be one definition, not two.
  */
-const MAX_ANNUAL_DEFAULT_PROBABILITY = 0.15;
-/** Leverage-minus-coverage score at which default risk is half of that maximum. */
-const PD_CURVE_MIDPOINT = 2;
-/** How gradually risk builds across the score — a wider curve means a smoother credit ladder. */
-const PD_CURVE_WIDTH = 2;
+export const DEFAULT_COVERAGE_FLOOR = 0.8;
 
-export function computeExpectedLossSpreadBps(comp: Company): number {
-  const interestExpense = comp.debtTranches?.reduce((sum, t) => {
+/** Expected relative EBITDA volatility per revenue volatility: margins amplify a revenue shock. */
+const OPERATING_LEVERAGE = 2.0;
+/**
+ * Floor on annualized relative EBITDA volatility. Measured volatility comes from the company's
+ * own revenue history, but early weeks have too little history to measure honestly, and a
+ * deterministic bootstrap would otherwise imply zero risk for everyone. Real mature-company
+ * EBITDA vol runs ~15-40% annualized; the floor sits at the calm end of that.
+ */
+const MIN_ANNUAL_EBITDA_VOL = 0.18;
+const MAX_ANNUAL_EBITDA_VOL = 1.2;
+
+/** Standard normal CDF (Abramowitz–Stegun; ~1e-7 accurate — plenty for a default probability). */
+function normalCdf(x: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  const poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const p = 1 - d * poly;
+  return x >= 0 ? p : 1 - p;
+}
+
+/** Annualized relative EBITDA volatility, measured from the company's own revenue history. */
+function annualEbitdaVol(comp: Company): number {
+  const hist = comp.revenueHistory || [];
+  if (hist.length < 8) return MIN_ANNUAL_EBITDA_VOL;
+  const rel: number[] = [];
+  for (let i = 1; i < hist.length; i++) {
+    if (hist[i - 1] > 0) rel.push(hist[i] / hist[i - 1] - 1);
+  }
+  if (rel.length < 4) return MIN_ANNUAL_EBITDA_VOL;
+  const mean = rel.reduce((a, b) => a + b, 0) / rel.length;
+  const varc = rel.reduce((a, b) => a + (b - mean) ** 2, 0) / (rel.length - 1);
+  const weeklyRevVol = Math.sqrt(varc);
+  const annual = weeklyRevVol * Math.sqrt(52) * OPERATING_LEVERAGE;
+  return Math.min(MAX_ANNUAL_EBITDA_VOL, Math.max(MIN_ANNUAL_EBITDA_VOL, annual));
+}
+
+/**
+ * Annual probability of default as a STRUCTURAL FORECAST of the real trigger above — not a
+ * fitted curve. The previous model was a logistic on (leverage − coverage) with a tuned cap,
+ * midpoint and width: a shape with the right slope and no relationship to how default actually
+ * happens in this simulation, so the market priced one risk while companies died of another
+ * (§7.19 review item 1 in the plan).
+ *
+ * This asks the real question instead: how large a relative EBITDA shock, sustained for a year,
+ * would put THIS company inside the trigger — and how likely is a shock that size given the
+ * company's own measured volatility?
+ *
+ *   - The coverage half trips when EBITDA falls below floor × interest.
+ *   - The cash half trips when the year's fixed outflows (interest, maintenance capex,
+ *     dividends) exhaust the shocked EBITDA plus the cash pile.
+ *   - The trigger is an AND, so the binding distance is the LARGER of the two shocks — which is
+ *     why a leveraged company with a genuine cash pile is safer than its coverage alone says,
+ *     exactly as a real credit desk would read it: runway matters.
+ *
+ * PD = Φ(−distance / σ). Every input is the company's own: its real ladder's interest, its real
+ * cash, its real capex and dividends, its own measured revenue volatility. Dispersion between
+ * two same-rated names is real information, not curve noise.
+ */
+export function computeAnnualDefaultProbability(comp: Company): number {
+  const interest = comp.debtTranches?.reduce((sum, t) => {
     const rate = t.rateType === 'FIXED'
       ? (t.couponRate ?? 0.05)
       : (0.05 + (t.floatingMarginBps ?? 200) / 10000);
     return sum + t.principalUSD * rate;
   }, 0) || 1;
-  const coverage = comp.ebitda / interestExpense;
-  const leverage = comp.totalDebt / (comp.ebitda || 1);
-  // Map the leverage-versus-coverage score to a real ANNUAL default probability. The raw logistic
-  // was used directly as a probability, which says a stressed borrower defaults with ~98%
-  // certainty within the year — no lender would price that, and none should. It survived as long
-  // as this number was only a soft signal nudging a quantity; the moment the clearing engine
-  // started using it as a reservation PRICE it priced high yield out of existence entirely, with
-  // B and CCC names finding no bid at any spread.
-  //
-  // The shape stays (worse leverage and thinner coverage mean more default risk); what changes is
-  // that it lands in the range real default rates occupy — a fraction of a percent for the
-  // strongest balance sheets, tens of percent for genuinely distressed ones.
-  const score = leverage - coverage;
-  const pd = MAX_ANNUAL_DEFAULT_PROBABILITY / (1 + Math.exp(-(score - PD_CURVE_MIDPOINT) / PD_CURVE_WIDTH));
-  return pd * (1 - CREDIT_RECOVERY_RATE) * 10000;
+  const ebitda = Math.max(1, comp.ebitda);
+
+  const shockToCoverage = 1 - (DEFAULT_COVERAGE_FLOOR * interest) / ebitda;
+  // Dividends live on the quarterly snapshot (there is no annual field on Company) — annualize
+  // the latest quarter. Zero when no snapshot exists yet.
+  const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
+  const dividendsAnnualUSD = (latestSnap?.cashFlowStatement?.dividendsPaid ?? 0) * 4;
+  const fixedOutflowsUSD = interest + (comp.maintenanceCapex ?? 0) + dividendsAnnualUSD;
+  const shockToCash = 1 - (fixedOutflowsUSD - Math.max(0, comp.cash)) / ebitda;
+  const distance = Math.max(shockToCoverage, shockToCash);
+
+  return normalCdf(-distance / annualEbitdaVol(comp));
+}
+
+export function computeExpectedLossSpreadBps(comp: Company): number {
+  return computeAnnualDefaultProbability(comp) * (1 - CREDIT_RECOVERY_RATE) * 10000;
 }
 
 /**
- * What a defaulted senior unsecured claim is worth. It sets both the loss in the expected-loss
- * calculation above and, through recoveryImpliedMaxSpreadBps, the price floor that bounds how
- * wide the same bond can trade — the two are the same real assumption and must not drift apart.
+ * What a defaulted senior unsecured claim is worth. Used in the expected-loss pricing above and
+ * in the distressed buyer's recovery arithmetic (asset-allocation.ts) — one assumption, two
+ * consumers, and G5 will eventually replace the constant with realized resolution outcomes.
  */
 export const CREDIT_RECOVERY_RATE = 0.4;
 
@@ -70,12 +117,6 @@ export function getRatingBucket(rating: string): 'IG' | 'HY' {
   return ['AAA', 'AA', 'A', 'BBB'].includes(rating) ? 'IG' : 'HY';
 }
 
-export function computeBucketDemandPremiumBps(bucket: 'IG' | 'HY', reg: Region, allCompaniesInBucket: Company[]): number {
-  const demand = reg.laggedCorporateDemandBase ?? 100; // Use lagged corporate demand as proxy for corporate bond demand
-  const supply = allCompaniesInBucket.reduce((sum, c) => sum + (c.totalDebt ?? 0), 0) || 100;
-  const ratio = demand / supply;
-  return (1 - ratio) * 200;
-}
 
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<string, number> {
   const demand: Record<string, number> = {
@@ -171,29 +212,6 @@ export function computeTargetOwnershipShares(assetClass: string, regionId: Regio
   return { bankShare, institutionalShare, foreignShare, centralBankShare: current.centralBankShare };
 }
 
-export function computeSupplyDemandPremium(
-  shares: any,
-  capacities: { bank: number, institutional: number },
-  totalOutstanding: number
-): number {
-  const demand = (capacities.bank * (shares.bankShare ?? 0.25)) + (capacities.institutional * (shares.institutionalShare ?? 0.25));
-  const supply = totalOutstanding || 1;
-  const ratio = demand / supply;
-  return (1 - ratio) * 200;
-}
-
-/**
- * Splits a real, already-bottom-up total (e.g. reg.corpBondOwnership.institutionalShare *
- * totalOutstandingUSD — the institutional sector's actual real claim on a market, already
- * bounded by construction) across named entities by their RELATIVE weight, never by an
- * independently-computed absolute amount. An entity's own policy target percentage
- * (assetAllocationTarget.corpBondPct etc.) is a long-term guide to how much MORE or LESS of the
- * shared real pool it wants relative to its peers — not a free-standing dollar figure that could
- * independently exceed the real pool and need a cap. sizeWeight is any real, relative measure of
- * the entity's own size (this codebase uses totalAssetsUSD, which is internally consistent
- * across entities within one region even where its absolute scale is not directly comparable to
- * the target market).
- */
 export function distributeRealTargetByWeight(
   entities: { id: string; sizeWeight: number; targetPct: number }[],
   totalRealTargetUSD: number

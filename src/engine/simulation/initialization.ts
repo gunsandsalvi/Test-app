@@ -1,8 +1,9 @@
 
-import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
+import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
-import { generateInitialCompanies } from '../companyGenerator';
+import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
+import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
@@ -21,6 +22,51 @@ export function createInitialGameState(): GameState {
   const fxPairs = getInitialFxPairs();
   const companies = generateInitialCompanies();
 
+  // ---- HC Wave 1: the named private tier (HC1 generation + HC3 carves) ----
+  // Generated FIRST, so every bootstrap computation below sees one consistent, already-carved
+  // world: private firms are real companies in `companies` (listingStatus 'PRIVATE'), and each
+  // segment aggregate has already surrendered exactly what its named tier now carries — debt
+  // (HC1), employment, revenue and capex (HC3) — never both counting the same real thing.
+  // Public-only computations (the holdings candidate lists) gate explicitly where they occur.
+  const privateFirmsByRegion = new Map<RegionId, Company[]>();
+  {
+    const allTickers = new Set(companies.map(c => c.ticker));
+    const allNames = new Set(companies.map(c => c.name));
+    (Object.keys(regions) as RegionId[]).forEach(regionId => {
+      const reg = regions[regionId];
+      const segs = reg.privateSectorSegments || [];
+      const seeds = generatePrivateFirmSeeds(regionId, segs);
+      const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, allTickers, allNames);
+
+      // HC3 finding, measured the hard way: private firms must NOT sell into the public
+      // sub-unit markets yet. The auctioned categories' demand is calibrated against public
+      // supply; the hidden tier's output is real but sells OUTSIDE the modeled taxonomy
+      // (services, local trade — categories that do not exist yet). Injecting its 165B/region
+      // of supply into markets sized for 211B of public revenue collapsed both (measured:
+      // -10% to -22% growth, unemployment pinned at its cap). Product-market entry therefore
+      // waits for BP1's registry to carry the hidden sector's real categories (tracked as HC3b
+      // in the plan); until then productLines stays empty and firm revenue evolves against its
+      // own baseline. What DOES hand over now, conserving exactly: employment (real occupation
+      // demand) and capex (real bids in the same capex categories public firms buy from).
+
+      // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
+      // primitive). Employment / revenue / capex: exactly what the named tier now carries.
+      segs.forEach(seg => {
+        const segIdx = seeds.map((sd, i) => sd.segmentType === seg.segmentType ? i : -1).filter(i => i >= 0);
+        const segFirms = segIdx.map(i => firms[i]);
+        seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - segFirms.reduce((a, f) => a + f.totalDebt, 0)));
+        seg.employment = Math.max(1000, Math.round(seg.employment - segFirms.reduce((a, f) => a + f.employeeCount, 0)));
+        // annualRevenueUSD deliberately NOT carved: the segment's stage-05 footprint (its buy-side
+        // demand and niche supply share) still represents the whole hidden tier's goods activity
+        // until HC3b moves the tier's product markets into the taxonomy.
+        seg.capexUSD = Math.round(Math.max(0, seg.capexUSD - segFirms.reduce((a, f) => a + f.capex, 0)));
+      });
+
+      privateFirmsByRegion.set(regionId, firms);
+      companies.push(...firms);
+    });
+  }
+
   const institutionalEntities: InstitutionalEntity[] = [];
 
   // corpBondPct + loanPct together are each type's total real corporate-credit appetite (same
@@ -36,6 +82,10 @@ export function createInitialGameState(): GameState {
     // weights, and a large cash sleeve that is real dry powder — the reason it can still bid
     // when everyone else is at their mandate limit.
     HEDGE_FUND: { govBondPct: 0.05, corpBondPct: 0.40, loanPct: 0.22, equityPct: 0.18, cashPct: 0.15 },
+    // A PE fund holds companies and dry powder, not securities: zero weights keep it out of the
+    // bond/loan/sovereign auctions entirely (no demand schedule, no budget). Its real assets are
+    // its portfolio stakes, marked in peFund below.
+    PRIVATE_EQUITY: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
   };
 
   Object.keys(regions).forEach(r => {
@@ -95,7 +145,7 @@ export function createInitialGameState(): GameState {
     reg.institutionalSector.sovBondHoldingsUSD = Number((reg.sovBondOwnership.institutionalShare * totalSovDebt).toFixed(0));
 
     // Compile holding candidates for individual institutional entities and macro sectors
-    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies.map(c => ({
+    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies.filter(c => c.listingStatus !== 'PRIVATE').map(c => ({
       id: c.id,
       type: 'EQUITY',
       region: regionId,
@@ -111,12 +161,17 @@ export function createInitialGameState(): GameState {
     // Real bonds are an issuer's FIXED-rate tranches only — floating tranches are real leveraged
     // loans, a genuinely different market with its own real clearing and its own candidate list
     // (loanCandidates below) — see 07b-corporate-bond-clearing.ts / 07d-leveraged-loan-clearing.ts.
+    // Candidate lists stay PUBLIC: the macro holdings aggregates were calibrated against the
+    // public market, and the private tier's paper is seeded separately in the engines' own
+    // shape (the HC2 block below).
     const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
+      .filter(c => c.listingStatus !== 'PRIVATE')
       .map(c => ({ id: c.id, type: 'CORP_BOND' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0) }))
       .filter(c => c.outstandingUSD > 0);
     const totalCorpCandidatesUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
 
     const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
+      .filter(c => c.listingStatus !== 'PRIVATE')
       .map(c => ({ id: c.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0) }))
       .filter(c => c.outstandingUSD > 0);
     const totalLoanCandidatesUSD = loanCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
@@ -495,6 +550,105 @@ export function createInitialGameState(): GameState {
   };
 
   
+
+  // ---- HC4: private equity sponsors become real owners ----
+  // The sponsor-style leverage has existed since HC1 (it is where the economy's B/BB paper
+  // lives); HC4 gives it its real owner. Two funds per region hold the levered cohort; the LPs
+  // behind them are the same real institutions, holding fund interests recorded under the same
+  // doctrine as HC2's float seeding — the stakes existed, the owners were unmodeled, no cash
+  // moves at recognition. Committed-but-undrawn capital is a real claim on named LPs that HC6's
+  // deal flow will draw through the budget machinery like any other payment.
+  (Object.keys(regions) as RegionId[]).forEach(regionId => {
+    const firms = privateFirmsByRegion.get(regionId) ?? [];
+    const sponsorable = firms.filter(f => f.leverage >= 4.2 && !f.isDefaulted);
+    if (sponsorable.length === 0) return;
+    const lps = institutionalEntities.filter(e => e.region === regionId &&
+      (e.entityType === 'INSURER' || e.entityType === 'PENSION_FUND' || e.entityType === 'ASSET_MANAGER'));
+    const lpWeightSum = lps.reduce((a, e) => a + e.totalAssetsUSD, 0) || 1;
+    const stakeValue = (f: Company) => Math.max(0, 8 * f.ebitda - f.totalDebt) * 0.75;
+
+    for (let fundIdx = 0; fundIdx < 2; fundIdx++) {
+      const portfolio = sponsorable.filter((_, i) => i % 2 === fundIdx);
+      if (portfolio.length === 0) continue;
+      const fundId = `${regionId}_PEFUND_${fundIdx + 1}`;
+      const investedUSD = Math.round(portfolio.reduce((a, f) => a + stakeValue(f), 0));
+      // Real funds keep ~a third of commitments undrawn — the dry powder HC6 calls.
+      const committedUSD = Math.round(investedUSD / 0.65);
+      portfolio.forEach(f => {
+        f.ownership = { founderPct: 0.25, peSponsorId: fundId, peSponsorPct: 0.75 };
+      });
+      institutionalEntities.push({
+        id: fundId,
+        name: `${regionId} Capital Partners ${['I', 'II'][fundIdx]}`,
+        ticker: `PEF${fundIdx + 1}`,
+        region: regionId,
+        entityType: 'PRIVATE_EQUITY',
+        totalAssetsUSD: investedUSD,
+        equityCapitalUSD: investedUSD,
+        sharesOutstanding: 1,
+        stockPrice: 0,
+        itemizedHoldings: [],
+        cashUSD: 0,
+        assetAllocationTarget: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
+        isDefaulted: false,
+        historicalPrices: [],
+        peFund: {
+          portfolioCompanyIds: portfolio.map(f => f.id),
+          lpCommitments: lps.map(e => ({
+            lpEntityId: e.id,
+            committedUSD: Math.round(committedUSD * (e.totalAssetsUSD / lpWeightSum)),
+            drawnUSD: Math.round(investedUSD * (e.totalAssetsUSD / lpWeightSum)),
+          })),
+        },
+      });
+      lps.forEach(e => {
+        const interestUSD = Math.round(investedUSD * (e.totalAssetsUSD / lpWeightSum));
+        if (interestUSD > 1) {
+          e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalUSD: interestUSD });
+          e.totalAssetsUSD += interestUSD;
+        }
+      });
+    }
+  });
+
+  // ---- HC2: the private tier's tradable float seeded onto its real holders ----
+  // Runs last because it needs the institutional entities built above. The paper existed before
+  // the market did — the claims were simply held by nobody the model named. Institutions hold
+  // the tradable share from week 0 in the same proportional shape the clearing engines produce
+  // (lesson §7.4), no cash moves (recognising an existing stock, not a purchase), and S11's
+  // weekly mark carries the enlarged books from week 1.
+  (Object.keys(regions) as RegionId[]).forEach(regionId => {
+    const reg = regions[regionId];
+    const firms = privateFirmsByRegion.get(regionId) ?? [];
+    const regionEntities = institutionalEntities.filter(e => e.region === regionId);
+    const fixedOf = (f: Company) => (f.debtTranches || []).filter(t => t.rateType === 'FIXED').reduce((a, t) => a + t.principalUSD, 0);
+    const floatOf = (f: Company) => (f.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((a, t) => a + t.principalUSD, 0);
+    const instShare = reg.corpBondOwnership.institutionalShare;
+    const IG = ['AAA', 'AA', 'A', 'BBB'];
+    const sleeve = (t: InstitutionalEntityType, ig: boolean) =>
+      ig ? 1 : t === 'INSURER' ? 0.08 : t === 'PENSION_FUND' ? 0.10 : t === 'ASSET_MANAGER' ? 2.0 : 4.0;
+    firms.forEach(f => {
+      const ig = IG.includes(f.creditRating);
+      (['CORP_BOND', 'LEVERAGED_LOAN'] as const).forEach(kind => {
+        const outstanding = kind === 'CORP_BOND' ? fixedOf(f) : floatOf(f);
+        if (outstanding <= 0) return;
+        const tradable = outstanding * instShare;
+        const weights = regionEntities.map(e => {
+          const pct = kind === 'CORP_BOND' ? e.assetAllocationTarget.corpBondPct : e.assetAllocationTarget.loanPct;
+          return e.totalAssetsUSD * pct * sleeve(e.entityType, ig);
+        });
+        const wSum = weights.reduce((a, b) => a + b, 0) || 1;
+        regionEntities.forEach((e, i) => {
+          const qty = tradable * (weights[i] / wSum);
+          if (qty > 1) {
+            e.itemizedHoldings.push({ instrumentId: f.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty) });
+            e.totalAssetsUSD += Math.round(qty);
+          }
+        });
+      });
+    });
+  });
+
   return {
     currentWeek: 1,
     year: 2026,

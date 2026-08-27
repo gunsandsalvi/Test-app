@@ -8,12 +8,13 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
   const [selectedRegion, setSelectedRegion] = useState<RegionId>('USA');
   const reg = state.regions[selectedRegion];
 
-  // Government Bonds
-  const sovereignRiskPremiumBps = reg.sovereignRating === 'AAA' ? 0 : reg.sovereignRating === 'AA' ? 15 : reg.sovereignRating === 'A' ? 35 : reg.sovereignRating === 'BBB' ? 70 : 150;
-  
+  // Government Bonds — S6: priced off the CLEARED curve (07c refits reg.yieldCurveParams to real
+  // cleared yields every week) at zero spread. The deleted line invented a sovereign-rating
+  // premium on top — a second price-setter disagreeing with the sovereign auction, for the one
+  // asset whose whole curve is already real.
   const govBonds = (reg.govDebtTranches || []).map((t: GovDebtTranche) => {
     const remainingTenorYears = Math.max(0.01, (t.maturityWeek - state.currentWeek) / 52);
-    const bondPricing = priceCorporateBond(remainingTenorYears, t.couponRate, reg.yieldCurveParams, sovereignRiskPremiumBps, false, 0.40);
+    const bondPricing = priceCorporateBond(remainingTenorYears, t.couponRate, reg.yieldCurveParams, 0, false, 0.40);
     const cleanName = formatBondName(selectedRegion, t.couponRate, t.maturityWeek, state.currentWeek, 'FIXED');
     
     return {

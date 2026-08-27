@@ -59,18 +59,6 @@ export interface ClearingInstrument {
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE';
   /** Duration in years — retained for adapters that convert the cleared level into a price. */
   durationYears: number;
-  /**
-   * The widest level the asset can reach for a real economic reason, supplied by the adapter that
-   * knows what that reason is — for credit, the spread implied by the price sitting on its
-   * recovery-value floor. Not a chosen cap and not a damper: the market genuinely does not exist
-   * beyond it, because past it the asset is worth more defaulted than held.
-   *
-   * It matters because the solve below has to return SOMETHING when demand cannot absorb the
-   * float at any level, and without this it returned the search bound — a number with no meaning
-   * that nonetheless printed as a spread. With it, the answer is the real edge of the market and
-   * the dealer is left holding what would not clear even there.
-   */
-  maxStat?: number;
 }
 
 /**
@@ -89,6 +77,16 @@ export interface ParticipantDemand {
   maxHoldingUSD: number;
   /** How far past the reservation level it takes to pull in that full size. */
   fullSizeStatRange: number;
+  /**
+   * The most this participant can ADD to its position this week, in dollars — its real budget
+   * for this name (see the adapters' budget derivation: available cash plus whatever leverage
+   * its type genuinely runs, apportioned across the names it wants). A bid is a claim on money;
+   * without this, entities bought with cash they did not have and ran ~10% unchosen leverage
+   * (§7.19 item on S11). A cash-constrained bidder rations QUANTITY, not price (§7.6) — the
+   * reservation level is unchanged, only the size it can take at that level. Omitted = unbounded
+   * (banks in 07c, whose real constraint is their reserve position, not a cash budget).
+   */
+  maxNetPurchaseUSD?: number;
 }
 
 export interface ClearingParticipant {
@@ -117,28 +115,39 @@ export interface ClearingResult {
   netCashDeltaByParticipantId: Map<string, number>;
 }
 
-/** What this participant would hold of this instrument at a given level. */
-function demandAtStat(demand: ParticipantDemand, stat: number, statKind: ClearingInstrument['statKind']): number {
+/**
+ * What this participant would hold of this instrument at a given level — its schedule, capped by
+ * what its money can actually buy this week (holdings it already has plus its real budget).
+ * The cap is a constant in the level, so total demand stays monotonic and bisection stays exact.
+ */
+function demandAtStat(
+  demand: ParticipantDemand,
+  stat: number,
+  statKind: ClearingInstrument['statKind'],
+  previousHoldingUSD: number
+): number {
   const range = Math.max(1e-6, demand.fullSizeStatRange);
   // A yield-like statistic gets more attractive as it RISES; a price-like one as it FALLS.
   const distanceIntoTheMoney = statKind === 'YIELD_LIKE'
     ? stat - demand.reservationStat
     : demand.reservationStat - stat;
   const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / range));
-  return demand.maxHoldingUSD * fraction;
+  const wantedUSD = demand.maxHoldingUSD * fraction;
+  const affordableUSD = demand.maxNetPurchaseUSD === undefined
+    ? Infinity
+    : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
+  return Math.min(wantedUSD, affordableUSD);
 }
 
 /**
  * Solves for the level at which the participants collectively want exactly the tradable float.
  * Total demand is monotonic in the level, so bisection is exact and cannot oscillate.
  *
- * The bracket's lower end is deliberately wide and is not an economic bound: if every
+ * Both bracket ends are numerical guards, deliberately far outside any real schedule: if every
  * participant's reservation level is above some spread, demand there is zero on its own and the
- * solve simply never goes there. The upper end IS economic where the adapter supplies one
- * (ClearingInstrument.maxStat) — for credit, the level at which the price has fallen to recovery
- * value and the market ends. Where even that level cannot attract enough demand to absorb the
- * float, the auction clears there and the dealer is left holding the difference, which is what a
- * dealer of last resort actually is.
+ * solve simply never goes there. Where demand cannot absorb the float at the level the schedules
+ * do support, the market clears wide and the dealer is left holding the difference, which is
+ * what a dealer of last resort actually is.
  */
 function solveClearingStat(
   inst: ClearingInstrument,
@@ -149,7 +158,7 @@ function solveClearingStat(
   const totalDemandAt = (stat: number) =>
     participants.reduce((sum, p) => {
       const d = p.demandByInstrumentId.get(inst.id);
-      return sum + (d ? demandAtStat(d, stat, inst.statKind) : 0);
+      return sum + (d ? demandAtStat(d, stat, inst.statKind, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0) : 0);
     }, 0);
 
   // Demand rises with the statistic for YIELD_LIKE and falls for PRICE_LIKE; orient the search so
@@ -157,14 +166,23 @@ function solveClearingStat(
   const lo = inst.statKind === 'YIELD_LIKE' ? bracketLow : bracketHigh;
   const hi = inst.statKind === 'YIELD_LIKE' ? bracketHigh : bracketLow;
 
-  if (totalDemandAt(hi) < inst.tradableFloatUSD) return hi; // nobody wants it all, even at the extreme
-  if (totalDemandAt(lo) > inst.tradableFloatUSD) return lo; // oversubscribed even at the extreme
+  // When the participants' combined capacity cannot absorb the whole float at ANY level, there
+  // is no crossing — and the honest clearing level is NOT the search bound (a bound is not a
+  // price; that mistake is recorded in the plan). It is the SATURATION point: the least
+  // aggressive level at which every willing buyer has taken its full size. Beyond it, a wider
+  // level attracts not one more dollar of demand, so no economic force pushes the price there.
+  // The dealer carries the genuine residual, which is what a dealer of last resort is — and the
+  // cost of that warehousing becoming real capital and funding is G3's item, not a reason to
+  // fake a wider print today.
+  const demandAtWideEnd = totalDemandAt(hi);
+  const targetUSD = Math.min(inst.tradableFloatUSD, demandAtWideEnd * 0.999999);
+  if (totalDemandAt(lo) > targetUSD) return lo; // oversubscribed even at the extreme
 
   let a = lo;
   let b = hi;
   for (let i = 0; i < 60; i++) {
     const mid = (a + b) / 2;
-    if (totalDemandAt(mid) < inst.tradableFloatUSD) a = mid;
+    if (totalDemandAt(mid) < targetUSD) a = mid;
     else b = mid;
   }
   return (a + b) / 2;
@@ -194,11 +212,15 @@ export function clearFinancialAsset(
 
     // Wide, non-economic search bounds. See solveClearingStat: the participants' own reservation
     // levels decide where the market can actually clear, not these.
+    // NUMERICAL guards only, never economics — wide enough that no real schedule reaches them.
+    // The demand side always contains a bid at some level (the distressed regime's recovery
+    // arithmetic guarantees it for credit), so the solve finds a real crossing inside the
+    // bracket; a solve that returns a bracket edge is a bug in an adapter's schedules, not a
+    // market outcome, and the earlier version of this file that dressed the upper bound in a
+    // recovery-value story is recorded in the plan as a mistake not to repeat.
     const isYieldLike = inst.statKind === 'YIELD_LIKE';
     const bracketLow = isYieldLike ? -2000 : Math.max(1e-6, inst.currentStat * 0.01);
-    const bracketHigh = isYieldLike
-      ? (inst.maxStat ?? 50000)
-      : Math.min(inst.maxStat ?? Infinity, inst.currentStat * 100);
+    const bracketHigh = isYieldLike ? 100000 : inst.currentStat * 100;
 
     const solvedStat = solveClearingStat(inst, participants, bracketLow, bracketHigh);
 
@@ -213,8 +235,8 @@ export function clearFinancialAsset(
     let allocatedUSD = 0;
     participants.forEach((p) => {
       const d = p.demandByInstrumentId.get(inst.id);
-      const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind) : 0;
       const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
+      const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind, previousUSD) : 0;
       const tradedUSD = filledUSD - previousUSD;
       const feeUSD = Math.abs(tradedUSD) * (params.dealerSpreadBps / 10000);
 

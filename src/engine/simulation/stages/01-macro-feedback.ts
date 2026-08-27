@@ -29,6 +29,8 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
 
   ctx.avgMargin = prevActiveFirms.reduce((sum, c) => sum + (c.ebitda / Math.max(1, c.annualRevenue)), 0) / Math.max(1, prevActiveFirms.length);
   ctx.marginCompression = ctx.avgMargin < 0.22 ? 0.22 - ctx.avgMargin : 0.0;
+  // Since HC2 the market holds private paper too, so a private default is a real credit event
+  // like any other.
   ctx.recentDefaultsCount = state.companies.filter((c) => c.isDefaulted || c.creditRating === 'CCC').length;
   ctx.creditContagionBps = ctx.recentDefaultsCount * 12;
   ctx.systemicStressFactorGlobal = Math.min(0.3, ctx.creditContagionBps / 500);

@@ -9,6 +9,7 @@ import { runUnitBiddingStage } from './stages/05-unit-bidding';
 import { runFxAndTradeStage } from './stages/06-fx-and-trade';
 import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
+import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
@@ -37,9 +38,13 @@ export function advanceWeeklyStep(state: GameState): GameState {
   runUnitBiddingStage(state, ctx);
   runFxAndTradeStage(state, ctx);
   runCommoditiesStage(state, ctx);
+  // Income first, so this week's real coupon receipts can fund this week's bids; mark after,
+  // so next week's structural shares are sized by this week's actual close (S11).
+  accrueInstitutionalIncome(ctx);
   runCorporateBondClearingStage(state, ctx);
   runSovereignBondClearingStage(state, ctx);
   runLeveragedLoanClearingStage(state, ctx);
+  markInstitutionalBooks(ctx);
   runCompanyFundamentalsStage(state, ctx);
   runConcentrationRiskStage(state, ctx);
   runMergersStage(state, ctx);

@@ -185,10 +185,20 @@ function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
 function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   const baseline = createInitialGameState();
   const shocked = createInitialGameState();
-  // Force heavy under-absorption: shrink USA bank/institutional balance-sheet capacity to a
-  // fraction of outstanding sovereign debt, well below the baseline run.
-  shocked.regions.USA.bankingSector.bankEquityUSD *= 0.01;
-  shocked.regions.USA.institutionalSector.sectorEquityUSD *= 0.01;
+  // S6: shock the fields the market ACTUALLY reads. The old version shrank two macro scalars
+  // (bankEquityUSD / sectorEquityUSD) that the clearing engine stopped reading when sovereign
+  // demand became per-bank reserve arbitrage (S2) and per-entity budgets (S11) — so baseline and
+  // shocked runs were identical to 8 decimal places and the check was testing nothing. An
+  // under-subscribed auction is buyers with no money: drain every USA bank's real reserves (the
+  // funding for their bond bids) and every USA institution's real cash (their budgets).
+  shocked.companies.forEach(c => {
+    if (c.region === 'USA' && c.bankBalanceSheet) {
+      c.bankBalanceSheet.cashReservesUSD *= 0.01;
+    }
+  });
+  shocked.institutionalEntities.forEach(e => {
+    if (e.region === 'USA') e.cashUSD = 0;
+  });
 
   const baselineNext = advanceWeeklyStep(baseline);
   const shockedNext = advanceWeeklyStep(shocked);

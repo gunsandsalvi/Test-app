@@ -222,6 +222,14 @@ export interface Company {
   lastEarningsSurprisePct: number;
   lastManagementCommentary: string;
 
+  /**
+   * S5: last week's cash walk as an explicit ledger — every real dollar in or out of `cash`,
+   * named. The invariant is structural: cash changes ONLY by the sum of these entries (one
+   * posting helper in stage 08 is the single write path), so any unexplained cash move is a
+   * missing entry, not a mystery.
+   */
+  lastCashLedger?: { label: string; amountUSD: number }[];
+
   // Capital Structure
   /**
    * The company's syndicated term loan, present only while it actually has floating-rate debt
@@ -266,6 +274,23 @@ export interface Company {
   // a higher-risk bank's own business-loan-loss experience scales up by this factor, so it can
   // genuinely underperform (or fail) while a conservative bank in the same region stays healthy.
   bankRiskFactor?: number;
+  /**
+   * Whether this company's equity trades on the public market — a STATE, not a type (plan §5-HC:
+   * one firm model, one lifecycle). A PRIVATE company is every bit as real: it produces, employs,
+   * borrows and defaults through the same stages, gated only where the behaviour is genuinely
+   * public-only (equity pricing, consensus/earnings theater, index membership). Going public is a
+   * transition of this flag through a real offering (HC7), not the creation of a new object.
+   * Absent on companies generated before this field existed — treat undefined as 'PUBLIC'
+   * (see isPubliclyListed below).
+   */
+  listingStatus?: 'PUBLIC' | 'PRIVATE';
+  /**
+   * Who owns a private company's equity. Founders/family by default; PE sponsor fields are
+   * filled by HC4/HC6 when sponsors become real entities with real committed capital. On public
+   * companies the real register is the share-ownership model (WS4) — this block is only
+   * meaningful while listingStatus is PRIVATE.
+   */
+  ownership?: { founderPct: number; peSponsorId?: string; peSponsorPct?: number };
   // Mirrors InstitutionalEntityType in domain/institutions.ts; inlined because that module
   // already imports from this one and a type import here would close the cycle.
   institutionalRole: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | null;
@@ -314,6 +339,11 @@ export interface Company {
   producedCommodityId?: string;
   demandShockLagBuffer?: number[];
 }
+/** Public-market membership test. Undefined (pre-HC companies) reads as PUBLIC. */
+export function isPubliclyListed(c: Pick<Company, 'listingStatus'>): boolean {
+  return c.listingStatus !== 'PRIVATE';
+}
+
 export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && !c.mergerAcquired; }
 
 export function getOutputInventoryUSD(comp: Company, subUnitId?: string): number {

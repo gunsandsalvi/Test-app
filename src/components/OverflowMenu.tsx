@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameState } from '../types';
 import { X, RefreshCw, FileText } from 'lucide-react';
-import { formatCurrency } from '../engine/formatters';
+import { formatSimulationDate, formatCurrency } from '../engine/formatters';
 
 interface OverflowMenuProps {
   onClose: () => void;
@@ -39,7 +39,7 @@ export const OverflowMenu: React.FC<OverflowMenuProps> = ({ onClose, onRestart, 
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Sim Clock:</span>
-              <span className="font-mono text-slate-200">{new Date(2024, 0, 1 + state.currentWeek * 7).toISOString().split('T')[0]}</span>
+              <span className="font-mono text-slate-200">{formatSimulationDate(state.currentWeek)}</span>
             </div>
           </div>
           

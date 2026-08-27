@@ -26,10 +26,13 @@ export function calculateCompositeIndices(
   prevIndices?: CompositeBenchmarkIndices
 ): CompositeBenchmarkIndices {
   // 1. Equities Cap-weighted calculations
-  const usFirms = companies.filter((c) => c.region === 'USA');
-  const euFirms = companies.filter((c) => c.region === 'EUR');
-  const ukFirms = companies.filter((c) => c.region === 'UK');
-  const jpFirms = companies.filter((c) => c.region === 'JPN');
+  // Indices are PUBLIC-market objects: a private firm (HC Wave 1) has no quote and no index
+  // membership, so it must not enter a cap-weighted average with a zero market cap.
+  const listed = companies.filter((c) => c.listingStatus !== 'PRIVATE');
+  const usFirms = listed.filter((c) => c.region === 'USA');
+  const euFirms = listed.filter((c) => c.region === 'EUR');
+  const ukFirms = listed.filter((c) => c.region === 'UK');
+  const jpFirms = listed.filter((c) => c.region === 'JPN');
 
   const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
     if (firms.length === 0) return baseIndex;

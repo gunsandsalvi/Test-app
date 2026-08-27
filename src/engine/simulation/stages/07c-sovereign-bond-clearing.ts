@@ -47,6 +47,7 @@ import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../..
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext } from './context';
+import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 
@@ -206,6 +207,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // the same choice the banks below face and the reason the front end tracks policy.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       const entityTarget = rawEntityTargets.get(entity.id) ?? 0;
+      // The entity's real money for this auction (S11), apportioned across tenor buckets by
+      // their share of the market. Banks below carry no such cap: their real constraint is the
+      // reserve position S2 already built, not a cash budget.
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'GOV_BOND');
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
@@ -213,6 +218,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           reservationStat: computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS),
           maxHoldingUSD: entityTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
           fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
+          maxNetPurchaseUSD: classBudgetUSD * bucketShareOfMarket,
         });
       });
 

@@ -14,7 +14,7 @@ import {
   GameState, Company, Region, Position, FxPair, Commodity, CompositeBenchmarkIndices,
   InstitutionalEntity, NewsItem, RegionId,
 } from '../../../types';
-import { isActiveCompany, CreditRating } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, CreditRating } from '../../../domain/company';
 
 export interface WeeklyStepContext {
   // Time bookkeeping
@@ -24,6 +24,9 @@ export interface WeeklyStepContext {
   // Cross-stage accumulators
   companyUpdates: Record<string, any>;
   prevActiveFirms: Company[];
+  /** Active PRIVATE companies (HC Wave 1) — consumed only by stages that have explicitly taken
+   * the handover; see the note on prevActiveFirms below. */
+  prevActivePrivateFirms: Company[];
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];
   recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];
   diagnosticLogs: any[];
@@ -85,7 +88,12 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     currentWeekMod13: ((nextWeek - 1) % 13) + 1,
 
     companyUpdates: {},
-    prevActiveFirms: state.companies.filter(isActiveCompany),
+    // The containment gate for the private tier (HC Wave 1): every existing stage consumes
+    // prevActiveFirms and therefore sees only the public universe it was built against. Private
+    // firms opt IN per handover wave — debt markets in HC2, goods/labor in HC3 — so nothing
+    // changes silently.
+    prevActiveFirms: state.companies.filter((c) => isActiveCompany(c) && isPubliclyListed(c)),
+    prevActivePrivateFirms: state.companies.filter((c) => isActiveCompany(c) && !isPubliclyListed(c)),
     recentIPOs: [],
     recentMergers: [],
     diagnosticLogs: [],

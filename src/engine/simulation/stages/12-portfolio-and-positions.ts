@@ -15,7 +15,6 @@ import { priceSovereignBond } from '../../nelsonSiegel';
 import { priceCorporateBond, priceLeveragedLoan, priceInterestRateSwap, priceCreditDefaultSwap, priceCrossCurrencyBasisSwap } from '../../pricing';
 import { getUnifiedInitialMarginRate } from '../../dealers';
 import { calculateCompositeIndices } from '../../macro/indices';
-import { computeSupplyDemandPremium, getRatingBucket, computeBucketDemandPremiumBps } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
 export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -117,12 +116,10 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
 
           const remainingTenorYears = Math.max(0.01, (tranche.maturityWeek - nextWeek) / 52);
           const totalCorpBondPrincipalOutstanding = updatedCompanies.filter(c => c.region === pos.region).reduce((s, c) => s + c.totalDebt, 0);
-          const corpBondPremium = computeSupplyDemandPremium(
-            updatedRegions[pos.region].corpBondOwnership,
-            { bank: updatedRegions[pos.region].bankingSector.bankEquityUSD, institutional: updatedRegions[pos.region].institutionalSector.sectorEquityUSD },
-            totalCorpBondPrincipalOutstanding
-          );
-          const adjustedOasSpreadBps = comp.oasSpreadBps * (1 - corpBondPremium);
+          // S6: the position marks off the CLEARED stat, full stop. The deleted block here
+          // re-adjusted the already-cleared OAS by an ownership-derived premium — a second
+          // price-setter duplicating (and disagreeing with) the real auction in 07b.
+          const adjustedOasSpreadBps = comp.oasSpreadBps;
 
           if (tranche.rateType === 'FIXED') {
             const bondPriced = priceCorporateBond(
@@ -152,16 +149,14 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             marginReq = pos.notional * fxRateToUsd * marginRate;
             maintMargin = marginReq * 0.65;
           } else {
-            const loanBucket = getRatingBucket(comp.creditRating);
-            const loanBucketPeers = updatedCompanies.filter(c => c.region === pos.region && getRatingBucket(c.creditRating) === loanBucket);
-            const loanBucketDemandPremiumBps = computeBucketDemandPremiumBps(loanBucket, updatedRegions[pos.region], loanBucketPeers);
+            // S6: marked off the loan's own CLEARED discount margin (07d), not a re-derived one.
+            const clearedDmBps = comp.leveragedLoan?.discountMarginBps ?? (tranche.floatingMarginBps ?? 200);
             const loanPricing = priceLeveragedLoan(
               tranche.floatingMarginBps ?? 200,
-              adjustedOasSpreadBps,
+              clearedDmBps,
               remainingTenorYears,
               comp.isDefaulted,
-              comp.recoveryRate,
-              loanBucketDemandPremiumBps
+              comp.recoveryRate
             );
             currentPrice = loanPricing.pricePar;
             const posValueUSD = pos.quantity * (currentPrice / 100) * fxRateToUsd;

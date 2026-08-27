@@ -767,15 +767,13 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
               {(company.debtTranches || []).map(t => {
                 const isFixed = t.rateType === 'FIXED';
                 const remainingTenorYears = Math.max(0.01, (t.maturityWeek - state.currentWeek) / 52);
-                const totalCorpBondPrincipalOutstanding = state.companies.filter(c => c.region === company.region).reduce((s, c) => s + c.totalDebt, 0) * 1_000_000;
-                const impliedBankDemandUSD = reg.corpBondOwnership.bankShare * reg.bankingSector.bankEquityUSD;
-                const impliedInstitutionalDemandUSD = reg.corpBondOwnership.institutionalShare * reg.institutionalSector.sectorEquityUSD;
-                const demandToSupplyRatio = totalCorpBondPrincipalOutstanding > 0 ? (impliedBankDemandUSD + impliedInstitutionalDemandUSD) / totalCorpBondPrincipalOutstanding : 1.0;
-                const corpBondPremium = Math.max(-0.15, Math.min(0.15, (demandToSupplyRatio - 1.0) * 0.3));
-                const adjustedOasSpreadBps = company.oasSpreadBps * (1 - corpBondPremium);
+                // S6: display prices come from the CLEARED stats via pure converters — the
+                // deleted block here was the engine's old ownership-premium formula pasted into
+                // the UI (with a x1,000,000 stale-unit bug on top): a third price-setter for an
+                // asset that already clears weekly in 07b/07d.
                 const pricing = isFixed
-                  ? priceCorporateBond(remainingTenorYears, t.couponRate ?? 0.05, reg.yieldCurveParams, adjustedOasSpreadBps, company.isDefaulted, company.recoveryRate)
-                  : priceLeveragedLoan(t.floatingMarginBps ?? 200, adjustedOasSpreadBps, remainingTenorYears, company.isDefaulted, company.recoveryRate);
+                  ? priceCorporateBond(remainingTenorYears, t.couponRate ?? 0.05, reg.yieldCurveParams, company.oasSpreadBps, company.isDefaulted, company.recoveryRate)
+                  : priceLeveragedLoan(t.floatingMarginBps ?? 200, company.leveragedLoan?.discountMarginBps ?? (t.floatingMarginBps ?? 200), remainingTenorYears, company.isDefaulted, company.recoveryRate);
                 const price = isFixed ? (pricing as any).price : (pricing as any).pricePar;
                 const bondName = formatBondName(company.ticker, t.couponRate, t.maturityWeek, state.currentWeek, t.rateType);
                 return (
