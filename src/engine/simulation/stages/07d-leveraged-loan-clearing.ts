@@ -37,6 +37,7 @@ import {
 import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
+import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
@@ -142,6 +143,12 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       const sectorTotal = totalRealInstitutionalTargetUSD || 1;
+      // The entity's real money for this auction (S11), split across names by structural size.
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN');
+      let totalStructuralSizeUSD = 0;
+      regionCompanies.forEach((c) => {
+        totalStructuralSizeUSD += floatingDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal);
+      });
 
       // Same terms as the bond book, at the loan's own economics: a first-lien loan's collateral
       // means less is expected to be lost on it and less capital is tied up holding it, so it
@@ -177,6 +184,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             structuralSizeUSD *
             (entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE),
           fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
+          maxNetPurchaseUSD:
+            classBudgetUSD * (totalStructuralSizeUSD > 0 ? structuralSizeUSD / totalStructuralSizeUSD : 0),
         });
       });
 

@@ -188,8 +188,8 @@ not formulas and they still produce wrong prices. The clearing markets are hones
 running on an asset universe that does not match the money pointed at it: institutional
 corporate-credit appetite is **~6x the corporate credit that exists** (§7.18), the hidden
 corporate sector's 549B of debt is a scalar no one can own (§5-HC), and institutions face no
-budget constraint at all (§5-S11). A correct auction over a 6x-short float still gives a wrong
-price, and no amount of work inside the auction fixes it.
+no budget constraint existed at all (fixed — §7.21). A correct auction over a 6x-short float
+still gives a wrong price, and no amount of work inside the auction fixes it.
 
 ---
 
@@ -201,28 +201,27 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
-| 1 | **Institutional balance sheet: bids bounded by money; live total assets** | S11 | — |
-| 2 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
+| 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
 | — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, HC W1 |
 | 4 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 5 | Delete every duplicate price-setter (engine + UI) | S6 | — |
-| 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S11 |
+| 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | — |
 | 7 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
-| 8 | Player trades enter the real market | S9 | S7, S11 |
+| 8 | Player trades enter the real market | S9 | S7 |
 | 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 10 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S5–S7, S11 |
-| 11 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S11 |
-| 12 | Private repo markets | WS6 | S11 |
+| 10 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S5–S7 |
+| 11 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | — |
+| 12 | Private repo markets | WS6 | — |
 | 13 | Money market funds | WS7 | WS5, WS6 |
 | 14 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
 | 14b | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
-| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S11, HC W1 |
+| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
 | 16 | Unify the two dealer systems | G3 | S9 |
 | 17 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
 | 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 19 | Institutional liability side (claims, benefits) drives demand | G6 | WS7, S11 |
+| 19 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
 | 20 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
 | 21 | Corporate hedging + banks hedge their own book | WS11 | G4 |
 | 22 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
@@ -241,11 +240,6 @@ at week 26, inflation is a measured statistic, and corporate spreads now track c
 **What the top three items have in common.** Each is a case of the credit market being right in
 mechanism and wrong in inputs, and each was found by measuring rather than reading:
 
-- **S11 first because there is no link between money and assets at all.** An institution's bid is
-  bounded by a policy ceiling and by nothing else; measured, institutional cash reaches −10% of
-  assets by week 20 and stays there, and `totalAssetsUSD` — the size weight driving every
-  entity's structural share in all three clearing stages — is never written after
-  initialization. Every market downstream inherits both.
 - **HC Wave 1 because the asset universe is 6x short of the money pointed at it** (§7.18), the
   labor market is short of employers by a similar order, and both missing halves are the same
   missing thing: the hidden corporate sector as real firms.
@@ -258,58 +252,13 @@ and G2 exist to receive it): the lifecycle — LBO/recap/exit flow, real IPOs re
 synthetic generator, firm births, defaults into estates. **Do not reorder further without
 asking.**
 
-Otherwise the shape holds: restore the money and holdings identities (S5–S9, S11), then the
+Otherwise the shape holds: restore the money and holdings identities (S5–S9), then the
 remaining markets, then Main Street before Blueprint's fiscal loop (taxes need households).
 Aurora is deliberately last: it re-renders everything the other projects produce.
 
 ---
 
 ## 5. Detailed work instructions
-
-### S11 — Institutional balance sheet: bids bounded by money, live total assets
-
-**Two measured defects, one balance sheet, and together they are the missing link between the
-money in the system and the price of assets.**
-
-1. **There is no budget constraint anywhere in the demand schedule.** `ParticipantDemand` carries
-   `maxHoldingUSD` — a *policy* ceiling — and nothing else. An entity with no money still bids
-   full size. Measured: USA institutional cash starts at +5.7% of assets and reaches **−10% by
-   week 20**, staying there; securities held (907B) exceed total assets (766B). The entities are
-   running ~18% leverage that nobody decided on. This is also the likely mechanism behind the
-   periodic institutional-book warnings in §6.
-2. **`InstitutionalEntity.totalAssetsUSD` is never written after initialization.** Nothing in
-   `src/engine/simulation/` assigns it. It is the `sizeWeight` argument to
-   `distributeRealTargetByWeight` in **all three clearing stages**, so every entity's structural
-   share of every instrument is computed from week-0 numbers forever, no matter how the book
-   actually evolves.
-
-**How:**
-- Recompute `totalAssetsUSD` each week as what it actually is: cash plus the marked value of
-  real holdings. It is a derived sum, not a stored parameter — the same "1$ is 1$" discipline
-  rule 3 applies to every other aggregate.
-- Add affordability to the demand schedule. An entity's bid across all instruments in a stage is
-  bounded by its real available cash (plus whatever leverage its type is genuinely allowed —
-  a hedge fund runs leverage, an insurer largely does not, and that difference should be a
-  named, real constraint rather than an accident). Where demand exceeds affordability, it
-  scales back — a real cash-constrained bidder rations quantity, which is lesson §7.6 applied to
-  the financial markets rather than the goods market.
-- Selling must genuinely release cash that is then available to bid elsewhere. That is the
-  cross-asset substitution the whole RV framing depends on, and it cannot work while cash is
-  free.
-
-**Verify:** institutional cash stays non-negative for every entity across 120 weeks without a
-clamp (if it goes negative, the constraint is not binding — find why, do not floor it); the
-periodic institutional-book warnings in §6 stop or are shown to be unrelated; and
-`totalAssetsUSD` tracks the real book.
-**Then delete 07b's per-name weight normalisation** (§7.19 item 2; its other gate, the
-distressed pricing regime, landed in §7.20): with real budgets bounding bids and a real
-recovery-based bid always present, demand should meet float because real buyers with real money
-choose to hold it, with the dealer absorbing any genuine residual — not because shares are
-renormalised to 1 by construction.
-Also reconcile the two representations of each institution that is *also* a listed company:
-company-level `aumUSD` and entity-level `totalAssetsUSD` describe one balance sheet — derive the
-company's AUM (and thus its fee revenue in stage 08) from the entity's real book, one direction
-only.
 
 ### P1 — Periodicity & units audit, and the MoM/YoY display convention
 
@@ -530,7 +479,7 @@ Work §6's table in one or two commits. Nothing there is architectural.
 
 ### WS4 — Equity clearing (slice 4) + sentiment retirement
 
-**The biggest lift.** Prereq: S5–S7, S11.
+**The biggest lift.** Prereq: S5–S7.
 **Where:** new `07e-equity-clearing.ts`; share registry in `domain/company.ts` holdings.
 
 1. **The registry holds SHARES, not dollars.** Add `instrumentType: 'EQUITY'` holdings whose
@@ -1344,7 +1293,7 @@ the complete simulation.
        It was the right fix for the prohibition-era no-bid collapse, but it means the market as a
        whole can never be genuinely short of buyers — scarcity of distressed capital cannot
        depress prices because shares always renormalise to 1. Part of why the ceiling-pinning
-       went away is construction, not economics. Once S11 gives entities real budgets and E2
+       went away is construction, not economics. Once entities have real budgets and E2
        gives distressed buyers real recovery-based bids, **delete the normalisation**: sizes come
        from real sleeves and real money, and the dealer absorbs what genuinely finds no buyer.
     3. **The dealer has no balance sheet.** Residual float parks in dealer inventory with no
@@ -1358,7 +1307,7 @@ the complete simulation.
        and `INSTITUTIONAL_REAL_RETURN_BPS` constants.
     5. **The hedge fund exists twice** — company-level `aumUSD` (revBase×20) and entity-level
        `totalAssetsUSD` (share of the macro pool) are two unreconciled representations of one
-       balance sheet. Fold the link into S11's derived `totalAssetsUSD`.
+       balance sheet. Fold the link into the derived `totalAssetsUSD` (done — §7.21).
     6. Dead code and a stale header survive from the quantity-target engine (see §6) — S10.
 20. **E2 landed: two pricing regimes, one default model, no ceiling.** Three connected changes:
     - **The priced hazard is now a structural forecast of the real default trigger.** The logistic
@@ -1392,7 +1341,43 @@ the complete simulation.
       was probably being smuggled in by the old model's error. The logistic's inflated PDs were
       doing the capital schedule's job; making PD honest exposed that the capital side had been
       flat all along. Fix the newly exposed structure, don't re-inflate the input.
-21. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+21. **S11 landed: bids are bounded by money, books are marked, income is real.** Four changes,
+    one balance sheet (`stages/institutional-balance-sheet.ts` + engine support):
+    - **Income leg completed.** Companies always EXPENSED their debt interest; the receiving side
+      did not exist — dollars leaving a real book and arriving nowhere. Holders are now credited
+      weekly off the issuer's own real tranche terms (bond coupons, loan interest at policy +
+      margin). Sovereign coupons deliberately NOT credited: the government does not pay them yet
+      (BP5); crediting the holder without debiting a payer would create money.
+    - **Budgets.** `ParticipantDemand.maxNetPurchaseUSD`: what an entity can ADD in a week is its
+      real available cash plus the leverage its type genuinely runs (hedge fund 0.5× assets,
+      everyone else none), apportioned across asset classes by its own targets and across names
+      by structural size. A cash-constrained bidder rations quantity (§7.6). Measured over 60
+      weeks with NO clamp anywhere: worst cash/assets = 0.0% for insurers/pensions (fully
+      invested — real-money behaviour), +14% floor for the hedge fund (real dry powder). The
+      pre-S11 state was −10% for everyone, permanently.
+    - **Marking.** `totalAssetsUSD` = cash + book, recomputed weekly after clearing; the week-0
+      mark corrected a bootstrap inconsistency between the seeded label and the seeded book
+      (§7.4's lesson, again). Institutional AUM on manager/HF companies now derives from the
+      entity's marked book — one balance sheet, one representation.
+    - **The per-name normalisation is deleted** (§7.19 item 2 complete), and deleting it forced
+      the engine fix it was hiding: when the buyer base's combined capacity cannot absorb the
+      float at ANY level there is no crossing, and the old solve returned the search bound as a
+      price. `solveClearingStat` now clears at the SATURATION point — the least aggressive level
+      at which every willing buyer has taken full size — with the dealer holding the genuine
+      residual. A bound is not a price; the widest level any actual buyer needed IS.
+    - Calibration made honest along the way: the asset manager's sub-IG size factor is 2.0
+      (dedicated high-yield fund complexes make asset managers the majority holders of real HY
+      markets), replacing the 1.0 that only worked while normalisation redistributed.
+    - **Known, accepted intermediate state:** HY meds cluster at the distressed backstop
+      (~900–1000bp; BB/B/CCC compressed together) because at real sleeves the HY buyer base is
+      genuinely short of the HY float — §7.18's composition shortage expressing itself honestly
+      in the one segment where regulated sleeves are thin. Do NOT tune sleeves to a spread
+      target; HC Wave 1's calibration gate (HC5) rebuilds supply and buyer base together and is
+      where this resolves. Also open: budget slices follow FIXED target percentages — money does
+      not yet chase the cheap asset class across books; that is G6/RVr's expectations-and-
+      liabilities work. IG unchanged and correct (AAA 157 / AA 157 / A 171 / BBB 215 at wk40);
+      Spearman 0.74–0.87; ownership correlation 0.06.
+22. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

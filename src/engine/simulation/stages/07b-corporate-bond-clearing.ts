@@ -56,6 +56,7 @@ import {
   computeDistressedReservationSpreadBps,
 } from './asset-allocation';
 import { WeeklyStepContext } from './context';
+import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // The entity's OWN book (its actual current corp-bond + loan holdings) drifts toward its real,
@@ -199,42 +200,19 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       totalRealInstitutionalTargetUSD
     );
 
-    // Who structurally owns THIS name, as opposed to who owns the market. The two differ, and the
-    // difference is the whole shape of the high-yield market: a name's float is held by whoever
-    // has appetite for its rating, so as a credit falls below investment grade its register does
-    // not shrink — it ROTATES, out of the regulated books that will only run a small sleeve of it
-    // and into the dedicated high-yield and distressed funds that exist to own exactly this.
-    //
-    // Modelled the wrong way this was measurably destructive. Applying the sub-investment-grade
-    // sleeve factor to each holder's market-wide share only ever subtracted: it took away the
-    // insurers' and pension funds' demand for a downgraded name without giving anyone else more
-    // of it, so total structural appetite came to ~94% of the float and every sub-IG name pinned
-    // at its recovery-implied ceiling — BB, B and CCC all printing the identical 1,745bp, which is
-    // an absence of buyers rather than a judgement about credit.
-    //
-    // Normalising the appetite weights per name is what makes it a rotation. Structural sizes then
-    // sum to the float for every issuer at every rating, and rating decides the MIX of the
-    // register, which is what it really decides.
-    const structuralShareByEntityByCompany = new Map<string, Map<string, number>>();
-    regionCompanies.forEach((c) => {
-      const subIG = !isInvestmentGrade(c.creditRating);
-      const weightByEntity = new Map<string, number>();
-      let totalWeight = 0;
-      regionEntities.forEach((e) => {
-        const w =
-          (rawEntityTargets.get(e.id) ?? 0) * (subIG ? subInvestmentGradeSizeFactor(e.entityType) : 1);
-        weightByEntity.set(e.id, w);
-        totalWeight += w;
-      });
-      const shareByEntity = new Map<string, number>();
-      regionEntities.forEach((e) => {
-        shareByEntity.set(e.id, totalWeight > 0 ? (weightByEntity.get(e.id) ?? 0) / totalWeight : 0);
-      });
-      structuralShareByEntityByCompany.set(c.id, shareByEntity);
-    });
-
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
+      const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
+      const sectorTotal = totalRealInstitutionalTargetUSD || 1;
+      // The entity's real budget for this auction (S11): available cash plus its type's genuine
+      // leverage capacity, sliced to this asset class by its own targets, then apportioned
+      // across names by structural size below. A bid is a claim on money; this is the money.
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND');
+      let totalStructuralSizeUSD = 0;
+      regionCompanies.forEach((c) => {
+        const f = !isInvestmentGrade(c.creditRating) ? subInvestmentGradeSizeFactor(entity.entityType) : 1;
+        totalStructuralSizeUSD += fixedDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal) * f;
+      });
 
       // This entity's terms, per issuer. The reservation spread is the RV economics used as what
       // they always were — a PRICE. Below the level that covers this issuer's own expected loss
@@ -267,14 +245,21 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
               capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, creditDurationYears(c)),
               creditConditionsIndex,
             });
+        // Structural size is the entity's own share of the name at its sub-IG sleeve factor —
+        // no per-name renormalisation (deleted per §7.19 item 2, now that budgets and the
+        // distressed regime exist): demand meets float when real buyers with real money choose
+        // to hold it, and the dealer absorbs any genuine residual.
+        const sizeFactor = subIG ? subInvestmentGradeSizeFactor(entity.entityType) : 1;
         const structuralSizeUSD =
-          fixedDebtUSD(c) * tradableShare * (structuralShareByEntityByCompany.get(c.id)?.get(entity.id) ?? 0);
+          fixedDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal) * sizeFactor;
         const overweightMultiple =
           entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
         demandByInstrumentId.set(c.id, {
           reservationStat: reservationBps,
           maxHoldingUSD: structuralSizeUSD * overweightMultiple,
           fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
+          maxNetPurchaseUSD:
+            classBudgetUSD * (totalStructuralSizeUSD > 0 ? structuralSizeUSD / totalStructuralSizeUSD : 0),
         });
       });
 

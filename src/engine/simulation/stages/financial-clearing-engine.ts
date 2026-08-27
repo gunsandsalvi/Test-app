@@ -77,6 +77,16 @@ export interface ParticipantDemand {
   maxHoldingUSD: number;
   /** How far past the reservation level it takes to pull in that full size. */
   fullSizeStatRange: number;
+  /**
+   * The most this participant can ADD to its position this week, in dollars — its real budget
+   * for this name (see the adapters' budget derivation: available cash plus whatever leverage
+   * its type genuinely runs, apportioned across the names it wants). A bid is a claim on money;
+   * without this, entities bought with cash they did not have and ran ~10% unchosen leverage
+   * (§7.19 item on S11). A cash-constrained bidder rations QUANTITY, not price (§7.6) — the
+   * reservation level is unchanged, only the size it can take at that level. Omitted = unbounded
+   * (banks in 07c, whose real constraint is their reserve position, not a cash budget).
+   */
+  maxNetPurchaseUSD?: number;
 }
 
 export interface ClearingParticipant {
@@ -105,15 +115,28 @@ export interface ClearingResult {
   netCashDeltaByParticipantId: Map<string, number>;
 }
 
-/** What this participant would hold of this instrument at a given level. */
-function demandAtStat(demand: ParticipantDemand, stat: number, statKind: ClearingInstrument['statKind']): number {
+/**
+ * What this participant would hold of this instrument at a given level — its schedule, capped by
+ * what its money can actually buy this week (holdings it already has plus its real budget).
+ * The cap is a constant in the level, so total demand stays monotonic and bisection stays exact.
+ */
+function demandAtStat(
+  demand: ParticipantDemand,
+  stat: number,
+  statKind: ClearingInstrument['statKind'],
+  previousHoldingUSD: number
+): number {
   const range = Math.max(1e-6, demand.fullSizeStatRange);
   // A yield-like statistic gets more attractive as it RISES; a price-like one as it FALLS.
   const distanceIntoTheMoney = statKind === 'YIELD_LIKE'
     ? stat - demand.reservationStat
     : demand.reservationStat - stat;
   const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / range));
-  return demand.maxHoldingUSD * fraction;
+  const wantedUSD = demand.maxHoldingUSD * fraction;
+  const affordableUSD = demand.maxNetPurchaseUSD === undefined
+    ? Infinity
+    : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
+  return Math.min(wantedUSD, affordableUSD);
 }
 
 /**
@@ -135,7 +158,7 @@ function solveClearingStat(
   const totalDemandAt = (stat: number) =>
     participants.reduce((sum, p) => {
       const d = p.demandByInstrumentId.get(inst.id);
-      return sum + (d ? demandAtStat(d, stat, inst.statKind) : 0);
+      return sum + (d ? demandAtStat(d, stat, inst.statKind, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0) : 0);
     }, 0);
 
   // Demand rises with the statistic for YIELD_LIKE and falls for PRICE_LIKE; orient the search so
@@ -143,14 +166,23 @@ function solveClearingStat(
   const lo = inst.statKind === 'YIELD_LIKE' ? bracketLow : bracketHigh;
   const hi = inst.statKind === 'YIELD_LIKE' ? bracketHigh : bracketLow;
 
-  if (totalDemandAt(hi) < inst.tradableFloatUSD) return hi; // nobody wants it all, even at the extreme
-  if (totalDemandAt(lo) > inst.tradableFloatUSD) return lo; // oversubscribed even at the extreme
+  // When the participants' combined capacity cannot absorb the whole float at ANY level, there
+  // is no crossing — and the honest clearing level is NOT the search bound (a bound is not a
+  // price; that mistake is recorded in the plan). It is the SATURATION point: the least
+  // aggressive level at which every willing buyer has taken its full size. Beyond it, a wider
+  // level attracts not one more dollar of demand, so no economic force pushes the price there.
+  // The dealer carries the genuine residual, which is what a dealer of last resort is — and the
+  // cost of that warehousing becoming real capital and funding is G3's item, not a reason to
+  // fake a wider print today.
+  const demandAtWideEnd = totalDemandAt(hi);
+  const targetUSD = Math.min(inst.tradableFloatUSD, demandAtWideEnd * 0.999999);
+  if (totalDemandAt(lo) > targetUSD) return lo; // oversubscribed even at the extreme
 
   let a = lo;
   let b = hi;
   for (let i = 0; i < 60; i++) {
     const mid = (a + b) / 2;
-    if (totalDemandAt(mid) < inst.tradableFloatUSD) a = mid;
+    if (totalDemandAt(mid) < targetUSD) a = mid;
     else b = mid;
   }
   return (a + b) / 2;
@@ -203,8 +235,8 @@ export function clearFinancialAsset(
     let allocatedUSD = 0;
     participants.forEach((p) => {
       const d = p.demandByInstrumentId.get(inst.id);
-      const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind) : 0;
       const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
+      const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind, previousUSD) : 0;
       const tradedUSD = filledUSD - previousUSD;
       const feeUSD = Math.abs(tradedUSD) * (params.dealerSpreadBps / 10000);
 

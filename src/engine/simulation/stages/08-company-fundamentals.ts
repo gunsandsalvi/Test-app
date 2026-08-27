@@ -141,10 +141,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
     } else if (comp.financialStatementProfile === 'ASSET_MANAGER') {
       const instEnt = state.institutionalEntities.find(e => e.id === comp.id);
+      // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
+      // company, its AUM IS that entity's marked book — totalAssetsUSD is recomputed weekly from
+      // real cash and real holdings (institutional-balance-sheet.ts), so the drift-by-index
+      // formula only survives for manager companies with no entity behind them.
       const equityIndex = comp.region === 'USA' ? state.compositeIndices.us500 : comp.region === 'EUR' ? state.compositeIndices.euStoxx : comp.region === 'UK' ? state.compositeIndices.uk100 : state.compositeIndices.jp225;
       const marketGrowth = equityIndex.value / Math.max(1, equityIndex.historical[equityIndex.historical.length - 2] ?? equityIndex.value);
       const flows = (Math.random() - 0.4) * 0.01;
-      comp.aumUSD = (comp.aumUSD ?? (instEnt?.totalAssetsUSD ?? comp.annualRevenue * 50)) * marketGrowth * (1 + flows);
+      comp.aumUSD = instEnt
+        ? instEnt.totalAssetsUSD
+        : (comp.aumUSD ?? comp.annualRevenue * 50) * marketGrowth * (1 + flows);
       comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + Math.random() * 0.005);
 
       const weeklyFees = comp.aumUSD * comp.managementFeeRate / 52;
