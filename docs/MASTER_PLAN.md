@@ -289,13 +289,34 @@ fault — the goods market's own prices really do move that much.
 clamping inflation. The index is the measurement; if the measurement is volatile, the economy
 is, and the economy is what to fix.
 
-### S3 — Sign off Wall Street slices 2–3
+### S3 — Sign off Wall Street slices 2–3  *(part done; one item open)*
 
-07c/07d are committed but were built while S1/S2 masked their behavior. After S1+S2:
-26-week smoke per region — sovereign yields stable and flow-responsive, loan DMs correlated
-with (but tighter than) the issuer's cleared OAS × senior-lien structure, dealer inventories
-mean-reverting, no NaNs. Fix anything real that surfaces **in the adapters' demand logic**,
-not with bounds. Close tasks #77/#78 only after this.
+**Landed** (see §7.13): the leveraged-loan market now exists at all, corporate actions settle
+against holders, and the accretive call actually refinances. Sovereign clearing is signed off.
+Loan discount margins are live and their dispersion is ~4x tighter. Dealer inventories are
+non-zero and mean-reverting. No NaNs anywhere, across 26 weeks and four regions.
+
+**Still open — corporate OAS drifts negative.** Median USA OAS falls 88 → 68 → −149 → −350bp
+over 36 weeks. A corporate bond yielding less than the sovereign curve is not a thing; the
+market is under persistent net buying pressure that nothing offsets. The three fixes above each
+removed a large source of one-sided flow and each moved the number a long way, but a residual
+remains. **Diagnose in this order, and do not put a floor under it:**
+1. **Is newly issued corporate debt still arriving unheld?** `settleCorporateActionOnHolders`
+   scales holders' positions by the change in an issuer's float, which should place new issues
+   pro-rata — verify it actually fires for maintenance-funding tranches and refi replacements,
+   which are created in a different place from the call path it was tested against.
+2. **Is the value anchor doing any work at the level?** 07b's fair-value signal is
+   `computeExpectedLossSpreadBps`, a real credit estimate, but it enters as a per-issuer
+   attractiveness TILT, and tilts renormalize — a signal that every issuer shares cannot move
+   the market's overall level, only its shape. This is the same limitation S2 hit on the
+   sovereign curve, where the fix was to let a participant's total position size respond
+   (banks choosing bonds versus reserves), not just its distribution. The corporate analogue is
+   an institution choosing corporate credit versus government bonds versus cash — its
+   `assetAllocationTarget` — which is real and currently static.
+3. **Is the aggregate target itself drifting?** `corpBondOwnership.institutionalShare` drifts
+   weekly in stage 02. If it drifts up while float is flat, that is a permanent bid.
+
+Close tasks #77/#78 only after the OAS drift is resolved.
 
 ### S4 — Cash settlement + one sovereign book
 
@@ -751,6 +772,32 @@ the complete simulation.
       category, so it is a genuine price cycle in the goods auction — amplified by the fact that
       monetary policy has no demand-side transmission channel yet, so the Taylor rule can respond
       but cannot stabilise. That channel is G2 (real lending) plus household rate response (MS).
-13. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+13. **S3 partly landed — three structural bugs, each found by tracing a number to its source.**
+    - **The leveraged-loan market did not exist.** `generateDebtTranches` decided each rung with
+      `cumulativePrincipalAssigned < fixedShare * debtBase`, and cumulative principal is zero at
+      the first rung — so the first tranche was FIXED for every issuer including CCC. Most issuers
+      carry a single blended tranche, so most were 100% fixed and **the floating float across the
+      entire market was zero**: 07d cleared nothing, and every company's `discountMarginBps` sat
+      frozen at its seed while its OAS moved (DM/OAS drifted 0.85 → 0.16). `FIXED_SHARE_BY_RATING`
+      was already right — investment grade funds with bonds, sub-investment grade funds with
+      floating-rate term loans, which is what a leveraged loan is. Testing each rung's MIDPOINT
+      against the target delivers that.
+    - **Corporate holdings did not track the corporate stock** — the same defect S2 fixed for
+      sovereigns. By week 24, 130 of ~184 issuers had institutions holding more than the issuer's
+      entire float. Since price impact scales with flow over float, trading phantom positions
+      against a shrunken float fanned spreads to −1097/+1757bp and loan margins to −1783/+471bp.
+      `settleCorporateActionOnHolders` now moves holders' positions with any change in an issuer's
+      float. **Where the snapshot is taken matters**: taken after the call block (the first
+      attempt) it missed the largest source of change and barely helped.
+    - **The "accretive call" was deleveraging, not refinancing.** It retired a tranche with cash
+      whenever the coupon exceeded the market rate and stopped there — so the issuer's debt shrank
+      every time rates moved in its favour. The corporate bond float halved inside six months and
+      73 of 200 issuers had no bonds left: the asset class 07b exists to clear was disappearing.
+      A call for value is a refinancing — replace the bond at today's rate and keep the money; the
+      saving is the lower coupon, which the code's own `rateSavingsIfRefinanced` already measured.
+    - **Lesson, generalised**: a market cannot be signed off by watching its price. Watch its
+      FLOAT and its HOLDINGS first — every one of these was invisible in the spread series and
+      obvious the moment the outstanding stock and who owned it were put side by side.
+14. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
    MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
    `npm run verify` gate closes #2/#14/#41.

@@ -263,8 +263,22 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
   let cumulativePrincipalAssigned = 0;
   return maturityWeeks.map((maturityWeek, i) => {
     const principalUSD = debtBase * trancheWeights[i];
-    // Deterministic rule: assign FIXED as long as cumulative principal assigned so far is still under the fixedShare target.
-    const isFixed = cumulativePrincipalAssigned < fixedShare * debtBase;
+    // Assign each rung to whichever side of the fixed/floating split its own principal mostly
+    // falls in, by testing its MIDPOINT against the target rather than its starting edge.
+    //
+    // Testing the starting edge made the first rung FIXED unconditionally — cumulative principal
+    // is zero at that point, so the test passed for every rating including CCC. Most issuers here
+    // carry a single blended tranche (see debtLadderShape), so most issuers came out 100% fixed
+    // and the floating float across the entire market was ZERO: the leveraged-loan market this
+    // codebase prices, trades, clears in 07d and offers in the trade ticket did not contain a
+    // single loan. Every company's discountMarginBps sat frozen at its seed while its OAS moved.
+    //
+    // FIXED_SHARE_BY_RATING was already right about the economics — investment-grade issuers fund
+    // with bonds, sub-investment-grade issuers fund with floating-rate term loans, which is what
+    // a leveraged loan IS. The midpoint test delivers that: a single-tranche CCC issuer (10%
+    // fixed) now comes out floating, a single-tranche AA issuer (85%) fixed, and multi-rung
+    // issuers land within a few points of their target share.
+    const isFixed = (cumulativePrincipalAssigned + principalUSD / 2) < fixedShare * debtBase;
     cumulativePrincipalAssigned += principalUSD;
     return isFixed
       ? {

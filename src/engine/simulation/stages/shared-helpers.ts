@@ -4,7 +4,7 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
-import { Company, Region, PrivateSectorSegment, RegionId, ItemizedHolding, SupplyRelationship } from '../../../types';
+import { Company, Region, PrivateSectorSegment, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
@@ -189,4 +189,49 @@ export function attributeItemizedHoldings(
     }
   }
   return result;
+}
+
+/**
+ * Settles a corporate action against the people who actually hold the paper.
+ *
+ * When an issuer's debt stack changes — a tranche matures, refinances (possibly into a different
+ * rate type, which moves the whole tranche between the bond market and the loan market), is
+ * prepaid, or is consolidated by a merger — the amount of that issuer's paper in existence
+ * changes. Whoever owned it has to change with it: matured paper leaves the holder's book, newly
+ * issued paper is placed with the existing holder base pro rata.
+ *
+ * Without this, holdings and the real stock drift apart until they are unrelated. Measured before
+ * this existed: by week 24, 130 of ~184 issuers had institutions holding MORE than the issuer's
+ * entire remaining float, and since the clearing engine's price impact scales with flow over
+ * float, trading those phantom positions against a shrunken (sometimes zero) float fanned
+ * corporate spreads out to -1097/+1757bp and loan discount margins to -1783/+471bp. It is the
+ * same defect that ran the two-year sovereign yield to 25% before 07c learned to redeem.
+ *
+ * Scaling by the ratio of new float to old preserves each holder's share of the issue exactly,
+ * which is what a pro-rata redemption and a pro-rata placement do. An issuer going from no float
+ * to some float is a genuinely new issue with no existing holder base to place into; the clearing
+ * engine absorbs it over the following weeks.
+ */
+export function settleCorporateActionOnHolders(
+  ctx: { updatedInstitutionalEntities: InstitutionalEntity[] },
+  issuerId: string,
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN',
+  oldFloatUSD: number,
+  newFloatUSD: number
+): void {
+  if (!(oldFloatUSD > 0)) return;
+  const ratio = Math.max(0, newFloatUSD) / oldFloatUSD;
+  if (Math.abs(ratio - 1) < 1e-9) return;
+
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
+    let touched = false;
+    const newHoldings = entity.itemizedHoldings
+      .map((h) => {
+        if (h.instrumentType !== instrumentType || h.instrumentId !== issuerId) return h;
+        touched = true;
+        return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
+      })
+      .filter((h) => h.quantityOrNotionalUSD > 1);
+    return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
+  });
 }
