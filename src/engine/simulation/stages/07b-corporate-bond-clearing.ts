@@ -6,15 +6,27 @@
  * a STATISTIC computed from the cleared price, never the primitive that sets it.
  *
  * This is the corporate-bond adapter over the generalized, asset-agnostic clearing engine (see
- * financial-clearing-engine.ts) — it owns only what's specific to corporate bonds: who the real
- * participants are (named institutional entities, banks as dealer), what "cheap versus fair
- * value" means for a bond (oasSpreadBps versus computeExpectedLossSpreadBps, a participant's own
- * fundamental credit view — an INPUT to its bid decision, never the price itself), and how the
- * cleared price maps onto this asset class's quoted statistic (OAS moves opposite price, real
- * bounds 10-5000bps). The actual auction — target-vs-actual gaps, tilted index weighting, dealer
- * inventory absorption and pressure, price-impact-to-statistic conversion — lives once in the
- * shared engine; sovereign bonds, loans, and equity plug into the same engine as their own
- * adapters rather than re-implementing it.
+ * financial-clearing-engine.ts) — it owns only what's specific to corporate bonds:
+ *
+ * - Who the real participants are (named institutional entities, banks as dealer).
+ * - Each entity's real, bottom-up total target (see deriveEntityTargetsUSD below) — never an
+ *   independently-computed number that could exceed the real market and need a cap.
+ * - How a real institutional entity actually decides what to buy, tactically, within that
+ *   long-term-guide target: computeEntityAttractiveness below combines fair value (an issuer's
+ *   spread versus a fundamental fair-value estimate, itself adjusted for current market/credit
+ *   conditions — not priced in a vacuum), recent spread momentum, this entity's own mandate
+ *   (real insurers and pension funds run investment-grade-only books and structurally avoid
+ *   high-yield paper), and duration/maturity fit against this entity's own real liability profile
+ *   — the target allocation is only the long-term guide for how much total capital sits in this
+ *   asset class; which specific issuers get that capital is driven by these real characteristics.
+ * - How the cleared price maps onto this asset class's quoted statistic (OAS moves opposite
+ *   price, with a real floor — no corporate credit trades at a zero spread — and the existing
+ *   distressed-pricing ceiling).
+ *
+ * The actual auction — per-participant tilted index weighting, dealer inventory absorption and
+ * pressure, price-impact-to-statistic conversion — lives once in the shared engine; sovereign
+ * bonds, loans, and equity plug into the same engine as their own adapters rather than
+ * re-implementing it.
  *
  * Foreign and household participation in corporate bonds, and hedge funds bidding for
  * distressed issuers specifically, are follow-on slices (see PROJECT_WALL_STREET.md) — this
@@ -28,18 +40,24 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { computeExpectedLossSpreadBps } from './shared-helpers';
+import { computeExpectedLossSpreadBps, getRatingBucket, distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './financial-clearing-engine';
 
-// An institutional entity closes this share of its real target-vs-actual gap every week —
-// real funds rebalance gradually, not instantaneously, mirroring the pace already used for
-// region-level ownership-share drift elsewhere in this codebase (0.05-0.35).
-const WEEKLY_REBALANCE_RATE = 0.20;
-// How far an issuer's own oasSpreadBps can currently sit from the fundamental fair-value
-// estimate before that "rich/cheap" signal is fully saturated (avoids one deeply distressed
-// name dominating an entity's entire corporate-bond order flow).
-const MAX_RICH_CHEAP_TILT = 0.5;
+// The entity's OWN book (its actual current corp-bond + loan holdings) drifts toward its real,
+// bottom-up-derived target at this slow pace — a policy allocation is a long-term guide real
+// institutions rebalance toward gradually, not a number they instantly chase every week.
+const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
+// Within that slow-moving budget, how fast a participant rotates toward its currently most
+// attractive names — tactical name selection is real and moves faster than the overall budget.
+const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
+const MAX_VALUE_TILT = 0.4;
+const MAX_MOMENTUM_TILT = 0.15;
+const MAX_DURATION_TILT = 0.15;
+// How much a tightening/loosening real credit-conditions backdrop (reg.bankingSector's own
+// -1..+1 index) shifts what "fair value" means right now — real credit investors price a bond
+// against the current market, not against an idiosyncratic PD estimate in a vacuum.
+const CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS = 150;
 // Net weekly order flow equal to this many multiples of an issuer's own total debt outstanding
 // is needed to move its bond price 100% — corporate bonds are less liquid than the equivalent
 // large-cap equity float, hence a shallower depth than EQUITY_LIQUIDITY_DEPTH (6).
@@ -51,15 +69,9 @@ const DEALER_INVENTORY_PRESSURE_RATE = 0.15;
 // Bid/ask spread the dealer desk earns on the gross flow it facilitates, credited as real
 // trading revenue to the named banks' own equity (split by bankMarketShare).
 const DEALER_SPREAD_BPS = 15;
-// Named institutional entities' combined target corp-bond allocation can claim at most this
-// share of the total corporate debt actually outstanding in the region — real bank, foreign,
-// and household holders exist too (see maxParticipantShareOfOutstanding in the shared engine).
-// Exported so the initial cold-start seed (simulation/initialization.ts) can seed entities'
-// starting holdings at this same real, achievable target rather than the raw (structurally
-// oversized) one — otherwise week 1 starts artificially overweight and spends many weeks
-// selling back down before reaching the level this stage would consider each entity's own
-// real target, which shows up as a persistent, systemic one-directional spread move.
-export const MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING = 0.85;
+// Real insurers and pension funds overwhelmingly run investment-grade-only mandates in
+// practice — a genuine structural avoidance of high-yield paper, not a soft preference.
+const IG_MANDATE_HY_AVOIDANCE_TILT = -0.7;
 
 function creditDurationYears(comp: Company): number {
   if (!comp.debtTranches || comp.debtTranches.length === 0 || comp.totalDebt <= 0) return 3.5;
@@ -68,6 +80,43 @@ function creditDurationYears(comp: Company): number {
     return s + tenorYears * t.principalUSD;
   }, 0) / comp.totalDebt;
   return Math.max(1.0, Math.min(8.0, weightedTenor * 0.75));
+}
+
+// Real insurers and pension funds carry long-dated liabilities and real asset-liability-matching
+// mandates that favor longer-duration paper; asset managers run closer to benchmark-neutral.
+function preferredDurationYears(entity: InstitutionalEntity): number {
+  return entity.entityType === 'ASSET_MANAGER' ? 4.0 : 6.0;
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * How attractive THIS entity finds THIS issuer's bonds right now — a real, multi-factor tactical
+ * view, not the target allocation itself. Combines: value (cheap/rich versus a fair-value
+ * estimate that is itself adjusted for current credit conditions), recent momentum (a name
+ * that's been widening fast is a riskier "catch the falling knife" buy even where it already
+ * looks cheap), this entity's own mandate (IG-only funds structurally avoid high-yield), and
+ * duration/maturity fit against this entity's own real liability/benchmark profile.
+ */
+function computeEntityAttractiveness(entity: InstitutionalEntity, comp: Company, creditConditionsIndex: number): number {
+  const fairSpread = computeExpectedLossSpreadBps(comp) + creditConditionsIndex * CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS;
+  const valueSignal = clamp((comp.oasSpreadBps - fairSpread) / 1000, -MAX_VALUE_TILT, MAX_VALUE_TILT);
+
+  const history = comp.oasSpreadBpsHistory || [];
+  const recentSpreadChangeBps = history.length >= 4 ? comp.oasSpreadBps - history[history.length - 4] : 0;
+  const momentumSignal = clamp(-recentSpreadChangeBps / 2000, -MAX_MOMENTUM_TILT, MAX_MOMENTUM_TILT);
+
+  const mandateSignal =
+    (entity.entityType === 'INSURER' || entity.entityType === 'PENSION_FUND') && getRatingBucket(comp.creditRating) === 'HY'
+      ? IG_MANDATE_HY_AVOIDANCE_TILT
+      : 0;
+
+  const durationGapYears = Math.abs(creditDurationYears(comp) - preferredDurationYears(entity));
+  const durationSignal = clamp(MAX_DURATION_TILT - durationGapYears * 0.05, -MAX_DURATION_TILT, MAX_DURATION_TILT);
+
+  return clamp(valueSignal + momentumSignal + mandateSignal + durationSignal, -1, 1);
 }
 
 export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -80,33 +129,27 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     );
     if (regionCompanies.length === 0) return;
 
-    const fairSpreadByCompany = new Map<string, number>();
-    regionCompanies.forEach((c) => fairSpreadByCompany.set(c.id, computeExpectedLossSpreadBps(c)));
+    const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + c.totalDebt, 0) || 1;
+    const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
 
-    const instruments: ClearingInstrument[] = regionCompanies.map((c) => {
-      const richCheapSignal = Math.max(
-        -MAX_RICH_CHEAP_TILT,
-        Math.min(MAX_RICH_CHEAP_TILT, (c.oasSpreadBps - (fairSpreadByCompany.get(c.id) ?? c.oasSpreadBps)) / 1000)
-      );
-      return {
-        id: c.id,
-        outstandingUSD: c.totalDebt,
-        currentStat: c.oasSpreadBps,
-        richCheapTiltSignal: richCheapSignal,
-        durationYears: creditDurationYears(c),
-        statDirection: -1, // OAS falls when net buying pushes the bond's price up
-        // Real floor: no real corporate credit trades at a zero or near-zero spread over its
-        // sovereign benchmark, however deep the bid — even the tightest AAA paper still carries
-        // some spread. 5000bps ceiling matches the existing CCC/distressed pricing bound.
-        minStat: 25,
-        maxStat: 5000,
-      };
-    });
+    const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
+      id: c.id,
+      outstandingUSD: c.totalDebt,
+      currentStat: c.oasSpreadBps,
+      durationYears: creditDurationYears(c),
+      statDirection: -1, // OAS falls when net buying pushes the bond's price up
+      // Real floor: no real corporate credit trades at a zero or near-zero spread over its
+      // sovereign benchmark, however deep the bid — even the tightest AAA paper still carries
+      // some spread. 5000bps ceiling matches the existing CCC/distressed pricing bound.
+      minStat: 25,
+      maxStat: 5000,
+    }));
 
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
     const otherHoldingsByEntity = new Map<string, ItemizedHolding[]>();
+    const currentHoldingByCompanyByEntity = new Map<string, Map<string, number>>();
 
-    const participants: ClearingParticipant[] = regionEntities.map((entity) => {
+    regionEntities.forEach((entity) => {
       const currentHoldingByCompany = new Map<string, number>();
       const otherHoldings: ItemizedHolding[] = [];
       entity.itemizedHoldings.forEach((h) => {
@@ -117,10 +160,35 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         }
       });
       otherHoldingsByEntity.set(entity.id, otherHoldings);
+      currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
+    });
+
+    // Real, bottom-up aggregate: the institutional sector's actual share of the real corporate
+    // debt market (reg.corpBondOwnership.institutionalShare, already a stable, real calibration
+    // used elsewhere in this codebase), never an independently-summed entity-level number that
+    // could come out larger than the market and need a cap.
+    const totalRealInstitutionalTargetUSD = reg.corpBondOwnership.institutionalShare * totalOutstandingUSD;
+    const rawEntityTargets = distributeRealTargetByWeight(
+      regionEntities.map((e) => ({ id: e.id, sizeWeight: e.totalAssetsUSD, targetPct: e.assetAllocationTarget.corpBondPct })),
+      totalRealInstitutionalTargetUSD
+    );
+
+    const participants: ClearingParticipant[] = regionEntities.map((entity) => {
+      const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
+      const currentEntityTotalUSD = Array.from(currentHoldingByCompany.values()).reduce((s, v) => s + v, 0);
+      const rawTargetUSD = rawEntityTargets.get(entity.id) ?? 0;
+      // The policy target is a long-term guide the entity's actual book drifts toward slowly —
+      // not a number it instantly reallocates to (see STRATEGIC_TARGET_DRIFT_RATE's doc comment).
+      const slowTargetTotalUSD = currentEntityTotalUSD + (rawTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
+
+      const attractivenessByInstrumentId = new Map<string, number>();
+      regionCompanies.forEach((c) => attractivenessByInstrumentId.set(c.id, computeEntityAttractiveness(entity, c, creditConditionsIndex)));
+
       return {
         id: entity.id,
-        targetTotalUSD: entity.assetAllocationTarget.corpBondPct * entity.totalAssetsUSD,
+        targetTotalUSD: slowTargetTotalUSD,
         currentHoldingsByInstrumentId: currentHoldingByCompany,
+        attractivenessByInstrumentId,
       };
     });
 
@@ -128,19 +196,22 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryUSD));
 
     const result = clearFinancialAsset(instruments, participants, priorDealerInventoryById, {
-      weeklyRebalanceRate: WEEKLY_REBALANCE_RATE,
+      weeklyRebalanceRate: WEEKLY_TACTICAL_REBALANCE_RATE,
       liquidityDepth: BOND_LIQUIDITY_DEPTH,
       dealerInventoryPressureRate: DEALER_INVENTORY_PRESSURE_RATE,
       dealerSpreadBps: DEALER_SPREAD_BPS,
-      maxParticipantShareOfOutstanding: MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING,
     });
 
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
-    // week's already-real value rather than recomputing one.
+    // week's already-real value rather than recomputing one. Also extend each company's rolling
+    // spread history (see computeEntityAttractiveness's momentum signal).
     const companyById = new Map(regionCompanies.map((c) => [c.id, c]));
     result.newStatById.forEach((newOasBps, companyId) => {
       const comp = companyById.get(companyId);
-      if (comp) comp.oasSpreadBps = newOasBps;
+      if (!comp) return;
+      const history = [...(comp.oasSpreadBpsHistory || []), comp.oasSpreadBps];
+      comp.oasSpreadBpsHistory = history.slice(-8);
+      comp.oasSpreadBps = newOasBps;
     });
 
     // Apply: each entity's real new holdings, split back into CORP_BOND/LEVERAGED_LOAN per the

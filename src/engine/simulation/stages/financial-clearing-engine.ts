@@ -2,19 +2,33 @@
  * Generalized Financial Asset Clearing Engine
  *
  * Wall Street foundational correction: every tradable financial asset's price must be the real
- * result of supply and demand — named participants compare their real holdings against their
- * real target allocation (tilted by how rich/cheap the asset currently looks versus their own
- * fundamental view), banks sit in the middle as the dealer absorbing the net of that real order
- * flow onto their own persistent inventory, and the resulting price move is converted into
+ * result of supply and demand — named participants compare their real holdings against a real,
+ * bottom-up target, tilt across instruments by their own multi-factor view of what's attractive
+ * to buy more of right now, banks sit in the middle as the dealer absorbing the net of that real
+ * order flow onto their own persistent inventory, and the resulting price move is converted into
  * whatever quoted statistic that asset class uses (OAS, discount margin, a sovereign yield, an
  * equity multiple) — the statistic is derived from the cleared price, never the other way round.
  *
+ * Two things this engine deliberately does NOT do, both per explicit correction:
+ *   - It does not clamp or rescale a participant's target to fit the market. A participant's
+ *     targetTotalUSD must already be a real, bottom-up, structurally-bounded number by the time
+ *     it reaches here (see each adapter's own derivation) — if it isn't, that's a bug in the
+ *     adapter's target derivation to fix at the source, not something for this engine to paper
+ *     over with a cap.
+ *   - It does not use one shared "rich/cheap" signal applied identically to every participant.
+ *     Real institutions don't share one view of what's attractive — each participant supplies
+ *     its own per-instrument attractiveness (see ClearingParticipant.attractivenessByInstrumentId),
+ *     built from whatever mix of value, momentum, credit/rating trajectory, and duration/maturity
+ *     fit is real for that participant type. A target allocation is a long-term policy guide for
+ *     how much total capital sits in this asset class; which specific instruments that capital
+ *     actually buys is a tactical decision driven by those characteristics, not the target itself.
+ *
  * This is asset-class-agnostic on purpose. Corporate bonds, sovereign bonds, leveraged loans, and
- * eventually equity all run through this exact same auction; only three things differ per asset
+ * eventually equity all run through this exact same auction; only two things differ per asset
  * class, and they're supplied by the caller rather than hardcoded here:
- *   1. what counts as a "participant" and its real target allocation to this asset class,
- *   2. the rich/cheap tilt signal for each instrument (what "attractive to buy more of" means),
- *   3. the quoted statistic's direction of travel relative to price (a yield/spread-like stat
+ *   1. what counts as a "participant", its real bottom-up target, and its own attractiveness view
+ *      of each instrument,
+ *   2. the quoted statistic's direction of travel relative to price (a yield/spread-like stat
  *      falls when price rises; a price-like stat rises with it) and its real min/max bounds.
  * Adding a new asset class (or a new participant type, e.g. hedge funds, foreign flows) means
  * writing a small adapter that builds these inputs, not re-implementing the auction.
@@ -29,11 +43,6 @@ export interface ClearingInstrument {
   // The instrument's current quoted statistic (oasSpreadBps, discountMarginBps, a sovereign
   // yield in bps, etc.) — read here only to compute this week's new value from real flow.
   currentStat: number;
-  // Real information already normalized to [-1, 1] by the asset-specific caller: positive means
-  // this instrument currently looks cheap/attractive relative to a fundamental view (draws extra
-  // real buying interest); negative means rich (draws selling interest). Not computed here —
-  // what "fair value" means is asset-class-specific.
-  richCheapTiltSignal: number;
   // How sensitive the quoted statistic is to a price move (bond/loan duration in years; an
   // equivalent constant for other asset classes) — used to convert a price-impact percentage
   // into a change in the quoted statistic.
@@ -47,11 +56,20 @@ export interface ClearingInstrument {
 
 export interface ClearingParticipant {
   id: string;
-  // This participant's real total target allocation to the asset class as a whole (its own
-  // assetAllocationTarget * its own totalAssetsUSD, or equivalent) — distributed across
-  // instruments by tilted index weight below, not decided per-instrument by the caller.
+  // This participant's real, bottom-up total target allocation to the asset class as a whole —
+  // a slow-moving policy anchor (see this asset class's adapter for how it's derived and why it
+  // must already be structurally consistent with the real market size, not an independent
+  // number this engine then has to cap). Distributed across instruments by this participant's
+  // own tilted index weight below.
   targetTotalUSD: number;
   currentHoldingsByInstrumentId: Map<string, number>;
+  // This participant's own real, multi-factor view of each instrument, normalized to [-1, 1]:
+  // positive means this participant currently finds this instrument attractive to hold more of
+  // (cheap versus its own fair-value view, constructive momentum, favorable rating trajectory
+  // for its own mandate, a good duration/maturity fit for its own liabilities or benchmark);
+  // negative means the opposite. Not computed here — this is real information specific to both
+  // the participant and the instrument, supplied by the asset-specific adapter.
+  attractivenessByInstrumentId: Map<string, number>;
 }
 
 export interface ClearingParams {
@@ -67,16 +85,6 @@ export interface ClearingParams {
   dealerInventoryPressureRate: number;
   // Bid/ask spread the dealer desk earns on the gross flow it facilitates.
   dealerSpreadBps: number;
-  // Real participants' combined target claim on this asset class can never exceed this share of
-  // what's actually outstanding — the same conservation constraint already enforced on region-
-  // level ownership shares elsewhere (bank + institutional + foreign + central bank must leave a
-  // real residual for household, never sum past ~1.0). Without it, a named participant's target
-  // is computed independently of the real float actually available (e.g. an institutional
-  // entity's total balance-sheet size, bootstrapped against regional GDP, has no guaranteed
-  // relationship to the dollar amount of corporate debt actually outstanding) and can imply
-  // wanting to own several times the entire market — which would otherwise show up as
-  // permanent, saturating one-directional pressure instead of a real, bounded rebalancing flow.
-  maxParticipantShareOfOutstanding: number;
 }
 
 export interface ClearingResult {
@@ -90,10 +98,10 @@ export interface ClearingResult {
 
 /**
  * Runs one week's real clearing auction for a single asset class in a single region: every
- * participant trades a real fraction of its target-vs-actual gap (tilted toward instruments
- * that look cheap), the bank dealer desk absorbs the net of that flow onto its own persistent
- * inventory (also leaning its quotes against whatever it's already carrying), and each
- * instrument's quoted statistic is derived from the resulting real price move.
+ * participant trades a real fraction of its own target-vs-actual gap (tilted, per instrument, by
+ * its own real attractiveness view), the bank dealer desk absorbs the net of that flow onto its
+ * own persistent inventory (also leaning its quotes against whatever it's already carrying), and
+ * each instrument's quoted statistic is derived from the resulting real price move.
  */
 export function clearFinancialAsset(
   instruments: ClearingInstrument[],
@@ -103,32 +111,28 @@ export function clearFinancialAsset(
 ): ClearingResult {
   const totalOutstandingUSD = instruments.reduce((s, i) => s + i.outstandingUSD, 0) || 1;
 
-  // Real participants' combined target claim can't exceed a bounded share of what actually
-  // exists (see maxParticipantShareOfOutstanding's doc comment) — rescale proportionally rather
-  // than let an independently-bootstrapped balance-sheet size imply permanent, saturating
-  // one-directional demand.
-  const totalTargetUSD = participants.reduce((s, p) => s + p.targetTotalUSD, 0);
-  const maxTotalTargetUSD = totalOutstandingUSD * params.maxParticipantShareOfOutstanding;
-  const targetScale = totalTargetUSD > maxTotalTargetUSD && totalTargetUSD > 0 ? maxTotalTargetUSD / totalTargetUSD : 1;
-
-  const tiltedWeightById = new Map<string, number>();
-  let tiltedWeightSum = 0;
-  instruments.forEach((inst) => {
-    const baseWeight = inst.outstandingUSD / totalOutstandingUSD;
-    const tilted = Math.max(0.0001, baseWeight * (1 + inst.richCheapTiltSignal));
-    tiltedWeightById.set(inst.id, tilted);
-    tiltedWeightSum += tilted;
-  });
-
   const netDemandById = new Map<string, number>();
   instruments.forEach((inst) => netDemandById.set(inst.id, 0));
 
   const newParticipantHoldings = new Map<string, Map<string, number>>();
   participants.forEach((p) => {
+    // Each participant tilts its OWN index-style weighting across instruments by its OWN
+    // attractiveness view, normalized within its own book — not a single shared ranking every
+    // participant is forced to agree with.
+    const tiltedWeightById = new Map<string, number>();
+    let tiltedWeightSum = 0;
+    instruments.forEach((inst) => {
+      const baseWeight = inst.outstandingUSD / totalOutstandingUSD;
+      const attractiveness = p.attractivenessByInstrumentId.get(inst.id) ?? 0;
+      const tilted = Math.max(0.0001, baseWeight * (1 + attractiveness));
+      tiltedWeightById.set(inst.id, tilted);
+      tiltedWeightSum += tilted;
+    });
+
     const holdings = new Map<string, number>();
     instruments.forEach((inst) => {
       const tiltedWeight = (tiltedWeightById.get(inst.id) ?? 0) / (tiltedWeightSum || 1);
-      const targetUSD = p.targetTotalUSD * targetScale * tiltedWeight;
+      const targetUSD = p.targetTotalUSD * tiltedWeight;
       const currentUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
       const fillUSD = (targetUSD - currentUSD) * params.weeklyRebalanceRate;
       netDemandById.set(inst.id, (netDemandById.get(inst.id) ?? 0) + fillUSD);

@@ -166,14 +166,45 @@ required shape for every asset class's clearing engine, not just corporate bonds
 ### Slice 1 landed: corporate bonds (`07b-corporate-bond-clearing.ts`)
 
 First concrete instance of the mechanism above, run as a new stage between commodities (07) and
-company fundamentals (08):
-- **Real participants, named**: institutional entities (insurers, asset managers, pension funds —
-  `state.institutionalEntities`, each with its own persistent `itemizedHoldings` and its own
-  `assetAllocationTarget.corpBondPct * totalAssetsUSD`) compare real holdings against real target,
-  tilted issuer-by-issuer by how rich/cheap that issuer's bond trades versus a fundamental
-  fair-value spread estimate (`computeExpectedLossSpreadBps` — repurposed as one participant's
-  credit view, an *input* to its bid decision, never the price itself), and trade a real fraction
-  of that gap every week (persisted — no more full mechanical recompute-from-scratch).
+company fundamentals (08).
+
+**Target allocation is a long-term guide, not the demand itself.** An institutional entity's
+`assetAllocationTarget.corpBondPct` only sizes how much of its *total* book should sit in
+corporate bonds — a slow-moving policy anchor. Two real corrections make this bottom-up, with no
+caps anywhere:
+- **The aggregate target is real and already bounded by construction.** The institutional
+  sector's combined corp-bond target is `reg.corpBondOwnership.institutionalShare *
+  totalOutstandingUSD` — an already-real, already-stable figure this codebase calibrates
+  elsewhere — never an independent sum of each entity's own `corpBondPct * totalAssetsUSD` (which
+  came out to ~2.8x the real market: entity size and the real bond float are bootstrapped from
+  unrelated bases, so multiplying a policy percentage into an independently-sized total doesn't
+  bound itself). Each entity's `corpBondPct` is now a *relative weight* on that real, bounded
+  pool — how much more or less it wants versus its peers, distributed via
+  `distributeRealTargetByWeight` (shared-helpers.ts) — not a free-standing dollar figure that
+  could exceed the market. This is the actual fix; there is no rescale/cap anywhere in the engine
+  or the adapter.
+- **The entity's actual book drifts toward that target slowly** (`STRATEGIC_TARGET_DRIFT_RATE =
+  0.05`), separate from and slower than the faster tactical rotation between individual names
+  within that budget — matching how a real institution's overall allocation moves gradually while
+  its day-to-day buying/selling is much more active.
+
+**What actually drives which bonds get bought — a real, multi-factor tactical decision
+(`computeEntityAttractiveness`), not the target itself:**
+- *Value*: the issuer's current spread versus a fair-value estimate that is itself adjusted for
+  current credit conditions (`reg.bankingSector.creditConditionsIndex`) — a bond is priced against
+  the current market, not against an idiosyncratic PD estimate in a vacuum.
+- *Momentum*: a name whose spread has been widening fast is a riskier "catch the falling knife"
+  buy even where it already looks cheap (`comp.oasSpreadBpsHistory`, a new rolling weekly series).
+- *Mandate*: real insurers and pension funds run investment-grade-only books and structurally
+  avoid high-yield paper, independent of how attractive it looks on value alone.
+- *Duration/maturity fit*: insurers and pension funds carry long-dated liabilities and real
+  asset-liability-matching preferences for longer paper; asset managers run closer to
+  benchmark-neutral.
+
+Each entity computes its own attractiveness per issuer (real participants don't share one view),
+tilts its own index-style (debt-outstanding-weighted) allocation across issuers accordingly, and
+trades a real fraction of the resulting per-issuer gap every week.
+
 - **Banks as the dealer in the middle**: all real order flow nets onto the banking sector's own
   `corpBondDealerInventory` (a genuine, persistent, per-issuer balance-sheet position — the axe),
   which also leans the price against its own standing inventory (real market-making inventory-risk
@@ -198,42 +229,42 @@ company fundamentals (08):
 Corporate bonds shipped first as one self-contained stage file; before building the next asset
 class on top of it, the auction itself was pulled out into `financial-clearing-engine.ts` —
 `clearFinancialAsset(instruments, participants, priorDealerInventory, params)`, asset-class
-agnostic. Only three things are asset-specific and supplied by a small adapter: what counts as a
-participant and its real target allocation, the rich/cheap tilt signal per instrument, and the
-quoted statistic's direction/duration/bounds relative to price. `07b-corporate-bond-clearing.ts`
-is now a thin adapter over this engine; sovereign bonds, loans, and equity become adapters too,
-not new auctions.
+agnostic and cap-free. Only two things are asset-specific and supplied by a small adapter: what
+counts as a participant, its real bottom-up target, and its own per-instrument attractiveness
+view (each participant tilts its own book — there is no single shared "rich/cheap" ranking every
+participant is forced to agree with); and the quoted statistic's direction/duration/bounds
+relative to price. `07b-corporate-bond-clearing.ts` is now a thin adapter over this engine;
+sovereign bonds, loans, and equity become adapters too, not new auctions.
 
-### Two real bugs found and fixed while verifying slice 1
+### Real bugs found and fixed while verifying slice 1 (bottom-up, no caps)
 
 - **Seed/lookup key mismatch**: the cold-start seed for institutional entities' `itemizedHoldings`
   keyed corporate positions by tranche id; the real clearing engine looks holdings up by issuer
   (company) id. Every entity's real starting position read as zero on its first real clearing
   week, producing an artificial, systemic one-time rebalancing shock. Fixed by seeding per-issuer
   (`simulation/initialization.ts`).
-- **Seed/target scale mismatch**: an institutional entity's real target
-  (`assetAllocationTarget.corpBondPct * totalAssetsUSD`) is computed from the institutional
-  sector's independently GDP-scaled balance-sheet size, which has no guaranteed relationship to
-  the bottom-up sum of every company's actual debt outstanding — summed across the 3 named
-  entities it came out to ~2.8x the entire region's corporate debt. The engine already rescales
-  this down (`maxParticipantShareOfOutstanding`) every week, but the cold-start seed used the
-  raw, unscaled target, so week 1 started far overweight and spent many weeks selling back down —
-  a persistent, systemic one-directional spread move, not real fundamentals-driven behavior.
-  Fixed by seeding with the same rescale the engine applies (`MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING`,
-  exported from the corp-bond adapter and reused at init).
+- **Aggregate target derived from the wrong base**: as described above, an entity's target must
+  be a relative weight on the real, already-bounded institutional pool
+  (`corpBondOwnership.institutionalShare * totalOutstandingUSD`), not an independent
+  `corpBondPct * totalAssetsUSD`. Fixed at the source in both the weekly engine and the cold-start
+  seed (`distributeRealTargetByWeight`, used identically by both) — no rescale/cap involved.
+- **Seed/target distribution-shape mismatch**: even after the aggregate dollar amount was fixed,
+  the cold-start seed split it across issuers via `attributeItemizedHoldings`' size-sorted,
+  40%-per-issue-capped greedy fill, while the real weekly engine splits by real debt-outstanding
+  weight (tilted by attractiveness). The two shapes disagreed per issuer even with the same total,
+  concentrating seed holdings in the 2-3 biggest issuers and leaving every smaller one to open
+  with an artificial, systemic buy gap — which showed up as most of the market drifting toward the
+  real spread floor. Fixed by seeding corporate-bond holdings with the same proportional-by-size
+  shape the engine itself uses (`attributeCorpBondHoldingsProportionally` in
+  `simulation/initialization.ts`).
 
-### Known open calibration residual
-
-After both fixes, a smoke check (20 weeks, no full invariants run per current guidance — long
-runs are reserved for end-of-project validation) shows no NaNs and a real, differentiated spread
-distribution that correlates sensibly with credit quality (distressed/near-zero-EBITDA names
-correctly drift toward the 5000bps ceiling), but a large share of investment-grade names (~75-80%)
-still converges to sit at the real-world floor (25bps) rather than a smoothly spread-out
-investment-grade curve. This reads as aggregate institutional demand still being structurally
-strong relative to the corporate bond float even after the 0.85 rescale cap, not a logic bug —
-tuning `WEEKLY_REBALANCE_RATE`, `BOND_LIQUIDITY_DEPTH`, and
-`MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING` against a real target distribution is left as an explicit
-follow-up rather than hand-tuned against one-off smoke output.
+After all three fixes, a smoke check (26 weeks, no full invariants run per current guidance — long
+runs are reserved for end-of-project validation) shows no NaNs, an average spread that holds in a
+plausible ~100-120bps range rather than drifting without bound, and a real, differentiated
+distribution that correlates sensibly with credit quality — the highest-quality names settle at
+the real-world floor (25bps) and stay there (a real, plausible outcome of strong institutional
+demand for quality paper relative to a modest simulated bond market, not a bug), while names with
+deteriorating fundamentals drift up toward real distressed levels over time.
 
 ## Constituent ideas (full scope)
 

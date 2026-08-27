@@ -145,6 +145,29 @@ export function computeSupplyDemandPremium(
   return (1 - ratio) * 200;
 }
 
+/**
+ * Splits a real, already-bottom-up total (e.g. reg.corpBondOwnership.institutionalShare *
+ * totalOutstandingUSD — the institutional sector's actual real claim on a market, already
+ * bounded by construction) across named entities by their RELATIVE weight, never by an
+ * independently-computed absolute amount. An entity's own policy target percentage
+ * (assetAllocationTarget.corpBondPct etc.) is a long-term guide to how much MORE or LESS of the
+ * shared real pool it wants relative to its peers — not a free-standing dollar figure that could
+ * independently exceed the real pool and need a cap. sizeWeight is any real, relative measure of
+ * the entity's own size (this codebase uses totalAssetsUSD, which is internally consistent
+ * across entities within one region even where its absolute scale is not directly comparable to
+ * the target market).
+ */
+export function distributeRealTargetByWeight(
+  entities: { id: string; sizeWeight: number; targetPct: number }[],
+  totalRealTargetUSD: number
+): Map<string, number> {
+  const weights = entities.map((e) => Math.max(0, e.sizeWeight * e.targetPct));
+  const weightSum = weights.reduce((s, w) => s + w, 0) || 1;
+  const result = new Map<string, number>();
+  entities.forEach((e, idx) => result.set(e.id, totalRealTargetUSD * (weights[idx] / weightSum)));
+  return result;
+}
+
 export function attributeItemizedHoldings(
   sectorShareUSD: number,
   candidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[]

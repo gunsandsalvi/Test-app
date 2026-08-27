@@ -4,8 +4,7 @@ import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
-import { computeOccupationDemand, attributeItemizedHoldings } from './stages/shared-helpers';
-import { MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING } from './stages/07b-corporate-bond-clearing';
+import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 
 export function createInitialGameState(): GameState {
@@ -99,6 +98,23 @@ export function createInitialGameState(): GameState {
         region: regionId,
         outstandingUSD: c.totalDebt,
       }));
+    const totalCorpCandidatesUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
+    // Proportional-by-size, not attributeItemizedHoldings' size-sorted-greedy-with-a-40%-cap
+    // fill: the real weekly clearing engine (07b-corporate-bond-clearing.ts) distributes an
+    // entity's target across issuers by real debt-outstanding weight (tilted only by real
+    // attractiveness, which is ~neutral at cold start); seeding the same shape here means an
+    // entity's real week-1 gap per issuer is genuinely small, instead of the greedy fill
+    // concentrating holdings in the 2-3 biggest issuers and leaving every smaller one to open
+    // with an artificial, systemic buy gap on its first real clearing week.
+    const attributeCorpBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+      corpCandidates
+        .filter(c => shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD) > 1)
+        .map(c => ({
+          instrumentId: c.id,
+          instrumentType: c.type,
+          issuerRegion: c.region,
+          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD),
+        }));
 
     const govDebtTranches = reg.govDebtTranches || [];
     const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = govDebtTranches.map(gt => ({
@@ -117,30 +133,30 @@ export function createInitialGameState(): GameState {
     // Build the individual InstitutionalEntity objects mapping to regional Companies
     const regionalInstCompanies = regionCompanies.filter(c => c.isInstitutionalEntity);
 
-    // The entities' combined real corp-bond target (assetAllocationTarget.corpBondPct *
-    // totalAssetsUSD, summed) is structurally independent of totalCorpDebt — one is derived
-    // from the institutional sector's own GDP-scaled balance-sheet size, the other from the
-    // bottom-up sum of every company's actual debt — and can come out well above 100% of it.
-    // The real clearing engine caps participants' combined claim at
-    // MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING of what's actually outstanding every week; seeding
-    // this same rescale here means week 1 starts at that same real, achievable target instead of
-    // the raw oversized one, so there's no artificial one-time sell-down shock as the engine's
-    // own cap immediately bites on its very first real week.
-    const rawTotalCorpTargetUSD = regionalInstCompanies.reduce((s, comp) => {
-      const role = comp.institutionalEntityType;
-      if (!role) return s;
-      const share = comp.institutionalMarketShare ?? 0.33;
-      const totalMacroAssetsUSD =
-        (reg.institutionalSector.equityHoldingsUSD || 0) +
-        (reg.institutionalSector.corpBondHoldingsUSD || 0) +
-        (reg.institutionalSector.sovBondHoldingsUSD || 0) +
-        (reg.institutionalSector.cashUSD || 0);
-      return s + allocationTargets[role].corpBondPct * (totalMacroAssetsUSD * share);
-    }, 0);
-    const maxTotalCorpTargetUSD = totalCorpDebt * MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING;
-    const corpTargetScale = rawTotalCorpTargetUSD > maxTotalCorpTargetUSD && rawTotalCorpTargetUSD > 0
-      ? maxTotalCorpTargetUSD / rawTotalCorpTargetUSD
-      : 1;
+    // Real, bottom-up aggregate: the institutional sector's actual share of the real corporate
+    // debt market (already a stable, real calibration used elsewhere in this codebase) — never
+    // an independently-summed entity-level number that could come out larger than the market.
+    // Each entity's own corpBondPct is a relative weight on this real, already-bounded pool (how
+    // much MORE or LESS of it this entity wants versus its peers), not a free-standing dollar
+    // target that could exceed the pool — see distributeRealTargetByWeight's doc comment. This
+    // is the exact same derivation the real weekly clearing engine
+    // (07b-corporate-bond-clearing.ts) uses, so week 1 starts already consistent with it instead
+    // of needing a one-time correction on its first real week.
+    const rawEntityCorpTargetsUSD = distributeRealTargetByWeight(
+      regionalInstCompanies
+        .filter(comp => comp.institutionalEntityType)
+        .map(comp => {
+          const role = comp.institutionalEntityType!;
+          const share = comp.institutionalMarketShare ?? 0.33;
+          const totalMacroAssetsUSD =
+            (reg.institutionalSector.equityHoldingsUSD || 0) +
+            (reg.institutionalSector.corpBondHoldingsUSD || 0) +
+            (reg.institutionalSector.sovBondHoldingsUSD || 0) +
+            (reg.institutionalSector.cashUSD || 0);
+          return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: allocationTargets[role].corpBondPct };
+        }),
+      reg.institutionalSector.corpBondHoldingsUSD || 0
+    );
 
     regionalInstCompanies.forEach(comp => {
       const role = comp.institutionalEntityType;
@@ -157,20 +173,12 @@ export function createInitialGameState(): GameState {
       const totalAssetsUSD = totalMacroAssetsUSD * share;
       const equityCapitalUSD = totalAssetsUSD * 0.12; // 12% capital ratio
 
-      // Seeded from this entity's own real target (assetAllocationTarget.corpBondPct *
-      // totalAssetsUSD) — the same quantity the real corporate-bond clearing engine
-      // (07b-corporate-bond-clearing.ts) treats as its target every week — rather than the
-      // region-level institutional ownership share. Those two numbers aren't the same thing
-      // (one is "share of the region's actual corp debt", the other is "share of this entity's
-      // own balance sheet") and can diverge sharply; seeding from the share left every entity
-      // starting week 1 already far short of (or over) its own real target, producing a huge,
-      // artificial one-time rebalancing shock instead of a real, small week-to-week gap.
-      const entCorpShareUSD = allocationTargets[role].corpBondPct * totalAssetsUSD * corpTargetScale;
+      const entCorpShareUSD = rawEntityCorpTargetsUSD.get(comp.id) ?? 0;
       const entSovShareUSD = (macroSector.sovBondHoldingsUSD || 0) * share;
       const entEquityShareUSD = (macroSector.equityHoldingsUSD || 0) * share;
 
       const itemizedHoldings = [
-        ...attributeItemizedHoldings(entCorpShareUSD, corpCandidates),
+        ...attributeCorpBondHoldingsProportionally(entCorpShareUSD),
         ...attributeItemizedHoldings(entSovShareUSD, sovCandidates),
         ...attributeItemizedHoldings(entEquityShareUSD, equityCandidates),
       ];
