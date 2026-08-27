@@ -134,6 +134,14 @@ export interface ClearingResult {
   newDealerInventoryById: Map<string, number>;
   totalDealerRevenueUSD: number;
   netCashDeltaByParticipantId: Map<string, number>;
+  /**
+   * §6 damper diagnostic: instrument ids whose printed level was held away from the solved
+   * level by `maxWeeklyStatMovePct` this week. The damper is legitimate discrete-time
+   * smoothing, but it must never BIND persistently — a name clamped for weeks on end means
+   * the posted schedules disagree with the printed level and the print is the damper, not
+   * the market. The invariants harness tracks consecutive-week counts off this.
+   */
+  damperBoundInstrumentIds: string[];
 }
 
 /**
@@ -222,6 +230,7 @@ export function clearFinancialAsset(
   const newDealerInventoryById = new Map<string, number>();
   const newParticipantHoldings = new Map<string, Map<string, number>>();
   const netCashDeltaByParticipantId = new Map<string, number>();
+  const damperBoundInstrumentIds: string[] = [];
   participants.forEach((p) => {
     newParticipantHoldings.set(p.id, new Map<string, number>());
     netCashDeltaByParticipantId.set(p.id, 0);
@@ -253,6 +262,9 @@ export function clearFinancialAsset(
     const clearedStat = Number(
       Math.max(inst.currentStat - maxMove, Math.min(inst.currentStat + maxMove, solvedStat)).toFixed(4)
     );
+    if (Math.abs(solvedStat - clearedStat) > Math.max(1e-6, Math.abs(solvedStat) * 1e-6)) {
+      damperBoundInstrumentIds.push(inst.id);
+    }
     newStatById.set(inst.id, isFinite(clearedStat) ? clearedStat : inst.currentStat);
 
     // Everyone holds what they wanted at the level that cleared; the dealer carries any residual.
@@ -265,23 +277,43 @@ export function clearFinancialAsset(
     // its solve by the damping let every participant book its full unclamped size and the books
     // together claimed multiples of the float — measured at 200% of shares outstanding in the
     // equity slice, which is where it finally became impossible to miss.
+    // §6 cores-first refinement: a mandated core (`minHoldingUSD` — the liability-driven
+    // sovereign core, WS6's pledged collateral) is a SIZE the holder cannot go below, and the
+    // old uniform pro-rata ration scaled fills straight through it (measured: pledged
+    // collateral printing ~1% above holdings at late-horizon scale). Cores are satisfied
+    // first; only the discretionary layer above them is rationed. If the cores alone exceed
+    // the float, the ledger cannot honor them all and they scale together — that case is a
+    // float-accounting bug upstream, not a market outcome.
     const wantedByParticipant = new Map<string, number>();
+    const coreByParticipant = new Map<string, number>();
     let wantedTotalUSD = 0;
+    let coreTotalUSD = 0;
     participants.forEach((p) => {
       const d = p.demandByInstrumentId.get(inst.id);
       const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
       const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind, previousUSD) : 0;
+      const affordableUSD = d?.maxNetPurchaseUSD === undefined
+        ? Infinity
+        : previousUSD + Math.max(0, d.maxNetPurchaseUSD);
+      const coreUSD = Math.min(d?.minHoldingUSD ?? 0, affordableUSD, filledUSD);
       wantedByParticipant.set(p.id, filledUSD);
+      coreByParticipant.set(p.id, coreUSD);
       wantedTotalUSD += filledUSD;
+      coreTotalUSD += coreUSD;
     });
-    const rationFactor = wantedTotalUSD > inst.tradableFloatUSD
-      ? inst.tradableFloatUSD / wantedTotalUSD
+    const coreScale = coreTotalUSD > inst.tradableFloatUSD ? inst.tradableFloatUSD / coreTotalUSD : 1;
+    const discretionaryFloatUSD = Math.max(0, inst.tradableFloatUSD - coreTotalUSD * coreScale);
+    const discretionaryWantedUSD = wantedTotalUSD - coreTotalUSD;
+    const discretionaryScale = discretionaryWantedUSD > discretionaryFloatUSD
+      ? discretionaryFloatUSD / Math.max(1e-9, discretionaryWantedUSD)
       : 1;
 
     let allocatedUSD = 0;
     participants.forEach((p) => {
       const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
-      const filledUSD = (wantedByParticipant.get(p.id) ?? 0) * rationFactor;
+      const coreUSD = (coreByParticipant.get(p.id) ?? 0) * coreScale;
+      const discretionaryUSD = Math.max(0, (wantedByParticipant.get(p.id) ?? 0) - (coreByParticipant.get(p.id) ?? 0));
+      const filledUSD = coreUSD + discretionaryUSD * discretionaryScale;
       const tradedUSD = filledUSD - previousUSD;
       const feeUSD = Math.abs(tradedUSD) * (params.dealerSpreadBps / 10000);
 
@@ -300,5 +332,6 @@ export function clearFinancialAsset(
     newDealerInventoryById,
     totalDealerRevenueUSD,
     netCashDeltaByParticipantId,
+    damperBoundInstrumentIds,
   };
 }

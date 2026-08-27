@@ -171,6 +171,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         dealerSpreadBps: DEALER_SPREAD_BPS,
         maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
       });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
       // Refit the curve through BOTH the cleared bills and 07c's cleared bonds, so the sub-2Y
       // segment every short-rate consumer reads comes from a market, not an extrapolation.
@@ -342,7 +343,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             impactBadge: '[FUNDING SQUEEZE]',
             impactRegion: comp.region,
             impactSector: comp.sector,
-            sentimentDelta: -0.15,
             affectedTicker: comp.ticker,
             urgent: true,
           } as NewsItem);

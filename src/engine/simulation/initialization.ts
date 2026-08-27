@@ -1,5 +1,6 @@
 
-import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
+import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
+import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
@@ -29,7 +30,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   setSimulationSeed(seed);
   const regions = getInitialRegions();
   const fxPairs = getInitialFxPairs();
-  const companies = generateInitialCompanies();
+  // §6 hoist: the generator reads seed primitives from the regions this function just built,
+  // instead of rebuilding four fresh regions per company.
+  const companies = generateInitialCompanies(regions);
 
   // ---- HC Wave 1: the named private tier (HC1 generation + HC3 carves) ----
   // Generated FIRST, so every bootstrap computation below sees one consistent, already-carved
@@ -128,18 +131,11 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
         const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
 
-        (regions[regionId].categoryDemand as any)[su.unitId] = {
+        (regions[regionId].categoryDemand as any)[su.unitId] = createSeedCategoryDemandState(
           demandLevelUSD,
-          demandGrowthAnnual: reg.gdpGrowth ?? 0.02,
-          demandHistory: [demandLevelUSD],
-          crowdingIntensity: 0.1,
-          inventoryLevelUSD: demandLevelUSD * 0.10,
-          inputCostPressure: 0,
-          clearedInputPriceIndex: 1.0,
-          upstreamScarcityIndex: 1.0,
-          lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
-          unitPriceUSD: deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, reg.totalPopulation, regionFirmCount),
-        };
+          reg.gdpGrowth ?? 0.02,
+          deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, reg.totalPopulation, regionFirmCount)
+        );
       });
     });
 
@@ -551,10 +547,12 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
 
   const commodities = getInitialCommodities();
   const allGeneratedCompanies = companies;
-  Object.keys(COMMODITY_CATEGORY_LINKAGE).forEach(commodityId => {
-    const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId];
-    const calibratedShare = calibrateIntensityShare(commodityId, allGeneratedCompanies, regions, linkage.subUnitId);
-    COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...linkage, intensityShare: calibratedShare };
+  // Calibrate the working linkage from the FROZEN base shares (§6: the old in-place mutation
+  // meant a second world built in the same process re-calibrated already-calibrated values).
+  Object.keys(BASE_COMMODITY_CATEGORY_LINKAGE).forEach(commodityId => {
+    const base = BASE_COMMODITY_CATEGORY_LINKAGE[commodityId];
+    const calibratedShare = calibrateIntensityShare(commodityId, allGeneratedCompanies, regions, base.subUnitId);
+    COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...base, intensityShare: calibratedShare };
   });
 
   const topUsaCompanyIds = companies
@@ -750,7 +748,6 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
           'Portfolio unencumbered capital: $25,000,000 USD. Multi-region Nelson-Siegel curves, 200 corporate issuers, 3 Dealer axes, asynchronous quarterly earnings, and full Greeks attribution online.',
         category: 'MACRO',
         impactBadge: '[SYSTEM INIT]',
-        sentimentDelta: 0.05,
         urgent: true,
       },
     ],

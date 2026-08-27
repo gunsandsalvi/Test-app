@@ -166,7 +166,6 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     impactBadge: '[M&A MERGER]',
     impactRegion: acquirer.region,
     impactSector: acquirer.sector,
-    sentimentDelta: 0.10,
     affectedTicker: acquirer.ticker,
     urgent: true,
   });

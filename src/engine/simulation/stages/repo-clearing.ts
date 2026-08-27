@@ -263,6 +263,7 @@ export function runRegionalRepoSession(
     maxWeeklyStatMovePct: 1000,
   });
 
+  ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
   const clearedBps = result.newStatById.get(instrumentId) ?? priorRepoRateAnnual * 10000;
   const repoRateAnnual = clearedBps / 10000;
 

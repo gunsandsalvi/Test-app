@@ -353,6 +353,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
     });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
     // Apply: real cleared yields -> refit the Nelson-Siegel curve so every other consumer rides
     // on these real points.

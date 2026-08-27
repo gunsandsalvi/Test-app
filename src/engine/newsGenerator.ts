@@ -12,6 +12,13 @@ export interface EarningsReportEvent {
   region: RegionId;
 }
 
+/**
+ * G8 (absorbed into S10): `sectorSentimentShocks` and `NewsItem.sentimentDelta` are deleted.
+ * WS4 retired sentiment as a price input, which left both as dead plumbing — every producer
+ * filled them in and nothing consumed them. News now reaches prices only through the real
+ * flows it reports: an earnings surprise through the earnings themselves, a downgrade through
+ * the cleared spread, weather through real supply into real commodity and goods prices.
+ */
 export function generateWeeklyNews(
   week: number,
   regions: Record<RegionId, Region>,
@@ -19,16 +26,10 @@ export function generateWeeklyNews(
   rateChanges: { region: RegionId; deltaBps: number }[],
   ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[],
   defaults: string[],
-  earningsReports: EarningsReportEvent[] = []
-): { newsItems: NewsItem[]; sectorSentimentShocks: Record<string, number> } {
+  earningsReports: EarningsReportEvent[] = [],
+  commodities: { id: string; name: string; symbol: string; unit: string; spotPrice: number }[] = []
+): { newsItems: NewsItem[] } {
   const news: NewsItem[] = [];
-  const sectorSentimentShocks: Record<string, number> = {
-    Tech: 0,
-    Energy: 0,
-    Financials: 0,
-    Industrials: 0,
-    Consumer: 0,
-  };
 
   // 1. Corporate Earnings Reports Pipeline
   earningsReports.forEach((er) => {
@@ -69,14 +70,9 @@ export function generateWeeklyNews(
       impactRegion: er.region,
       impactSector: er.sector as any,
       affectedTicker: er.ticker,
-      sentimentDelta: isBeat ? 0.18 : isMiss ? -0.20 : 0.0,
       urgent: Math.abs(surprisePctVal) > 0.10,
       tradeShortcut,
     });
-
-    if (er.sector && sectorSentimentShocks[er.sector] !== undefined) {
-      sectorSentimentShocks[er.sector] += isBeat ? 0.04 : isMiss ? -0.04 : 0;
-    }
   });
 
   // 1. Central Bank Rate Decisions
@@ -124,17 +120,12 @@ export function generateWeeklyNews(
       category: 'CENTRAL_BANK',
       impactBadge,
       impactRegion: rc.region,
-      sentimentDelta: isHike ? -0.10 : isCut ? 0.12 : 0.0,
       urgent: true,
       tradeShortcut,
     });
 
     if (isHike) {
-      sectorSentimentShocks.Financials += 0.05;
-      sectorSentimentShocks.Tech -= 0.08;
     } else if (isCut) {
-      sectorSentimentShocks.Tech += 0.10;
-      sectorSentimentShocks.Financials -= 0.04;
     }
   });
 
@@ -152,17 +143,17 @@ export function generateWeeklyNews(
       impactRegion: comp?.region,
       impactSector: comp?.sector,
       affectedTicker: ticker,
-      sentimentDelta: -0.45,
       urgent: true,
     });
-    if (comp?.sector) {
-      sectorSentimentShocks[comp.sector] -= 0.15;
-    }
   });
 
   // 3. Rating Migrations
   ratingChanges.slice(0, 3).forEach((rc) => {
-    const isUpgrade = ['AAA', 'AA', 'A', 'BBB'].indexOf(rc.to) < ['AAA', 'AA', 'A', 'BBB'].indexOf(rc.from);
+    // The FULL rating ladder: the old IG-only array returned -1 for every high-yield notch,
+    // so any migration involving BB/B/CCC/D was classified by accident (a BB→BBB upgrade
+    // printed as a downgrade).
+    const RATING_LADDER = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC', 'D'];
+    const isUpgrade = RATING_LADDER.indexOf(rc.to) < RATING_LADDER.indexOf(rc.from);
     const title = `CREDIT RATING: ${rc.ticker} ${isUpgrade ? 'Upgraded' : 'Downgraded'} from ${rc.from} to ${rc.to}`;
     const desc = isUpgrade
       ? `Agency cites balance sheet deleveraging, robust cash flow expansion, and improving debt service coverage ratios.`
@@ -192,7 +183,6 @@ export function generateWeeklyNews(
       category: 'CREDIT',
       impactBadge: isUpgrade ? '[CREDIT UPGRADE]' : '[CREDIT DOWNGRADE]',
       affectedTicker: rc.ticker,
-      sentimentDelta: isUpgrade ? 0.20 : -0.25,
       urgent: !isUpgrade,
       tradeShortcut,
     });
@@ -202,30 +192,20 @@ export function generateWeeklyNews(
   Object.values(regions).forEach((r) => {
     if (r.weather && r.weather.severity !== 'Normal' && random() < 0.4) {
       const w = r.weather;
-      let tradeShortcut: TradeableInstrument | undefined;
-      if (w.affectedCommodityId === 'NATURAL_GAS') {
-        tradeShortcut = {
-          assetType: 'COMMODITY',
-          id: 'NATURAL_GAS',
-          symbol: 'NATURAL_GAS',
-          name: 'Natural Gas',
-          region: 'USA',
-          price: 2.85,
-          quoteUnit: '$/mmbtu',
-          details: {},
-        };
-      } else if (w.affectedCommodityId === 'HEAVY_CRUDE_OIL') {
-        tradeShortcut = {
-          assetType: 'COMMODITY',
-          id: 'HEAVY_CRUDE_OIL',
-          symbol: 'HEAVY_CRUDE_OIL',
-          name: 'Heavy Crude Oil',
-          region: 'USA',
-          price: 78.50,
-          quoteUnit: '$/bbl',
-          details: {},
-        };
-      }
+      // The shortcut quotes the REAL affected commodity at its REAL current spot — the old
+      // version hardcoded two prices (2.85/78.50) that were fabrications the moment week 1
+      // moved the market (rule 4).
+      const affected = commodities.find((c) => c.id === w.affectedCommodityId);
+      const tradeShortcut: TradeableInstrument | undefined = affected ? {
+        assetType: 'COMMODITY',
+        id: affected.id,
+        symbol: affected.symbol,
+        name: affected.name,
+        region: r.id,
+        price: affected.spotPrice,
+        quoteUnit: affected.unit,
+        details: {},
+      } : undefined;
 
       news.push({
         id: `weather_${week}_${r.id}`,
@@ -235,93 +215,16 @@ export function generateWeeklyNews(
         category: 'WEATHER',
         impactBadge: '[WEATHER ALERT]',
         impactRegion: r.id,
-        sentimentDelta: -0.05,
         urgent: w.severity === 'Severe',
         tradeShortcut,
       });
     }
   });
 
-  // 5. Macro & Earnings Procedural Shocks
-  if (news.length < 3) {
-    const macroEvents = [
-      {
-        title: 'Global Semiconductor Consortium Announces Next-Gen 1nm Node Architecture',
-        desc: 'Advanced packaging breakthroughs drive massive capex revisions across US and European chip fabricators.',
-        cat: 'MACRO' as const,
-        badge: '[HIGH IMPACT]',
-        sector: 'Tech' as const,
-        delta: 0.15,
-        symbol: 'NVST',
-      },
-      {
-        title: 'OPEC+ Surprise Quota Adjustments Tighten Global Crude Supplies',
-        desc: 'Crude oil forward curves slip into deep backwardation as spot inventories in Cushing drop to multi-year lows.',
-        cat: 'COMMODITY' as const,
-        badge: '[COMMODITY SPIKE]',
-        sector: 'Energy' as const,
-        delta: 0.18,
-        symbol: 'TXEN',
-      },
-      {
-        title: 'Eurozone Industrial Output Data Surpasses Forecasts on Renewable Infrastructure Surge',
-        desc: 'Strong German and French manufacturing orders signal unexpected resilience in heavy equipment and power grid exports.',
-        cat: 'MACRO' as const,
-        badge: '[MACRO SURPRISE]',
-        sector: 'Industrials' as const,
-        delta: 0.12,
-        symbol: 'CHEM',
-      },
-      {
-        title: 'Consumer Confidence Survey Highlights Rising Caution Over High Financing Costs',
-        desc: 'Big-ticket durable goods retail foot traffic slows, while discount grocery chains maintain defensive margins.',
-        cat: 'EARNINGS' as const,
-        badge: '[EARNINGS WARNING]',
-        sector: 'Consumer' as const,
-        delta: -0.10,
-        symbol: 'WMRT',
-      },
-      {
-        title: 'Cross-Currency Basis Swap Demand Surges as Japanese Insurers Hedge Portfolios',
-        desc: 'USD/JPY 3-month basis spreads widen as institutional players lock in FX forward hedges amid Bank of Japan shifts.',
-        cat: 'MACRO' as const,
-        badge: '[BASIS SHOCK]',
-        sector: 'Financials' as const,
-        delta: 0.08,
-        symbol: 'JPMC',
-      },
-    ];
+  // The old block here fabricated filler headlines when the week produced fewer than three
+  // real events — canned stories with real-world references (OPEC+, Cushing, Bank of Japan)
+  // and five tickers that exist in no run (rule 4). A quiet news week is information; invented
+  // news is a lie. Deleted with G8's plumbing.
 
-    const pick = macroEvents[(week + Math.floor(random() * macroEvents.length)) % macroEvents.length];
-    const comp = companies.find((c) => c.ticker === pick.symbol);
-    const tradeShortcut: TradeableInstrument | undefined = comp ? {
-      assetType: 'EQUITY',
-      id: comp.id,
-      symbol: comp.ticker,
-      name: comp.name,
-      region: comp.region,
-      price: comp.stockPrice,
-      quoteUnit: 'USD',
-      details: {
-        sector: comp.sector,
-        rating: comp.creditRating,
-      },
-    } : undefined;
-
-    news.push({
-      id: `macro_${week}_${pick.sector}`,
-      week,
-      title: pick.title,
-      description: pick.desc,
-      category: pick.cat,
-      impactBadge: pick.badge,
-      impactSector: pick.sector,
-      sentimentDelta: pick.delta,
-      urgent: false,
-      tradeShortcut,
-    });
-    sectorSentimentShocks[pick.sector] += pick.delta;
-  }
-
-  return { newsItems: news, sectorSentimentShocks };
+  return { newsItems: news };
 }

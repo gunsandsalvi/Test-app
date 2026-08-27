@@ -205,6 +205,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
     // Apply: real cleared discount margin + derived price-to-par, mutated in place so stage 8
     // reads it as an already-real value. Also extend the rolling history for momentum.

@@ -279,6 +279,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
     // week's already-real value rather than recomputing one. Also extend each company's rolling

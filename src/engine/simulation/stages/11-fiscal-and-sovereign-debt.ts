@@ -446,7 +446,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     ctx.rateChanges,
     ctx.ratingChanges,
     ctx.defaultedTickers,
-    ctx.earningsReportedThisTurn
+    ctx.earningsReportedThisTurn,
+    ctx.updatedCommodities
   );
   ctx.newsItems.push(...generatedNews.newsItems);
 }

@@ -20,8 +20,15 @@ const DEFAULT_PPE_INTENSITY = 0.5;
 // the accumulated-depreciation fraction of gross PP&E used at that seed point.
 const INITIAL_ACCUM_DEPRECIATION_FRACTION = 0.45;
 
-export function getCategoryDemandSeedUSD(category: string, region: RegionId): number {
-  const income = getInitialRegions()[region]?.estimatedHouseholdIncomeUSD ?? 10_000_000_000_000;
+export function getCategoryDemandSeedUSD(
+  category: string,
+  region: RegionId,
+  // §6 hoist: callers inside generation pass the world they already built; rebuilding four
+  // regions (and consuming their RNG draws) once per company was most of the cold start's
+  // random stream spent on immediately-discarded objects.
+  initialRegions: Record<RegionId, import('../types').Region> = getInitialRegions()
+): number {
+  const income = initialRegions[region]?.estimatedHouseholdIncomeUSD ?? 10_000_000_000_000;
   const consumption = income * 0.95;
   const govBase = income * 0.18;
   const corpBase = income * 0.08;
@@ -343,7 +350,9 @@ const SUBUNIT_TO_CATEGORY: Record<string, string> = {
  * manager/pension-fund specialty roles and commodity producers), then padded out with
  * procedurally scaled clones up to the per-region target count below.
  */
-export function generateInitialCompanies(): Company[] {
+export function generateInitialCompanies(
+  initialRegions: Record<RegionId, import('../types').Region> = getInitialRegions()
+): Company[] {
   const regions: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
   const companies: Company[] = [];
   // Shared across every region's seed generation so tickers/names are globally unique, not
@@ -353,7 +362,7 @@ export function generateInitialCompanies(): Company[] {
   const existingSeedNames = new Set<string>();
 
   regions.forEach((region) => {
-    const regionPolicyRate = getInitialRegions()[region]?.policyRate ?? 0.045;
+    const regionPolicyRate = initialRegions[region]?.policyRate ?? 0.045;
     const regionProductivityPerCapita = getRegionProductivityPerCapitaUSD(region);
     let templates: FirmSeedTemplate[] = generateFirmSeeds(region, existingSeedTickers, existingSeedNames);
 
@@ -385,13 +394,12 @@ export function generateInitialCompanies(): Company[] {
       const rankInCategory = group.findIndex(t => t.ticker === rawTmpl.ticker);
       const totalInCategory = group.length;
 
-      const regionDemandSeed = getCategoryDemandSeedUSD(primaryCat, region);
+      const regionDemandSeed = getCategoryDemandSeedUSD(primaryCat, region, initialRegions);
       let derivedRevBase = deriveInitialRevenueUSD(primaryCat, regionDemandSeed, rankInCategory >= 0 ? rankInCategory : 0, totalInCategory || 1);
 
       if (rawTmpl.sector === 'Banks') {
         const bankShare = rawTmpl.bankMarketShare ?? 0.25;
-        const initRegs = getInitialRegions();
-        const initReg = initRegs[region];
+        const initReg = initialRegions[region];
         if (initReg?.bankingSector) {
           const bs = initReg.bankingSector;
           const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
@@ -603,7 +611,7 @@ export function generateInitialCompanies(): Company[] {
         // region's initial aggregate, not a value it will ever re-derive from that aggregate
         // again (02b-bank-diversification.ts evolves it independently from here on).
         bankBalanceSheet: tmpl.sector === 'Banks' ? (() => {
-          const seedReg = getInitialRegions()[region];
+          const seedReg = initialRegions[region];
           const bs = seedReg?.bankingSector;
           const share = tmpl.bankMarketShare ?? 0.25;
           if (!bs) return undefined;
@@ -789,22 +797,15 @@ export function generateInitialCompanies(): Company[] {
             ];
           }
         } else if (sector === 'Consumer') {
-          const isMegaCap = c.baselineAnnualRevenue > 100000;
-          if (isMegaCap) {
-            lines = [
-              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.40, competitiveness: 0 },
-              { industry: 'HealthcarePharma', subUnitId: 'pharmaceuticals', revenueShare: 0.30, competitiveness: 0 },
-              { industry: 'AutomotiveTransport', subUnitId: 'passenger_vehicles', revenueShare: 0.15, competitiveness: 0 },
-              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.15, competitiveness: 0 }
-            ];
-          } else {
-            lines = [
-              { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.35, competitiveness: 0 },
-              { industry: 'HealthcarePharma', subUnitId: 'pharmaceuticals', revenueShare: 0.25, competitiveness: 0 },
-              { industry: 'AutomotiveTransport', subUnitId: 'passenger_vehicles', revenueShare: 0.20, competitiveness: 0 },
-              { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.20, competitiveness: 0 }
-            ];
-          }
+          // §6: `baselineAnnualRevenue > 100000` was a stale-scale test — revenues are dollars,
+          // so every company passed it and the "else" mix was dead. One mix, the one every run
+          // has actually used (behaviour-preserving deletion).
+          lines = [
+            { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.40, competitiveness: 0 },
+            { industry: 'HealthcarePharma', subUnitId: 'pharmaceuticals', revenueShare: 0.30, competitiveness: 0 },
+            { industry: 'AutomotiveTransport', subUnitId: 'passenger_vehicles', revenueShare: 0.15, competitiveness: 0 },
+            { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.15, competitiveness: 0 }
+          ];
         } else if (sector === 'Financials' || sector === 'Banks') {
           lines = [
             { industry: 'SoftwareDigitalServices', subUnitId: 'enterprise_software', revenueShare: 1.0, competitiveness: 0 }

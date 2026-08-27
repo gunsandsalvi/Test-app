@@ -18,7 +18,6 @@ export interface NewsItem {
   impactBadge: string;
   impactRegion?: RegionId;
   impactSector?: Sector;
-  sentimentDelta: number;
   affectedTicker?: string;
   urgent: boolean;
   tradeShortcut?: TradeableInstrument;

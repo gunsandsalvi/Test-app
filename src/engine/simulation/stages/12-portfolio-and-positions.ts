@@ -109,7 +109,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
               category: 'CREDIT',
               impactBadge: '[REDEMPTION]',
               impactRegion: pos.region,
-              sentimentDelta: 0,
               affectedTicker: comp.ticker,
               urgent: true
             });
@@ -219,7 +218,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             category: 'MACRO',
             impactBadge: '[MATURITY]',
             impactRegion: pos.region,
-            sentimentDelta: 0,
             urgent: true,
           });
         } else {
@@ -269,7 +267,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             category: 'MACRO',
             impactBadge: '[EXPIRY]',
             impactRegion: pos.region,
-            sentimentDelta: 0,
             urgent: false,
           });
         } else {
@@ -327,7 +324,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
               category: 'CREDIT',
               impactBadge: '[EXPIRY]',
               impactRegion: pos.region,
-              sentimentDelta: 0,
               urgent: false,
             });
           } else {
@@ -484,7 +480,6 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
               category: 'MACRO',
               impactBadge: '[MATURITY]',
               impactRegion: pos.region,
-              sentimentDelta: 0,
               urgent: false,
             });
           } else {

@@ -58,6 +58,32 @@ export interface CategoryDemandState {
   totalUnitsDemandedThisWeek?: number;
 }
 
+/**
+ * §6: the ONE seed-time constructor of a CategoryDemandState. Two initialization sites used to
+ * write this object shape out independently (macro/initialization and simulation/initialization
+ * — a third writer, stage 03, is an UPDATER that spreads the existing entry and owns only its
+ * demand-side fields). Duplicated shapes drift (§7.5): a field added to one copy and not the
+ * other is exactly how the unitPriceUSD-drop bug family starts.
+ */
+export function createSeedCategoryDemandState(
+  demandLevelUSD: number,
+  demandGrowthAnnual: number,
+  unitPriceUSD: number
+): CategoryDemandState & { upstreamScarcityIndex: number; lastWeekInventoryLevelUSD: number; unitPriceUSD: number } {
+  return {
+    demandLevelUSD,
+    demandGrowthAnnual,
+    demandHistory: [demandLevelUSD],
+    crowdingIntensity: 0.1,
+    inventoryLevelUSD: demandLevelUSD * 0.10,
+    inputCostPressure: 0,
+    clearedInputPriceIndex: 1.0,
+    upstreamScarcityIndex: 1.0,
+    lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
+    unitPriceUSD,
+  } as any;
+}
+
 export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = {
   TechHardwareSemis: { upstream_extraction: 0.008, specialty_metals: 0.010 },
   SoftwareDigitalServices: { upstream_extraction: 0.002 },

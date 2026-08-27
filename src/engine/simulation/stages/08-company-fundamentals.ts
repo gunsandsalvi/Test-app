@@ -863,7 +863,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           impactBadge: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? '[REFINANCING SQUEEZE]' : '[REFINANCING]',
           impactRegion: comp.region,
           impactSector: comp.sector,
-          sentimentDelta: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? -0.05 : 0,
           affectedTicker: comp.ticker,
           urgent: true,
         };
@@ -1047,10 +1046,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // of the regional aggregate, which is now itself just the sum of banks like this one.
       const realBankEquityUSD = companyUpdates[comp.ticker]?.bankBalanceSheet?.bankEquityUSD ?? comp.bankBalanceSheet?.bankEquityUSD;
       const bankBookValue = Math.max(10, realBankEquityUSD ?? (reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25)));
+      // The regime ladder covers the ACTUAL cycleRegime union — the dead 'Boom' branch (only
+      // reachable through an `as string` cast, since no such regime exists) is gone, and
+      // 'Recovery' has its own rung instead of falling through to the Expansion default.
       const cycle = reg.cycleRegime;
       let pbMultiple = 1.0;
-      if ((cycle as string) === 'Boom') pbMultiple = 1.1;
-      else if (cycle === 'Expansion') pbMultiple = 1.0;
+      if (cycle === 'Expansion') pbMultiple = 1.0;
+      else if (cycle === 'Recovery') pbMultiple = 0.9;
       else if (cycle === 'Slowdown') pbMultiple = 0.8;
       else if (cycle === 'Recession') pbMultiple = 0.6;
 
@@ -1061,8 +1063,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const instBookValue = Math.max(10, reg.institutionalSector.sectorEquityUSD * (comp.institutionalMarketShare ?? 0.33));
       const cycle = reg.cycleRegime;
       let pbMultiple = 1.0;
-      if ((cycle as string) === 'Boom') pbMultiple = 1.15;
-      else if (cycle === 'Expansion') pbMultiple = 1.05;
+      if (cycle === 'Expansion') pbMultiple = 1.05;
+      else if (cycle === 'Recovery') pbMultiple = 0.95;
       else if (cycle === 'Slowdown') pbMultiple = 0.85;
       else if (cycle === 'Recession') pbMultiple = 0.65;
 

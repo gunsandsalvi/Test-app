@@ -25,6 +25,8 @@ export interface GameState {
    */
   rngSeed: number;
   rngState: number;
+  /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
+  lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];

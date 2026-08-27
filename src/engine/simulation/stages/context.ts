@@ -35,6 +35,11 @@ export interface WeeklyStepContext {
   ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
   earningsReportedThisTurn: any[];
   defaultedTickers: string[];
+  /** §6 damper diagnostic: instrument ids whose print was held away from its solve this week,
+   * accumulated across every clearing stage; lands on GameState.lastWeekDamperBoundIds so the
+   * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
+   * market). */
+  damperBoundInstrumentIds: string[];
 
   // Main working state, threaded and reassigned stage to stage
   updatedRegions: Record<RegionId, Region>;
@@ -107,6 +112,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     ratingChanges: [],
     earningsReportedThisTurn: [],
     defaultedTickers: [],
+    damperBoundInstrumentIds: [],
 
     updatedRegions: { ...state.regions },
     updatedFxPairs: [...state.fxPairs],

@@ -103,6 +103,10 @@ export const COMMODITY_QUANTITY_UNIT: Record<string, CommodityQuantityUnit> = {
 // can trade" and "the company that really supplies this industrial input" are the same named
 // actor, and stage04 sources its real weekly supply directly from these commodities' own
 // weeklySupplyUnits/spotPrice instead of an independently invented figure.
+// §6: `industrial_automation` is no longer in this table — it is a plain sub-unit category
+// whose supply and demand clear in stages 04/05 like any other; the pseudo-commodity entry and
+// its bespoke branches in evolution.ts pretended it was a tradable spot commodity, which it
+// never was.
 export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; intensityShare: number }> = {
   CRUDE_OIL: { subUnitId: 'upstream_extraction', intensityShare: 0.35 },
   HEAVY_CRUDE_OIL: { subUnitId: 'upstream_extraction', intensityShare: 0.30 },
@@ -113,8 +117,15 @@ export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; int
   WHEAT: { subUnitId: 'agricultural_commodities', intensityShare: 0.04 },
   CORN: { subUnitId: 'agricultural_commodities', intensityShare: 0.04 },
   SOYBEANS: { subUnitId: 'agricultural_commodities', intensityShare: 0.03 },
-  industrial_automation: { subUnitId: 'industrial_automation', intensityShare: 0.15 },
 };
+
+/**
+ * §6 "copy, don't mutate": the pristine generation-time shares, frozen. Init calibrates the
+ * WORKING table above from THESE, so a second world built in the same process calibrates from
+ * the base rather than compounding on an already-calibrated value.
+ */
+export const BASE_COMMODITY_CATEGORY_LINKAGE: Readonly<Record<string, { subUnitId: string; intensityShare: number }>> =
+  Object.freeze(JSON.parse(JSON.stringify(COMMODITY_CATEGORY_LINKAGE)));
 
 export interface Commodity {
   id: string;

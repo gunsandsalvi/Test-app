@@ -2,6 +2,7 @@ import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroR
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, PrivateSectorSegment, PrivateSegmentType, GovDebtTranche } from '../../types';
 import { generate52WeekHistory } from './utils';
+import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
 import { getRegionPopulation, getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
@@ -116,18 +117,7 @@ export function createInitialCategoryDemand(
       const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
       const unitPriceUSD = deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, population, firmCount);
 
-      cd[su.unitId] = {
-        demandLevelUSD,
-        demandGrowthAnnual: gdpGrowth,
-        demandHistory: [demandLevelUSD],
-        crowdingIntensity: 0.1,
-        inventoryLevelUSD: demandLevelUSD * 0.10,
-        inputCostPressure: 0,
-        clearedInputPriceIndex: 1.0,
-        upstreamScarcityIndex: 1.0,
-        lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
-        unitPriceUSD,
-      };
+      cd[su.unitId] = createSeedCategoryDemandState(demandLevelUSD, gdpGrowth, unitPriceUSD);
     });
   });
   return cd;
@@ -491,6 +481,15 @@ function buildRegion(regionId: RegionId): Region {
   return region;
 }
 
+/**
+ * Builds a FRESH world every call — deliberately not memoized. A cache here was tried and
+ * reverted the same day: createInitialGameState runs more than once per process (the harness's
+ * A/B shock checks build baseline and shocked worlds), and a cached return aliased one mutable
+ * region graph across all of them — every "independent" world was the same object. The §6
+ * hoist is done where it belongs instead: generateInitialCompanies takes the already-built
+ * regions as a parameter rather than rebuilding four regions (and consuming their RNG draws)
+ * once per company.
+ */
 export function getInitialRegions(): Record<RegionId, Region> {
   const regionIds: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
   const regions = {} as Record<RegionId, Region>;

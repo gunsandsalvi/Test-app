@@ -890,7 +890,11 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
   const quoteAttractiveness = (quoteRegion.gdpGrowth + quoteRegion.inflation) - quoteRegion.zeroRates.tenor10Y;
   const capitalFlowTerm = (baseAttractiveness - quoteAttractiveness) * 0.5;
 
-  const drift = rateDiff * dt * 0.3 + sigmaFx * eps + tradeTerm + capitalFlowTerm;
+  // §6 UIP-sign fix: fx.rate is quote-per-base, so rate UP = base appreciating. Carry flows
+  // toward the HIGHER-yielding currency — a higher quote rate (rateDiff > 0) attracts flow
+  // into the quote currency and the pair falls. The old positive term appreciated the LOWER
+  // yielder's counterpart, backwards. WS9 deletes this whole drift for real FX clearing.
+  const drift = -rateDiff * dt * 0.3 + sigmaFx * eps + tradeTerm + capitalFlowTerm;
   const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));
   const change1W = Number((newRate - fx.rate).toFixed(4));
 
@@ -920,20 +924,14 @@ export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, reg
 }
 
 export function calibrateIntensityShare(commodityId: string, allCompanies: Company[], regions: Record<RegionId, Region>, subUnitId: string): number {
-  const producers = allCompanies.filter(c => {
-    if (commodityId === 'industrial_automation') {
-      return (c.productLines || []).some(l => l.subUnitId === 'industrial_automation') && isActiveCompany(c);
-    }
-    return c.producedCommodityId === commodityId && isActiveCompany(c);
-  });
-  const publicWeeklySupplyUSD = producers.reduce((s, c) => {
-    if (commodityId === 'industrial_automation') {
-      const line = (c.productLines || []).find(l => l.subUnitId === 'industrial_automation')!;
-      return s + (c.annualRevenue * line.revenueShare * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52;
-    }
-    return s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52;
-  }, 0);
-  const privateWeeklySupplyUSD = commodityId === 'industrial_automation' ? 0 : computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
+  // §6: the `industrial_automation` pseudo-commodity branches are deleted — it left the
+  // linkage table (see BASE_COMMODITY_CATEGORY_LINKAGE) and is a plain sub-unit category whose
+  // supply and demand already clear in stages 04/05. This function now only ever sees real
+  // producedCommodityId-tagged producers.
+  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
+  const publicWeeklySupplyUSD = producers.reduce((s, c) =>
+    s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
+  const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
   const totalCategoryDemandUSD = (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => s + ((regions[r].categoryDemand as any)[subUnitId]?.demandLevelUSD ?? 0), 0);
   return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;

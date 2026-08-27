@@ -20,6 +20,9 @@ interface Violation {
 }
 
 const violations: Violation[] = [];
+let damperBindStreak = new Map<string, number>();
+const damperPersistentBinds = new Set<string>();
+let damperWorstStreak = 0;
 let prevStateForBookCheck: GameState | null = null;
 
 /**
@@ -259,6 +262,13 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   shocked.companies.forEach(c => {
     if (c.region === 'USA' && c.bankBalanceSheet) {
       c.bankBalanceSheet.cashReservesUSD *= 0.01;
+      // WS6 taught the check the same lesson S6 did, one field later: with a repo market, a
+      // bank with drained CASH still bids — it funds the purchase secured against its
+      // collateral, which is exactly why real sovereign auctions rarely fail. "Buyers with no
+      // money" now means no cash AND no unencumbered collateral to borrow against.
+      const sovUSD = Object.values((c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}) as Record<string, number>)
+        .reduce((a, v) => a + (Number(v) || 0), 0);
+      c.bankBalanceSheet.repoEncumberedCollateralUSD = sovUSD;
     }
   });
   shocked.institutionalEntities.forEach(e => {
@@ -508,6 +518,25 @@ function runInvariantsHarness() {
       }
     });
 
+    // 5d. §6 damper diagnostic: the weekly damper is legitimate discrete-time smoothing, but a
+    // name held away from its solve for 3+ CONSECUTIVE weeks means the print is the damper,
+    // not the market. First run of this metric measured the condition as ENDEMIC — 3,450
+    // streak events across ~1,600 corp tranches, ~900 equity/loan names and 28 sovereign
+    // bucket-streaks in 60 weeks (the §7.21 HY saturation cohort and the §7.31 small-cap
+    // equity tail, mostly) — so it reports as an end-of-run measurement rather than
+    // per-instrument violations that would drown the harness. The number to watch DOWN as
+    // G6/HC-resolution give the wides a real buyer base.
+    {
+      const boundThisWeek = new Set<string>((state as any).lastWeekDamperBoundIds ?? []);
+      const next = new Map<string, number>();
+      boundThisWeek.forEach(id => next.set(id, (damperBindStreak.get(id) ?? 0) + 1));
+      next.forEach((streak, id) => {
+        if (streak >= 3) damperPersistentBinds.add(id);
+        damperWorstStreak = Math.max(damperWorstStreak, streak);
+      });
+      damperBindStreak = next;
+    }
+
     // 6. Bank capital ratio & NIM bands for USA
     const usaBank = state.regions.USA.bankingSector;
     if (usaBank.bankCapitalRatio < 0.05 || usaBank.bankCapitalRatio > 0.35) {
@@ -553,9 +582,11 @@ function runInvariantsHarness() {
   });
 
   if (violations.length === 0) {
+    console.log(`[damper] instruments persistently bound (3+ consecutive weeks): ${damperPersistentBinds.size}; worst streak ${damperWorstStreak} weeks — watch this DOWN as the wides get a real buyer base (§6)`);
     console.log(`✅ INVARIANTS HARNESS PASSED — ${WEEKS} weeks, all assertions satisfied!`);
     process.exit(0);
   } else {
+    console.log(`[damper] instruments persistently bound (3+ consecutive weeks): ${damperPersistentBinds.size}; worst streak ${damperWorstStreak} weeks — watch this DOWN as the wides get a real buyer base (§6)`);
     console.error(`❌ INVARIANTS HARNESS FAILED — ${violations.length} violation(s):`);
     violations.forEach(v => console.error(`  [Week ${v.week}] ${v.message}`));
     process.exit(1);

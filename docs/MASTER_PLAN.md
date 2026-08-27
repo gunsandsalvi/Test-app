@@ -63,6 +63,15 @@ These are standing user directives. They are not suggestions.
    level itself rather than a change derived from a partial or synthetic window — a missing
    change is information; a fabricated one is a lie.
 
+10. **The simulation is a partial world until the remaining projects land — do not chase every
+    moved number.** (User directive, 2026-08-27.) Whole systems are still missing (G2's
+    transmission, MS's households, BP5's fiscal loop), so harness counts shift for
+    non-economic reasons — an RNG-stream change relabels the world, a deleted prop reveals a
+    documented disease, a different seed escapes a band another seed holds. Attribute a moved
+    baseline BRIEFLY (one cheap A/B at most), record it with its owner, and move on. Deep
+    root-cause hunts are for defects inside the systems that exist, not for the imbalances the
+    missing systems explain.
+
 ### 1.10 Verification ladder (every work item)
 
 ```
@@ -270,6 +279,12 @@ CompanyDeepDive's TapToChart rows, InteractiveChartModal's "in period"), and wit
 than re-inventing it.
 
 ### G1b — Damp the inflation swing
+
+**Measured update (S10 close):** the post-S8 band is SEED-SENSITIVE — one world holds
+−10..0%, others escape upward by week 40 (seed 7: USA 8.4% pre-batch; the default-stream world
+reaches 50%+ by week 52 with the 10Y following to 17%). The escape pre-dates the S10 batch and
+both UIP signs; the missing stabiliser is item 2 below (G2's transmission), exactly as written.
+Late-horizon bank-NIM band breaches are the same family (honest carry on a diseased curve).
 
 **Problem.** With inflation now genuinely measured (§7.11), the index is bounded and
 mean-reverting but volatile: ±10–17% swings over a year across regions, where a real economy

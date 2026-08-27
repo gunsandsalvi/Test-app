@@ -139,6 +139,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
     });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
     // Apply the cleared price. Stage 08 runs after this and reads it as already-real, exactly as
     // it reads the cleared OAS — it no longer computes a price of its own.
