@@ -326,7 +326,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         newHoldings.forEach((usd, instrumentId) => {
           if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
         });
-        updated.set(entity.id, { ...entity, itemizedHoldings: [...(otherEntityHoldings.get(entity.id) ?? []), ...newGovHoldings] });
+        updated.set(entity.id, { ...entity, cashUSD: (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0), itemizedHoldings: [...(otherEntityHoldings.get(entity.id) ?? []), ...newGovHoldings] });
       });
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => updated.get(e.id) ?? e);
     }
@@ -343,10 +343,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       const newTotalUSD = Object.values(newBuckets).reduce((s, v) => s + v, 0);
       const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
       if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
+      // The cash leg of the bank's own portfolio trading: bonds bought are paid for out of the
+      // bank's reserves, bonds sold return to them. Its securities and its money move together.
       ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
         ...existingSheet,
         sovereignBondHoldingsByTenor: newBuckets,
         sovereignBondHoldingsUSD: Number(newTotalUSD.toFixed(0)),
+        cashReservesUSD: existingSheet!.cashReservesUSD + (result.netCashDeltaByParticipantId.get(bank.ticker) ?? 0),
       };
     });
 

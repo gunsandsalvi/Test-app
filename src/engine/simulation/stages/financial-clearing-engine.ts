@@ -105,6 +105,13 @@ export interface ClearingResult {
   newParticipantHoldings: Map<string, Map<string, number>>;
   newDealerInventoryById: Map<string, number>;
   totalDealerRevenueUSD: number;
+  // participantId -> the real cash this participant's trading moved this week: positive when it
+  // sold more than it bought, negative when it bought, always net of the bid/ask it paid the
+  // dealer. Securities do not change hands for free — every fill has a cash leg, and without it
+  // a participant's holdings grow while its balance sheet stays put, which is only a market on
+  // one side of the ledger. Adapters are responsible for applying this to whatever each
+  // participant type actually holds cash in.
+  netCashDeltaByParticipantId: Map<string, number>;
 }
 
 /**
@@ -126,6 +133,8 @@ export function clearFinancialAsset(
   instruments.forEach((inst) => netDemandById.set(inst.id, 0));
 
   const newParticipantHoldings = new Map<string, Map<string, number>>();
+  const netCashDeltaByParticipantId = new Map<string, number>();
+  let totalClientFeesUSD = 0;
   participants.forEach((p) => {
     // Each participant tilts its OWN index-style weighting across instruments by its OWN
     // attractiveness view, normalized within its own book — not a single shared ranking every
@@ -141,6 +150,7 @@ export function clearFinancialAsset(
     });
 
     const holdings = new Map<string, number>();
+    let participantCashDeltaUSD = 0;
     instruments.forEach((inst) => {
       const tiltedWeight = (tiltedWeightById.get(inst.id) ?? 0) / (tiltedWeightSum || 1);
       const targetUSD = p.targetTotalUSD * tiltedWeight;
@@ -148,10 +158,17 @@ export function clearFinancialAsset(
       const fillUSD = (targetUSD - currentUSD) * params.weeklyRebalanceRate;
       netDemandById.set(inst.id, (netDemandById.get(inst.id) ?? 0) + fillUSD);
 
+      // The cash leg of this fill: buying costs cash, selling raises it, and either way the
+      // dealer takes its bid/ask off the top of the participant's own GROSS trade.
+      const feeUSD = Math.abs(fillUSD) * (params.dealerSpreadBps / 10000);
+      participantCashDeltaUSD -= fillUSD + feeUSD;
+      totalClientFeesUSD += feeUSD;
+
       const newHoldingUSD = Math.max(0, currentUSD + fillUSD);
       if (newHoldingUSD > 1) holdings.set(inst.id, newHoldingUSD);
     });
     newParticipantHoldings.set(p.id, holdings);
+    netCashDeltaByParticipantId.set(p.id, participantCashDeltaUSD);
   });
 
   const newStatById = new Map<string, number>();
@@ -176,9 +193,14 @@ export function clearFinancialAsset(
 
     const newInventoryUSD = oldInventoryUSD - clientNetDemandUSD;
     newDealerInventoryById.set(inst.id, Number(newInventoryUSD.toFixed(0)));
-
-    totalDealerRevenueUSD += Math.abs(clientNetDemandUSD) * (params.dealerSpreadBps / 10000);
   });
 
-  return { newStatById, newParticipantHoldings, newDealerInventoryById, totalDealerRevenueUSD };
+  // The desk earns the spread on every client trade it facilitates, which is the sum of what the
+  // clients actually paid above — not the spread on their NET, which is what this used to charge.
+  // Netting a buyer against a seller is the dealer's whole business; it does not mean the desk
+  // waived its bid/ask on both sides. Taking the two figures from the same place also means the
+  // money clients pay and the money the desk receives are the same money.
+  totalDealerRevenueUSD = totalClientFeesUSD;
+
+  return { newStatById, newParticipantHoldings, newDealerInventoryById, totalDealerRevenueUSD, netCashDeltaByParticipantId };
 }

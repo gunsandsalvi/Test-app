@@ -186,7 +186,7 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | — (S1, S2, G1 done) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 2 | Cash settlement in all clearing + stop bank sov-holdings drift | S4 | S3 |
+| 2 | **Allocation as an outcome: relative value + opportunistic issuance** | RV | — (S4 done) |
 | 3 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 4 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
 | 5 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
@@ -318,23 +318,83 @@ remains. **Diagnose in this order, and do not put a floor under it:**
 
 Close tasks #77/#78 only after the OAS drift is resolved.
 
-### S4 — Cash settlement + one sovereign book
+### S4r — Government debt service (the one piece S4 left)
 
-**Problem:** no clearing stage settles cash (holdings change, balance sheets don't), and
-`macro/banking.ts` still drifts `sovereignBondHoldingsUSD` by formula alongside 07c's real
-tenor books.
+**Done in S4:** every clearing fill now has a cash leg, banks fund their own bond purchases from
+reserves, the formula drift on the aggregate sovereign book is gone, and an invariant enforces
+that an institution's cash plus securities can only move by real flows.
 
-**Where:** `financial-clearing-engine.ts` (return per-participant net cash flow — it already
-knows every fill), the 07b/07c/07d adapters (apply it), `macro/banking.ts` (delete the sov
-drift; aggregate = Σ per-bank tenor books), `02b-bank-diversification.ts`.
+**Not done, deliberately:** the government books **no interest expense at all** — a tranche's
+`couponRate` is stored and never paid by anyone or received by anyone. Paying holders their
+coupons therefore cannot be added on its own: funding it from outside the budget creates money,
+and adding it on top of the deficit double-counts, because a real fiscal deficit already includes
+interest.
 
-**How:** engine returns `netCashDeltaByParticipantId` (sells − buys − fees). Adapters apply:
-institutional entities → `cashUSD` (and keep `totalAssetsUSD` consistent); banks →
-their real cash/reserves (a bank funding dealer inventory pays for it — inventory is a
-real asset position, cash is the other leg). Sovereign coupons + redemptions in stage 11 must
-settle against the per-tenor books (pro-rata by bucket holdings), not the aggregate.
-Add a per-region assertion (behind the invariants harness): Σ(participant holdings + dealer
-inventory) changes reconcile with Σ(cash deltas) each week.
+The correct decomposition is `governmentSpending = interest + procurement + transfers`, with
+interest computed from the real debt stack and the remainder splitting by
+`GOV_PROCUREMENT_SHARE_OF_SPENDING`. That is worth doing properly rather than quickly: it gives
+the simulation a real and important mechanism — rising debt and rising rates crowding out
+procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
+national-accounts identity established in §7.10. **Do it as part of BP5** (government as a real
+fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
+
+### RV — Allocation as an outcome: cross-asset relative value + opportunistic issuance
+
+**The defect this fixes, stated properly.** Every market here is a *closed pot*. A participant's
+total is fixed (`share × outstanding`) and attractiveness only redistributes that total across
+instruments — and since the engine renormalizes tilted weights, a view every participant shares
+cancels out exactly. The model can say "issuer A is cheap versus issuer B"; it has no way to say
+"corporate credit as a whole is too tight." The float is fixed too, so the asset cannot respond
+to its own price either. **Both of the real world's restoring forces on a spread level are
+structurally absent** — which is why corporate OAS random-walks to −350bp (§5-S3) and why only a
+clamp would stop it. S2 hit the same wall on the sovereign curve and only anchored the front end
+once banks could choose bonds-versus-reserves *at all*; that was the level mechanism, built as a
+one-off for one participant in one market. This item generalises it.
+
+**The idea: allocation percentages become an output, not an input.** Replace the fixed
+`assetAllocationTarget` with what actually pins a real institution's portfolio, and let the
+percentages fall out of solving it at today's cleared prices. Each institution carries:
+- a **hurdle** from its own liabilities — an insurer's reserve discount rate, a pension fund's
+  actuarial assumption, an asset manager's benchmark plus fee, a money fund's overnight rate;
+- a **risk budget**, which in reality is a capital charge per asset class and rating bucket
+  (Solvency II, NAIC, bank RWA): governments near zero, IG credit modest, HY credit heavy,
+  equity heaviest;
+- **constraints**: duration against the liability profile, mandate limits (an IG fund cannot own
+  HY at any price), liquidity minima.
+
+Each week it ranks the opportunity set by **expected return per unit of capital charge**,
+computed only from what already clears: corporate bonds = cleared yield − expected loss; loans =
+DM + reference rate − expected loss at the senior-lien recovery; sovereigns = the cleared curve;
+cash = the policy rate. When credit compresses toward zero its return-per-charge falls below
+governments', which carry almost no charge, and capital genuinely leaves. That moves the size of
+the pot rather than its distribution, so unlike a tilt it survives renormalization.
+
+**Percentages don't disappear — they change meaning.** A real investment policy statement says
+"corporate credit 30%, range 20–40%": the *band* is the guideline, the *point inside it* is
+relative value. So `assetAllocationTarget` becomes the centre of a band and the position inside
+is chosen by the ranking above. That is a far smaller change than it sounds and keeps everything
+already built.
+
+**The supply side, which is the other half.** Make issuance a real CFO decision rather than a
+mechanical roll: a company compares its own cleared cost of debt against what it would do with
+the money — fund growth capex, retire equity when its earnings yield exceeds after-tax cost of
+debt, pay a special dividend, pre-refinance. Cheap credit pulls issuance forward; expensive
+credit stops it and turns companies into deleveragers. Everything that decision needs is already
+on the company (real `oasSpreadBps`, earnings yield, `growthCapex`, dividend and buyback
+machinery). This is worth more than the stabilisation: **it is the credit cycle** — tight spreads
+breeding supply that widens them, wide spreads choking supply until they tighten — which the
+simulation currently has no way to produce.
+
+**Two practical notes.**
+1. Equity clearing is NOT a prerequisite. Corporate credit versus governments versus cash is
+   enough to bound spreads, and all three clear today; WS4 later just widens the rotation set.
+2. This makes markets genuinely coupled for the first time, so money leaving credit has to
+   arrive somewhere and the accounting has to close. **That is why S4 comes first** — without
+   real cash settlement the rotation leaks.
+
+**Scope note:** this subsumes **WS8** (issuance with placement agents — same mechanism, and the
+CFO decision is the missing half of it) and is expected to resolve the open half of **S3**
+(negative corporate OAS). Re-check S3's diagnosis list after this lands rather than before.
 
 ### S5 — Company cash truth (four leaks, one pass)
 
@@ -469,7 +529,7 @@ ledger) and the household aggregate, chosen vs. bank deposits on real yield comp
 which creates real deposit competition for banks (feeds G2). Assets: bills + CP (WS5), repo
 (WS6), ON RRP. This delivers the real short-paper demand base.
 
-### WS8 — Issuance with placement agents
+### WS8 — Issuance with placement agents  *(largely subsumed by RV — read that first)*
 
 New debt/equity issuance as real primary auctions: issuing company + a bank placement agent
 (fee to the bank's real revenue) put real new supply into the relevant clearing book
@@ -798,6 +858,25 @@ the complete simulation.
     - **Lesson, generalised**: a market cannot be signed off by watching its price. Watch its
       FLOAT and its HOLDINGS first — every one of these was invisible in the spread series and
       obvious the moment the outstanding stock and who owned it were put side by side.
-14. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+14. **S4 landed (money moves with the securities).** `clearFinancialAsset` now returns
+    `netCashDeltaByParticipantId` — every fill's cash leg, net of the bid/ask the participant
+    paid — and all three adapters apply it: institutional entities against a new real per-entity
+    `cashUSD`, banks against their own reserves. Before this, a participant's holdings changed
+    every week with nothing on the other side of the trade: a market on one side of the ledger.
+    - **Dealer revenue now comes from the same place the clients' money goes.** It was charged on
+      the NET of client flow per instrument; netting a buyer against a seller is the dealer's
+      whole business, but it does not mean the desk waived its bid/ask on both sides. Taking the
+      desk's revenue as the sum of what clients actually paid makes the two figures the same money.
+    - **The formula drift on bank sovereign holdings is gone** (`macro/banking.ts` pushed them
+      toward 18% of the loan book every week regardless of what the banks had traded, while
+      02b already summed the real per-bank books — two accounts of one holding).
+    - **A new invariant keeps it honest**: an institution's cash plus securities may only move by
+      real flows. Measured worst single-week move over 40 weeks is 0.47% against a 5% threshold;
+      before the cash leg existed nothing would have caught its absence.
+    - Verified: entity cash moves while securities hold and the combined book is conserved; banks
+      fund bond purchases from reserves and reach for the SRF when they run low, which is the real
+      behaviour Phase 2 already models; capital ratio unchanged versus baseline (#67 unaffected,
+      as expected).
+15. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
    MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
    `npm run verify` gate closes #2/#14/#41.

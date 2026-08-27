@@ -309,6 +309,9 @@ export function createInitialGameState(): GameState {
         entityType: role,
         financialStatementProfile: comp.financialStatementProfile,
         totalAssetsUSD,
+        // Real opening cash: the entity's own policy cash weight against its own book. Every
+        // clearing fill from here on settles against this balance.
+        cashUSD: totalAssetsUSD * allocationTargets[role].cashPct,
         equityCapitalUSD,
         sharesOutstanding: comp.sharesOutstanding,
         stockPrice: comp.stockPrice,

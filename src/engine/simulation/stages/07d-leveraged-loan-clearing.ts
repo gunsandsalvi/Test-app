@@ -174,6 +174,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         });
         updatedEntitiesById.set(entity.id, {
           ...entity,
+          cashUSD: (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0),
           itemizedHoldings: [...(otherHoldingsByEntity.get(entity.id) ?? []), ...newLoanHoldings],
         });
       });

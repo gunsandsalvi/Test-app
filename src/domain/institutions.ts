@@ -47,6 +47,13 @@ export interface InstitutionalEntity {
   sharesOutstanding: number;
   stockPrice: number;
   itemizedHoldings: ItemizedHolding[];
+  /**
+   * Real, per-entity cash. Every fill this entity takes in a clearing stage settles against it,
+   * so its securities and its money move together. Before this existed the entity's holdings
+   * changed each week with nothing on the other side of the trade — a market on one side of the
+   * ledger only.
+   */
+  cashUSD: number;
   assetAllocationTarget: AssetAllocationTarget;
   isDefaulted: boolean;
   historicalPrices: number[];
