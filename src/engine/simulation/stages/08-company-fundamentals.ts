@@ -22,7 +22,7 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { computeExpectedLossSpreadBps, getRatingBucket, computeBucketDemandPremiumBps } from './shared-helpers';
+import { getRatingBucket, computeBucketDemandPremiumBps } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
@@ -553,7 +553,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const calculatedRating = determineCreditRating(newLeverage, newCoverage);
       // Wall Street: rating migration is deliberately sticky (a 25%/week chance to move even one
       // notch) to mirror how real rating agencies don't instantly re-rate every week — but the
-      // bond-implied spread (computeExpectedLossSpreadBps below) reacts to this company's real
+      // bond-implied spread (real institutional order flow tilted by computeExpectedLossSpreadBps
+      // in 07b-corporate-bond-clearing.ts, run before this stage) reacts to this company's real
       // leverage/coverage every week with NO such lag, so a company whose fundamentals actually
       // deteriorated fast could sit at a stale investment-grade rating for dozens of weeks while
       // its own spread already prices default risk (confirmed: an A-rated company observed at
@@ -577,12 +578,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     }
 
-    // Dynamic OAS credit spread & Leveraged Loan pricing
+    // Wall Street: comp.oasSpreadBps is now a real, already-cleared value — set by
+    // 07b-corporate-bond-clearing.ts from actual institutional-entity order flow against the
+    // bank dealer desk, before this stage ever runs. Nothing here computes or smooths it; it's
+    // read as this week's real market level. Leveraged-loan pricing still applies its own
+    // bucket demand premium on top (loans have their own clearing engine as a follow-on slice).
     const bucket = getRatingBucket(newRating);
     const bucketPeers = state.companies.filter(c => c.region === comp.region && getRatingBucket(c.creditRating) === bucket);
-    const targetOasBps = computeExpectedLossSpreadBps(comp) + computeBucketDemandPremiumBps(bucket, reg, bucketPeers);
-    const rawOas = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35;
-    comp.oasSpreadBps = isFinite(rawOas) ? Number(Math.max(10, Math.min(5000, rawOas)).toFixed(2)) : 150;
 
     // Pre-refinancing trigger roughly one year before maturity
     let companyTranches = comp.debtTranches.map(t => ({ ...t }));
@@ -641,7 +643,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek);
     let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek);
-    let refinancingSpreadShockBps = 0; // Kept to 0, or calculated if needed, but we rely on new interest calc now
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
     let buybacksThisWeek = 0;
@@ -706,8 +707,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
     }
 
-    const rawNewOas = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35 + refinancingSpreadShockBps + (Math.random() - 0.5) * 5;
-    const newOasBps = isFinite(rawNewOas) ? Math.round(Math.max(10, Math.min(5000, rawNewOas))) : 150;
+    // Real, already-cleared this week (see the comment above) — not recomputed here.
+    const newOasBps = comp.oasSpreadBps;
     const rawNewCds = newOasBps + Math.floor(Math.random() * 8 - 4);
     const newCdsSpreadBps = isFinite(rawNewCds) ? Math.round(Math.max(10, Math.min(5000, rawNewCds))) : 150;
 

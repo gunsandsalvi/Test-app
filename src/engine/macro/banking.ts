@@ -125,5 +125,8 @@ export function evolveBankingSector(
     // final once this week's evolution above has run.
     srfBorrowingUSD: 0,
     onRrpLendingUSD: 0,
+    // Real dealer inventory positions persist across weeks (only real trade fills change them)
+    // — see 07b-corporate-bond-clearing.ts, which runs after this and owns updating them.
+    corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
   };
 }

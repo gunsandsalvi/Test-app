@@ -39,6 +39,7 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     itemizedHoldings: [],
     srfBorrowingUSD: bs.srfBorrowingUSD * share,
     onRrpLendingUSD: bs.onRrpLendingUSD * share,
+    corpBondDealerInventory: [],
   };
 }
 
@@ -160,6 +161,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       itemizedHoldings: priorAggregate.itemizedHoldings || [],
       srfBorrowingUSD: sumField((s) => s.srfBorrowingUSD),
       onRrpLendingUSD: sumField((s) => s.onRrpLendingUSD),
+      // Real dealer inventory is a shared regional book (see corpBondDealerInventory's domain
+      // comment) owned and updated by 07b-corporate-bond-clearing.ts, which runs right after
+      // this stage — carried forward unchanged here, not recomputed as a per-bank sum.
+      corpBondDealerInventory: priorAggregate.corpBondDealerInventory || [],
     };
   });
 }

@@ -269,6 +269,7 @@ function buildRegion(regionId: RegionId): Region {
     itemizedHoldings: [],
     srfBorrowingUSD: 0,
     onRrpLendingUSD: 0,
+    corpBondDealerInventory: [],
   };
 
   const institutionalSector = {

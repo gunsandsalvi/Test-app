@@ -150,6 +150,91 @@ financial-asset clearing engine and retrofit existing equity/bond/loan pricing t
 every new phase is built on the real mechanism from day one rather than adding more to retrofit
 later.
 
+### The exact mechanism (user spec, adopted verbatim)
+
+At the start of each week, every real participant looks at its own asset-by-asset tracked
+holdings, its total allocation, its ideal target allocation, how each asset/asset class has
+recently performed, ratings, maturities, and the relevant index — and decides what to buy, what
+to sell, and the max price it's willing to bid/offer at. This includes available IPOs and primary
+issuance of debt and equity. Once every participant has decided, the auction runs with banks
+sitting in the middle, facilitating through their trading book (a bilateral trade, or a fill from
+that book's own inventory) — banks are also themselves possible buyers/sellers through their
+treasury/main balance sheet. A clearing price results, trades happen, and banks earn money on the
+flow they facilitate, replenishing their inventories with their axes afterward. This is the
+required shape for every asset class's clearing engine, not just corporate bonds.
+
+### Slice 1 landed: corporate bonds (`07b-corporate-bond-clearing.ts`)
+
+First concrete instance of the mechanism above, run as a new stage between commodities (07) and
+company fundamentals (08):
+- **Real participants, named**: institutional entities (insurers, asset managers, pension funds —
+  `state.institutionalEntities`, each with its own persistent `itemizedHoldings` and its own
+  `assetAllocationTarget.corpBondPct * totalAssetsUSD`) compare real holdings against real target,
+  tilted issuer-by-issuer by how rich/cheap that issuer's bond trades versus a fundamental
+  fair-value spread estimate (`computeExpectedLossSpreadBps` — repurposed as one participant's
+  credit view, an *input* to its bid decision, never the price itself), and trade a real fraction
+  of that gap every week (persisted — no more full mechanical recompute-from-scratch).
+- **Banks as the dealer in the middle**: all real order flow nets onto the banking sector's own
+  `corpBondDealerInventory` (a genuine, persistent, per-issuer balance-sheet position — the axe),
+  which also leans the price against its own standing inventory (real market-making inventory-risk
+  behavior), and earns a bid/ask spread on the gross flow it facilitates, credited as real trading
+  revenue to each named bank's own equity by market share.
+- **Price is primitive, OAS is derived**: the net real flow moves the bond's price; the new
+  `oasSpreadBps` is derived from that price move via duration math (price up -> spread down), not
+  set by a target-seeking formula. Stage 8's old `computeExpectedLossSpreadBps +
+  computeBucketDemandPremiumBps -> targetOasBps -> smoothed toward it` block is gone; stage 8 now
+  reads `comp.oasSpreadBps` as an already-real, already-cleared value.
+- **Scoped for this slice**: foreign/household participation in corporate bonds and hedge funds
+  bidding for distressed names (idea 11) are follow-on slices — this slice's real participants are
+  institutional entities and the bank dealer desk. Leveraged loans still take `comp.oasSpreadBps`
+  (now real) as an input to `priceLeveragedLoan`'s own bucket demand premium, which remains
+  formula-based until loans get their own clearing slice.
+- **Next slices, same mechanism**: sovereign bonds, then leveraged loans, then equity (biggest
+  lift — needs a real per-entity share-unit ownership model, which doesn't exist yet), each its
+  own bounded commit against the same generalized shape above.
+
+### Centralized into a generic engine (per user feedback)
+
+Corporate bonds shipped first as one self-contained stage file; before building the next asset
+class on top of it, the auction itself was pulled out into `financial-clearing-engine.ts` —
+`clearFinancialAsset(instruments, participants, priorDealerInventory, params)`, asset-class
+agnostic. Only three things are asset-specific and supplied by a small adapter: what counts as a
+participant and its real target allocation, the rich/cheap tilt signal per instrument, and the
+quoted statistic's direction/duration/bounds relative to price. `07b-corporate-bond-clearing.ts`
+is now a thin adapter over this engine; sovereign bonds, loans, and equity become adapters too,
+not new auctions.
+
+### Two real bugs found and fixed while verifying slice 1
+
+- **Seed/lookup key mismatch**: the cold-start seed for institutional entities' `itemizedHoldings`
+  keyed corporate positions by tranche id; the real clearing engine looks holdings up by issuer
+  (company) id. Every entity's real starting position read as zero on its first real clearing
+  week, producing an artificial, systemic one-time rebalancing shock. Fixed by seeding per-issuer
+  (`simulation/initialization.ts`).
+- **Seed/target scale mismatch**: an institutional entity's real target
+  (`assetAllocationTarget.corpBondPct * totalAssetsUSD`) is computed from the institutional
+  sector's independently GDP-scaled balance-sheet size, which has no guaranteed relationship to
+  the bottom-up sum of every company's actual debt outstanding — summed across the 3 named
+  entities it came out to ~2.8x the entire region's corporate debt. The engine already rescales
+  this down (`maxParticipantShareOfOutstanding`) every week, but the cold-start seed used the
+  raw, unscaled target, so week 1 started far overweight and spent many weeks selling back down —
+  a persistent, systemic one-directional spread move, not real fundamentals-driven behavior.
+  Fixed by seeding with the same rescale the engine applies (`MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING`,
+  exported from the corp-bond adapter and reused at init).
+
+### Known open calibration residual
+
+After both fixes, a smoke check (20 weeks, no full invariants run per current guidance — long
+runs are reserved for end-of-project validation) shows no NaNs and a real, differentiated spread
+distribution that correlates sensibly with credit quality (distressed/near-zero-EBITDA names
+correctly drift toward the 5000bps ceiling), but a large share of investment-grade names (~75-80%)
+still converges to sit at the real-world floor (25bps) rather than a smoothly spread-out
+investment-grade curve. This reads as aggregate institutional demand still being structurally
+strong relative to the corporate bond float even after the 0.85 rescale cap, not a logic bug —
+tuning `WEEKLY_REBALANCE_RATE`, `BOND_LIQUIDITY_DEPTH`, and
+`MAX_INSTITUTIONAL_SHARE_OF_OUTSTANDING` against a real target distribution is left as an explicit
+follow-up rather than hand-tuned against one-off smoke output.
+
 ## Constituent ideas (full scope)
 
 ### 1. Diversified banking sector (new — foundation for everything else)

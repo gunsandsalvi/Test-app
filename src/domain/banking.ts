@@ -45,4 +45,11 @@ export interface BankingSector {
   // 02b-bank-diversification.ts's applyCentralBankFacilities.
   srfBorrowingUSD: number;
   onRrpLendingUSD: number;
+  // Wall Street: real corporate-bond dealer inventory — the banking sector's shared secondary-
+  // market trading book (banks sit in the middle of the real institutional-entity clearing
+  // auction, absorbing client order imbalance onto their own book rather than the market simply
+  // failing to clear). One position per issuer this region's banks are currently long/short
+  // against a flat book; a genuine balance-sheet line updated only by real trade fills, not a
+  // formula. See stages/07b-corporate-bond-clearing.ts.
+  corpBondDealerInventory: { companyId: string; inventoryUSD: number }[];
 }
