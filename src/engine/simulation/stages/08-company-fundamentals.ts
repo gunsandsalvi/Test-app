@@ -41,6 +41,24 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // scan of a multi-thousand-element array executed once per company.
   const entityById = new Map(state.institutionalEntities.map(e => [e.id, e]));
   const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
+  // Supply relationships indexed by customer. This was a full scan of the region's relationship
+  // list for EVERY company — the same O(companies x list) shape that made corporate-action
+  // settlement 12% of the weekly step. One grouping pass instead.
+  const supplyRelsByCustomer = new Map<string, any[]>();
+  (Object.keys(updatedRegions) as (keyof typeof updatedRegions)[]).forEach(rid => {
+    (updatedRegions[rid]?.supplyRelationships || []).forEach((rel: any) => {
+      const list = supplyRelsByCustomer.get(rel.customerCompanyId);
+      if (list) list.push(rel); else supplyRelsByCustomer.set(rel.customerCompanyId, [rel]);
+    });
+  });
+  /** The nearest short government tranche a corporate treasury would park cash in. One lookup
+   *  per region per week: the ladder now carries weekly bill issuance, so this list grows all
+   *  run and was being re-scanned per company. */
+  const nearestShortGovTrancheByRegion = new Map<string, any>();
+  (Object.keys(updatedRegions) as (keyof typeof updatedRegions)[]).forEach(rid => {
+    const found = (updatedRegions[rid]?.govDebtTranches || []).find((t: any) => t.tenorAtIssuanceYears <= 2);
+    if (found) nearestShortGovTrancheByRegion.set(rid as string, found);
+  });
   const suppliedSubUnitsByRegion = new Map<string, Set<string>>();
   prevActiveFirms.forEach(c => {
     let set = suppliedSubUnitsByRegion.get(c.region);
@@ -328,8 +346,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + combinedFulfillment * 0.3);
 
       // Supply relationship shocks
-      const region = updatedRegions[comp.region];
-      const rels = region.supplyRelationships?.filter((r) => r.customerCompanyId === comp.id) || [];
+      const rels = supplyRelsByCustomer.get(comp.id) ?? [];
       rels.forEach((rel) => {
         const supplier = firmById.get(rel.supplierCompanyId);
         if (!supplier) return;
@@ -1061,7 +1078,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const currentTreasuryUSD = (comp.treasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
     let newTreasuryHoldings = [...(comp.treasuryHoldings || [])];
     if (targetTreasuryUSD > currentTreasuryUSD) {
-      const nearestGovTranche = reg.govDebtTranches.find(t => t.tenorAtIssuanceYears <= 2);
+      const nearestGovTranche = nearestShortGovTrancheByRegion.get(comp.region);
       if (nearestGovTranche) {
         const purchaseAmountUSD = targetTreasuryUSD - currentTreasuryUSD;
         newTreasuryHoldings.push({

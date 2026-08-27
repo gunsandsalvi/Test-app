@@ -110,11 +110,18 @@ function executeSubUnitBiddingMarket(
   baseUnitPrice: number,
   targetReg: Region,
   targetRegionId: RegionId,
-  index: RegionMarketIndex
-) {
+  index: RegionMarketIndex,
+  /**
+   * ONLY this sub-unit's live contracts. Each market used to walk the region's entire contract
+   * list to find its own — O(sub-units x contracts) for what is one grouping pass, and the
+   * single largest cost left in this stage. The caller partitions once per region per week and
+   * this returns the survivors for its own bucket.
+   */
+  ownContracts: SupplyContract[]
+): SupplyContract[] {
   const { companyUpdates, nextWeek } = ctx;
   const demandState = targetReg.categoryDemand[subUnitId] as any;
-  if (!demandState) return;
+  if (!demandState) return ownContracts;
 
   if (!demandState.unitPriceUSD || demandState.unitPriceUSD <= 0) {
     demandState.unitPriceUSD = baseUnitPrice;
@@ -135,18 +142,13 @@ function executeSubUnitBiddingMarket(
   const supplierExpectedUnitPrice = demandState.smoothedUnitPriceUSD;
 
   // 1. Process active contracts
-  if (!targetReg.activeContracts) targetReg.activeContracts = [];
   const remainingContracts: SupplyContract[] = [];
   // supUp.salesUnits/salesUSD are deliberately cross-sub-unit totals (other consumers want a
   // company's whole-business sales) — but the inventory formula below needs THIS sub-unit's
   // sales specifically, so track that separately rather than reading the contaminated total.
   const contractSalesUnitsBySupplier: Record<string, number> = {};
 
-  targetReg.activeContracts.forEach(contract => {
-    if (contract.subUnitId !== subUnitId) {
-      remainingContracts.push(contract);
-      return;
-    }
+  ownContracts.forEach(contract => {
 
     const supplier = index.byTicker.get(contract.supplierCompanyId) ?? index.byId.get(contract.supplierCompanyId);
     const customer = index.byTicker.get(contract.customerCompanyId) ?? index.byId.get(contract.customerCompanyId);
@@ -192,8 +194,6 @@ function executeSubUnitBiddingMarket(
       }
     }
   });
-  targetReg.activeContracts = remainingContracts;
-
   // 2. Open Bidding & Matching
   const bids: UnitBid[] = [];
   const offers: UnitOffer[] = [];
@@ -766,10 +766,9 @@ function executeSubUnitBiddingMarket(
     }
   });
 
-  targetReg.activeContracts = remainingContracts;
-
   // 5. Save Category Demand state metrics
-  const activeSubUnitContracts = remainingContracts.filter(c => c.subUnitId === subUnitId);
+  // remainingContracts is already exactly this sub-unit's book — no filter needed.
+  const activeSubUnitContracts = remainingContracts;
   demandState.unitPriceUSD = Number(clearedPriceUSD.toFixed(2));
   demandState.totalUnitsSuppliedThisWeek = openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
   // bid.quantityUnits is each bid's original requested amount (no longer drained down during
@@ -783,6 +782,8 @@ function executeSubUnitBiddingMarket(
   // captured the first time the category clears and never rewritten.
   if (!(demandState.baseUnitPriceUSD > 0)) demandState.baseUnitPriceUSD = clearedPriceUSD;
   demandState.clearedInputPriceIndex = Number((clearedPriceUSD / demandState.baseUnitPriceUSD).toFixed(4));
+
+  return remainingContracts;
 }
 
 function computeRealizedVol(historicalValues: number[], window: number): number {
@@ -801,10 +802,28 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
 
     // One index per region per week — see buildRegionMarketIndex for why.
     const index = buildRegionMarketIndex(ctx, regionId);
+
+    // Partition the region's contract book by sub-unit ONCE, so each market touches only its
+    // own paper instead of walking the whole book to find it. Buckets for sub-units this loop
+    // never visits are still carried through, so no contract is lost.
+    const contractsBySubUnit = new Map<string, SupplyContract[]>();
+    (reg.activeContracts || []).forEach(c => {
+      const bucket = contractsBySubUnit.get(c.subUnitId);
+      if (bucket) bucket.push(c); else contractsBySubUnit.set(c.subUnitId, [c]);
+    });
+
     Object.values(INDUSTRY_SUBUNITS).flat().forEach(subUnit => {
       const seed = reg.categoryDemand[subUnit.unitId]?.unitPriceUSD;
-      executeSubUnitBiddingMarket(ctx, subUnit.unitId, Math.max(1, seed || 1), reg, regionId, index);
+      const survivors = executeSubUnitBiddingMarket(
+        ctx, subUnit.unitId, Math.max(1, seed || 1), reg, regionId, index,
+        contractsBySubUnit.get(subUnit.unitId) ?? []
+      );
+      contractsBySubUnit.set(subUnit.unitId, survivors);
     });
+
+    const reassembled: SupplyContract[] = [];
+    contractsBySubUnit.forEach(bucket => { bucket.forEach(c => reassembled.push(c)); });
+    reg.activeContracts = reassembled;
   });
 
   const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);

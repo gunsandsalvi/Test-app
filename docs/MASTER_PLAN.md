@@ -1491,6 +1491,21 @@ the complete simulation.
       where those live: the end of a section.
     - **`npm run profile`** (scripts/profile.ts + `advanceWeeklyStepProfiled`) prints per-stage
       mean/worst/share so optimization starts from measurement, not intuition (§7.27's lesson).
+    - **Second pass, 920 -> 490 ms/week (47%), every result byte-identical.** Profiled first,
+      every time; all three finds were the SAME anti-pattern — a per-item scan of a
+      collection that should have been grouped once:
+      - stage 08 scanned the region's whole supply-relationship list per company, and (new with
+        WS5's weekly bill issuance) re-scanned a government ladder that now grows every week to
+        find one short tranche. Indexed both: **387 -> 118 ms**.
+      - stage 05 walked the region's ENTIRE contract book — ~74,000 live contracts by week 60 —
+        once per sub-unit market, to find the contracts belonging to that market. The book is
+        now partitioned by sub-unit once per region and each market gets only its own bucket:
+        **315 -> 209 ms**.
+      - stage 09 had the right complexity but the wrong shape: two maps-of-arrays over 74,000
+        contracts, ~150,000 array slots of garbage a week. It now accumulates directly into the
+        totals it needs in one pass: **87 -> 25 ms**.
+      **The generalisation, now three for three: when a stage is slow, it is scanning a
+      collection per item.** Look for the grouping pass before looking at anything else.
     - **First measured win, 1191 -> 895 ms/week:** `settleCorporateActionOnHolders` rebuilt every
       entity's whole holdings array per corporate action, twice per company — 12% of the entire
       weekly step to scale one issuer's holders. Actions now record a per-instrument ratio and
