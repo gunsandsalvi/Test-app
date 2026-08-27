@@ -187,7 +187,7 @@ fiscal loop (Blueprint).
 not formulas and they still produce wrong prices. The clearing markets are honest mechanisms
 running on an asset universe that does not match the money pointed at it: institutional
 corporate-credit appetite is **~6x the corporate credit that exists** (§7.18), the hidden
-corporate sector's 549B of debt is a scalar no one can own (§5-BP7), and institutions face no
+corporate sector's 549B of debt is a scalar no one can own (§5-HC), and institutions face no
 budget constraint at all (§5-S11). A correct auction over a 6x-short float still gives a wrong
 price, and no amount of work inside the auction fixes it.
 
@@ -203,10 +203,10 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | 1 | **Retire the recovery-value ceiling; distressed paper prices off recovery** | E2 | — (fixes a known-wrong mechanism now in the code) |
 | 2 | **Institutional balance sheet: bids bounded by money; live total assets** | S11 | — |
-| 3 | **Hidden corporates: the rework, including real debt issuance** | BP7 | — (see the sequencing note below) |
+| 3 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, E2, BP7 |
+| — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, E2, HC W1 |
 | 4 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 5 | Delete every duplicate price-setter (engine + UI) | S6 | — |
 | 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S11 |
@@ -218,7 +218,8 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 12 | Private repo markets | WS6 | S11 |
 | 13 | Money market funds | WS7 | WS5, WS6 |
 | 14 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S11, BP7 |
+| 14b | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
+| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S11, HC W1 |
 | 16 | Unify the two dealer systems | G3 | S9 |
 | 17 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
 | 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2, E2 |
@@ -250,18 +251,17 @@ mechanism and wrong in inputs, and each was found by measuring rather than readi
   assets by week 20 and stays there, and `totalAssetsUSD` — the size weight driving every
   entity's structural share in all three clearing stages — is never written after
   initialization. Every market downstream inherits both.
-- **BP7 because the asset universe is 6x short of the money pointed at it** (§7.18). This is the
-  hidden-corporate rework, and the debt-issuance piece belongs inside it rather than beside it.
+- **HC Wave 1 because the asset universe is 6x short of the money pointed at it** (§7.18), the
+  labor market is short of employers by a similar order, and both missing halves are the same
+  missing thing: the hidden corporate sector as real firms.
 
-**A sequencing question the user should settle.** BP7 sits in the Blueprint block, which is
-scheduled after Main Street. But the measurement in §7.18 says corporate credit is ~6x
-oversubscribed *because* the hidden sector's 549B of debt is not investable, and every credit
-item below (RVr, WS5, WS8, G2, G5) is currently calibrated against that 6x-short float. That is
-the identical argument that promoted G1 to the front of the queue earlier: signing off a market
-in a broken environment measures the environment, not the market. The recommendation is to run
-BP7's debt-issuance half early — at position 3, where it sits above — and leave BP7's remaining
-internals (segment detail, industry structure) in the Blueprint block. **Do not reorder further
-without asking.**
+**Sequencing settled with the user (2026-08-27):** Hidden Corporates runs in **two waves**.
+Wave 1 (position 3): firmify the upper tail, real debt, real employment, PE ownership — because
+every credit item below is currently calibrated against a 6x-short float, and signing off a
+market in a broken environment measures the environment, not the market. Wave 2 (after WS4, WS8
+and G2 exist to receive it): the lifecycle — LBO/recap/exit flow, real IPOs replacing the
+synthetic generator, firm births, defaults into estates. **Do not reorder further without
+asking.**
 
 Otherwise the shape holds: restore the money and holdings identities (S5–S9, S11), then the
 remaining markets, then Main Street before Blueprint's fiscal loop (taxes need households).
@@ -459,7 +459,7 @@ demand-schedule engine produces zero negative spreads at every rating in every w
 because a participant's reservation level already covers its own costs and demand below that is
 genuinely zero. What remains of RVr is therefore an open question rather than a known defect:
 *is* the cycle's amplitude still unrealistic once the tights are bounded by real economics? Do
-not start until E2 and BP7 have landed, then measure the cycle again over 120 weeks and decide
+not start until E2 and HC Wave 1 have landed, then measure the cycle again over 120 weeks and decide
 whether there is anything left to damp.
 
 **If there is, do not damp it by shrinking the response rates or bounding the spread.** The
@@ -471,7 +471,7 @@ single expectations channel serving the goods auction and the credit markets ali
 
 One contributor worth measuring first: **issuer count decays** (200 → 127 over 80 weeks) as
 companies delever out of the bond market entirely, thinning the float and amplifying the next
-move. BP7's hidden-sector issuance is the obvious counterweight, which is another reason to
+move. HC's births and recap issuance are the obvious counterweight, which is another reason to
 sequence it first.
 
 ### S5 — Company cash truth (one ledger, four leaks)
@@ -731,7 +731,7 @@ verified before the next:**
 
 1. **Itemize the stock.** `BankLoan {id, borrowerId, principalUSD, marginBps, originationWeek,
    termWeeks, status}` per named bank; migrate today's aggregate business-loan number into real
-   loans to real borrowers (companies + BP7's small segments; households arrive with MS),
+   loans to real borrowers (companies + HC's SME pools; households arrive with MS),
    allocated by the borrowers' real existing bank debt. Aggregates become sums.
 2. **Real interest, both directions.** Borrowers' S5 ledgers pay loan interest to the named
    bank; banks pay real deposit interest. NIM stops being a formula — it is revenue minus cost
@@ -892,8 +892,8 @@ consumption in stage 05 — the recession transmission the sim exists to have.
    table: category → sub-units, buyer mix, input recipes, capex weights, commodity links, labor
    intensity by occupation. `INDUSTRY_SUBUNITS`, `CATEGORY_INPUT_REQUIREMENTS`,
    `COMMODITY_CATEGORY_LINKAGE` become views of it (then die as separate definitions). Adding an
-   industry becomes one entry — the precondition for every specialization below and for BP7's
-   segment detail.
+   industry becomes one entry — the precondition for every specialization below and for HC's
+   firm and pool keying.
 2. **BP2 — Industry profiles** (#51): per-sector `{capexIntensity, cyclicalityBeta,
    financingPreference (bond/loan/equity mix), payoutPolicy, hedgingPolicy}` consumed by stage
    08, `corporate-financing.ts` (which market an issuer taps stops being uniform) and WS11.
@@ -911,66 +911,116 @@ consumption in stage 05 — the recession transmission the sim exists to have.
 6. **BP6 — Antitrust** (#45): real `categoryMarketShare` above a threshold for N sustained weeks
    → forced divestiture (split the company into two real companies via the existing generation
    machinery, dividing product lines, debt and holders) + an M&A freeze flag stage 10 respects.
-7. **BP7 — Hidden corporates**: scaffolded in its own section above (its debt half runs early).
+7. **BP7 → absorbed into HC** (its own master project, §5-HC): the hidden corporate sector as
+   real named firms with a full lifecycle. Nothing of it remains in Blueprint except that BP1's
+   registry is what HC's firms and SME pools are keyed to.
 
-### BP7 — Hidden corporates: the rework  *(task #48; absorbs the credit-supply finding)*
+### HC — Hidden Corporates (master project): the real non-public sector
 
-**Why this stopped being a detail item.** The hidden sector is not a rounding error on the
-public one — measured in the USA region at week 0 it is **56.5% of the economy by revenue** and
-carries **549.4B of debt against the public companies' 89.5B, i.e. 86% of all corporate debt**.
-None of it is investable. It exists as a scalar `debtUSD` on a `PrivateSectorSegment`: nobody
-holds it, it never clears, it pays no coupon to anyone, and no institution can own it.
+**What this is.** The hidden sector stops being five scalars and becomes what it is in reality:
+the majority of the economy, made of real firms that **issue debt, employ people, default, and
+go public**. Decisions settled with the user (2026-08-27): ~300 named private firms per region;
+private equity sponsors as a real institutional type, in this project; two waves; the synthetic
+IPO generator is replaced entirely.
 
-Meanwhile the four institutional entities hold ~846B and the corporate credit actually available
-to them is **41B** — bonds 33.8B plus loans 7.3B. Their allocation targets want ~262B of
-corporate credit. That is a **6.4x oversubscription**, and it is the structural reason spreads
-were behaving badly long before any of the engine work: too much money chasing an asset class
-that barely exists. (Equity and sovereigns are roughly in balance — 0.6x and 1.2x — so this is
-specific to credit, not a general money glut. Full numbers in §7.18.)
+**Why it leads the queue (the measurements, §7.18 + §6):** the sector is 56.5% of the economy by
+revenue and carries 549.4B of debt — 86% of all corporate debt — as a scalar nobody can own,
+which is why institutional corporate-credit appetite runs **6.4x** the credit that exists.
+The bootstrap's firms also demand 11–14% fewer workers than the population supplies — the
+missing employers are these same firms. And the public universe's generated rating distribution
+has **zero BBB and zero high yield**, while in reality the B-rated universe *is* mostly
+PE-owned private firms. One missing sector explains three separate standing defects.
 
-Making a realistic share of that 549B into real instruments takes credit supply from ~41B to
-~300B and turns the 6.4x into rough balance. **The size of the missing supply and the size of
-the imbalance match**, which is the strongest evidence that this is the right fix rather than a
-plausible one.
+**Architecture: two tiers, one firm model, listing as a state.**
 
-**Scope, in two halves.**
+- **Tier 1 — named private firms** (~300/region): real `Company` objects with
+  `listingStatus: 'PRIVATE' | 'PUBLIC'` replacing today's implicit always-public. A private firm
+  has no traded equity (no `stockPrice`, no share registry entry, no consensus/earnings theater —
+  stage 08 runs a reduced, cheaper path for them, which is also the realistic one: private firms
+  do not report quarterly), an `ownership` block ({founderPct, peSponsorId?, peSponsorPct}), and
+  everything else real firms have: product lines bidding in stage 05, occupation demand, a debt
+  ladder, a rating, a cash ledger (S5). Every stage that takes `Company` works on them with the
+  listing flag deciding the few genuinely public-only behaviours. **No parallel type** — a
+  second firm type would be two representations of one real thing.
+- **Tier 2 — the SME mass**: the long tail stays aggregate but re-keyed to BP1's registry
+  categories (finer than today's five segments), bank-financed only, with real aggregate
+  entry/exit and employment. It is a real pool, not a formula: its revenue is its real stage-05
+  participation (already built in 1$-Phase 3), its debt is real bank loans (G2's book), its
+  losses are the banks' real loan losses.
+- **PE sponsors**: new `InstitutionalEntityType: 'PRIVATE_EQUITY'`, 2–3 funds per region.
+  Balance sheet: committed capital (insurers/pensions/asset managers allocate a real
+  `privateEquityPct` sleeve — real, illiquid, drawn down when called), dry powder, and a
+  portfolio of companyIds. The sponsor is what makes the leveraged-loan market make sense: in
+  reality PE-owned issuers ARE the B/BB loan universe, dividend recaps are the opportunistic
+  supply RVr needs, and exits are the IPO pipeline.
 
-*Half A — the hidden sector becomes a real borrower (run early, §4 item 3).*
-- Segments issue real instruments instead of carrying a debt scalar. The natural split follows
-  how private credit really divides: small segments borrow from **banks** (feeding G2's itemized
-  loan books directly), larger segments issue into the **leveraged loan and bond markets** where
-  institutions can hold them. **Confirm the split with the user before building** — it decides
-  how much new supply lands in each market.
-- A segment needs enough of a balance sheet to be priced: real leverage and coverage from its
-  existing `annualRevenueUSD` / `marginPct` / `debtUSD`, so `computeExpectedLossSpreadBps` works
-  on it unchanged and it clears in 07b/07d alongside public issuers with no special-casing.
-- Segments then make the same financing decision public companies already make
-  (`stages/corporate-financing.ts`) — issue when spreads are tight, delever when they are wide.
-  This also directly counteracts the issuer-count decay noted in §5-RVr.
-- Their coupons must be paid to real holders, and their defaults must be real (feeds G5).
+**Conservation is the build discipline.** Tier 1 firms are **carved out of** the existing
+segment aggregates, never added on top: at cutover, Σ(named firms) + (SME residual) must equal
+the prior segment totals for revenue, debt, and employment exactly, and a same-week A/B against
+HEAD must show GDP, employment and total debt unchanged. Firm sizes draw from a Pareto tail
+(real firm-size distributions are power-law) calibrated so the sums close.
 
-*Half B — segment internals (stays in Blueprint).* Richer per-segment behaviour on the same
-category definitions: capex, employment, margin dynamics, entry/exit, and the industry
-specialization BP1–BP4 introduce.
+---
 
-**A related generation defect to fix in the same pass.** The public universe's rating
-distribution is inverted versus reality. At week 0 the USA universe is AAA 16% / AA 39% /
-A 45% with **zero BBB and zero high yield**, and 55% of debt rated AA or better. Real broad
-universes have BBB as the *largest* investment-grade bucket and roughly 20% high yield. By week
-40 it drifts to something sensible (BBB 39%, HY 16%) — so the dynamics are right and
-**generation is wrong**. Fix the generated distribution in `bootstrap/firms.ts`; it costs
-nothing in runtime and it is a precondition for the credit market having anything to price at
-the wides in its first year.
+**Wave 1 — real firms, real debt, real employment** *(§4 position 3; prereqs: none)*
 
-**On adding more public companies:** variety first, count later. The rating distribution above
-is the real defect; adding companies adds float linearly but also costs runtime linearly, and
-200 per region is not obviously too few once the hidden sector is issuing. Re-measure the
-6.4x after Half A and decide then.
+- **HC1 Generation & carve-out.** `bootstrap/private-firms.ts`: ~300 firms/region from the
+  Pareto tail of each registry category, sector mix matching the segment shares; names/tickers
+  from the existing generator (private firms get internal ids, no exchange ticker). Segment
+  scalars become the SME residual. Verify conservation A/B.
+- **HC2 Real debt.** Allocate the carved-out debt by what each firm would really have:
+  sponsor-owned and mid-size firms carry **leveraged loans** (real FLOATING tranches clearing in
+  07d — the loan universe grows from ~30 to a few hundred real names, fixing §6's small-n),the
+  largest carry **private placements/bonds** (FIXED tranches clearing in 07b), the rest is
+  **bank term debt** (aggregate per-bank books until G2 itemizes them). The bank/market split is
+  **not chosen — it is solved** from two real constraints: institutional want/have → ~1.0x
+  (§7.18's diagnostic) and bank balance-sheet capacity at real capital ratios. Coupons flow
+  through real ledgers; institutions hold the paper in the S7 ledger like any other.
+- **HC3 Real employment & goods-market handover.** Private firms get real occupation demand
+  (same sector mixes); their stage-05 participation replaces the equivalent share of segment
+  participation. Verify: the labor supply/demand gap (§6 root item) narrows materially — this is
+  the measurement that says the missing employers were found.
+- **HC4 Ratings & the sponsor universe.** Rate private firms from their real leverage/coverage
+  with the same credit model. Sponsor-owned firms lever at real LBO levels (debt/EBITDA 4.5–6.5),
+  which lands them B/BB **and fixes the inverted public+private rating distribution as a
+  consequence, not a patch** (§6 row). PE funds exist as owners with committed capital from real
+  institutional sleeves; deal *flow* waits for Wave 2.
+- **HC5 Calibration gate.** Re-run §7.18's want/have diagnostic: corporate credit ~1.0x;
+  Spearman(leverage, OAS/DM) holds ≥0.8 on the enlarged universe; runtime check at 500
+  firms/region (stage 05/08 timings — the reduced private path in stage 08 is the budget for
+  this).
 
-**Verify:** the corporate-credit want/have ratio (§7.18's measurement, kept as a scratchpad
-diagnostic) lands near 1.0x rather than 6.4x; `distributeRealTargetByWeight` is no longer
-absorbing a large renormalization in the credit stages; issuer count stops decaying over 80
-weeks; and spreads still track credit (Spearman ≥0.8) with the much larger universe.
+**Wave 2 — the lifecycle** *(§4 position 14b; prereqs: WS4, WS8, G2)*
+
+- **HC6 PE deal flow.** LBOs: sponsor buys a private firm (or takes a public one private —
+  delisting is just the listing flag, the same one-firm-model payoff) at a real EV/EBITDA price,
+  funded ~50–60% by a new leveraged loan priced as a real WS8 primary offering in 07d, equity
+  from dry powder. Dividend recaps when spreads are tight (real opportunistic supply). Exits:
+  sale to another sponsor/strategic (stage 10) or IPO.
+- **HC7 Real IPOs — the synthetic generator dies.** `generateIPOCompany` is deleted. An IPO is
+  an existing private firm choosing to list: motive = WS4-arithmetic public valuation exceeding
+  private hold value, plus owner intent (sponsor exit window, founder liquidity); mechanics =
+  a WS8 primary offering into the 07e equity book (primary shares fund growth/deleveraging,
+  secondary shares are the sponsor selling down), lead bank earns the real fee. The IPO price is
+  what the book clears — a weak book prices low or pulls the deal, which is real.
+- **HC8 Births.** A registry category whose SME pool grows past a real threshold spawns a new
+  named private firm carved from the pool (conservation again). Firm creation now has exactly
+  one path: born small → named private → public. Deaths in the mass stay statistical and feed
+  bank loan losses (G2).
+- **HC9 Defaults into estates.** Private-firm defaults open G5 estates like any other; sponsor
+  equity is wiped first (real). The SME mass's default rate stops being a formula input and
+  becomes the banks' measured loss experience on the real pool.
+
+**Ties, so nothing is built twice:** BP1 (firms and pools key to the registry), G2 (bank half of
+HC2 becomes itemized loans; mass losses are its loss experience), MS2 (private firms are the
+missing labor demand; cohorts later work at them by name), WS4/WS8 (IPO and LBO paper price in
+the real books), G5 (estates), S7 (private loan/bond holdings live in the one ledger), RVr
+(recap supply and issuer births are the counterweight to issuer-count decay), E2 (distressed
+private loans price off recovery like everything else).
+
+**Verify (whole project):** conservation A/B at every carve; want/have ~1.0x; labor gap
+narrowed; one firm-creation path; rating histogram matches a real universe shape (BBB largest IG
+bucket, ~20% HY) at week 0 AND week 80; no invariant regressions.
 
 ### AU — Aurora (complete UI rebuild) — LAST
 
@@ -1013,7 +1063,7 @@ the complete simulation.
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
 | generation-time unconditional fields | §7.17 found `leveragedLoan` attached to all 200 companies when only ~33 had loans. Sweep `companyGenerator.ts` for other fields attached unconditionally that only apply to a subset — same failure mode (a frozen record that reads as live downstream) |
 | `scripts/invariants.ts` sovereign-absorption | No longer vacuous (it references USA and `zeroRates.tenor10Y` for real), but it fails with **baseline and shocked identical to 8 decimal places** — an under-subscribed auction changes the 10Y by literally nothing. Not a weak transmission, an absent one: find where the shock is dropped between the auction and 07c's curve refit |
-| `bootstrap/firms.ts` rating generation | Generated rating distribution is inverted vs reality — week 0 USA is AAA 16% / AA 39% / A 45%, **zero BBB, zero HY**, 55% of debt AA or better. Dynamics are fine (BBB 39% / HY 16% by week 40); generation is wrong. Fix in the §5-BP7 pass |
+| `bootstrap/firms.ts` rating generation | Generated rating distribution is inverted vs reality — week 0 USA is AAA 16% / AA 39% / A 45%, **zero BBB, zero HY**, 55% of debt AA or better. Dynamics are fine (BBB 39% / HY 16% by week 40); generation is wrong. Fix in HC4 (sponsor-owned private firms ARE the missing HY universe) |
 | `07b`/`07c`/`asset-allocation.ts` dead tilt-era code | `computeEntityAttractiveness` (07b:125, defined, never called), `STRATEGIC_TARGET_DRIFT_RATE`/`MAX_*_TILT` constants in 07b and 07c, and `computeAllocationTilt`+`MAX_ALLOCATION_BAND`+`EXCESS_SPREAD_FULL_TILT` in asset-allocation.ts (module-internal only) all survive from the quantity-target engine. Delete in S10. 07b's header comment (lines ~15–33) still *describes* that engine — "tilted index weighting, price-impact-to-statistic conversion" — rewrite it to describe the demand-schedule auction |
 | `shared-helpers.ts` `computeBucketDemandPremiumBps` | Only remaining consumers are the two duplicate price-setters S6 deletes (pricing.ts, stage 12). Delete the helper in the same pass |
 | clearing damper diagnostic | `maxWeeklyStatMovePct` is legitimate discrete-time smoothing, but it must never *bind persistently* — a name clamped ≥3 consecutive weeks means the posted schedules disagree with the printed level and the print is the damper, not the market. Add a cheap per-week clamped-count to the invariants harness; alert on persistent binding |
@@ -1325,7 +1375,7 @@ the complete simulation.
 
     - The missing supply has a name and a size: the hidden corporate sector carries **549.4B of
       debt, 86% of all corporate debt in the region**, as a scalar nobody can own. Making a
-      realistic share of it investable closes almost exactly the gap measured. → §5-BP7.
+      realistic share of it investable closes almost exactly the gap measured. → §5-HC.
     - **Method note worth keeping.** The first version of this measurement read a nonexistent
       sovereign field, reported 0, and made the imbalance look like a 1.3x aggregate money glut
       rather than a 6.4x credit-specific shortage — a wrong diagnosis that would have sent the
@@ -1373,6 +1423,6 @@ the complete simulation.
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
-    (hedge funds are a real institutional type bidding in 07b/07d). **#48 is now §5-BP7** and has
+    (hedge funds are a real institutional type bidding in 07b/07d). **#48 is now §5-HC, a master project** and has
     grown from a detail item into a §4 top-three one — retitle it to match. #47 (deeper
     institutional sector) is substantially §5-S11 plus G6.
