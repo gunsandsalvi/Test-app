@@ -163,18 +163,37 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   const labels = getDirectionLabels();
 
   
-  const resolveCounterpartyFill = (instrument: any, quantityUSD: number, region: Region, spreadCostUSD: number) => {
-    const bankInventory = region.bankingSector.itemizedHoldings.filter((h: any) => h.instrumentId === instrument.id || h.instrumentId === instrument.symbol || (instrument.details && h.instrumentId === instrument.details.trancheId));
-    const bankInventoryUSD = bankInventory.reduce((s: number, h: any) => s + h.quantityOrNotionalUSD, 0);
-    if (bankInventoryUSD >= quantityUSD) {
-      return { fillPrice: instrument.price, counterpartyFeeUSD: 0, sourcedFrom: 'Bank inventory', spreadCostUSD };
+  // S9: the fill comes off the real DEALER INVENTORY the clearing engines maintain — the desk's
+  // actual axe in this instrument — not the sector itemizedHoldings, which are a derived view
+  // (S7) rebuilt from the real books every week and therefore not a position anyone can trade
+  // against. The side matters: a buyer lifts the offer, a seller hits the bid. The previous
+  // version marked the fill UP for both, so a round trip lost the spread twice.
+  const resolveCounterpartyFill = (instrument: any, quantityUSD: number, region: Region, spreadCostUSD: number, isBuy: boolean) => {
+    const instrumentKey = instrument.details?.trancheId ?? instrument.id ?? instrument.symbol;
+    const deskBooks = [
+      ...(region.bankingSector.corpBondDealerInventory ?? []),
+      ...(region.bankingSector.loanDealerInventory ?? []),
+    ];
+    const deskInventoryUSD = deskBooks
+      .filter((p: any) => p.companyId === instrumentKey || p.companyId === instrument.id || p.companyId === instrument.symbol)
+      .reduce((s: number, p: any) => s + Math.max(0, p.inventoryUSD), 0);
+    const sideSign = isBuy ? 1 : -1;
+    if (deskInventoryUSD >= quantityUSD) {
+      // The desk has the axe: it fills from its own book at the quoted side, no sourcing fee.
+      return { fillPrice: instrument.price, counterpartyFeeUSD: 0, sourcedFrom: 'Dealer inventory', spreadCostUSD };
     }
-    const shortfallUSD = quantityUSD - bankInventoryUSD;
-    const intermediationFeeRate = 0.0015; // real, modest, distinct from zero
-    return { fillPrice: instrument.price * (1 + intermediationFeeRate), counterpartyFeeUSD: shortfallUSD * intermediationFeeRate, sourcedFrom: 'Bank intermediated (sourced externally)', spreadCostUSD };
+    // The desk must go find the paper (or place it), and charges for the intermediation.
+    const shortfallUSD = quantityUSD - deskInventoryUSD;
+    const intermediationFeeRate = 0.0015;
+    return {
+      fillPrice: instrument.price * (1 + sideSign * intermediationFeeRate),
+      counterpartyFeeUSD: shortfallUSD * intermediationFeeRate,
+      sourcedFrom: 'Dealer intermediated (sourced externally)',
+      spreadCostUSD,
+    };
   };
 
-  const executionDetails = useMemo(() => resolveCounterpartyFill(instrument, notionalUSD, region, spreadCostUSD), [instrument, notionalUSD, region, spreadCostUSD]);
+  const executionDetails = useMemo(() => resolveCounterpartyFill(instrument, notionalUSD, region, spreadCostUSD, direction === 'BUY'), [instrument, notionalUSD, region, spreadCostUSD, direction]);
 
   const handleConfirm = () => {
     if (!canAfford) return;

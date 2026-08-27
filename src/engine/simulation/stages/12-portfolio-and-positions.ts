@@ -90,11 +90,13 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
             const entryValueUSD = pos.quantity * (pos.entryPrice / 100) * fxRateToUsd;
             unrealizedPnL = pos.direction === 'LONG' ? posValueUSD - entryValueUSD : entryValueUSD - posValueUSD;
 
-            if (pos.direction === 'LONG') {
-              ctx.weeklyRealizedCashUSD += posValueUSD;
-            } else {
-              ctx.weeklyRealizedCashUSD -= posValueUSD;
-            }
+            // S9: a matured position realizes its P&L, not its face value. This book is
+            // margin-financed — opening a position commits margin and pays the spread, never the
+            // notional — so crediting the full redemption here handed the player principal they
+            // had never paid, and stage 13 then added the P&L on top of it (it sums realized cash
+            // AND realized P&L into the week's cash). Money from nowhere, twice over. The
+            // contractual payout is still what sets the price (par, or recovery on default);
+            // what settles to cash is the gain or loss against entry.
             ctx.weeklyRealizedPnL += unrealizedPnL;
             pos.isClosed = true;
             closedCount++;
@@ -204,8 +206,10 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         if (nextWeek >= maturityWeek) {
           pos.isClosed = true;
           closedCount++;
-          const redemptionCash = pos.quantity * 1.0 * fxRateToUsd * (pos.direction === 'LONG' ? 1 : -1);
-          ctx.weeklyRealizedCashUSD += redemptionCash;
+          // S9: same margin-book rule as the corporate maturity above — the redemption pays par
+          // contractually, but what settles to the player's cash is the P&L against entry, not
+          // face value they never funded (and which stage 13 would then double by also adding
+          // the P&L).
           ctx.weeklyRealizedPnL += unrealizedPnL;
           ctx.newsItems.push({
             id: `sov-matured-${pos.id}-${nextWeek}`,

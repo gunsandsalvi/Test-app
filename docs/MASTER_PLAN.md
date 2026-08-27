@@ -204,7 +204,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 8 | Player trades enter the real market | S9 | S7 |
 | 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
 | 10 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S5–S7 |
 | 11 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | — |
@@ -329,27 +328,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### S9 — Player flow enters the real market
-
-**Where:** `trade.ts`, `12-portfolio-and-positions.ts`, the 07x adapters, `TradeTicketModal.tsx`.
-
-A player order is client flow to a dealer desk, exactly like any other participant's:
-1. **Execution now, impact next week.** The trade executes against the relevant dealer inventory
-   at the current cleared stat ± the dealer spread (buys pay the offer, sells hit the bid — fix
-   the current both-sides-pay-markup sign bug). The inventory delta is written at execution.
-2. **The market feels it through the standing inventory.** Next week's auction already reads
-   prior dealer inventory; a large player buy leaves the dealer short, and the dealer's residual
-   absorption at the solve moves the level. No bespoke "player impact" formula — the engine's
-   existing mechanics carry it.
-3. **Maturities pay contract, not formula:** a held tranche at maturity credits exactly its
-   contractual principal + final coupon, netted against what was actually paid (kills the
-   free-money bug).
-Equity and commodity player flow route the same way once WS4/G7 books exist. After G3, "the
-dealer" is a named bank's desk and the player's counterparty is real all the way down.
-
-**Verify:** round-trip a large player position and confirm the level moves next week and decays
-as the desk lays off; fee conservation invariant still holds; maturity P&L equals coupon math.
 
 ### S10 — Backlog batch
 
@@ -1483,7 +1461,26 @@ the complete simulation.
       note that seeded capacity floods supply) plus the still-absent monetary transmission (G2)
       and expectations channel — a much smaller and better-posed problem than the runaway or the
       cycle it replaced.
-30. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+30. **S9 landed: player flow is real client flow to a real dealer desk.**
+    - **The trade touched nothing.** `executeTrade` sourced a position by walking down the sector
+      `itemizedHoldings` — which S7 had just turned into a derived view, rebuilt from the real
+      books every week. Every write was silently discarded: the player could buy any size and no
+      book anywhere changed. Now the order moves the real **dealer inventory** the clearing
+      engines maintain, so the player's impact arrives through the mechanism that already exists
+      (the engines read prior inventory and lean on it) rather than a bespoke impact formula.
+    - **Both sides paid the markup.** `resolveCounterpartyFill` marked the fill UP whether the
+      player was buying or selling, so a round trip lost the spread twice. A buyer now lifts the
+      offer and a seller hits the bid, and the fill is sourced against the desk's real axe.
+    - **Maturities paid principal the player never funded.** This book is margin-financed —
+      opening a position commits margin and pays the spread, never the notional — but redemption
+      credited the full face value AND stage 13 then added the realized P&L on top of it, since
+      it sums both into the week's cash. Money from nowhere, twice, on both the corporate and
+      sovereign maturity paths. The contractual payout still sets the price (par, or recovery on
+      default); what settles is the gain or loss against entry.
+    - Recorded because it generalises: **a write to a derived view is a write to nothing.** S7
+      converted these aggregates deliberately, and any code still writing to them is now a silent
+      no-op rather than a visible error. Worth a sweep as later items convert more state to views.
+31. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

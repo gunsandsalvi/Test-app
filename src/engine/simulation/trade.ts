@@ -28,42 +28,40 @@ export function executeTrade(
   if (executionDetails) {
     const region = updatedRegions[posData.region];
     if (region) {
+      // S9: a player order is client flow to a real dealer desk, and the desk's INVENTORY is
+      // where it lands. The previous version sourced the position by walking down the sector
+      // itemizedHoldings — which S7 turned into a derived view, rebuilt from the real books every
+      // week, so those writes were silently discarded and the trade touched nothing at all.
+      //
+      // Inventory is the right home for a second reason: the clearing engines already read prior
+      // dealer inventory and lean on it, so a player buy leaves the desk short and next week's
+      // auction prices that shortfall. The player's market impact arrives through the mechanism
+      // that already exists, not through a bespoke impact formula.
       const instrumentId = posData.trancheId || posData.symbol;
-      let remainingToSource = posData.notional;
-      let newBankHoldings = [...region.bankingSector.itemizedHoldings];
-      let newInstHoldings = [...region.institutionalSector.itemizedHoldings];
+      // Buying takes paper OFF the desk; selling puts it on. A short sale is the desk taking the
+      // other side, which leaves it long, exactly as a real client short does.
+      const inventoryDeltaUSD = posData.direction === 'LONG' ? -posData.notional : posData.notional;
 
-      newBankHoldings = newBankHoldings.map(h => {
-        if (h.instrumentId === instrumentId && remainingToSource > 0) {
-          const deduction = Math.min(h.quantityOrNotionalUSD, remainingToSource);
-          remainingToSource -= deduction;
-          return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD - deduction };
-        }
-        return h;
-      }).filter(h => h.quantityOrNotionalUSD > 0.01);
+      const applyToInventory = (book: { companyId: string; inventoryUSD: number }[] | undefined) => {
+        const next = [...(book ?? [])];
+        const idx = next.findIndex(p => p.companyId === instrumentId);
+        if (idx >= 0) next[idx] = { ...next[idx], inventoryUSD: next[idx].inventoryUSD + inventoryDeltaUSD };
+        else next.push({ companyId: instrumentId, inventoryUSD: inventoryDeltaUSD });
+        return next;
+      };
 
-      if (remainingToSource > 0) {
-        newInstHoldings = newInstHoldings.map(h => {
-          if (h.instrumentId === instrumentId && remainingToSource > 0) {
-            const deduction = Math.min(h.quantityOrNotionalUSD, remainingToSource);
-            remainingToSource -= deduction;
-            return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD - deduction };
-          }
-          return h;
-        }).filter(h => h.quantityOrNotionalUSD > 0.01);
-      }
+      const isLoan = posData.assetType === 'LEVERAGED_LOAN' || (posData.assetType as string) === 'LEV_LOAN';
+      const isCorpBond = posData.assetType === 'CORP_BOND';
 
       updatedRegions[posData.region] = {
         ...region,
         bankingSector: {
           ...region.bankingSector,
+          // The desk's real earnings on the flow it facilitated.
           bankEquityUSD: region.bankingSector.bankEquityUSD + executionDetails.counterpartyFeeUSD + executionDetails.spreadCostUSD,
-          itemizedHoldings: newBankHoldings
+          ...(isCorpBond ? { corpBondDealerInventory: applyToInventory(region.bankingSector.corpBondDealerInventory) } : {}),
+          ...(isLoan ? { loanDealerInventory: applyToInventory(region.bankingSector.loanDealerInventory) } : {}),
         },
-        institutionalSector: {
-          ...region.institutionalSector,
-          itemizedHoldings: newInstHoldings
-        }
       };
     }
   }
