@@ -13,6 +13,7 @@ import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+import { random } from '../../rng';
 
 // 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
 // real ticker so the post-clearing crediting step can tell it apart from a real company sale.
@@ -390,7 +391,7 @@ function executeSubUnitBiddingMarket(
       // path back up as its cash position recovers, instead of a one-way ratchet toward zero.
       const cashConstrainedQtyModifier = cashRatio < 0.02 ? 0.70 : 1.0;
       const cashRichPricePremium = cashRatio > 0.15 ? 1.15 : 1.0;
-      const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashRichPricePremium;
+      const maxPriceUSD = currentUnitPrice * (0.95 + random() * 0.1) * cashRichPricePremium;
 
       bids.push({
         companyId: comp.ticker,
@@ -415,7 +416,7 @@ function executeSubUnitBiddingMarket(
         bids.push({
           companyId: privateSegmentOfferId(segment.segmentType),
           quantityUnits: demandUnits,
-          maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+          maxPriceUSD: currentUnitPrice * (0.95 + random() * 0.1),
         });
       }
     });
@@ -442,7 +443,7 @@ function executeSubUnitBiddingMarket(
           bids.push({
             companyId: privateSegmentOfferId('MANUFACTURING'),
             quantityUnits: demandUnits,
-            maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+            maxPriceUSD: currentUnitPrice * (0.95 + random() * 0.1),
           });
         }
       }
@@ -706,8 +707,8 @@ function executeSubUnitBiddingMarket(
 
   matchedBids.forEach(bid => {
     if (matchedOffers.length === 0) return;
-    const offer = matchedOffers[Math.floor(Math.random() * matchedOffers.length)];
-    if (Math.random() < 0.15 && bid.companyId) {
+    const offer = matchedOffers[Math.floor(random() * matchedOffers.length)];
+    if (random() < 0.15 && bid.companyId) {
       const supplierComp = index.byTicker.get(offer.companyId as string);
       const customerComp = index.byTicker.get(bid.companyId as string);
 
@@ -718,7 +719,7 @@ function executeSubUnitBiddingMarket(
           const supplierPowerFactor = 0.5 + (supplierMarketShare - 0.25) * 0.5;
           const customerBargainingPower = (relativeSize > 1.0 ? 0.6 : 0.4) * (1.0 - supplierPowerFactor);
           let contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
-          let duration = 12 + Math.floor(Math.random() * 40);
+          let duration = 12 + Math.floor(random() * 40);
 
           // Hedging for revenue volatility
           const revHist = customerComp.revenueHistory || [];
@@ -729,7 +730,7 @@ function executeSubUnitBiddingMarket(
             revVol = Math.sqrt(varRev) / meanRev;
           }
           if (revVol > 0.05) {
-            duration = 52 + Math.floor(Math.random() * 52); // Seek longer contracts
+            duration = 52 + Math.floor(random() * 52); // Seek longer contracts
             const impliedPd = Math.max(0, Math.min(1, 1 / (1 + Math.exp(customerComp.interestCoverage * 0.8 - customerComp.leverage * 0.4))));
             const costOfCapital = 0.05 + (impliedPd * 0.60);
             const hedgingPremium = costOfCapital * 0.20; // Modest price premium

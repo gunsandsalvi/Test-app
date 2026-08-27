@@ -1499,6 +1499,23 @@ the complete simulation.
       their valuation — real gapping, but worth confirming it is the tail and not a discontinuity
       at the branch boundary. Households/banks/treasury are not yet participants in this book
       (the float is the institutional share); they arrive with MS and WS8.
+31. **Determinism + measurement: the engine is seeded, and one guess-free profiler.**
+    - **Every run was a different world.** 51 raw `Math.random()` sites across the engine meant
+      no before/after measurement in this file ever compared the same economy to itself — the
+      whole "measure, change one thing, measure again" method was being applied to numbers that
+      moved on their own. All engine draws now come from `engine/rng.ts` (mulberry32, one word of
+      state), the seed and stream position live ON the GameState, so a saved game resumes its own
+      world and any measurement can be replayed exactly. Verified: two 260-week harness runs are
+      byte-identical. UI jitter deliberately not converted — animation noise is not part of the
+      world. Harness scripts take `SEED=<n>` to test a claim against a genuinely different world.
+    - **`npm run profile`** (scripts/profile.ts + `advanceWeeklyStepProfiled`) prints per-stage
+      mean/worst/share so optimization starts from measurement, not intuition (§7.27's lesson).
+    - **First measured win, 1191 -> 895 ms/week:** `settleCorporateActionOnHolders` rebuilt every
+      entity's whole holdings array per corporate action, twice per company — 12% of the entire
+      weekly step to scale one issuer's holders. Actions now record a per-instrument ratio and
+      settle in ONE pass at the end of stage 08 (ratios compose by product). Remaining cost, by
+      measurement: stage 08 (42%), stage 05 (34%) — both already indexed; further cuts need
+      algorithmic changes, logged not chased.
 31. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.

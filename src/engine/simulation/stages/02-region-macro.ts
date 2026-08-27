@@ -12,6 +12,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand, computeTargetOwnershipShares } from './shared-helpers';
 import { WeeklyStepContext } from './context';
+import { random } from '../../rng';
 
 // Bank/institutional/foreign/central-bank ownership is capped well under 100% so household
 // (the implicit residual everywhere ownership is displayed) always retains a real floor,
@@ -19,8 +20,8 @@ import { WeeklyStepContext } from './context';
 const MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE = 0.85;
 
 export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): void {
-  const globalInflationShock = (Math.random() - 0.5) * 0.0008;
-  const globalGdpShock = (Math.random() - 0.5) * 0.001;
+  const globalInflationShock = (random() - 0.5) * 0.0008;
+  const globalGdpShock = (random() - 0.5) * 0.001;
 
   ctx.updatedRegions = { ...state.regions };
 

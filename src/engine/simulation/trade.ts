@@ -1,4 +1,5 @@
 import { GameState, Position } from '../../types';
+import { random } from '../rng';
 
 export function executeTrade(
   state: GameState,
@@ -7,7 +8,7 @@ export function executeTrade(
 ): GameState {
   const newPos: Position = {
     ...posData,
-    id: `pos_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    id: `pos_${Date.now()}_${Math.floor(random() * 1000)}`,
     openedWeek: state.currentWeek,
     unrealizedPnL: 0,
     realizedPnL: 0,

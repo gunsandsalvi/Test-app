@@ -1,4 +1,9 @@
 import { createInitialGameState } from '../src/engine/simulation/initialization';
+import { DEFAULT_SIMULATION_SEED } from '../src/engine/rng';
+
+// Same seed, same world. Pass SEED=<n> to check a result against a genuinely different economy
+// rather than against the noise an unseeded run used to produce.
+const SEED = Number(process.env.SEED ?? DEFAULT_SIMULATION_SEED);
 import { advanceWeeklyStep } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
@@ -172,7 +177,7 @@ function checkNavIdentity(state: GameState, week: number) {
 
 
 function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
-  let seedState = createInitialGameState();
+  let seedState = createInitialGameState(SEED);
   const company = seedState.companies[0];
   const posData = {
     assetType: 'EQUITY' as any,
@@ -205,7 +210,7 @@ function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
 }
 
 function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
-  let state = createInitialGameState();
+  let state = createInitialGameState(SEED);
   const ticker = state.companies.find(c => c.region === 'USA' && !c.isBankEntity && !c.isInstitutionalEntity)?.ticker;
   if (!ticker) return null;
   // Force a large institutional under-allocation so the holder-class rebalancing flow
@@ -237,8 +242,8 @@ function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
 }
 
 function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
-  const baseline = createInitialGameState();
-  const shocked = createInitialGameState();
+  const baseline = createInitialGameState(SEED);
+  const shocked = createInitialGameState(SEED);
   // S6: shock the fields the market ACTUALLY reads. The old version shrank two macro scalars
   // (bankEquityUSD / sectorEquityUSD) that the clearing engine stopped reading when sovereign
   // demand became per-bank reserve arbitrage (S2) and per-entity budgets (S11) — so baseline and
@@ -268,7 +273,7 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
 
 function runInvariantsHarness() {
   console.log('--- STARTING INVARIANTS HARNESS (260 WEEKS) ---');
-  let state = createInitialGameState();
+  let state = createInitialGameState(SEED);
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
   let knownTickers = new Set(state.companies.map(c => c.ticker));
 

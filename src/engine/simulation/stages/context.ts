@@ -41,6 +41,12 @@ export interface WeeklyStepContext {
   updatedFxPairs: FxPair[];
   updatedCompanies: Company[];
   updatedInstitutionalEntities: InstitutionalEntity[];
+  /**
+   * Corporate actions (defaults, refinancings, amortization) recorded during stage 08, as a
+   * per-instrument scaling ratio, settled onto the real books in one pass at the end of the
+   * stage — see applyPendingCorporateActionSettlements.
+   */
+  pendingHolderSettlements: Map<string, number>;
   updatedCommodities: Commodity[];
   updatedCompositeIndices: CompositeBenchmarkIndices;
   marketVolPremium: number;
@@ -106,6 +112,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     updatedFxPairs: [...state.fxPairs],
     updatedCompanies: [...state.companies],
     updatedInstitutionalEntities: [...state.institutionalEntities],
+    pendingHolderSettlements: new Map<string, number>(),
     updatedCommodities: [...state.commodities],
     updatedCompositeIndices: { ...state.compositeIndices },
     marketVolPremium: state.marketVolPremium || 0,

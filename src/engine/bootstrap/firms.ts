@@ -10,6 +10,7 @@
 import { RegionId, Sector, CreditRating } from '../../types';
 import { determineCreditRating } from '../simulation/credit';
 import { GENERATED_COMMODITIES } from './commodities-and-fx';
+import { random } from '../rng';
 
 export interface FirmSeedTemplate {
   ticker: string;
@@ -58,10 +59,10 @@ export function generateUniqueName(baseName: string, sector: string, existingNam
   const suffixPool = SECTOR_NAME_SUFFIXES[sector as Sector] ?? NAME_SUFFIXES;
   let attempt = 0;
   while (attempt < 200) {
-    const p = NAME_PREFIXES[Math.floor(Math.random() * NAME_PREFIXES.length)];
-    const s = suffixPool[Math.floor(Math.random() * suffixPool.length)];
-    const useQualifier = attempt > 30 || Math.random() < 0.3; // widen the space more aggressively once early attempts are exhausted
-    const q = useQualifier ? NAME_QUALIFIERS[Math.floor(Math.random() * NAME_QUALIFIERS.length)] : null;
+    const p = NAME_PREFIXES[Math.floor(random() * NAME_PREFIXES.length)];
+    const s = suffixPool[Math.floor(random() * suffixPool.length)];
+    const useQualifier = attempt > 30 || random() < 0.3; // widen the space more aggressively once early attempts are exhausted
+    const q = useQualifier ? NAME_QUALIFIERS[Math.floor(random() * NAME_QUALIFIERS.length)] : null;
     const name = q ? `${p} ${q} ${s}` : `${p} ${s}`;
     if (!existingNames.has(name)) {
       existingNames.add(name);
@@ -69,7 +70,7 @@ export function generateUniqueName(baseName: string, sector: string, existingNam
     }
     attempt++;
   }
-  return `${baseName} ${Math.floor(Math.random() * 10000)} Corp`;
+  return `${baseName} ${Math.floor(random() * 10000)} Corp`;
 }
 
 export function generateUniqueTicker(existingTickers: Set<string>): string {
@@ -77,7 +78,7 @@ export function generateUniqueTicker(existingTickers: Set<string>): string {
   let attempt = 0;
   while (attempt < 100) {
     let t = '';
-    for (let i = 0; i < 4; i++) t += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 4; i++) t += chars.charAt(Math.floor(random() * chars.length));
     if (!existingTickers.has(t)) {
       existingTickers.add(t);
       return t;

@@ -1,5 +1,6 @@
 import { GameState } from '../../types';
 import { createInitialContext } from './stages/context';
+import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
 import { runBankDiversificationStage } from './stages/02b-bank-diversification';
@@ -22,35 +23,78 @@ import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 
 export { computeOccupationDemand } from './stages/shared-helpers';
 
-/**
- * Advances the simulation by one week, running the thirteen weekly-step stages in
- * order against a single shared WeeklyStepContext. See stages/context.ts for why the
- * stages share one mutable context instead of narrow per-stage interfaces, and each
- * stage file's header for what that stage owns.
- */
-export function advanceWeeklyStep(state: GameState): GameState {
-  const ctx = createInitialContext(state);
+/** Wall-clock cost of one stage, for one week. See `advanceWeeklyStep`'s `profile` option. */
+export interface StageTiming {
+  stage: string;
+  ms: number;
+}
 
-  runMacroFeedbackStage(state, ctx);
-  runRegionMacroStage(state, ctx);
-  runBankDiversificationStage(state, ctx);
-  runCategoryDemandStage(state, ctx);
-  runInputOutputStage(state, ctx);
-  runUnitBiddingStage(state, ctx);
-  runFxAndTradeStage(state, ctx);
-  runCommoditiesStage(state, ctx);
+export interface WeeklyStepOptions {
+  /**
+   * Record per-stage wall-clock time and return it alongside the state.
+   *
+   * This exists because the first optimization pass bought 6%: the obvious filters were hoisted
+   * and the real cost turned out to be somewhere else entirely (an O(firms x contracts) scan).
+   * Guessing where a weekly step spends its time is unreliable — measure it. Off by default and
+   * free when off; the only cost when on is one `performance.now()` per stage.
+   */
+  profile?: boolean;
+}
+
+export interface WeeklyStepResult {
+  state: GameState;
+  /** Populated only when `profile` was set. */
+  timings: StageTiming[];
+}
+
+/**
+ * Advances the simulation by one week, running the weekly-step stages in order against a single
+ * shared WeeklyStepContext. See stages/context.ts for why the stages share one mutable context
+ * instead of narrow per-stage interfaces, and each stage file's header for what that stage owns.
+ */
+export function advanceWeeklyStep(state: GameState, options?: WeeklyStepOptions): GameState {
+  return advanceWeeklyStepProfiled(state, options).state;
+}
+
+/** As `advanceWeeklyStep`, but hands back the per-stage timings too. */
+export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStepOptions): WeeklyStepResult {
+  // Pick the random stream up where this state left it, and hand the new position back on the
+  // state below. A saved game therefore resumes the same world instead of forking into another
+  // one, and a run replayed from the same seed is identical week for week (engine/rng.ts).
+  setRngState(state.rngState);
+  const ctx = createInitialContext(state);
+  const timings: StageTiming[] = [];
+  const profile = options?.profile === true;
+  const run = <T>(stage: string, fn: () => T): T => {
+    if (!profile) return fn();
+    const startedAt = performance.now();
+    const result = fn();
+    timings.push({ stage, ms: performance.now() - startedAt });
+    return result;
+  };
+
+  run('01-macro-feedback', () => runMacroFeedbackStage(state, ctx));
+  run('02-region-macro', () => runRegionMacroStage(state, ctx));
+  run('02b-bank-diversification', () => runBankDiversificationStage(state, ctx));
+  run('03-category-demand', () => runCategoryDemandStage(state, ctx));
+  run('04-input-output', () => runInputOutputStage(state, ctx));
+  run('05-unit-bidding', () => runUnitBiddingStage(state, ctx));
+  run('06-fx-and-trade', () => runFxAndTradeStage(state, ctx));
+  run('07-commodities', () => runCommoditiesStage(state, ctx));
   // Income first, so this week's real coupon receipts can fund this week's bids; mark after,
   // so next week's structural shares are sized by this week's actual close (S11).
-  accrueInstitutionalIncome(ctx);
-  runCorporateBondClearingStage(state, ctx);
-  runSovereignBondClearingStage(state, ctx);
-  runLeveragedLoanClearingStage(state, ctx);
-  runEquityClearingStage(state, ctx);
-  markInstitutionalBooks(ctx);
-  runCompanyFundamentalsStage(state, ctx);
-  runConcentrationRiskStage(state, ctx);
-  runMergersStage(state, ctx);
-  runFiscalAndSovereignDebtStage(state, ctx);
-  runPortfolioAndPositionsStage(state, ctx);
-  return runNewsAndTurnSummaryStage(state, ctx);
+  run('institutional-income', () => accrueInstitutionalIncome(ctx));
+  run('07b-corporate-bond-clearing', () => runCorporateBondClearingStage(state, ctx));
+  run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
+  run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
+  run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
+  run('institutional-marking', () => markInstitutionalBooks(ctx));
+  run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));
+  run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
+  run('10-mergers', () => runMergersStage(state, ctx));
+  run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));
+  run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
+  const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
+
+  return { state: { ...nextState, rngState: getRngState() }, timings };
 }

@@ -22,10 +22,11 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket, settleCorporateActionOnHolders, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
+import { random } from '../../rng';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
@@ -156,7 +157,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newInputInventoryBySubUnit[su] = lots as InputLot[];
     });
 
-    const executionNoise = (Math.random() - 0.5) * 0.3;
+    const executionNoise = (random() - 0.5) * 0.3;
     const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
 
 
@@ -166,7 +167,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
       const weeklyNim = bs.netInterestMarginPct / 52;
       const impliedNimRev = totalAssets * weeklyNim * share;
-      const loanLosses = Math.random() * 0.05 * totalAssets * share / 52;
+      const loanLosses = random() * 0.05 * totalAssets * share / 52;
       // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
       // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this
       // company's original generation-time seed — that seed comes from the same small-scale
@@ -190,12 +191,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const floatAssets = comp.annualRevenue * 5;
       comp.technicalReservesUSD = floatAssets * 0.85;
 
-      const premiumGrowth = reg.gdpGrowth / 52 + (Math.random() - 0.5) * 0.02;
+      const premiumGrowth = reg.gdpGrowth / 52 + (random() - 0.5) * 0.02;
       const prevPremiums = (comp.insurancePremiumsWrittenUSD || comp.annualRevenue) / 52;
       const weeklyPremiums = Math.max(10, prevPremiums * (1 + premiumGrowth));
       comp.insurancePremiumsWrittenUSD = weeklyPremiums * 52;
 
-      const lossRatio = 0.70 + (Math.random() - 0.5) * 0.20;
+      const lossRatio = 0.70 + (random() - 0.5) * 0.20;
       comp.insuranceClaimsPaidUSD = weeklyPremiums * lossRatio * 52;
 
       const underwritingIncome = weeklyPremiums * (1 - lossRatio - 0.20);
@@ -216,11 +217,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // formula only survives for manager companies with no entity behind them.
       const equityIndex = comp.region === 'USA' ? state.compositeIndices.us500 : comp.region === 'EUR' ? state.compositeIndices.euStoxx : comp.region === 'UK' ? state.compositeIndices.uk100 : state.compositeIndices.jp225;
       const marketGrowth = equityIndex.value / Math.max(1, equityIndex.historical[equityIndex.historical.length - 2] ?? equityIndex.value);
-      const flows = (Math.random() - 0.4) * 0.01;
+      const flows = (random() - 0.4) * 0.01;
       comp.aumUSD = instEnt
         ? instEnt.totalAssetsUSD
         : (comp.aumUSD ?? comp.annualRevenue * 50) * marketGrowth * (1 + flows);
-      comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + Math.random() * 0.005);
+      comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + random() * 0.005);
 
       const weeklyFees = comp.aumUSD * comp.managementFeeRate / 52;
       newRevenue = Math.max(10, weeklyFees * 52);
@@ -235,7 +236,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
 
       // Weekly revenue transition
-      const noise = (Math.random() - 0.5) * 0.015;
+      const noise = (random() - 0.5) * 0.015;
       const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
 
       // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
@@ -352,7 +353,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
       const baselineMargin = comp.baselineEbitdaMargin ?? (comp.ebitda / Math.max(1, comp.annualRevenue));
       const targetMargin = Math.min(0.65, Math.max(0.04, baselineMargin - wageCompression - capacityDecayPenalty - avgCrowdingIntensity * 0.08 - inputPriceDrag * 0.03));
-      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (Math.random() - 0.5) * 0.004));
+      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (random() - 0.5) * 0.004));
 
       const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
@@ -683,7 +684,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const notchGap = Math.abs(RATING_ORDER.indexOf(calculatedRating) - RATING_ORDER.indexOf(comp.creditRating));
       const crossesIgHyLine = getRatingBucket(calculatedRating) !== getRatingBucket(comp.creditRating);
       const forceUpdate = notchGap >= 2 || crossesIgHyLine;
-      if (calculatedRating !== comp.creditRating && (forceUpdate || Math.random() < 0.25)) {
+      if (calculatedRating !== comp.creditRating && (forceUpdate || random() < 0.25)) {
         ctx.ratingChanges.push({
           ticker: comp.ticker,
           from: comp.creditRating,
@@ -801,7 +802,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       } else {
         // Fallback: standard refinancing at maturity
         const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
-        const refinanceAsFixed = Math.random() < currentFixedShare;
+        const refinanceAsFixed = random() < currentFixedShare;
         const currentBaseSpreadBps = comp.oasSpreadBps;
         const fiveYearSovRateAtMaturity = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
 
@@ -933,7 +934,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.
     const newOasBps = comp.oasSpreadBps;
-    const rawNewCds = newOasBps + Math.floor(Math.random() * 8 - 4);
+    const rawNewCds = newOasBps + Math.floor(random() * 8 - 4);
     const newCdsSpreadBps = isFinite(rawNewCds) ? Math.round(Math.max(10, Math.min(5000, rawNewCds))) : 150;
 
     // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
@@ -970,7 +971,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       } else {
         guidanceSnippet = 'Management reaffirms FY baseline guidance with stable unit economics and operating backlog.';
         lastManagementCommentary = `In-line quarterly results with steady gross margins and stable backlog demand.`;
-        sentimentDelta = (Math.random() - 0.5) * 0.05;
+        sentimentDelta = (random() - 0.5) * 0.05;
       }
 
       ctx.earningsReportedThisTurn.push({
@@ -1265,6 +1266,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       treasuryHoldings: newTreasuryHoldings,
     };
   });
+
+  // Every corporate action this stage recorded reaches the real books here, in one pass.
+  applyPendingCorporateActionSettlements(ctx);
 
   ctx.newsItems.push(...refinanceNews);
 }

@@ -271,7 +271,7 @@ export function attributeItemizedHoldings(
  * engine absorbs it over the following weeks.
  */
 export function settleCorporateActionOnHolders(
-  ctx: { updatedInstitutionalEntities: InstitutionalEntity[] },
+  ctx: { pendingHolderSettlements: Map<string, number> },
   issuerId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN',
   oldFloatUSD: number,
@@ -280,16 +280,39 @@ export function settleCorporateActionOnHolders(
   if (!(oldFloatUSD > 0)) return;
   const ratio = Math.max(0, newFloatUSD) / oldFloatUSD;
   if (Math.abs(ratio - 1) < 1e-9) return;
+  const key = `${instrumentType}:${issuerId}`;
+  // Ratios compose: two actions on one instrument in one week scale the holders once, by the
+  // product, which is the same number applying them in sequence would have reached.
+  ctx.pendingHolderSettlements.set(key, (ctx.pendingHolderSettlements.get(key) ?? 1) * ratio);
+}
+
+/**
+ * Apply every corporate action recorded this week to the real books, in ONE pass.
+ *
+ * This used to write through immediately, once per action: each call rebuilt the whole entity
+ * array AND re-mapped every holding of every entity, to change the holdings of a single issuer.
+ * Two calls per company across ~800 companies made it 12% of the entire weekly step — measured,
+ * after the last optimization pass had guessed wrong about where the time was going. Nothing
+ * inside stage 08 reads these books (it reads the pre-stage snapshot), so recording the ratios
+ * and settling them once at the end of the stage is the same arithmetic at 1/800th the traversal.
+ */
+export function applyPendingCorporateActionSettlements(
+  ctx: { updatedInstitutionalEntities: InstitutionalEntity[]; pendingHolderSettlements: Map<string, number> }
+): void {
+  const pending = ctx.pendingHolderSettlements;
+  if (pending.size === 0) return;
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let touched = false;
     const newHoldings = entity.itemizedHoldings
       .map((h) => {
-        if (h.instrumentType !== instrumentType || h.instrumentId !== issuerId) return h;
+        const ratio = pending.get(`${h.instrumentType}:${h.instrumentId}`);
+        if (ratio === undefined) return h;
         touched = true;
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
       })
       .filter((h) => h.quantityOrNotionalUSD > 1);
     return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
   });
+  pending.clear();
 }

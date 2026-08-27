@@ -9,6 +9,7 @@ import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTarge
 import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { refreshRegionalHoldingsView } from './stages/holdings-view';
+import { setSimulationSeed, getRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import {
@@ -18,7 +19,13 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 
-export function createInitialGameState(): GameState {
+/**
+ * Build a world. The same seed always builds the same world and, stepped the same number of
+ * weeks, reaches the same state — which is what makes any before/after measurement of this
+ * simulation mean anything (see engine/rng.ts).
+ */
+export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
+  setSimulationSeed(seed);
   const regions = getInitialRegions();
   const fxPairs = getInitialFxPairs();
   const companies = generateInitialCompanies();
@@ -687,6 +694,8 @@ export function createInitialGameState(): GameState {
   return {
     currentWeek: 1,
     year: 2026,
+    rngSeed: seed,
+    rngState: getRngState(),
     regions,
     fxPairs,
     companies,

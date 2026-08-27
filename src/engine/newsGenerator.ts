@@ -1,4 +1,5 @@
 import { Company, CreditRating, NewsItem, Region, RegionId, TradeableInstrument } from '../types';
+import { random } from './rng';
 
 export interface EarningsReportEvent {
   ticker: string;
@@ -199,7 +200,7 @@ export function generateWeeklyNews(
 
   // 4. Regional Weather Alerts
   Object.values(regions).forEach((r) => {
-    if (r.weather && r.weather.severity !== 'Normal' && Math.random() < 0.4) {
+    if (r.weather && r.weather.severity !== 'Normal' && random() < 0.4) {
       const w = r.weather;
       let tradeShortcut: TradeableInstrument | undefined;
       if (w.affectedCommodityId === 'NATURAL_GAS') {
@@ -291,7 +292,7 @@ export function generateWeeklyNews(
       },
     ];
 
-    const pick = macroEvents[(week + Math.floor(Math.random() * macroEvents.length)) % macroEvents.length];
+    const pick = macroEvents[(week + Math.floor(random() * macroEvents.length)) % macroEvents.length];
     const comp = companies.find((c) => c.ticker === pick.symbol);
     const tradeShortcut: TradeableInstrument | undefined = comp ? {
       assetType: 'EQUITY',

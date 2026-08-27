@@ -7,6 +7,7 @@ import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
 import { PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
+import { random } from './rng';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -467,7 +468,7 @@ export function generateInitialCompanies(): Company[] {
       }).toFixed(2));
       
       const oasSpreadBps = RATING_OAS_SPREADS[tmpl.initialRating].baseBps;
-      const cdsSpreadBps = oasSpreadBps + Math.floor(Math.random() * 10 - 5);
+      const cdsSpreadBps = oasSpreadBps + Math.floor(random() * 10 - 5);
       
       const historicalPrices: number[] = [stockPrice];
       const marketCap = tmpl.shares * stockPrice;
@@ -631,7 +632,7 @@ export function generateInitialCompanies(): Company[] {
         // Persistent idiosyncratic risk: smaller/higher-rank banks run a real, generated risk
         // premium (concentrated commercial exposure is a genuine real-world pattern for
         // smaller/regional banks), not a random re-roll each week — seeded once, here.
-        bankRiskFactor: tmpl.sector === 'Banks' ? Number((0.75 + tmpl.rank * 0.18 + (Math.random() - 0.5) * 0.25).toFixed(3)) : undefined,
+        bankRiskFactor: tmpl.sector === 'Banks' ? Number((0.75 + tmpl.rank * 0.18 + (random() - 0.5) * 0.25).toFixed(3)) : undefined,
         isBankEntity: tmpl.sector === 'Banks',
         isInstitutionalEntity: !!tmpl.institutionalRole,
         institutionalEntityType: tmpl.institutionalRole as any,
@@ -674,10 +675,10 @@ export function generateInitialCompanies(): Company[] {
     // tickers colliding with this region's padding clones, since seed generation and padding
     // used to track uniqueness in two disconnected sets.
     while (companies.filter(c => c.region === region).length < targetCount) {
-      const parent = baseCompanies[Math.floor(Math.random() * baseCompanies.length)];
+      const parent = baseCompanies[Math.floor(random() * baseCompanies.length)];
       const newTicker = generateUniqueTicker(existingSeedTickers);
       const newName = generateUniqueName(parent.name, parent.sector, existingSeedNames);
-      const newEmployeeCount = Math.max(10, Math.floor(parent.employeeCount * (0.3 + Math.random() * 1.4)));
+      const newEmployeeCount = Math.max(10, Math.floor(parent.employeeCount * (0.3 + random() * 1.4)));
       const revenueScale = newEmployeeCount / Math.max(1, parent.employeeCount);
 
       
@@ -690,7 +691,7 @@ export function generateInitialCompanies(): Company[] {
         insuranceClaimsPaidUSD: parent.insuranceClaimsPaidUSD,
 
         ...parent,
-        id: parent.id + "-" + Math.random().toString(36).substring(2, 9),
+        id: parent.id + "-" + random().toString(36).substring(2, 9),
         ticker: newTicker,
         name: newName,
         annualRevenue: parent.annualRevenue * revenueScale,
@@ -847,8 +848,8 @@ export function generateInitialCompanies(): Company[] {
 
 
 export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number, policyRate: number = 0.045, existingCompanies: Company[] = []): Company {
-  const revBase = categoryDemandUSD * (0.02 + Math.random() * 0.03);
-  const ebitdaMargin = 0.15 + Math.random() * 0.15;
+  const revBase = categoryDemandUSD * (0.02 + random() * 0.03);
+  const ebitdaMargin = 0.15 + random() * 0.15;
   const shares = Math.floor(revBase * 10);
 
   let industry: Industry = 'SoftwareDigitalServices';
@@ -885,7 +886,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const existingNames = new Set(existingCompanies.map(c => c.name));
   const ticker = generateUniqueTicker(existingTickers);
   const name = generateUniqueName(`${regionId} ${sector}`, sector, existingNames);
-  const initialRating: CreditRating = Math.random() > 0.5 ? 'BB' : 'B';
+  const initialRating: CreditRating = random() > 0.5 ? 'BB' : 'B';
   const debtBase = revBase * 1.5;
   
   const ebitda = revBase * ebitdaMargin;

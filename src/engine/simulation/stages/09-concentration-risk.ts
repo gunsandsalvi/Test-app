@@ -8,6 +8,18 @@
 import { GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
 
+/** Shared empty list, so a company with no contracts on a side allocates nothing. */
+const NO_CONTRACTS: any[] = [];
+
+/** Contracts are keyed by ticker on some paths and by id on others; join without allocating
+ *  when only one side (the common case) or neither has any. */
+function contractsFor(index: Map<string, any[]>, ticker: string, id: string): any[] {
+  const byTicker = index.get(ticker);
+  const byId = index.get(id);
+  if (byTicker && byId) return [...byTicker, ...byId];
+  return byTicker ?? byId ?? NO_CONTRACTS;
+}
+
 export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepContext): void {
   // Indexed once per week rather than rescanned per company: the contract array and the company
   // roster were both walked in full for every one of ~2,000 companies, which is the whole cost
@@ -29,7 +41,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
     const flags: string[] = [];
 
     // Supplier concentration
-    const asSupplier = [...(supplierContracts.get(comp.ticker) ?? []), ...(supplierContracts.get(comp.id) ?? [])];
+    const asSupplier = contractsFor(supplierContracts, comp.ticker, comp.id);
     const totalSupplierVal = asSupplier.reduce((s, c) => s + c.quantityUnitsPerWeek * c.priceUSD * 52, 0);
     if (totalSupplierVal > 0) {
       const custTotals: Record<string, number> = {};
@@ -47,7 +59,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
     }
 
     // Customer concentration
-    const asCustomer = [...(customerContracts.get(comp.ticker) ?? []), ...(customerContracts.get(comp.id) ?? [])];
+    const asCustomer = contractsFor(customerContracts, comp.ticker, comp.id);
     const totalCustomerVal = asCustomer.reduce((s, c) => s + c.quantityUnitsPerWeek * c.priceUSD * 52, 0);
     if (totalCustomerVal > 0) {
       const supTotals: Record<string, number> = {};
