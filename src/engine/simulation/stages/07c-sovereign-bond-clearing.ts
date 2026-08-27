@@ -73,6 +73,21 @@ const BOND_LIQUIDITY_DEPTH = 2;
 const DEALER_INVENTORY_PRESSURE_RATE = 0.15;
 const DEALER_SPREAD_BPS = 5;
 const BANK_PREFERRED_TENOR_YEARS = 3; // a bank's HQLA book skews shorter/more liquid than a typical bond investor
+/**
+ * Share of its policy government-bond allocation each holder keeps at ANY yield, because its
+ * liabilities require the match. Insurers and pension funds are liability-driven and hold most of
+ * their book through anything; an asset manager runs a benchmark it can deviate from but not
+ * abandon; a hedge fund and a PE sponsor have no such obligation and can hold none.
+ */
+function liabilityDrivenCoreShare(entityType: string): number {
+  switch (entityType) {
+    case 'INSURER': return 0.70;
+    case 'PENSION_FUND': return 0.75;
+    case 'ASSET_MANAGER': return 0.40;
+    default: return 0;
+  }
+}
+
 const INSTITUTIONAL_PREFERRED_TENOR_YEARS = 12; // insurers/pension funds match long-dated liabilities
 
 // How macro conditions reach the curve now that no formula writes it (see this file's header
@@ -99,12 +114,47 @@ function durationPremiumBps(tenorYears: number, preferredTenorYears: number): nu
  * plus a real return, plus compensation for duration. No credit term — that is the point of a
  * government bond.
  */
+/**
+ * The inflation a holder of THIS tenor actually prices against: the average expected over the
+ * bond's life, not this week's year-over-year print.
+ *
+ * This is the term structure of inflation expectations, and it is the single most important
+ * feature of a credible inflation-targeting regime: a spike in current inflation moves a 30-year
+ * yield far less than one-for-one, because holders expect the central bank to bring it back.
+ * Modelled the standard way — the deviation from target decays with a mean-reversion time
+ * constant, and the bond prices the AVERAGE of that decay path over its own tenor:
+ *
+ *     avg(T) = target + (current - target) * (1 - e^(-T/tau)) / (T/tau)
+ *
+ * Short tenors get nearly the current expectation; long tenors converge on the target.
+ *
+ * Why this had to exist: the reservation yield used the raw current expectation at every tenor,
+ * so an inflation print of 16% (itself a separate open defect — see the plan's G1b) demanded a
+ * 17.5% yield on a 10-year bond paying 3.2%. Demand went to exactly zero and institutions
+ * liquidated their entire sovereign book — measured, 284B to 1B in twenty weeks (§7.26). No real
+ * long-bond holder reprices like that, because no real holder believes a spike is permanent.
+ */
+const INFLATION_MEAN_REVERSION_YEARS = 3;
+
+function expectedInflationOverTenor(
+  reg: { expectedInflation: number; targetInflation: number },
+  tenorYears: number
+): number {
+  const target = reg.targetInflation ?? 0.02;
+  const gap = reg.expectedInflation - target;
+  const x = Math.max(0.01, tenorYears) / INFLATION_MEAN_REVERSION_YEARS;
+  const averagingFactor = (1 - Math.exp(-x)) / x;
+  return target + gap * averagingFactor;
+}
+
 function computeSovereignReservationYieldBps(
-  reg: { expectedInflation: number; policyRate: number },
+  reg: { expectedInflation: number; targetInflation: number; policyRate: number },
   tenorYears: number,
   preferredTenorYears: number
 ): number {
-  return reg.expectedInflation * 10000 + INSTITUTIONAL_REAL_RETURN_BPS + durationPremiumBps(tenorYears, preferredTenorYears);
+  return expectedInflationOverTenor(reg, tenorYears) * 10000
+    + INSTITUTIONAL_REAL_RETURN_BPS
+    + durationPremiumBps(tenorYears, preferredTenorYears);
 }
 
 function bucketInstrumentId(regionId: RegionId, tenorKey: string): string {
@@ -122,11 +172,13 @@ function clamp(v: number, min: number, max: number): number {
  * applies to anyone holding the paper.
  */
 function realYieldSignal(
-  reg: { expectedInflation: number },
+  reg: { expectedInflation: number; targetInflation: number },
   bucket: { years: number },
   currentYieldBps: number
 ): number {
-  const realYieldBps = currentYieldBps - reg.expectedInflation * 10000;
+  // Same horizon-matched expectation as the reservation above: a holder judging a 10-year bond's
+  // real yield uses the inflation it expects over ten years, not this week's print.
+  const realYieldBps = currentYieldBps - expectedInflationOverTenor(reg as any, bucket.years) * 10000;
   const durationExposure = Math.min(1, bucket.years / LONG_END_TENOR_YEARS);
   return clamp((realYieldBps / REAL_YIELD_SCALE_BPS) * durationExposure, -MAX_INFLATION_TILT, MAX_INFLATION_TILT);
 }
@@ -219,6 +271,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           maxHoldingUSD: entityTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
           fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
           maxNetPurchaseUSD: classBudgetUSD * bucketShareOfMarket,
+          // Liability-driven core: an insurer's claim reserves and a pension fund's benefit
+          // promises still exist when yields look poor, and something has to match them.
+          minHoldingUSD: entityTarget * bucketShareOfMarket * liabilityDrivenCoreShare(entity.entityType),
         });
       });
 

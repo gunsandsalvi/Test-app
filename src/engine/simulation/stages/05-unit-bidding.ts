@@ -55,17 +55,62 @@ function addInputInventory(update: any, baseComp: Company, subUnitId: string, se
   ];
 }
 
+/**
+ * Everything about a region's firms that does not change between one sub-unit's auction and the
+ * next, computed once per region per week.
+ *
+ * Why this exists: every one of these lists used to be rebuilt inside each sub-unit's auction —
+ * a full scan of the region's firms (and of each firm's product lines) per sub-unit, per region,
+ * per week. At ~40 sub-units x 4 regions that is the same ~2,000-firm array walked hundreds of
+ * times a week to answer questions whose answers were identical every time. Measured, stage 05
+ * was 72.6% of the entire weekly step at 3.8 seconds a week; this is the reason.
+ *
+ * The lists are read-only within a week: the auction mutates `companyUpdates`, never the firm
+ * objects these index, so one build per region is correct as well as faster.
+ */
+interface RegionMarketIndex {
+  activeFirms: Company[];
+  /** subUnitId -> the firms that produce it (built from one pass over every firm's lines). */
+  suppliersBySubUnit: Map<string, Company[]>;
+  /** Firms with real capex, the customer base for every capital-goods category. */
+  capexBuyers: Company[];
+  byTicker: Map<string, Company>;
+  byId: Map<string, Company>;
+}
+
+function buildRegionMarketIndex(ctx: WeeklyStepContext, regionId: RegionId): RegionMarketIndex {
+  const activeFirms: Company[] = [];
+  const suppliersBySubUnit = new Map<string, Company[]>();
+  const capexBuyers: Company[] = [];
+  const byTicker = new Map<string, Company>();
+  const byId = new Map<string, Company>();
+  // HC3: the goods market has never cared who owns a supplier's equity — public and private
+  // firms bid and offer in the same real auction.
+  const walk = (c: Company) => {
+    if (c.region !== regionId || !isActiveCompany(c)) return;
+    activeFirms.push(c);
+    byTicker.set(c.ticker, c);
+    byId.set(c.id, c);
+    if ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0) capexBuyers.push(c);
+    (c.productLines || []).forEach((l) => {
+      const arr = suppliersBySubUnit.get(l.subUnitId);
+      if (arr) arr.push(c); else suppliersBySubUnit.set(l.subUnitId, [c]);
+    });
+  };
+  ctx.prevActiveFirms.forEach(walk);
+  ctx.prevActivePrivateFirms.forEach(walk);
+  return { activeFirms, suppliersBySubUnit, capexBuyers, byTicker, byId };
+}
+
 function executeSubUnitBiddingMarket(
   ctx: WeeklyStepContext,
   subUnitId: string,
   baseUnitPrice: number,
   targetReg: Region,
-  targetRegionId: RegionId
+  targetRegionId: RegionId,
+  index: RegionMarketIndex
 ) {
-  const { companyUpdates, prevActiveFirms, nextWeek } = ctx;
-  // HC3: the goods market has never cared who owns a supplier's equity — public and private
-  // firms bid and offer in the same real auction.
-  const allParticipatingFirms = [...prevActiveFirms, ...ctx.prevActivePrivateFirms];
+  const { companyUpdates, nextWeek } = ctx;
   const demandState = targetReg.categoryDemand[subUnitId] as any;
   if (!demandState) return;
 
@@ -101,8 +146,8 @@ function executeSubUnitBiddingMarket(
       return;
     }
 
-    const supplier = allParticipatingFirms.find(c => c.ticker === contract.supplierCompanyId || c.id === contract.supplierCompanyId);
-    const customer = allParticipatingFirms.find(c => c.ticker === contract.customerCompanyId || c.id === contract.customerCompanyId);
+    const supplier = index.byTicker.get(contract.supplierCompanyId) ?? index.byId.get(contract.supplierCompanyId);
+    const customer = index.byTicker.get(contract.customerCompanyId) ?? index.byId.get(contract.customerCompanyId);
 
     if (supplier && customer) {
       if (!isActiveCompany(supplier)) {
@@ -154,8 +199,9 @@ function executeSubUnitBiddingMarket(
   // HC3: private firms produce, sell and buy in the same real auction — the goods market has
   // never cared who owns a supplier's equity. Their segment aggregates surrendered this slice
   // at the carve, so each real good is offered exactly once.
-  const regionActiveFirms = allParticipatingFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
-  const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
+  const regionActiveFirms = index.activeFirms;
+  const suppliers = index.suppliersBySubUnit.get(subUnitId) ?? [];
+  const supplierSet = suppliers.length > 0 ? new Set(suppliers) : null;
 
   // A recipe-input category (upstream_extraction, specialty_metals) is bought by named
   // companies for a literal, computable reason — their own production recipe — not a generic
@@ -176,12 +222,26 @@ function executeSubUnitBiddingMarket(
   // C+I+G identity, not a hand-picked per-category intensity list that only covered a handful
   // of categories and let every other one starve for real corporate buyers).
   const hasCorporateDemand = (demandState.corporateDemandUSD ?? 0) > 0;
-  const customers = regionActiveFirms.filter(c => {
-    if ((c.productLines || []).some(l => l.subUnitId === subUnitId)) return false;
-    if (isCapexSupplierCategory) return (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0;
+  // Capital-goods categories draw from the pre-indexed capex buyers; everything else scans the
+  // region's firms once. A producer of the category is never also its customer.
+  const candidatePool = isCapexSupplierCategory ? index.capexBuyers : regionActiveFirms;
+  const customers = candidatePool.filter(c => {
+    if (supplierSet?.has(c)) return false;
+    if (isCapexSupplierCategory) return true;
     return isRecipeInputCategory ? computeRecipeInputNeedUSD(c, subUnitId) > 0 : hasCorporateDemand;
   });
   const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
+
+  // Contracts indexed by counterparty, once, instead of re-scanned inside every supplier's and
+  // every customer's loop. The scans were O(firms x contracts) per sub-unit per region per week
+  // — the dominant cost in the stage that dominates the weekly step.
+  const contractUnitsBySupplier = new Map<string, number>();
+  const contractUnitsByCustomer = new Map<string, number>();
+  remainingContracts.forEach(c => {
+    if (c.subUnitId !== subUnitId) return;
+    contractUnitsBySupplier.set(c.supplierCompanyId, (contractUnitsBySupplier.get(c.supplierCompanyId) ?? 0) + c.quantityUnitsPerWeek);
+    contractUnitsByCustomer.set(c.customerCompanyId, (contractUnitsByCustomer.get(c.customerCompanyId) ?? 0) + c.quantityUnitsPerWeek);
+  });
   // Suppliers submit unit offers
   suppliers.forEach(comp => {
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
@@ -201,9 +261,7 @@ function executeSubUnitBiddingMarket(
     const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
-    const contractSales = remainingContracts
-      .filter(c => (c.supplierCompanyId === comp.ticker || c.supplierCompanyId === comp.id) && c.subUnitId === subUnitId)
-      .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+    const contractSales = (contractUnitsBySupplier.get(comp.ticker) ?? 0) + (contractUnitsBySupplier.get(comp.id) ?? 0);
 
     const openOfferUnits = Math.max(0, targetProductionUnits + currentUnits - contractSales);
 
@@ -286,9 +344,7 @@ function executeSubUnitBiddingMarket(
     }
     const demandUnits = demandUSD / currentUnitPrice;
 
-    const contractPurchases = remainingContracts
-      .filter(c => (c.customerCompanyId === comp.ticker || c.customerCompanyId === comp.id) && c.subUnitId === subUnitId)
-      .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+    const contractPurchases = (contractUnitsByCustomer.get(comp.ticker) ?? 0) + (contractUnitsByCustomer.get(comp.id) ?? 0);
 
     const openBidUnits = Math.max(0, demandUnits - contractPurchases);
 
@@ -619,8 +675,8 @@ function executeSubUnitBiddingMarket(
     if (matchedOffers.length === 0) return;
     const offer = matchedOffers[Math.floor(Math.random() * matchedOffers.length)];
     if (Math.random() < 0.15 && bid.companyId) {
-      const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
-      const customerComp = customers.find(c => c.ticker === bid.companyId);
+      const supplierComp = index.byTicker.get(offer.companyId as string);
+      const customerComp = index.byTicker.get(bid.companyId as string);
 
         if (supplierComp && customerComp) {
           const totalSuppliersRevenue = suppliers.reduce((s, c) => s + c.annualRevenue, 0);
@@ -703,9 +759,11 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     const regionId = regionIdKey as RegionId;
     const reg = ctx.updatedRegions[regionId];
 
+    // One index per region per week — see buildRegionMarketIndex for why.
+    const index = buildRegionMarketIndex(ctx, regionId);
     Object.values(INDUSTRY_SUBUNITS).flat().forEach(subUnit => {
       const seed = reg.categoryDemand[subUnit.unitId]?.unitPriceUSD;
-      executeSubUnitBiddingMarket(ctx, subUnit.unitId, Math.max(1, seed || 1), reg, regionId);
+      executeSubUnitBiddingMarket(ctx, subUnit.unitId, Math.max(1, seed || 1), reg, regionId, index);
     });
   });
 

@@ -890,7 +890,6 @@ the complete simulation.
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
 | open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
 | public default rate ~10%/yr (was 13%) | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. S5 cut it 59 → 46/196 by wk121; the remainder tracks the goods-market cash-margin row above — re-measure after that item |
-| institutional sovereign book collapses (§7.26) | USA institutional GOV_BOND holdings fall ~284B (wk20) → ~1B (wk40) while entity cash goes 20B → 309B. Exposed by S7 making the aggregate live; the behaviour pre-dates it. Likely mechanism: 07c's reservation yield (real-return floor + duration premium) rises above the cleared yield, so demand goes to zero and holders liquidate the whole class — directionally real, unbounded in magnitude. Investigate whether the reservation floor is too high, whether liability-driven demand (G6) is the missing anchor that keeps a pension fund in duration regardless, and whether a sell should face the same budget/participation discipline a buy does |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
 | generation-time unconditional fields | §7.17 found `leveragedLoan` attached to all 200 companies when only ~33 had loans. Sweep `companyGenerator.ts` for other fields attached unconditionally that only apply to a subset — same failure mode (a frozen record that reads as live downstream) |
@@ -899,7 +898,6 @@ the complete simulation.
 | clearing damper diagnostic | `maxWeeklyStatMovePct` is legitimate discrete-time smoothing, but it must never *bind persistently* — a name clamped ≥3 consecutive weeks means the posted schedules disagree with the printed level and the print is the damper, not the market. Add a cheap per-week clamped-count to the invariants harness; alert on persistent binding |
 | `macro/initialization.ts` segment `debtUSD = annualRevenueUSD * 2` | Unpriced bootstrap primitive, exposed by HC1: it implies ~15x debt/EBITDA on the private sector in aggregate, which no real balance sheet services. HC1 carves only serviceable debt into the named tier, so the residual (~474B USA) sits on the segments as implied SME bank debt at an impossible aggregate leverage. Recalibrate the primitive when G2 itemizes the bank book — segment debt should be what real SME leverage on segment EBITDA plus real bank capital can carry — and re-measure §7.18's want/have after |
 | payment calendars (user note, 2026-08-27) | Coupons, loan interest and dividends are currently accrued as smooth weekly 1/52 flows (both sides: stage 08's expense and institutional-balance-sheet.ts's income). Real instruments pay on their own calendar — bonds semi-annual/quarterly, loans monthly or quarterly off the reset schedule, dividends quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow lumpiness (quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP/MMF money markets breathe on a calendar). Give each DebtTranche/loan a real payment schedule and pay on it; the S5 cash ledger is the natural place to land the corporate side, WS5/WS7 will want the lumpiness. Not urgent until those items, but every new instrument added from here on should carry its payment calendar from birth |
-| algorithm optimization sweep (user note, 2026-08-27) | HC Wave 1 roughly doubles the firm universe, so hot paths matter now. Known offenders: (1) per-(entity × company) recomputation of per-company quantities in the clearing adapters — the structural PD was computed 4x per company per market per week (fixed by per-region memoization, same commit as this note); apply the same pattern to any per-company quantity inside a participants loop. (2) stage 08's per-company `state.institutionalEntities.find` and full-array scans inside company loops — build Maps once per week. (3) `getInitialRegions()` rebuilt inside loops (already in this backlog). (4) stage 05's auction inner loops are the largest fixed cost — profile before HC5's runtime gate, optimize only what the profile names. Rule: memoize per-week derived values at the top of a stage; never inside a per-participant loop |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1419,7 +1417,38 @@ the complete simulation.
       recorded in §6 — the demand schedule lets a holder go to 100% cash when its reservation
       yield sits above the cleared yield, which is directionally right and unbounded in magnitude
       (real money does not liquidate an entire asset class in twenty weeks).
-27. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+27. **Sovereign collapse fixed; the optimization pass; and G1b is now the dominant defect.**
+    - **Anchored inflation expectations.** The sovereign reservation yield used the raw current
+      expectation at every tenor, so a 16% inflation print demanded 17.5% on a 10-year bond
+      paying 3.2%: demand went to exactly zero and institutions liquidated their whole sovereign
+      book (§7.26's finding). Replaced with the term structure of inflation expectations — a bond
+      prices the AVERAGE expected inflation over ITS OWN tenor, with the deviation from target
+      decaying at a mean-reversion time constant, so short tenors track the print and long ones
+      converge on the target. This is the defining property of a credible inflation-targeting
+      regime, not a damper.
+    - **Liability-driven core** (`ParticipantDemand.minHoldingUSD`): an insurer matching claim
+      reserves and a pension fund matching a benefit duration cannot liquidate their government
+      book because yields look poor this week — the liability is still there and something has to
+      match it. A mandate expressed as SIZE, never as a price, exactly like the sub-IG sleeve.
+      G6 replaces the modelled share with real liability profiles.
+    - Measured at week 42 against the same seed: institutional sovereign book **0.0B → 133.0B**
+      (the core holds), 10Y **21.6% → 5.1%** on a 57% inflation print.
+    - **Optimization: the weekly step is 5.7x faster** — 5,280ms → 924ms. Stage 05 went
+      3,832ms → 233ms (16x) and stage 09 324ms → 39ms (8x). Every win was the same defect: an
+      index that should be built once per week was rebuilt inside a per-item loop. Stage 05
+      re-derived the region's firm list, its per-sub-unit supplier list and its contract totals
+      inside EVERY sub-unit's auction (~40 sub-units x 4 regions x ~2,000 firms); stage 09
+      rescanned the whole contract array and company roster per company; stage 08 did a full
+      array scan per company for entity lookup, region equity cap and input-supply checks.
+      **Lesson: profile before optimizing.** The first pass hoisted the firm-list filters and
+      bought only 6% — the real cost was the O(firms x contracts) contract scans, which the
+      profile named and intuition had not.
+    - **G1b is now the largest defect in the simulation and should be next.** Inflation is not
+      merely volatile, it is a runaway: measured 12.7% by week 26 and 57% by week 42, dragging
+      reported real growth to −18%. Everything downstream (the sovereign curve, real rates, the
+      Taylor rule, growth) is being measured against it. The sovereign fix above bounds the
+      market's RESPONSE to the spiral; it does not touch the spiral.
+28. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

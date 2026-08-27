@@ -9,13 +9,27 @@ import { GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
 
 export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepContext): void {
+  // Indexed once per week rather than rescanned per company: the contract array and the company
+  // roster were both walked in full for every one of ~2,000 companies, which is the whole cost
+  // of this stage (O(companies x contracts) for what is really one grouping pass).
+  const byCompany = new Map<string, typeof ctx.updatedCompanies[number]>();
+  ctx.updatedCompanies.forEach(c => { byCompany.set(c.ticker, c); byCompany.set(c.id, c); });
+  const supplierContracts = new Map<string, any[]>();
+  const customerContracts = new Map<string, any[]>();
+  (Object.keys(ctx.updatedRegions) as (keyof typeof ctx.updatedRegions)[]).forEach(rid => {
+    (ctx.updatedRegions[rid]?.activeContracts || []).forEach((c: any) => {
+      const sup = supplierContracts.get(c.supplierCompanyId);
+      if (sup) sup.push(c); else supplierContracts.set(c.supplierCompanyId, [c]);
+      const cus = customerContracts.get(c.customerCompanyId);
+      if (cus) cus.push(c); else customerContracts.set(c.customerCompanyId, [c]);
+    });
+  });
+
   ctx.updatedCompanies.forEach(comp => {
     const flags: string[] = [];
-    const reg = ctx.updatedRegions[comp.region];
-    const contracts = reg?.activeContracts || [];
 
     // Supplier concentration
-    const asSupplier = contracts.filter(c => c.supplierCompanyId === comp.ticker || c.supplierCompanyId === comp.id);
+    const asSupplier = [...(supplierContracts.get(comp.ticker) ?? []), ...(supplierContracts.get(comp.id) ?? [])];
     const totalSupplierVal = asSupplier.reduce((s, c) => s + c.quantityUnitsPerWeek * c.priceUSD * 52, 0);
     if (totalSupplierVal > 0) {
       const custTotals: Record<string, number> = {};
@@ -25,7 +39,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
       Object.entries(custTotals).forEach(([custTicker, val]) => {
         const share = val / totalSupplierVal;
         if (share > 0.40) {
-          const custComp = ctx.updatedCompanies.find(x => x.ticker === custTicker || x.id === custTicker);
+          const custComp = byCompany.get(custTicker);
           const custName = custComp?.name || custTicker;
           flags.push(`High Customer Concentration: ${custName} (${(share * 100).toFixed(0)}% of contract revenue)`);
         }
@@ -33,7 +47,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
     }
 
     // Customer concentration
-    const asCustomer = contracts.filter(c => c.customerCompanyId === comp.ticker || c.customerCompanyId === comp.id);
+    const asCustomer = [...(customerContracts.get(comp.ticker) ?? []), ...(customerContracts.get(comp.id) ?? [])];
     const totalCustomerVal = asCustomer.reduce((s, c) => s + c.quantityUnitsPerWeek * c.priceUSD * 52, 0);
     if (totalCustomerVal > 0) {
       const supTotals: Record<string, number> = {};
@@ -43,7 +57,7 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
       Object.entries(supTotals).forEach(([supTicker, val]) => {
         const share = val / totalCustomerVal;
         if (share > 0.40) {
-          const supComp = ctx.updatedCompanies.find(x => x.ticker === supTicker || x.id === supTicker);
+          const supComp = byCompany.get(supTicker);
           const supName = supComp?.name || supTicker;
           flags.push(`High Supplier Concentration: ${supName} (${(share * 100).toFixed(0)}% of input supply)`);
         }

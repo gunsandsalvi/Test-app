@@ -37,6 +37,23 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, regionCategoryExports, systemicStressFactorGlobal, regionEquityNetFlowUSD } = ctx;
   const refinanceNews: NewsItem[] = [];
 
+  // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
+  // values at the top of a stage, never inside a per-company loop). Each of these was a full
+  // scan of a multi-thousand-element array executed once per company.
+  const entityById = new Map(state.institutionalEntities.map(e => [e.id, e]));
+  const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
+  const listedCapByRegion = new Map<string, number>();
+  state.companies.forEach(c => {
+    if (!isActiveCompany(c) || !isPubliclyListed(c)) return;
+    listedCapByRegion.set(c.region, (listedCapByRegion.get(c.region) ?? 0) + c.marketCap);
+  });
+  const suppliedSubUnitsByRegion = new Map<string, Set<string>>();
+  prevActiveFirms.forEach(c => {
+    let set = suppliedSubUnitsByRegion.get(c.region);
+    if (!set) { set = new Set<string>(); suppliedSubUnitsByRegion.set(c.region, set); }
+    (c.productLines || []).forEach(pl => set!.add(pl.subUnitId));
+  });
+
   ctx.updatedCompanies = state.companies.map((comp) => {
     if (!isActiveCompany(comp)) {
       return { ...comp, previousEmployeeCount: 0, employeeCount: 0 };
@@ -199,7 +216,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
       newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
     } else if (comp.financialStatementProfile === 'ASSET_MANAGER') {
-      const instEnt = state.institutionalEntities.find(e => e.id === comp.id);
+      const instEnt = entityById.get(comp.id);
       // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
       // company, its AUM IS that entity's marked book — totalAssetsUSD is recomputed weekly from
       // real cash and real holdings (institutional-balance-sheet.ts), so the drift-by-index
@@ -287,7 +304,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           if (neededUSD <= 0) return;
           // A private-segment offer (05-unit-bidding.ts's PRIVATE_SEGMENT_SUPPLY_CATEGORIES) is
           // just as real a supply source as a public company's product line.
-          const hasRealSupply = prevActiveFirms.some(c => c.region === comp.region && (c.productLines || []).some(pl => pl.subUnitId === inputSubUnit))
+          const hasRealSupply = (suppliedSubUnitsByRegion.get(comp.region)?.has(inputSubUnit) ?? false)
             || PRIVATE_SEGMENT_SUPPLY_CATEGORIES[inputSubUnit] !== undefined;
           if (!hasRealSupply) return;
           const inputUnitPrice = (reg.categoryDemand[inputSubUnit as any] as any)?.unitPriceUSD ?? 1;
@@ -320,7 +337,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const region = updatedRegions[comp.region];
       const rels = region.supplyRelationships?.filter((r) => r.customerCompanyId === comp.id) || [];
       rels.forEach((rel) => {
-        const supplier = prevActiveFirms.find(c => c.id === rel.supplierCompanyId);
+        const supplier = firmById.get(rel.supplierCompanyId);
         if (!supplier) return;
         // The relationship's own category — a supplier's OTHER lines being backed up isn't this
         // customer's problem, only a glut in the specific good it actually buys from them.
@@ -999,7 +1016,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // and the region-level equity flow computed in stage 2) rather than an eps x sectorPE formula.
     // Forward P/E becomes an output of that price, not an input to it.
     const newSentiment = (comp.sentiment * 0.85 + sentimentDelta);
-    const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region && isActiveCompany(c) && isPubliclyListed(c)).reduce((s, c) => s + c.marketCap, 0);
+    const totalRegionEquityCapUSD = listedCapByRegion.get(comp.region) ?? 0;
     const companyEquityFlowUSD = totalRegionEquityCapUSD > 0
       ? (regionEquityNetFlowUSD[comp.region] ?? 0) * (comp.marketCap / totalRegionEquityCapUSD)
       : 0;

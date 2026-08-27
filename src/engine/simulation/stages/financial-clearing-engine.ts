@@ -87,6 +87,19 @@ export interface ParticipantDemand {
    * (banks in 07c, whose real constraint is their reserve position, not a cash budget).
    */
   maxNetPurchaseUSD?: number;
+  /**
+   * The core this participant holds at ANY level — a mandate expressed as size, never as a price
+   * (the same doctrine as the sub-investment-grade sleeve). An insurer matching claim reserves
+   * and a pension fund matching a liability duration cannot liquidate their government book
+   * because yields look poor this week: the liability is still there, and something has to match
+   * it. Without this, a demand schedule that goes to zero when the reservation level is missed
+   * let real-money holders sell an entire asset class in twenty weeks (§7.26).
+   *
+   * This is a floor on holdings, not on price: it says WHAT a mandate forces the holder to own,
+   * and leaves WHERE it clears entirely to the auction. G6 replaces the modelled share with each
+   * entity's real liability profile.
+   */
+  minHoldingUSD?: number;
 }
 
 export interface ClearingParticipant {
@@ -136,7 +149,10 @@ function demandAtStat(
   const affordableUSD = demand.maxNetPurchaseUSD === undefined
     ? Infinity
     : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
-  return Math.min(wantedUSD, affordableUSD);
+  // The mandated core is held at any level, but a mandate cannot conjure money: it is bounded by
+  // what the participant can actually afford to hold.
+  const mandatedCoreUSD = Math.min(demand.minHoldingUSD ?? 0, affordableUSD);
+  return Math.max(mandatedCoreUSD, Math.min(wantedUSD, affordableUSD));
 }
 
 /**
