@@ -703,7 +703,7 @@ the complete simulation.
 | `01-macro-feedback.ts` `regionFloatingPrincipal` → `banking.ts` business loan book | **The leveraged-loan market is double-counted**: the bank business-loan book is sized as the public firms' floating tranche principal — the same tranches 07d clears into institutional books — so the identical principal sits on two ledgers and its interest is expensed once (stage 08) but received twice (S11 holders + bank NIM). Meanwhile the segments' ~474B of SME "bank debt" has NO lender book anywhere. Both die in G2 slice 1 (itemize the book to real borrowers) |
 | stage 08 bank/institution equity branch | Banks and institutional companies are excluded from 07e's cleared equity book; their stock prices come from a book-value x cycle-P/B formula — the last formula price setter for a listed cohort. Bring them into 07e once bank earnings are real P&L readers (post-G2); the P/B branch then dies |
 | stage 13 IPO underwriting fee + `trade.ts` player fees | Both credit the AGGREGATE `bankingSector.bankEquityUSD`, which 02b overwrites with the per-bank sum next week — the fees vanish (a write to a derived view, §7.30). 07e's equity dealer revenue is dropped entirely (clients pay fees into nothing). All three route to a real named desk in G3 |
-| open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
+| open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). **Since the flow ledger (§7.36) the harness PRINTS the collapse** (capital-band breaches from ~week 86; −0.7% by week 100, default seed) — the deleted recapitalization-from-nowhere used to prop the printed ratio while §6 recorded the real one. With repo and SRF both at zero when it happens, the bleed is the loss-rate/yield formulas on the loan books — G2's to make real. The long-horizon harness stays red on this line until then |
 | public default rate ~10%/yr (was 13%) | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. S5 cut it 59 → 46/196 by wk121; the remainder tracks the goods-market cash-margin row above — re-measure after that item |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
@@ -713,6 +713,8 @@ the complete simulation.
 | clearing damper diagnostic | `maxWeeklyStatMovePct` is legitimate discrete-time smoothing, but it must never *bind persistently* — a name clamped ≥3 consecutive weeks means the posted schedules disagree with the printed level and the print is the damper, not the market. Add a cheap per-week clamped-count to the invariants harness; alert on persistent binding |
 | `macro/initialization.ts` segment `debtUSD = annualRevenueUSD * 2` | Unpriced bootstrap primitive, exposed by HC1: it implies ~15x debt/EBITDA on the private sector in aggregate, which no real balance sheet services. HC1 carves only serviceable debt into the named tier, so the residual (~474B USA) sits on the segments as implied SME bank debt at an impossible aggregate leverage. Recalibrate the primitive when G2 itemizes the bank book — segment debt should be what real SME leverage on segment EBITDA plus real bank capital can carry — and re-measure §7.18's want/have after |
 | payment calendars (user note, 2026-08-27) | Coupons, loan interest and dividends are currently accrued as smooth weekly 1/52 flows (both sides: stage 08's expense and institutional-balance-sheet.ts's income). Real instruments pay on their own calendar — bonds semi-annual/quarterly, loans monthly or quarterly off the reset schedule, dividends quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow lumpiness (quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP/MMF money markets breathe on a calendar). Give each DebtTranche/loan a real payment schedule and pay on it; the S5 cash ledger is the natural place to land the corporate side, WS5/WS7 will want the lumpiness. Not urgent until those items, but every new instrument added from here on should carry its payment calendar from birth |
+| late-horizon NIM band (seed 7: 21 breaches, NIM to 7.4%) | The G2-owned formula sizes — loan yields `policy+250/350bp`, deposit beta 0.45 — produce an unreal margin when the late inflation regime steepens the curve. Not the repo market's doing (measured: breaches occur with repo/SRF at zero). Dies with G2 slice 2 (real per-loan yields, competitive deposit pricing) |
+| `financial-clearing-engine.ts` rationing vs `minHoldingUSD` | The pro-rata ration (fills scaled to the float) can scale a participant's fill BELOW its mandated core — the liability-driven sovereign core and WS6's encumbrance floor are both expressed as `minHoldingUSD`, and under rationing neither is strictly honored. Measured consequence: 4 "pledged > held" prints at week 259 scale (~1% over, gone at post-leverage-floor scale). Refine the allocator to satisfy cores first, ration only the discretionary layer |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1546,8 +1548,30 @@ the complete simulation.
       region-weeks at the floor (no need), 33 mid-corridor (private lenders pricing), 21 at
       the ceiling, and ceiling weeks coincide with real SRF usage (§5-WS6's verify condition).
       USA week 60: 91.8B borrowed from institutional lenders, SRF 0.00B. Harness unchanged at
-      4 violations (the known #18 names); 733 ms/week (was 824). Full 260-week close: see the
-      figures recorded in the §4 table note and re-measured at this section's close.
+      4 violations (the known #18 names); 733 ms/week (was 824).
+    - **The 260-week run then exposed a runaway the deleted clamps had been hiding, and its fix
+      is the Basel leverage floor.** With sovereigns at zero risk weight no constraint saw the
+      bond book's size, and banks levered the repo carry into the growing government float
+      without limit: 289 violations at 260 weeks — EUR banks pledging 913B of collateral, USA
+      capital NEGATIVE (−13.3%), NIM 11.8%, bank company revenue in the trillions — and zero of
+      them identity breaks, because the ledger was conserving a runaway perfectly. The old world
+      printed 12 violations at 260 weeks only because the recapitalization-from-nowhere and the
+      equity rescale manufactured the capital line each week. `BASEL_MIN_LEVERAGE_RATIO` (3%,
+      the posted Basel floor — a real regulatory minimum, same administered standing as the SRF
+      spread) now bounds the bank budget in 07c/07f: equity/0.03 − total unweighted assets.
+      Measured at the failure-onset window (110 weeks, both seeds): NIM breaches 88 → 0 on the
+      default seed; corridor, encumbrance and identity all 0 on both; the sov book peaks at
+      228B and UNWINDS as equity falls — real deleveraging — instead of compounding to 900B.
+    - **What stays red at long horizon, attributed not fixed:** USA capital falls through the
+      band from ~week 86 (−0.7% by week 100) with ZERO repo and ZERO SRF outstanding — the
+      documented #67, whose printed ratio the deleted recapitalization used to prop up. The
+      harness now reports the disease instead of the prop; G2 owns the cure. Seed 7 keeps 21
+      late NIM breaches (7.4% when the late curve is steep) traced to the G2-owned loan-yield
+      and deposit-beta formulas under the late inflation regime, not to the repo market.
+    - **Lesson:** deleting a symptom-clamp does not create the disease it was hiding, but it
+      does transfer the disease onto every downstream statistic the clamp was laundering. Budget
+      for the harness to get honestly redder when a prop dies, and attribute each new red line
+      to its real owner before touching anything.
 37. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
