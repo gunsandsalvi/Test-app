@@ -9,6 +9,7 @@
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
+import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
@@ -257,8 +258,35 @@ function executeSubUnitBiddingMarket(
     const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
     const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
-    const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
-    const targetProductionUnits = targetProductionUSD / currentUnitPrice;
+
+    // Production is capacity x utilisation, in UNITS. The previous version sized production in
+    // dollars (annualRevenue/52) and divided by the CURRENT price, so a doubling of price halved
+    // the units the same plant produced — supply fell as price rose, which is the wrong sign and
+    // closes a positive feedback loop. Measured, it drove the inflation runaway (§7.28):
+    // defense_systems went to 9.3x its base price with supply collapsing 49 -> 22 units while
+    // demand still stood at 1,255. Real capacity is physical: what price changes is how hard the
+    // plant is run (productionResponseFactor) and whether the warehouse is already full
+    // (productionThrottle), never how much the plant can make.
+    if (!(line.weeklyCapacityUnits! > 0)) {
+      // Seeded from this line's real baseline output at the price prevailing when it first
+      // trades — at week 1 that is the bootstrap price, so capacity opens exactly where the old
+      // dollar-anchored figure did and only the response to later price moves changes.
+      line.weeklyCapacityUnits =
+        ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / currentUnitPrice;
+    } else {
+      // Real net investment grows the plant: growth capex less depreciation, over the capital
+      // stock. Both are nominal dollars, so the ratio is real and inflation cancels out of it.
+      const grossPPE = comp.grossPPEUSD ?? 0;
+      const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationUSD ?? 0));
+      const weeklyDepreciationUSD = grossPPE / ((SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12) * 52);
+      const netInvestmentRate = ((comp.growthCapex ?? 0) / 52 - weeklyDepreciationUSD) / netPPE;
+      line.weeklyCapacityUnits = Math.max(
+        0.0001,
+        line.weeklyCapacityUnits! * (1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate)))
+      );
+    }
+    const targetProductionUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    const targetProductionUSD = targetProductionUnits * currentUnitPrice;
 
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     const contractSales = (contractUnitsBySupplier.get(comp.ticker) ?? 0) + (contractUnitsBySupplier.get(comp.id) ?? 0);
@@ -594,8 +622,13 @@ function executeSubUnitBiddingMarket(
     const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
     const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
-    const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
-    const targetProductionUnits = targetProductionUSD / currentUnitPrice;
+
+    // Settlement pass: capacity was already seeded and evolved in the offer pass above; this
+    // pass only reads it, so a week's investment is never applied twice.
+    const capacityUnits = line.weeklyCapacityUnits
+      ?? (((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / currentUnitPrice);
+    const targetProductionUnits = capacityUnits * productionResponseFactor * productionThrottle;
+    const targetProductionUSD = targetProductionUnits * currentUnitPrice;
 
     const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
     if (sale) {

@@ -1448,7 +1448,33 @@ the complete simulation.
       reported real growth to −18%. Everything downstream (the sovereign curve, real rates, the
       Taylor rule, growth) is being measured against it. The sovereign fix above bounds the
       market's RESPONSE to the spiral; it does not touch the spiral.
-28. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+28. **G1b root cause found and fixed: production capacity was denominated in dollars.**
+    Stage 05 sized a supplier's weekly output as `annualRevenue/52 x shares x response` and then
+    divided by the CURRENT unit price to get units. So when a category's price rose, the same
+    plant produced FEWER units — supply fell as price rose, which is the wrong sign and closes a
+    positive feedback loop: shortage → higher price → less supply → worse shortage.
+    - **The measurement that found it.** Tracing every category rather than the index: the MEDIAN
+      category never moved (x1.00) while a handful ran away — defense_systems to 9.3x,
+      pharmaceuticals 9.3x, passenger_vehicles 6.3x — and in every spiralling one SUPPLY WAS
+      COLLAPSING as price climbed (defense_systems 49 → 22 units against demand of 1,255). An
+      economy-wide monetary story cannot produce a flat median; a broken supply response can.
+    - **The fix is the real mechanism:** `ProductLine.weeklyCapacityUnits` — capacity is a
+      physical stock in UNITS, seeded from the line's real baseline output and evolved by real
+      net investment (growth capex less depreciation over the capital stock, a ratio, so
+      inflation cancels). Price now decides how hard the plant is RUN, never what it can make.
+    - **Measured, same seed:** inflation was 15.7% (wk35) → 38.3% (wk40) → 78.7% (wk45), a
+      monotone runaway. Now −3.9% → −13.1% (trough) → −7.6% and recovering. defense_systems
+      supply 22 → 1,534 units against demand of 1,626 — the supply response works.
+    - **Residual, stated honestly: the runaway is gone, the CYCLE is not.** Over 110 weeks
+      inflation oscillates roughly ±20% (USA +21.6% at wk60, −10.5% at wk100; JPN spikes to 62.8%
+      at wk110) and reported real growth is very nearly its mirror image, because nominal GDP is
+      comparatively flat and the whole swing lands in the deflator. That is the classic cobweb of
+      G1b item 1, now isolated to its own mechanism rather than compounded by a broken supply
+      curve. Next diagnostics: the capacity-utilisation response (`productionResponseFactor`
+      ±50% on a smoothed price may over-respond), the seeded capacity LEVEL (an initial deflation
+      to −13% suggests the cold-start floods supply), and G1b items 2/3 — monetary transmission
+      (G2) and an expectations term in real bid/offer pricing.
+29. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

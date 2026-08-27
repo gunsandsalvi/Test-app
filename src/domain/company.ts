@@ -27,6 +27,22 @@ export interface ProductLine {
   categoryMarketShare13WeeksAgo?: number;
   competitiveness: number;
   marginByUnit?: Record<string, number>;
+  /**
+   * Real productive capacity for this line, in UNITS per week — a physical stock, not a dollar
+   * budget. A plant that makes 100 units a week makes 100 when the price doubles; what price
+   * changes is how much of that capacity is worth running, never the capacity itself.
+   *
+   * This exists because production used to be sized in dollars and converted to units at the
+   * CURRENT price (`annualRevenue/52 / currentUnitPrice`), which made supply fall as price rose
+   * — a positive feedback loop and the mechanism behind the inflation runaway recorded in the
+   * plan (§7.28): a handful of categories spiralled to 9x while the median category never moved,
+   * and in every spiralling one supply was collapsing as price climbed.
+   *
+   * Seeded on first use from the line's real baseline output, then evolved by real net
+   * investment (growth capex less depreciation, as a ratio of the capital stock, so the number
+   * is real and inflation cancels).
+   */
+  weeklyCapacityUnits?: number;
 }
 
 // 1$ is 1$ Phase 6: one real purchase lot — a specific quantity bought from a specific named
