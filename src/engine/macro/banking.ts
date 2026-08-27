@@ -119,5 +119,19 @@ export function evolveBankingSector(
     centralBankReservesUSD: Number(newCentralBankReservesWithMonetization.toFixed(0)),
     moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
     itemizedHoldings: prevBanking.itemizedHoldings || [],
+    // Real facility usage is decided per-bank after this function returns (see
+    // 02b-bank-diversification.ts's applyCentralBankFacilities) — reset here, not carried
+    // forward, since a bank's cash position (and therefore its real facility need) is only
+    // final once this week's evolution above has run.
+    srfBorrowingUSD: 0,
+    onRrpLendingUSD: 0,
+    // Real dealer inventory positions persist across weeks (only real trade fills change them)
+    // — see 07b-corporate-bond-clearing.ts, which runs after this and owns updating them.
+    corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
+    // Same for sovereign-bond tenor-bucket holdings — 07c-sovereign-bond-clearing.ts owns
+    // updating these; carried forward unchanged here.
+    sovereignBondHoldingsByTenor: prevBanking.sovereignBondHoldingsByTenor || {},
+    sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],
+    loanDealerInventory: prevBanking.loanDealerInventory || [],
   };
 }

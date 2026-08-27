@@ -36,4 +36,33 @@ export interface BankingSector {
   centralBankReservesUSD: number;
   moneySupplyM2USD: number;
   itemizedHoldings: ItemizedHolding[];
+  // Wall Street Phase 2: real central bank facility usage — a genuine, named operation each
+  // week, not policyRate read as an ambient parameter. A bank short of its own target cash
+  // buffer borrows from the Standing Repo Facility (against government-bond collateral, at
+  // policyRate + a spread); a bank with cash above its target buffer places the excess at the
+  // reverse repo facility (earning policyRate - a spread) rather than letting idle cash sit
+  // unremunerated or invisibly disappear into the aggregate. See
+  // 02b-bank-diversification.ts's applyCentralBankFacilities.
+  srfBorrowingUSD: number;
+  onRrpLendingUSD: number;
+  // Wall Street: real corporate-bond dealer inventory — the banking sector's shared secondary-
+  // market trading book (banks sit in the middle of the real institutional-entity clearing
+  // auction, absorbing client order imbalance onto their own book rather than the market simply
+  // failing to clear). One position per issuer this region's banks are currently long/short
+  // against a flat book; a genuine balance-sheet line updated only by real trade fills, not a
+  // formula. See stages/07b-corporate-bond-clearing.ts.
+  corpBondDealerInventory: { companyId: string; inventoryUSD: number }[];
+  // Wall Street: the banking sector's real sovereign-bond holdings, broken out by tenor bucket
+  // (t2/t5/t10/t30) — banks hold government bonds substantially for real regulatory-liquidity
+  // (HQLA) purposes; this per-bucket breakdown is what lets the real sovereign-bond clearing
+  // engine (07c-sovereign-bond-clearing.ts) treat "the banking sector" as a real participant in
+  // the tenor-point auction rather than one scalar total with no maturity composition.
+  // sovereignBondHoldingsUSD stays the derived sum of these buckets.
+  sovereignBondHoldingsByTenor: Record<string, number>;
+  // Real dealer inventory for the sovereign-bond clearing auction, by tenor bucket — the same
+  // shared-regional-dealer-desk role banks play for corporate bonds (corpBondDealerInventory),
+  // distinct from banks' own real investment-portfolio holdings above (sovereignBondHoldingsByTenor).
+  sovBondDealerInventory: { tenorKey: string; inventoryUSD: number }[];
+  // Same shared-regional-dealer-desk role for leveraged loans. See 07d-leveraged-loan-clearing.ts.
+  loanDealerInventory: { companyId: string; inventoryUSD: number }[];
 }

@@ -16,13 +16,13 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
-import { SECTOR_BENCHMARKS, priceLeveragedLoan } from '../../pricing';
+import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
 import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { computeExpectedLossSpreadBps, getRatingBucket, computeBucketDemandPremiumBps } from './shared-helpers';
+import { getRatingBucket } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
@@ -206,6 +206,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       //    constraint nothing in the model can ever satisfy would be penalizing a company for a
       //    modeling gap, not a real economic condition.
       let physicalFulfillment = 1.0;
+      // 1$ is 1$ Phase 6: the real dollar cost of whatever was actually consumed from real lots
+      // this week — feeds the quarterly COGS breakdown's inputPriceCostUSD driver below, in
+      // place of the old inputPriceDrag*revenue statistical proxy, so "raw materials cost" in
+      // the financials reconciles to what this company genuinely paid its real suppliers for the
+      // inputs it actually used, not an invented intensity ratio.
+      let realInputConsumptionCostUSD = 0;
       linesNeedingInputs.forEach(l => {
         const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
         if (!reqs) return;
@@ -234,6 +240,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             if (remainingToConsume <= 0.0001) { remainingLots.push(lot); continue; }
             const consumedFromLot = Math.min(lot.unitsHeld, remainingToConsume);
             remainingToConsume -= consumedFromLot;
+            realInputConsumptionCostUSD += consumedFromLot * lot.unitPriceUSD;
             const unitsLeftInLot = lot.unitsHeld - consumedFromLot;
             if (unitsLeftInLot > 0.0001) remainingLots.push({ ...lot, unitsHeld: unitsLeftInLot });
           }
@@ -390,7 +397,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const revQ = newRevenue / 4;
       costDriversUSD = {
         wagePressureUSD: wageCompression * revQ,
-        inputPriceCostUSD: inputPriceDrag * 0.03 * revQ,
+        // 1$ is 1$ Phase 6: real dollars actually paid for real lots actually consumed this
+        // week (realInputConsumptionCostUSD, above), expressed as a share of this week's real
+        // production and scaled to the same quarterly-dollar convention as the other drivers —
+        // not inputPriceDrag's statistical intensity guess. A company with no real recipe
+        // input requirement (or no real supplier for one) correctly gets 0 here, falling to
+        // baseCostUSD's residual bucket instead of an invented nonzero cost.
+        inputPriceCostUSD: (realInputConsumptionCostUSD / Math.max(1, targetProductionUSD)) * revQ,
         capacityDecayCostUSD: capacityDecayPenalty * revQ,
         crowdingCostUSD: avgCrowdingIntensity * 0.08 * revQ,
       };
@@ -538,7 +551,23 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     } else {
       const calculatedRating = determineCreditRating(newLeverage, newCoverage);
-      if (calculatedRating !== comp.creditRating && Math.random() < 0.25) {
+      // Wall Street: rating migration is deliberately sticky (a 25%/week chance to move even one
+      // notch) to mirror how real rating agencies don't instantly re-rate every week — but the
+      // bond-implied spread (real institutional order flow tilted by computeExpectedLossSpreadBps
+      // in 07b-corporate-bond-clearing.ts, run before this stage) reacts to this company's real
+      // leverage/coverage every week with NO such lag, so a company whose fundamentals actually
+      // deteriorated fast could sit at a stale investment-grade rating for dozens of weeks while
+      // its own spread already prices default risk (confirmed: an A-rated company observed at
+      // the 5000bps spread ceiling — CCC/distressed pricing under a rating three-plus notches
+      // stale). Real rating agencies don't let this go on indefinitely either — a severe,
+      // multi-notch gap (or crossing the investment-grade/high-yield line) triggers a real
+      // "fallen angel" cliff downgrade, not another 25% coin flip. Force an immediate update once
+      // the gap is that large; keep the stochastic lag only for ordinary single-notch drift.
+      const RATING_ORDER: typeof calculatedRating[] = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC'];
+      const notchGap = Math.abs(RATING_ORDER.indexOf(calculatedRating) - RATING_ORDER.indexOf(comp.creditRating));
+      const crossesIgHyLine = getRatingBucket(calculatedRating) !== getRatingBucket(comp.creditRating);
+      const forceUpdate = notchGap >= 2 || crossesIgHyLine;
+      if (calculatedRating !== comp.creditRating && (forceUpdate || Math.random() < 0.25)) {
         ctx.ratingChanges.push({
           ticker: comp.ticker,
           from: comp.creditRating,
@@ -549,12 +578,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     }
 
-    // Dynamic OAS credit spread & Leveraged Loan pricing
-    const bucket = getRatingBucket(newRating);
-    const bucketPeers = state.companies.filter(c => c.region === comp.region && getRatingBucket(c.creditRating) === bucket);
-    const targetOasBps = computeExpectedLossSpreadBps(comp) + computeBucketDemandPremiumBps(bucket, reg, bucketPeers);
-    const rawOas = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35;
-    comp.oasSpreadBps = isFinite(rawOas) ? Number(Math.max(10, Math.min(5000, rawOas)).toFixed(2)) : 150;
+    // Wall Street: comp.oasSpreadBps (07b-corporate-bond-clearing.ts) and
+    // comp.leveragedLoan.discountMarginBps (07d-leveraged-loan-clearing.ts) are both now real,
+    // already-cleared values, set from actual institutional-entity order flow against the bank
+    // dealer desk before this stage ever runs. Nothing here computes or smooths either one.
 
     // Pre-refinancing trigger roughly one year before maturity
     let companyTranches = comp.debtTranches.map(t => ({ ...t }));
@@ -613,7 +640,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek);
     let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek);
-    let refinancingSpreadShockBps = 0; // Kept to 0, or calculated if needed, but we rely on new interest calc now
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
     let buybacksThisWeek = 0;
@@ -678,20 +704,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
     }
 
-    const rawNewOas = comp.oasSpreadBps + (targetOasBps - comp.oasSpreadBps) * 0.35 + refinancingSpreadShockBps + (Math.random() - 0.5) * 5;
-    const newOasBps = isFinite(rawNewOas) ? Math.round(Math.max(10, Math.min(5000, rawNewOas))) : 150;
+    // Real, already-cleared this week (see the comment above) — not recomputed here.
+    const newOasBps = comp.oasSpreadBps;
     const rawNewCds = newOasBps + Math.floor(Math.random() * 8 - 4);
     const newCdsSpreadBps = isFinite(rawNewCds) ? Math.round(Math.max(10, Math.min(5000, rawNewCds))) : 150;
 
-    const loanBucketDemandPremiumBps = computeBucketDemandPremiumBps(bucket, reg, bucketPeers);
-    const loanPricing = priceLeveragedLoan(
-      comp.leveragedLoan.quotedMarginBps,
-      newOasBps,
-      comp.leveragedLoan.tenorYears,
-      isDefaulted,
-      0.65,
-      loanBucketDemandPremiumBps
-    );
+    // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
 
     // Asynchronous Quarterly Earnings cycle
     const isReportingThisWeek = !isDefaulted && comp.earningsWeekModulo === currentWeekMod13;
@@ -774,7 +792,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((comp.stockPrice * (1 + flowPct + sentimentPct)).toFixed(2)));
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
     if (comp.isBankEntity) {
-      const bankBookValue = Math.max(10, reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25));
+      // Wall Street Phase 1: this bank's own real equity (computed this week in
+      // 02b-bank-diversification.ts, before this stage runs) — no longer a proportional slice
+      // of the regional aggregate, which is now itself just the sum of banks like this one.
+      const realBankEquityUSD = companyUpdates[comp.ticker]?.bankBalanceSheet?.bankEquityUSD ?? comp.bankBalanceSheet?.bankEquityUSD;
+      const bankBookValue = Math.max(10, realBankEquityUSD ?? (reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25)));
       const cycle = reg.cycleRegime;
       let pbMultiple = 1.0;
       if ((cycle as string) === 'Boom') pbMultiple = 1.1;
@@ -882,7 +904,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       weeklyDepreciation * 13,
       costDriversUSD,
       newShortTermDebtUSD,
-      annualInterest
+      annualInterest,
+      Object.values(newInputInventoryBySubUnit).reduce((s, lots) => s + lots.reduce((s2, lot) => s2 + lot.unitsHeld * lot.unitPriceUSD, 0), 0)
     );
     const histFundamentals = isReportingThisWeek
       ? [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot]
@@ -962,6 +985,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       netIncome: Number(newNetIncome.toFixed(1)),
       eps: newEps,
       sharesOutstanding: Number(updatedSharesOutstanding.toFixed(3)),
+      // Wall Street Phase 1: real per-bank balance sheet computed this week in
+      // 02b-bank-diversification.ts (which runs before this stage), carried forward otherwise.
+      bankBalanceSheet: companyUpdates[comp.ticker]?.bankBalanceSheet ?? comp.bankBalanceSheet,
+      bankRiskFactor: comp.bankRiskFactor,
       technicalReservesUSD: comp.technicalReservesUSD,
       aumUSD: comp.aumUSD,
       managementFeeRate: comp.managementFeeRate,
@@ -986,11 +1013,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       dealerConsensus: updatedConsensus,
       lastEarningsSurprisePct,
       lastManagementCommentary,
-      leveragedLoan: {
-        ...comp.leveragedLoan,
-        pricePar: loanPricing.pricePar,
-        discountMarginBps: loanPricing.discountMarginBps,
-      },
+      // Already real and already-cleared (07d-leveraged-loan-clearing.ts) — passed through as-is.
+      leveragedLoan: comp.leveragedLoan,
       treasuryHoldings: newTreasuryHoldings,
     };
   });

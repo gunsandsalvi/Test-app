@@ -267,6 +267,12 @@ function buildRegion(regionId: RegionId): Region {
     centralBankReservesUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp).toFixed(0)),
     moneySupplyM2USD: 0,
     itemizedHoldings: [],
+    srfBorrowingUSD: 0,
+    onRrpLendingUSD: 0,
+    corpBondDealerInventory: [],
+    sovereignBondHoldingsByTenor: {},
+    sovBondDealerInventory: [],
+    loanDealerInventory: [],
   };
 
   const institutionalSector = {

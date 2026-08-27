@@ -289,7 +289,7 @@ function executeSubUnitBiddingMarket(
       // but under pro-rata clearing every in-the-money bid gets the same fill ratio regardless
       // of how far above the clearing price it sits, so a discounted bid is either fully in the
       // money like everyone else, or (once the clearing price rises past it) shut out entirely.
-      // Confirmed by direct A/B instrumentation (docs/ONE_DOLLAR_PROJECT.md, Phase 4 section):
+      // Confirmed by direct A/B instrumentation (see docs/MASTER_PLAN.md §7; full history in git):
       // this produced a real, compounding death spiral with no recovery path — low cash -> lower
       // bid price -> shut out -> can't get inputs -> less revenue -> less cash -> an even lower
       // price next week. A capital-constrained real buyer instead orders LESS at a normal market
@@ -413,7 +413,7 @@ function executeSubUnitBiddingMarket(
   // walking through the sorted arrays and draining bid.quantityUnits/offer.quantityUnits in
   // order) — a company sorted near the back of the queue could be shut out completely even when
   // the region's aggregate supply and demand balanced exactly, confirmed by direct
-  // instrumentation (see docs/ONE_DOLLAR_PROJECT.md's Phase 2 section). Allocation below is
+  // instrumentation (see docs/MASTER_PLAN.md §7; full history in git). Allocation below is
   // pro-rata among everyone who clears at the market price instead, the way real double auctions
   // and oversubscribed IPO allocations actually work.
   let clearedPriceUSD = currentUnitPrice;

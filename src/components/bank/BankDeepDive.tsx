@@ -118,6 +118,43 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
             </div>
           </div>
 
+          {/* Wall Street Phase 1: the real named banks this aggregate is the sum of — each with
+              its own capital ratio, equity, and loan book, not a proportional slice. */}
+          {(() => {
+            const namedBanks = state.companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+            if (namedBanks.length === 0) return null;
+            return (
+              <div className="p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
+                <h3 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">Individual Banks ({namedBanks.length})</h3>
+                <div className="space-y-2">
+                  {namedBanks
+                    .slice()
+                    .sort((a, b) => (b.bankBalanceSheet?.bankEquityUSD ?? 0) - (a.bankBalanceSheet?.bankEquityUSD ?? 0))
+                    .map(b => {
+                      const sheet = b.bankBalanceSheet!;
+                      const isDistressed = sheet.bankCapitalRatio < 0.05;
+                      return (
+                        <div key={b.ticker} className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] text-xs">
+                          <div>
+                            <div className="font-bold text-[var(--text-primary)]">{b.name} <span className="text-[var(--text-tertiary)] font-normal">({b.ticker})</span></div>
+                            <div className="text-[10px] text-[var(--text-tertiary)] font-mono">
+                              Loan book {formatCurrency(sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD, { compact: true })} · Deposits {formatCurrency(sheet.depositsUSD, { compact: true })}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-bold font-[var(--font-numeric)] ${isDistressed ? 'text-[var(--signal-negative)]' : 'text-[var(--text-primary)]'}`}>
+                              {formatPercent(sheet.bankCapitalRatio, 1)} capital
+                            </div>
+                            <div className="text-[10px] text-[var(--text-tertiary)]">{formatCurrency(sheet.bankEquityUSD, { compact: true })} equity</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Balance Sheet Breakdown */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
@@ -160,6 +197,26 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
               </div>
             </div>
           </div>
+
+          {/* Wall Street Phase 2: real central bank facility usage — a bank short of its own
+              cash buffer borrows from the Standing Repo Facility; a bank with excess cash
+              places it at the reverse repo facility. Both are real, named operations against
+              the central bank, not policyRate read as an ambient parameter. */}
+          {((bank.srfBorrowingUSD ?? 0) > 0 || (bank.onRrpLendingUSD ?? 0) > 0) && (
+            <div className="p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
+              <h3 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">Central Bank Facilities</h3>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)]">
+                  <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Standing Repo Facility (borrowed)</div>
+                  <div className="font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">{formatCurrency(bank.srfBorrowingUSD ?? 0, { compact: true })}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)]">
+                  <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Reverse Repo Facility (lent)</div>
+                  <div className="font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">{formatCurrency(bank.onRrpLendingUSD ?? 0, { compact: true })}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Regional Asset Ownership Shares */}
           <div className="p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
