@@ -1,11 +1,13 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
-import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
+import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
 import { getInitialRegions } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaUSD } from './bootstrap/population';
-import { SECTOR_PPE_INTENSITY } from './simulation/constants';
+import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
+import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
 import { PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
+import { random } from './rng';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -443,11 +445,30 @@ export function generateInitialCompanies(): Company[] {
       const leverage = Number((tmpl.debtBase / Math.max(1, ebitda)).toFixed(2));
       const interestCoverage = Number((ebit / interestExpense).toFixed(2));
       
+      const capex = Math.round(tmpl.revBase * 0.06);
+      const maintenanceCapex = Math.round(capex * 0.6); // maintenance is the majority baseline for a mature company at generation
+      const growthCapex = capex - maintenanceCapex;
+
       const sectorConfig = SECTOR_BENCHMARKS[tmpl.sector];
-      const stockPrice = Number(priceEquity(eps, sectorConfig.basePE, 0.0, false).toFixed(2));
+      // Open the market at the price the market itself would set (§7.4: seed shape = engine
+      // shape). The old `eps x sector basePE` capitalised earnings at ~1.5% net of growth while
+      // every holder in 07e's auction capitalises them at 4-10%, so week 1 opened ~4x above any
+      // real bid and the whole market spent ten weeks falling at its damping limit to get back.
+      const seedGrossPPEUSD = tmpl.revBase * (SECTOR_PPE_INTENSITY[tmpl.sector] ?? DEFAULT_PPE_INTENSITY) / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
+      const seedNetPPEUSD = seedGrossPPEUSD * (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION);
+      const stockPrice = Number(fairValuePerShare({
+        annualEarningsUSD: netIncome,
+        sharesOutstanding: tmpl.shares,
+        // Book equity at the seed is the same identity the first filed balance sheet computes.
+        bookEquityUSD: derivedCashBase + tmpl.revBase * 0.08 * 0.6 + seedNetPPEUSD - (tmpl.revBase * 0.08 * 0.4 + derivedDebtBase),
+        netInvestmentRate: (growthCapex - seedGrossPPEUSD / (SECTOR_PPE_USEFUL_LIFE_YEARS[tmpl.sector] ?? 12)) / Math.max(1, seedNetPPEUSD),
+        riskFreeRate: regionPolicyRate,
+        beta: tmpl.beta,
+        holderRequiredReturn: REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
+      }).toFixed(2));
       
       const oasSpreadBps = RATING_OAS_SPREADS[tmpl.initialRating].baseBps;
-      const cdsSpreadBps = oasSpreadBps + Math.floor(Math.random() * 10 - 5);
+      const cdsSpreadBps = oasSpreadBps + Math.floor(random() * 10 - 5);
       
       const historicalPrices: number[] = [stockPrice];
       const marketCap = tmpl.shares * stockPrice;
@@ -492,11 +513,6 @@ export function generateInitialCompanies(): Company[] {
       const gammaRev = Number((tmpl.revBase * 1.05).toFixed(1));
       const consensusRev = Number(((alphaRev + betaRev + gammaRev) / 3).toFixed(1));
 
-      const capex = Math.round(tmpl.revBase * 0.06);
-      const maintenanceCapex = Math.round(capex * 0.6); // maintenance is the majority baseline for a mature company at generation
-      const growthCapex = capex - maintenanceCapex;
-
-      
       let financialStatementProfile: FinancialStatementProfile = 'STANDARD_OPERATING';
       if (tmpl.sector === 'Banks') financialStatementProfile = 'BANK';
       else if (tmpl.institutionalRole === 'INSURER') financialStatementProfile = 'INSURER';
@@ -578,7 +594,7 @@ export function generateInitialCompanies(): Company[] {
         
         stockPrice,
         historicalPrices,
-        forwardPE: sectorConfig.basePE,
+        forwardPE: eps > 0 ? Number((stockPrice / eps).toFixed(2)) : sectorConfig.basePE,
         marketCap: Number((stockPrice * tmpl.shares).toFixed(0)),
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
@@ -616,7 +632,7 @@ export function generateInitialCompanies(): Company[] {
         // Persistent idiosyncratic risk: smaller/higher-rank banks run a real, generated risk
         // premium (concentrated commercial exposure is a genuine real-world pattern for
         // smaller/regional banks), not a random re-roll each week — seeded once, here.
-        bankRiskFactor: tmpl.sector === 'Banks' ? Number((0.75 + tmpl.rank * 0.18 + (Math.random() - 0.5) * 0.25).toFixed(3)) : undefined,
+        bankRiskFactor: tmpl.sector === 'Banks' ? Number((0.75 + tmpl.rank * 0.18 + (random() - 0.5) * 0.25).toFixed(3)) : undefined,
         isBankEntity: tmpl.sector === 'Banks',
         isInstitutionalEntity: !!tmpl.institutionalRole,
         institutionalEntityType: tmpl.institutionalRole as any,
@@ -659,10 +675,10 @@ export function generateInitialCompanies(): Company[] {
     // tickers colliding with this region's padding clones, since seed generation and padding
     // used to track uniqueness in two disconnected sets.
     while (companies.filter(c => c.region === region).length < targetCount) {
-      const parent = baseCompanies[Math.floor(Math.random() * baseCompanies.length)];
+      const parent = baseCompanies[Math.floor(random() * baseCompanies.length)];
       const newTicker = generateUniqueTicker(existingSeedTickers);
       const newName = generateUniqueName(parent.name, parent.sector, existingSeedNames);
-      const newEmployeeCount = Math.max(10, Math.floor(parent.employeeCount * (0.3 + Math.random() * 1.4)));
+      const newEmployeeCount = Math.max(10, Math.floor(parent.employeeCount * (0.3 + random() * 1.4)));
       const revenueScale = newEmployeeCount / Math.max(1, parent.employeeCount);
 
       
@@ -675,7 +691,7 @@ export function generateInitialCompanies(): Company[] {
         insuranceClaimsPaidUSD: parent.insuranceClaimsPaidUSD,
 
         ...parent,
-        id: parent.id + "-" + Math.random().toString(36).substring(2, 9),
+        id: parent.id + "-" + random().toString(36).substring(2, 9),
         ticker: newTicker,
         name: newName,
         annualRevenue: parent.annualRevenue * revenueScale,
@@ -832,8 +848,8 @@ export function generateInitialCompanies(): Company[] {
 
 
 export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number, policyRate: number = 0.045, existingCompanies: Company[] = []): Company {
-  const revBase = categoryDemandUSD * (0.02 + Math.random() * 0.03);
-  const ebitdaMargin = 0.15 + Math.random() * 0.15;
+  const revBase = categoryDemandUSD * (0.02 + random() * 0.03);
+  const ebitdaMargin = 0.15 + random() * 0.15;
   const shares = Math.floor(revBase * 10);
 
   let industry: Industry = 'SoftwareDigitalServices';
@@ -870,7 +886,7 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   const existingNames = new Set(existingCompanies.map(c => c.name));
   const ticker = generateUniqueTicker(existingTickers);
   const name = generateUniqueName(`${regionId} ${sector}`, sector, existingNames);
-  const initialRating: CreditRating = Math.random() > 0.5 ? 'BB' : 'B';
+  const initialRating: CreditRating = random() > 0.5 ? 'BB' : 'B';
   const debtBase = revBase * 1.5;
   
   const ebitda = revBase * ebitdaMargin;
@@ -889,9 +905,20 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
   
   const eps = Number(((ebitda * 0.5) / Math.max(1, shares)).toFixed(4));
   const IPO_POP = 0.08;
-  const stockPrice = Math.max(0.5, Number((eps * SECTOR_BENCHMARKS[sector].basePE * (1 + IPO_POP)).toFixed(2)));
+  // Priced into the same book it will trade in from its first week — 07e's arithmetic, plus the
+  // real pop an offering is deliberately underwritten to leave on the table.
+  const ipoNetPPEUSD = initialGrossPPEUSD * (1 - ipoAccumDeprFraction);
+  const stockPrice = Math.max(0.5, Number((fairValuePerShare({
+    annualEarningsUSD: ebitda * 0.5,
+    sharesOutstanding: shares,
+    bookEquityUSD: revBase * 0.5 + revBase * 0.08 * 0.6 + ipoNetPPEUSD - (revBase * 0.08 * 0.4 + debtBase),
+    netInvestmentRate: (growthCapex - initialGrossPPEUSD / (SECTOR_PPE_USEFUL_LIFE_YEARS[sector] ?? 12)) / Math.max(1, ipoNetPPEUSD),
+    riskFreeRate: policyRate,
+    beta: 1.2,
+    holderRequiredReturn: REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
+  }) * (1 + IPO_POP)).toFixed(2)));
   const marketCap = shares * stockPrice;
-  const forwardPE = SECTOR_BENCHMARKS[sector].basePE;
+  const forwardPE = eps > 0 ? Number((stockPrice / eps).toFixed(2)) : SECTOR_BENCHMARKS[sector].basePE;
 
   return {
     id: `comp_${ticker}_${Date.now()}_${week}`,

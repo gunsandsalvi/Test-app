@@ -12,6 +12,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand, computeTargetOwnershipShares } from './shared-helpers';
 import { WeeklyStepContext } from './context';
+import { random } from '../../rng';
 
 // Bank/institutional/foreign/central-bank ownership is capped well under 100% so household
 // (the implicit residual everywhere ownership is displayed) always retains a real floor,
@@ -19,8 +20,8 @@ import { WeeklyStepContext } from './context';
 const MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE = 0.85;
 
 export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): void {
-  const globalInflationShock = (Math.random() - 0.5) * 0.0008;
-  const globalGdpShock = (Math.random() - 0.5) * 0.001;
+  const globalInflationShock = (random() - 0.5) * 0.0008;
+  const globalGdpShock = (random() - 0.5) * 0.001;
 
   ctx.updatedRegions = { ...state.regions };
 
@@ -88,17 +89,12 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     );
     ctx.updatedRegions[regionId] = updatedRegion;
 
-    if (updatedRegion.institutionalSector) {
-      const macroSector = updatedRegion.institutionalSector;
-      const investmentIncomeUSD =
-        ((macroSector.equityHoldingsUSD || 0) +
-         (macroSector.corpBondHoldingsUSD || 0) +
-         (macroSector.sovBondHoldingsUSD || 0)) *
-        ((macroSector.investmentIncomeMarginPct || 0.03) / 52);
-
-      macroSector.cashUSD = (macroSector.cashUSD || 0) + investmentIncomeUSD;
-      macroSector.sectorEquityUSD = (macroSector.sectorEquityUSD || 0) + investmentIncomeUSD;
-    }
+    // S7: the macro institutional-sector accrual is deleted. It applied a flat
+    // investmentIncomeMarginPct to three aggregates and accreted the result into sector cash and
+    // sector equity every week — a second, formula-driven income stream running beside the real
+    // one (S11 credits every entity its real coupons at its issuers' real terms), and a second
+    // writer of numbers that are now derived from the real books each week in holdings-view.ts.
+    // Two representations of one real thing; the real one survives.
 
     (['equity', 'corpBond', 'sovBond'] as const).forEach(assetClass => {
       const fieldName = `${assetClass}Ownership` as 'equityOwnership' | 'corpBondOwnership' | 'sovBondOwnership';
@@ -110,13 +106,6 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         foreignShare: Object.fromEntries((['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => [r, current.foreignShare[r] + ((target.foreignShare[r] ?? 0) - current.foreignShare[r]) * 0.05])) as Record<RegionId, number>,
         centralBankShare: current.centralBankShare + (target.centralBankShare - current.centralBankShare) * 0.05,
       };
-
-      if (assetClass === 'equity') {
-        const totalRegionEquityCapUSD = state.companies.filter(c => c.region === regionId && isActiveCompany(c) && c.listingStatus !== 'PRIVATE').reduce((s, c) => s + c.marketCap, 0);
-        const foreignShareDelta = Object.keys(updatedShares.foreignShare).reduce((s, r) => s + (updatedShares.foreignShare[r as RegionId] - current.foreignShare[r as RegionId]), 0);
-        const shareDelta = (updatedShares.bankShare - current.bankShare) + (updatedShares.institutionalShare - current.institutionalShare) + foreignShareDelta;
-        ctx.regionEquityNetFlowUSD[regionId] = shareDelta * totalRegionEquityCapUSD;
-      }
 
       // Bank/institutional/foreign/central-bank shares are meant to leave a real residual for
       // household ownership (every other ownership display in the app computes household as

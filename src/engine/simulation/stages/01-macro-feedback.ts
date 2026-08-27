@@ -9,6 +9,9 @@
 import { GameState, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 
+/** How long a default keeps feeding credit contagion before it is treated as absorbed. */
+const CONTAGION_WINDOW_WEEKS = 52;
+
 export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext): void {
   const { prevActiveFirms } = ctx;
 
@@ -31,7 +34,23 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   ctx.marginCompression = ctx.avgMargin < 0.22 ? 0.22 - ctx.avgMargin : 0.0;
   // Since HC2 the market holds private paper too, so a private default is a real credit event
   // like any other.
-  ctx.recentDefaultsCount = state.companies.filter((c) => c.isDefaulted || c.creditRating === 'CCC').length;
+  //
+  // S8: contagion is a RECENT-loss signal, not a permanent scar. The previous count included
+  // every company that had EVER defaulted, so the number could only ratchet upward — a default
+  // in week 3 still tightened credit in week 200, and with the universe now at 2,000+ firms the
+  // scar dominated the signal. Real contagion decays as losses are absorbed: count defaults
+  // inside a rolling year, weighted so the freshest carry most of it, plus the currently
+  // distressed cohort (a live state, not a memory).
+  const week = state.currentWeek;
+  let weightedRecentDefaults = 0;
+  state.companies.forEach((c) => {
+    if (!c.isDefaulted) return;
+    const age = week - (c.defaultedWeek ?? week);
+    if (age < 0 || age > CONTAGION_WINDOW_WEEKS) return;
+    weightedRecentDefaults += 1 - age / CONTAGION_WINDOW_WEEKS;
+  });
+  const currentlyDistressed = state.companies.filter((c) => !c.isDefaulted && c.creditRating === 'CCC').length;
+  ctx.recentDefaultsCount = Math.round(weightedRecentDefaults + currentlyDistressed);
   ctx.creditContagionBps = ctx.recentDefaultsCount * 12;
   ctx.systemicStressFactorGlobal = Math.min(0.3, ctx.creditContagionBps / 500);
 }

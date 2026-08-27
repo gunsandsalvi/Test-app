@@ -22,20 +22,49 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket, settleCorporateActionOnHolders, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
+import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
+import { random } from '../../rng';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
 const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
-// Liquidity depth: a net weekly flow equal to this many multiples of a company's own market
-// cap is needed to move its price 100%.
-const EQUITY_LIQUIDITY_DEPTH = 6;
 
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
-  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, regionCategoryExports, systemicStressFactorGlobal, regionEquityNetFlowUSD } = ctx;
+  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, regionCategoryExports, systemicStressFactorGlobal } = ctx;
   const refinanceNews: NewsItem[] = [];
+
+  // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
+  // values at the top of a stage, never inside a per-company loop). Each of these was a full
+  // scan of a multi-thousand-element array executed once per company.
+  const entityById = new Map(state.institutionalEntities.map(e => [e.id, e]));
+  const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
+  // Supply relationships indexed by customer. This was a full scan of the region's relationship
+  // list for EVERY company — the same O(companies x list) shape that made corporate-action
+  // settlement 12% of the weekly step. One grouping pass instead.
+  const supplyRelsByCustomer = new Map<string, any[]>();
+  (Object.keys(updatedRegions) as (keyof typeof updatedRegions)[]).forEach(rid => {
+    (updatedRegions[rid]?.supplyRelationships || []).forEach((rel: any) => {
+      const list = supplyRelsByCustomer.get(rel.customerCompanyId);
+      if (list) list.push(rel); else supplyRelsByCustomer.set(rel.customerCompanyId, [rel]);
+    });
+  });
+  /** The nearest short government tranche a corporate treasury would park cash in. One lookup
+   *  per region per week: the ladder now carries weekly bill issuance, so this list grows all
+   *  run and was being re-scanned per company. */
+  const nearestShortGovTrancheByRegion = new Map<string, any>();
+  (Object.keys(updatedRegions) as (keyof typeof updatedRegions)[]).forEach(rid => {
+    const found = (updatedRegions[rid]?.govDebtTranches || []).find((t: any) => t.tenorAtIssuanceYears <= 2);
+    if (found) nearestShortGovTrancheByRegion.set(rid as string, found);
+  });
+  const suppliedSubUnitsByRegion = new Map<string, Set<string>>();
+  prevActiveFirms.forEach(c => {
+    let set = suppliedSubUnitsByRegion.get(c.region);
+    if (!set) { set = new Set<string>(); suppliedSubUnitsByRegion.set(c.region, set); }
+    (c.productLines || []).forEach(pl => set!.add(pl.subUnitId));
+  });
 
   ctx.updatedCompanies = state.companies.map((comp) => {
     if (!isActiveCompany(comp)) {
@@ -146,7 +175,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newInputInventoryBySubUnit[su] = lots as InputLot[];
     });
 
-    const executionNoise = (Math.random() - 0.5) * 0.3;
+    const executionNoise = (random() - 0.5) * 0.3;
     const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
 
 
@@ -156,7 +185,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
       const weeklyNim = bs.netInterestMarginPct / 52;
       const impliedNimRev = totalAssets * weeklyNim * share;
-      const loanLosses = Math.random() * 0.05 * totalAssets * share / 52;
+      const loanLosses = random() * 0.05 * totalAssets * share / 52;
       // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
       // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this
       // company's original generation-time seed — that seed comes from the same small-scale
@@ -180,12 +209,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const floatAssets = comp.annualRevenue * 5;
       comp.technicalReservesUSD = floatAssets * 0.85;
 
-      const premiumGrowth = reg.gdpGrowth / 52 + (Math.random() - 0.5) * 0.02;
+      const premiumGrowth = reg.gdpGrowth / 52 + (random() - 0.5) * 0.02;
       const prevPremiums = (comp.insurancePremiumsWrittenUSD || comp.annualRevenue) / 52;
       const weeklyPremiums = Math.max(10, prevPremiums * (1 + premiumGrowth));
       comp.insurancePremiumsWrittenUSD = weeklyPremiums * 52;
 
-      const lossRatio = 0.70 + (Math.random() - 0.5) * 0.20;
+      const lossRatio = 0.70 + (random() - 0.5) * 0.20;
       comp.insuranceClaimsPaidUSD = weeklyPremiums * lossRatio * 52;
 
       const underwritingIncome = weeklyPremiums * (1 - lossRatio - 0.20);
@@ -199,18 +228,18 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
       newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
     } else if (comp.financialStatementProfile === 'ASSET_MANAGER') {
-      const instEnt = state.institutionalEntities.find(e => e.id === comp.id);
+      const instEnt = entityById.get(comp.id);
       // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
       // company, its AUM IS that entity's marked book — totalAssetsUSD is recomputed weekly from
       // real cash and real holdings (institutional-balance-sheet.ts), so the drift-by-index
       // formula only survives for manager companies with no entity behind them.
       const equityIndex = comp.region === 'USA' ? state.compositeIndices.us500 : comp.region === 'EUR' ? state.compositeIndices.euStoxx : comp.region === 'UK' ? state.compositeIndices.uk100 : state.compositeIndices.jp225;
       const marketGrowth = equityIndex.value / Math.max(1, equityIndex.historical[equityIndex.historical.length - 2] ?? equityIndex.value);
-      const flows = (Math.random() - 0.4) * 0.01;
+      const flows = (random() - 0.4) * 0.01;
       comp.aumUSD = instEnt
         ? instEnt.totalAssetsUSD
         : (comp.aumUSD ?? comp.annualRevenue * 50) * marketGrowth * (1 + flows);
-      comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + Math.random() * 0.005);
+      comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + random() * 0.005);
 
       const weeklyFees = comp.aumUSD * comp.managementFeeRate / 52;
       newRevenue = Math.max(10, weeklyFees * 52);
@@ -225,7 +254,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
 
       // Weekly revenue transition
-      const noise = (Math.random() - 0.5) * 0.015;
+      const noise = (random() - 0.5) * 0.015;
       const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
 
       // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
@@ -287,7 +316,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           if (neededUSD <= 0) return;
           // A private-segment offer (05-unit-bidding.ts's PRIVATE_SEGMENT_SUPPLY_CATEGORIES) is
           // just as real a supply source as a public company's product line.
-          const hasRealSupply = prevActiveFirms.some(c => c.region === comp.region && (c.productLines || []).some(pl => pl.subUnitId === inputSubUnit))
+          const hasRealSupply = (suppliedSubUnitsByRegion.get(comp.region)?.has(inputSubUnit) ?? false)
             || PRIVATE_SEGMENT_SUPPLY_CATEGORIES[inputSubUnit] !== undefined;
           if (!hasRealSupply) return;
           const inputUnitPrice = (reg.categoryDemand[inputSubUnit as any] as any)?.unitPriceUSD ?? 1;
@@ -317,10 +346,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + combinedFulfillment * 0.3);
 
       // Supply relationship shocks
-      const region = updatedRegions[comp.region];
-      const rels = region.supplyRelationships?.filter((r) => r.customerCompanyId === comp.id) || [];
+      const rels = supplyRelsByCustomer.get(comp.id) ?? [];
       rels.forEach((rel) => {
-        const supplier = prevActiveFirms.find(c => c.id === rel.supplierCompanyId);
+        const supplier = firmById.get(rel.supplierCompanyId);
         if (!supplier) return;
         // The relationship's own category — a supplier's OTHER lines being backed up isn't this
         // customer's problem, only a glut in the specific good it actually buys from them.
@@ -342,7 +370,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
       const baselineMargin = comp.baselineEbitdaMargin ?? (comp.ebitda / Math.max(1, comp.annualRevenue));
       const targetMargin = Math.min(0.65, Math.max(0.04, baselineMargin - wageCompression - capacityDecayPenalty - avgCrowdingIntensity * 0.08 - inputPriceDrag * 0.03));
-      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (Math.random() - 0.5) * 0.004));
+      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (random() - 0.5) * 0.004));
 
       const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
@@ -650,6 +678,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newRating = 'D';
       if (!comp.isDefaulted) {
         ctx.defaultedTickers.push(comp.ticker);
+        comp.defaultedWeek = nextWeek;
         newRevenue = Number((newRevenue * 0.4).toFixed(1));
         newEbitda = 0;
         newEbit = 0;
@@ -672,7 +701,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const notchGap = Math.abs(RATING_ORDER.indexOf(calculatedRating) - RATING_ORDER.indexOf(comp.creditRating));
       const crossesIgHyLine = getRatingBucket(calculatedRating) !== getRatingBucket(comp.creditRating);
       const forceUpdate = notchGap >= 2 || crossesIgHyLine;
-      if (calculatedRating !== comp.creditRating && (forceUpdate || Math.random() < 0.25)) {
+      if (calculatedRating !== comp.creditRating && (forceUpdate || random() < 0.25)) {
         ctx.ratingChanges.push({
           ticker: comp.ticker,
           from: comp.creditRating,
@@ -696,13 +725,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // by comparing against this. Snapshotting after the call block (the first attempt) missed the
     // single largest source of change: the call can retire an entire tranche in one week, and
     // sampled issuers lost ~88% of their fixed float to it inside five weeks.
-    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+    // CP excluded on both sides: bondholders own none of it, so a CP issue or roll must not
+    // scale their books (settleCorporateActionOnHolders keys off these two floats).
+    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
     const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
     companyTranches.forEach(tranche => {
-      if (tranche.rateType !== 'FIXED') return;
+      if (tranche.rateType !== 'FIXED' || tranche.isCommercialPaper) return;
       const currentFairRate = calculateNelsonSiegelZeroRate(Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52), reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
       const rateSavingsIfRefinanced = tranche.couponRate - currentFairRate;
       const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
@@ -739,6 +770,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (calledRefinanceTranches.length > 0) companyTranches = [...companyTranches, ...calledRefinanceTranches];
 
     const tranchesToRefinance = companyTranches.filter(tranche => {
+      if (tranche.isCommercialPaper) return false; // 07f owns the CP roll
       const weeksToMaturity = tranche.maturityWeek - state.currentWeek;
       return weeksToMaturity <= 52 && weeksToMaturity > 45 && !tranche._refinanceInitiated;
     });
@@ -775,8 +807,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       companyTranches.push(refinanceTranche);
     });
 
-    const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek);
-    let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek);
+    // CP never reaches this path: 07f rolls (or fails) it BEFORE this stage runs, so a maturing
+    // CP tranche here would be a bug in 07f, not a bond to refinance. Guarded anyway — the bond
+    // refinance below would turn a 13-week bridge into five-year term debt.
+    const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek && !t.isCommercialPaper);
+    let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek || t.isCommercialPaper);
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
     let buybacksThisWeek = 0;
@@ -790,7 +825,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       } else {
         // Fallback: standard refinancing at maturity
         const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
-        const refinanceAsFixed = Math.random() < currentFixedShare;
+        const refinanceAsFixed = random() < currentFixedShare;
         const currentBaseSpreadBps = comp.oasSpreadBps;
         const fiveYearSovRateAtMaturity = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
 
@@ -865,7 +900,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             .slice()
             .sort((a, b) => a.maturityWeek - b.maturityWeek)
             .map(t => {
-              if (toPrepayUSD <= 0) return t;
+              if (toPrepayUSD <= 0 || t.isCommercialPaper) return t; // CP is 07f's to resize against the real gap
               const repaid = Math.min(t.principalUSD, toPrepayUSD);
               toPrepayUSD -= repaid;
               return { ...t, principalUSD: t.principalUSD - repaid };
@@ -922,7 +957,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.
     const newOasBps = comp.oasSpreadBps;
-    const rawNewCds = newOasBps + Math.floor(Math.random() * 8 - 4);
+    const rawNewCds = newOasBps + Math.floor(random() * 8 - 4);
     const newCdsSpreadBps = isFinite(rawNewCds) ? Math.round(Math.max(10, Math.min(5000, rawNewCds))) : 150;
 
     // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
@@ -959,7 +994,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       } else {
         guidanceSnippet = 'Management reaffirms FY baseline guidance with stable unit economics and operating backlog.';
         lastManagementCommentary = `In-line quarterly results with steady gross margins and stable backlog demand.`;
-        sentimentDelta = (Math.random() - 0.5) * 0.05;
+        sentimentDelta = (random() - 0.5) * 0.05;
       }
 
       ctx.earningsReportedThisTurn.push({
@@ -998,14 +1033,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // Equity price now moves from holder-class rebalancing flow (see computeTargetOwnershipShares
     // and the region-level equity flow computed in stage 2) rather than an eps x sectorPE formula.
     // Forward P/E becomes an output of that price, not an input to it.
+    // WS4: the share price is CLEARED, in 07e-equity-clearing.ts, before this stage runs — read
+    // it, never recompute it, exactly as this stage reads the cleared OAS. The old line moved
+    // price by a holder-class rebalancing flow plus `comp.sentiment x 0.35`: a free parameter
+    // that existed only because nothing real was setting the price. Sentiment survives as a
+    // narrative/news signal; it no longer moves a market.
     const newSentiment = (comp.sentiment * 0.85 + sentimentDelta);
-    const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region && isActiveCompany(c) && isPubliclyListed(c)).reduce((s, c) => s + c.marketCap, 0);
-    const companyEquityFlowUSD = totalRegionEquityCapUSD > 0
-      ? (regionEquityNetFlowUSD[comp.region] ?? 0) * (comp.marketCap / totalRegionEquityCapUSD)
-      : 0;
-    const flowPct = comp.marketCap > 0 ? companyEquityFlowUSD / (comp.marketCap * EQUITY_LIQUIDITY_DEPTH) : 0;
-    const sentimentPct = newSentiment * 0.35;
-    let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((comp.stockPrice * (1 + flowPct + sentimentPct)).toFixed(2)));
+    let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number(comp.stockPrice.toFixed(2)));
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
     if (comp.isBankEntity) {
       // Wall Street Phase 1: this bank's own real equity (computed this week in
@@ -1044,7 +1078,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const currentTreasuryUSD = (comp.treasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
     let newTreasuryHoldings = [...(comp.treasuryHoldings || [])];
     if (targetTreasuryUSD > currentTreasuryUSD) {
-      const nearestGovTranche = reg.govDebtTranches.find(t => t.tenorAtIssuanceYears <= 2);
+      const nearestGovTranche = nearestShortGovTrancheByRegion.get(comp.region);
       if (nearestGovTranche) {
         const purchaseAmountUSD = targetTreasuryUSD - currentTreasuryUSD;
         newTreasuryHoldings.push({
@@ -1074,7 +1108,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * comp.sharesOutstanding));
     if (excessCash > 5 && debtToEquity < 0.6 && comp.sharesOutstanding > 10 && !isDefaulted && newStockPrice > 0) {
       const estimatedBookValuePerShare = Math.max(0.5, (newCash + newRevenue * 0.8 - newTotalDebt) / comp.sharesOutstanding);
-      const isCheap = newStockPrice < estimatedBookValuePerShare || newForwardPE < ((SECTOR_BENCHMARKS[comp.sector]?.basePE ?? 15) * 0.95);
+      // "Cheap" against the same arithmetic the market itself prices this company with (07e /
+      // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E
+      // table. A board that buys back stock is taking the other side of that auction, so it has
+      // to be reading the same book; comparing to a multiple the market no longer uses would be
+      // two valuations of one company again.
+      const boardFairValuePerShare = companyFairValuePerShare(
+        { ...comp, netIncome: newNetIncome, cash: newCash, totalDebt: newTotalDebt },
+        reg.zeroRates?.tenor10Y ?? reg.policyRate,
+        REPRESENTATIVE_HOLDER_REQUIRED_RETURN
+      );
+      const isCheap = newStockPrice < estimatedBookValuePerShare || newStockPrice < boardFairValuePerShare * 0.95;
       const buybackShare = isCheap ? 0.60 : 0.25;
       const buybackSpendM = (excessCash * 0.05 / 52) * buybackShare;
       const sharesToRetire = Math.min(comp.sharesOutstanding * 0.005, buybackSpendM / Math.max(0.1, newStockPrice));
@@ -1097,7 +1141,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // into the other rate type has moved between the bond market and the loan market, so their
     // position moves with it. Holdings that do not track the real stock are the difference
     // between a market and a random walk — see settleCorporateActionOnHolders.
-    const postActionFixedUSD = updatedTranches.filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+    const postActionFixedUSD = updatedTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
     const postActionFloatingUSD = updatedTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
     settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
@@ -1245,6 +1289,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       treasuryHoldings: newTreasuryHoldings,
     };
   });
+
+  // Every corporate action this stage recorded reaches the real books here, in one pass.
+  applyPendingCorporateActionSettlements(ctx);
 
   ctx.newsItems.push(...refinanceNews);
 }

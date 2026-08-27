@@ -205,11 +205,16 @@ const PRIVATE_SEGMENT_PROFILE: Record<PrivateSegmentType, { employmentShare: num
 const MANUFACTURING_COMMODITY_SUPPLY_SHARE = 0.0375; // share of MANUFACTURING segment revenue, per linked commodity
 const MANUFACTURING_LINKED_COMMODITIES = ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'];
 
+// WS5: ~18% of the stock is bills (13/26/52-week paper) — the real treasury mix runs 15-25%
+// bills; the bond weights carry the rest in the same proportions as before.
 const GOV_DEBT_TENOR_WEIGHTS: { tenorYears: number; tenorWeeks: number; weight: number }[] = [
-  { tenorYears: 2, tenorWeeks: 104, weight: 0.30 },
-  { tenorYears: 5, tenorWeeks: 260, weight: 0.30 },
-  { tenorYears: 10, tenorWeeks: 520, weight: 0.25 },
-  { tenorYears: 30, tenorWeeks: 1560, weight: 0.15 },
+  { tenorYears: 0.25, tenorWeeks: 13, weight: 0.06 },
+  { tenorYears: 0.5, tenorWeeks: 26, weight: 0.06 },
+  { tenorYears: 1, tenorWeeks: 52, weight: 0.06 },
+  { tenorYears: 2, tenorWeeks: 104, weight: 0.246 },
+  { tenorYears: 5, tenorWeeks: 260, weight: 0.246 },
+  { tenorYears: 10, tenorWeeks: 520, weight: 0.205 },
+  { tenorYears: 30, tenorWeeks: 1560, weight: 0.123 },
 ];
 
 const HOUSEHOLD_DEBT_RATIOS = { creditCardToIncome: 0.075, otherConsumerLoanToIncome: 0.133, mortgageToIncome: 0.90, depositsToIncome: 0.65, equityHoldingsToIncome: 1.8 };

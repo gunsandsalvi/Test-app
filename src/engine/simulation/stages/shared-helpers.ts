@@ -92,9 +92,12 @@ export function computeAnnualDefaultProbability(comp: Company): number {
 
   const shockToCoverage = 1 - (DEFAULT_COVERAGE_FLOOR * interest) / ebitda;
   // Dividends live on the quarterly snapshot (there is no annual field on Company) — annualize
-  // the latest quarter. Zero when no snapshot exists yet.
+  // the latest quarter. Zero when no snapshot exists yet. The statement stores dividends the way
+  // a cash flow statement does, as a NEGATIVE financing outflow; this needs the magnitude of the
+  // outflow, so take the absolute value — added signed, it subtracted from fixed outflows and
+  // made a dividend-paying company look SAFER for paying one.
   const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
-  const dividendsAnnualUSD = (latestSnap?.cashFlowStatement?.dividendsPaid ?? 0) * 4;
+  const dividendsAnnualUSD = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0) * 4;
   const fixedOutflowsUSD = interest + (comp.maintenanceCapex ?? 0) + dividendsAnnualUSD;
   const shockToCash = 1 - (fixedOutflowsUSD - Math.max(0, comp.cash)) / ebitda;
   const distance = Math.max(shockToCoverage, shockToCash);
@@ -268,7 +271,7 @@ export function attributeItemizedHoldings(
  * engine absorbs it over the following weeks.
  */
 export function settleCorporateActionOnHolders(
-  ctx: { updatedInstitutionalEntities: InstitutionalEntity[] },
+  ctx: { pendingHolderSettlements: Map<string, number> },
   issuerId: string,
   instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN',
   oldFloatUSD: number,
@@ -277,16 +280,65 @@ export function settleCorporateActionOnHolders(
   if (!(oldFloatUSD > 0)) return;
   const ratio = Math.max(0, newFloatUSD) / oldFloatUSD;
   if (Math.abs(ratio - 1) < 1e-9) return;
+  const key = `${instrumentType}:${issuerId}`;
+  // Ratios compose: two actions on one instrument in one week scale the holders once, by the
+  // product, which is the same number applying them in sequence would have reached.
+  ctx.pendingHolderSettlements.set(key, (ctx.pendingHolderSettlements.get(key) ?? 1) * ratio);
+}
+
+/**
+ * Apply every corporate action recorded this week to the real books, in ONE pass.
+ *
+ * This used to write through immediately, once per action: each call rebuilt the whole entity
+ * array AND re-mapped every holding of every entity, to change the holdings of a single issuer.
+ * Two calls per company across ~800 companies made it 12% of the entire weekly step — measured,
+ * after the last optimization pass had guessed wrong about where the time was going. Nothing
+ * inside stage 08 reads these books (it reads the pre-stage snapshot), so recording the ratios
+ * and settling them once at the end of the stage is the same arithmetic at 1/800th the traversal.
+ */
+export function applyPendingCorporateActionSettlements(
+  ctx: { updatedInstitutionalEntities: InstitutionalEntity[]; pendingHolderSettlements: Map<string, number> }
+): void {
+  const pending = ctx.pendingHolderSettlements;
+  if (pending.size === 0) return;
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let touched = false;
     const newHoldings = entity.itemizedHoldings
       .map((h) => {
-        if (h.instrumentType !== instrumentType || h.instrumentId !== issuerId) return h;
+        const ratio = pending.get(`${h.instrumentType}:${h.instrumentId}`);
+        if (ratio === undefined) return h;
         touched = true;
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
       })
       .filter((h) => h.quantityOrNotionalUSD > 1);
     return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
   });
+  pending.clear();
+}
+
+/**
+ * The sovereign ladder's bucket vocabulary — bills below 2Y (WS5), bonds at the four standard
+ * points. ONE function owns the mapping from a tranche's tenor to its bucket key: three separate
+ * nearest-of-[2,5,10,30] reducers existed before bills did, and any one of them left unconverted
+ * would have silently folded a 13-week bill into the two-year bucket.
+ */
+export const SOV_BILL_BUCKETS = [
+  { key: 'b13', years: 0.25, weeks: 13 },
+  { key: 'b26', years: 0.5, weeks: 26 },
+  { key: 'b52', years: 1.0, weeks: 52 },
+] as const;
+export const SOV_BOND_BUCKET_YEARS = [2, 5, 10, 30] as const;
+/** A tranche below this tenor is a bill; at or above, a bond. */
+export const SOV_BILL_MAX_TENOR_YEARS = 1.5;
+
+export function sovBucketKey(tenorAtIssuanceYears: number): string {
+  if (tenorAtIssuanceYears < SOV_BILL_MAX_TENOR_YEARS) {
+    const bucket = SOV_BILL_BUCKETS.reduce((best, b) =>
+      Math.abs(b.years - tenorAtIssuanceYears) < Math.abs(best.years - tenorAtIssuanceYears) ? b : best);
+    return bucket.key;
+  }
+  const years = SOV_BOND_BUCKET_YEARS.reduce((best, y) =>
+    Math.abs(y - tenorAtIssuanceYears) < Math.abs(best - tenorAtIssuanceYears) ? y : best);
+  return `t${years}`;
 }

@@ -1,7 +1,8 @@
 import { RegionId, WeatherAnomaly } from '../../domain';
+import { random } from '../rng';
 
 function generateRandomMinDuration(): number {
-  return 2 + Math.floor(Math.random() * 6);
+  return 2 + Math.floor(random() * 6);
 }
 
 export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
@@ -60,15 +61,15 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
 
 export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomaly, _week: number): WeatherAnomaly {
   const isExpired = current.weeksActive >= (current.minDurationWeeks || 1);
-  if (isExpired && Math.random() < 0.28) {
-    const r = Math.random();
+  if (isExpired && random() < 0.28) {
+    const r = random();
     let pick: WeatherAnomaly['type'] = 'Normal';
     if (r > 0.55) {
       const remaining: WeatherAnomaly['type'][] = ['Heatwave', 'Drought', 'Polar Vortex', 'Monsoon'];
-      pick = remaining[Math.floor(Math.random() * remaining.length)];
+      pick = remaining[Math.floor(random() * remaining.length)];
     }
 
-    const variance = 0.6 + Math.random() * 0.8; // [0.6, 1.4]
+    const variance = 0.6 + random() * 0.8; // [0.6, 1.4]
     const minDurationWeeks = generateRandomMinDuration();
 
     if (pick === 'Normal') {

@@ -52,25 +52,6 @@ function buildSectorBenchmarks(): Record<Sector, { basePE: number; growthRate: n
 export const SECTOR_BENCHMARKS = buildSectorBenchmarks();
 
 /**
- * Equities Pricing: Forward P/E multiple hybrid
- * P_t = EPS_t * PE_sector * (1 + SentimentFactor)
- */
-export function priceEquity(
-  eps: number,
-  sectorPE: number,
-  sentiment: number,
-  isDefaulted: boolean = false
-): number {
-  if (isDefaulted || eps <= 0) {
-    if (isDefaulted) return 0.00;
-    return Math.max(1.5, Math.abs(eps) * sectorPE * 0.4);
-  }
-  const sentimentMultiplier = 1 + sentiment * 0.35; // sentiment between -1 and +1 modifies PE by +/- 35%
-  const price = eps * sectorPE * sentimentMultiplier;
-  return Math.max(0.5, price);
-}
-
-/**
  * Corporate Bond Pricing
  * Sovereign Benchmark Yield + OAS Rating Spread
  */

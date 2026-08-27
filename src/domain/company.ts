@@ -27,6 +27,22 @@ export interface ProductLine {
   categoryMarketShare13WeeksAgo?: number;
   competitiveness: number;
   marginByUnit?: Record<string, number>;
+  /**
+   * Real productive capacity for this line, in UNITS per week — a physical stock, not a dollar
+   * budget. A plant that makes 100 units a week makes 100 when the price doubles; what price
+   * changes is how much of that capacity is worth running, never the capacity itself.
+   *
+   * This exists because production used to be sized in dollars and converted to units at the
+   * CURRENT price (`annualRevenue/52 / currentUnitPrice`), which made supply fall as price rose
+   * — a positive feedback loop and the mechanism behind the inflation runaway recorded in the
+   * plan (§7.28): a handful of categories spiralled to 9x while the median category never moved,
+   * and in every spiralling one supply was collapsing as price climbed.
+   *
+   * Seeded on first use from the line's real baseline output, then evolved by real net
+   * investment (growth capex less depreciation, as a ratio of the capital stock, so the number
+   * is real and inflation cancels).
+   */
+  weeklyCapacityUnits?: number;
 }
 
 // 1$ is 1$ Phase 6: one real purchase lot — a specific quantity bought from a specific named
@@ -54,6 +70,17 @@ export interface DebtTranche {
   originationWeek: number;
   maturityWeek: number;
   seniority: 'SENIOR' | 'SUBORDINATED';
+  /**
+   * WS5: commercial paper — a genuinely different market from the bond it superficially
+   * resembles. A 13-week unsecured note issued against a projected working-capital gap, priced
+   * off the cleared bill curve plus the issuer's short-horizon expected loss, and ROLLED (or
+   * failed) weekly by 07f-short-debt-clearing.ts, which owns its whole lifecycle. Every other
+   * consumer of the ladder (07b's bond float, stage 08's maturity refinancing and surplus-cash
+   * prepayment) must skip tranches carrying this flag — to them CP is someone else's market.
+   * It still counts in totalDebt and still pays real interest through the ledger, because it is
+   * real debt.
+   */
+  isCommercialPaper?: boolean;
   _refinanceInitiated?: boolean;
 }
 
@@ -293,6 +320,9 @@ export interface Company {
   ownership?: { founderPct: number; peSponsorId?: string; peSponsorPct?: number };
   // Mirrors InstitutionalEntityType in domain/institutions.ts; inlined because that module
   // already imports from this one and a type import here would close the cycle.
+  /** Week this company first defaulted — lets credit contagion decay out of a rolling window
+   *  instead of counting every default that ever happened (S8). */
+  defaultedWeek?: number;
   institutionalRole: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | null;
   institutionalMarketShare?: number;
   beta: number;

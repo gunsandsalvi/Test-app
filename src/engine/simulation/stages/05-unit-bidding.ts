@@ -9,9 +9,11 @@
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
+import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+import { random } from '../../rng';
 
 // 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
 // real ticker so the post-clearing crediting step can tell it apart from a real company sale.
@@ -55,19 +57,90 @@ function addInputInventory(update: any, baseComp: Company, subUnitId: string, se
   ];
 }
 
+/**
+ * Everything about a region's firms that does not change between one sub-unit's auction and the
+ * next, computed once per region per week.
+ *
+ * Why this exists: every one of these lists used to be rebuilt inside each sub-unit's auction —
+ * a full scan of the region's firms (and of each firm's product lines) per sub-unit, per region,
+ * per week. At ~40 sub-units x 4 regions that is the same ~2,000-firm array walked hundreds of
+ * times a week to answer questions whose answers were identical every time. Measured, stage 05
+ * was 72.6% of the entire weekly step at 3.8 seconds a week; this is the reason.
+ *
+ * The lists are read-only within a week: the auction mutates `companyUpdates`, never the firm
+ * objects these index, so one build per region is correct as well as faster.
+ */
+interface RegionMarketIndex {
+  activeFirms: Company[];
+  /**
+   * Firms that genuinely consume each recipe-input sub-unit. Built by walking each firm's own
+   * product lines ONCE and recording the inputs its industry requires — the inverse of asking,
+   * for every sub-unit market, which of the region's ~500 firms happen to need it. Same answer,
+   * O(firms x lines) instead of O(sub-units x firms x lines).
+   */
+  recipeInputBuyersBySubUnit: Map<string, Company[]>;
+  /** subUnitId -> the firms that produce it (built from one pass over every firm's lines). */
+  suppliersBySubUnit: Map<string, Company[]>;
+  /** Firms with real capex, the customer base for every capital-goods category. */
+  capexBuyers: Company[];
+  byTicker: Map<string, Company>;
+  byId: Map<string, Company>;
+}
+
+function buildRegionMarketIndex(ctx: WeeklyStepContext, regionId: RegionId): RegionMarketIndex {
+  const activeFirms: Company[] = [];
+  const suppliersBySubUnit = new Map<string, Company[]>();
+  const capexBuyers: Company[] = [];
+  const recipeInputBuyersBySubUnit = new Map<string, Company[]>();
+  const byTicker = new Map<string, Company>();
+  const byId = new Map<string, Company>();
+  // HC3: the goods market has never cared who owns a supplier's equity — public and private
+  // firms bid and offer in the same real auction.
+  const walk = (c: Company) => {
+    if (c.region !== regionId || !isActiveCompany(c)) return;
+    activeFirms.push(c);
+    byTicker.set(c.ticker, c);
+    byId.set(c.id, c);
+    if ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0) capexBuyers.push(c);
+    (c.productLines || []).forEach((l) => {
+      const arr = suppliersBySubUnit.get(l.subUnitId);
+      if (arr) arr.push(c); else suppliersBySubUnit.set(l.subUnitId, [c]);
+      const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
+      if (reqs) {
+        Object.keys(reqs).forEach(inputSubUnitId => {
+          if (!(reqs as any)[inputSubUnitId]) return;
+          const buyers = recipeInputBuyersBySubUnit.get(inputSubUnitId);
+          // A firm with two lines needing the same input is one buyer, not two: its need is
+          // summed by computeRecipeInputNeedUSD when it bids.
+          if (buyers) { if (buyers[buyers.length - 1] !== c) buyers.push(c); }
+          else recipeInputBuyersBySubUnit.set(inputSubUnitId, [c]);
+        });
+      }
+    });
+  };
+  ctx.prevActiveFirms.forEach(walk);
+  ctx.prevActivePrivateFirms.forEach(walk);
+  return { activeFirms, suppliersBySubUnit, capexBuyers, recipeInputBuyersBySubUnit, byTicker, byId };
+}
+
 function executeSubUnitBiddingMarket(
   ctx: WeeklyStepContext,
   subUnitId: string,
   baseUnitPrice: number,
   targetReg: Region,
-  targetRegionId: RegionId
-) {
-  const { companyUpdates, prevActiveFirms, nextWeek } = ctx;
-  // HC3: the goods market has never cared who owns a supplier's equity — public and private
-  // firms bid and offer in the same real auction.
-  const allParticipatingFirms = [...prevActiveFirms, ...ctx.prevActivePrivateFirms];
+  targetRegionId: RegionId,
+  index: RegionMarketIndex,
+  /**
+   * ONLY this sub-unit's live contracts. Each market used to walk the region's entire contract
+   * list to find its own — O(sub-units x contracts) for what is one grouping pass, and the
+   * single largest cost left in this stage. The caller partitions once per region per week and
+   * this returns the survivors for its own bucket.
+   */
+  ownContracts: SupplyContract[]
+): SupplyContract[] {
+  const { companyUpdates, nextWeek } = ctx;
   const demandState = targetReg.categoryDemand[subUnitId] as any;
-  if (!demandState) return;
+  if (!demandState) return ownContracts;
 
   if (!demandState.unitPriceUSD || demandState.unitPriceUSD <= 0) {
     demandState.unitPriceUSD = baseUnitPrice;
@@ -88,21 +161,16 @@ function executeSubUnitBiddingMarket(
   const supplierExpectedUnitPrice = demandState.smoothedUnitPriceUSD;
 
   // 1. Process active contracts
-  if (!targetReg.activeContracts) targetReg.activeContracts = [];
   const remainingContracts: SupplyContract[] = [];
   // supUp.salesUnits/salesUSD are deliberately cross-sub-unit totals (other consumers want a
   // company's whole-business sales) — but the inventory formula below needs THIS sub-unit's
   // sales specifically, so track that separately rather than reading the contaminated total.
   const contractSalesUnitsBySupplier: Record<string, number> = {};
 
-  targetReg.activeContracts.forEach(contract => {
-    if (contract.subUnitId !== subUnitId) {
-      remainingContracts.push(contract);
-      return;
-    }
+  ownContracts.forEach(contract => {
 
-    const supplier = allParticipatingFirms.find(c => c.ticker === contract.supplierCompanyId || c.id === contract.supplierCompanyId);
-    const customer = allParticipatingFirms.find(c => c.ticker === contract.customerCompanyId || c.id === contract.customerCompanyId);
+    const supplier = index.byTicker.get(contract.supplierCompanyId) ?? index.byId.get(contract.supplierCompanyId);
+    const customer = index.byTicker.get(contract.customerCompanyId) ?? index.byId.get(contract.customerCompanyId);
 
     if (supplier && customer) {
       if (!isActiveCompany(supplier)) {
@@ -145,8 +213,6 @@ function executeSubUnitBiddingMarket(
       }
     }
   });
-  targetReg.activeContracts = remainingContracts;
-
   // 2. Open Bidding & Matching
   const bids: UnitBid[] = [];
   const offers: UnitOffer[] = [];
@@ -154,8 +220,9 @@ function executeSubUnitBiddingMarket(
   // HC3: private firms produce, sell and buy in the same real auction — the goods market has
   // never cared who owns a supplier's equity. Their segment aggregates surrendered this slice
   // at the carve, so each real good is offered exactly once.
-  const regionActiveFirms = allParticipatingFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
-  const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
+  const regionActiveFirms = index.activeFirms;
+  const suppliers = index.suppliersBySubUnit.get(subUnitId) ?? [];
+  const supplierSet = suppliers.length > 0 ? new Set(suppliers) : null;
 
   // A recipe-input category (upstream_extraction, specialty_metals) is bought by named
   // companies for a literal, computable reason — their own production recipe — not a generic
@@ -176,12 +243,29 @@ function executeSubUnitBiddingMarket(
   // C+I+G identity, not a hand-picked per-category intensity list that only covered a handful
   // of categories and let every other one starve for real corporate buyers).
   const hasCorporateDemand = (demandState.corporateDemandUSD ?? 0) > 0;
-  const customers = regionActiveFirms.filter(c => {
-    if ((c.productLines || []).some(l => l.subUnitId === subUnitId)) return false;
-    if (isCapexSupplierCategory) return (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0;
-    return isRecipeInputCategory ? computeRecipeInputNeedUSD(c, subUnitId) > 0 : hasCorporateDemand;
+  // Capital-goods categories draw from the pre-indexed capex buyers; everything else scans the
+  // region's firms once. A producer of the category is never also its customer.
+  const candidatePool = isCapexSupplierCategory
+    ? index.capexBuyers
+    : isRecipeInputCategory
+      ? (index.recipeInputBuyersBySubUnit.get(subUnitId) ?? [])
+      : regionActiveFirms;
+  const customers = candidatePool.filter(c => {
+    if (supplierSet?.has(c)) return false;
+    if (isCapexSupplierCategory || isRecipeInputCategory) return true;
+    return hasCorporateDemand;
   });
   const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
+
+  // Contracts indexed by counterparty, once, instead of re-scanned inside every supplier's and
+  // every customer's loop. The scans were O(firms x contracts) per sub-unit per region per week
+  // — the dominant cost in the stage that dominates the weekly step.
+  const contractUnitsBySupplier = new Map<string, number>();
+  const contractUnitsByCustomer = new Map<string, number>();
+  remainingContracts.forEach(c => {
+    contractUnitsBySupplier.set(c.supplierCompanyId, (contractUnitsBySupplier.get(c.supplierCompanyId) ?? 0) + c.quantityUnitsPerWeek);
+    contractUnitsByCustomer.set(c.customerCompanyId, (contractUnitsByCustomer.get(c.customerCompanyId) ?? 0) + c.quantityUnitsPerWeek);
+  });
   // Suppliers submit unit offers
   suppliers.forEach(comp => {
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
@@ -197,13 +281,38 @@ function executeSubUnitBiddingMarket(
     const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
     const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
-    const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
-    const targetProductionUnits = targetProductionUSD / currentUnitPrice;
+
+    // Production is capacity x utilisation, in UNITS. The previous version sized production in
+    // dollars (annualRevenue/52) and divided by the CURRENT price, so a doubling of price halved
+    // the units the same plant produced — supply fell as price rose, which is the wrong sign and
+    // closes a positive feedback loop. Measured, it drove the inflation runaway (§7.28):
+    // defense_systems went to 9.3x its base price with supply collapsing 49 -> 22 units while
+    // demand still stood at 1,255. Real capacity is physical: what price changes is how hard the
+    // plant is run (productionResponseFactor) and whether the warehouse is already full
+    // (productionThrottle), never how much the plant can make.
+    if (!(line.weeklyCapacityUnits! > 0)) {
+      // Seeded from this line's real baseline output at the price prevailing when it first
+      // trades — at week 1 that is the bootstrap price, so capacity opens exactly where the old
+      // dollar-anchored figure did and only the response to later price moves changes.
+      line.weeklyCapacityUnits =
+        ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / currentUnitPrice;
+    } else {
+      // Real net investment grows the plant: growth capex less depreciation, over the capital
+      // stock. Both are nominal dollars, so the ratio is real and inflation cancels out of it.
+      const grossPPE = comp.grossPPEUSD ?? 0;
+      const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationUSD ?? 0));
+      const weeklyDepreciationUSD = grossPPE / ((SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12) * 52);
+      const netInvestmentRate = ((comp.growthCapex ?? 0) / 52 - weeklyDepreciationUSD) / netPPE;
+      line.weeklyCapacityUnits = Math.max(
+        0.0001,
+        line.weeklyCapacityUnits! * (1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate)))
+      );
+    }
+    const targetProductionUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    const targetProductionUSD = targetProductionUnits * currentUnitPrice;
 
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
-    const contractSales = remainingContracts
-      .filter(c => (c.supplierCompanyId === comp.ticker || c.supplierCompanyId === comp.id) && c.subUnitId === subUnitId)
-      .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+    const contractSales = (contractUnitsBySupplier.get(comp.ticker) ?? 0) + (contractUnitsBySupplier.get(comp.id) ?? 0);
 
     const openOfferUnits = Math.max(0, targetProductionUnits + currentUnits - contractSales);
 
@@ -286,9 +395,7 @@ function executeSubUnitBiddingMarket(
     }
     const demandUnits = demandUSD / currentUnitPrice;
 
-    const contractPurchases = remainingContracts
-      .filter(c => (c.customerCompanyId === comp.ticker || c.customerCompanyId === comp.id) && c.subUnitId === subUnitId)
-      .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+    const contractPurchases = (contractUnitsByCustomer.get(comp.ticker) ?? 0) + (contractUnitsByCustomer.get(comp.id) ?? 0);
 
     const openBidUnits = Math.max(0, demandUnits - contractPurchases);
 
@@ -306,7 +413,7 @@ function executeSubUnitBiddingMarket(
       // path back up as its cash position recovers, instead of a one-way ratchet toward zero.
       const cashConstrainedQtyModifier = cashRatio < 0.02 ? 0.70 : 1.0;
       const cashRichPricePremium = cashRatio > 0.15 ? 1.15 : 1.0;
-      const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashRichPricePremium;
+      const maxPriceUSD = currentUnitPrice * (0.95 + random() * 0.1) * cashRichPricePremium;
 
       bids.push({
         companyId: comp.ticker,
@@ -331,7 +438,7 @@ function executeSubUnitBiddingMarket(
         bids.push({
           companyId: privateSegmentOfferId(segment.segmentType),
           quantityUnits: demandUnits,
-          maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+          maxPriceUSD: currentUnitPrice * (0.95 + random() * 0.1),
         });
       }
     });
@@ -358,7 +465,7 @@ function executeSubUnitBiddingMarket(
           bids.push({
             companyId: privateSegmentOfferId('MANUFACTURING'),
             quantityUnits: demandUnits,
-            maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+            maxPriceUSD: currentUnitPrice * (0.95 + random() * 0.1),
           });
         }
       }
@@ -538,8 +645,13 @@ function executeSubUnitBiddingMarket(
     const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
     const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
-    const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
-    const targetProductionUnits = targetProductionUSD / currentUnitPrice;
+
+    // Settlement pass: capacity was already seeded and evolved in the offer pass above; this
+    // pass only reads it, so a week's investment is never applied twice.
+    const capacityUnits = line.weeklyCapacityUnits
+      ?? (((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / currentUnitPrice);
+    const targetProductionUnits = capacityUnits * productionResponseFactor * productionThrottle;
+    const targetProductionUSD = targetProductionUnits * currentUnitPrice;
 
     const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
     if (sale) {
@@ -617,10 +729,10 @@ function executeSubUnitBiddingMarket(
 
   matchedBids.forEach(bid => {
     if (matchedOffers.length === 0) return;
-    const offer = matchedOffers[Math.floor(Math.random() * matchedOffers.length)];
-    if (Math.random() < 0.15 && bid.companyId) {
-      const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
-      const customerComp = customers.find(c => c.ticker === bid.companyId);
+    const offer = matchedOffers[Math.floor(random() * matchedOffers.length)];
+    if (random() < 0.15 && bid.companyId) {
+      const supplierComp = index.byTicker.get(offer.companyId as string);
+      const customerComp = index.byTicker.get(bid.companyId as string);
 
         if (supplierComp && customerComp) {
           const totalSuppliersRevenue = suppliers.reduce((s, c) => s + c.annualRevenue, 0);
@@ -629,7 +741,7 @@ function executeSubUnitBiddingMarket(
           const supplierPowerFactor = 0.5 + (supplierMarketShare - 0.25) * 0.5;
           const customerBargainingPower = (relativeSize > 1.0 ? 0.6 : 0.4) * (1.0 - supplierPowerFactor);
           let contractPrice = clearedPriceUSD * (1.0 - (customerBargainingPower - 0.3) * 0.05);
-          let duration = 12 + Math.floor(Math.random() * 40);
+          let duration = 12 + Math.floor(random() * 40);
 
           // Hedging for revenue volatility
           const revHist = customerComp.revenueHistory || [];
@@ -640,7 +752,7 @@ function executeSubUnitBiddingMarket(
             revVol = Math.sqrt(varRev) / meanRev;
           }
           if (revVol > 0.05) {
-            duration = 52 + Math.floor(Math.random() * 52); // Seek longer contracts
+            duration = 52 + Math.floor(random() * 52); // Seek longer contracts
             const impliedPd = Math.max(0, Math.min(1, 1 / (1 + Math.exp(customerComp.interestCoverage * 0.8 - customerComp.leverage * 0.4))));
             const costOfCapital = 0.05 + (impliedPd * 0.60);
             const hedgingPremium = costOfCapital * 0.20; // Modest price premium
@@ -676,17 +788,24 @@ function executeSubUnitBiddingMarket(
     }
   });
 
-  targetReg.activeContracts = remainingContracts;
-
   // 5. Save Category Demand state metrics
-  const activeSubUnitContracts = remainingContracts.filter(c => c.subUnitId === subUnitId);
+  // remainingContracts is already exactly this sub-unit's book — no filter needed.
+  const activeSubUnitContracts = remainingContracts;
   demandState.unitPriceUSD = Number(clearedPriceUSD.toFixed(2));
   demandState.totalUnitsSuppliedThisWeek = openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
   // bid.quantityUnits is each bid's original requested amount (no longer drained down during
   // matching — allocation is pro-rata, computed separately above), so this sum already is the
   // full open-market demand; adding openUnitsCleared again would double-count the filled share.
   demandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
-  demandState.clearedInputPriceIndex = Number((clearedPriceUSD / baseUnitPrice).toFixed(4));
+  // S8: measured against a FIXED baseline, not against last week. `baseUnitPrice` here is the
+  // caller's seed — this category's price LAST week — so the old form made this a week-over-week
+  // change while every consumer read it as a level versus baseline (1.0 = at baseline). Two
+  // different periodicities in one field, exactly what rule 9 exists to catch. The baseline is
+  // captured the first time the category clears and never rewritten.
+  if (!(demandState.baseUnitPriceUSD > 0)) demandState.baseUnitPriceUSD = clearedPriceUSD;
+  demandState.clearedInputPriceIndex = Number((clearedPriceUSD / demandState.baseUnitPriceUSD).toFixed(4));
+
+  return remainingContracts;
 }
 
 function computeRealizedVol(historicalValues: number[], window: number): number {
@@ -703,10 +822,30 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     const regionId = regionIdKey as RegionId;
     const reg = ctx.updatedRegions[regionId];
 
+    // One index per region per week — see buildRegionMarketIndex for why.
+    const index = buildRegionMarketIndex(ctx, regionId);
+
+    // Partition the region's contract book by sub-unit ONCE, so each market touches only its
+    // own paper instead of walking the whole book to find it. Buckets for sub-units this loop
+    // never visits are still carried through, so no contract is lost.
+    const contractsBySubUnit = new Map<string, SupplyContract[]>();
+    (reg.activeContracts || []).forEach(c => {
+      const bucket = contractsBySubUnit.get(c.subUnitId);
+      if (bucket) bucket.push(c); else contractsBySubUnit.set(c.subUnitId, [c]);
+    });
+
     Object.values(INDUSTRY_SUBUNITS).flat().forEach(subUnit => {
       const seed = reg.categoryDemand[subUnit.unitId]?.unitPriceUSD;
-      executeSubUnitBiddingMarket(ctx, subUnit.unitId, Math.max(1, seed || 1), reg, regionId);
+      const survivors = executeSubUnitBiddingMarket(
+        ctx, subUnit.unitId, Math.max(1, seed || 1), reg, regionId, index,
+        contractsBySubUnit.get(subUnit.unitId) ?? []
+      );
+      contractsBySubUnit.set(subUnit.unitId, survivors);
     });
+
+    const reassembled: SupplyContract[] = [];
+    contractsBySubUnit.forEach(bucket => { bucket.forEach(c => reassembled.push(c)); });
+    reg.activeContracts = reassembled;
   });
 
   const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);

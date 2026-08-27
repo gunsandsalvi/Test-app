@@ -32,7 +32,6 @@ export interface WeeklyStepContext {
   diagnosticLogs: any[];
   newsItems: NewsItem[];
   rateChanges: { region: RegionId; deltaBps: number }[];
-  regionEquityNetFlowUSD: Partial<Record<RegionId, number>>;
   ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
   earningsReportedThisTurn: any[];
   defaultedTickers: string[];
@@ -42,6 +41,12 @@ export interface WeeklyStepContext {
   updatedFxPairs: FxPair[];
   updatedCompanies: Company[];
   updatedInstitutionalEntities: InstitutionalEntity[];
+  /**
+   * Corporate actions (defaults, refinancings, amortization) recorded during stage 08, as a
+   * per-instrument scaling ratio, settled onto the real books in one pass at the end of the
+   * stage — see applyPendingCorporateActionSettlements.
+   */
+  pendingHolderSettlements: Map<string, number>;
   updatedCommodities: Commodity[];
   updatedCompositeIndices: CompositeBenchmarkIndices;
   marketVolPremium: number;
@@ -99,7 +104,6 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     diagnosticLogs: [],
     newsItems: [],
     rateChanges: [],
-    regionEquityNetFlowUSD: {},
     ratingChanges: [],
     earningsReportedThisTurn: [],
     defaultedTickers: [],
@@ -108,6 +112,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     updatedFxPairs: [...state.fxPairs],
     updatedCompanies: [...state.companies],
     updatedInstitutionalEntities: [...state.institutionalEntities],
+    pendingHolderSettlements: new Map<string, number>(),
     updatedCommodities: [...state.commodities],
     updatedCompositeIndices: { ...state.compositeIndices },
     marketVolPremium: state.marketVolPremium || 0,

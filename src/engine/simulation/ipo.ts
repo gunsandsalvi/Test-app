@@ -1,6 +1,7 @@
 import { isActiveCompany } from '../../domain/company';
 import { Company, RegionId, Region } from '../../types';
 import { generateIPOCompany } from '../companyGenerator';
+import { random } from '../rng';
 
 export function checkForIPO(regionId: RegionId, reg: Region, companies: Company[], week: number): Company | null {
   if (week % 26 !== 0) return null;
@@ -16,7 +17,7 @@ export function checkForIPO(regionId: RegionId, reg: Region, companies: Company[
     const maxShareInCategory = Math.max(0, ...incumbents.map(c => c.productLines?.find(l => l.subUnitId === cat)?.categoryMarketShare ?? 0));
     const concentrationTrigger = maxShareInCategory > 0.40;
 
-    if ((demandTrigger || concentrationTrigger) && Math.random() < (concentrationTrigger ? 0.5 : 0.35)) {
+    if ((demandTrigger || concentrationTrigger) && random() < (concentrationTrigger ? 0.5 : 0.35)) {
       return generateIPOCompany(regionId, cat, demand.demandLevelUSD, week, reg.policyRate, companies);
     }
   }

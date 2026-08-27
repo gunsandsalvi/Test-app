@@ -35,6 +35,9 @@ export interface CategoryDemandState {
   crowdingIntensity: number;
   inventoryLevelUSD: number;
   inputCostPressure: number;
+  /** This category's unit price at initialization — the FIXED baseline clearedInputPriceIndex is
+   *  measured against. Stored once and never rewritten (S8). */
+  baseUnitPriceUSD?: number;
   clearedInputPriceIndex: number; // 1.0 = baseline; this category's own real auction clearing price vs its baseline unit price — set unconditionally every week by 05-unit-bidding.ts for every category
   // 04-input-output.ts's OWN smoothed upstream scarcity/glut index for its input-category
   // categories (upstream_extraction, specialty_metals) — kept separate from

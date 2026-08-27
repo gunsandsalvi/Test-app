@@ -8,6 +8,9 @@ import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateC
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
+import { refreshRegionalHoldingsView } from './stages/holdings-view';
+import { sovBucketKey } from './stages/shared-helpers';
+import { setSimulationSeed, getRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import {
@@ -17,7 +20,13 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 
-export function createInitialGameState(): GameState {
+/**
+ * Build a world. The same seed always builds the same world and, stepped the same number of
+ * weeks, reaches the same state — which is what makes any before/after measurement of this
+ * simulation mean anything (see engine/rng.ts).
+ */
+export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
+  setSimulationSeed(seed);
   const regions = getInitialRegions();
   const fxPairs = getInitialFxPairs();
   const companies = generateInitialCompanies();
@@ -201,6 +210,28 @@ export function createInitialGameState(): GameState {
           quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD),
         }));
 
+    // Equity is seeded in SHARES, proportional to each name's market cap — the same shape
+    // 07e-equity-clearing.ts builds its structural demand in (§7.4). The greedy size-sorted fill
+    // used before concentrated every entity's book in the two or three largest names, so week 1
+    // opened with a systemic buy gap in every smaller name; and it stored dollars only, which is
+    // the circularity the share registry exists to kill — a book whose size depends on the price
+    // it is supposed to set (#28).
+    const totalEquityCandidatesUSD = equityCandidates.reduce((s2, c) => s2 + c.outstandingUSD, 0) || 1;
+    const equityPriceById = new Map(regionCompanies.map(c => [c.id, c.stockPrice]));
+    const attributeEquityHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+      equityCandidates
+        .filter(c => shareUSD * (c.outstandingUSD / totalEquityCandidatesUSD) > 1)
+        .map(c => {
+          const nameUSD = shareUSD * (c.outstandingUSD / totalEquityCandidatesUSD);
+          return {
+            instrumentId: c.id,
+            instrumentType: c.type,
+            issuerRegion: c.region,
+            quantityShares: nameUSD / Math.max(0.01, equityPriceById.get(c.id) ?? 1),
+            quantityOrNotionalUSD: nameUSD,
+          };
+        });
+
     const govDebtTranches = reg.govDebtTranches || [];
     const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = govDebtTranches.map(gt => ({
       id: gt.id,
@@ -213,22 +244,23 @@ export function createInitialGameState(): GameState {
     // (07c-sovereign-bond-clearing.ts) uses (`${region}-GOV-t2/t5/t10/t30`), not per-tranche —
     // individual gov debt tranches roll off and reissue quarterly, so a per-tranche key here
     // would suffer the exact same silent reset-to-zero problem the corporate-bond seed had.
-    const SOV_TENOR_BUCKETS = [2, 5, 10, 30];
-    const sovBucketOutstandingUSD = new Map<number, number>();
-    SOV_TENOR_BUCKETS.forEach(y => sovBucketOutstandingUSD.set(y, 0));
+    // Keyed by sovBucketKey — bills (b13/b26/b52, WS5) and bonds (t2..t30) alike, so the seed
+    // covers the same seven buckets the weekly engines clear (07f clears the bills, 07c the
+    // bonds) and no bucket opens with a phantom gap.
+    const sovBucketOutstandingUSD = new Map<string, number>();
     govDebtTranches.forEach(gt => {
-      const bucket = SOV_TENOR_BUCKETS.reduce((best, y) => Math.abs(y - gt.tenorAtIssuanceYears) < Math.abs(best - gt.tenorAtIssuanceYears) ? y : best);
-      sovBucketOutstandingUSD.set(bucket, (sovBucketOutstandingUSD.get(bucket) ?? 0) + gt.principalUSD);
+      const key = sovBucketKey(gt.tenorAtIssuanceYears);
+      sovBucketOutstandingUSD.set(key, (sovBucketOutstandingUSD.get(key) ?? 0) + gt.principalUSD);
     });
     const totalSovBucketedUSD = Array.from(sovBucketOutstandingUSD.values()).reduce((s, v) => s + v, 0) || 1;
     const attributeSovBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
-      SOV_TENOR_BUCKETS
-        .filter(y => shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD) > 1)
-        .map(y => ({
-          instrumentId: `${regionId}-GOV-t${y}`,
+      Array.from(sovBucketOutstandingUSD.entries())
+        .filter(([, bucketUSD]) => shareUSD * (bucketUSD / totalSovBucketedUSD) > 1)
+        .map(([key, bucketUSD]) => ({
+          instrumentId: `${regionId}-GOV-${key}`,
           instrumentType: 'GOV_BOND' as const,
           issuerRegion: regionId,
-          quantityOrNotionalUSD: shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD),
+          quantityOrNotionalUSD: shareUSD * (bucketUSD / totalSovBucketedUSD),
         }));
 
     // Seed each named bank's real sovereign book across the same tenor buckets the weekly
@@ -252,9 +284,9 @@ export function createInitialGameState(): GameState {
       regionBanksForSov.forEach(bank => {
         const targetUSD = perBankTargets.get(bank.ticker) ?? 0;
         const byTenor: Record<string, number> = {};
-        SOV_TENOR_BUCKETS.forEach(y => {
-          const bucketUSD = targetUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD);
-          if (bucketUSD > 1) byTenor[`t${y}`] = bucketUSD;
+        sovBucketOutstandingUSD.forEach((bucketUSD_, key) => {
+          const bucketUSD = targetUSD * (bucketUSD_ / totalSovBucketedUSD);
+          if (bucketUSD > 1) byTenor[key] = bucketUSD;
         });
         bank.bankBalanceSheet!.sovereignBondHoldingsByTenor = byTenor;
         bank.bankBalanceSheet!.sovereignBondHoldingsUSD = Number(
@@ -266,7 +298,7 @@ export function createInitialGameState(): GameState {
     reg.institutionalSector.itemizedHoldings = [
       ...attributeItemizedHoldings(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
       ...attributeItemizedHoldings(reg.institutionalSector.sovBondHoldingsUSD, sovCandidates),
-      ...attributeItemizedHoldings(reg.institutionalSector.equityHoldingsUSD, equityCandidates),
+      ...attributeEquityHoldingsProportionally(reg.institutionalSector.equityHoldingsUSD),
     ];
 
     // Build the individual InstitutionalEntity objects mapping to regional Companies
@@ -358,7 +390,7 @@ export function createInitialGameState(): GameState {
         ...attributeCorpBondHoldingsProportionally(entCorpShareUSD),
         ...attributeSovBondHoldingsProportionally(entSovShareUSD),
         ...attributeLoanHoldingsProportionally(entLoanShareUSD),
-        ...attributeItemizedHoldings(entEquityShareUSD, equityCandidates),
+        ...attributeEquityHoldingsProportionally(entEquityShareUSD),
       ];
 
       institutionalEntities.push({
@@ -649,9 +681,23 @@ export function createInitialGameState(): GameState {
     });
   });
 
+  // S7: project the real seeded books onto the sector aggregates before the first week runs, so
+  // week 0's displayed numbers are the same derivation every later week uses. The aggregates
+  // written earlier in this function are the SEEDS the entity targets were sized against (they
+  // have to exist first); this replaces them with what the resulting real books actually hold —
+  // notably including the HC private tier, which the share-times-outstanding seeds never saw.
+  {
+    const seeded = { regions, companies, institutionalEntities } as unknown as GameState;
+    (Object.keys(regions) as RegionId[]).forEach(regionId => {
+      refreshRegionalHoldingsView(seeded, regionId, regions[regionId]);
+    });
+  }
+
   return {
     currentWeek: 1,
     year: 2026,
+    rngSeed: seed,
+    rngState: getRngState(),
     regions,
     fxPairs,
     companies,

@@ -18,6 +18,13 @@ import { Region } from './region-macro';
 export interface GameState {
   currentWeek: number;
   year: number;
+  /**
+   * The seed this world was generated from, and where its random stream currently sits. Carried
+   * on the state so a saved game resumes the same world rather than forking into a new one, and
+   * so any measurement of this simulation can be repeated exactly. See engine/rng.ts.
+   */
+  rngSeed: number;
+  rngState: number;
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];

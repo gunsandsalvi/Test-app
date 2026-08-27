@@ -74,10 +74,6 @@ const MAX_DURATION_TILT = 0.15;
 // -1..+1 index) shifts what "fair value" means right now — real credit investors price a bond
 // against the current market, not against an idiosyncratic PD estimate in a vacuum.
 const CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS = 150;
-// Net weekly order flow equal to this many multiples of an issuer's own total debt outstanding
-// is needed to move its bond price 100% — corporate bonds are less liquid than the equivalent
-// large-cap equity float, hence a shallower depth than EQUITY_LIQUIDITY_DEPTH (6).
-const BOND_LIQUIDITY_DEPTH = 3;
 // The dealer's own standing inventory creates its own convergence pressure each week (a dealer
 // sitting long leans its quotes to sell it back down, and vice versa) — real market-making
 // inventory-risk behavior, not client flow.
@@ -90,11 +86,11 @@ const DEALER_SPREAD_BPS = 15;
 const IG_MANDATE_HY_AVOIDANCE_TILT = -0.7;
 
 function fixedDebtUSD(comp: Company): number {
-  return (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+  return (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
 }
 
 function creditDurationYears(comp: Company): number {
-  const fixedTranches = (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED');
+  const fixedTranches = (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED' && !t.isCommercialPaper);
   const totalFixed = fixedDebtUSD(comp);
   if (fixedTranches.length === 0 || totalFixed <= 0) return 3.5;
   const weightedTenor = fixedTranches.reduce((s, t) => {

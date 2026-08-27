@@ -1,6 +1,7 @@
 import { Company } from '../../types';
 import { isActiveCompany } from '../../domain/company';
 import { formatCurrency } from '../formatters';
+import { random } from '../rng';
 
 export interface MergerCandidate {
   acquirerTicker: string;
@@ -33,7 +34,7 @@ export function checkForMerger(
       if (!isDistressed && !isUndervalued) continue;
 
       // Probabilistic execution trigger: 20% when an eligible match is found
-      if (Math.random() < 0.20) {
+      if (random() < 0.20) {
         const valStr = formatCurrency(target.marketCap * 1.15, { compact: true, precision: 1 });
         return {
           acquirerTicker: acquirer.ticker,

@@ -10,6 +10,7 @@ import {
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
+import { random } from '../rng';
 
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;
@@ -171,7 +172,7 @@ export function evolveRegionMacro(
   const newParticipation = (region.laborForceParticipation + participationDrift);
 
   // Slow demographic drift — independent of the business cycle
-  const nonEmployableDrift = (Math.random() - 0.5) * 0.00002; // tiny, structural, not cycle-driven
+  const nonEmployableDrift = (random() - 0.5) * 0.00002; // tiny, structural, not cycle-driven
   const newNonEmployablePct = (region.nonEmployablePct + nonEmployableDrift);
 
   // Government employment responds to real spending growth
@@ -664,9 +665,17 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   // Housing market evolution as a real asset class
   const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD, region.totalPopulation);
-  const resDemand = region.categoryDemand?.['residential_construction']?.demandLevelUSD ?? 1e9;
-  const resSupply = region.categoryDemand?.['residential_construction']?.inventoryLevelUSD ?? (resDemand * 0.1);
-  const supplyDemandRatio = resSupply / Math.max(1, resDemand);
+  // S8: housing supply is the real cleared OUTPUT of the residential_construction auction, not
+  // its `inventoryLevelUSD` — that field is frozen at initialization for output-only categories,
+  // so the ratio below was a constant pretending to be a market signal and house prices drifted
+  // on a number that never changed. Units cleared this week x the cleared price is the real
+  // weekly supply, against the same week's real demand.
+  const resCat = region.categoryDemand?.['residential_construction'];
+  const resDemandUnits = resCat?.totalUnitsDemandedThisWeek ?? 0;
+  const resSupplyUnits = resCat?.totalUnitsSuppliedThisWeek ?? 0;
+  const supplyDemandRatio = resDemandUnits > 0
+    ? resSupplyUnits / resDemandUnits
+    : 1.0; // no real demand cleared this week — treat as balanced rather than inventing pressure
   const creditFactor = Math.max(0.5, Math.min(1.5, 1.0 + (newPolicyRate < 0.05 ? 0.02 : -0.02)));
   const priceIndexDelta = (1.0 - supplyDemandRatio) * 0.002 * creditFactor;
   const newPriceIndex = Math.max(0.5, Math.min(3.0, prevHousing.priceIndex + priceIndexDelta));
@@ -864,7 +873,7 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
 
   const rateDiff = rDomestic - rForeign;
   const sigmaFx = 0.08;
-  const eps = (Math.random() - 0.5) * Math.sqrt(dt) * 2;
+  const eps = (random() - 0.5) * Math.sqrt(dt) * 2;
 
   // Trade-balance term is now the dominant driver: a sustained current-account imbalance
   // (as a share of each region's own GDP) should actually clear over time rather than being
@@ -883,7 +892,7 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
   const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));
   const change1W = Number((newRate - fx.rate).toFixed(4));
 
-  const basisNoise = (Math.random() - 0.5) * 2.0;
+  const basisNoise = (random() - 0.5) * 2.0;
   const newBasisBps = Math.round(fx.basisSpreadBps + basisNoise + (rDomestic - rForeign) * 20);
 
   const hist = [...fx.historicalRates.slice(-51), newRate];
@@ -962,7 +971,7 @@ export function evolveCommodity(
 ): Commodity {
   const dt = 1 / 52;
   const demandShock = globalGrowth * 0.8;
-  const randomEps = (Math.random() - 0.5) * comm.volatility * Math.sqrt(dt);
+  const randomEps = (random() - 0.5) * comm.volatility * Math.sqrt(dt);
 
   let weatherBoost = 0;
   Object.values(regions).forEach((r) => {
@@ -989,7 +998,7 @@ export function evolveCommodity(
 
   const hist = [...comm.historicalPrices.slice(-51), newSpot];
 
-  const inventoryLevelPct = Math.max(0, Math.min(100, Math.round(comm.inventoryLevelPct + (Math.random() - 0.5) * 3 - (weatherBoost > 0 ? 4 : 0))));
+  const inventoryLevelPct = Math.max(0, Math.min(100, Math.round(comm.inventoryLevelPct + (random() - 0.5) * 3 - (weatherBoost > 0 ? 4 : 0))));
   // Derived from the same clearing ratio actually driving price/supply/demand above, not the
   // independent inventoryLevelPct random walk — previously the two could (and regularly did)
   // disagree, e.g. showing "Balanced" next to a ~2x demand/supply gap.

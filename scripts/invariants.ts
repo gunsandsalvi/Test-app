@@ -1,4 +1,15 @@
 import { createInitialGameState } from '../src/engine/simulation/initialization';
+import { DEFAULT_SIMULATION_SEED } from '../src/engine/rng';
+
+// Same seed, same world. Pass SEED=<n> to check a result against a genuinely different economy
+// rather than against the noise an unseeded run used to produce.
+const SEED = Number(process.env.SEED ?? DEFAULT_SIMULATION_SEED);
+
+// How long to run. 60 weeks is the working default — every real finding in this project has come
+// from the first sixty, and a change can be checked in a minute instead of half an hour. The full
+// 260-week run belongs at the close of a section, where the long-horizon degradation items
+// (#67 bank capital, #18 revenue runaway) actually live: WEEKS=260 npm run verify
+const WEEKS = Number(process.env.WEEKS ?? 60);
 import { advanceWeeklyStep } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
@@ -22,6 +33,60 @@ let prevStateForBookCheck: GameState | null = null;
  * The tolerance is per-week and generous enough to cover real dealer spread and coupon/redemption
  * flows while still catching a leg that is missing entirely.
  */
+/**
+ * S7: the one-ledger conservation check. Every dollar of an instrument is held by exactly one of
+ * the real books, or sits with the passive share the model does not yet name as holders
+ * (households, foreign, central bank — the complement of the tradable share, which retires when
+ * MS and WS9 land). Overshoot is the failure that matters: if the real books together claim MORE
+ * than the instrument's outstanding, some formula is minting claims.
+ */
+function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
+  const out: Violation[] = [];
+  (['USA', 'EUR', 'UK', 'JPN'] as const).forEach(regionId => {
+    const reg: any = (state as any).regions[regionId];
+    const cos = state.companies.filter((c: any) => c.region === regionId && !c.isDefaulted && !c.mergerAcquired);
+    const fixedOutstanding = cos.reduce((a: number, c: any) =>
+      a + (c.debtTranches || []).filter((t: any) => t.rateType === 'FIXED').reduce((x: number, t: any) => x + t.principalUSD, 0), 0);
+    const floatOutstanding = cos.reduce((a: number, c: any) =>
+      a + (c.debtTranches || []).filter((t: any) => t.rateType === 'FLOATING').reduce((x: number, t: any) => x + t.principalUSD, 0), 0);
+    const sovOutstanding = (reg.govDebtTranches || []).reduce((a: number, t: any) => a + t.principalUSD, 0);
+
+    let heldCorp = 0, heldLoan = 0, heldSov = 0;
+    state.institutionalEntities.forEach((e: any) => {
+      if (e.region !== regionId) return;
+      e.itemizedHoldings.forEach((h: any) => {
+        const v = h.quantityOrNotionalUSD ?? 0;
+        if (h.instrumentType === 'CORP_BOND') heldCorp += v;
+        else if (h.instrumentType === 'LEVERAGED_LOAN') heldLoan += v;
+        else if (h.instrumentType === 'GOV_BOND') heldSov += v;
+      });
+    });
+    state.companies.forEach((c: any) => {
+      if (c.region !== regionId || !c.bankBalanceSheet) return;
+      heldSov += (Object.values(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}) as any[])
+        .reduce((a: number, v: any) => a + (Number(v) || 0), 0);
+    });
+    (reg.bankingSector.corpBondDealerInventory || []).forEach((p: any) => { heldCorp += p.inventoryUSD; });
+    (reg.bankingSector.loanDealerInventory || []).forEach((p: any) => { heldLoan += p.inventoryUSD; });
+
+    const cases: [string, number, number][] = [
+      ['corporate bonds', heldCorp, fixedOutstanding],
+      ['leveraged loans', heldLoan, floatOutstanding],
+      ['sovereign bonds', heldSov, sovOutstanding],
+    ];
+    cases.forEach(([label, held, outstanding]) => {
+      if (outstanding <= 0) return;
+      if (held > outstanding * 1.02) {
+        out.push({
+          week,
+          message: `${regionId} ${label}: real books hold ${(held / 1e9).toFixed(1)}B against ${(outstanding / 1e9).toFixed(1)}B outstanding (${((held / outstanding - 1) * 100).toFixed(1)}% over) — a ledger is minting claims`
+        });
+      }
+    });
+  });
+  return out;
+}
+
 function checkInstitutionalBookConservation(prev: GameState, state: GameState, week: number) {
   const bookOf = (s: GameState, region: RegionId) =>
     (s.institutionalEntities || [])
@@ -118,7 +183,7 @@ function checkNavIdentity(state: GameState, week: number) {
 
 
 function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
-  let seedState = createInitialGameState();
+  let seedState = createInitialGameState(SEED);
   const company = seedState.companies[0];
   const posData = {
     assetType: 'EQUITY' as any,
@@ -151,7 +216,7 @@ function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
 }
 
 function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
-  let state = createInitialGameState();
+  let state = createInitialGameState(SEED);
   const ticker = state.companies.find(c => c.region === 'USA' && !c.isBankEntity && !c.isInstitutionalEntity)?.ticker;
   if (!ticker) return null;
   // Force a large institutional under-allocation so the holder-class rebalancing flow
@@ -183,8 +248,8 @@ function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
 }
 
 function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
-  const baseline = createInitialGameState();
-  const shocked = createInitialGameState();
+  const baseline = createInitialGameState(SEED);
+  const shocked = createInitialGameState(SEED);
   // S6: shock the fields the market ACTUALLY reads. The old version shrank two macro scalars
   // (bankEquityUSD / sectorEquityUSD) that the clearing engine stopped reading when sovereign
   // demand became per-bank reserve arbitrage (S2) and per-entity budgets (S11) — so baseline and
@@ -213,8 +278,8 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
 }
 
 function runInvariantsHarness() {
-  console.log('--- STARTING INVARIANTS HARNESS (260 WEEKS) ---');
-  let state = createInitialGameState();
+  console.log(`--- STARTING INVARIANTS HARNESS (${WEEKS} WEEKS, seed ${SEED}) ---`);
+  let state = createInitialGameState(SEED);
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
   let knownTickers = new Set(state.companies.map(c => c.ticker));
 
@@ -242,8 +307,8 @@ function runInvariantsHarness() {
     violations.push(auctionViolation);
   }
 
-  for (let w = 1; w <= 260; w++) {
-    if (true) {
+  for (let w = 1; w <= WEEKS; w++) {
+    if (w % 10 === 0) {
       console.log(`[Invariants Harness] Week ${w}...`);
     }
     // Inject scripted trades at week 5 to test NAV with IRS, CDS, and leveraged positions
@@ -389,6 +454,7 @@ function runInvariantsHarness() {
     // 5. NAV identity
     checkNavIdentity(state, w);
     if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
+    violations.push(...checkHoldingsLedgerConservation(state, w));
     prevStateForBookCheck = state;
 
     // 6. Bank capital ratio & NIM bands for USA
@@ -429,14 +495,14 @@ function runInvariantsHarness() {
     const initRev = initialRevenueByTicker.get(c.ticker);
     if (initRev && c.annualRevenue > initRev * 20) {
       violations.push({
-        week: 260,
+        week: WEEKS,
         message: `Company ${c.ticker} revenue grew >20x initial baseline (${initRev} -> ${c.annualRevenue})`
       });
     }
   });
 
   if (violations.length === 0) {
-    console.log('✅ INVARIANTS HARNESS PASSED — 260 weeks, all assertions satisfied!');
+    console.log(`✅ INVARIANTS HARNESS PASSED — ${WEEKS} weeks, all assertions satisfied!`);
     process.exit(0);
   } else {
     console.error(`❌ INVARIANTS HARNESS FAILED — ${violations.length} violation(s):`);

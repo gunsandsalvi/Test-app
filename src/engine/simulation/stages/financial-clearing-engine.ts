@@ -87,6 +87,19 @@ export interface ParticipantDemand {
    * (banks in 07c, whose real constraint is their reserve position, not a cash budget).
    */
   maxNetPurchaseUSD?: number;
+  /**
+   * The core this participant holds at ANY level — a mandate expressed as size, never as a price
+   * (the same doctrine as the sub-investment-grade sleeve). An insurer matching claim reserves
+   * and a pension fund matching a liability duration cannot liquidate their government book
+   * because yields look poor this week: the liability is still there, and something has to match
+   * it. Without this, a demand schedule that goes to zero when the reservation level is missed
+   * let real-money holders sell an entire asset class in twenty weeks (§7.26).
+   *
+   * This is a floor on holdings, not on price: it says WHAT a mandate forces the holder to own,
+   * and leaves WHERE it clears entirely to the auction. G6 replaces the modelled share with each
+   * entity's real liability profile.
+   */
+  minHoldingUSD?: number;
 }
 
 export interface ClearingParticipant {
@@ -136,7 +149,10 @@ function demandAtStat(
   const affordableUSD = demand.maxNetPurchaseUSD === undefined
     ? Infinity
     : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
-  return Math.min(wantedUSD, affordableUSD);
+  // The mandated core is held at any level, but a mandate cannot conjure money: it is bounded by
+  // what the participant can actually afford to hold.
+  const mandatedCoreUSD = Math.min(demand.minHoldingUSD ?? 0, affordableUSD);
+  return Math.max(mandatedCoreUSD, Math.min(wantedUSD, affordableUSD));
 }
 
 /**
@@ -232,11 +248,32 @@ export function clearFinancialAsset(
     newStatById.set(inst.id, isFinite(clearedStat) ? clearedStat : inst.currentStat);
 
     // Everyone holds what they wanted at the level that cleared; the dealer carries any residual.
-    let allocatedUSD = 0;
+    //
+    // The printed level is the DAMPED one, so at that level demand and float need not be equal —
+    // damping is a discrete-time device and the market still has to settle a real quantity
+    // against it. When the schedules want more than exists, the fills are rationed pro rata:
+    // the same allocation rule the goods auction uses (#49), and the only honest one, because
+    // nobody can be handed a security that was never issued. Without this, a level held below
+    // its solve by the damping let every participant book its full unclamped size and the books
+    // together claimed multiples of the float — measured at 200% of shares outstanding in the
+    // equity slice, which is where it finally became impossible to miss.
+    const wantedByParticipant = new Map<string, number>();
+    let wantedTotalUSD = 0;
     participants.forEach((p) => {
       const d = p.demandByInstrumentId.get(inst.id);
       const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
       const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind, previousUSD) : 0;
+      wantedByParticipant.set(p.id, filledUSD);
+      wantedTotalUSD += filledUSD;
+    });
+    const rationFactor = wantedTotalUSD > inst.tradableFloatUSD
+      ? inst.tradableFloatUSD / wantedTotalUSD
+      : 1;
+
+    let allocatedUSD = 0;
+    participants.forEach((p) => {
+      const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
+      const filledUSD = (wantedByParticipant.get(p.id) ?? 0) * rationFactor;
       const tradedUSD = filledUSD - previousUSD;
       const feeUSD = Math.abs(tradedUSD) * (params.dealerSpreadBps / 10000);
 
