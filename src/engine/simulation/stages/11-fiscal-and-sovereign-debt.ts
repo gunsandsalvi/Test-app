@@ -12,6 +12,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
 import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts';
+import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
@@ -71,6 +72,37 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       ...attributeItemizedHoldings(instSovShareUSD, sovCandidates),
       ...attributeItemizedHoldings(instEquityShareUSD, equityCandidates),
     ];
+  });
+
+  // Measure this week's real consumer price level from the prices stage 05's auction actually
+  // cleared, and derive inflation as its year-over-year change. This is the only place inflation
+  // is set; macro/evolution.ts carries the measured value forward rather than computing one.
+  // Running it here, after the auction and alongside the GDP measurement, is also why the Taylor
+  // rule in stage 02 reads LAST week's figure — which is how central banks actually work, acting
+  // on the most recently published statistic rather than one that does not exist yet.
+  regionIds.forEach((regionId) => {
+    const reg = updatedRegions[regionId];
+
+    // Rebase annually onto current spending patterns, chain-linked from the current level so the
+    // series has no step at the rebase — what a statistical agency does when consumption habits
+    // have moved far enough that last year's weights no longer describe the basket people buy.
+    if (nextWeek - reg.cpiBasket.baseWeek >= CPI_BASKET_REBASE_WEEKS || Object.keys(reg.cpiBasket.weightBySubUnit).length === 0) {
+      reg.cpiBasket = buildCpiBasket(reg, nextWeek, computeCpiLevel(reg, reg.cpiBasket));
+    }
+
+    const cpiLevel = computeCpiLevel(reg, reg.cpiBasket);
+    const coreCpiLevel = computeCpiLevel(reg, reg.cpiBasket, true);
+    const cpiHistory = [...(reg.cpiHistory ?? []).slice(-52), cpiLevel];
+    const coreCpiHistory = [...(reg.coreCpiHistory ?? []).slice(-52), coreCpiLevel];
+    const yearAgoCpi = cpiHistory.length >= 53 ? cpiHistory[0] : null;
+    const yearAgoCoreCpi = coreCpiHistory.length >= 53 ? coreCpiHistory[0] : null;
+
+    reg.consumerPriceIndex = Number(cpiLevel.toFixed(6));
+    reg.coreConsumerPriceIndex = Number(coreCpiLevel.toFixed(6));
+    reg.cpiHistory = cpiHistory;
+    reg.coreCpiHistory = coreCpiHistory;
+    if (yearAgoCpi && yearAgoCpi > 0) reg.inflation = Number((cpiLevel / yearAgoCpi - 1).toFixed(4));
+    if (yearAgoCoreCpi && yearAgoCoreCpi > 0) reg.coreInflation = Number((coreCpiLevel / yearAgoCoreCpi - 1).toFixed(4));
   });
 
   // Phase 4a: Derived nominal GDP parallel diagnostic
@@ -280,6 +312,94 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     if (updatedBankingSector.centralBankReservesUSD < 0) throw new Error("Invariant Violation: centralBankReservesUSD cannot be negative");
     updatedBankingSector.centralBankReservesUSD = Number(updatedBankingSector.centralBankReservesUSD.toFixed(0));
+
+    // Place the new issue with the buyers who actually fund the government, the same way maturity
+    // takes it back off them. A government does not leave a new bond sitting unowned: it auctions
+    // it, and the existing holder base takes it down. Leaving it unheld made every issuance week
+    // a large one-sided demand shock — participants' targets scale with the outstanding stock, so
+    // the whole stock of new paper had to be bought back off nobody, and the two-year yield went
+    // NEGATIVE while the policy rate sat near 3%.
+    //
+    // Allocated pro-rata to each holder's existing position in the same tenor bucket, with banks
+    // paying for it out of the cash that maturity credits them — the same balance-sheet swap in
+    // the opposite direction, so composition shifts and total assets do not jump. When a bank
+    // runs its cash down funding the government it reaches for the standing repo facility, which
+    // is exactly the real behaviour Phase 2 already models.
+    //
+    // This is placement, not underwriting: no fee, no book-building, no auction price discovery.
+    // Those are the real primary market (see the work order's issuance item); this just stops the
+    // secondary market from being handed a phantom seller every quarter.
+    if (newTranches.length > 0) {
+      const bucketKeyOf = (tenorYears: number) => `t${tenorYears}`;
+      const issuedByBucket = new Map<string, number>();
+      newTranches.forEach(t => {
+        const key = bucketKeyOf(t.tenorAtIssuanceYears);
+        issuedByBucket.set(key, (issuedByBucket.get(key) ?? 0) + t.principalUSD);
+      });
+
+      // Who currently holds each bucket, so the new paper lands in proportion to real positions.
+      const heldByBucket = new Map<string, number>();
+      ctx.updatedCompanies.forEach(c => {
+        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return;
+        Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}).forEach(([key, usd]) => {
+          heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + usd);
+        });
+      });
+      ctx.updatedInstitutionalEntities.forEach(entity => {
+        if (entity.region !== regionId) return;
+        entity.itemizedHoldings.forEach(h => {
+          if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return;
+          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
+          heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + h.quantityOrNotionalUSD);
+        });
+      });
+
+      // Bank and institutional holders together fund the market-held share of the new issue; the
+      // rest is the foreign and central-bank base this slice still treats as passive.
+      const placedShare = reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare;
+      const takeUpFractionByBucket = new Map<string, number>();
+      issuedByBucket.forEach((issuedUSD, key) => {
+        const heldUSD = heldByBucket.get(key) ?? 0;
+        if (heldUSD > 0) takeUpFractionByBucket.set(key, (issuedUSD * placedShare) / heldUSD);
+      });
+
+      ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
+        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
+        const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByTenor || {};
+        let purchasedUSD = 0;
+        const newByTenor: Record<string, number> = { ...byTenor };
+        Object.entries(byTenor).forEach(([key, heldUSD]) => {
+          const takeUp = takeUpFractionByBucket.get(key) ?? 0;
+          if (takeUp <= 0) return;
+          purchasedUSD += heldUSD * takeUp;
+          newByTenor[key] = heldUSD * (1 + takeUp);
+        });
+        if (purchasedUSD <= 0) return c;
+        return {
+          ...c,
+          bankBalanceSheet: {
+            ...c.bankBalanceSheet,
+            sovereignBondHoldingsByTenor: newByTenor,
+            sovereignBondHoldingsUSD: Number(Object.values(newByTenor).reduce((sum, v) => sum + v, 0).toFixed(0)),
+            cashReservesUSD: c.bankBalanceSheet.cashReservesUSD - purchasedUSD,
+          },
+        };
+      });
+
+      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
+        if (entity.region !== regionId) return entity;
+        let touched = false;
+        const newHoldings = entity.itemizedHoldings.map(h => {
+          if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
+          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
+          const takeUp = takeUpFractionByBucket.get(key) ?? 0;
+          if (takeUp <= 0) return h;
+          touched = true;
+          return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 + takeUp) };
+        });
+        return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
+      });
+    }
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
     const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);

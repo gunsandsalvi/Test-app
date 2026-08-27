@@ -84,25 +84,13 @@ export function evolveRegionMacro(
   
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week);
 
-  const weatherDecay = Math.pow(0.55, Math.max(0, updatedWeather.weeksActive - 1));
-  let weatherInfShock = updatedWeather.inflationImpactPct * weatherDecay;
-  
-  if (updatedWeather.affectedCommodityId && prevCommodities.length > 0) {
-    const affectedComm = prevCommodities.find(c => c.id === updatedWeather.affectedCommodityId || c.symbol === updatedWeather.affectedCommodityId);
-    if (affectedComm && affectedComm.historicalPrices.length >= 2) {
-      const lastPrice = affectedComm.historicalPrices[affectedComm.historicalPrices.length - 1];
-      const prevPrice = affectedComm.historicalPrices[affectedComm.historicalPrices.length - 2];
-      const realizedCommodityChangePct = (lastPrice - prevPrice) / prevPrice;
-      const consumptionBasketWeight = 0.03; // Assumed share of CPI basket
-      weatherInfShock = (realizedCommodityChangePct * consumptionBasketWeight) * weatherDecay;
-    }
-  }
-
-  // Micro-to-Macro Transmission:
-  // 1. Margin compression forces hiring freezes, cooling wage inflation
-  const laborCooling = microFeedback.marginCompression * 0.15;
-  
-  const infNoise = (Math.random() - 0.5) * 0.0008 + globalShock.inflationShock + weatherInfShock * 0.20 - laborCooling * 0.0008;
+  // A weather event's effect on inflation is no longer injected into a CPI formula here. It was
+  // an assumed 3% "share of CPI basket" applied to one commodity's price change — a second,
+  // parallel account of something the simulation already models for real: bad weather cuts a real
+  // commodity's real supply, that commodity's price clears higher in stage 07, its buyers' input
+  // costs rise, and the goods households buy clear higher in stage 05's auction, which the price
+  // index then measures. The real chain is the transmission; the shortcut around it was double
+  // counting with an invented weight. `updatedWeather` still drives that real supply effect.
 
   // GDP Growth is derived bottom-up from C+I+G+NX identity in simulation core (Phase 4)
   const potentialGdp = region.potentialGdpGrowth;
@@ -151,10 +139,12 @@ export function evolveRegionMacro(
   // Process recession shocks
   const remainingShocks = region.recessionShockQueue.filter(s => s.week !== week);
 
-  // 1. Autoregressive AR(1) base with anchor to target inflation piStar + supply noise
-  const infPersistence = 0.98;
-  const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
-  let newInflation = Number(baseInflation.toFixed(4));
+  // Inflation is NOT computed here. It is measured, in simulation/stages/price-index.ts, as the
+  // year-over-year change in a real consumer basket priced at what stage 05's auction actually
+  // clears. This carries last week's measured figure forward for the stages that read it before
+  // the new measurement exists — most importantly the Taylor rule below, which is supposed to
+  // react to the most recently published statistic, exactly as a real central bank does.
+  const newInflation = region.inflation;
 
   const smoothedAnnualizedGrowthForFiscal = ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52;
   const outputGap = potentialGdp - smoothedAnnualizedGrowthForFiscal;
@@ -545,22 +535,16 @@ export function evolveRegionMacro(
     normalizedTiers
   );
 
-  const prevM2 = region.bankingSector.moneySupplyM2USD > 0
-    ? region.bankingSector.moneySupplyM2USD
-    : (region.bankingSector.depositsUSD + (region.bankingSector.centralBankReservesUSD ?? 1.2e12) * 0.1);
-  const m2GrowthRateAnnualized = prevM2 > 0
-    ? ((newBankingSector.moneySupplyM2USD / prevM2) - 1) * 52
-    : 0;
-  const velocityFactor = (1.0 - Math.max(0, (100 - newCCI) / 100) * 0.6); // low confidence suppresses velocity, dampening inflation pass-through
-  const monetaryInflationPressure = ((m2GrowthRateAnnualized - newGdpGrowth) * 0.15 * velocityFactor);
-
-  const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
-  
-  // Wage-push and monetary inflation add to CPI (scaled for weekly turn)
-  newInflation = Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4));
-  newInflation = isFinite(newInflation) ? Number(Math.max(-0.20, Math.min(0.50, newInflation)).toFixed(4)) : 0.025;
-  const rawCore = newInflation * 0.92 + wagePushInflation * 0.1;
-  const newCoreInflation = isFinite(rawCore) ? Number(Math.max(-0.20, Math.min(0.50, rawCore)).toFixed(4)) : 0.025;
+  // The wage-push and monetary-pressure terms that used to be added to CPI here are gone. Both
+  // were formulas layered on top of an already-formulaic inflation series, and together they were
+  // the runaway: an AR(1) with 0.98 persistence multiplies any persistent addition roughly
+  // fiftyfold in equilibrium, and the monetary term's `m2Growth - gdpGrowth` grew without bound as
+  // measured real growth fell — a feedback loop from inflation, through fake real growth, back
+  // into inflation. If higher wages or faster money growth genuinely raise prices, they do it by
+  // raising what buyers bid in stage 05's real auction, and the price index measures that. A
+  // separate term for them counts the same economics twice, once through the market and once
+  // around it.
+  const newCoreInflation = region.coreInflation;
   const rawExp = region.expectedInflation * 0.9 + newInflation * 0.1;
   const newExpectedInflation = isFinite(rawExp) ? Number(Math.max(-0.20, Math.min(0.50, rawExp)).toFixed(4)) : 0.025;
 
@@ -802,8 +786,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     inflation: newInflation,
     coreInflation: newCoreInflation,
     expectedInflation: newExpectedInflation,
-    wagePushInflation,
-    monetaryInflationPressure,
     gdpGrowth: newGdpGrowth,
     wageGrowth: Number(newWageGrowth.toFixed(4)),
     debtToGdpPct: newDebtToGdpPct,

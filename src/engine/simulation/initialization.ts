@@ -6,6 +6,7 @@ import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
+import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import {
@@ -395,6 +396,10 @@ export function createInitialGameState(): GameState {
       governmentSpendingWeeklyUSD: reg.governmentSpendingUSD,
       netExportsUSD: reg.exportsUSD - reg.importsUSD,
     });
+    // Build the real consumer basket now that every sub-unit carries its bootstrapped price.
+    // Weights are what households actually spend on each good; base prices are today's.
+    reg.cpiBasket = buildCpiBasket(reg, 1, CPI_BASE_LEVEL);
+
     reg.derivedNominalGdpUSD = Number(bottomUpGdpUSD.toFixed(0));
     reg.lastWeekNominalGdpUSD = reg.derivedNominalGdpUSD;
     const nominalTrendGrowth = reg.potentialGdpGrowth + reg.targetInflation;

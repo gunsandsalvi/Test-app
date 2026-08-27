@@ -91,7 +91,7 @@ every cross-stage dependency is visible) and runs the stages in order:
 | 08 | `08-company-fundamentals.ts` | Per-company weekly update: revenue (anchored to stage 05 real sales), costs, capex/debt, rating, earnings, equity price. Largest stage; reads cleared credit stats, never sets them |
 | 09 | `09-concentration-risk.ts` | >40% supplier/customer concentration flags |
 | 10 | `10-mergers.ts` | Quarterly M&A |
-| 11 | `11-fiscal-and-sovereign-debt.ts` | Bottom-up GDP, deficit → real gov tranche issuance, itemized-holdings attribution (**mechanical rebuild — must die, §5-B2**), news generation |
+| 11 | `11-fiscal-and-sovereign-debt.ts` | The statistics stage: measures bottom-up GDP **and the consumer price index** (`stages/price-index.ts` — the only place inflation is set); deficit → real gov tranche issuance, placed with and redeemed from real holders; itemized-holdings attribution (**mechanical rebuild — must die, §5-S7**), news generation |
 | 12 | `12-portfolio-and-positions.ts` | Index recomputation + player portfolio mark-to-market |
 | 13 | `13-news-and-turn-summary.ts` | IPO checks, cash/NAV settlement, turn summary |
 
@@ -170,38 +170,40 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
-| 1 | **CPI measured from the real cleared basket** — promoted, see note | G1 | — (S1, S2 done) |
-| 2 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | G1 |
-| 3 | Cash settlement in all clearing + stop bank sov-holdings drift | S4 | S3 |
-| 4 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
-| 5 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
-| 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
-| 7 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
-| 8 | Player trades enter the real market | S9 | S4, S7 |
-| 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 10 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
-| 11 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
-| 12 | Private repo markets | WS6 | S4 |
-| 13 | Money market funds | WS7 | WS5, WS6 |
-| 14 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 15 | Hedge funds as distressed-debt demand | WS10 | WS4 |
-| 16 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
-| 17 | Unify the two dealer systems | G3 | S9 |
-| 18 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 19 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
-| 20 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 21 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 22 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 23 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 24 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
-| 25 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
-| 26 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
-| 27 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 28 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | — (S1, S2, G1 done) |
+| 2 | Cash settlement in all clearing + stop bank sov-holdings drift | S4 | S3 |
+| 3 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
+| 4 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
+| 5 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
+| 6 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
+| 7 | Player trades enter the real market | S9 | S4, S7 |
+| 8 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
+| 9 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
+| 10 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
+| 11 | Private repo markets | WS6 | S4 |
+| 12 | Money market funds | WS7 | WS5, WS6 |
+| 13 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 14 | Hedge funds as distressed-debt demand | WS10 | WS4 |
+| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
+| 16 | Unify the two dealer systems | G3 | S9 |
+| 17 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
+| 19 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 20 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 21 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 22 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 23 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
+| 24 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
+| 25 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
+| 26 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 27 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
-**Why this order.** S1 and S2 are done (§7.10, §7.11): the ~110% fake GDP growth is gone and the
-yield curve now has exactly one owner, the real auction. **G1 is promoted to first** on evidence
-gathered while verifying both: with the fake growth removed, the dominant remaining distortion is the CPI formula, which
+**Why this order.** The three macro root causes are done (§7.10–§7.12): the ~110% fake GDP growth,
+the double-written yield curve, and the runaway formula CPI. Real growth now reads positive in
+every region at week 26 and inflation is a measured statistic. What remains is the money side —
+so the order runs: sign off the credit markets built on the old macro (S3), then restore the cash
+and holdings identities (S4–S7), then the player and the remaining markets. Kept for the record,
+the evidence that promoted G1 to the front of the queue in the first place: with the fake growth removed, the dominant remaining distortion is the CPI formula, which
 runs inflation away to ~10% by week 40 and ~11% in the pre-S1 baseline (A/B confirmed
 pre-existing, not caused by S1). Because headline real growth is computed as nominal minus
 inflation, that runaway alone drags reported growth to −20% by week 40 and feeds the Taylor
@@ -407,28 +409,6 @@ feels residual exposure.
 
 ---
 
-### G1 — CPI measured from the real basket  ← **promoted to 2nd; see §4**
-
-**Measured evidence (gathered while verifying S1, A/B against the committed baseline):** the
-current formula-driven CPI runs away — USA inflation climbs 1.6% → 4.2% by week 10, 6.8% by
-week 20, 9.8% by week 40, and reaches 11.4% in the pre-S1 baseline. It does not mean-revert to
-target and the Taylor rule does not contain it (policy rate lags to 5.3% while inflation is
-10%). Every region does the same. Because headline real growth is `nominal YoY − inflation`,
-this single formula drags reported real growth to −20% even when the nominal level is nearly
-flat, and it feeds every real-rate and discounting calculation downstream. It is now the
-largest remaining distortion in the macro layer.
-
-
-**Where:** `macro/evolution.ts` (delete the formula), new small module
-`engine/simulation/stages/price-index.ts` (or fold into stage 11).
-**How:** fixed-weight (chain-updated annually) basket over the real transacted prices the
-sim already produces: stage 05 cleared unit prices per sub-unit (household buyerMix share as
-weights), commodity spots (energy/food weight), housing (S8's real series). CPI = weighted
-index; `inflation` = its 52-week change; `coreInflation` = ex energy/food. The wage-push and
-"monetary pressure" terms die — if they're real, they show up in the real prices. Keep
-`expectedInflation` as adaptive expectations over the measured series. **This changes the
-Taylor rule's input** — validate policy-rate behavior over 60 weeks after.
-
 ### G2 — Itemized lending + endogenous money
 
 **How:** bank loan books become itemized: business loans = real credit lines/term loans to
@@ -560,11 +540,10 @@ the complete simulation.
 | `charts/Charts.tsx` | YieldCurveChart x-axis: nonlinear tenors plotted equally spaced, middle label wrong |
 | `NewsDrawer.tsx:94` | Verify `Commodity.symbol` matches `'CRUDE_OIL'` ids; else fallback always picks `commodities[0]` |
 | `ManualModal.tsx` | Restated engine constants (IM rates, axe discounts, Taylor coefficients) drifting from code — generate from the real constants or trim |
-| `11-fiscal-and-sovereign-debt.ts` issuance | New government issuance enters the market as unheld float — nobody is allocated it at auction, so the clearing engine absorbs it over the following weeks and yields dip while it is digested (visible as a 2Y dip after each maturity/reissuance wave). Real primary placement with banks as underwriters is **WS8**; until then this is a known, bounded artifact rather than a defect in the secondary-market clearing |
 | `macro/evolution.ts` wage/tightness | Nominal wage growth goes negative (−2.5% by week 40) while inflation runs at 10% — a 12% real-wage collapse per year. Partly a symptom of G1's runaway, partly the tightness→wage-growth formula having no real bargaining mechanism. Re-measure after G1; if it survives, it belongs to MS3 |
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
-| open (#67) | USA bank capital → 0 from ~week 149 (expect root cause via S4 + G2; re-verify then) |
+| open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 
 ## 7. Record & lessons (do not re-learn)
@@ -663,6 +642,45 @@ the complete simulation.
       and tracks the policy rate. The deleted `computeSupplyDemandPremium` call in stage 02 went
       with it (it compared an ownership share times sector equity against principal outstanding —
       not commensurable quantities — purely to feed the old curve write).
-12. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+12. **G1 landed (inflation is measured, not assumed).** `macro/evolution.ts` no longer computes
+    inflation at all. `simulation/stages/price-index.ts` builds a real consumer basket — every
+    sub-unit households actually buy, weighted by what they actually spend on it — prices it at
+    the unit prices stage 05's auction genuinely clears, and takes the 52-week change. Core is the
+    same index excluding food and energy. The basket rebases annually onto current spending,
+    chain-linked so the level has no step.
+    - **What died with it**: the AR(1) series anchored on target, the wage-push term, the
+      money-growth term, and a weather shock injected through an invented "3% of the CPI basket"
+      weight. The AR(1) had 0.98 persistence, which multiplies any persistent addition roughly
+      fiftyfold in equilibrium, and the monetary term's `m2Growth - gdpGrowth` grew without bound
+      as measured real growth fell — inflation, through fake real growth, back into inflation.
+      Weather still moves prices, but the real way: less supply, higher commodity price, higher
+      input costs, higher cleared goods price, measured by the index.
+    - **A real bug found doing it, worth more than the feature**: `03-category-demand.ts` rebuilt
+      each category's state object from scratch every week and silently dropped every field owned
+      by a later stage — above all `unitPriceUSD`, the cleared price stage 05 writes. So the
+      bootstrapped per-unit prices (~$70k for some categories) were destroyed in week 1, stage 05
+      fell back to its `Math.max(1, seed || 1)` default, and **every price in the economy rebased
+      to a ~$1 scale one week into every run**. Anything comparing prices across that boundary was
+      comparing two different units. Fixed by spreading the existing entry: a stage writes the
+      fields it owns and nothing else.
+    - **Sovereign issuance is now placed with real buyers**, the mirror of S2's redemption fix.
+      Leaving a new issue unheld made every issuance week a one-sided demand shock — targets scale
+      with the outstanding stock, so the whole new issue had to be bought off nobody, and the 2Y
+      went NEGATIVE against a ~3% policy rate. Placement is pro-rata to existing holders, banks
+      paying from the cash maturity credits them. Not underwriting (no fee, no book-building, no
+      auction price discovery — that is still WS8), but it stops handing the secondary market a
+      phantom seller every quarter.
+    - Result: inflation starts near target, is bounded and mean-reverting over 120 weeks in all
+      four regions (CPI 82–117, peaks reversing) rather than climbing monotonically past 11%; the
+      Taylor rule now moves against a real statistic; the 2Y tracks the policy rate across 60
+      weeks with no negative yields; **real growth reads positive in every region at week 26**
+      (2.9%–6.1%, against −14% before); and the revenue-ratio diagnostic is the healthiest this
+      project has recorded (median 1.00, 2 violations at week 60, against 20–118 in earlier phases).
+    - **Residual, recorded not fixed**: inflation is volatile, swinging ±10–17% over a year.
+      Decomposition shows it is broad-based across the basket rather than one pathological
+      category, so it is a genuine price cycle in the goods auction — amplified by the fact that
+      monetary policy has no demand-side transmission channel yet, so the Taylor rule can respond
+      but cannot stabilise. That channel is G2 (real lending) plus household rate response (MS).
+13. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
    MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
    `npm run verify` gate closes #2/#14/#41.

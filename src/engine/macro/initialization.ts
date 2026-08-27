@@ -5,6 +5,7 @@ import { generate52WeekHistory } from './utils';
 import { INITIAL_WEATHER } from './weather';
 import { getRegionPopulation, getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
+import { CPI_BASE_LEVEL, seedCpiHistory } from '../simulation/stages/price-index';
 import {
   assertHouseholdIncomeIdentity,
   computeHouseholdDisposableIncomeUSD,
@@ -386,9 +387,14 @@ function buildRegion(regionId: RegionId): Region {
     neutralRate,
     inflation: targetInflation,
     coreInflation: targetInflation,
+    // Seeded empty here and filled once every region's sub-unit prices exist (see
+    // simulation/initialization.ts) — a price index needs the prices before it can be built.
+    consumerPriceIndex: CPI_BASE_LEVEL,
+    coreConsumerPriceIndex: CPI_BASE_LEVEL,
+    cpiHistory: seedCpiHistory(CPI_BASE_LEVEL, targetInflation),
+    coreCpiHistory: seedCpiHistory(CPI_BASE_LEVEL, targetInflation),
+    cpiBasket: { weightBySubUnit: {}, basePriceBySubUnit: {}, baseIndexLevel: CPI_BASE_LEVEL, baseWeek: 1 },
     expectedInflation: targetInflation,
-    wagePushInflation: Number((targetInflation * 0.5).toFixed(4)),
-    monetaryInflationPressure: Number((targetInflation * 0.2).toFixed(4)),
     targetInflation,
     gdpGrowth,
     potentialGdpGrowth: gdpGrowth,

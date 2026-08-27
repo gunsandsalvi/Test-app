@@ -193,9 +193,17 @@ export interface Region {
   neutralRate: number;
   inflation: number;
   coreInflation: number;
+  /**
+   * Real measured price level and its trailing year, produced by the CPI basket in
+   * simulation/stages/price-index.ts from the prices stage 05's auction actually clears.
+   * `inflation` and `coreInflation` above are the 52-week changes in these, not free parameters.
+   */
+  consumerPriceIndex: number;
+  coreConsumerPriceIndex: number;
+  cpiHistory: number[];
+  coreCpiHistory: number[];
+  cpiBasket: import('../engine/simulation/stages/price-index').CpiBasket;
   expectedInflation: number;
-  wagePushInflation: number;
-  monetaryInflationPressure: number;
   centralBankBalanceSheet: number;
   balanceSheetStance: number;
   creditConditionsSpilloverAdjustment?: number;

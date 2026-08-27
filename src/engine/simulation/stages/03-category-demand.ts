@@ -109,7 +109,16 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       const growthAnnual = Number.isFinite(rawGrowthAnnual) ? rawGrowthAnnual : 0;
       const prevHistory = existingEntry?.demandHistory ?? [];
       const crowdingIntensity = Math.max(0, Math.min(1, (categorySupplyGrowth[cat] ?? 0) * 8 - (target ? growthAnnual : 0)));
+      // Spread the existing entry first: this stage owns the demand-side fields it sets below and
+      // nothing else. Rebuilding the object from scratch silently dropped every field owned by a
+      // later stage — above all `unitPriceUSD`, the real cleared price 05-unit-bidding.ts writes.
+      // That price is bootstrapped per sub-unit (deriveSubUnitUnitPrice, ~$70k/unit for some
+      // categories); losing it meant stage 05 fell back to its `Math.max(1, seed || 1)` default
+      // from week 1 onward and every price in the economy silently rebased to a ~$1 scale, one
+      // week into every run. Anything comparing a price across that boundary — a price index
+      // most of all — was comparing two different units.
       (reg.categoryDemand as any)[cat] = {
+        ...(existingEntry ?? {}),
         demandLevelUSD: newLevel,
         demandGrowthAnnual: growthAnnual,
         demandHistory: [...prevHistory.slice(-25), newLevel],
