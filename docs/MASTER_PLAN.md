@@ -885,10 +885,27 @@ HEAD must show GDP, employment and total debt unchanged. Firm sizes draw from a 
   level is set by the most reluctant current holder rather than two-sided schedules — the
   honest price of a market with no new money, resolving via G6's liability inflows and HC5's
   calibration, not by seeding more generous sleeves.
-- **HC3 Real employment & goods-market handover.** Private firms get real occupation demand
-  (same sector mixes); their stage-05 participation replaces the equivalent share of segment
-  participation. Verify: the labor supply/demand gap (§6 root item) narrows materially — this is
-  the measurement that says the missing employers were found.
+- **HC3 Employment & capex handover — DONE; goods handover re-scoped as HC3b.**
+  What landed: private firms are real employers (occupation demand with real sector mixes;
+  segment employment reduced by exactly the carved headcount — USA 6.9M total conserved to the
+  worker) and real capex demanders (their capex in the corporate demand base; segment capexUSD
+  reduced identically). Two of this pass's own bugs are worth remembering: employment change
+  must be measured over the SAME firm universe on both sides of the week (an asymmetric pair
+  read the tier's arrival as a mass layoff and pinned unemployment at its 25% cap), and an
+  unsold-production penalty must only exist for a firm that actually offers into a modeled
+  market.
+  **HC3b — the real product-market handover — waits for BP1, and the reason is a measured
+  structural fact, not caution:** the auctioned sub-unit categories' demand is calibrated
+  against public supply, while the hidden tier's output genuinely sells OUTSIDE the modeled
+  taxonomy (services, local trade — categories that do not exist yet). Injecting the tier's
+  165B/region of supply into markets sized for 211B of public revenue collapsed both (−10% to
+  −22% growth). The right fix is BP1's registry carrying the hidden sector's real categories,
+  with demand routed to them by real buyer mixes — then private firms get product lines in
+  THEIR markets, segment annualRevenueUSD is carved in the same pass, and the sales-anchored
+  revenue path (already written, gated on market presence) switches on.
+  **Correction to an earlier claim:** HC3 does not narrow the 11–14% labor supply/demand gap —
+  the carve conserves totals by construction, so the gap remains MS2's to close by making both
+  sides real. What HC3 delivers is attribution: labor demand now belongs to named employers.
 - **HC4 Ratings & the sponsor universe.** Rate private firms from their real leverage/coverage
   with the same credit model. Sponsor-owned firms lever at real LBO levels (debt/EBITDA 4.5–6.5),
   which lands them B/BB **and fixes the inverted public+private rating distribution as a

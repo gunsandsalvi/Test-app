@@ -34,7 +34,9 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // here. Shares the one procurement constant with the GDP identity in stage 11 so the two
     // cannot disagree about what the government actually buys.
     const G = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD) * (1 + reg.fiscalStanceScore * 0.25);
-    const rawCorporateDemandBase = ctx.prevActiveFirms.filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
+    // HC3: private firms' capex is real corporate demand like anyone else's (their segments'
+    // capexUSD was reduced by exactly this at the carve).
+    const rawCorporateDemandBase = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
     const newLaggedCorporateDemandBase = reg.laggedCorporateDemandBase * 0.95 + rawCorporateDemandBase * 0.05;
     reg.laggedCorporateDemandBase = newLaggedCorporateDemandBase;
     const I = newLaggedCorporateDemandBase;

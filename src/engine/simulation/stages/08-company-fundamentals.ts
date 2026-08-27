@@ -51,7 +51,21 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const interestAnnual = comp.debtTranches.reduce((sum, t) => t.rateType === 'FIXED'
         ? sum + t.principalUSD * (t.couponRate ?? 0.05)
         : sum + t.principalUSD * (regP.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0);
-      const revenue = comp.baselineAnnualRevenue;
+      // HC3: revenue anchors to the same real settled sales the public path reads — stage 05
+      // has already run this firm's real auction. Unsold production hurts revenue exactly as it
+      // does for a public firm; a slow drift re-anchors toward baseline capacity. What private
+      // firms skip is the public-market machinery, not the real economy.
+      const hasMarketPresence = (comp.productLines || []).length > 0;
+      const updateP = companyUpdates[comp.ticker];
+      const salesP = updateP?.salesUSD ?? 0;
+      const targetProductionP = updateP?._targetProductionUSD ?? comp.annualRevenue / 52;
+      // The unsold-production signal only exists for a firm that actually offers into a modeled
+      // market. Until HC3b gives the hidden tier's products real categories, a private firm with
+      // no product lines holds its baseline — penalising it for not selling in markets it is
+      // not in was measured to collapse the whole tier.
+      const unsoldP = hasMarketPresence ? Math.max(0, targetProductionP - salesP) : 0;
+      const revenue = Math.max(10,
+        comp.annualRevenue * 0.98 + comp.baselineAnnualRevenue * 0.02 - unsoldP * 0.5);
       const ebitda = revenue * (comp.baselineEbitdaMargin ?? 0.12);
       const da = revenue * 0.045;
       const ebit = Math.max(1, ebitda - da);

@@ -60,6 +60,9 @@ function executeSubUnitBiddingMarket(
   targetRegionId: RegionId
 ) {
   const { companyUpdates, prevActiveFirms, nextWeek } = ctx;
+  // HC3: the goods market has never cared who owns a supplier's equity — public and private
+  // firms bid and offer in the same real auction.
+  const allParticipatingFirms = [...prevActiveFirms, ...ctx.prevActivePrivateFirms];
   const demandState = targetReg.categoryDemand[subUnitId] as any;
   if (!demandState) return;
 
@@ -95,8 +98,8 @@ function executeSubUnitBiddingMarket(
       return;
     }
 
-    const supplier = prevActiveFirms.find(c => c.ticker === contract.supplierCompanyId || c.id === contract.supplierCompanyId);
-    const customer = prevActiveFirms.find(c => c.ticker === contract.customerCompanyId || c.id === contract.customerCompanyId);
+    const supplier = allParticipatingFirms.find(c => c.ticker === contract.supplierCompanyId || c.id === contract.supplierCompanyId);
+    const customer = allParticipatingFirms.find(c => c.ticker === contract.customerCompanyId || c.id === contract.customerCompanyId);
 
     if (supplier && customer) {
       if (!isActiveCompany(supplier)) {
@@ -145,7 +148,10 @@ function executeSubUnitBiddingMarket(
   const bids: UnitBid[] = [];
   const offers: UnitOffer[] = [];
 
-  const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
+  // HC3: private firms produce, sell and buy in the same real auction — the goods market has
+  // never cared who owns a supplier's equity. Their segment aggregates surrendered this slice
+  // at the carve, so each real good is offered exactly once.
+  const regionActiveFirms = allParticipatingFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
   const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
 
   // A recipe-input category (upstream_extraction, specialty_metals) is bought by named

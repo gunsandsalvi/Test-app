@@ -33,10 +33,12 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
 
     const regionFirms = ctx.prevActiveFirms.filter(f => f.region === regionId);
 
-    const regionEmployment = regionFirms.reduce((sum, f) => sum + f.employeeCount, 0);
-    // Public firms only until HC3's labor handover: the segments still carry the private tier's
-    // employment in their aggregates, so counting private firms here would double-count workers.
-    const regionEmploymentLastWeek = state.companies.filter(f => f.region === regionId && f.listingStatus !== 'PRIVATE').reduce((sum, f) => sum + (f.previousEmployeeCount || f.employeeCount), 0);
+    // HC3: employment change is measured over the SAME universe on both sides — public and
+    // private firms together (the segments carry only the SME residual now). An asymmetric pair
+    // here read the private tier's arrival as a mass layoff and pinned unemployment at its cap.
+    const employmentFirms = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(f => f.region === regionId);
+    const regionEmployment = employmentFirms.reduce((sum, f) => sum + f.employeeCount, 0);
+    const regionEmploymentLastWeek = state.companies.filter(f => f.region === regionId).reduce((sum, f) => sum + (f.previousEmployeeCount || f.employeeCount), 0);
     const employmentChangePct = (regionEmployment - regionEmploymentLastWeek) / Math.max(1, regionEmploymentLastWeek);
     const bottomUpUnemploymentDelta = -employmentChangePct * 0.1;
 
@@ -48,7 +50,9 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     const boundedGdpContribution = (capexGdpImpactWeekly * 52);
 
     const regionOccDemand = computeOccupationDemand(
-      ctx.prevActiveFirms,
+      // HC3: private firms are real employers with real sector occupation mixes; the segments
+      // supply only the SME residual's statistical demand.
+      [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms],
       state.regions[regionId].privateSectorSegments,
       regionId,
       state.regions[regionId].governmentEmployment
