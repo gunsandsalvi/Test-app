@@ -117,12 +117,6 @@ export function getRatingBucket(rating: string): 'IG' | 'HY' {
   return ['AAA', 'AA', 'A', 'BBB'].includes(rating) ? 'IG' : 'HY';
 }
 
-export function computeBucketDemandPremiumBps(bucket: 'IG' | 'HY', reg: Region, allCompaniesInBucket: Company[]): number {
-  const demand = reg.laggedCorporateDemandBase ?? 100; // Use lagged corporate demand as proxy for corporate bond demand
-  const supply = allCompaniesInBucket.reduce((sum, c) => sum + (c.totalDebt ?? 0), 0) || 100;
-  const ratio = demand / supply;
-  return (1 - ratio) * 200;
-}
 
 export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<string, number> {
   const demand: Record<string, number> = {
@@ -218,29 +212,6 @@ export function computeTargetOwnershipShares(assetClass: string, regionId: Regio
   return { bankShare, institutionalShare, foreignShare, centralBankShare: current.centralBankShare };
 }
 
-export function computeSupplyDemandPremium(
-  shares: any,
-  capacities: { bank: number, institutional: number },
-  totalOutstanding: number
-): number {
-  const demand = (capacities.bank * (shares.bankShare ?? 0.25)) + (capacities.institutional * (shares.institutionalShare ?? 0.25));
-  const supply = totalOutstanding || 1;
-  const ratio = demand / supply;
-  return (1 - ratio) * 200;
-}
-
-/**
- * Splits a real, already-bottom-up total (e.g. reg.corpBondOwnership.institutionalShare *
- * totalOutstandingUSD — the institutional sector's actual real claim on a market, already
- * bounded by construction) across named entities by their RELATIVE weight, never by an
- * independently-computed absolute amount. An entity's own policy target percentage
- * (assetAllocationTarget.corpBondPct etc.) is a long-term guide to how much MORE or LESS of the
- * shared real pool it wants relative to its peers — not a free-standing dollar figure that could
- * independently exceed the real pool and need a cap. sizeWeight is any real, relative measure of
- * the entity's own size (this codebase uses totalAssetsUSD, which is internally consistent
- * across entities within one region even where its absolute scale is not directly comparable to
- * the target market).
- */
 export function distributeRealTargetByWeight(
   entities: { id: string; sizeWeight: number; targetPct: number }[],
   totalRealTargetUSD: number

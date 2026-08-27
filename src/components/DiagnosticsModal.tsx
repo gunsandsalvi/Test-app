@@ -26,41 +26,18 @@ export const DiagnosticsModal: React.FC<DiagnosticsModalProps> = ({ state, onClo
   const regions: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
   const formattedDate = formatSimulationDate(state.currentWeek);
 
-  // Aggregate CapEx across all 50 firms per region
+  // S6: real engine numbers only. The deleted block here invented a parallel micro-model for
+  // display (a fabricated baselineCapex of n x $50, a nonexistent pricingPowerMarkupPct field,
+  // hand-rolled capex-to-GDP and wage-push formulas unrelated to anything the engine computes).
+  // A diagnostics panel that shows numbers the engine never produced is a second price-setter
+  // for the reader's understanding.
   const getRegionalMicroAggregation = (rId: RegionId) => {
-    const companiesInRegion = state.companies.filter((c) => c.region === rId);
-    const totalCapex = companiesInRegion.reduce((sum, c) => sum + (c.capex || c.ebitda * 0.3), 0);
-    const avgMarkup =
-      companiesInRegion.reduce((sum, c) => sum + ((c as any).pricingPowerMarkupPct || 0.12), 0) /
-      Math.max(1, companiesInRegion.length);
+    const companiesInRegion = state.companies.filter((c) => c.region === rId && !c.isDefaulted);
+    const totalCapex = companiesInRegion.reduce((sum, c) => sum + (c.capex || 0), 0);
     const totalDebt = companiesInRegion.reduce((sum, c) => sum + c.totalDebt, 0);
-    const regionObj = state.regions[rId];
-    
-    // 1. Normalized CapEx impact calculation
-    const baselineCapex = companiesInRegion.length * 50; 
-    const aggregateCapexGrowth = (totalCapex / Math.max(1, baselineCapex)) - 1.0;
-    const capexGdpImpactPct = Math.max(0.0005, Math.min(0.0035, aggregateCapexGrowth * 0.02 + 0.0015));
-    
-    const markupCpiImpactPct = avgMarkup * 0.15;
-    
-    // 2. Household Spending -> Retail Sector Revenue Drag/Boost (in bps)
-    const retailRevBoostPct = (regionObj?.householdState?.realConsumptionGrowth || 0) * 1.6;
-    const retailRevBoostBps = retailRevBoostPct * 10000;
-    
-    // 3. Wage-Push Inflation Contribution to Core CPI (in bps)
-    const wagePushPct = Math.max(0, (regionObj?.householdState?.wageGrowth || 0) - 0.015) * 0.40;
-    const wagePushBps = (wagePushPct * 0.02) * 10000; // Scaled by weekly factor
-
-    return {
-      companyCount: companiesInRegion.length,
-      totalCapex,
-      capexGdpImpactPct,
-      avgMarkup,
-      markupCpiImpactPct,
-      totalDebt,
-      retailRevBoostBps,
-      wagePushBps,
-    };
+    const totalRevenue = companiesInRegion.reduce((sum, c) => sum + c.annualRevenue, 0);
+    const totalEmployment = companiesInRegion.reduce((sum, c) => sum + c.employeeCount, 0);
+    return { companyCount: companiesInRegion.length, totalCapex, totalDebt, totalRevenue, totalEmployment };
   };
 
   return (
@@ -231,23 +208,16 @@ export const DiagnosticsModal: React.FC<DiagnosticsModalProps> = ({ state, onClo
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
                       <div className="p-2 rounded-lg bg-slate-950 border border-slate-850">
-                        <span className="text-slate-500 text-[9px] block uppercase">CapEx → GDP Addition</span>
+                        <span className="text-slate-500 text-[9px] block uppercase">Aggregate Revenue</span>
                         <span className="text-emerald-400 font-bold text-xs mt-0.5 block">
-                          +{formatPercent(agg.capexGdpImpactPct, { isDecimal: true, precision: 2 })}
+                          {formatCurrency(agg.totalRevenue, { compact: true })}
                         </span>
                       </div>
 
                       <div className="p-2 rounded-lg bg-slate-950 border border-slate-850">
-                        <span className="text-slate-500 text-[9px] block uppercase">Wage-Push → Core CPI</span>
+                        <span className="text-slate-500 text-[9px] block uppercase">Employment</span>
                         <span className="text-amber-400 font-bold text-xs mt-0.5 block">
-                          +{agg.wagePushBps.toFixed(1)} bps
-                        </span>
-                      </div>
-
-                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-850">
-                        <span className="text-slate-500 text-[9px] block uppercase">Consumpt → Rtl Rev</span>
-                        <span className="text-cyan-400 font-bold text-xs mt-0.5 block">
-                          {agg.retailRevBoostBps > 0 ? '+' : ''}{agg.retailRevBoostBps.toFixed(1)} bps
+                          {(agg.totalEmployment / 1e6).toFixed(2)}M
                         </span>
                       </div>
 
@@ -304,9 +274,8 @@ export const DiagnosticsModal: React.FC<DiagnosticsModalProps> = ({ state, onClo
               <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-500 block uppercase text-[9px]">Defaulted Issuers</span>
                 <span className="text-sm font-bold text-rose-400 mt-0.5 block">
-                  {state.companies.filter((c) => c.isDefaulted).length} / 200
+                  {state.companies.filter((c) => c.isDefaulted).length} / {state.companies.filter((c) => !c.isBankEntity && !c.isInstitutionalEntity).length}
                 </span>
-                <span className="text-[9px] text-slate-500">Senior recovery: ~40%</span>
               </div>
             </div>
 

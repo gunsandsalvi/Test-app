@@ -255,13 +255,18 @@ export function priceCommodityFutures(
  * Price_par = 100 - (DM - QM) * ModifiedDuration
  * Default Recovery = 65% of Par
  */
+/**
+ * S6: a pure converter from a CLEARED discount margin to price/yield — never a price-setter.
+ * The DM is set once, by the real loan auction (07d); this maps it to points-of-par for
+ * display and P&L. The old version re-derived a DM from OAS via a demand-premium-adjusted
+ * senior-lien multiple — a second, parallel price-setter for an asset that already clears.
+ */
 export function priceLeveragedLoan(
   quotedMarginBps: number,
-  oasSpreadBps: number,
+  clearedDiscountMarginBps: number,
   tenorYears: number = 5,
   isDefaulted: boolean = false,
-  recoveryRate: number = 0.65,
-  bucketDemandPremiumBps: number = 0
+  recoveryRate: number = 0.65
 ): { pricePar: number; discountMarginBps: number; effectiveYield: number; duration: number } {
   if (isDefaulted) {
     return {
@@ -274,12 +279,7 @@ export function priceLeveragedLoan(
 
   // Floating rate loans have low interest rate duration (approx 0.25y) but credit spread duration ~ 3.5y
   const creditDuration = Math.min(4.0, tenorYears * 0.7);
-  // Senior-lien discount off the unsecured OAS is no longer a fixed multiple: it responds to
-  // the loan bucket's own demand/supply premium (computeBucketDemandPremiumBps) — strong
-  // relative demand for loans (a negative premium) prices them even tighter versus bonds;
-  // weak demand widens the discount back out.
-  const seniorLienDiscount = Math.max(0.65, Math.min(0.95, 0.85 + bucketDemandPremiumBps / 2000));
-  const discountMarginBps = Math.round(oasSpreadBps * seniorLienDiscount);
+  const discountMarginBps = Math.round(clearedDiscountMarginBps);
   const marginDeltaBps = discountMarginBps - quotedMarginBps;
   // Price in points of par
   const pricePar = (100 - (marginDeltaBps / 10000) * creditDuration * 100);
