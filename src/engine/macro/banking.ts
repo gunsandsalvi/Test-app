@@ -52,8 +52,15 @@ export function evolveBankingSector(
 
   const newDeposits = prevBanking.depositsUSD * 0.999 + weeklySavingsInflow * 0.3 + netNewLending - netLoanRepayment + (monetizedAmountUSD ?? 0);
 
-  const targetSovHoldings = (newBusinessLoanBook + newConsumerLoanBook + prevBanking.sovereignBondHoldingsUSD) * 0.18;
-  const newSovHoldings = prevBanking.sovereignBondHoldingsUSD * 0.98 + targetSovHoldings * 0.02;
+  // The sovereign book is NOT drifted toward a ratio of the loan book here. Banks buy and sell
+  // government bonds in a real auction (07c-sovereign-bond-clearing.ts), against real targets, and
+  // pay real cash for them; the region aggregate is the sum of those named banks' own per-tenor
+  // books (02b-bank-diversification.ts). This formula was a second, competing account of the same
+  // holdings — it drifted them toward 18% of the loan book every week regardless of what the
+  // banks had actually traded, which is the "two representations of one real thing" pattern that
+  // this project exists to remove. Carried forward here so the cash and total-asset arithmetic
+  // below still balances against the real figure.
+  const newSovHoldings = prevBanking.sovereignBondHoldingsUSD;
   const newCashReserves = Math.max(newDeposits * 0.08, newDeposits + prevBanking.bankEquityUSD - newBusinessLoanBook - newConsumerLoanBook - newSovHoldings);
   const totalAssetsProxy = newBusinessLoanBook + newConsumerLoanBook + newSovHoldings + newCashReserves;
   const depositBeta = 0.45;

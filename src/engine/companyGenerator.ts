@@ -263,8 +263,22 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
   let cumulativePrincipalAssigned = 0;
   return maturityWeeks.map((maturityWeek, i) => {
     const principalUSD = debtBase * trancheWeights[i];
-    // Deterministic rule: assign FIXED as long as cumulative principal assigned so far is still under the fixedShare target.
-    const isFixed = cumulativePrincipalAssigned < fixedShare * debtBase;
+    // Assign each rung to whichever side of the fixed/floating split its own principal mostly
+    // falls in, by testing its MIDPOINT against the target rather than its starting edge.
+    //
+    // Testing the starting edge made the first rung FIXED unconditionally — cumulative principal
+    // is zero at that point, so the test passed for every rating including CCC. Most issuers here
+    // carry a single blended tranche (see debtLadderShape), so most issuers came out 100% fixed
+    // and the floating float across the entire market was ZERO: the leveraged-loan market this
+    // codebase prices, trades, clears in 07d and offers in the trade ticket did not contain a
+    // single loan. Every company's discountMarginBps sat frozen at its seed while its OAS moved.
+    //
+    // FIXED_SHARE_BY_RATING was already right about the economics — investment-grade issuers fund
+    // with bonds, sub-investment-grade issuers fund with floating-rate term loans, which is what
+    // a leveraged loan IS. The midpoint test delivers that: a single-tranche CCC issuer (10%
+    // fixed) now comes out floating, a single-tranche AA issuer (85%) fixed, and multi-rung
+    // issuers land within a few points of their target share.
+    const isFixed = (cumulativePrincipalAssigned + principalUSD / 2) < fixedShare * debtBase;
     cumulativePrincipalAssigned += principalUSD;
     return isFixed
       ? {
@@ -484,7 +498,7 @@ export function generateInitialCompanies(): Company[] {
       let financialStatementProfile: FinancialStatementProfile = 'STANDARD_OPERATING';
       if (tmpl.sector === 'Banks') financialStatementProfile = 'BANK';
       else if (tmpl.institutionalRole === 'INSURER') financialStatementProfile = 'INSURER';
-      else if (tmpl.institutionalRole === 'ASSET_MANAGER' || tmpl.institutionalRole === 'PENSION_FUND') financialStatementProfile = 'ASSET_MANAGER';
+      else if (tmpl.institutionalRole === 'ASSET_MANAGER' || tmpl.institutionalRole === 'PENSION_FUND' || tmpl.institutionalRole === 'HEDGE_FUND') financialStatementProfile = 'ASSET_MANAGER';
       else if ((tmpl.sector as string) === 'RealEstate' || (tmpl as any).producedCommodityId === 'commercial_construction') financialStatementProfile = 'REIT';
       
       const company: Company = {
@@ -492,8 +506,11 @@ export function generateInitialCompanies(): Company[] {
         technicalReservesUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase * 4 : undefined,
         insurancePremiumsWrittenUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase : undefined,
         insuranceClaimsPaidUSD: financialStatementProfile === 'INSURER' ? tmpl.revBase * 0.70 : undefined,
-        aumUSD: financialStatementProfile === 'ASSET_MANAGER' ? tmpl.revBase * 60 : undefined,
-        managementFeeRate: financialStatementProfile === 'ASSET_MANAGER' ? 0.0075 : undefined,
+        // A hedge fund earns the same fee dollars off roughly a third of the assets: a 2-and-20
+        // load is ~3x a long-only manager's flat fee, so the same revenue base implies far less
+        // AUM. Modelled as the same fee-revenue profile with the real fee/AUM ratio inverted.
+        aumUSD: financialStatementProfile === 'ASSET_MANAGER' ? tmpl.revBase * (tmpl.institutionalRole === 'HEDGE_FUND' ? 20 : 60) : undefined,
+        managementFeeRate: financialStatementProfile === 'ASSET_MANAGER' ? (tmpl.institutionalRole === 'HEDGE_FUND' ? 0.0225 : 0.0075) : undefined,
         id: `${region}_${tmpl.ticker}`,
         ticker: tmpl.ticker,
         name: tmpl.name,
@@ -536,15 +553,18 @@ export function generateInitialCompanies(): Company[] {
         lastEarningsSurprisePct: 0,
         lastManagementCommentary: 'Management reaffirmed structural operating margins and disciplined leverage management.',
         
-        leveragedLoan: {
-          quotedMarginBps,
-          referenceBenchmark: loanRef,
-          pricePar: 98.75,
-          discountMarginBps,
-          tenorYears: 5,
-          seniority: 'Senior Secured First Lien',
-          recoveryRate: 0.65,
-        },
+        // Only a company with floating-rate debt has a loan to quote. See Company.leveragedLoan.
+        leveragedLoan: debtTranches.some((t) => t.rateType === 'FLOATING')
+          ? {
+              quotedMarginBps,
+              referenceBenchmark: loanRef,
+              pricePar: 98.75,
+              discountMarginBps,
+              tenorYears: 5,
+              seniority: 'Senior Secured First Lien',
+              recoveryRate: 0.65,
+            }
+          : undefined,
         
         leverage,
         interestCoverage,
@@ -909,15 +929,17 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     },
     lastEarningsSurprisePct: 0,
     lastManagementCommentary: 'Newly public company; management outlined initial growth strategy at IPO.',
-    leveragedLoan: {
-      quotedMarginBps: 300,
-      referenceBenchmark: 'SOFR',
-      pricePar: 99.0,
-      discountMarginBps: 300,
-      tenorYears: 5,
-      seniority: 'Senior Secured First Lien',
-      recoveryRate: 0.40,
-    },
+    leveragedLoan: debtTranches.some((t) => t.rateType === 'FLOATING')
+      ? {
+          quotedMarginBps: 300,
+          referenceBenchmark: 'SOFR',
+          pricePar: 99.0,
+          discountMarginBps: 300,
+          tenorYears: 5,
+          seniority: 'Senior Secured First Lien',
+          recoveryRate: 0.40,
+        }
+      : undefined,
     ratingHistory: [initialRating],
     institutionalRole: null,
     sentiment: 0.0,

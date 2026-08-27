@@ -22,7 +22,8 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket } from './shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders } from './shared-helpers';
+import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
@@ -585,21 +586,53 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     // Pre-refinancing trigger roughly one year before maturity
     let companyTranches = comp.debtTranches.map(t => ({ ...t }));
+    // The issuer's real float BEFORE any of this week's corporate actions — the accretive call
+    // below, the maturity and refinancing further down, all of it. Everything that changes the
+    // amount of this issuer's paper in existence is settled against its holders once, at the end,
+    // by comparing against this. Snapshotting after the call block (the first attempt) missed the
+    // single largest source of change: the call can retire an entire tranche in one week, and
+    // sampled issuers lost ~88% of their fixed float to it inside five weeks.
+    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+    const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
 
-    // Corporate debt lifecycle: prepayment/call when genuinely accretive
+    // Corporate debt lifecycle: call and refinance when genuinely accretive
+    const calledRefinanceTranches: DebtTranche[] = [];
     companyTranches.forEach(tranche => {
       if (tranche.rateType !== 'FIXED') return;
       const currentFairRate = calculateNelsonSiegelZeroRate(Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52), reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
       const rateSavingsIfRefinanced = tranche.couponRate - currentFairRate;
       const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
       if (rateSavingsIfRefinanced > 0.01 && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
-        const prepayAmountUSD = Math.min(tranche.principalUSD, newCash - comp.annualRevenue * 0.15);
-        tranche.principalUSD -= prepayAmountUSD;
-        newCash -= prepayAmountUSD;
+        const calledAmountUSD = Math.min(tranche.principalUSD, newCash - comp.annualRevenue * 0.15);
+        tranche.principalUSD -= calledAmountUSD;
+        newCash -= calledAmountUSD;
+        // Calling a bond because it is expensive relative to the market is REFINANCING, not
+        // deleveraging: the issuer replaces it at today's cheaper rate and keeps the money. The
+        // saving is the lower coupon, which is what `rateSavingsIfRefinanced` above measures.
+        //
+        // This used to retire the tranche with cash and stop there, which is a different
+        // transaction entirely — it shrank the issuer's debt every time rates moved in its
+        // favour. Across the market that meant the corporate bond float fell by half inside six
+        // months and 73 of 200 issuers had no bonds left at all: the asset class 07b exists to
+        // clear was quietly disappearing, and what remained was a float small enough that ordinary
+        // flow moved its spread hundreds of basis points a week.
+        if (calledAmountUSD > 0.01) {
+          calledRefinanceTranches.push({
+            id: `${comp.id}-CALL-${state.currentWeek}-${tranche.id}`,
+            principalUSD: calledAmountUSD,
+            rateType: 'FIXED',
+            couponRate: currentFairRate,
+            originationWeek: state.currentWeek,
+            maturityWeek: state.currentWeek + STANDARD_CORP_TENOR_YEARS * 52,
+            seniority: 'SENIOR',
+          });
+          newCash += calledAmountUSD; // proceeds of the replacement issue
+        }
       }
     });
-    // Remove any tranche whose principalUSD reaches zero
+    // Remove any tranche whose principalUSD reaches zero, then add the replacement issues.
     companyTranches = companyTranches.filter(t => t.principalUSD > 0.01);
+    if (calledRefinanceTranches.length > 0) companyTranches = [...companyTranches, ...calledRefinanceTranches];
 
     const tranchesToRefinance = companyTranches.filter(tranche => {
       const weeksToMaturity = tranche.maturityWeek - state.currentWeek;
@@ -702,6 +735,59 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (maintenanceFundingTranches.length > 0) {
       updatedTranches = [...updatedTranches, ...maintenanceFundingTranches];
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
+    }
+
+    // The supply side of what bounds a credit spread: the issuer's own call on whether debt is
+    // worth raising at the price the market is quoting it. Every other change to this stack above
+    // happens TO the company — a tranche matures, maintenance needs funding — so the amount of
+    // paper outstanding never responded to what it cost. That leaves a market with only one of
+    // the two forces that hold a spread in place, and it is why spreads still drifted once
+    // investors alone were made price-sensitive.
+    //
+    // Priced off this company's OWN cleared cost of debt this week, so tight spreads genuinely
+    // invite the supply that widens them and wide spreads choke it off — the credit cycle, which
+    // this simulation had no way to produce before.
+    const costOfNewDebtAnnual =
+      calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
+    const financing = decideCorporateFinancing({
+      comp,
+      costOfDebtAnnual: costOfNewDebtAnnual,
+      effectiveTaxRate: reg.effectiveTaxRate,
+      ebitdaAnnual: newEbitda,
+      totalDebtUSD: updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0),
+      cashUSD: newCash,
+      rating: newRating,
+    });
+
+    if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000) {
+      // Real new paper, priced at this week's real cost, and real cash raised against it.
+      updatedTranches = [...updatedTranches, {
+        id: `${comp.id}-OPP-${nextWeek}`,
+        principalUSD: financing.netDebtChangeUSD,
+        rateType: 'FIXED',
+        couponRate: costOfNewDebtAnnual,
+        originationWeek: nextWeek,
+        maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+        seniority: 'SENIOR',
+      }];
+      debtIssuanceThisWeek += financing.netDebtChangeUSD;
+      newCash += financing.netDebtChangeUSD;
+    } else if (financing.reason === 'DELEVER_EXPENSIVE_DEBT' && financing.netDebtChangeUSD < -1000) {
+      // Pay down real principal, newest and dearest paper first, out of real cash.
+      let remainingToRepayUSD = -financing.netDebtChangeUSD;
+      updatedTranches = updatedTranches
+        .slice()
+        .sort((a, b) => b.originationWeek - a.originationWeek)
+        .map(t => {
+          if (remainingToRepayUSD <= 0) return t;
+          const repaidUSD = Math.min(t.principalUSD, remainingToRepayUSD);
+          remainingToRepayUSD -= repaidUSD;
+          return { ...t, principalUSD: t.principalUSD - repaidUSD };
+        })
+        .filter(t => t.principalUSD > 0.01);
+      const actuallyRepaidUSD = -financing.netDebtChangeUSD - remainingToRepayUSD;
+      debtRepaymentThisWeek += actuallyRepaidUSD;
+      newCash -= actuallyRepaidUSD;
     }
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.
@@ -876,6 +962,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const currentTreasuryHoldingsUSD = (newTreasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
     // Real current-portion-of-debt: tranches actually maturing within a year, from this
     // company's own updated ladder — not a flat 15% guess.
+    // Settle this week's corporate actions against the real holders of this issuer's paper. A
+    // tranche that matured has left the issuer's books, so it leaves theirs; one that refinanced
+    // into the other rate type has moved between the bond market and the loan market, so their
+    // position moves with it. Holdings that do not track the real stock are the difference
+    // between a market and a random walk — see settleCorporateActionOnHolders.
+    const postActionFixedUSD = updatedTranches.filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+    const postActionFloatingUSD = updatedTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
+    settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
+    settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
+
     const newShortTermDebtUSD = updatedTranches.filter(t => t.maturityWeek - nextWeek <= 52).reduce((s, t) => s + t.principalUSD, 0);
 
     const currentSnapshot = buildQuarterlyFundamentalSnapshot(

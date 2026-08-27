@@ -24,7 +24,7 @@ export interface FirmSeedTemplate {
   beta: number;
   rank: number;
   bankMarketShare?: number;
-  institutionalRole?: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | null;
+  institutionalRole?: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | null;
   institutionalMarketShare?: number;
   producedCommodityId?: string;
 }
@@ -187,17 +187,26 @@ export function generateFirmSeeds(
   });
 
   // Financials specialty roles ranked just behind the largest generic financial firms.
+  // Shares sum to 1.0 (they slice the one real regional institutional asset pool). The hedge-fund
+  // slice is deliberately the smallest: real credit hedge funds run a small fraction of the
+  // sector's assets, but they are the marginal buyer at the wides — the bid that exists when
+  // mandate-constrained insurers and pension funds have none — so their weight matters far more
+  // to where distressed paper clears than their size suggests.
   seeds.push(buildTemplate(region, 'Financials', 0.5, existingTickers, existingNames, {
     institutionalRole: 'INSURER',
-    institutionalMarketShare: 0.45,
+    institutionalMarketShare: 0.42,
   }));
   seeds.push(buildTemplate(region, 'Financials', 1.5, existingTickers, existingNames, {
     institutionalRole: 'ASSET_MANAGER',
-    institutionalMarketShare: 0.35,
+    institutionalMarketShare: 0.33,
   }));
   seeds.push(buildTemplate(region, 'Financials', 2.5, existingTickers, existingNames, {
     institutionalRole: 'PENSION_FUND',
-    institutionalMarketShare: 0.20,
+    institutionalMarketShare: 0.18,
+  }));
+  seeds.push(buildTemplate(region, 'Financials', 3.5, existingTickers, existingNames, {
+    institutionalRole: 'HEDGE_FUND',
+    institutionalMarketShare: 0.07,
   }));
 
   const bankShareRank0 = 0.35;

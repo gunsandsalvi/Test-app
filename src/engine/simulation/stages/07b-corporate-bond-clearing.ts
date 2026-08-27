@@ -44,9 +44,20 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { computeExpectedLossSpreadBps, getRatingBucket, distributeRealTargetByWeight } from './shared-helpers';
+import { computeExpectedLossSpreadBps, getRatingBucket, distributeRealTargetByWeight, CREDIT_RECOVERY_RATE } from './shared-helpers';
+import {
+  CAPITAL_CHARGE_BY_ASSET_CLASS,
+  computeReservationSpreadBps,
+  FULL_SIZE_SPREAD_RANGE_BPS,
+  isInvestmentGrade,
+  subInvestmentGradeSizeFactor,
+  SUB_INVESTMENT_GRADE_CAPITAL_CHARGE,
+  MAX_OVERWEIGHT_MULTIPLE,
+  DISTRESSED_CONVICTION_MULTIPLE,
+  recoveryImpliedMaxSpreadBps,
+} from './asset-allocation';
 import { WeeklyStepContext } from './context';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // The entity's OWN book (its actual current corp-bond + loan holdings) drifts toward its real,
 // bottom-up-derived target at this slow pace — a policy allocation is a long-term guide real
@@ -54,6 +65,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
+const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 const MAX_VALUE_TILT = 0.4;
 const MAX_MOMENTUM_TILT = 0.15;
@@ -142,16 +154,24 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + fixedDebtUSD(c), 0) || 1;
     const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
 
+    // The float genuinely in play is what the bidders below can hold between them. The rest of
+    // each issue sits with holders who do not bid in this auction, and was never for sale.
+    const tradableShare = reg.corpBondOwnership.institutionalShare;
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: fixedDebtUSD(c),
+      tradableFloatUSD: fixedDebtUSD(c) * tradableShare,
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
       durationYears: creditDurationYears(c),
-      statDirection: -1, // OAS falls when net buying pushes the bond's price up
-      // No floor or ceiling at all — how tight or wide a spread gets versus the sovereign
-      // benchmark is purely a function of real demand, not a realism bound. A corporate name
-      // trading through its own sovereign is rare but not mathematically impossible.
+      // No floor. Where a spread can settle from below is decided by what the bidders below will
+      // pay, and every one of their reservation levels already covers its own expected loss and
+      // capital cost — so the floor is an outcome of their economics, not a bound on the price.
+      //
+      // The ceiling is not a bound on the price either; it is the price. A bond cannot trade
+      // below what defaulting on it would pay out, so the spread implied by that recovery-value
+      // floor is where this market ends.
+      maxStat: recoveryImpliedMaxSpreadBps(CREDIT_RECOVERY_RATE, creditDurationYears(c)),
     }));
 
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
@@ -182,33 +202,85 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       totalRealInstitutionalTargetUSD
     );
 
+    // Who structurally owns THIS name, as opposed to who owns the market. The two differ, and the
+    // difference is the whole shape of the high-yield market: a name's float is held by whoever
+    // has appetite for its rating, so as a credit falls below investment grade its register does
+    // not shrink — it ROTATES, out of the regulated books that will only run a small sleeve of it
+    // and into the dedicated high-yield and distressed funds that exist to own exactly this.
+    //
+    // Modelled the wrong way this was measurably destructive. Applying the sub-investment-grade
+    // sleeve factor to each holder's market-wide share only ever subtracted: it took away the
+    // insurers' and pension funds' demand for a downgraded name without giving anyone else more
+    // of it, so total structural appetite came to ~94% of the float and every sub-IG name pinned
+    // at its recovery-implied ceiling — BB, B and CCC all printing the identical 1,745bp, which is
+    // an absence of buyers rather than a judgement about credit.
+    //
+    // Normalising the appetite weights per name is what makes it a rotation. Structural sizes then
+    // sum to the float for every issuer at every rating, and rating decides the MIX of the
+    // register, which is what it really decides.
+    const structuralShareByEntityByCompany = new Map<string, Map<string, number>>();
+    regionCompanies.forEach((c) => {
+      const subIG = !isInvestmentGrade(c.creditRating);
+      const weightByEntity = new Map<string, number>();
+      let totalWeight = 0;
+      regionEntities.forEach((e) => {
+        const w =
+          (rawEntityTargets.get(e.id) ?? 0) * (subIG ? subInvestmentGradeSizeFactor(e.entityType) : 1);
+        weightByEntity.set(e.id, w);
+        totalWeight += w;
+      });
+      const shareByEntity = new Map<string, number>();
+      regionEntities.forEach((e) => {
+        shareByEntity.set(e.id, totalWeight > 0 ? (weightByEntity.get(e.id) ?? 0) / totalWeight : 0);
+      });
+      structuralShareByEntityByCompany.set(c.id, shareByEntity);
+    });
+
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
-      const currentEntityTotalUSD = Array.from(currentHoldingByCompany.values()).reduce((s, v) => s + v, 0);
-      const rawTargetUSD = rawEntityTargets.get(entity.id) ?? 0;
-      // The policy target is a long-term guide the entity's actual book drifts toward slowly —
-      // not a number it instantly reallocates to (see STRATEGIC_TARGET_DRIFT_RATE's doc comment).
-      const slowTargetTotalUSD = currentEntityTotalUSD + (rawTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
 
-      const attractivenessByInstrumentId = new Map<string, number>();
-      regionCompanies.forEach((c) => attractivenessByInstrumentId.set(c.id, computeEntityAttractiveness(entity, c, creditConditionsIndex)));
+      // This entity's terms, per issuer. The reservation spread is the RV economics used as what
+      // they always were — a PRICE. Below the level that covers this issuer's own expected loss
+      // and the capital the position consumes at this entity's own required return, it does not
+      // want the bond at all; above it, it scales into its policy size. The old engine used the
+      // same numbers to nudge a quantity target, which is why spreads could settle through zero:
+      // a nudged quota still has to be filled at whatever price results.
+      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      regionCompanies.forEach((c) => {
+        // Rating enters this book in the two places it really acts: the capital the position
+        // consumes (which steps up sharply below investment grade and so widens the level at
+        // which a regulated holder is indifferent) and the size of the sleeve the holder will
+        // run there. It is deliberately NOT a prohibition — see subInvestmentGradeSizeFactor for
+        // what modelling it as one did to high-yield clearing.
+        const subIG = !isInvestmentGrade(c.creditRating);
+        const reservationBps = computeReservationSpreadBps({
+          entityType: entity.entityType,
+          expectedLossBps: computeExpectedLossSpreadBps(c),
+          capitalChargeRate: subIG
+            ? SUB_INVESTMENT_GRADE_CAPITAL_CHARGE
+            : CAPITAL_CHARGE_BY_ASSET_CLASS.CORP_BOND,
+          creditConditionsIndex,
+        });
+        const structuralSizeUSD =
+          fixedDebtUSD(c) * tradableShare * (structuralShareByEntityByCompany.get(c.id)?.get(entity.id) ?? 0);
+        const overweightMultiple =
+          entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
+        demandByInstrumentId.set(c.id, {
+          reservationStat: reservationBps,
+          maxHoldingUSD: structuralSizeUSD * overweightMultiple,
+          fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
+        });
+      });
 
-      return {
-        id: entity.id,
-        targetTotalUSD: slowTargetTotalUSD,
-        currentHoldingsByInstrumentId: currentHoldingByCompany,
-        attractivenessByInstrumentId,
-      };
+      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId };
     });
 
     const priorDealerInventoryById = new Map<string, number>();
     (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryUSD));
 
     const result = clearFinancialAsset(instruments, participants, priorDealerInventoryById, {
-      weeklyRebalanceRate: WEEKLY_TACTICAL_REBALANCE_RATE,
-      liquidityDepth: BOND_LIQUIDITY_DEPTH,
-      dealerInventoryPressureRate: DEALER_INVENTORY_PRESSURE_RATE,
       dealerSpreadBps: DEALER_SPREAD_BPS,
+      maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
 
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
@@ -236,6 +308,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         });
         updatedEntitiesById.set(entity.id, {
           ...entity,
+          cashUSD: (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0),
           itemizedHoldings: [...(otherHoldingsByEntity.get(entity.id) ?? []), ...newCorpHoldings],
         });
       });

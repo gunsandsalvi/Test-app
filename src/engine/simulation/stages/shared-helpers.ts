@@ -4,7 +4,7 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
-import { Company, Region, PrivateSectorSegment, RegionId, ItemizedHolding, SupplyRelationship } from '../../../types';
+import { Company, Region, PrivateSectorSegment, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
@@ -13,6 +13,27 @@ import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructu
 const EQUITY_ATTRACTIVENESS_SENSITIVITY = 0.6;
 const EQUITY_BANK_SENSITIVITY = 0.10;
 const FOREIGN_GROWTH_SENSITIVITY = 3.0;
+
+/**
+ * Annual default probability of a borrower in the worst state this model produces.
+ *
+ * This has to be consistent with CREDIT_RECOVERY_RATE, because the two together decide whether a
+ * distressed bond has a price at all. At 30% a year the expected loss on the worst names came to
+ * ~1,800bp, which is MORE than the recovery-value price floor lets the bond pay (about 1,745bp on
+ * five-year paper at a 40% recovery) — so no holder's reservation level was reachable, B and CCC
+ * had no bid anywhere inside the range where the market exists, and both cohorts printed the
+ * ceiling with no dispersion between them. An asset whose expected loss exceeds what its price
+ * floor can compensate is not a market; it is an arithmetic contradiction.
+ *
+ * 15% is also simply the more honest number. Observed one-year default rates for the weakest
+ * rating cohort run around 10-13%, reaching the mid-20s only in a genuine credit crisis, and this
+ * is the steady-state worst case rather than the crisis one.
+ */
+const MAX_ANNUAL_DEFAULT_PROBABILITY = 0.15;
+/** Leverage-minus-coverage score at which default risk is half of that maximum. */
+const PD_CURVE_MIDPOINT = 2;
+/** How gradually risk builds across the score — a wider curve means a smoother credit ladder. */
+const PD_CURVE_WIDTH = 2;
 
 export function computeExpectedLossSpreadBps(comp: Company): number {
   const interestExpense = comp.debtTranches?.reduce((sum, t) => {
@@ -23,11 +44,27 @@ export function computeExpectedLossSpreadBps(comp: Company): number {
   }, 0) || 1;
   const coverage = comp.ebitda / interestExpense;
   const leverage = comp.totalDebt / (comp.ebitda || 1);
+  // Map the leverage-versus-coverage score to a real ANNUAL default probability. The raw logistic
+  // was used directly as a probability, which says a stressed borrower defaults with ~98%
+  // certainty within the year — no lender would price that, and none should. It survived as long
+  // as this number was only a soft signal nudging a quantity; the moment the clearing engine
+  // started using it as a reservation PRICE it priced high yield out of existence entirely, with
+  // B and CCC names finding no bid at any spread.
+  //
+  // The shape stays (worse leverage and thinner coverage mean more default risk); what changes is
+  // that it lands in the range real default rates occupy — a fraction of a percent for the
+  // strongest balance sheets, tens of percent for genuinely distressed ones.
   const score = leverage - coverage;
-  const pd = 1 / (1 + Math.exp(-score));
-  const recoveryRate = 0.4;
-  return pd * (1 - recoveryRate) * 10000;
+  const pd = MAX_ANNUAL_DEFAULT_PROBABILITY / (1 + Math.exp(-(score - PD_CURVE_MIDPOINT) / PD_CURVE_WIDTH));
+  return pd * (1 - CREDIT_RECOVERY_RATE) * 10000;
 }
+
+/**
+ * What a defaulted senior unsecured claim is worth. It sets both the loss in the expected-loss
+ * calculation above and, through recoveryImpliedMaxSpreadBps, the price floor that bounds how
+ * wide the same bond can trade — the two are the same real assumption and must not drift apart.
+ */
+export const CREDIT_RECOVERY_RATE = 0.4;
 
 export function getRatingBucket(rating: string): 'IG' | 'HY' {
   return ['AAA', 'AA', 'A', 'BBB'].includes(rating) ? 'IG' : 'HY';
@@ -189,4 +226,49 @@ export function attributeItemizedHoldings(
     }
   }
   return result;
+}
+
+/**
+ * Settles a corporate action against the people who actually hold the paper.
+ *
+ * When an issuer's debt stack changes — a tranche matures, refinances (possibly into a different
+ * rate type, which moves the whole tranche between the bond market and the loan market), is
+ * prepaid, or is consolidated by a merger — the amount of that issuer's paper in existence
+ * changes. Whoever owned it has to change with it: matured paper leaves the holder's book, newly
+ * issued paper is placed with the existing holder base pro rata.
+ *
+ * Without this, holdings and the real stock drift apart until they are unrelated. Measured before
+ * this existed: by week 24, 130 of ~184 issuers had institutions holding MORE than the issuer's
+ * entire remaining float, and since the clearing engine's price impact scales with flow over
+ * float, trading those phantom positions against a shrunken (sometimes zero) float fanned
+ * corporate spreads out to -1097/+1757bp and loan discount margins to -1783/+471bp. It is the
+ * same defect that ran the two-year sovereign yield to 25% before 07c learned to redeem.
+ *
+ * Scaling by the ratio of new float to old preserves each holder's share of the issue exactly,
+ * which is what a pro-rata redemption and a pro-rata placement do. An issuer going from no float
+ * to some float is a genuinely new issue with no existing holder base to place into; the clearing
+ * engine absorbs it over the following weeks.
+ */
+export function settleCorporateActionOnHolders(
+  ctx: { updatedInstitutionalEntities: InstitutionalEntity[] },
+  issuerId: string,
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN',
+  oldFloatUSD: number,
+  newFloatUSD: number
+): void {
+  if (!(oldFloatUSD > 0)) return;
+  const ratio = Math.max(0, newFloatUSD) / oldFloatUSD;
+  if (Math.abs(ratio - 1) < 1e-9) return;
+
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
+    let touched = false;
+    const newHoldings = entity.itemizedHoldings
+      .map((h) => {
+        if (h.instrumentType !== instrumentType || h.instrumentId !== issuerId) return h;
+        touched = true;
+        return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
+      })
+      .filter((h) => h.quantityOrNotionalUSD > 1);
+    return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
+  });
 }

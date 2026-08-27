@@ -4,7 +4,13 @@ import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, Cr
 import { generate52WeekHistory } from './utils';
 import { INITIAL_WEATHER } from './weather';
 import { getRegionPopulation, getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
-import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
+import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
+import { CPI_BASE_LEVEL, seedCpiHistory } from '../simulation/stages/price-index';
+import {
+  assertHouseholdIncomeIdentity,
+  computeHouseholdDisposableIncomeUSD,
+  UNEMPLOYMENT_REPLACEMENT_RATE,
+} from '../bootstrap/national-accounts';
 import { deriveSubUnitUnitPrice, TARGET_FIRMS_PER_REGION } from '../bootstrap/category-demand';
 import { GENERATED_COMMODITIES, GENERATED_FX_PAIR_LEGS, getInitialFxRate, getCommodityBaseSpotPrice } from '../bootstrap/commodities-and-fx';
 import { getRegionYieldCurveParams, getRegionNeutralRate, getRegionInitialPolicyRate, getRegionProductivityGrowth, INFLATION_TARGET } from '../bootstrap/yield-curves';
@@ -210,6 +216,29 @@ const HOUSEHOLD_DEBT_RATIOS = { creditCardToIncome: 0.075, otherConsumerLoanToIn
 const HOUSEHOLD_SAVINGS_RATE = 0.065;
 const HOUSEHOLD_SPEND_SHARES = { staple: 0.35, standard: 0.50, luxury: 0.15 };
 
+/**
+ * A region does not come into existence in its first week — it has been running at its trend
+ * rate for years. Seeding a real trailing year of nominal GDP says exactly that, and it is what
+ * lets the headline growth rate be a genuine year-over-year comparison from week 1.
+ *
+ * Without it `nominalGdpHistory` started empty, so for the whole first year the growth rate fell
+ * back to annualizing one smoothed weekly rate via (1+x)^52 — which turned the cold-start level
+ * transient into a headline growth rate that reached ~110%, and from there poisoned the Taylor
+ * rule, the yield curve's beta2, the cycle regime, FX capital flows and equity flows. The
+ * transient itself is fixed at its source (see bootstrap/national-accounts.ts); this makes sure
+ * that no residual first-year wobble can ever again be exponentiated into a fake growth number.
+ *
+ * The path is deterministic rather than noisy on purpose: a synthetic past should carry the
+ * region's real trend and nothing else, so week 1 reads growth equal to trend instead of reading
+ * invented volatility.
+ */
+function seedNominalGdpHistory(currentLevelUSD: number, nominalAnnualGrowth: number): number[] {
+  const weeks = 52;
+  return Array.from({ length: weeks }, (_, i) =>
+    Number((currentLevelUSD * Math.pow(1 + nominalAnnualGrowth, (i - (weeks - 1)) / 52)).toFixed(0))
+  );
+}
+
 function buildRegion(regionId: RegionId): Region {
   const identity = REGION_IDENTITY[regionId];
   const totalPopulation = getRegionPopulation(regionId);
@@ -229,13 +258,7 @@ function buildRegion(regionId: RegionId): Region {
   const governmentEmployment = Math.round(totalPopulation * GOV_EMPLOYMENT_SHARE_OF_POPULATION);
 
   const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
-  const occupationLaborForceShare: Record<OccupationType, number> = {
-    GENERAL: 0.55,
-    SKILLED_TRADES: 0.15,
-    TECHNICAL_ENGINEERING: 0.12,
-    SPECIALIZED_PROFESSIONAL: 0.08,
-    MANAGERIAL_FINANCIAL: 0.10,
-  };
+  const occupationLaborForceShare: Record<OccupationType, number> = { ...BASELINE_OCCUPATION_LABOR_FORCE_SHARE };
   const occupationPools: Record<OccupationType, OccupationPool> = {} as Record<OccupationType, OccupationPool>;
   (Object.keys(occupationLaborForceShare) as OccupationType[]).forEach((occ) => {
     occupationPools[occ] = {
@@ -244,12 +267,28 @@ function buildRegion(regionId: RegionId): Region {
       wageGrowthAnnual: wageGrowth,
     };
   });
-  const estimatedHouseholdIncomeUSD = Number(((Object.keys(occupationPools) as OccupationType[]).reduce(
-    (sum, occ) => sum + baseAnnualWageUSD[occ] * occupationPools[occ].employed, 0
-  ) * 1.15).toFixed(0)); // wage income + 15% capital income, matching the downstream capital-income convention
 
   const governmentRevenueUSD = Number(((estimatedNominalGdpUSD * EFFECTIVE_TAX_RATE) / 52).toFixed(0));
   const governmentSpendingUSD = Number((governmentRevenueUSD + (estimatedNominalGdpUSD * FISCAL_DEFICIT_PCT_GDP) / 52).toFixed(0));
+
+  // Household income comes from the one shared national-accounts derivation (wages + capital
+  // income + government transfers, net of household tax) that the weekly evolution also uses,
+  // so the cold start and week 1 describe the same economy. At init the unemployment-benefit
+  // component sits well inside the government's standing transfer budget, so it does not raise
+  // the total — it becomes the variable part of it once unemployment moves.
+  const totalWageIncomeUSD = (Object.keys(occupationPools) as OccupationType[]).reduce(
+    (sum, occ) => sum + baseAnnualWageUSD[occ] * occupationPools[occ].employed, 0
+  );
+  const initialUnemploymentBenefitsUSD = (Object.keys(occupationPools) as OccupationType[]).reduce((sum, occ) => {
+    const unemployedInPool = totalLaborForce * occupationLaborForceShare[occ] - occupationPools[occ].employed;
+    return sum + baseAnnualWageUSD[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
+  }, 0);
+  const estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+    wageIncomeUSD: totalWageIncomeUSD,
+    governmentSpendingWeeklyUSD: governmentSpendingUSD,
+    unemploymentBenefitsUSD: initialUnemploymentBenefitsUSD,
+  }).toFixed(0));
+  assertHouseholdIncomeIdentity(regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, governmentSpendingUSD);
   const lastWeekNominalGdpUSD = estimatedNominalGdpUSD;
 
   const netInterestMarginPct = Number(Math.max(NIM_FLOOR, policyRate * NIM_TO_POLICY_RATE_RATIO + 0.005).toFixed(4));
@@ -348,9 +387,14 @@ function buildRegion(regionId: RegionId): Region {
     neutralRate,
     inflation: targetInflation,
     coreInflation: targetInflation,
+    // Seeded empty here and filled once every region's sub-unit prices exist (see
+    // simulation/initialization.ts) — a price index needs the prices before it can be built.
+    consumerPriceIndex: CPI_BASE_LEVEL,
+    coreConsumerPriceIndex: CPI_BASE_LEVEL,
+    cpiHistory: seedCpiHistory(CPI_BASE_LEVEL, targetInflation),
+    coreCpiHistory: seedCpiHistory(CPI_BASE_LEVEL, targetInflation),
+    cpiBasket: { weightBySubUnit: {}, basePriceBySubUnit: {}, baseIndexLevel: CPI_BASE_LEVEL, baseWeek: 1 },
     expectedInflation: targetInflation,
-    wagePushInflation: Number((targetInflation * 0.5).toFixed(4)),
-    monetaryInflationPressure: Number((targetInflation * 0.2).toFixed(4)),
     targetInflation,
     gdpGrowth,
     potentialGdpGrowth: gdpGrowth,
@@ -386,7 +430,7 @@ function buildRegion(regionId: RegionId): Region {
     gdpGrowthBottomUp: 0,
     smoothedWeeklyGrowthRate: 0,
     lastWeekNominalGdpUSD,
-    nominalGdpHistory: [],
+    nominalGdpHistory: seedNominalGdpHistory(estimatedNominalGdpUSD, gdpGrowth + targetInflation),
     consumptionComponentUSD: 0,
     investmentComponentUSD: 0,
     effectiveTaxRate: EFFECTIVE_TAX_RATE,

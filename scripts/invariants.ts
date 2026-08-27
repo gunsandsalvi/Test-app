@@ -9,6 +9,45 @@ interface Violation {
 }
 
 const violations: Violation[] = [];
+let prevStateForBookCheck: GameState | null = null;
+
+/**
+ * Securities do not change hands for free. Every fill in a clearing stage has a cash leg, so an
+ * institution's book — its cash plus the market value of what it holds — can only change by the
+ * bid/ask it paid the dealer and by whatever real income or redemption it received. It cannot
+ * simply grow because the clearing engine handed it more securities.
+ *
+ * This is the check that keeps the cash settlement honest: before it existed, holdings changed
+ * every week with nothing on the other side of the trade, and no test would have noticed.
+ * The tolerance is per-week and generous enough to cover real dealer spread and coupon/redemption
+ * flows while still catching a leg that is missing entirely.
+ */
+function checkInstitutionalBookConservation(prev: GameState, state: GameState, week: number) {
+  const bookOf = (s: GameState, region: RegionId) =>
+    (s.institutionalEntities || [])
+      .filter((e) => e.region === region && !e.isDefaulted)
+      .reduce(
+        (sum, e) =>
+          sum + (e.cashUSD ?? 0) + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
+        0
+      );
+
+  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+    const before = bookOf(prev, region);
+    const after = bookOf(state, region);
+    if (!(before > 0)) return;
+    const changePct = Math.abs(after - before) / before;
+    if (changePct > 0.05) {
+      violations.push({
+        week,
+        message:
+          `Institutional book in ${region} moved ${(changePct * 100).toFixed(1)}% in one week ` +
+          `(${(before / 1e9).toFixed(1)}B -> ${(after / 1e9).toFixed(1)}B). Securities and cash ` +
+          `must move together — check that every clearing stage applies netCashDeltaByParticipantId.`,
+      });
+    }
+  });
+}
 
 function checkNaNAndPurity(state: GameState, week: number) {
   state.companies.forEach(c => {
@@ -339,6 +378,8 @@ function runInvariantsHarness() {
 
     // 5. NAV identity
     checkNavIdentity(state, w);
+    if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
+    prevStateForBookCheck = state;
 
     // 6. Bank capital ratio & NIM bands for USA
     const usaBank = state.regions.USA.bankingSector;

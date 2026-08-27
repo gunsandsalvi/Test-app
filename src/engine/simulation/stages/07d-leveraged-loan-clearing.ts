@@ -26,19 +26,25 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
+import {
+  CAPITAL_CHARGE_BY_ASSET_CLASS,
+  computeReservationSpreadBps,
+  FULL_SIZE_SPREAD_RANGE_BPS,
+  MAX_OVERWEIGHT_MULTIPLE,
+  DISTRESSED_CONVICTION_MULTIPLE,
+  recoveryImpliedMaxSpreadBps,
+} from './asset-allocation';
+import { computeExpectedLossSpreadBps, CREDIT_RECOVERY_RATE } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
+const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
 const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
-const MAX_VALUE_TILT = 0.4;
-const MAX_MOMENTUM_TILT = 0.15;
 // Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
 // unsecured bond spread — collateral and seniority mean less loss given default.
 const SENIOR_LIEN_DISCOUNT = 0.85;
-const LOAN_LIQUIDITY_DEPTH = 3.5; // slightly thinner than corporate bonds (BOND_LIQUIDITY_DEPTH=3 there)
-const DEALER_INVENTORY_PRESSURE_RATE = 0.15;
 const DEALER_SPREAD_BPS = 20; // loan secondary markets trade a bit wider than investment-grade bonds
 
 function floatingDebtUSD(comp: Company): number {
@@ -49,43 +55,65 @@ function loanCreditDurationYears(comp: Company): number {
   return Math.min(4.0, Math.max(1.0, (comp.leveragedLoan?.tenorYears ?? 5) * 0.7));
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
-function computeEntityAttractiveness(comp: Company): number {
-  const fairDiscountMarginBps = comp.oasSpreadBps * SENIOR_LIEN_DISCOUNT;
-  const currentDM = comp.leveragedLoan.discountMarginBps;
-  const valueSignal = clamp((currentDM - fairDiscountMarginBps) / 1000, -MAX_VALUE_TILT, MAX_VALUE_TILT);
-
-  const history = comp.leveragedLoan.discountMarginBpsHistory || [];
-  const recentChangeBps = history.length >= 4 ? currentDM - history[history.length - 4] : 0;
-  const momentumSignal = clamp(-recentChangeBps / 2000, -MAX_MOMENTUM_TILT, MAX_MOMENTUM_TILT);
-
-  return clamp(valueSignal + momentumSignal, -1, 1);
-}
-
 export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
+
+    // This stage owns whether a loan quote exists at all, because it owns the loan market. A
+    // company has a quote exactly while it has floating-rate debt: the syndicate opens one when
+    // the loan is drawn and there is nothing left to quote once it is repaid. Without this the
+    // quote outlived the loan, and since the clearing below (rightly) skips a company with no
+    // floating debt, those orphaned quotes froze at whatever level generation gave them and then
+    // reported themselves as live prices for the rest of the run.
+    ctx.prevActiveFirms.forEach((c) => {
+      if (c.region !== regionId || !isActiveCompany(c)) return;
+      const hasLoan = floatingDebtUSD(c) > 0;
+      if (!hasLoan) {
+        if (c.leveragedLoan) c.leveragedLoan = undefined;
+        return;
+      }
+      if (c.leveragedLoan) return;
+      // A newly drawn loan opens at the issuer's own credit, priced off its bonds at the senior
+      // lien's discount — the same relationship the clearing below maintains thereafter — so it
+      // enters the auction already consistent with the rest of that issuer's capital structure.
+      const openingMarginBps = Math.round(c.oasSpreadBps * SENIOR_LIEN_DISCOUNT);
+      c.leveragedLoan = {
+        quotedMarginBps: openingMarginBps,
+        referenceBenchmark:
+          regionId === 'USA' ? 'SOFR' : regionId === 'EUR' ? 'EURIBOR' : regionId === 'UK' ? 'SONIA' : 'TONA',
+        pricePar: 100,
+        discountMarginBps: openingMarginBps,
+        tenorYears: 5,
+        seniority: 'Senior Secured First Lien',
+        recoveryRate: 1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE),
+      };
+    });
+
     const regionCompanies = ctx.prevActiveFirms.filter(
-      (c) => c.region === regionId && isActiveCompany(c) && floatingDebtUSD(c) > 0
+      (c) => c.region === regionId && isActiveCompany(c) && floatingDebtUSD(c) > 0 && !!c.leveragedLoan
     );
     if (regionCompanies.length === 0) return;
 
     const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + floatingDebtUSD(c), 0) || 1;
 
+    const tradableShare = reg.corpBondOwnership.institutionalShare;
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: floatingDebtUSD(c),
-      currentStat: c.leveragedLoan.discountMarginBps,
+      tradableFloatUSD: floatingDebtUSD(c) * tradableShare,
+      currentStat: c.leveragedLoan!.discountMarginBps,
       statKind: 'YIELD_LIKE',
       durationYears: loanCreditDurationYears(c),
-      statDirection: -1, // discount margin falls when net buying pushes the loan's price up
-      // No floor or ceiling — purely a function of real demand vs. the issuer's own real credit
-      // risk (comp.oasSpreadBps), not a realism bound.
+      // Same recovery-value price floor as the bond book, at the loan's own recovery. The senior
+      // lien is worth exactly what SENIOR_LIEN_DISCOUNT already says it is worth: expected loss
+      // is PD x (1 - recovery), so a loss 0.85x the unsecured claim's IS a recovery that much
+      // higher. Derived rather than stated so the two cannot drift apart.
+      maxStat: recoveryImpliedMaxSpreadBps(
+        1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE),
+        loanCreditDurationYears(c)
+      ),
     }));
 
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
@@ -116,34 +144,43 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       totalRealInstitutionalTargetUSD
     );
 
-    const attractivenessByCompany = new Map<string, number>();
-    regionCompanies.forEach((c) => attractivenessByCompany.set(c.id, computeEntityAttractiveness(c)));
-
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
-      const currentEntityTotalUSD = Array.from(currentHoldingByCompany.values()).reduce((s, v) => s + v, 0);
-      const rawTargetUSD = rawEntityTargets.get(entity.id) ?? 0;
-      const slowTargetTotalUSD = currentEntityTotalUSD + (rawTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
+      const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
+      const sectorTotal = totalRealInstitutionalTargetUSD || 1;
 
-      return {
-        id: entity.id,
-        targetTotalUSD: slowTargetTotalUSD,
-        currentHoldingsByInstrumentId: currentHoldingByCompany,
-        // Real loan investors don't hold sharply differing views of the same issuer the way bond
-        // investors with different mandates/duration targets do — the same value+momentum view
-        // applies to every entity here, so the same map is safely reused across participants.
-        attractivenessByInstrumentId: attractivenessByCompany,
-      };
+      // Same terms as the bond book, at the loan's own economics: a first-lien loan's collateral
+      // means less is expected to be lost on it and less capital is tied up holding it, so it
+      // clears its cost at a tighter margin than the same issuer's unsecured paper. That is the
+      // structural relationship between the two markets, expressed where it belongs — in what
+      // each set of holders will pay — rather than as a fixed multiple between two statistics.
+      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      regionCompanies.forEach((c) => {
+        const reservationBps = computeReservationSpreadBps({
+          entityType: entity.entityType,
+          expectedLossBps: computeExpectedLossSpreadBps(c) * SENIOR_LIEN_DISCOUNT,
+          capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.LEVERAGED_LOAN,
+          creditConditionsIndex: reg.bankingSector.creditConditionsIndex ?? 0,
+        });
+        const structuralSizeUSD = floatingDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal);
+        demandByInstrumentId.set(c.id, {
+          reservationStat: reservationBps,
+          maxHoldingUSD:
+            structuralSizeUSD *
+            (entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE),
+          fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
+        });
+      });
+
+      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId };
     });
 
     const priorDealerInventoryById = new Map<string, number>();
     (reg.bankingSector.loanDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryUSD));
 
     const result = clearFinancialAsset(instruments, participants, priorDealerInventoryById, {
-      weeklyRebalanceRate: WEEKLY_TACTICAL_REBALANCE_RATE,
-      liquidityDepth: LOAN_LIQUIDITY_DEPTH,
-      dealerInventoryPressureRate: DEALER_INVENTORY_PRESSURE_RATE,
       dealerSpreadBps: DEALER_SPREAD_BPS,
+      maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
 
     // Apply: real cleared discount margin + derived price-to-par, mutated in place so stage 8
@@ -152,6 +189,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     result.newStatById.forEach((newDiscountMarginBps, companyId) => {
       const comp = companyById.get(companyId);
       if (!comp) return;
+      if (!comp.leveragedLoan) return;
       const history = [...(comp.leveragedLoan.discountMarginBpsHistory || []), comp.leveragedLoan.discountMarginBps];
       const marginDeltaBps = newDiscountMarginBps - comp.leveragedLoan.quotedMarginBps;
       const creditDuration = loanCreditDurationYears(comp);
@@ -174,6 +212,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         });
         updatedEntitiesById.set(entity.id, {
           ...entity,
+          cashUSD: (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0),
           itemizedHoldings: [...(otherHoldingsByEntity.get(entity.id) ?? []), ...newLoanHoldings],
         });
       });

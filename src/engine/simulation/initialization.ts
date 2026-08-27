@@ -5,7 +5,16 @@ import { GameState } from '../../types';
 import { generateInitialCompanies } from '../companyGenerator';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
+import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
+import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
+import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
+import {
+  computeExpenditureGdpUSD,
+  computeGovernmentPurchasesUSD,
+  computeHouseholdDisposableIncomeUSD,
+  UNEMPLOYMENT_REPLACEMENT_RATE,
+} from '../bootstrap/national-accounts';
 
 export function createInitialGameState(): GameState {
   const regions = getInitialRegions();
@@ -22,6 +31,11 @@ export function createInitialGameState(): GameState {
     INSURER: { govBondPct: 0.50, corpBondPct: 0.32, loanPct: 0.03, equityPct: 0.10, cashPct: 0.05 },
     ASSET_MANAGER: { govBondPct: 0.10, corpBondPct: 0.12, loanPct: 0.08, equityPct: 0.65, cashPct: 0.05 },
     PENSION_FUND: { govBondPct: 0.25, corpBondPct: 0.25, loanPct: 0.05, equityPct: 0.40, cashPct: 0.05 },
+    // A credit hedge fund is the opposite balance sheet to an insurer: almost no sovereigns (it
+    // is not there to match liabilities), the sector's heaviest corporate-credit and loan
+    // weights, and a large cash sleeve that is real dry powder — the reason it can still bid
+    // when everyone else is at their mandate limit.
+    HEDGE_FUND: { govBondPct: 0.05, corpBondPct: 0.40, loanPct: 0.22, equityPct: 0.18, cashPct: 0.15 },
   };
 
   Object.keys(regions).forEach(r => {
@@ -29,7 +43,7 @@ export function createInitialGameState(): GameState {
     const reg = regions[regionId];
     const hs = reg.householdState;
     const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    const G = reg.governmentSpendingUSD * 52 * 0.35 * (1 + reg.fiscalStanceScore * 0.25);
+    const G = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD) * (1 + reg.fiscalStanceScore * 0.25);
     const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
     reg.laggedCorporateDemandBase = corpBase;
     const I = corpBase;
@@ -162,6 +176,38 @@ export function createInitialGameState(): GameState {
           quantityOrNotionalUSD: shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD),
         }));
 
+    // Seed each named bank's real sovereign book across the same tenor buckets the weekly
+    // auction clears, using the same target derivation it uses (the region's real bank ownership
+    // share of the real outstanding stock, split across banks by deposit size) and the same
+    // outstanding-weighted split across tenors.
+    //
+    // This was missing: banks carried a scalar `sovereignBondHoldingsUSD` but an EMPTY
+    // `sovereignBondHoldingsByTenor`, and 07c reads the buckets. So every bank opened ~$147B
+    // below its own target in a $670B market and bought into it every single week, which the
+    // auction could only express as a monotonic slide in yields — the whole banking sector
+    // permanently on the bid. Two representations of one book, and the engine was reading the
+    // empty one. Seed shape must match engine shape.
+    const regionBanksForSov = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
+    if (regionBanksForSov.length > 0 && totalSovBucketedUSD > 1) {
+      const bankSovTargetUSD = reg.sovBondOwnership.bankShare * totalSovBucketedUSD;
+      const perBankTargets = distributeRealTargetByWeight(
+        regionBanksForSov.map(b => ({ id: b.ticker, sizeWeight: b.bankBalanceSheet!.depositsUSD, targetPct: 1 })),
+        bankSovTargetUSD
+      );
+      regionBanksForSov.forEach(bank => {
+        const targetUSD = perBankTargets.get(bank.ticker) ?? 0;
+        const byTenor: Record<string, number> = {};
+        SOV_TENOR_BUCKETS.forEach(y => {
+          const bucketUSD = targetUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD);
+          if (bucketUSD > 1) byTenor[`t${y}`] = bucketUSD;
+        });
+        bank.bankBalanceSheet!.sovereignBondHoldingsByTenor = byTenor;
+        bank.bankBalanceSheet!.sovereignBondHoldingsUSD = Number(
+          Object.values(byTenor).reduce((sum, v) => sum + v, 0).toFixed(0)
+        );
+      });
+    }
+
     reg.institutionalSector.itemizedHoldings = [
       ...attributeItemizedHoldings(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
       ...attributeItemizedHoldings(reg.institutionalSector.sovBondHoldingsUSD, sovCandidates),
@@ -268,6 +314,9 @@ export function createInitialGameState(): GameState {
         entityType: role,
         financialStatementProfile: comp.financialStatementProfile,
         totalAssetsUSD,
+        // Real opening cash: the entity's own policy cash weight against its own book. Every
+        // clearing fill from here on settles against this balance.
+        cashUSD: totalAssetsUSD * allocationTargets[role].cashPct,
         equityCapitalUSD,
         sharesOutstanding: comp.sharesOutstanding,
         stockPrice: comp.stockPrice,
@@ -301,7 +350,85 @@ export function createInitialGameState(): GameState {
       });
     }
     reg.occupationLaborForceShare = calibratedShares;
+
+    // Seed employment from the SAME real labor demand the weekly step clears against, rather
+    // than a top-down headcount. buildRegion has to size the pools before any company exists,
+    // so it assumes every worker implied by the population/participation/unemployment
+    // primitives is employed; the real economy assembled just above demands ~4% fewer of them.
+    // Leaving both figures in place is the "two representations of one real thing" pattern: the
+    // wage bill, and therefore household income and consumption, stepped down the moment week 1
+    // recomputed employment on the real basis. The real basis is the one that survives.
+    const totalLaborForce = reg.totalPopulation * (1 - reg.nonEmployablePct) * reg.laborForceParticipation;
+    (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
+      const availableSupply = totalLaborForce * (calibratedShares[occ] ?? 0);
+      reg.occupationPools[occ].employed = Math.round(Math.min(availableSupply, week1OccDemand[occ] ?? 0));
+    });
+    // NOTE, deliberately not "fixed" here: these pools imply an unemployment rate around 11-14%
+    // (the firms this bootstrap generates demand that much less labor than the population and
+    // participation primitives supply), while `reg.unemploymentRate` and the weekly evolution
+    // report ~4.5%. Two representations of one real thing again — but reconciling them means
+    // making firm generation and labor supply agree, which is the labor market's own rebuild
+    // (Main Street), not this item. Writing the pool-implied rate into the field here was tried
+    // and reverted: it moves reported unemployment from 4.5% to 12.7% without making the two
+    // sides agree, trading a hidden inconsistency for a visible one.
+
+    const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
+    const realWageIncomeUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce(
+      (sum, occ) => sum + baseAnnualWageUSD[occ] * reg.occupationPools[occ].wageIndex * reg.occupationPools[occ].employed, 0
+    );
+    const realUnemploymentBenefitsUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce((sum, occ) => {
+      const unemployedInPool = totalLaborForce * (calibratedShares[occ] ?? 0) - reg.occupationPools[occ].employed;
+      return sum + baseAnnualWageUSD[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
+    }, 0);
+    reg.estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+      wageIncomeUSD: realWageIncomeUSD,
+      governmentSpendingWeeklyUSD: reg.governmentSpendingUSD,
+      unemploymentBenefitsUSD: realUnemploymentBenefitsUSD,
+    }).toFixed(0));
+
+    // With income now on its real footing, restate the reported GDP series to what this
+    // economy's own components actually sum to. estimatedNominalGdpUSD stays the supply-side
+    // potential-output anchor it always was (it sizes the wage table, the government's budget
+    // and the bank balance-sheet ratios); what gets reported, compared year-over-year and fed to
+    // the Taylor rule is the real bottom-up measure, and it has to start where the real economy
+    // starts or the difference is read as growth.
+    const regionFirms = regionCompanies.filter(c => !c.isDefaulted && !c.mergerAcquired);
+    const trackedInvestmentUSD = regionFirms.reduce((sum, c) => sum + c.maintenanceCapex + c.growthCapex, 0);
+    const trackedEmployment = regionFirms.reduce((sum, c) => sum + c.employeeCount, 0);
+    const privateEmployment = (reg.privateSectorSegments || []).reduce((sum, seg) => sum + seg.employment, 0);
+    const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + privateEmployment) / trackedEmployment : 1;
+    const { gdpUSD: bottomUpGdpUSD } = computeExpenditureGdpUSD({
+      householdIncomeUSD: reg.estimatedHouseholdIncomeUSD,
+      savingsRate: reg.householdState.savingsRate,
+      investmentUSD: trackedInvestmentUSD * investmentScaleFactor,
+      governmentSpendingWeeklyUSD: reg.governmentSpendingUSD,
+      netExportsUSD: reg.exportsUSD - reg.importsUSD,
+    });
+    // Build the real consumer basket now that every sub-unit carries its bootstrapped price.
+    // Weights are what households actually spend on each good; base prices are today's.
+    reg.cpiBasket = buildCpiBasket(reg, 1, CPI_BASE_LEVEL);
+
+    reg.derivedNominalGdpUSD = Number(bottomUpGdpUSD.toFixed(0));
+    reg.lastWeekNominalGdpUSD = reg.derivedNominalGdpUSD;
+    const nominalTrendGrowth = reg.potentialGdpGrowth + reg.targetInflation;
+    reg.nominalGdpHistory = reg.nominalGdpHistory.map((_, i, arr) =>
+      Number((reg.derivedNominalGdpUSD * Math.pow(1 + nominalTrendGrowth, (i - (arr.length - 1)) / 52)).toFixed(0))
+    );
   });
+
+  // Open the regions on their real trade position rather than at zero exports and zero imports,
+  // using the same bilateral computation the weekly step runs (06-fx-and-trade.ts). Seeding this
+  // before the GDP re-anchor below matters: net exports are a real component of the identity, and
+  // starting them at zero made week 1 read the entire structural trade balance as a one-week
+  // collapse in output.
+  {
+    const { exportsByRegion, importsByRegion } = computeBilateralTradeFlows(companies, regions, fxPairs);
+    (Object.keys(regions) as RegionId[]).forEach((regionId) => {
+      regions[regionId].exportsUSD = Number(exportsByRegion[regionId].toFixed(0));
+      regions[regionId].importsUSD = Number(importsByRegion[regionId].toFixed(0));
+      regions[regionId].tradeBalance = regions[regionId].exportsUSD - regions[regionId].importsUSD;
+    });
+  }
 
   const commodities = getInitialCommodities();
   const allGeneratedCompanies = companies;

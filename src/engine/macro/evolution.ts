@@ -1,8 +1,12 @@
 import { isActiveCompany } from '../../domain/company';
-import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
+import { NelsonSiegelParams } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
-import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
+import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
+import {
+  computeHouseholdDisposableIncomeUSD,
+  UNEMPLOYMENT_REPLACEMENT_RATE,
+} from '../bootstrap/national-accounts';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
@@ -64,7 +68,6 @@ export function evolveRegionMacro(
     publicCompanyEmployment: number;
     occupationDemand?: Record<OccupationType, number>;
     monetizedAmountUSD?: number;
-    sovereignAuctionPremiumBps?: number;
   },
   week: number,
   equityReturn: number = 0,
@@ -81,25 +84,13 @@ export function evolveRegionMacro(
   
   const updatedWeather = evolveRegionalWeather(region.id, region.weather, week);
 
-  const weatherDecay = Math.pow(0.55, Math.max(0, updatedWeather.weeksActive - 1));
-  let weatherInfShock = updatedWeather.inflationImpactPct * weatherDecay;
-  
-  if (updatedWeather.affectedCommodityId && prevCommodities.length > 0) {
-    const affectedComm = prevCommodities.find(c => c.id === updatedWeather.affectedCommodityId || c.symbol === updatedWeather.affectedCommodityId);
-    if (affectedComm && affectedComm.historicalPrices.length >= 2) {
-      const lastPrice = affectedComm.historicalPrices[affectedComm.historicalPrices.length - 1];
-      const prevPrice = affectedComm.historicalPrices[affectedComm.historicalPrices.length - 2];
-      const realizedCommodityChangePct = (lastPrice - prevPrice) / prevPrice;
-      const consumptionBasketWeight = 0.03; // Assumed share of CPI basket
-      weatherInfShock = (realizedCommodityChangePct * consumptionBasketWeight) * weatherDecay;
-    }
-  }
-
-  // Micro-to-Macro Transmission:
-  // 1. Margin compression forces hiring freezes, cooling wage inflation
-  const laborCooling = microFeedback.marginCompression * 0.15;
-  
-  const infNoise = (Math.random() - 0.5) * 0.0008 + globalShock.inflationShock + weatherInfShock * 0.20 - laborCooling * 0.0008;
+  // A weather event's effect on inflation is no longer injected into a CPI formula here. It was
+  // an assumed 3% "share of CPI basket" applied to one commodity's price change — a second,
+  // parallel account of something the simulation already models for real: bad weather cuts a real
+  // commodity's real supply, that commodity's price clears higher in stage 07, its buyers' input
+  // costs rise, and the goods households buy clear higher in stage 05's auction, which the price
+  // index then measures. The real chain is the transmission; the shortcut around it was double
+  // counting with an invented weight. `updatedWeather` still drives that real supply effect.
 
   // GDP Growth is derived bottom-up from C+I+G+NX identity in simulation core (Phase 4)
   const potentialGdp = region.potentialGdpGrowth;
@@ -148,10 +139,12 @@ export function evolveRegionMacro(
   // Process recession shocks
   const remainingShocks = region.recessionShockQueue.filter(s => s.week !== week);
 
-  // 1. Autoregressive AR(1) base with anchor to target inflation piStar + supply noise
-  const infPersistence = 0.98;
-  const baseInflation = (region.inflation * infPersistence) + (piStar * (1 - infPersistence)) + infNoise;
-  let newInflation = Number(baseInflation.toFixed(4));
+  // Inflation is NOT computed here. It is measured, in simulation/stages/price-index.ts, as the
+  // year-over-year change in a real consumer basket priced at what stage 05's auction actually
+  // clears. This carries last week's measured figure forward for the stages that read it before
+  // the new measurement exists — most importantly the Taylor rule below, which is supposed to
+  // react to the most recently published statistic, exactly as a real central bank does.
+  const newInflation = region.inflation;
 
   const smoothedAnnualizedGrowthForFiscal = ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52;
   const outputGap = potentialGdp - smoothedAnnualizedGrowthForFiscal;
@@ -289,13 +282,7 @@ export function evolveRegionMacro(
   const newOtherLoanDebtUSD = Math.max(0, (prevHS.otherConsumerLoanDebtUSD || 0) * (1 - otherLoanPaydownRate) + weeklyNewOtherLoansUSD);
 
   // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
-  const defaultOccupationShares: Record<OccupationType, number> = {
-    GENERAL: 0.55,
-    SKILLED_TRADES: 0.15,
-    TECHNICAL_ENGINEERING: 0.12,
-    SPECIALIZED_PROFESSIONAL: 0.08,
-    MANAGERIAL_FINANCIAL: 0.10,
-  };
+  const defaultOccupationShares: Record<OccupationType, number> = BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
   const currentLaborForceShares = region.occupationLaborForceShare || defaultOccupationShares;
   const currentOccupationPools = region.occupationPools || {
     GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
@@ -442,15 +429,21 @@ export function evolveRegionMacro(
     const pool = newOccupationPools[occ];
     return sum + baseAnnualWageUSD[occ] * pool.wageIndex * pool.employed;
   }, 0);
-  const unemploymentReplacementRate = 0.35;
-  const unemploymentTransferIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
+  const unemploymentBenefitsUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
     const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
     const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
-    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * unemploymentReplacementRate;
+    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * UNEMPLOYMENT_REPLACEMENT_RATE;
   }, 0);
-  const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
-  const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + unemploymentTransferIncomeUSD + capitalIncomeUSD).toFixed(0));
+  // The same national-accounts derivation the cold-start bootstrap uses. It used to be written
+  // out separately here (wages + unemployment transfers + a flat 15% capital income, no tax and
+  // no government transfers), so the week-1 economy did not describe the same one the bootstrap
+  // had built — the two definitions have to be one definition.
+  const newEstimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+    wageIncomeUSD: totalWageIncomeUSD,
+    governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
+    unemploymentBenefitsUSD,
+  }).toFixed(0));
 
   const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
   
@@ -542,22 +535,16 @@ export function evolveRegionMacro(
     normalizedTiers
   );
 
-  const prevM2 = region.bankingSector.moneySupplyM2USD > 0
-    ? region.bankingSector.moneySupplyM2USD
-    : (region.bankingSector.depositsUSD + (region.bankingSector.centralBankReservesUSD ?? 1.2e12) * 0.1);
-  const m2GrowthRateAnnualized = prevM2 > 0
-    ? ((newBankingSector.moneySupplyM2USD / prevM2) - 1) * 52
-    : 0;
-  const velocityFactor = (1.0 - Math.max(0, (100 - newCCI) / 100) * 0.6); // low confidence suppresses velocity, dampening inflation pass-through
-  const monetaryInflationPressure = ((m2GrowthRateAnnualized - newGdpGrowth) * 0.15 * velocityFactor);
-
-  const wagePushInflation = (newWageGrowth - 0.015) * 0.8;
-  
-  // Wage-push and monetary inflation add to CPI (scaled for weekly turn)
-  newInflation = Number((newInflation + wagePushInflation * 0.005 + monetaryInflationPressure * 0.005).toFixed(4));
-  newInflation = isFinite(newInflation) ? Number(Math.max(-0.20, Math.min(0.50, newInflation)).toFixed(4)) : 0.025;
-  const rawCore = newInflation * 0.92 + wagePushInflation * 0.1;
-  const newCoreInflation = isFinite(rawCore) ? Number(Math.max(-0.20, Math.min(0.50, rawCore)).toFixed(4)) : 0.025;
+  // The wage-push and monetary-pressure terms that used to be added to CPI here are gone. Both
+  // were formulas layered on top of an already-formulaic inflation series, and together they were
+  // the runaway: an AR(1) with 0.98 persistence multiplies any persistent addition roughly
+  // fiftyfold in equilibrium, and the monetary term's `m2Growth - gdpGrowth` grew without bound as
+  // measured real growth fell — a feedback loop from inflation, through fake real growth, back
+  // into inflation. If higher wages or faster money growth genuinely raise prices, they do it by
+  // raising what buyers bid in stage 05's real auction, and the price index measures that. A
+  // separate term for them counts the same economics twice, once through the market and once
+  // around it.
+  const newCoreInflation = region.coreInflation;
   const rawExp = region.expectedInflation * 0.9 + newInflation * 0.1;
   const newExpectedInflation = isFinite(rawExp) ? Number(Math.max(-0.20, Math.min(0.50, rawExp)).toFixed(4)) : 0.025;
 
@@ -613,32 +600,31 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const dotPlot1Y = Number((newPolicyRate * 0.4 + smoothedTargetRate * 0.6).toFixed(4));
   const dotPlot2Y = Number((smoothedTargetRate * 0.35 + (rStar + piStar) * 0.65).toFixed(4));
 
-  const qePremium = (cbChangePct * -0.5);
-
-  // Update Nelson-Siegel yield curve parameters. The long-run level (beta0) is driven by an
-  // auction-outcome signal (issuance supply vs. absorbed bank/institutional demand, computed
-  // in core.ts's sovereign-debt section from the same 40/60 split used to allocate holdings)
-  // rather than an ad-hoc macro formula: under-absorption (a positive premium) raises yields,
-  // over-subscription (a negative premium) lowers them, anchored on the region's own
-  // generated neutral rate instead of a flat literal.
-  const targetBeta0 = region.neutralRate + (microFeedback.sovereignAuctionPremiumBps ?? 0) / 10000 + qePremium * 2;
-  const newBeta0 = Math.max(
-    0.012,
-    region.yieldCurveParams.beta0 * 0.98 + targetBeta0 * 0.02 + (Math.random() - 0.5) * 0.0003
-  );
-  const newBeta1 = newPolicyRate - newBeta0 + (Math.random() - 0.5) * 0.0002;
-  const targetBeta2 = (newGdpGrowth - region.potentialGdpGrowth) * 2.0;
-  const newBeta2 =
-    region.yieldCurveParams.beta2 * 0.95 + targetBeta2 * 0.05 + (Math.random() - 0.5) * 0.0003;
-
-  const newCurveParams: NelsonSiegelParams = {
-    beta0: newBeta0,
-    beta1: newBeta1,
-    beta2: newBeta2,
-    lambda: region.yieldCurveParams.lambda,
-  };
-
-  const newZeroRates = calculateTenorZeroRates(newCurveParams);
+  // The yield curve is NOT set here. It has exactly one owner: the real sovereign auction in
+  // 07c-sovereign-bond-clearing.ts, where named banks and institutions trade real tenor buckets
+  // against the government's real outstanding stock and the Nelson-Siegel parameters are refit
+  // to the yields that actually clear.
+  //
+  // This block used to recompute beta0/beta1/beta2 from macro formulas every week and overwrite
+  // whatever the auction had cleared — two price-setters for one curve, with the formula running
+  // first and the market's answer discarded a stage later. `targetBeta2 = (gdpGrowth -
+  // potentialGdpGrowth) * 2.0` in particular was the path that turned the cold-start GDP
+  // transient into a 4% -> 26% two-year yield spiral.
+  //
+  // Macro conditions still reach the curve, but the way they do in reality — through what
+  // participants are willing to pay. The policy rate reaches the front end because banks
+  // arbitrage bonds against reserves at the central bank; inflation expectations reach the long
+  // end because what a bond is worth to its holder is its real yield. Both now live in 07c's
+  // attractiveness functions. The one rate still set here is the policy rate itself, which is
+  // genuinely administered rather than traded — a posted central-bank rate IS the real-world
+  // mechanism, not a formula standing in for a missing market.
+  //
+  // Central-bank balance-sheet policy (QE/QT) reached the curve here too, via qePremium. That
+  // is real, but it belongs in the auction as real central-bank demand for real bonds rather
+  // than as a nudge to a curve parameter; it is tracked as its own work item (G9) and is
+  // deliberately absent rather than approximated in the meantime.
+  const newCurveParams: NelsonSiegelParams = region.yieldCurveParams;
+  const newZeroRates = region.zeroRates;
 
   let newInversionCount = region.inversionWeeksCount;
   if (newZeroRates.tenor2Y > newZeroRates.tenor10Y) {
@@ -800,8 +786,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     inflation: newInflation,
     coreInflation: newCoreInflation,
     expectedInflation: newExpectedInflation,
-    wagePushInflation,
-    monetaryInflationPressure,
     gdpGrowth: newGdpGrowth,
     wageGrowth: Number(newWageGrowth.toFixed(4)),
     debtToGdpPct: newDebtToGdpPct,
