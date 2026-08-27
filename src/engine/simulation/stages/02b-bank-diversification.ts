@@ -10,16 +10,21 @@
  * genuine derived total rather than a second, parallel source of truth. Must run before stage 8
  * (company fundamentals), which prices each bank's stock off its own bankBalanceSheet.
  *
- * Wall Street Phase 2: real central bank facilities on top of each bank's own evolved sheet — a
- * bank short of its own target cash buffer borrows from the Standing Repo Facility (against
- * government-bond collateral, at policyRate + a spread); a bank with cash above its target
- * buffer places the excess at the reverse repo facility (earning policyRate - a spread) instead
- * of policyRate being an ambient parameter every formula reads directly.
+ * Wall Street Phase 2, revised by the flow-ledger rework: each bank's cash is now a real stock
+ * moved only by named flows (see macro/banking.ts), and the one bank-side facility is the
+ * Standing Repo Facility — a bank whose week closes short of its own operating buffer draws the
+ * shortfall against its government-bond book at the posted rate, and repays with interest at
+ * next week's maturation. The bank-side reverse-repo parking that used to sit opposite it is
+ * gone: bank reserves earn the policy rate (the floor-system IOR), so a real bank never has
+ * business at the RRP window — that facility is the NON-bank cash floor (WS6's lenders, WS7's
+ * money funds).
  */
 
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector } from '../../../domain/banking';
-import { evolveBankingSector } from '../../macro/banking';
+import {
+  evolveBankingSector, computeSovereignBookAnnualYield, MIN_CASH_BUFFER_RATIO,
+} from '../../macro/banking';
 import { WeeklyStepContext } from './context';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -48,45 +53,23 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   };
 }
 
-// Real posted spreads over/under policyRate — mirrors how the real Fed's Standing Repo Facility
-// and overnight reverse repo facility are priced relative to the policy rate, rather than an
-// invented "emergency injection" formula reacting after the fact.
-const SRF_SPREAD_BPS = 25;
-const ON_RRP_SPREAD_BPS = 20;
-// A bank wants to hold at least this share of its deposits as ready cash; short of that, it
-// borrows the shortfall from the Standing Repo Facility rather than running cash negative.
-const MIN_CASH_BUFFER_RATIO = 0.02;
-// Above this share of deposits, cash is genuinely excess — placed at the reverse repo facility
-// (a real, interest-bearing use) instead of sitting idle in the aggregate.
-const EXCESS_CASH_RATIO = 0.15;
-
-function applyCentralBankFacilities(sheet: BankingSector, policyRate: number): BankingSector {
-  const targetMinCash = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
-  const targetMaxCash = sheet.depositsUSD * EXCESS_CASH_RATIO;
-
-  let cashReservesUSD = sheet.cashReservesUSD;
-  let bankEquityUSD = sheet.bankEquityUSD;
-  let srfBorrowingUSD = 0;
-  let onRrpLendingUSD = 0;
-
-  if (cashReservesUSD < targetMinCash) {
-    srfBorrowingUSD = targetMinCash - cashReservesUSD;
-    cashReservesUSD += srfBorrowingUSD;
-    const weeklyInterestCost = (srfBorrowingUSD * (policyRate + SRF_SPREAD_BPS / 10000)) / 52;
-    bankEquityUSD = Math.max(0, bankEquityUSD - weeklyInterestCost);
-  } else if (cashReservesUSD > targetMaxCash) {
-    onRrpLendingUSD = cashReservesUSD - targetMaxCash;
-    cashReservesUSD -= onRrpLendingUSD;
-    const weeklyInterestIncome = (onRrpLendingUSD * Math.max(0, policyRate - ON_RRP_SPREAD_BPS / 10000)) / 52;
-    bankEquityUSD += weeklyInterestIncome;
-  }
-
+/**
+ * The Standing Repo Facility draw: struck at the END of the bank's week, once every real flow
+ * has posted, exactly like a real treasury desk squaring its position at the close. The draw
+ * itself is a swap of a liability for cash (srfBorrowing +X, cash +X); the interest is paid at
+ * maturation next week, in evolveBankingSector's step 1. No floor, no plug — a bank that is
+ * short simply borrows what it is short, bounded by nothing here because the SRF is by design
+ * an elastic posted-rate window (rule-1's administered exception). Collateral encumbrance
+ * against the draw arrives with WS6's repo market, which shares the same collateral pool.
+ */
+function applySrfDraw(sheet: BankingSector): BankingSector {
+  const targetMinCashUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
+  if (!(sheet.cashReservesUSD < targetMinCashUSD)) return sheet;
+  const srfBorrowingUSD = targetMinCashUSD - sheet.cashReservesUSD;
   return {
     ...sheet,
-    cashReservesUSD: Number(cashReservesUSD.toFixed(0)),
-    bankEquityUSD: Number(bankEquityUSD.toFixed(0)),
+    cashReservesUSD: Number((sheet.cashReservesUSD + srfBorrowingUSD).toFixed(0)),
     srfBorrowingUSD: Number(srfBorrowingUSD.toFixed(0)),
-    onRrpLendingUSD: Number(onRrpLendingUSD.toFixed(0)),
   };
 }
 
@@ -124,14 +107,15 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // way a bank concentrated in subprime/regional consumer lending genuinely would be.
         ctx.creditContagionBps * riskFactor,
         reg.unemploymentRate * (0.6 + riskFactor * 0.4),
-        reg.zeroRates.tenor10Y,
+        // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
+        computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByTenor, reg.zeroRates),
         reg.balanceSheetStance,
         reg.gdpGrowth,
         reg.creditConditionsSpilloverAdjustment ?? 0,
         0,
         reg.householdState.creditTierBooks
       );
-      return { bank, sheet: applyCentralBankFacilities(sheet, reg.policyRate) };
+      return { bank, sheet: applySrfDraw(sheet) };
     });
 
     newSheets.forEach(({ bank, sheet }) => {

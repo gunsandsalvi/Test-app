@@ -173,19 +173,24 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // Only the buckets this auction actually priced are rewritten; a bucket whose last
         // tranche matures this week is left standing for stage 11 to redeem for cash.
         const byTenor = { ...(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}) };
-        let cashDelta = 0;
+        let faceDeltaUSD = 0;
         activeBuckets.forEach((b) => {
           const newUSD = fills.get(billInstrumentId(regionId, b.key)) ?? 0;
-          cashDelta -= newUSD - (byTenor[b.key] ?? 0);
+          faceDeltaUSD += newUSD - (byTenor[b.key] ?? 0);
           if (newUSD > 1) byTenor[b.key] = newUSD; else delete byTenor[b.key];
         });
+        // The engine's cash leg (face plus the dealer fee); the fee part is P&L — an expense the
+        // identity invariant would otherwise report as a missing leg.
+        const cashDeltaUSD = result.netCashDeltaByParticipantId.get(`BANK-${c.ticker}`) ?? -faceDeltaUSD;
+        const feeUSD = Math.max(0, -(cashDeltaUSD + faceDeltaUSD));
         return {
           ...c,
           bankBalanceSheet: {
             ...c.bankBalanceSheet,
             sovereignBondHoldingsByTenor: byTenor,
             sovereignBondHoldingsUSD: Number(Object.values(byTenor).reduce((s, v) => s + v, 0).toFixed(0)),
-            cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + cashDelta,
+            cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + cashDeltaUSD,
+            bankEquityUSD: c.bankBalanceSheet.bankEquityUSD - feeUSD,
           },
         };
       });
@@ -218,6 +223,25 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         });
       });
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => updatedById.get(e.id) ?? e);
+
+      // The desk's bill-market earnings: the clients' cash legs already paid these fees, so
+      // dropping the revenue destroyed the money. Credited as cash AND equity to the named
+      // banks, same as the other clearing desks (the identity invariant catches either leg
+      // missing).
+      if (result.totalDealerRevenueUSD > 0) {
+        ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
+          if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return c;
+          const share = c.bankMarketShare ?? 1 / Math.max(1, regionBanks.length);
+          return {
+            ...c,
+            bankBalanceSheet: {
+              ...c.bankBalanceSheet,
+              bankEquityUSD: c.bankBalanceSheet.bankEquityUSD + result.totalDealerRevenueUSD * share,
+              cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + result.totalDealerRevenueUSD * share,
+            },
+          };
+        });
+      }
 
       // Dealer residual: bills live in the same dealer book as bonds, under their own keys.
       const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !p.tenorKey.startsWith('b'));

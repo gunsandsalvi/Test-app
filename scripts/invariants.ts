@@ -457,6 +457,28 @@ function runInvariantsHarness() {
     violations.push(...checkHoldingsLedgerConservation(state, w));
     prevStateForBookCheck = state;
 
+    // 5b. The bank balance-sheet identity, per named bank, every week. Cash moves only by
+    // named flows and every flow posts to both sides, so deposits + equity + secured funding
+    // must equal loans + securities + cash to the dollar (small tolerance for per-field
+    // rounding). Before the flow ledger this identity was broken by -138.9B (USA, week 0) and
+    // a Math.max plug hid it; if this drifts again, some flow is missing a leg — find it,
+    // never plug it.
+    state.companies.forEach((c: any) => {
+      if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
+      const bs = c.bankBalanceSheet;
+      const sovUSD = Object.values((bs.sovereignBondHoldingsByTenor || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
+      const residualUSD: number =
+        bs.depositsUSD + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
+        - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
+        - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0);
+      if (Math.abs(residualUSD) > 5e6) {
+        violations.push({
+          week: w,
+          message: `Bank ${c.ticker} balance-sheet identity broken by ${(residualUSD / 1e6).toFixed(1)}M — a flow is missing a leg`
+        });
+      }
+    });
+
     // 6. Bank capital ratio & NIM bands for USA
     const usaBank = state.regions.USA.bankingSector;
     if (usaBank.bankCapitalRatio < 0.05 || usaBank.bankCapitalRatio > 0.35) {

@@ -292,7 +292,39 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         bank.bankBalanceSheet!.sovereignBondHoldingsUSD = Number(
           Object.values(byTenor).reduce((sum, v) => sum + v, 0).toFixed(0)
         );
+        // §7.4, applied to the FUNDING side this time. This sovereign book is seeded from the
+        // market (the bank share of the real outstanding stock — the S2 fix), but the deposit
+        // seed still came from a GDP ratio chosen when the sov book was a 2%-of-GDP scalar.
+        // Nobody reconciled the two, so the balance sheet opened ~139B short (USA) and the old
+        // evolution's Math.max plug manufactured the difference every week. Cash now moves only
+        // by named flows, so the sheet must BALANCE at birth: deposits are seeded as the funding
+        // the asset side actually requires — assets minus equity — the same shape the weekly
+        // ledger maintains from here on. G2 later replaces this stock with real loan-created
+        // deposits and real household flows.
+        const bs = bank.bankBalanceSheet!;
+        bs.depositsUSD = Number((
+          bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD +
+          bs.cashReservesUSD - bs.bankEquityUSD
+        ).toFixed(0));
       });
+
+      // The region aggregate is the derived sum of the named banks (the 02b/S7 doctrine),
+      // re-projected here so week 0 reads the same books week 1 will.
+      const aggByTenor: Record<string, number> = {};
+      regionBanksForSov.forEach(b => {
+        Object.entries(b.bankBalanceSheet!.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => {
+          aggByTenor[k] = (aggByTenor[k] ?? 0) + v;
+        });
+      });
+      const sumBank = (f: (bs: import('../../types').BankingSector) => number) =>
+        Number(regionBanksForSov.reduce((sum, b) => sum + f(b.bankBalanceSheet!), 0).toFixed(0));
+      reg.bankingSector.sovereignBondHoldingsByTenor = aggByTenor;
+      reg.bankingSector.sovereignBondHoldingsUSD = sumBank(bs => bs.sovereignBondHoldingsUSD);
+      reg.bankingSector.depositsUSD = sumBank(bs => bs.depositsUSD);
+      reg.bankingSector.cashReservesUSD = sumBank(bs => bs.cashReservesUSD);
+      reg.bankingSector.bankEquityUSD = sumBank(bs => bs.bankEquityUSD);
+      reg.bankingSector.businessLoanBookUSD = sumBank(bs => bs.businessLoanBookUSD);
+      reg.bankingSector.consumerLoanBookUSD = sumBank(bs => bs.consumerLoanBookUSD);
     }
 
     reg.institutionalSector.itemizedHoldings = [

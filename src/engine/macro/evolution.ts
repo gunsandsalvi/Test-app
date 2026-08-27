@@ -7,7 +7,7 @@ import {
   computeHouseholdDisposableIncomeUSD,
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
-import { evolveBankingSector } from './banking';
+import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
@@ -528,7 +528,9 @@ export function evolveRegionMacro(
     region.policyRate,
     microFeedback.creditContagionBps,
     newUnemployment,
-    region.zeroRates.tenor10Y,
+    // The aggregate book's real yield at the real cleared curve — the per-bank truth is
+    // recomputed in 02b, which overwrites this aggregate with the sum of named banks.
+    computeSovereignBookAnnualYield(region.bankingSector.sovereignBondHoldingsByTenor, region.zeroRates),
     newBalanceSheetStance,
     newGdpGrowth,
     region.creditConditionsSpilloverAdjustment ?? 0,

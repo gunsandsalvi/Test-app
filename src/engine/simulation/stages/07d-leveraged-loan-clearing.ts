@@ -258,7 +258,12 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
         ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
           ...existingSheet,
+          // The desk's earnings are money the clients actually paid (their cash legs already
+          // deduct the fee), so the bank receives CASH, not just a bookkeeping equity credit —
+          // an equity write with no cash leg breaks the balance-sheet identity the invariants
+          // harness now asserts per bank per week.
           bankEquityUSD: existingSheet.bankEquityUSD + result.totalDealerRevenueUSD * share,
+          cashReservesUSD: existingSheet.cashReservesUSD + result.totalDealerRevenueUSD * share,
         };
       });
     }

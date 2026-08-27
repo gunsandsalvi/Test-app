@@ -359,13 +359,28 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // scalar total (sovereignBondHoldingsUSD stays the sum of buckets).
     regionBanks.forEach((bank) => {
       const newHoldings = result.newParticipantHoldings.get(bank.ticker) ?? new Map<string, number>();
+      const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
+      // A clearing stage may only rewrite the instruments it actually cleared (§7.34). This
+      // auction prices the four BOND buckets; the bank's BILL buckets (b13/b26/b52, cleared in
+      // 07f) pass through untouched. Rebuilding the whole book from this auction's fills
+      // deleted every bank's bill position with no cash leg — the exact WS5 bug, fixed on the
+      // institutional path at the time and sitting unnoticed here until the per-bank identity
+      // invariant existed to catch it (measured: 26.6B of USA bank bills vanished in week 1).
       const newBuckets: Record<string, number> = {};
+      Object.entries(existingSheet?.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
+        if (!ownBucketInstrumentIds.has(bucketInstrumentId(regionId, key))) newBuckets[key] = Number(v) || 0;
+      });
       newHoldings.forEach((usd, instrumentId) => {
         const key = instrumentId.replace(`${regionId}-GOV-`, '');
         newBuckets[key] = usd;
       });
+      const prevClearedUSD = activeBuckets.reduce((s, b) => s + (existingSheet?.sovereignBondHoldingsByTenor?.[b.key] ?? 0), 0);
+      const newClearedUSD = activeBuckets.reduce((s, b) => s + (newBuckets[b.key] ?? 0), 0);
       const newTotalUSD = Object.values(newBuckets).reduce((s, v) => s + v, 0);
-      const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
+      const cashDeltaUSD = result.netCashDeltaByParticipantId.get(bank.ticker) ?? 0;
+      // The dealer fee inside the cash leg is an expense: cash left the bank beyond what the
+      // bonds cost, and P&L must say so or the balance-sheet identity drifts by the fee.
+      const feeUSD = Math.max(0, -(cashDeltaUSD + (newClearedUSD - prevClearedUSD)));
       if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
       // The cash leg of the bank's own portfolio trading: bonds bought are paid for out of the
       // bank's reserves, bonds sold return to them. Its securities and its money move together.
@@ -373,7 +388,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         ...existingSheet,
         sovereignBondHoldingsByTenor: newBuckets,
         sovereignBondHoldingsUSD: Number(newTotalUSD.toFixed(0)),
-        cashReservesUSD: existingSheet!.cashReservesUSD + (result.netCashDeltaByParticipantId.get(bank.ticker) ?? 0),
+        cashReservesUSD: existingSheet!.cashReservesUSD + cashDeltaUSD,
+        bankEquityUSD: existingSheet!.bankEquityUSD - feeUSD,
       };
     });
 
@@ -393,7 +409,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
         ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
           ...existingSheet,
+          // The desk's earnings are money the clients actually paid (their cash legs already
+          // deduct the fee), so the bank receives CASH, not just a bookkeeping equity credit —
+          // an equity write with no cash leg breaks the balance-sheet identity the invariants
+          // harness now asserts per bank per week.
           bankEquityUSD: existingSheet.bankEquityUSD + result.totalDealerRevenueUSD * share,
+          cashReservesUSD: existingSheet.cashReservesUSD + result.totalDealerRevenueUSD * share,
         };
       });
     }
