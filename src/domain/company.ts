@@ -256,6 +256,13 @@ export interface Company {
    * missing entry, not a mystery.
    */
   lastCashLedger?: { label: string; amountUSD: number }[];
+  /**
+   * WS7: treasury cash swept into the region's money market fund at its $1 NAV — a corporate
+   * near-cash asset, NOT cash (the S5 ledger moves real dollars out when shares are bought and
+   * back in when they redeem). The treasurer sweeps what sits above the company's own
+   * working-capital need and redeems the moment operations need it back.
+   */
+  mmfSharesUSD?: number;
 
   // Capital Structure
   /**

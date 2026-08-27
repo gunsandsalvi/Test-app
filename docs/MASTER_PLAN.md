@@ -101,7 +101,7 @@ every cross-stage dependency is visible) and runs the stages in order:
 |---|---|---|
 | 01 | `01-macro-feedback.ts` | Cross-region contagion/systemic-stress signals |
 | 02 | `02-region-macro.ts` | Region macro evolution via `macro/evolution.ts` (GDP, inflation, wages, FX, ownership drift). Sets the administered policy rate; does NOT touch the yield curve |
-| 02b | `02b-bank-diversification.ts` | Per-bank flow-ledger evolution (`macro/banking.ts` — cash moves only by named flows), the weekly overnight GC repo session (`stages/repo-clearing.ts`, WS6) with the SRF as a posted-rate seat in the book, region aggregate = real sum of named banks |
+| 02b | `02b-bank-diversification.ts` | Per-bank flow-ledger evolution (`macro/banking.ts` — cash moves only by named flows), the weekly overnight GC repo session (`stages/repo-clearing.ts`, WS6) with the SRF as a posted-rate seat in the book, the household deposit-vs-MMF split and fund quotes (`stages/money-market-fund.ts`, WS7), region aggregate = real sum of named banks |
 | 03 | `03-category-demand.ts` | C+I+G demand targets per sub-unit; `corporateDemandUSD` persisted per category |
 | 04 | `04-input-output.ts` | Input-category clearing: real supply from linked commodities, pooled multi-industry demand, pro-rata rationing |
 | 05 | `05-unit-bidding.ts` | THE real goods auction: named bids/offers, pro-rata clearing, contracts, per-lot settlement (northwest-corner), capex bids |
@@ -213,23 +213,21 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 1 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 2 | Money market funds | WS7 | WS5, WS6 |
-| 3 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 4 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
-| 5 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
-| 6 | Unify the two dealer systems | G3 | S9 |
-| 7 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 8 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 9 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 10 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 11 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 12 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 13 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 14 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 15 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 16 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 17 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 2 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
+| 3 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
+| 4 | Unify the two dealer systems | G3 | S9 |
+| 5 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 6 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 7 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 8 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 9 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 10 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 11 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 12 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 13 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 14 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 15 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
@@ -331,27 +329,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### S10 — Backlog batch
-
-Work §6's table in one or two commits. Nothing there is architectural.
-
----
-
-### WS7 — Money market funds
-
-New `InstitutionalEntityType: 'MONEY_MARKET_FUND'`, one or two per region, generated like the
-other institutional companies. **Liabilities are real shares:** corporate treasuries sweep cash
-above a real operating buffer (S5's honest ledger says what that is) and the household aggregate
-allocates between deposits and MMF shares on the real yield gap — which finally makes banks
-compete for funding (G2 reads deposit outflow to MMFs as a real funding cost driver). NAV fixed
-at 1; the fund's yield is its real asset yield minus a fee.
-**Assets:** bills + CP (WS5) and repo lending (WS6), with ON RRP as the real floor-rate
-residual — the fund is the missing dominant bid in both WS5 books, which is why it sequences
-after them. Redemptions force real asset sales into the same books.
-
-**Verify:** MMF yield tracks policy with a ~1-week lag; a policy hike pulls deposits toward MMFs
-(measure the flow); bill/CP demand visibly deepens vs the pre-WS7 baseline.
 
 ### WS8 — Issuance with placement agents  *(the primary market)*
 
@@ -696,21 +673,6 @@ the complete simulation.
 
 | Where | Issue |
 |---|---|
-| `stages/08-company-fundamentals.ts:802,814` | Dead `'Boom'` regime branches (`as string` cast is the tell); `'Recovery'` unhandled in the P/B ladder — add it, delete Boom |
-| stage 08 | `isMegaCap > 100000` stale-scale dead branch |
-| `11-…ts:221` + `newsGenerator.ts` | `sectorSentimentShocks` discarded at only call site; `NewsItem.sentimentDelta` never read (→ G8); fake hardcoded tickers NVST/TXEN/CHEM/WMRT/JPMC, real-world references, hardcoded prices 2.85/78.50 (rule 4 violation); `isUpgrade` via `indexOf` misclassifies HY notches |
-| `domain/game-state.ts` | Dead UI fields (`selectedTab`, `isCheatsheetOpen`, `isWatchlistDrawerOpen`, `chartModalData`, `isDiagnosticsOpen`) and fully-dead `watchlist` |
-| `macro/evolution.ts` | FX UIP term sign; `getInitialRegions()` rebuilt inside loops (hoist) |
-| `simulation/initialization.ts:311` | `COMMODITY_CATEGORY_LINKAGE` module-global mutated at init — copy, don't mutate |
-| init / macro-init / stage 03 | Three parallel demand-seed constructors — one constructor owns `CategoryDemandState` creation |
-| `instruments.ts:116`, `evolution.ts:929-941` | `industrial_automation` pseudo-commodity special-case cluster — make it a plain category (its supply/demand already clear in stages 04/05) and delete the bespoke branches |
-| `CompanyDeepDive.tsx:783` | `assetType: 'LEV_LOAN'` not in the `AssetType` union (`'LEVERAGED_LOAN'`); MyBook string-matches both — unify |
-| `TradeTicketModal.tsx` | Option expiry hardcoded `+8` weeks & carry tenor `8/52`; IRS/CDS payoff scenarios labeled "±10%" but computed as ±10bps; "Unencumbered Cash" row shows raw cash while the gate uses free cash |
-| `MyBookScreen.tsx:92-98` | Corp-bond P&L attribution uses issuer-level OAS + `tenorYears ?? 5` for tranche positions — use the tranche's cleared stat |
-| `CompanyDeepDive.tsx` bank/inst cards | Prorated aggregate slices (`?? 0.25` / `?? 0.33`) instead of real per-bank/entity data; sector-actual vs entity-target allocation comparison; PP&E roll-forward first-filing artifact |
-| `charts/Charts.tsx` | YieldCurveChart x-axis: nonlinear tenors plotted equally spaced, middle label wrong |
-| `NewsDrawer.tsx:94` | Verify `Commodity.symbol` matches `'CRUDE_OIL'` ids; else fallback always picks `commodities[0]` |
-| `ManualModal.tsx` | Restated engine constants (IM rates, axe discounts, Taylor coefficients) drifting from code — generate from the real constants or trim |
 | `macro/evolution.ts` wage/tightness | Nominal wage growth goes negative (−2.5% by week 40) while inflation runs at 10% — a 12% real-wage collapse per year. Partly a symptom of G1's runaway, partly the tightness→wage-growth formula having no real bargaining mechanism. Re-measure after G1; if it survives, it belongs to MS3 |
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
@@ -724,12 +686,9 @@ the complete simulation.
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
 | generation-time unconditional fields | §7.17 found `leveragedLoan` attached to all 200 companies when only ~33 had loans. Sweep `companyGenerator.ts` for other fields attached unconditionally that only apply to a subset — same failure mode (a frozen record that reads as live downstream) |
 | `bootstrap/firms.ts` rating generation | Generated rating distribution is inverted vs reality — week 0 USA is AAA 16% / AA 39% / A 45%, **zero BBB, zero HY**, 55% of debt AA or better. Dynamics are fine (BBB 39% / HY 16% by week 40); generation is wrong. Fix in HC4 (sponsor-owned private firms ARE the missing HY universe) |
-| `07b`/`07c`/`asset-allocation.ts` dead tilt-era code | `computeEntityAttractiveness` (07b:125, defined, never called), `STRATEGIC_TARGET_DRIFT_RATE`/`MAX_*_TILT` constants in 07b and 07c, and `computeAllocationTilt`+`MAX_ALLOCATION_BAND`+`EXCESS_SPREAD_FULL_TILT` in asset-allocation.ts (module-internal only) all survive from the quantity-target engine. Delete in S10. 07b's header comment (lines ~15–33) still *describes* that engine — "tilted index weighting, price-impact-to-statistic conversion" — rewrite it to describe the demand-schedule auction |
-| clearing damper diagnostic | `maxWeeklyStatMovePct` is legitimate discrete-time smoothing, but it must never *bind persistently* — a name clamped ≥3 consecutive weeks means the posted schedules disagree with the printed level and the print is the damper, not the market. Add a cheap per-week clamped-count to the invariants harness; alert on persistent binding |
 | `macro/initialization.ts` segment `debtUSD = annualRevenueUSD * 2` | Unpriced bootstrap primitive, exposed by HC1: it implies ~15x debt/EBITDA on the private sector in aggregate, which no real balance sheet services. HC1 carves only serviceable debt into the named tier, so the residual (~474B USA) sits on the segments as implied SME bank debt at an impossible aggregate leverage. Recalibrate the primitive when G2 itemizes the bank book — segment debt should be what real SME leverage on segment EBITDA plus real bank capital can carry — and re-measure §7.18's want/have after |
-| payment calendars (user note, 2026-08-27) | Coupons, loan interest and dividends are currently accrued as smooth weekly 1/52 flows (both sides: stage 08's expense and institutional-balance-sheet.ts's income). Real instruments pay on their own calendar — bonds semi-annual/quarterly, loans monthly or quarterly off the reset schedule, dividends quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow lumpiness (quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP/MMF money markets breathe on a calendar). Give each DebtTranche/loan a real payment schedule and pay on it; the S5 cash ledger is the natural place to land the corporate side, WS5/WS7 will want the lumpiness. Not urgent until those items, but every new instrument added from here on should carry its payment calendar from birth |
+| payment calendars (user note, 2026-08-27) | Coupons, loan interest and dividends are currently accrued as smooth weekly 1/52 flows (both sides: stage 08's expense and institutional-balance-sheet.ts's income). Real instruments pay on their own calendar — bonds semi-annual/quarterly, loans monthly or quarterly off the reset schedule, dividends quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow lumpiness (quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP/MMF money markets breathe on a calendar). Give each DebtTranche/loan a real payment schedule and pay on it; the S5 cash ledger is the natural place to land the corporate side, WS5/WS7 will want the lumpiness. WS5/WS7 now exist and would feel the lumpiness — the next instrument-touching item should land the calendars |
 | late-horizon NIM band (seed 7: 21 breaches, NIM to 7.4%) | The G2-owned formula sizes — loan yields `policy+250/350bp`, deposit beta 0.45 — produce an unreal margin when the late inflation regime steepens the curve. Not the repo market's doing (measured: breaches occur with repo/SRF at zero). Dies with G2 slice 2 (real per-loan yields, competitive deposit pricing) |
-| `financial-clearing-engine.ts` rationing vs `minHoldingUSD` | The pro-rata ration (fills scaled to the float) can scale a participant's fill BELOW its mandated core — the liability-driven sovereign core and WS6's encumbrance floor are both expressed as `minHoldingUSD`, and under rationing neither is strictly honored. Measured consequence: 4 "pledged > held" prints at week 259 scale (~1% over, gone at post-leverage-floor scale). Refine the allocator to satisfy cores first, ration only the discretionary layer |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1587,7 +1546,59 @@ the complete simulation.
       does transfer the disease onto every downstream statistic the clamp was laundering. Budget
       for the harness to get honestly redder when a prop dies, and attribute each new red line
       to its real owner before touching anything.
-37. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+37. **S10 landed: the backlog batch, and the damper measurement it produced.** Engine half:
+    G8 absorbed (sentiment plumbing deleted everywhere; the fabricated macro-filler with its
+    real-world references and five nonexistent tickers is gone — a quiet news week is
+    information); the full rating ladder in news classification; stage 08's regime ladders
+    real ('Recovery' rung added, dead 'Boom' deleted); the always-true stale-scale Consumer
+    branch deleted; the per-company `getInitialRegions()` rebuild hoisted by threading the
+    already-built world through the generator (~2,000 four-region rebuilds and their RNG draws
+    gone — a memoized version was tried and reverted the same day for aliasing one mutable
+    region graph across the harness's baseline/shocked worlds); the UIP carry sign corrected
+    (WS9 still deletes the formula); linkage calibration reads a frozen base; one seed-time
+    CategoryDemandState constructor; the tilt-era dead code deleted and 07b's header rewritten
+    for the demand-schedule engine; **cores-first rationing** in the clearing engine (mandated
+    cores are satisfied before the discretionary layer rations — the uniform pro-rata scale cut
+    straight through `minHoldingUSD`). UI half: per-entity/per-bank cards read the real books;
+    MyBook attribution reads the position's own cleared stat and real remaining tenor;
+    scenario chips label the basis points they compute; log-tenor curve axis; ManualModal
+    renders the real engine constants (the restated copy had already drifted); dead GameState
+    UI fields deleted; PP&E first-filing shows the level (rule 9).
+    - **The damper metric §6 asked for, first measurement:** 1,349 instruments persistently
+      bound (3+ consecutive weeks), worst streak 60/60 — the §7.21 HY-saturation cohort and
+      §7.31 equity tail, quantified. An end-of-run metric, not violations: endemic until the
+      wides get a real buyer base (G6/HC-resolution). Watch it DOWN.
+    - **The absorption check learned WS6's lesson:** a cash-drained bank still bids — it funds
+      secured against collateral (why real auctions rarely fail) — so the "no money" shock now
+      also encumbers the collateral. Passing again with a real yield response.
+    - The generator hoist relabels the default-seed world (§1.10's directive applies): the #18
+      cohort is the same four companies under new tickers, and this world's inflation escapes
+      the post-S8 band (recorded in §5-G1b; pre-dates the batch on seed 7, both UIP signs;
+      G2-owned). Late-NIM prints are downstream of that escape.
+38. **WS7 landed: money market funds — real liabilities, and the front-end bid they fund.**
+    One fund per region, born EMPTY (no fabricated stock; flows build it, the WS5-CP doctrine).
+    The asset side cost almost nothing — an MMF is what an entity looks like when the cash
+    sleeve is its whole balance sheet, so 07f's bill program, WS6's repo session and the RRP
+    floor already deploy it. The liability side is real flows: corporate treasuries sweep cash
+    above their own working-capital need (the same WORKING_CAPITAL_SHARE_OF_REVENUE the CP
+    program reads — the duplicated 0.08 literal is hoisted to one definition) through the S5
+    ledger as its LAST entry of the week, redeem bounded by the fund's real cash; and the
+    household savings flow splits between deposits and the fund on the real yield gap — the
+    deposit competition G2 will read as a funding-cost driver.
+    - **Measured (30 weeks, default seed):** AUM 0 → 55.4B (USA), 762 corporate holders, bills
+      9.7B; the quoted yield tracks policy with the structural ~1-week lag (3.35% → 2.84% →
+      2.15% across two cuts) and clears the deposit rate (policy × 0.45) by ~160bp, so the
+      household flow diverts hard — banks now genuinely lose funding when their deposit beta
+      lags. Share conservation exact: Σ company shares + household shares = fund liabilities
+      to the dollar, fund cash = shares at the $1 NAV.
+    - **Bill CARRY is now credited to institutional holders** (bond coupons still are not):
+      the money-market instruments need their real yield for the deposit-vs-fund competition
+      to exist, and banks already earned the same carry on the same paper. One more named
+      boundary on the §6 banking-boundary row; BP5 replaces both carries with real coupons.
+    - CP holdings wiring deliberately skipped: the CP market sits at ~0 outstanding (§7.34's
+      honest finding) — when G2's cash drain revives it, the fund's sleeve machinery is the
+      natural holder; wire it then.
+39. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

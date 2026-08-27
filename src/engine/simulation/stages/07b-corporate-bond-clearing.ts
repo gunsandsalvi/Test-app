@@ -11,14 +11,12 @@
  * - Who the real participants are (named institutional entities, banks as dealer).
  * - Each entity's real, bottom-up total target (see deriveEntityTargetsUSD below) — never an
  *   independently-computed number that could exceed the real market and need a cap.
- * - How a real institutional entity actually decides what to buy, tactically, within that
- *   long-term-guide target: computeEntityAttractiveness below combines fair value (an issuer's
- *   spread versus a fundamental fair-value estimate, itself adjusted for current market/credit
- *   conditions — not priced in a vacuum), recent spread momentum, this entity's own mandate
- *   (real insurers and pension funds run investment-grade-only books and structurally avoid
- *   high-yield paper), and duration/maturity fit against this entity's own real liability profile
- *   — the target allocation is only the long-term guide for how much total capital sits in this
- *   asset class; which specific issuers get that capital is driven by these real characteristics.
+ * - Each participant's DEMAND SCHEDULE per issuer (§7.16's engine): a reservation spread built
+ *   from the issuer's own structural default probability, the entity's rating- and
+ *   duration-granular capital charge and required return on that capital (or, for distressed
+ *   paper, the recovery arithmetic of the fund bidding it), the size it scales in over, and
+ *   its real weekly budget (S11). The auction bisects for the spread where total demanded
+ *   quantity equals the real tradable float.
  * - How the cleared price maps onto this asset class's quoted statistic (OAS moves opposite
  *   price — no realism floor or ceiling, purely a function of real demand versus govies).
  *
@@ -27,10 +25,9 @@
  * base (CLOs/loan funds, not bond funds) and different technicals — and get their own real
  * clearing (07d-leveraged-loan-clearing.ts), not a byproduct split of this one's fills.
  *
- * The actual auction — per-participant tilted index weighting, dealer inventory absorption and
- * pressure, price-impact-to-statistic conversion — lives once in the shared engine; sovereign
- * bonds, loans, and equity plug into the same engine as their own adapters rather than
- * re-implementing it.
+ * The actual auction — the demand-schedule solve, cores-first rationing, cash legs, dealer
+ * residual — lives once in the shared engine; sovereign bonds, bills, loans, equity and the
+ * repo session plug into the same engine as their own adapters rather than re-implementing it.
  *
  * Foreign and household participation in corporate bonds, and hedge funds bidding for
  * distressed issuers specifically, are follow-on slices (see PROJECT_WALL_STREET.md) — this
@@ -59,25 +56,14 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
-// The entity's OWN book (its actual current corp-bond + loan holdings) drifts toward its real,
-// bottom-up-derived target at this slow pace — a policy allocation is a long-term guide real
-// institutions rebalance toward gradually, not a number they instantly chase every week.
-const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
 const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
-const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 const MAX_VALUE_TILT = 0.4;
-const MAX_MOMENTUM_TILT = 0.15;
-const MAX_DURATION_TILT = 0.15;
 // How much a tightening/loosening real credit-conditions backdrop (reg.bankingSector's own
 // -1..+1 index) shifts what "fair value" means right now — real credit investors price a bond
 // against the current market, not against an idiosyncratic PD estimate in a vacuum.
 const CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS = 150;
-// The dealer's own standing inventory creates its own convergence pressure each week (a dealer
-// sitting long leans its quotes to sell it back down, and vice versa) — real market-making
-// inventory-risk behavior, not client flow.
-const DEALER_INVENTORY_PRESSURE_RATE = 0.15;
 // Bid/ask spread the dealer desk earns on the gross flow it facilitates, credited as real
 // trading revenue to the named banks' own equity (split by bankMarketShare).
 const DEALER_SPREAD_BPS = 15;
@@ -118,24 +104,6 @@ function clamp(v: number, min: number, max: number): number {
  * looks cheap), this entity's own mandate (IG-only funds structurally avoid high-yield), and
  * duration/maturity fit against this entity's own real liability/benchmark profile.
  */
-function computeEntityAttractiveness(entity: InstitutionalEntity, comp: Company, creditConditionsIndex: number): number {
-  const fairSpread = computeExpectedLossSpreadBps(comp) + creditConditionsIndex * CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS;
-  const valueSignal = clamp((comp.oasSpreadBps - fairSpread) / 1000, -MAX_VALUE_TILT, MAX_VALUE_TILT);
-
-  const history = comp.oasSpreadBpsHistory || [];
-  const recentSpreadChangeBps = history.length >= 4 ? comp.oasSpreadBps - history[history.length - 4] : 0;
-  const momentumSignal = clamp(-recentSpreadChangeBps / 2000, -MAX_MOMENTUM_TILT, MAX_MOMENTUM_TILT);
-
-  const mandateSignal =
-    (entity.entityType === 'INSURER' || entity.entityType === 'PENSION_FUND') && getRatingBucket(comp.creditRating) === 'HY'
-      ? IG_MANDATE_HY_AVOIDANCE_TILT
-      : 0;
-
-  const durationGapYears = Math.abs(creditDurationYears(comp) - preferredDurationYears(entity));
-  const durationSignal = clamp(MAX_DURATION_TILT - durationGapYears * 0.05, -MAX_DURATION_TILT, MAX_DURATION_TILT);
-
-  return clamp(valueSignal + momentumSignal + mandateSignal + durationSignal, -1, 1);
-}
 
 export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -283,7 +251,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
     // week's already-real value rather than recomputing one. Also extend each company's rolling
-    // spread history (see computeEntityAttractiveness's momentum signal).
     const companyById = new Map(regionCompanies.map((c) => [c.id, c]));
     result.newStatById.forEach((newOasBps, companyId) => {
       const comp = companyById.get(companyId);

@@ -61,18 +61,10 @@ const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField 
   { key: 't30', years: 30, zeroRateField: 'tenor30Y' },
 ];
 
-const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
-const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
-const MAX_MOMENTUM_TILT = 0.15;
-const MAX_DURATION_TILT = 0.15;
-const MOMENTUM_SCALE_BPS = 200;
 const MAX_WEEKLY_YIELD_MOVE_PCT = 0.20;
 const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
 const INSTITUTIONAL_REAL_RETURN_BPS = 150;
-// Sovereign bonds are typically the deepest, most liquid instrument in any market.
-const BOND_LIQUIDITY_DEPTH = 2;
-const DEALER_INVENTORY_PRESSURE_RATE = 0.15;
 const DEALER_SPREAD_BPS = 5;
 const BANK_PREFERRED_TENOR_YEARS = 3; // a bank's HQLA book skews shorter/more liquid than a typical bond investor
 /**

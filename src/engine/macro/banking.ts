@@ -131,7 +131,11 @@ export function evolveBankingSector(
    * repo market exists or when the bank had no position. */
   priorRepoBorrowedUSD: number = 0,
   priorRepoLentUSD: number = 0,
-  priorRepoRateAnnual: number = 0
+  priorRepoRateAnnual: number = 0,
+  /** WS7: the slice of THIS bank's household savings inflow that went to the money market fund
+   * instead — the deposit-competition channel. The fund's credit happens in 02b; here the
+   * deposits simply never arrive. */
+  householdMmfDiversionUSD: number = 0
 ): BankingSector {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
   let cashUSD = prevBanking.cashReservesUSD;
@@ -162,7 +166,7 @@ export function evolveBankingSector(
   // ---- 2. Household deposit flow (formula-sized boundary flow; G2/MS make the counterparty
   // real). A depositor bringing money brings the cash with it; one leaving takes it. ----
   const weeklySavingsInflowUSD = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
-  const targetDepositsUSD = depositsUSD * 0.999 + weeklySavingsInflowUSD * 0.3 + (monetizedAmountUSD ?? 0);
+  const targetDepositsUSD = depositsUSD * 0.999 + Math.max(0, weeklySavingsInflowUSD * 0.3 - householdMmfDiversionUSD) + (monetizedAmountUSD ?? 0);
   const householdDepositFlowUSD = targetDepositsUSD - depositsUSD;
   depositsUSD += householdDepositFlowUSD;
   cashUSD += householdDepositFlowUSD;

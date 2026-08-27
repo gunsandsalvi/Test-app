@@ -26,6 +26,7 @@ import {
   evolveBankingSector, computeSovereignBookAnnualYield,
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
+import { divertHouseholdSavingsToMmf, refreshMmfQuotes } from './money-market-fund';
 import { WeeklyStepContext } from './context';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -69,6 +70,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // how initial seeding works in companyGenerator.ts.
     const priorAggregate = reg.bankingSector;
 
+    // WS7: the household savings flow chooses between deposits and the money fund on last
+    // week's real yield gap, BEFORE the banks' deposit flow posts — the deposits simply never
+    // arrive at the banks. This is the funding competition WS7 exists to create.
+    const regionSavingsDepositInflowUSD = (reg.householdState.savingsRate * reg.estimatedHouseholdIncomeUSD) / 52 * 0.3;
+    const regionDivertedUSD = divertHouseholdSavingsToMmf(regionId, reg, regionSavingsDepositInflowUSD, ctx);
+
     const newSheets: { bank: Company; sheet: BankingSector }[] = banks.map((bank) => {
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
@@ -101,7 +108,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // WS6: last week's overnight repo book matures inside as explicit flows.
         prevSheet.repoBorrowedUSD ?? 0,
         prevSheet.repoLentUSD ?? 0,
-        reg.repoRateAnnual ?? reg.policyRate
+        reg.repoRateAnnual ?? reg.policyRate,
+        regionDivertedUSD * share
       );
       return { bank, sheet };
     });
@@ -114,6 +122,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const sheetByTicker = new Map<string, BankingSector>(newSheets.map(({ bank, sheet }) => [bank.ticker, sheet]));
     const session = runRegionalRepoSession(regionId, reg, banks, sheetByTicker, ctx);
     reg.repoRateAnnual = Number(session.repoRateAnnual.toFixed(6));
+    // The fund's quote for next week's yield-gap decision comes off its post-session book.
+    refreshMmfQuotes(regionId, reg, ctx);
     newSheets.forEach((entry) => {
       entry.sheet = session.sheetByTicker.get(entry.bank.ticker) ?? entry.sheet;
     });

@@ -94,6 +94,10 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // weights, and a large cash sleeve that is real dry powder — the reason it can still bid
     // when everyone else is at their mandate limit.
     HEDGE_FUND: { govBondPct: 0.05, corpBondPct: 0.40, loanPct: 0.22, equityPct: 0.18, cashPct: 0.15 },
+    // A money fund's whole book IS the cash sleeve: bills and overnight money through the same
+    // machinery every entity's sleeve already uses (07f's bill share, WS6's repo/RRP split).
+    // Zero term weights keep it out of the bond/loan/equity auctions entirely.
+    MONEY_MARKET_FUND: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
     // A PE fund holds companies and dry powder, not securities: zero weights keep it out of the
     // bond/loan/sovereign auctions entirely (no demand schedule, no budget). Its real assets are
     // its portfolio stakes, marked in peFund below.
@@ -621,6 +625,30 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       (e.entityType === 'INSURER' || e.entityType === 'PENSION_FUND' || e.entityType === 'ASSET_MANAGER'));
     const lpWeightSum = lps.reduce((a, e) => a + e.totalAssetsUSD, 0) || 1;
     const stakeValue = (f: Company) => Math.max(0, 8 * f.ebitda - f.totalDebt) * 0.75;
+
+    // WS7: one money market fund per region. Born EMPTY — no fabricated share stock (§7.4's
+    // seed-shape rule read the other way: the honest seed for a market the flows create is
+    // zero, the same doctrine as WS5's CP program). Corporate sweeps and the household
+    // yield-gap flow build its book; its bills/repo/RRP deployment rides the sleeve machinery
+    // every entity already has.
+    institutionalEntities.push({
+      id: `${regionId}_MMF_1`,
+      name: `${regionId} Government Money Market Fund`,
+      ticker: `MMF1`,
+      region: regionId,
+      entityType: 'MONEY_MARKET_FUND',
+      totalAssetsUSD: 0,
+      equityCapitalUSD: 0,
+      sharesOutstanding: 1,
+      stockPrice: 0,
+      itemizedHoldings: [],
+      cashUSD: 0,
+      assetAllocationTarget: allocationTargets.MONEY_MARKET_FUND,
+      isDefaulted: false,
+      historicalPrices: [],
+      mmfSharesOutstandingUSD: 0,
+      mmfNetYieldAnnual: 0,
+    });
 
     for (let fundIdx = 0; fundIdx < 2; fundIdx++) {
       const portfolio = sponsorable.filter((_, i) => i % 2 === fundIdx);

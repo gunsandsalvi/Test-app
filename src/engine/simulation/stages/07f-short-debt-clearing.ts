@@ -31,7 +31,7 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, SOV_BILL_BUCKETS, sovBucketKey } from './shared-helpers';
+import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -305,7 +305,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const quarterInflowUSD = Math.max(0, comp.ebitda) / 4;
       // Quarter-end cash before any CP: what the company itself will have on hand.
       const projectedCashUSD = comp.cash - cpOutstandingUSD + quarterInflowUSD - quarterOutflowsUSD;
-      const workingCapitalStockUSD = comp.annualRevenue * 0.08;
+      const workingCapitalStockUSD = comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
       const rawGapUSD = Math.max(0, workingCapitalStockUSD - Math.max(0, projectedCashUSD));
       const targetCPUSD = rawGapUSD > comp.annualRevenue * CP_MIN_GAP_SHARE_OF_REVENUE
         ? Math.min(rawGapUSD, comp.annualRevenue * CP_MAX_SHARE_OF_REVENUE)

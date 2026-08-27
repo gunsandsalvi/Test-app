@@ -32,6 +32,7 @@
 
 import { Company, InstitutionalEntity, InstitutionalEntityType } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { computeSovereignBookAnnualYield } from '../../macro/banking';
 
 /**
  * Balance-sheet leverage each type genuinely runs, as a fraction of total assets. A hedge fund
@@ -46,6 +47,8 @@ const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
   HEDGE_FUND: 0.5,
   // The fund itself does not lever; the leverage lives on the portfolio companies' own ladders.
   PRIVATE_EQUITY: 0,
+  // A $1-NAV fund is unlevered by construction.
+  MONEY_MARKET_FUND: 0,
 };
 
 /**
@@ -110,8 +113,23 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
         const regionPolicyRate = ctx.updatedRegions[entity.region]?.policyRate ?? 0.03;
         weeklyIncomeUSD += (notional * (regionPolicyRate + avgMarginBps / 10000)) / 52;
       }
-      // Sovereign coupons: none, on purpose — see the module comment.
+      // Sovereign BOND coupons: none, on purpose — see the module comment (BP5 pays them).
     });
+    // WS7: BILL carry IS credited — the money-market instruments need their real yield for the
+    // deposit-vs-fund competition to exist at all, and banks already earn the same carry on the
+    // same paper (the §6 boundary-flow row: the government's unpaid side closes in BP5, which
+    // then replaces both carries with real coupon payments).
+    const billByTenor: Record<string, number> = {};
+    entity.itemizedHoldings.forEach((h) => {
+      if (h.instrumentType !== 'GOV_BOND') return;
+      const key = h.instrumentId.replace(`${h.issuerRegion}-GOV-`, '');
+      if (key.startsWith('b')) billByTenor[key] = (billByTenor[key] ?? 0) + h.quantityOrNotionalUSD;
+    });
+    const billUSD = Object.values(billByTenor).reduce((a, v) => a + v, 0);
+    if (billUSD > 0) {
+      const reg = ctx.updatedRegions[entity.region];
+      if (reg) weeklyIncomeUSD += (billUSD * computeSovereignBookAnnualYield(billByTenor, reg.zeroRates)) / 52;
+    }
     if (weeklyIncomeUSD <= 0) return entity;
     return { ...entity, cashUSD: (entity.cashUSD ?? 0) + weeklyIncomeUSD };
   });

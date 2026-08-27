@@ -92,44 +92,15 @@ export const REQUIRED_RETURN_ON_CAPITAL: Record<InstitutionalEntityType, number>
   // A sponsor underwrites deals to a real LBO hurdle — higher than every liquid-market holder,
   // which is why it owns companies rather than paper.
   PRIVATE_EQUITY: 0.20,
+  // A money fund runs no credit book — never exercised; present so the type map stays total.
+  MONEY_MARKET_FUND: 0.0,
 };
 
-/**
- * How far the book may sit from its policy centre. The band is the real guideline — an investment
- * policy statement constrains the range, not the point — so this is a genuine structural limit
- * rather than a cap on a price: a mandate does not let a credit fund hold zero credit however
- * cheap cash looks, nor double its allocation however wide spreads go.
- */
-export const MAX_ALLOCATION_BAND = 0.45;
-
-/** Excess spread, in bps, that moves the book fully to one edge of its band. */
-const EXCESS_SPREAD_FULL_TILT_BPS = 120;
-
-/**
- * How far this asset class's real compensation sits above or below what it costs to hold, as a
- * fraction of the policy allocation. Positive means it pays more than its capital costs and the
- * book leans in; negative means it does not and the book leans out, releasing real cash.
- */
-export function computeAllocationTilt(params: {
-  entityType: InstitutionalEntityType;
-  /** Spread actually earned over the risk-free curve: cleared OAS, or a loan's discount margin. */
-  earnedSpreadBps: number;
-  /** Expected credit loss on that same exposure, in bps — what the spread has to cover first. */
-  expectedLossBps: number;
-  /** Regulatory capital consumed per dollar held. */
-  capitalChargeRate: number;
-}): number {
-  const requiredSpreadBps =
-    params.capitalChargeRate * REQUIRED_RETURN_ON_CAPITAL[params.entityType] * 10000;
-  const excessBps = params.earnedSpreadBps - params.expectedLossBps - requiredSpreadBps;
-  const raw = excessBps / EXCESS_SPREAD_FULL_TILT_BPS;
-  return Math.max(-MAX_ALLOCATION_BAND, Math.min(MAX_ALLOCATION_BAND, raw));
-}
 
 /**
  * The spread at which a holder is indifferent — its RESERVATION PRICE for the asset.
  *
- * This is the same arithmetic `computeAllocationTilt` performs, used the way it should always
+ * This is the tilt-era arithmetic used the way it should always
  * have been used. A spread has to cover, in order: the credit loss actually expected on the
  * exposure, and the return the holder needs on the regulatory capital the position ties up.
  * Below that level the asset does not pay for itself and a rational holder wants none of it;

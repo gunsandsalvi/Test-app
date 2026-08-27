@@ -342,3 +342,10 @@ export function sovBucketKey(tenorAtIssuanceYears: number): string {
     Math.abs(y - tenorAtIssuanceYears) < Math.abs(best - tenorAtIssuanceYears) ? y : best);
   return `t${years}`;
 }
+
+/**
+ * The working-capital stock a company's own statements imply, as a share of revenue — the ONE
+ * definition (WS5's CP sizing and WS7's treasury sweep both read it; it was a duplicated 0.08
+ * literal before WS7 hoisted it here).
+ */
+export const WORKING_CAPITAL_SHARE_OF_REVENUE = 0.08;

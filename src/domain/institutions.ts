@@ -20,7 +20,7 @@ export interface InstitutionalSector {
   itemizedHoldings: ItemizedHolding[];
 }
 
-export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY';
+export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND';
 
 export interface AssetAllocationTarget {
   equityPct: number;
@@ -63,6 +63,17 @@ export interface InstitutionalEntity {
    * securities with money it had already lent.
    */
   repoLentUSD?: number;
+  /**
+   * MONEY_MARKET_FUND only (WS7): the fund's share liabilities at its fixed $1 NAV — every
+   * dollar of shares is a dollar some real holder (a corporate treasury's `mmfSharesUSD`, the
+   * household boundary) put in. Assets (cash + bills + repo/RRP claims) exceed shares by the
+   * fund's own retained fee income; the yield PAID to holders is the real asset yield minus
+   * the fee.
+   */
+  mmfSharesOutstandingUSD?: number;
+  /** MONEY_MARKET_FUND only: last week's realised annualised yield net of fee — the number
+   * deposits compete against. Rule 9: annualised decimal. */
+  mmfNetYieldAnnual?: number;
   assetAllocationTarget: AssetAllocationTarget;
   /**
    * PRIVATE_EQUITY only (HC4): the fund's real portfolio and the real LPs behind it. Portfolio

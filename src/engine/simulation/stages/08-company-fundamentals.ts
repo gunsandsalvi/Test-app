@@ -23,6 +23,7 @@ import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
+import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -65,6 +66,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (!set) { set = new Set<string>(); suppliedSubUnitsByRegion.set(c.region, set); }
     (c.productLines || []).forEach(pl => set!.add(pl.subUnitId));
   });
+
+  // WS7: per-region redemption capacity for the treasury sweeps below — the funds' real cash.
+  const mmfSweepBooks = openCorporateSweepBooks(ctx);
 
   ctx.updatedCompanies = state.companies.map((comp) => {
     if (!isActiveCompany(comp)) {
@@ -672,6 +676,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // of this trigger — the same object the credit market prices its hazard against
     // (computeAnnualDefaultProbability), so priced risk and realized risk are one model.
     let isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < DEFAULT_COVERAGE_FLOOR));
+
     let newRating = comp.creditRating;
 
     if (isDefaulted) {
@@ -1210,6 +1215,21 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       };
     });
 
+        // WS7: the treasury sweep — the week's LAST ledger entry, after every operating and
+    // financing flow has posted. Cash above the company's own working-capital need buys money
+    // fund shares at the $1 NAV; cash below it redeems, bounded by the fund's real available
+    // cash this week. The sweep only ever moves the EXCESS, so it cannot push a company toward
+    // the default trigger; a redemption arriving the week after distress began is the real
+    // T+1 of a treasury pulling money home.
+    let newMmfSharesUSD = comp.mmfSharesUSD ?? 0;
+    if (!comp.isBankEntity && !comp.isInstitutionalEntity && !isDefaulted && comp.listingStatus !== 'PRIVATE') {
+      const sweep = corporateSweepDecision(comp, newCash, mmfSweepBooks.get(comp.region));
+      if (sweep.cashDeltaUSD !== 0) {
+        post(sweep.cashDeltaUSD < 0 ? 'treasury sweep into money fund shares' : 'money fund share redemption', sweep.cashDeltaUSD);
+        newMmfSharesUSD = Math.max(0, newMmfSharesUSD + sweep.shareDeltaUSD);
+      }
+    }
+
     return {
       ...comp,
       revenueVolatility: Number(calculatedRevVol.toFixed(4)),
@@ -1267,6 +1287,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       insurancePremiumsWrittenUSD: comp.insurancePremiumsWrittenUSD,
       insuranceClaimsPaidUSD: comp.insuranceClaimsPaidUSD,
       cash: Number(newCash.toFixed(1)),
+      mmfSharesUSD: newMmfSharesUSD,
       lastCashLedger: cashLedger,
       leverage: newLeverage,
       interestCoverage: newCoverage,
@@ -1293,6 +1314,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   });
 
   // Every corporate action this stage recorded reaches the real books here, in one pass.
+  // WS7: the funds receive/pay the week's net corporate sweep money.
+  settleCorporateSweepBooks(mmfSweepBooks, ctx);
+
   applyPendingCorporateActionSettlements(ctx);
 
   ctx.newsItems.push(...refinanceNews);
