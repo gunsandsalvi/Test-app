@@ -204,7 +204,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 5 | Delete every duplicate price-setter (engine + UI) | S6 | — |
 | 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | — |
 | 7 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
 | 8 | Player trades enter the real market | S9 | S7 |
@@ -332,32 +331,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### S6 — Delete every duplicate price-setter
-
-One pass, pure deletion/rewiring. All must READ cleared state, never recompute:
-- `12-portfolio-and-positions.ts`: delete the `corpBondPremium`/`adjustedOasSpreadBps` block
-  (bps-treated-as-fraction bug; duplicates 07b). Mark player corp-bond positions off the
-  tranche's cleared stat.
-- `components/company/CompanyDeepDive.tsx:770-778`: same formula pasted in UI (plus a
-  `× 1_000_000` stale-unit bug) — price tranches from cleared OAS (fixed) /
-  `leveragedLoan.discountMarginBps` (floating) via the pricers as pure converters.
-- `components/screens/RatesScreen.tsx`: gov bonds priced via `priceCorporateBond` + invented
-  sovereign-rating premium → read 07c's cleared `zeroRates`/curve.
-- `pricing.ts:priceLeveragedLoan`: remove the `bucketDemandPremiumBps`/`seniorLienDiscount`
-  clamp path; the function becomes a DM→price converter taking the cleared DM.
-- `components/DiagnosticsModal.tsx`: delete the fabricated "micro aggregation" block
-  (invented capex/wage-push/retail formulas, `baselineCapex = n×50`, nonexistent
-  `pricingPowerMarkupPct`); show real engine numbers or nothing. Also remove hardcoded
-  "200 issuers", "~40% recovery", per-region r*.
-- `components/OverflowMenu.tsx`: sim clock hardcodes 2024 epoch → use `formatSimulationDate`.
-- `components/screens/MyBookScreen.tsx`: `initialCapital = 25000000` duplicate → read from a
-  single exported constant next to `startingCash`.
-- `scripts/invariants.ts`: the sovereign-absorption check now references real fields but the
-  shock changes nothing (§6) — make it detect the real transmission once the shock actually
-  reaches 07c, and root-cause where the shock is dropped.
-- `shared-helpers.ts`: delete `computeBucketDemandPremiumBps` once its two consumers above are
-  gone — it is the last vestige of the pre-clearing spread formula.
 
 ### S7 — One holdings ledger
 
@@ -941,15 +914,12 @@ the complete simulation.
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
 | open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
-| goods-market cash margin vs accrual margin | §7.23 finding #2: settled auction purchases ≈ 2x settled sales for sampled firms, so the real cash margin is deeply negative while formula EBITDA says +18%. Root-cause next: is input demand sized off target production that persistently exceeds sales (inventory spiral), are auction input prices too high relative to output prices, or is the EBITDA margin the fiction? Owns the residual default rate below and probably #18 |
 | public default rate ~10%/yr (was 13%) | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. S5 cut it 59 → 46/196 by wk121; the remainder tracks the goods-market cash-margin row above — re-measure after that item |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
 | generation-time unconditional fields | §7.17 found `leveragedLoan` attached to all 200 companies when only ~33 had loans. Sweep `companyGenerator.ts` for other fields attached unconditionally that only apply to a subset — same failure mode (a frozen record that reads as live downstream) |
-| `scripts/invariants.ts` sovereign-absorption | No longer vacuous (it references USA and `zeroRates.tenor10Y` for real), but it fails with **baseline and shocked identical to 8 decimal places** — an under-subscribed auction changes the 10Y by literally nothing. Not a weak transmission, an absent one: find where the shock is dropped between the auction and 07c's curve refit |
 | `bootstrap/firms.ts` rating generation | Generated rating distribution is inverted vs reality — week 0 USA is AAA 16% / AA 39% / A 45%, **zero BBB, zero HY**, 55% of debt AA or better. Dynamics are fine (BBB 39% / HY 16% by week 40); generation is wrong. Fix in HC4 (sponsor-owned private firms ARE the missing HY universe) |
 | `07b`/`07c`/`asset-allocation.ts` dead tilt-era code | `computeEntityAttractiveness` (07b:125, defined, never called), `STRATEGIC_TARGET_DRIFT_RATE`/`MAX_*_TILT` constants in 07b and 07c, and `computeAllocationTilt`+`MAX_ALLOCATION_BAND`+`EXCESS_SPREAD_FULL_TILT` in asset-allocation.ts (module-internal only) all survive from the quantity-target engine. Delete in S10. 07b's header comment (lines ~15–33) still *describes* that engine — "tilted index weighting, price-impact-to-statistic conversion" — rewrite it to describe the demand-schedule auction |
-| `shared-helpers.ts` `computeBucketDemandPremiumBps` | Only remaining consumers are the two duplicate price-setters S6 deletes (pricing.ts, stage 12). Delete the helper in the same pass |
 | clearing damper diagnostic | `maxWeeklyStatMovePct` is legitimate discrete-time smoothing, but it must never *bind persistently* — a name clamped ≥3 consecutive weeks means the posted schedules disagree with the printed level and the print is the damper, not the market. Add a cheap per-week clamped-count to the invariants harness; alert on persistent binding |
 | `macro/initialization.ts` segment `debtUSD = annualRevenueUSD * 2` | Unpriced bootstrap primitive, exposed by HC1: it implies ~15x debt/EBITDA on the private sector in aggregate, which no real balance sheet services. HC1 carves only serviceable debt into the named tier, so the residual (~474B USA) sits on the segments as implied SME bank debt at an impossible aggregate leverage. Recalibrate the primitive when G2 itemizes the bank book — segment debt should be what real SME leverage on segment EBITDA plus real bank capital can carry — and re-measure §7.18's want/have after |
 | payment calendars (user note, 2026-08-27) | Coupons, loan interest and dividends are currently accrued as smooth weekly 1/52 flows (both sides: stage 08's expense and institutional-balance-sheet.ts's income). Real instruments pay on their own calendar — bonds semi-annual/quarterly, loans monthly or quarterly off the reset schedule, dividends quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow lumpiness (quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP/MMF money markets breathe on a calendar). Give each DebtTranche/loan a real payment schedule and pay on it; the S5 cash ledger is the natural place to land the corporate side, WS5/WS7 will want the lumpiness. Not urgent until those items, but every new instrument added from here on should carry its payment calendar from birth |
@@ -1415,7 +1385,41 @@ the complete simulation.
       thing, at the heart of the stage 05/08 reconciliation, and now the leading suspect for the
       residual ~10%/yr public default rate and for #18's revenue-floor residual. This was
       invisible before the ledger existed, which is the ledger's whole argument.
-24. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+24. **The fantasy contract flow — the S5 ledger's finding #2, root-caused and fixed.** Supply
+    contracts were sized by a hardcoded random ladder (`Math.random() * 10000 + 2000` units/week
+    for most categories) with NO relationship to the buyer's real need. For a five-figure-per-
+    unit input like upstream_extraction, one contract committed a buyer to 35M/week against an
+    8.5M/week revenue — measured: 48 weeks of revenue piled up as unusable input inventory, and
+    ~90% of the auction's apparent volume (8.9B/week of "sales", 6.9B of it Energy) was this
+    churn. For as long as cash never settled (pre-S5) it was invisible. Fix: a contract is the
+    LOCKED-PRICE FORM OF THE BUYER'S REAL DEMAND — quantity = a share of the weekly need the
+    buyer's own bid already expresses (CONTRACTED_DEMAND_SHARE), capped by the supplier's real
+    offer; spot covers the rest. Measured after: every sector's settled purchases sit BELOW its
+    settled sales (P/S 0.04–0.58, from 2.7–7.5x), and honest auction volume is ~0.7B/week — the
+    other 8.2B never corresponded to any real need.
+    - **Lesson:** when a flow's PRICE side is made real but its QUANTITY side still contains an
+      invented number, settling the cash converts the invented quantity into a real damage. Every
+      quantity in a settled flow deserves the same "where does this number come from" audit that
+      prices got.
+25. **S6 landed: every duplicate price-setter deleted; one statistic, one owner.**
+    - Engine: stage 12 marks player corp-bond positions off the CLEARED OAS and loans off the
+      loan's own CLEARED discount margin (deleted the ownership-premium re-adjustment and the
+      bucket-premium re-derivation); `priceLeveragedLoan` is now a pure DM→price converter
+      (deleted its internal OAS×senior-lien-discount second setter);
+      `computeBucketDemandPremiumBps` and `computeSupplyDemandPremium` are deleted outright.
+    - UI: CompanyDeepDive prices tranches from cleared stats via pure converters (deleting a
+      pasted copy of the old engine formula plus its x1,000,000 stale-unit bug); RatesScreen
+      reads the cleared curve at zero spread (deleting an invented sovereign-rating premium);
+      DiagnosticsModal shows real engine aggregates only (deleting the fabricated micro-model:
+      baselineCapex = n×$50, a nonexistent pricingPowerMarkupPct, hand-rolled wage-push/capex
+      formulas, hardcoded "/200" and "~40% recovery"); OverflowMenu uses the real sim calendar;
+      MyBook reads `portfolio.startingCapitalUSD`.
+    - `scripts/invariants.ts`: the sovereign-absorption check now shocks the fields the market
+      ACTUALLY reads (per-bank `cashReservesUSD`, per-entity `cashUSD`) instead of two macro
+      scalars the engine stopped reading at S2/S11 — measured, the shocked 10Y prints +6.5bp
+      over baseline in week 1, widening to +12.7bp by week 4. A check that shocks retired fields
+      is a check that tests nothing.
+26. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
