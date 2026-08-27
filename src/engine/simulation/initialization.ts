@@ -2,7 +2,8 @@
 import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
-import { generateInitialCompanies } from '../companyGenerator';
+import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
+import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
@@ -495,6 +496,37 @@ export function createInitialGameState(): GameState {
   };
 
   
+
+  // ---- HC Wave 1 (HC1): the named private tier ----
+  // Generated AFTER every public-derived bootstrap sum above (corporate demand bases, holdings
+  // attribution, occupation seeds) so nothing here leaks into them — private firms enter the
+  // goods and labor economies in HC3's conservation-checked handover, and their debt enters the
+  // credit markets in HC2. What IS carved now, exactly, is debt: each firm's real ladder is
+  // subtracted from its segment's aggregate, so total private debt is unchanged to the dollar.
+  const privateTickers = new Set(companies.map(c => c.ticker));
+  const privateNames = new Set(companies.map(c => c.name));
+  Object.keys(regions).forEach(r => {
+    const regionId = r as RegionId;
+    const reg = regions[regionId];
+    const segs = reg.privateSectorSegments || [];
+    const seeds = generatePrivateFirmSeeds(regionId, segs);
+    const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, privateTickers, privateNames);
+    // Conservation with serviceability: each firm's ladder is what its REAL leverage supports —
+    // never scaled up to hit a carve quota. The first version scaled ladders to carry
+    // NAMED_TIER_DEBT_SHARE of the segment aggregate and promptly killed a third of the cohort:
+    // the segment primitive (debtUSD = 2 x revenue) implies ~15x debt/EBITDA on the private
+    // sector as a whole, which no real firm services. The named tier carries what real balance
+    // sheets carry; the aggregate's excess stays on the segment as the SME mass's (and the
+    // bootstrap's own unpriced) bank debt — flagged in the plan for HC2's split calibration.
+    segs.forEach(seg => {
+      const segFirms = firms.filter((f, i) => seeds[i].segmentType === seg.segmentType);
+      const carvedUSD = segFirms.reduce((a, f) => a + f.totalDebt, 0);
+      seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - carvedUSD));
+    });
+    companies.push(...firms);
+  });
+
+
   return {
     currentWeek: 1,
     year: 2026,

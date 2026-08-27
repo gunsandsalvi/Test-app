@@ -855,10 +855,21 @@ HEAD must show GDP, employment and total debt unchanged. Firm sizes draw from a 
 
 **Wave 1 — real firms, real debt, real employment** *(§4 position 3; prereqs: none)*
 
-- **HC1 Generation & carve-out.** `bootstrap/private-firms.ts`: ~300 firms/region from the
-  Pareto tail of each registry category, sector mix matching the segment shares; names/tickers
-  from the existing generator (private firms get internal ids, no exchange ticker). Segment
-  scalars become the SME residual. Verify conservation A/B.
+- **HC1 Generation & carve-out — DONE** (see the commit "HC1: the named private tier exists").
+  301 firms/region carved from the segments (`bootstrap/private-firms.ts` Pareto-quantile seeds,
+  `generatePrivateCompanies`), `listingStatus`/`ownership` on Company, `ctx.prevActiveFirms` as
+  the public-only containment gate with `prevActivePrivateFirms` for per-wave opt-in, a reduced
+  stage-08 path (real ladder interest, cash walk, coverage, the same default trigger — no equity
+  or reporting theater). Measured: debt conservation exact to the decimal (USA 549.4B before =
+  75.5B firms + 473.9B segment residual after), zero spurious defaults over 26 weeks, zero
+  non-finite fields across 2,006 companies, 26 weeks in ~27s.
+  **Finding that reshapes HC2's numbers:** the segment primitive `debtUSD = 2 x revenue` implies
+  ~15x debt/EBITDA on the private sector as a whole — the first carve scaled real ladders up to
+  meet it and killed a third of the cohort in 26 weeks. The tier now carries what real leverage
+  services (~75B USA, not ~330B), so HC2 brings roughly 3x today's investable credit supply
+  rather than 8x; the remaining ~474B stays as the SME mass's bank debt (G2's loan book) and the
+  2x-revenue primitive itself is flagged in §6 for recalibration against what serviceable
+  leverage plus the real bank book can actually support.
 - **HC2 Real debt.** Allocate the carved-out debt by what each firm would really have:
   sponsor-owned and mid-size firms carry **leveraged loans** (real FLOATING tranches clearing in
   07d — the loan universe grows from ~30 to a few hundred real names, fixing §6's small-n),the
@@ -958,6 +969,7 @@ the complete simulation.
 | `07b`/`07c`/`asset-allocation.ts` dead tilt-era code | `computeEntityAttractiveness` (07b:125, defined, never called), `STRATEGIC_TARGET_DRIFT_RATE`/`MAX_*_TILT` constants in 07b and 07c, and `computeAllocationTilt`+`MAX_ALLOCATION_BAND`+`EXCESS_SPREAD_FULL_TILT` in asset-allocation.ts (module-internal only) all survive from the quantity-target engine. Delete in S10. 07b's header comment (lines ~15–33) still *describes* that engine — "tilted index weighting, price-impact-to-statistic conversion" — rewrite it to describe the demand-schedule auction |
 | `shared-helpers.ts` `computeBucketDemandPremiumBps` | Only remaining consumers are the two duplicate price-setters S6 deletes (pricing.ts, stage 12). Delete the helper in the same pass |
 | clearing damper diagnostic | `maxWeeklyStatMovePct` is legitimate discrete-time smoothing, but it must never *bind persistently* — a name clamped ≥3 consecutive weeks means the posted schedules disagree with the printed level and the print is the damper, not the market. Add a cheap per-week clamped-count to the invariants harness; alert on persistent binding |
+| `macro/initialization.ts` segment `debtUSD = annualRevenueUSD * 2` | Unpriced bootstrap primitive, exposed by HC1: it implies ~15x debt/EBITDA on the private sector in aggregate, which no real balance sheet services. HC1 carves only serviceable debt into the named tier, so the residual (~474B USA) sits on the segments as implied SME bank debt at an impossible aggregate leverage. Recalibrate the primitive when G2 itemizes the bank book — segment debt should be what real SME leverage on segment EBITDA plus real bank capital can carry — and re-measure §7.18's want/have after |
 | payment calendars (user note, 2026-08-27) | Coupons, loan interest and dividends are currently accrued as smooth weekly 1/52 flows (both sides: stage 08's expense and institutional-balance-sheet.ts's income). Real instruments pay on their own calendar — bonds semi-annual/quarterly, loans monthly or quarterly off the reset schedule, dividends quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow lumpiness (quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP/MMF money markets breathe on a calendar). Give each DebtTranche/loan a real payment schedule and pay on it; the S5 cash ledger is the natural place to land the corporate side, WS5/WS7 will want the lumpiness. Not urgent until those items, but every new instrument added from here on should carry its payment calendar from birth |
 | algorithm optimization sweep (user note, 2026-08-27) | HC Wave 1 roughly doubles the firm universe, so hot paths matter now. Known offenders: (1) per-(entity × company) recomputation of per-company quantities in the clearing adapters — the structural PD was computed 4x per company per market per week (fixed by per-region memoization, same commit as this note); apply the same pattern to any per-company quantity inside a participants loop. (2) stage 08's per-company `state.institutionalEntities.find` and full-array scans inside company loops — build Maps once per week. (3) `getInitialRegions()` rebuilt inside loops (already in this backlog). (4) stage 05's auction inner loops are the largest fixed cost — profile before HC5's runtime gate, optimize only what the profile names. Rule: memoize per-week derived values at the top of a stage; never inside a per-participant loop |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |

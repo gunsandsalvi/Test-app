@@ -29,7 +29,9 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
 
   ctx.avgMargin = prevActiveFirms.reduce((sum, c) => sum + (c.ebitda / Math.max(1, c.annualRevenue)), 0) / Math.max(1, prevActiveFirms.length);
   ctx.marginCompression = ctx.avgMargin < 0.22 ? 0.22 - ctx.avgMargin : 0.0;
-  ctx.recentDefaultsCount = state.companies.filter((c) => c.isDefaulted || c.creditRating === 'CCC').length;
+  // Public universe only until HC2: a private firm's default becomes a market credit event when
+  // the market actually holds its paper (its debt enters 07b/07d), not before.
+  ctx.recentDefaultsCount = state.companies.filter((c) => c.listingStatus !== 'PRIVATE' && (c.isDefaulted || c.creditRating === 'CCC')).length;
   ctx.creditContagionBps = ctx.recentDefaultsCount * 12;
   ctx.systemicStressFactorGlobal = Math.min(0.3, ctx.creditContagionBps / 500);
 }

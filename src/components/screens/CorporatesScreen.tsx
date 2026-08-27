@@ -20,10 +20,13 @@ export const CorporatesScreen: React.FC<{
   };
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return state.companies;
+    // Private firms (HC Wave 1) have no public quote to show; they get their own view when the
+    // private credit market exists (HC2+). Until then the corporates screen is the public book.
+    const listed = state.companies.filter(c => c.listingStatus !== 'PRIVATE');
+    if (!search.trim()) return listed;
     const q = search.toLowerCase().trim();
     
-    return state.companies
+    return listed
       .map(c => {
         const t = c.ticker.toLowerCase();
         const n = c.name.toLowerCase();

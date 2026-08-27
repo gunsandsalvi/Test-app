@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial,
 } from '../../../types';
-import { isActiveCompany, getOutputInventoryUSD, InputLot } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
@@ -38,6 +38,41 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   ctx.updatedCompanies = state.companies.map((comp) => {
     if (!isActiveCompany(comp)) {
       return { ...comp, previousEmployeeCount: 0, employeeCount: 0 };
+    }
+
+    // HC Wave 1: a PRIVATE company runs the reduced weekly path — the real balance-sheet walk
+    // (interest at its real ladder terms, cash, coverage, rating, the same default trigger as
+    // everyone else) with none of the public-market machinery (no equity pricing, no consensus,
+    // no earnings reporting — real private firms publish none of that). Its revenue holds at
+    // baseline with real drift arriving in HC3, when it takes over its slice of the goods
+    // economy from the segment aggregates.
+    if (!isPubliclyListed(comp)) {
+      const regP = updatedRegions[comp.region];
+      const interestAnnual = comp.debtTranches.reduce((sum, t) => t.rateType === 'FIXED'
+        ? sum + t.principalUSD * (t.couponRate ?? 0.05)
+        : sum + t.principalUSD * (regP.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0);
+      const revenue = comp.baselineAnnualRevenue;
+      const ebitda = revenue * (comp.baselineEbitdaMargin ?? 0.12);
+      const da = revenue * 0.045;
+      const ebit = Math.max(1, ebitda - da);
+      const netIncome = (ebit - interestAnnual) * (1 - 0.21); // same flat rate the public path uses; BP5 makes it real
+      const cash = comp.cash + (ebitda - interestAnnual - comp.maintenanceCapex) / 52;
+      const coverage = Number(Math.max(-50, Math.min(50, ebit / Math.max(0.5, interestAnnual))).toFixed(2));
+      const leverage = comp.totalDebt / Math.max(1, ebitda);
+      const defaulted = comp.isDefaulted || (cash < 0 && coverage < DEFAULT_COVERAGE_FLOOR);
+      const rating = defaulted ? 'D' as const : determineCreditRating(leverage, coverage);
+      return {
+        ...comp,
+        annualRevenue: revenue,
+        revenueHistory: [...(comp.revenueHistory || []).slice(-12), revenue],
+        ebitda, ebit, netIncome: Math.round(netIncome),
+        cash: Number(cash.toFixed(0)),
+        leverage: Number(leverage.toFixed(2)),
+        interestCoverage: coverage,
+        isDefaulted: defaulted,
+        creditRating: rating,
+        ratingHistory: comp.creditRating === rating ? comp.ratingHistory : [...(comp.ratingHistory || []).slice(-12), rating],
+      };
     }
 
     const reg = updatedRegions[comp.region];
@@ -878,7 +913,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // and the region-level equity flow computed in stage 2) rather than an eps x sectorPE formula.
     // Forward P/E becomes an output of that price, not an input to it.
     const newSentiment = (comp.sentiment * 0.85 + sentimentDelta);
-    const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region && isActiveCompany(c)).reduce((s, c) => s + c.marketCap, 0);
+    const totalRegionEquityCapUSD = state.companies.filter(c => c.region === comp.region && isActiveCompany(c) && isPubliclyListed(c)).reduce((s, c) => s + c.marketCap, 0);
     const companyEquityFlowUSD = totalRegionEquityCapUSD > 0
       ? (regionEquityNetFlowUSD[comp.region] ?? 0) * (comp.marketCap / totalRegionEquityCapUSD)
       : 0;

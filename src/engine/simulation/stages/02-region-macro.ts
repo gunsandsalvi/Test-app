@@ -34,7 +34,9 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     const regionFirms = ctx.prevActiveFirms.filter(f => f.region === regionId);
 
     const regionEmployment = regionFirms.reduce((sum, f) => sum + f.employeeCount, 0);
-    const regionEmploymentLastWeek = state.companies.filter(f => f.region === regionId).reduce((sum, f) => sum + (f.previousEmployeeCount || f.employeeCount), 0);
+    // Public firms only until HC3's labor handover: the segments still carry the private tier's
+    // employment in their aggregates, so counting private firms here would double-count workers.
+    const regionEmploymentLastWeek = state.companies.filter(f => f.region === regionId && f.listingStatus !== 'PRIVATE').reduce((sum, f) => sum + (f.previousEmployeeCount || f.employeeCount), 0);
     const employmentChangePct = (regionEmployment - regionEmploymentLastWeek) / Math.max(1, regionEmploymentLastWeek);
     const bottomUpUnemploymentDelta = -employmentChangePct * 0.1;
 
@@ -106,7 +108,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       };
 
       if (assetClass === 'equity') {
-        const totalRegionEquityCapUSD = state.companies.filter(c => c.region === regionId && isActiveCompany(c)).reduce((s, c) => s + c.marketCap, 0);
+        const totalRegionEquityCapUSD = state.companies.filter(c => c.region === regionId && isActiveCompany(c) && c.listingStatus !== 'PRIVATE').reduce((s, c) => s + c.marketCap, 0);
         const foreignShareDelta = Object.keys(updatedShares.foreignShare).reduce((s, r) => s + (updatedShares.foreignShare[r as RegionId] - current.foreignShare[r as RegionId]), 0);
         const shareDelta = (updatedShares.bankShare - current.bankShare) + (updatedShares.institutionalShare - current.institutionalShare) + foreignShareDelta;
         ctx.regionEquityNetFlowUSD[regionId] = shareDelta * totalRegionEquityCapUSD;

@@ -4,6 +4,8 @@ import { getInitialRegions } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
 import { getRegionProductivityPerCapitaUSD } from './bootstrap/population';
 import { SECTOR_PPE_INTENSITY } from './simulation/constants';
+import { PrivateFirmSeed } from './bootstrap/private-firms';
+import { determineCreditRating } from './simulation/credit';
 
 export const FIXED_SHARE_BY_RATING: Record<CreditRating, number> = {
   AAA: 0.90, AA: 0.85, A: 0.75, BBB: 0.60, BB: 0.40, B: 0.20, CCC: 0.10, D: 0,
@@ -950,4 +952,110 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     recentFulfillmentEMA: 1.0,
     treasuryHoldings: [],
   };
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// HC Wave 1 (HC1): named private firms — see bootstrap/private-firms.ts for the carve logic.
+// One firm model: these are full Company objects with listingStatus 'PRIVATE'; the only fields
+// that differ are the genuinely public-only ones (no traded equity, no consensus theater).
+// ---------------------------------------------------------------------------------------------
+
+const SEGMENT_SECTOR: Record<string, Sector> = {
+  MANUFACTURING: 'Industrials',
+  PROFESSIONAL_SERVICES: 'Tech',
+  RETAIL_TRADE: 'Consumer',
+  CONSTRUCTION_REALESTATE: 'Industrials',
+  HEALTHCARE_SERVICES: 'Consumer', // closest fit in the sector taxonomy until BP1 re-keys categories
+};
+
+export function generatePrivateCompanies(
+  region: RegionId,
+  seeds: PrivateFirmSeed[],
+  regionPolicyRate: number,
+  existingTickers: Set<string>,
+  existingNames: Set<string>
+): Company[] {
+  return seeds.map((seed, idx) => {
+    const sector = SEGMENT_SECTOR[seed.segmentType] ?? 'Industrials';
+    const ticker = generateUniqueTicker(existingTickers);
+    const name = generateUniqueName(`${region} ${sector}`, sector, existingNames);
+    const revBase = Math.round(seed.annualRevenueUSD);
+    const ebitda = Math.round(revBase * seed.ebitdaMargin);
+    const debtBase = Math.round(ebitda * seed.leverage);
+    // A provisional rating seeds the ladder's coupon economics; the REAL rating below comes from
+    // the resulting real leverage and coverage, same model as everyone else.
+    const provisionalRating: CreditRating = seed.leverage > 4.5 ? 'B' : seed.leverage > 3 ? 'BB' : 'BBB';
+    const debtTranches = generateDebtTranches(ticker, debtBase, provisionalRating, regionPolicyRate, 3 + (idx % 5));
+    const annualInterest = debtTranches.reduce((a, t) => a + (t.rateType === 'FIXED'
+      ? t.principalUSD * (t.couponRate ?? 0.05)
+      : t.principalUSD * (regionPolicyRate + (t.floatingMarginBps ?? 200) / 10000)), 0);
+    const da = revBase * 0.045;
+    const ebit = Math.max(1, ebitda - da);
+    const coverage = ebit / Math.max(0.5, annualInterest);
+    const rating = determineCreditRating(debtBase / Math.max(1, ebitda), coverage);
+    const capex = Math.round(revBase * 0.05);
+    const maintenanceCapex = Math.round(capex * 0.6);
+    const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;
+    const grossPPEUSD = Math.round(revBase * ppeIntensity / 0.65);
+
+    return {
+      id: `${region}_PRV_${ticker}`,
+      ticker, name, region, sector,
+      listingStatus: 'PRIVATE',
+      // Founder/family owned until HC4 assigns real PE sponsors to the sponsorStyle cohort —
+      // the leverage is already theirs, the owner arrives with the PE entities.
+      ownership: { founderPct: 1.0 },
+      baselineAnnualRevenue: revBase, annualRevenue: revBase,
+      previousEmployeeCount: seed.employeeCount, employeeCount: seed.employeeCount,
+      baselineEmployeeCount: seed.employeeCount,
+      ebitda, baselineEbitdaMargin: seed.ebitdaMargin, ebit,
+      netIncome: Math.round((ebit - annualInterest) * 0.78),
+      eps: 0,
+      // No traded equity: private shares exist (founders hold them) but carry no market price.
+      // Zero here is "unquoted", not "worthless" — every consumer of stockPrice/marketCap must
+      // gate on isPubliclyListed, and the engine's gates run through ctx.prevActiveFirms.
+      sharesOutstanding: 1_000_000, stockPrice: 0, marketCap: 0,
+      historicalPrices: [], forwardPE: 0,
+      cash: Math.round(ebitda * 0.6),
+      totalDebt: debtBase,
+      currentLiabilities: Math.round(debtBase * 0.2 + revBase * 0.06),
+      debtTranches,
+      capex, maintenanceCapex, growthCapex: capex - maintenanceCapex,
+      baselineGrowthCapexToRevenueRatio: (capex - maintenanceCapex) / Math.max(1, revBase),
+      maintenanceShortfallStreak: 0,
+      grossPPEUSD, accumulatedDepreciationUSD: Math.round(grossPPEUSD * 0.35),
+      executionQuality: 1.0,
+      occupationMixDrift: {},
+      creditRating: rating, ratingHistory: [rating],
+      isDefaulted: false,
+      oasSpreadBps: 0, cdsSpreadBps: 0, seniorBondYield: 0,
+      dividendYield: 0, baselineDividendYield: 0,
+      beta: 1.0,
+      recoveryRate: 0.40, baselineRecoveryRate: 0.40,
+      // Goods-market participation arrives with HC3's conservation-checked handover; until then
+      // the segments keep carrying this revenue in stage 05 and this array stays empty.
+      productLines: [],
+      leverage: debtBase / Math.max(1, ebitda),
+      interestCoverage: coverage,
+      earningsWeekModulo: idx % 13,
+      lastEarningsReportWeek: 0,
+      reportedThisWeek: false,
+      historicalFundamentals: [],
+      dealerConsensus: {
+        alpha: { eps: 0, revenue: revBase }, beta: { eps: 0, revenue: revBase },
+        gamma: { eps: 0, revenue: revBase }, consensusEps: 0, consensusRevenue: revBase,
+      },
+      lastEarningsSurprisePct: 0,
+      lastManagementCommentary: 'Privately held; no public disclosures.',
+      leveragedLoan: undefined, // 07d opens a real quote when its floating debt enters the market (HC2)
+      institutionalRole: null,
+      sentiment: 0,
+      inputSupplyConstraintFactor: 1.0,
+      outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
+      inventoryCarryingCostRate: 0.02,
+      recentFulfillmentEMA: 1.0,
+      treasuryHoldings: [],
+    } as unknown as Company;
+  });
 }
