@@ -190,6 +190,15 @@ export interface Region {
   
   // Macro fundamentals
   policyRate: number;
+  /**
+   * WS6 — the cleared overnight general-collateral repo rate, an ANNUALISED decimal (same
+   * convention as policyRate; the weekly accrual is this over 52). A market print solved each
+   * week in stages/repo-clearing.ts from real bank funding needs against real lender cash,
+   * with the administered facilities as the participants' own outside options — which is why
+   * it lives inside the corridor without a clamp anywhere. One owner, region level; the banks'
+   * sheets carry positions, never a second copy of the rate.
+   */
+  repoRateAnnual: number;
   neutralRate: number;
   inflation: number;
   coreInflation: number;

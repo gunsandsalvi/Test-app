@@ -54,6 +54,15 @@ export interface InstitutionalEntity {
    * ledger only.
    */
   cashUSD: number;
+  /**
+   * WS6 — cash this entity lent overnight in the general-collateral repo market this week
+   * (stages/repo-clearing.ts). It matures back into cashUSD with interest at the start of the
+   * next week's money-market session. Part of the entity's book (markInstitutionalBooks and
+   * the S4 conservation check count it), NOT part of its weekly purchase capacity — the cash
+   * is genuinely out the door for the week, and counting it twice would let the entity buy
+   * securities with money it had already lent.
+   */
+  repoLentUSD?: number;
   assetAllocationTarget: AssetAllocationTarget;
   /**
    * PRIVATE_EQUITY only (HC4): the fund's real portfolio and the real LPs behind it. Portfolio

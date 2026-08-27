@@ -93,7 +93,7 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
       .filter((e) => e.region === region && !e.isDefaulted)
       .reduce(
         (sum, e) =>
-          sum + (e.cashUSD ?? 0) + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
+          sum + (e.cashUSD ?? 0) + ((e as any).repoLentUSD ?? 0) + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
         0
       );
 
@@ -475,6 +475,35 @@ function runInvariantsHarness() {
         violations.push({
           week: w,
           message: `Bank ${c.ticker} balance-sheet identity broken by ${(residualUSD / 1e6).toFixed(1)}M — a flow is missing a leg`
+        });
+      }
+    });
+
+    // 5c. WS6: the overnight repo rate must print inside the administered corridor in every
+    // region every week — not because anything clamps it, but because every lender's
+    // reservation is its own posted floor and the SRF sits in the book as an elastic seat at
+    // the ceiling. A print outside the corridor means a schedule is wrong or the damper bound.
+    // And pledged collateral can never exceed the pledger's holdings.
+    (['USA', 'EUR', 'UK', 'JPN'] as const).forEach(regionId => {
+      const reg: any = (state as any).regions[regionId];
+      if (typeof reg.repoRateAnnual !== 'number') return;
+      const floorAnnual = Math.max(0, reg.policyRate - 20 / 10000);
+      const ceilAnnual = reg.policyRate + 25 / 10000;
+      if (reg.repoRateAnnual < floorAnnual - 1e-6 || reg.repoRateAnnual > ceilAnnual + 1e-6) {
+        violations.push({
+          week: w,
+          message: `${regionId} repo rate ${(reg.repoRateAnnual * 100).toFixed(3)}% outside corridor [${(floorAnnual * 100).toFixed(3)}%, ${(ceilAnnual * 100).toFixed(3)}%]`
+        });
+      }
+    });
+    state.companies.forEach((c: any) => {
+      if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
+      const bs = c.bankBalanceSheet;
+      const sovUSD = Object.values((bs.sovereignBondHoldingsByTenor || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
+      if ((bs.repoEncumberedCollateralUSD ?? 0) > sovUSD + 1e6) {
+        violations.push({
+          week: w,
+          message: `Bank ${c.ticker} pledged ${(bs.repoEncumberedCollateralUSD / 1e9).toFixed(2)}B of collateral against ${(sovUSD / 1e9).toFixed(2)}B held`
         });
       }
     });

@@ -108,6 +108,14 @@ export interface ClearingParticipant {
   demandByInstrumentId: Map<string, ParticipantDemand>;
 }
 
+/**
+ * The absolute floor the damper grants a YIELD_LIKE statistic's one-week move (the `+ 25` in
+ * the damping arithmetic below). Exported with one owner because WS6's haircut derivation
+ * needs the same number: the smallest repricing a lender must assume collateral can suffer in
+ * one week is exactly the smallest move this engine will allow it to make.
+ */
+export const YIELD_LIKE_MIN_WEEKLY_MOVE_BPS = 25;
+
 export interface ClearingParams {
   /** Bid/ask the dealer desk earns on the gross flow it facilitates. */
   dealerSpreadBps: number;
@@ -241,7 +249,7 @@ export function clearFinancialAsset(
     const solvedStat = solveClearingStat(inst, participants, bracketLow, bracketHigh);
 
     // Discrete-time damping, not a price bound: see maxWeeklyStatMovePct.
-    const maxMove = Math.abs(inst.currentStat) * params.maxWeeklyStatMovePct + (isYieldLike ? 25 : 0);
+    const maxMove = Math.abs(inst.currentStat) * params.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0);
     const clearedStat = Number(
       Math.max(inst.currentStat - maxMove, Math.min(inst.currentStat + maxMove, solvedStat)).toFixed(4)
     );

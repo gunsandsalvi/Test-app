@@ -72,4 +72,19 @@ export interface BankingSector {
   sovBondDealerInventory: { tenorKey: string; inventoryUSD: number }[];
   // Same shared-regional-dealer-desk role for leveraged loans. See 07d-leveraged-loan-clearing.ts.
   loanDealerInventory: { companyId: string; inventoryUSD: number }[];
+  /**
+   * WS6 — this bank's overnight general-collateral repo book, struck fresh each week by
+   * stages/repo-clearing.ts and matured (principal AND interest, as explicit flows) at the
+   * start of the next week inside evolveBankingSector. Always a one-week-old overnight
+   * position, never a term liability.
+   */
+  repoLentUSD: number;
+  repoBorrowedUSD: number;
+  /**
+   * Government-bond collateral pledged against `repoBorrowedUSD` + `srfBorrowingUSD`, at the
+   * derived per-bucket haircuts (see computeSovereignRepoHaircuts). Pledged paper cannot
+   * simultaneously be sold — 07c/07f read this as a floor on the pledging bank's holdings and
+   * exclude it from further borrowing capacity.
+   */
+  repoEncumberedCollateralUSD: number;
 }

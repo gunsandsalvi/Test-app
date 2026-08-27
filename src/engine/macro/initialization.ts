@@ -317,6 +317,11 @@ function buildRegion(regionId: RegionId): Region {
     sovereignBondHoldingsByTenor: {},
     sovBondDealerInventory: [],
     loanDealerInventory: [],
+    // WS6: overnight positions are struck weekly and mature at the next session, so a cold
+    // start opens with an empty book — the same shape the weekly engine produces (§7.4).
+    repoLentUSD: 0,
+    repoBorrowedUSD: 0,
+    repoEncumberedCollateralUSD: 0,
   };
 
   const institutionalSector = {
@@ -389,6 +394,10 @@ function buildRegion(regionId: RegionId): Region {
     centralBankBalanceSheet: estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankBalanceSheetToGdp,
     balanceSheetStance: 0,
     policyRate,
+    // WS6: a cleared market print from week 1. The cold start opens at the corridor floor —
+    // where an overnight market with no funding need prints, and exactly what the first
+    // session computes when the seeded sheets open at their buffers.
+    repoRateAnnual: Math.max(0, policyRate - 20 / 10000),
     neutralRate,
     inflation: targetInflation,
     coreInflation: targetInflation,

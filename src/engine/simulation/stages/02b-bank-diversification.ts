@@ -23,8 +23,9 @@
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector } from '../../../domain/banking';
 import {
-  evolveBankingSector, computeSovereignBookAnnualYield, MIN_CASH_BUFFER_RATIO,
+  evolveBankingSector, computeSovereignBookAnnualYield,
 } from '../../macro/banking';
+import { runRegionalRepoSession } from './repo-clearing';
 import { WeeklyStepContext } from './context';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -50,26 +51,9 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     sovereignBondHoldingsByTenor: scaledBuckets,
     sovBondDealerInventory: [],
     loanDealerInventory: [],
-  };
-}
-
-/**
- * The Standing Repo Facility draw: struck at the END of the bank's week, once every real flow
- * has posted, exactly like a real treasury desk squaring its position at the close. The draw
- * itself is a swap of a liability for cash (srfBorrowing +X, cash +X); the interest is paid at
- * maturation next week, in evolveBankingSector's step 1. No floor, no plug — a bank that is
- * short simply borrows what it is short, bounded by nothing here because the SRF is by design
- * an elastic posted-rate window (rule-1's administered exception). Collateral encumbrance
- * against the draw arrives with WS6's repo market, which shares the same collateral pool.
- */
-function applySrfDraw(sheet: BankingSector): BankingSector {
-  const targetMinCashUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
-  if (!(sheet.cashReservesUSD < targetMinCashUSD)) return sheet;
-  const srfBorrowingUSD = targetMinCashUSD - sheet.cashReservesUSD;
-  return {
-    ...sheet,
-    cashReservesUSD: Number((sheet.cashReservesUSD + srfBorrowingUSD).toFixed(0)),
-    srfBorrowingUSD: Number(srfBorrowingUSD.toFixed(0)),
+    repoLentUSD: bs.repoLentUSD * share,
+    repoBorrowedUSD: bs.repoBorrowedUSD * share,
+    repoEncumberedCollateralUSD: bs.repoEncumberedCollateralUSD * share,
   };
 }
 
@@ -113,9 +97,25 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         reg.gdpGrowth,
         reg.creditConditionsSpilloverAdjustment ?? 0,
         0,
-        reg.householdState.creditTierBooks
+        reg.householdState.creditTierBooks,
+        // WS6: last week's overnight repo book matures inside as explicit flows.
+        prevSheet.repoBorrowedUSD ?? 0,
+        prevSheet.repoLentUSD ?? 0,
+        reg.repoRateAnnual ?? reg.policyRate
       );
-      return { bank, sheet: applySrfDraw(sheet) };
+      return { bank, sheet };
+    });
+
+    // WS6: the weekly money-market session. Every real flow has posted; banks short of their
+    // buffer now fund against their collateral, surplus banks and institutional idle cash
+    // lend, and the SRF sits in the book as the posted-rate seat of last resort — so there is
+    // no separate "facility draw" step to run afterwards, and the region's overnight rate is
+    // whatever this session cleared.
+    const sheetByTicker = new Map<string, BankingSector>(newSheets.map(({ bank, sheet }) => [bank.ticker, sheet]));
+    const session = runRegionalRepoSession(regionId, reg, banks, sheetByTicker, ctx);
+    reg.repoRateAnnual = Number(session.repoRateAnnual.toFixed(6));
+    newSheets.forEach((entry) => {
+      entry.sheet = session.sheetByTicker.get(entry.bank.ticker) ?? entry.sheet;
     });
 
     newSheets.forEach(({ bank, sheet }) => {
@@ -170,6 +170,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       sovBondDealerInventory: priorAggregate.sovBondDealerInventory || [],
       // Same for leveraged loans — owned by 07d-leveraged-loan-clearing.ts.
       loanDealerInventory: priorAggregate.loanDealerInventory || [],
+      // WS6: the region's overnight book is the sum of the named banks' real positions. The
+      // RATE is one market print per region and lives on reg.repoRateAnnual — never a second
+      // copy on any sheet.
+      repoLentUSD: sumField((s) => s.repoLentUSD ?? 0),
+      repoBorrowedUSD: sumField((s) => s.repoBorrowedUSD ?? 0),
+      repoEncumberedCollateralUSD: sumField((s) => s.repoEncumberedCollateralUSD ?? 0),
     };
   });
 }

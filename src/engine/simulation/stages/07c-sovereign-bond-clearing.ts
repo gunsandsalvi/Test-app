@@ -50,6 +50,8 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
+import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
+import { MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
 const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
@@ -291,12 +293,30 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       return { id: entity.id, currentHoldingsByInstrumentId: currentByBucket, demandByInstrumentId };
     });
 
+    const repoHaircuts = computeSovereignRepoHaircuts(reg);
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
-      const sheet = bank.bankBalanceSheet!;
+      const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const currentByBucket = new Map<string, number>();
       Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
-        currentByBucket.set(bucketInstrumentId(regionId, key), v);
+        currentByBucket.set(bucketInstrumentId(regionId, key), Number(v) || 0);
       });
+
+      // WS6 closes the loop the old comment left open ("their real constraint is the reserve
+      // position") — the constraint now EXISTS. A bank can add this week what its own money
+      // and its own collateral can fund: cash above its operating buffer, plus the secured
+      // borrowing its UNENCUMBERED government book supports at the derived haircuts. Before
+      // this budget, the honest ledger showed banks buying 241B of bonds against 232B of
+      // deposits with the SRF financing 88B at penalty — a real bid must be a claim on real
+      // funding (§7.6: a cash-constrained bidder rations quantity, never price).
+      const fundableUSD = Math.max(0, sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
+        + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts);
+      // Collateral already pledged overnight cannot simultaneously be sold: the encumbered
+      // share of the book is a floor on holdings — size, never price, exactly like the
+      // liability-driven core above.
+      const totalBookUSD = Array.from(currentByBucket.values()).reduce((a, b) => a + b, 0);
+      const encumberedShare = totalBookUSD > 0
+        ? Math.min(1, (sheet.repoEncumberedCollateralUSD ?? 0) / totalBookUSD)
+        : 0;
 
       // A bank's reservation yield is the administered rate it can earn on reserves instead, plus
       // what it needs for the duration risk a bond carries and cash does not. This is the same
@@ -311,6 +331,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           reservationStat: reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS),
           maxHoldingUSD: bankTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
           fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
+          maxNetPurchaseUSD: fundableUSD * bucketShareOfMarket,
+          minHoldingUSD: (currentByBucket.get(id) ?? 0) * encumberedShare,
         });
       });
 

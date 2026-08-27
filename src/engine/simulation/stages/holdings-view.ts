@@ -49,7 +49,8 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
 
   state.institutionalEntities.forEach((e) => {
     if (e.region !== regionId || e.isDefaulted) return;
-    cash += e.cashUSD ?? 0;
+    // WS6: cash lent overnight is the entity's money in transit, part of its cash position.
+    cash += (e.cashUSD ?? 0) + (e.repoLentUSD ?? 0);
     e.itemizedHoldings.forEach((h) => {
       institutionalHoldings.push(h);
       const v = h.quantityOrNotionalUSD ?? 0;

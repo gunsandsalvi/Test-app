@@ -48,7 +48,14 @@ const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
   PRIVATE_EQUITY: 0,
 };
 
-/** An entity's real purchasing capacity right now, across all asset classes. */
+/**
+ * An entity's real purchasing capacity right now, across all asset classes.
+ *
+ * WS6's overnight repo lending (`repoLentUSD`) is deliberately NOT counted: the cash is
+ * genuinely out the door for the week — a bank is funding its book with it — and counting a
+ * receivable as spendable would let the entity buy securities with money it had already lent.
+ * It is part of the BOOK (markInstitutionalBooks), never of the budget.
+ */
 export function availablePurchaseCapacityUSD(entity: InstitutionalEntity): number {
   const allowanceUSD = LEVERAGE_ALLOWANCE[entity.entityType] * Math.max(0, entity.totalAssetsUSD);
   return Math.max(0, (entity.cashUSD ?? 0) + allowanceUSD);
@@ -130,10 +137,13 @@ export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
         const stakePct = c.ownership?.peSponsorPct ?? 0;
         return a + Math.max(0, 8 * c.ebitda - c.totalDebt) * stakePct;
       }, 0);
-      return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0) + portfolioUSD) };
+      return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0) + (entity.repoLentUSD ?? 0) + portfolioUSD) };
     }
     const holdingsUSD = entity.itemizedHoldings.reduce(
       (a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
-    return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + holdingsUSD };
+    // Cash lent overnight (WS6) is still the entity's money — a secured claim maturing next
+    // session, not a security; leaving it out would mark the book down by the position's size
+    // every week and back up the week after.
+    return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + (entity.repoLentUSD ?? 0) + holdingsUSD };
   });
 }

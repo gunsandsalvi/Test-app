@@ -267,6 +267,9 @@ export function evolveBankingSector(
     // week's came due in step 1 above.
     srfBorrowingUSD: 0,
     onRrpLendingUSD: 0,
+    repoLentUSD: 0,
+    repoBorrowedUSD: 0,
+    repoEncumberedCollateralUSD: 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
