@@ -72,10 +72,13 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   const carryEstimate = useMemo(() => {
     let thetaPerContract: number | undefined;
     if (instrument.assetType === 'OPTION') {
+      const weeksToExpiry = instrument.details.expiryWeek !== undefined
+        ? Math.max(1, instrument.details.expiryWeek - state.currentWeek)
+        : 8; // the dealer's standard listed-contract tenor when the ticket carries none
       const greeks = calculateBlackScholesGreeks(
         instrument.details.strike || instrument.price,
         instrument.details.strike || instrument.price,
-        8 / 52,
+        weeksToExpiry / 52,
         policyRate,
         instrument.details.impliedVol || 0.3,
         instrument.details.optionType || 'CALL'
@@ -123,7 +126,8 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
           : (instrument.price - intrinsic) * contracts;
         estPnLUSD = payoffAtExpiry;
       } else if (instrument.assetType === 'IRS') {
-        // Rates move by pct * 100 bps
+        // §6: the scenario grid for rates products is in BASIS POINTS (pct 0.10 → 10bp), and
+        // the label below now says so — it used to print "±10%" while computing ±10bp.
         const bpsMove = pct * 100;
         const dv01 = (notionalUSD * 4.5) / 10000; // ~4.5 duration for 5Y swap
         estPnLUSD = isLong ? bpsMove * dv01 : -bpsMove * dv01;
@@ -138,7 +142,9 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
       }
 
       return {
-        label: formatPercent(pct, { isDecimal: true, showSign: true, precision: 0 }),
+        label: (instrument.assetType === 'IRS' || instrument.assetType === 'CDS')
+          ? `${pct >= 0 ? '+' : ''}${Math.round(pct * 100)}bp`
+          : formatPercent(pct, { isDecimal: true, showSign: true, precision: 0 }),
         pnlUSD: estPnLUSD,
       };
     });
@@ -237,7 +243,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
         : undefined,
       strike: instrument.details.strike,
       optionType: instrument.details.optionType,
-      expiryWeek: state.currentWeek + 8,
+      expiryWeek: instrument.details.expiryWeek ?? (state.currentWeek + 8),
       impliedVol: instrument.details.impliedVol,
       delta: instrument.details.delta,
       gamma: instrument.details.gamma,
@@ -507,7 +513,9 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
           </div>
           <div className="flex items-center justify-between text-slate-400">
             <span>Unencumbered Cash:</span>
-            <span className="text-slate-300">{formatCurrency(state.portfolio.cashUSD)}</span>
+            {/* §6: the affordability gate uses cash net of required margin — show that number,
+                not raw cash that overstates what this ticket can commit. */}
+            <span className="text-slate-300">{formatCurrency(freeCashUSD)}</span>
           </div>
         </div>
 

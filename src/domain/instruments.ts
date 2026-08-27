@@ -173,6 +173,8 @@ export interface TradeableInstrument {
     discountMarginBps?: number;
     referenceBenchmark?: string;
     impliedVol?: number;
+    /** OPTION only: the contract's own expiry week; absent = the dealer's standard listed tenor. */
+    expiryWeek?: number;
     delta?: number;
     gamma?: number;
     vega?: number;

@@ -555,13 +555,6 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...base, intensityShare: calibratedShare };
   });
 
-  const topUsaCompanyIds = companies
-    .filter(c => c.region === 'USA')
-    .sort((a, b) => b.marketCap - a.marketCap)
-    .slice(0, 2)
-    .map(c => c.id);
-  const watchlist = [...topUsaCompanyIds, 'HEAVY_CRUDE_OIL', 'GOLD'];
-
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
@@ -738,7 +731,6 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     recentMergers,
     dealers,
     portfolio,
-    watchlist,
     newsFeed: [
       {
         id: 'init_welcome',
@@ -752,13 +744,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       },
     ],
     turnSummary: null,
-    selectedTab: 'macro',
     isTradeModalOpen: false,
     selectedInstrument: null,
     isNewsDrawerOpen: false,
-    isWatchlistDrawerOpen: false,
-    isCheatsheetOpen: false,
-    isDiagnosticsOpen: false,
     diagnosticsLogs: [
       {
         week: 1,
@@ -769,7 +757,6 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         data: { capitalUSD: startingCash, regionsCount: 4, firmsCount: companies.length },
       },
     ],
-    chartModalData: null,
     isGameOver: false,
     gameOverReason: null,
   };

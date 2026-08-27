@@ -10,9 +10,9 @@ import { RegionId, FxPair } from './geography';
 import { Company, CreditRating } from './company';
 import { InstitutionalEntity } from './institutions';
 import { Commodity, Dealer, TradeableInstrument } from './instruments';
-import { CompositeBenchmarkIndices, TabKey } from './markets';
+import { CompositeBenchmarkIndices } from './markets';
 import { Portfolio, ReturnAttribution } from './portfolio';
-import { NewsItem, DiagnosticsLog, ChartModalData } from './events';
+import { NewsItem, DiagnosticsLog } from './events';
 import { Region } from './region-macro';
 
 export interface GameState {
@@ -39,7 +39,6 @@ export interface GameState {
   dealers: Dealer[];
   portfolio: Portfolio;
   newsFeed: NewsItem[];
-  watchlist: string[];
   turnSummary: {
     week: number;
     pnlDeltaUSD: number;
@@ -52,15 +51,10 @@ export interface GameState {
     marginAlert: string | null;
     attribution: ReturnAttribution;
   } | null;
-  selectedTab: TabKey;
   isTradeModalOpen: boolean;
   selectedInstrument: TradeableInstrument | null;
   isNewsDrawerOpen: boolean;
-  isWatchlistDrawerOpen: boolean;
-  isCheatsheetOpen: boolean;
-  isDiagnosticsOpen: boolean;
   diagnosticsLogs: DiagnosticsLog[];
-  chartModalData: ChartModalData | null;
   isGameOver: boolean;
   gameOverReason: string | null;
 }

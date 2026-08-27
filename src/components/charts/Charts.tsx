@@ -70,20 +70,27 @@ export const YieldCurveChart: React.FC<{ params: NelsonSiegelParams, width?: num
   const minRate = Math.min(0, ...rates);
   const maxRate = Math.max(...rates, 0.05); // cap at 5% min visual
   const range = maxRate - minRate || 0.01;
-  const pts = rates.map((r, i) => `${(i / (tenors.length - 1)) * width},${height - ((r - minRate) / range) * height}`).join(' ');
+  // §6: the x-axis is the curve's real convention — log of tenor — so 3M..30Y spread by
+  // maturity instead of ten nonlinear tenors plotted equally spaced (which put "10Y" under the
+  // curve's 3Y point and made every slope read wrong).
+  const logMin = Math.log(tenors[0]);
+  const logMax = Math.log(tenors[tenors.length - 1]);
+  const xOf = (t: number) => ((Math.log(t) - logMin) / (logMax - logMin)) * width;
+  const pts = rates.map((r, i) => `${xOf(tenors[i])},${height - ((r - minRate) / range) * height}`).join(' ');
 
   return (
     <div className="relative" style={{ width, height }}>
       <svg width={width} height={height} className="overflow-visible">
         <polyline points={pts} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinejoin="round" />
         {rates.map((r, i) => (
-          <circle key={i} cx={(i / (tenors.length - 1)) * width} cy={height - ((r - minRate) / range) * height} r={1.5} fill="#c4b5fd" />
+          <circle key={i} cx={xOf(tenors[i])} cy={height - ((r - minRate) / range) * height} r={1.5} fill="#c4b5fd" />
         ))}
       </svg>
-      <div className="absolute bottom-[-14px] w-full flex justify-between text-[8px] text-slate-500">
-        <span>3M</span>
-        <span>10Y</span>
-        <span>30Y</span>
+      <div className="absolute bottom-[-14px] text-[8px] text-slate-500" style={{ width }}>
+        <span className="absolute" style={{ left: 0 }}>3M</span>
+        <span className="absolute" style={{ left: xOf(2) - 6 }}>2Y</span>
+        <span className="absolute" style={{ left: xOf(10) - 8 }}>10Y</span>
+        <span className="absolute" style={{ right: 0 }}>30Y</span>
       </div>
     </div>
   );

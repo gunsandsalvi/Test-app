@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { DEALERS, getUnifiedInitialMarginRate } from '../engine/dealers';
 import {
   Activity,
   BookOpen,
@@ -182,23 +183,23 @@ export const ManualModal: React.FC<ManualModalProps> = ({ onClose }) => {
                 <Layers className="w-3.5 h-3.5 text-blue-400" />
                 Unified Prime Broker Initial Margin
               </h4>
+              {/* §6: rendered from the REAL engine schedule (getUnifiedInitialMarginRate) —
+                  the restated copy had already drifted from the code it described. */}
               <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-slate-300 mt-1">
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span className="text-slate-500 block">Sovereign Bonds</span>
-                  <span className="font-bold text-emerald-400">4% IM (25x)</span>
-                </div>
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span className="text-slate-500 block">Interest Rate Swaps</span>
-                  <span className="font-bold text-emerald-400">5% IM (20x)</span>
-                </div>
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span className="text-slate-500 block">Corporate Bonds / CDS</span>
-                  <span className="font-bold text-blue-400">10% IM (10x)</span>
-                </div>
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span className="text-slate-500 block">Equities & Options</span>
-                  <span className="font-bold text-amber-400">20% IM (5x)</span>
-                </div>
+                {([
+                  ['Sovereign Bonds', 'SOV_BOND', 'text-emerald-400'],
+                  ['Interest Rate Swaps', 'IRS', 'text-emerald-400'],
+                  ['Corporate Bonds / Loans', 'CORP_BOND', 'text-blue-400'],
+                  ['Equities', 'EQUITY', 'text-amber-400'],
+                ] as const).map(([label, at, color]) => {
+                  const im = getUnifiedInitialMarginRate(at as any);
+                  return (
+                    <div key={at} className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-500 block">{label}</span>
+                      <span className={`font-bold ${color}`}>{Math.round(im * 100)}% IM ({Math.round(1 / im)}x)</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -220,21 +221,21 @@ export const ManualModal: React.FC<ManualModalProps> = ({ onClose }) => {
                 <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
                   <span className="font-bold text-white block text-[11px]">Dealer Alpha (Credit/Rates Specialist)</span>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Offers <strong className="text-emerald-400">-50% spread discounts</strong> on Corporate Bonds, CDS, and Sovereign Rates.
+                    Offers <strong className="text-emerald-400">-{Math.round((DEALERS[0]?.axeDiscountPct ?? 0.5) * 100)}% spread discounts</strong> on Corporate Bonds, CDS, and Sovereign Rates.
                   </p>
                 </div>
 
                 <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
                   <span className="font-bold text-white block text-[11px]">Dealer Beta (FX & Energy Specialist)</span>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Best liquidity and <strong className="text-emerald-400">-50% spread discounts</strong> on Cross-Currency Basis Swaps and Commodities.
+                    Best liquidity and <strong className="text-emerald-400">-{Math.round((DEALERS[1]?.axeDiscountPct ?? 0.5) * 100)}% spread discounts</strong> on Cross-Currency Basis Swaps and Commodities.
                   </p>
                 </div>
 
                 <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
                   <span className="font-bold text-white block text-[11px]">Dealer Gamma (Equities & Volatility Specialist)</span>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Tightest spreads and <strong className="text-emerald-400">-50% discounts</strong> on Single-Stock Options and Equity cash baskets.
+                    Tightest spreads and <strong className="text-emerald-400">-{Math.round((DEALERS[2]?.axeDiscountPct ?? 0.5) * 100)}% discounts</strong> on Single-Stock Options and Equity cash baskets.
                   </p>
                 </div>
               </div>

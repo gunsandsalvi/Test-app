@@ -91,7 +91,11 @@ export const NewsDrawer: React.FC<NewsDrawerProps> = ({
     }
 
     if (item.category === 'COMMODITY') {
-      const oil = state.commodities.find((c) => c.symbol === 'CRUDE_OIL') || state.commodities[0];
+      // §6: prefer the tradeShortcut the generator now attaches (it names the REAL affected
+      // commodity); fall back to crude by id OR symbol — the old symbol-only match meant a
+      // symbol/id mismatch silently opened a ticket on commodities[0], whatever that was.
+      const oil = state.commodities.find((c) => c.id === 'CRUDE_OIL' || c.symbol === 'CRUDE_OIL')
+        || state.commodities[0];
       if (oil) {
         onOpenTrade({
           assetType: 'COMMODITY',

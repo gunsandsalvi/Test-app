@@ -51,7 +51,9 @@ export function executeTrade(
         return next;
       };
 
-      const isLoan = posData.assetType === 'LEVERAGED_LOAN' || (posData.assetType as string) === 'LEV_LOAN';
+      // §6: 'LEV_LOAN' never existed in the AssetType union — the one producer (CompanyDeepDive)
+      // now emits 'LEVERAGED_LOAN' like everything else, so the string-match tolerance is gone.
+      const isLoan = posData.assetType === 'LEVERAGED_LOAN';
       const isCorpBond = posData.assetType === 'CORP_BOND';
 
       updatedRegions[posData.region] = {

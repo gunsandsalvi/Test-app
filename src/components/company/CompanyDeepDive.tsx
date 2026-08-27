@@ -221,41 +221,54 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
 
             {finSubTab === 'balance' && latestFund?.balanceSheet && (
               <>
-                {company.isBankEntity && (
+                {company.isBankEntity && (() => {
+                  // §6: this card prorated the REGION aggregate by market share while every bank
+                  // has carried its own real bankBalanceSheet since WS Phase 1 — real per-bank
+                  // data, shown as itself; the share-slice survives only for a sheetless bank.
+                  const bs = company.bankBalanceSheet;
+                  const share = company.bankMarketShare ?? 0.25;
+                  const bizUSD = bs?.businessLoanBookUSD ?? reg.bankingSector.businessLoanBookUSD * share;
+                  const consUSD = bs?.consumerLoanBookUSD ?? reg.bankingSector.consumerLoanBookUSD * share;
+                  const depUSD = bs?.depositsUSD ?? reg.bankingSector.depositsUSD * share;
+                  const sovUSD = bs?.sovereignBondHoldingsUSD ?? reg.bankingSector.sovereignBondHoldingsUSD * share;
+                  const capRatio = bs?.bankCapitalRatio ?? reg.bankingSector.bankCapitalRatio;
+                  const nimPct = bs?.netInterestMarginPct ?? reg.bankingSector.netInterestMarginPct;
+                  return (
                   <div className="p-3 bg-[var(--bg-elevated)] border border-[var(--border-hairline)] rounded-xl mb-3 space-y-1 text-[var(--text-primary)]">
                     <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold border-b border-[var(--border-hairline)] pb-1 mb-2">
-                      Prorated Bank Balance Sheet & Capital Metrics
+                      {bs ? 'Bank Balance Sheet & Capital Metrics' : 'Prorated Bank Balance Sheet & Capital Metrics'}
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Total Loan Book</span>
-                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.bankingSector.businessLoanBookUSD + reg.bankingSector.consumerLoanBookUSD) * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(bizUSD + consUSD, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">  · Business Loans</span>
-                      <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(reg.bankingSector.businessLoanBookUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                      <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(bizUSD, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">  · Consumer Loans</span>
-                      <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(reg.bankingSector.consumerLoanBookUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                      <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(consUSD, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Customer Deposits</span>
-                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(reg.bankingSector.depositsUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(depUSD, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Sovereign Bond Holdings</span>
-                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(reg.bankingSector.sovereignBondHoldingsUSD * (company.bankMarketShare ?? 0.25), { compact: true })}</span>
+                      <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(sovUSD, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Capital Adequacy Ratio (Tier 1)</span>
-                      <span className="font-bold">{formatPercent(reg.bankingSector.bankCapitalRatio)}</span>
+                      <span className="font-bold">{formatPercent(capRatio)}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1">
                       <span className="text-[var(--text-secondary)]">Net Interest Margin (NIM)</span>
-                      <span className="font-bold">{formatPercent(reg.bankingSector.netInterestMarginPct)}</span>
+                      <span className="font-bold">{formatPercent(nimPct)}</span>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {company.isInstitutionalEntity && (() => {
                   const instEntity = state.institutionalEntities?.find(ent => ent.id === company.id);
@@ -275,19 +288,19 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                       </div>
                       <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                         <span className="text-[var(--text-secondary)]">Cash Reserves</span>
-                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.cashUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((instEntity.cashUSD ?? 0) + (instEntity.repoLentUSD ?? 0), { compact: true })}</span>
                       </div>
                       <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                         <span className="text-[var(--text-secondary)]">Sovereign Bond Holdings</span>
-                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.sovBondHoldingsUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(instEntity.itemizedHoldings.filter(h => h.instrumentType === 'GOV_BOND').reduce((a, h) => a + h.quantityOrNotionalUSD, 0), { compact: true })}</span>
                       </div>
                       <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                         <span className="text-[var(--text-secondary)]">Corporate Bond Holdings</span>
-                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.corpBondHoldingsUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(instEntity.itemizedHoldings.filter(h => h.instrumentType === 'CORP_BOND').reduce((a, h) => a + h.quantityOrNotionalUSD, 0), { compact: true })}</span>
                       </div>
                       <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                         <span className="text-[var(--text-secondary)]">Equity Holdings</span>
-                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency((reg.institutionalSector.equityHoldingsUSD || 0) * (company.institutionalMarketShare ?? 0.33), { compact: true })}</span>
+                        <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(instEntity.itemizedHoldings.filter(h => h.instrumentType === 'EQUITY').reduce((a, h) => a + h.quantityOrNotionalUSD, 0), { compact: true })}</span>
                       </div>
 
                       <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold pt-2 pb-1 border-b border-[var(--border-hairline)] mb-2">
@@ -299,11 +312,20 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                         <span>Target Pct</span>
                       </div>
                       {(() => {
-                        const totalInvested = (reg.institutionalSector.cashUSD || 0) + (reg.institutionalSector.sovBondHoldingsUSD || 0) + (reg.institutionalSector.corpBondHoldingsUSD || 0) + (reg.institutionalSector.equityHoldingsUSD || 0);
-                        const cashPct = totalInvested > 0 ? (reg.institutionalSector.cashUSD || 0) / totalInvested : 0;
-                        const sovPct = totalInvested > 0 ? (reg.institutionalSector.sovBondHoldingsUSD || 0) / totalInvested : 0;
-                        const corpPct = totalInvested > 0 ? (reg.institutionalSector.corpBondHoldingsUSD || 0) / totalInvested : 0;
-                        const eqPct = totalInvested > 0 ? (reg.institutionalSector.equityHoldingsUSD || 0) / totalInvested : 0;
+                        // §6: "Actual" compared the SECTOR's mix against THIS entity's target —
+                        // two different books. Both columns are this entity's now.
+                        const sumType = (t: string) => instEntity.itemizedHoldings
+                          .filter(h => h.instrumentType === t)
+                          .reduce((a, h) => a + h.quantityOrNotionalUSD, 0);
+                        const cashUSD = (instEntity.cashUSD ?? 0) + (instEntity.repoLentUSD ?? 0);
+                        const sovUSD = sumType('GOV_BOND');
+                        const corpUSD = sumType('CORP_BOND') + sumType('LEVERAGED_LOAN');
+                        const eqUSD = sumType('EQUITY');
+                        const totalInvested = cashUSD + sovUSD + corpUSD + eqUSD;
+                        const cashPct = totalInvested > 0 ? cashUSD / totalInvested : 0;
+                        const sovPct = totalInvested > 0 ? sovUSD / totalInvested : 0;
+                        const corpPct = totalInvested > 0 ? corpUSD / totalInvested : 0;
+                        const eqPct = totalInvested > 0 ? eqUSD / totalInvested : 0;
                         
                         const t = instEntity.assetAllocationTarget;
                         return (
@@ -391,9 +413,22 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     {(() => {
                       const hist = company.historicalFundamentals || [];
                       const prevFund = hist.length > 1 ? hist[hist.length - 2] : undefined;
-                      const beginningNetPPE = prevFund?.balanceSheet.netPPE ?? latestFund.balanceSheet.netPPE;
-                      const capexAdded = latestFund.balanceSheet.grossPPE - (prevFund?.balanceSheet.grossPPE ?? latestFund.balanceSheet.grossPPE);
-                      const depreciation = latestFund.balanceSheet.accumulatedDepreciation - (prevFund?.balanceSheet.accumulatedDepreciation ?? 0);
+                      // §6 + rule 9: with only one filing there is no real prior period — the old
+                      // fallback subtracted 0, printing the company's ENTIRE accumulated
+                      // depreciation since founding as one quarter's flow. A missing change is
+                      // information; a fabricated one is a lie — show levels only until a real
+                      // prior filing exists.
+                      if (!prevFund) {
+                        return (
+                          <div className="flex justify-between text-[11px] py-0.5">
+                            <span className="text-[var(--text-tertiary)]">Net PP&E (first filing — roll-forward from next quarter)</span>
+                            <span className="font-[var(--font-numeric)] text-[var(--text-secondary)]">{formatCurrency(latestFund.balanceSheet.netPPE, { compact: true })}</span>
+                          </div>
+                        );
+                      }
+                      const beginningNetPPE = prevFund.balanceSheet.netPPE;
+                      const capexAdded = latestFund.balanceSheet.grossPPE - prevFund.balanceSheet.grossPPE;
+                      const depreciation = latestFund.balanceSheet.accumulatedDepreciation - prevFund.balanceSheet.accumulatedDepreciation;
                       return (
                         <>
                           <div className="flex justify-between text-[11px] py-0.5">
@@ -778,7 +813,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 const bondName = formatBondName(company.ticker, t.couponRate, t.maturityWeek, state.currentWeek, t.rateType);
                 return (
                   <div key={t.id} onClick={() => onOpenTrade({
-                    assetType: isFixed ? 'CORP_BOND' : 'LEV_LOAN', id: t.id, symbol: t.id,
+                    assetType: isFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN', id: t.id, symbol: t.id,
                     name: bondName,
                     region: company.region, price, quoteUnit: isFixed ? '% Par' : 'pts of par',
                     details: { trancheId: t.id, tenorYears: remainingTenorYears, fixedRate: t.couponRate ?? 0, rateType: t.rateType, oasSpreadBps: company.oasSpreadBps, rating: company.creditRating, sector: company.sector },

@@ -90,11 +90,20 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
                 if (p.assetType === 'COMMODITY') return `Commodity Spot Move: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
                 if (p.assetType === 'SOV_BOND' || p.assetType === 'IRS') return `Yield Curve Delta: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
                 if (p.assetType === 'CDS') return `Credit Default Spread Delta: ${formatCurrency(pnl, { compact: true, showSign: true })}`;
-                if ((p.assetType === 'CORP_BOND' || (p.assetType as string) === 'LEVERAGED_LOAN' || (p.assetType as string) === 'LEV_LOAN') && p.entryOasSpreadBps !== undefined) {
+                if ((p.assetType === 'CORP_BOND' || p.assetType === 'LEVERAGED_LOAN') && p.entryOasSpreadBps !== undefined) {
+                  // §6: attribution reads the position's OWN cleared statistic — a loan's cleared
+                  // discount margin, a bond's cleared OAS — and the tranche's real remaining
+                  // tenor, not issuer-level OAS with a `?? 5` guess for both.
                   const currentCompany = state.companies.find(c => c.debtTranches?.some(t => t.id === p.trancheId));
-                  const currentOas = currentCompany?.oasSpreadBps ?? p.entryOasSpreadBps;
-                  const spreadDiffBps = p.entryOasSpreadBps - currentOas;
-                  const approxSpreadPnL = (spreadDiffBps / 10000) * currentVal * (p.tenorYears || 5);
+                  const tranche = currentCompany?.debtTranches?.find(t => t.id === p.trancheId);
+                  const currentStat = p.assetType === 'LEVERAGED_LOAN'
+                    ? (currentCompany?.leveragedLoan?.discountMarginBps ?? p.entryOasSpreadBps)
+                    : (currentCompany?.oasSpreadBps ?? p.entryOasSpreadBps);
+                  const spreadDiffBps = p.entryOasSpreadBps - currentStat;
+                  const remainingTenorYears = tranche
+                    ? Math.max(0.1, (tranche.maturityWeek - state.currentWeek) / 52)
+                    : (p.tenorYears || 5);
+                  const approxSpreadPnL = (spreadDiffBps / 10000) * currentVal * remainingTenorYears;
                   const ratePnL = pnl - approxSpreadPnL;
                   return `Rate Component: ${formatCurrency(ratePnL, { compact: true, showSign: true })} · Spread Component: ${formatCurrency(approxSpreadPnL, { compact: true, showSign: true })}`;
                 }
