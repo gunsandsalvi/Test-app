@@ -1504,8 +1504,17 @@ the complete simulation.
       - stage 09 had the right complexity but the wrong shape: two maps-of-arrays over 74,000
         contracts, ~150,000 array slots of garbage a week. It now accumulates directly into the
         totals it needs in one pass: **87 -> 25 ms**.
-      **The generalisation, now three for three: when a stage is slow, it is scanning a
-      collection per item.** Look for the grouping pass before looking at anything else.
+      A fourth change — inverting the recipe-input buyer lookup in stage 05 so firms are indexed
+      by the inputs they consume rather than each market filtering all ~500 regional firms —
+      bought **4 ms and is recorded as a miss**, kept only because it is the better shape. The
+      remaining 205 ms in stage 05 is the auction itself: real per-market work, not a scan.
+      **The generalisation, three for three on the wins: when a stage is slow, it is scanning a
+      collection per item.** Look for the grouping pass before looking at anything else — and
+      re-measure after, because the fourth one looked identical and was not.
+    - **SECTION CLOSE, full 260-week harness: 12 violations, all one kind.** Every one is the
+      known #18 revenue-runaway name. **Zero** bank-NIM breaches (298 in the pre-seed baseline —
+      #67's symptom is gone at long horizon), **zero** book-conservation breaches (23-138 across
+      earlier runs), zero ledgers minting claims. The run takes 3m53s where it took ~25 minutes.
     - **First measured win, 1191 -> 895 ms/week:** `settleCorporateActionOnHolders` rebuilt every
       entity's whole holdings array per corporate action, twice per company — 12% of the entire
       weekly step to scale one issuer's holders. Actions now record a per-instrument ratio and

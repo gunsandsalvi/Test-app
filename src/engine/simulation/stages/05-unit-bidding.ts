@@ -72,6 +72,13 @@ function addInputInventory(update: any, baseComp: Company, subUnitId: string, se
  */
 interface RegionMarketIndex {
   activeFirms: Company[];
+  /**
+   * Firms that genuinely consume each recipe-input sub-unit. Built by walking each firm's own
+   * product lines ONCE and recording the inputs its industry requires — the inverse of asking,
+   * for every sub-unit market, which of the region's ~500 firms happen to need it. Same answer,
+   * O(firms x lines) instead of O(sub-units x firms x lines).
+   */
+  recipeInputBuyersBySubUnit: Map<string, Company[]>;
   /** subUnitId -> the firms that produce it (built from one pass over every firm's lines). */
   suppliersBySubUnit: Map<string, Company[]>;
   /** Firms with real capex, the customer base for every capital-goods category. */
@@ -84,6 +91,7 @@ function buildRegionMarketIndex(ctx: WeeklyStepContext, regionId: RegionId): Reg
   const activeFirms: Company[] = [];
   const suppliersBySubUnit = new Map<string, Company[]>();
   const capexBuyers: Company[] = [];
+  const recipeInputBuyersBySubUnit = new Map<string, Company[]>();
   const byTicker = new Map<string, Company>();
   const byId = new Map<string, Company>();
   // HC3: the goods market has never cared who owns a supplier's equity — public and private
@@ -97,11 +105,22 @@ function buildRegionMarketIndex(ctx: WeeklyStepContext, regionId: RegionId): Reg
     (c.productLines || []).forEach((l) => {
       const arr = suppliersBySubUnit.get(l.subUnitId);
       if (arr) arr.push(c); else suppliersBySubUnit.set(l.subUnitId, [c]);
+      const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
+      if (reqs) {
+        Object.keys(reqs).forEach(inputSubUnitId => {
+          if (!(reqs as any)[inputSubUnitId]) return;
+          const buyers = recipeInputBuyersBySubUnit.get(inputSubUnitId);
+          // A firm with two lines needing the same input is one buyer, not two: its need is
+          // summed by computeRecipeInputNeedUSD when it bids.
+          if (buyers) { if (buyers[buyers.length - 1] !== c) buyers.push(c); }
+          else recipeInputBuyersBySubUnit.set(inputSubUnitId, [c]);
+        });
+      }
     });
   };
   ctx.prevActiveFirms.forEach(walk);
   ctx.prevActivePrivateFirms.forEach(walk);
-  return { activeFirms, suppliersBySubUnit, capexBuyers, byTicker, byId };
+  return { activeFirms, suppliersBySubUnit, capexBuyers, recipeInputBuyersBySubUnit, byTicker, byId };
 }
 
 function executeSubUnitBiddingMarket(
@@ -226,11 +245,15 @@ function executeSubUnitBiddingMarket(
   const hasCorporateDemand = (demandState.corporateDemandUSD ?? 0) > 0;
   // Capital-goods categories draw from the pre-indexed capex buyers; everything else scans the
   // region's firms once. A producer of the category is never also its customer.
-  const candidatePool = isCapexSupplierCategory ? index.capexBuyers : regionActiveFirms;
+  const candidatePool = isCapexSupplierCategory
+    ? index.capexBuyers
+    : isRecipeInputCategory
+      ? (index.recipeInputBuyersBySubUnit.get(subUnitId) ?? [])
+      : regionActiveFirms;
   const customers = candidatePool.filter(c => {
     if (supplierSet?.has(c)) return false;
-    if (isCapexSupplierCategory) return true;
-    return isRecipeInputCategory ? computeRecipeInputNeedUSD(c, subUnitId) > 0 : hasCorporateDemand;
+    if (isCapexSupplierCategory || isRecipeInputCategory) return true;
+    return hasCorporateDemand;
   });
   const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
 
@@ -240,7 +263,6 @@ function executeSubUnitBiddingMarket(
   const contractUnitsBySupplier = new Map<string, number>();
   const contractUnitsByCustomer = new Map<string, number>();
   remainingContracts.forEach(c => {
-    if (c.subUnitId !== subUnitId) return;
     contractUnitsBySupplier.set(c.supplierCompanyId, (contractUnitsBySupplier.get(c.supplierCompanyId) ?? 0) + c.quantityUnitsPerWeek);
     contractUnitsByCustomer.set(c.customerCompanyId, (contractUnitsByCustomer.get(c.customerCompanyId) ?? 0) + c.quantityUnitsPerWeek);
   });
