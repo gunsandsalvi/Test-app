@@ -47,7 +47,8 @@ import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../..
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext } from './context';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './financial-clearing-engine';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
 const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
@@ -62,6 +63,10 @@ const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 const MAX_MOMENTUM_TILT = 0.15;
 const MAX_DURATION_TILT = 0.15;
 const MOMENTUM_SCALE_BPS = 200;
+const MAX_WEEKLY_YIELD_MOVE_PCT = 0.20;
+const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
+const DURATION_PREMIUM_BPS_PER_YEAR = 4;
+const INSTITUTIONAL_REAL_RETURN_BPS = 150;
 // Sovereign bonds are typically the deepest, most liquid instrument in any market.
 const BOND_LIQUIDITY_DEPTH = 2;
 const DEALER_INVENTORY_PRESSURE_RATE = 0.15;
@@ -82,6 +87,24 @@ const MAX_RESERVE_SUBSTITUTION = 0.5; // a bank must always carry some HQLA and 
 const REAL_YIELD_SCALE_BPS = 1000; // real yield that fully forms a duration view
 const MAX_INFLATION_TILT = 0.15;
 const LONG_END_TENOR_YEARS = 20; // tenor at which a holder is fully exposed to the inflation view
+
+/** Extra yield a holder wants for committing duration away from its preferred maturity. */
+function durationPremiumBps(tenorYears: number, preferredTenorYears: number): number {
+  return Math.abs(tenorYears - preferredTenorYears) * DURATION_PREMIUM_BPS_PER_YEAR;
+}
+
+/**
+ * What an institution needs a government bond to yield: the inflation it expects to lose to,
+ * plus a real return, plus compensation for duration. No credit term — that is the point of a
+ * government bond.
+ */
+function computeSovereignReservationYieldBps(
+  reg: { expectedInflation: number; policyRate: number },
+  tenorYears: number,
+  preferredTenorYears: number
+): number {
+  return reg.expectedInflation * 10000 + INSTITUTIONAL_REAL_RETURN_BPS + durationPremiumBps(tenorYears, preferredTenorYears);
+}
 
 function bucketInstrumentId(regionId: RegionId, tenorKey: string): string {
   return `${regionId}-GOV-${tenorKey}`;
@@ -134,10 +157,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       return {
         id: bucketInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        currentStat: currentYieldDecimal * 10000, // work in bps, matching the engine's duration math
+        tradableFloatUSD: (outstandingByBucket.get(b.key) ?? 0) * (reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare),
+        currentStat: currentYieldDecimal * 10000, // bps
         statKind: 'YIELD_LIKE',
         durationYears: b.years,
-        statDirection: -1, // yield falls when net buying pushes the bond's price up
         // No floor or ceiling — nominal sovereign yields have gone genuinely negative in real
         // markets; the actual bound is whatever real demand versus supply clears to.
       };
@@ -176,48 +199,24 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         }
       });
       otherEntityHoldings.set(entity.id, other);
-      const currentTotalUSD = Array.from(currentByBucket.values()).reduce((s, v) => s + v, 0);
-      const rawTargetUSD = rawEntityTargets.get(entity.id) ?? 0;
-      const slowTargetUSD = currentTotalUSD + (rawTargetUSD - currentTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
 
-      // No standalone "value versus fair yield" signal here (unlike corporate bonds): an
-      // independently-invented fair-yield-level formula has no guaranteed relationship to
-      // whatever process actually bootstrapped this region's initial curve, and a persistent
-      // level mismatch between the two would show up as a systematic, saturating, never-mean-
-      // reverting tilt rather than real information — confirmed by testing (it produced a
-      // runaway yield spiral). A properly-calibrated fair-value anchor for sovereign curves is a
-      // real follow-up, not something to fake here.
-      //
-      // The recent-yield-change signal below is intentionally mean-reverting, not trend-
-      // following, unlike corporate bonds' momentum: a sovereign yield in this model carries no
-      // credit/default risk, so a recent rise is purely a valuation event (the bond got cheaper),
-      // which a real value-driven bond investor treats as MORE attractive, not a warning sign —
-      // there's no "deteriorating fundamentals" story for risk-free debt the way there is for a
-      // credit spread. Trend-following here (confirmed by testing) is a genuine runaway: a small
-      // initial move gets bought/sold further in the same direction with nothing to turn it
-      // around, unlike corporate bonds where a dominant value signal keeps momentum secondary.
-      const attractivenessByInstrumentId = new Map<string, number>();
+      // A government bond carries no credit loss, so what a holder needs from it is the real
+      // return its liabilities cost plus compensation for the duration it is committing. That is
+      // the reservation yield; below it the money is better left at the central bank, which is
+      // the same choice the banks below face and the reason the front end tracks policy.
+      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const entityTarget = rawEntityTargets.get(entity.id) ?? 0;
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
-        const currentYieldBps = reg.zeroRates[b.zeroRateField] * 10000;
-        const historicalYieldBps = historyLen >= 4 ? reg.historicalZeroCurves[historyLen - 4][b.zeroRateField] * 10000 : currentYieldBps;
-        const meanReversionSignal = clamp((currentYieldBps - historicalYieldBps) / MOMENTUM_SCALE_BPS, -MAX_MOMENTUM_TILT, MAX_MOMENTUM_TILT);
-        const durationGap = Math.abs(b.years - INSTITUTIONAL_PREFERRED_TENOR_YEARS);
-        const durationSignal = clamp(MAX_DURATION_TILT - durationGap * 0.01, -MAX_DURATION_TILT, MAX_DURATION_TILT);
-        // What a bond is actually worth to whoever holds it is its REAL yield, so rising
-        // inflation expectations make the compensation on offer worse — and worse by more the
-        // longer the money is committed, which is why a real term premium widens the curve
-        // rather than shifting it in parallel. This is how inflation reaches the long end now
-        // that no formula writes beta2.
-        attractivenessByInstrumentId.set(id, clamp(meanReversionSignal + durationSignal + realYieldSignal(reg, b, currentYieldBps), -1, 1));
+        const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
+        demandByInstrumentId.set(id, {
+          reservationStat: computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS),
+          maxHoldingUSD: entityTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
+          fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
+        });
       });
 
-      return {
-        id: entity.id,
-        targetTotalUSD: slowTargetUSD,
-        currentHoldingsByInstrumentId: currentByBucket,
-        attractivenessByInstrumentId,
-      };
+      return { id: entity.id, currentHoldingsByInstrumentId: currentByBucket, demandByInstrumentId };
     });
 
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
@@ -226,79 +225,32 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
         currentByBucket.set(bucketInstrumentId(regionId, key), v);
       });
-      const currentTotalUSD = Array.from(currentByBucket.values()).reduce((s, v) => s + v, 0);
-      // A bank's sovereign book and its reserve account at the central bank compete for the same
-      // cash: both are high-quality liquid assets, and the central bank pays an administered rate
-      // on one of them. So the SIZE of the book, not just its shape, responds to what the curve
-      // pays relative to that rate — a tilt across tenors alone can only ever decide which bond
-      // to own, never whether to own bonds at all. Without this the front end drifted hundreds of
-      // basis points below the policy rate with nothing to stop it: every participant crowded
-      // into short paper to escape duration, and no one had the one option a real bank always
-      // has, which is to hold the cash instead.
-      //
-      // Weighted toward the tenors that genuinely substitute for cash, because that is where the
-      // choice is actually being made. The bound is structural rather than a price limit: a bank
-      // must carry some liquid assets whatever the rate says, and cannot fund an unbounded bond
-      // book off its balance sheet.
-      const substitutabilityWeights = activeBuckets.map((b) => 1 / (1 + b.years / FRONT_END_SUBSTITUTION_TENOR_YEARS));
-      const weightSum = substitutabilityWeights.reduce((sum, w) => sum + w, 0) || 1;
-      const cashComparableYieldBps = activeBuckets.reduce(
-        (sum, b, i) => sum + reg.zeroRates[b.zeroRateField] * 10000 * substitutabilityWeights[i], 0
-      ) / weightSum;
-      const reserveSubstitution = clamp(
-        (cashComparableYieldBps - reg.policyRate * 10000) / RESERVE_SUBSTITUTION_SCALE_BPS,
-        -MAX_RESERVE_SUBSTITUTION,
-        MAX_RESERVE_SUBSTITUTION
-      );
-      // The structural share moves slowly, the way a real strategic allocation does; the
-      // bond-versus-reserves choice is layered on top of it rather than inside it, because that
-      // is a treasury decision taken on the day the rate changes, not a policy review. Folding it
-      // into the slow drift throttled a central-bank hike down to well under half its real
-      // pass-through into front-end yields.
-      const structuralTargetUSD = rawBankTargets.get(bank.ticker) ?? 0;
-      const slowTargetUSD = (currentTotalUSD + (structuralTargetUSD - currentTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE)
-        * (1 + reserveSubstitution);
 
-      const attractivenessByInstrumentId = new Map<string, number>();
+      // A bank's reservation yield is the administered rate it can earn on reserves instead, plus
+      // what it needs for the duration risk a bond carries and cash does not. This is the same
+      // bonds-versus-reserves choice that anchors the front end, now expressed as a price rather
+      // than as a scaling factor on a quantity target.
+      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      const bankTarget = rawBankTargets.get(bank.ticker) ?? 0;
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
-        const currentYieldBps = reg.zeroRates[b.zeroRateField] * 10000;
-        const durationGap = Math.abs(b.years - BANK_PREFERRED_TENOR_YEARS);
-        const durationSignal = clamp(MAX_DURATION_TILT - durationGap * 0.02, -MAX_DURATION_TILT, MAX_DURATION_TILT);
-        // Real front-end arbitrage, and the reason the policy rate still reaches the curve
-        // without anyone writing it there: a bank holding this bond is choosing not to leave the
-        // cash at the central bank earning the administered rate (it funds and places at the
-        // SRF/ON RRP corridor around exactly that rate). A bond yielding more than the corridor
-        // is worth owning; when the central bank hikes past it, the same bond is worth selling.
-        // The two are near-perfect substitutes at the front end and barely substitutes at all
-        // far out, so the signal fades along the curve — which is why a hike bites hardest on
-        // short yields.
-        const yieldPickupOverPolicyBps = currentYieldBps - reg.policyRate * 10000;
-        const cashSubstitutability = 1 / (1 + b.years / FRONT_END_SUBSTITUTION_TENOR_YEARS);
-        const policyCorridorSignal = clamp(
-          (yieldPickupOverPolicyBps / POLICY_SPREAD_SCALE_BPS) * cashSubstitutability,
-          -MAX_POLICY_TILT,
-          MAX_POLICY_TILT
-        );
-        attractivenessByInstrumentId.set(id, clamp(durationSignal + policyCorridorSignal + realYieldSignal(reg, b, currentYieldBps), -1, 1));
+        const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
+        demandByInstrumentId.set(id, {
+          reservationStat: reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS),
+          maxHoldingUSD: bankTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
+          fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
+        });
       });
 
-      return {
-        id: bank.ticker,
-        targetTotalUSD: slowTargetUSD,
-        currentHoldingsByInstrumentId: currentByBucket,
-        attractivenessByInstrumentId,
-      };
+      return { id: bank.ticker, currentHoldingsByInstrumentId: currentByBucket, demandByInstrumentId };
     });
 
     const priorDealerInventoryById = new Map<string, number>();
     (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(bucketInstrumentId(regionId, p.tenorKey), p.inventoryUSD));
 
     const result = clearFinancialAsset(instruments, [...entityParticipants, ...bankParticipants], priorDealerInventoryById, {
-      weeklyRebalanceRate: WEEKLY_TACTICAL_REBALANCE_RATE,
-      liquidityDepth: BOND_LIQUIDITY_DEPTH,
-      dealerInventoryPressureRate: DEALER_INVENTORY_PRESSURE_RATE,
       dealerSpreadBps: DEALER_SPREAD_BPS,
+      maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
     });
 
     // Apply: real cleared yields -> refit the Nelson-Siegel curve so every other consumer rides

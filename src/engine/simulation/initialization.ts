@@ -31,6 +31,11 @@ export function createInitialGameState(): GameState {
     INSURER: { govBondPct: 0.50, corpBondPct: 0.32, loanPct: 0.03, equityPct: 0.10, cashPct: 0.05 },
     ASSET_MANAGER: { govBondPct: 0.10, corpBondPct: 0.12, loanPct: 0.08, equityPct: 0.65, cashPct: 0.05 },
     PENSION_FUND: { govBondPct: 0.25, corpBondPct: 0.25, loanPct: 0.05, equityPct: 0.40, cashPct: 0.05 },
+    // A credit hedge fund is the opposite balance sheet to an insurer: almost no sovereigns (it
+    // is not there to match liabilities), the sector's heaviest corporate-credit and loan
+    // weights, and a large cash sleeve that is real dry powder — the reason it can still bid
+    // when everyone else is at their mandate limit.
+    HEDGE_FUND: { govBondPct: 0.05, corpBondPct: 0.40, loanPct: 0.22, equityPct: 0.18, cashPct: 0.15 },
   };
 
   Object.keys(regions).forEach(r => {

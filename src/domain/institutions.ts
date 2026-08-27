@@ -20,7 +20,7 @@ export interface InstitutionalSector {
   itemizedHoldings: ItemizedHolding[];
 }
 
-export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND';
+export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND';
 
 export interface AssetAllocationTarget {
   equityPct: number;

@@ -223,7 +223,17 @@ export interface Company {
   lastManagementCommentary: string;
 
   // Capital Structure
-  leveragedLoan: LeveragedLoanInfo;
+  /**
+   * The company's syndicated term loan, present only while it actually has floating-rate debt
+   * outstanding. Optional on purpose: this used to be attached to every company unconditionally,
+   * so 167 of 200 firms carried a live-looking loan quote with no loan behind it. The loan
+   * clearing stage correctly skips a company with no floating debt, which meant those quotes were
+   * never updated and every published discount margin was a frozen generation-time number
+   * unrelated to the issuer's current credit — CCC names quoting inside AAA ones. A company
+   * without a loan has no loan quote. 07d-leveraged-loan-clearing.ts owns this field's lifecycle:
+   * it opens a quote when floating debt appears and retires it when the debt is repaid.
+   */
+  leveragedLoan?: LeveragedLoanInfo;
   historicalFundamentals: FundamentalSnapshot[];
 
   // Credit & Status
@@ -256,7 +266,9 @@ export interface Company {
   // a higher-risk bank's own business-loan-loss experience scales up by this factor, so it can
   // genuinely underperform (or fail) while a conservative bank in the same region stays healthy.
   bankRiskFactor?: number;
-  institutionalRole: 'INSURER' | 'ASSET_MANAGER' | null;
+  // Mirrors InstitutionalEntityType in domain/institutions.ts; inlined because that module
+  // already imports from this one and a type import here would close the cycle.
+  institutionalRole: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | null;
   institutionalMarketShare?: number;
   beta: number;
 

@@ -14,6 +14,27 @@ const EQUITY_ATTRACTIVENESS_SENSITIVITY = 0.6;
 const EQUITY_BANK_SENSITIVITY = 0.10;
 const FOREIGN_GROWTH_SENSITIVITY = 3.0;
 
+/**
+ * Annual default probability of a borrower in the worst state this model produces.
+ *
+ * This has to be consistent with CREDIT_RECOVERY_RATE, because the two together decide whether a
+ * distressed bond has a price at all. At 30% a year the expected loss on the worst names came to
+ * ~1,800bp, which is MORE than the recovery-value price floor lets the bond pay (about 1,745bp on
+ * five-year paper at a 40% recovery) — so no holder's reservation level was reachable, B and CCC
+ * had no bid anywhere inside the range where the market exists, and both cohorts printed the
+ * ceiling with no dispersion between them. An asset whose expected loss exceeds what its price
+ * floor can compensate is not a market; it is an arithmetic contradiction.
+ *
+ * 15% is also simply the more honest number. Observed one-year default rates for the weakest
+ * rating cohort run around 10-13%, reaching the mid-20s only in a genuine credit crisis, and this
+ * is the steady-state worst case rather than the crisis one.
+ */
+const MAX_ANNUAL_DEFAULT_PROBABILITY = 0.15;
+/** Leverage-minus-coverage score at which default risk is half of that maximum. */
+const PD_CURVE_MIDPOINT = 2;
+/** How gradually risk builds across the score — a wider curve means a smoother credit ladder. */
+const PD_CURVE_WIDTH = 2;
+
 export function computeExpectedLossSpreadBps(comp: Company): number {
   const interestExpense = comp.debtTranches?.reduce((sum, t) => {
     const rate = t.rateType === 'FIXED'
@@ -23,11 +44,27 @@ export function computeExpectedLossSpreadBps(comp: Company): number {
   }, 0) || 1;
   const coverage = comp.ebitda / interestExpense;
   const leverage = comp.totalDebt / (comp.ebitda || 1);
+  // Map the leverage-versus-coverage score to a real ANNUAL default probability. The raw logistic
+  // was used directly as a probability, which says a stressed borrower defaults with ~98%
+  // certainty within the year — no lender would price that, and none should. It survived as long
+  // as this number was only a soft signal nudging a quantity; the moment the clearing engine
+  // started using it as a reservation PRICE it priced high yield out of existence entirely, with
+  // B and CCC names finding no bid at any spread.
+  //
+  // The shape stays (worse leverage and thinner coverage mean more default risk); what changes is
+  // that it lands in the range real default rates occupy — a fraction of a percent for the
+  // strongest balance sheets, tens of percent for genuinely distressed ones.
   const score = leverage - coverage;
-  const pd = 1 / (1 + Math.exp(-score));
-  const recoveryRate = 0.4;
-  return pd * (1 - recoveryRate) * 10000;
+  const pd = MAX_ANNUAL_DEFAULT_PROBABILITY / (1 + Math.exp(-(score - PD_CURVE_MIDPOINT) / PD_CURVE_WIDTH));
+  return pd * (1 - CREDIT_RECOVERY_RATE) * 10000;
 }
+
+/**
+ * What a defaulted senior unsecured claim is worth. It sets both the loss in the expected-loss
+ * calculation above and, through recoveryImpliedMaxSpreadBps, the price floor that bounds how
+ * wide the same bond can trade — the two are the same real assumption and must not drift apart.
+ */
+export const CREDIT_RECOVERY_RATE = 0.4;
 
 export function getRatingBucket(rating: string): 'IG' | 'HY' {
   return ['AAA', 'AA', 'A', 'BBB'].includes(rating) ? 'IG' : 'HY';
