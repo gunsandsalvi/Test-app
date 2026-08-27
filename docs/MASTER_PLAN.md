@@ -1484,6 +1484,11 @@ the complete simulation.
       world and any measurement can be replayed exactly. Verified: two 40-week runs from seed 42 are
       state-identical (curve, GDP, market cap, RNG position all equal). UI jitter deliberately not converted — animation noise is not part of the
       world. Harness scripts take `SEED=<n>` to test a claim against a genuinely different world.
+    - **`npm run verify` now defaults to 60 weeks** (`WEEKS=260` at a section's close). Every
+      real finding in this project has come from the first sixty; the 260-week run took 25
+      minutes and was being used as a per-change check, which is most of a working session spent
+      waiting. The long horizon still matters for the degradation items (#67, #18) and belongs
+      where those live: the end of a section.
     - **`npm run profile`** (scripts/profile.ts + `advanceWeeklyStepProfiled`) prints per-stage
       mean/worst/share so optimization starts from measurement, not intuition (§7.27's lesson).
     - **First measured win, 1191 -> 895 ms/week:** `settleCorporateActionOnHolders` rebuilt every
@@ -1515,6 +1520,16 @@ the complete simulation.
       cash DEFICIT, and almost nobody projects negative cash. Real CP funds the working-capital
       STOCK of issuers who run lean cash. Recorded because the failure mode generalises: sizing
       a market off the tail event instead of the standing need finds no market.
+    - **The bug WS5 exposed, and the rule it produced.** Bills are `instrumentType: 'GOV_BOND'`,
+      so 07c — which rebuilds each holder's government book from its own four bond buckets —
+      swept every bill position into its rebuilt-from-fills set and deleted it with no cash leg.
+      Measured as the UK institutional book losing 4.6B of bills in week 7 with its cash
+      unmoved. Stage 11's redemption and placement paths were also moving sovereign securities
+      with no cash leg at all (pre-existing; quarterly issuance hid it, weekly bill rolls did
+      not). **Rule, now stated in both stages: a clearing stage may only rewrite the instruments
+      it actually cleared.** Everything else passes through untouched.
+    - **Whole harness after the fix (60 weeks, seed default): 7 violations -> 4**, and the 4 are
+      the known #18 revenue-runaway names. Every book-conservation and bank-NIM breach is gone.
     - **Measured (seed 7, 60 weeks):** 3M sits 15–16bp over policy in steady state and follows a
       175bp hike THE SAME WEEK; CP spread ladder orders by rating (A 40 < BBB 45 < BB 48 < B
       51bp — the BB/B prints being fallen-angel runoff already headed to the revolver); bill

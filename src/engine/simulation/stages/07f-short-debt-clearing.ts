@@ -170,6 +170,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
         const fills = bankFillById.get(c.ticker);
         if (!fills) return c;
+        // Only the buckets this auction actually priced are rewritten; a bucket whose last
+        // tranche matures this week is left standing for stage 11 to redeem for cash.
         const byTenor = { ...(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}) };
         let cashDelta = 0;
         activeBuckets.forEach((b) => {
@@ -193,9 +195,17 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       regionEntities.forEach((entity) => {
         const fills = result.newParticipantHoldings.get(entity.id);
         if (!fills) return;
+        // Keep everything this auction did NOT price: other regions, bonds, and — the subtle one
+        // — bill buckets not in THIS week's auction. A bucket leaves the auction the week its
+        // last tranche matures (`maturityWeek > nextWeek` excludes it), and rebuilding the book
+        // from the auction alone therefore deleted the holder's position in it with no cash leg,
+        // leaving stage 11's redemption nothing to pay out on. Measured as the institutional
+        // book dropping 5-11% on exactly the weeks the seeded 13/26/52-week programs matured.
+        const auctionedIds = new Set(activeBuckets.map((b) => billInstrumentId(regionId, b.key)));
         const nonBillHoldings = entity.itemizedHoldings.filter((h) => {
           if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return true;
-          return !h.instrumentId.replace(`${regionId}-GOV-`, '').startsWith('b');
+          if (!h.instrumentId.replace(`${regionId}-GOV-`, '').startsWith('b')) return true;
+          return !auctionedIds.has(h.instrumentId);
         });
         const billHoldings: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {

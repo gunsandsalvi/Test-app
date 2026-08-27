@@ -243,12 +243,20 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       rawBankTargetUSD
     );
 
+    /** The instruments THIS auction prices — every other holding passes through untouched. */
+    const ownBucketInstrumentIds = new Set(activeBuckets.map((b) => bucketInstrumentId(regionId, b.key)));
+
     const otherEntityHoldings = new Map<string, ItemizedHolding[]>();
     const entityParticipants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentByBucket = new Map<string, number>();
       const other: ItemizedHolding[] = [];
+      // Only the four BOND buckets this auction actually prices are its own. Bills are
+      // instrumentType GOV_BOND too, and clear in 07f — sweeping them in here put them in the
+      // rebuilt-from-fills set, so this stage deleted every bill position with no cash leg.
+      // Measured as the UK institutional book losing 4.6B of bills in week 7 while its cash did
+      // not move. A stage may only rewrite the instruments it cleared.
       entity.itemizedHoldings.forEach((h) => {
-        if (h.instrumentType === 'GOV_BOND') {
+        if (h.instrumentType === 'GOV_BOND' && ownBucketInstrumentIds.has(h.instrumentId)) {
           currentByBucket.set(h.instrumentId, (currentByBucket.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
         } else {
           other.push(h);

@@ -4,6 +4,12 @@ import { DEFAULT_SIMULATION_SEED } from '../src/engine/rng';
 // Same seed, same world. Pass SEED=<n> to check a result against a genuinely different economy
 // rather than against the noise an unseeded run used to produce.
 const SEED = Number(process.env.SEED ?? DEFAULT_SIMULATION_SEED);
+
+// How long to run. 60 weeks is the working default — every real finding in this project has come
+// from the first sixty, and a change can be checked in a minute instead of half an hour. The full
+// 260-week run belongs at the close of a section, where the long-horizon degradation items
+// (#67 bank capital, #18 revenue runaway) actually live: WEEKS=260 npm run verify
+const WEEKS = Number(process.env.WEEKS ?? 60);
 import { advanceWeeklyStep } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
@@ -272,7 +278,7 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
 }
 
 function runInvariantsHarness() {
-  console.log('--- STARTING INVARIANTS HARNESS (260 WEEKS) ---');
+  console.log(`--- STARTING INVARIANTS HARNESS (${WEEKS} WEEKS, seed ${SEED}) ---`);
   let state = createInitialGameState(SEED);
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
   let knownTickers = new Set(state.companies.map(c => c.ticker));
@@ -301,8 +307,8 @@ function runInvariantsHarness() {
     violations.push(auctionViolation);
   }
 
-  for (let w = 1; w <= 260; w++) {
-    if (true) {
+  for (let w = 1; w <= WEEKS; w++) {
+    if (w % 10 === 0) {
       console.log(`[Invariants Harness] Week ${w}...`);
     }
     // Inject scripted trades at week 5 to test NAV with IRS, CDS, and leveraged positions
@@ -489,14 +495,14 @@ function runInvariantsHarness() {
     const initRev = initialRevenueByTicker.get(c.ticker);
     if (initRev && c.annualRevenue > initRev * 20) {
       violations.push({
-        week: 260,
+        week: WEEKS,
         message: `Company ${c.ticker} revenue grew >20x initial baseline (${initRev} -> ${c.annualRevenue})`
       });
     }
   });
 
   if (violations.length === 0) {
-    console.log('✅ INVARIANTS HARNESS PASSED — 260 weeks, all assertions satisfied!');
+    console.log(`✅ INVARIANTS HARNESS PASSED — ${WEEKS} weeks, all assertions satisfied!`);
     process.exit(0);
   } else {
     console.error(`❌ INVARIANTS HARNESS FAILED — ${violations.length} violation(s):`);
