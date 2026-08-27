@@ -122,10 +122,21 @@ export interface PrivateSectorSegment {
   marginPct: number;
   producedCommodityIds?: string[];
   commoditySupplyShareUSD?: Record<string, number>;
-  // This week's real capex-derived contribution to annualRevenueUSD (see 08b-capex-settlement.ts)
-  // — tracked separately so next week's settlement can replace it rather than stack another
-  // annualized figure on top, since annualRevenueUSD is a run-rate, not an accumulator.
-  capexDerivedAnnualRevenueUSD?: number;
+  // This week's real capex-derived contribution to annualRevenueUSD, keyed by capex sub-unit
+  // category (see 05-unit-bidding.ts) — tracked per category, not one shared scalar, because
+  // several capex categories can route to the SAME segment (e.g. heavy_equipment,
+  // industrial_automation, and commercial_fleet all fall to MANUFACTURING); a single shared
+  // field meant each category's weekly update wrongly subtracted a DIFFERENT category's
+  // just-written contribution as if it were its own prior week's value, corrupting
+  // annualRevenueUSD every week multiple categories touched the same segment. Each category
+  // subtracts only its own prior entry and writes only its own new one, so contributions from
+  // different categories to the same segment add up instead of clobbering each other.
+  capexDerivedAnnualRevenueUSDBySubUnit?: Record<string, number>;
+  // 1$ is 1$ Phase 3: this week's real annualized contribution from acting as a named seller in
+  // 05-unit-bidding.ts's auction (e.g. specialty_metals, which can otherwise have zero real
+  // public-company suppliers in a region), keyed by sub-unit category for the identical
+  // multiple-categories-one-segment reason as capexDerivedAnnualRevenueUSDBySubUnit above.
+  realSupplySalesDerivedAnnualRevenueUSDBySubUnit?: Record<string, number>;
 }
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';

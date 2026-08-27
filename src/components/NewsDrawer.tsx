@@ -91,7 +91,7 @@ export const NewsDrawer: React.FC<NewsDrawerProps> = ({
     }
 
     if (item.category === 'COMMODITY') {
-      const oil = state.commodities.find((c) => c.symbol === 'ENERGY_ALPHA') || state.commodities[0];
+      const oil = state.commodities.find((c) => c.symbol === 'CRUDE_OIL') || state.commodities[0];
       if (oil) {
         onOpenTrade({
           assetType: 'COMMODITY',

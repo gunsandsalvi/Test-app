@@ -59,6 +59,7 @@ export function createInitialGameState(): GameState {
           inventoryLevelUSD: demandLevelUSD * 0.10,
           inputCostPressure: 0,
           clearedInputPriceIndex: 1.0,
+          upstreamScarcityIndex: 1.0,
           lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
           unitPriceUSD: deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, reg.totalPopulation, regionFirmCount),
         };
@@ -192,7 +193,7 @@ export function createInitialGameState(): GameState {
     .sort((a, b) => b.marketCap - a.marketCap)
     .slice(0, 2)
     .map(c => c.id);
-  const watchlist = [...topUsaCompanyIds, 'ENERGY_BETA', 'METAL_ALPHA'];
+  const watchlist = [...topUsaCompanyIds, 'HEAVY_CRUDE_OIL', 'GOLD'];
 
   const dealers = DEALERS;
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);

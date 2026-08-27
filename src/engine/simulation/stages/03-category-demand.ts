@@ -41,10 +41,11 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     // Capital-goods categories (heavy_equipment, industrial_automation, commercial_construction,
     // enterprise_software, commercial_fleet) are excluded from the abstract CORPORATE pool here —
-    // their demand now comes from the real, named bilateral capex settlement in
-    // 08b-capex-settlement.ts (each buyer's actual weekly capex $, routed to real supplier
-    // companies or the private sector), not from an anonymous share of aggregate I. Leaving them
-    // in both channels would double-count the same capex dollars.
+    // their demand comes from real, named per-company capex bids in 05-unit-bidding.ts instead
+    // (each buyer's actual weekly capex $, bid directly against real supplier companies or the
+    // private sector — see PRIVATE_SEGMENT_SUPPLY_CATEGORIES/CAPEX_CATEGORY_PRIVATE_SEGMENT),
+    // not an anonymous share of aggregate I. Leaving them in both channels would double-count
+    // the same capex dollars.
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) return;
@@ -56,14 +57,19 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     const allTargets: Record<string, number> = {};
     const smoothingByCategory: Record<string, number> = {};
+    const corporateDemandByCategory: Record<string, number> = {};
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) {
-          // Left unchanged here — 08b-capex-settlement.ts (which runs after this week's real
-          // capex figures exist) overwrites demandLevelUSD/demandGrowthAnnual/crowdingIntensity
-          // for these categories directly from actual routed capex volume. This placeholder only
-          // matters on the very first tick before that stage has ever run.
+          // These categories' real demand/growth signal now comes entirely from stage05's real
+          // per-company capex bids and Phase 1's real-sales revenue reconciliation, not from
+          // this stage's statistical demandLevelUSD/demandGrowthAnnual — this placeholder just
+          // carries the level forward unchanged (no growth signal from here) so the field stays
+          // a sane, non-zero number for anything that still reads it (e.g. the commodities UI).
+          // No corporateDemandUSD here either — these categories' real bids in stage05 are
+          // sized directly from each buyer's own capex, not from a generic corporate-demand
+          // share, to avoid double-counting.
           allTargets[su.unitId] = reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId]);
           smoothingByCategory[su.unitId] = 0.08;
           return;
@@ -72,6 +78,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
         const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
         allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;
+        corporateDemandByCategory[su.unitId] = suCorpDemand;
 
         if (su.buyerMix.HOUSEHOLD > 0.5) smoothingByCategory[su.unitId] = 0.1;
         else if (su.buyerMix.GOVERNMENT > 0.5) smoothingByCategory[su.unitId] = 0.05;
@@ -106,7 +113,9 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         inventoryLevelUSD: existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
         inputCostPressure: existingEntry?.inputCostPressure ?? 0,
         clearedInputPriceIndex: existingEntry?.clearedInputPriceIndex ?? 1.0,
+        upstreamScarcityIndex: existingEntry?.upstreamScarcityIndex ?? 1.0,
         lastWeekInventoryLevelUSD: existingEntry?.lastWeekInventoryLevelUSD ?? existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
+        corporateDemandUSD: corporateDemandByCategory[cat] ?? 0,
       };
     });
 

@@ -3,9 +3,12 @@
  *
  * Step 5 of the generative bootstrap pipeline. Commodity spot prices are derived from a
  * cost-of-production primitive against a per-commodity scarcity index (a structural
- * resource-endowment proxy), and use generic, non-real-ticker names/ids. FX rates are
- * derived from relative purchasing power (productivity-per-capita) across the four
- * generated economies rather than quoted market rates.
+ * resource-endowment proxy) — real, understandable commodity-category names/ids (Crude Oil,
+ * Copper, Wheat, ...) so a company's productLines/input recipe can name what it actually
+ * produces or consumes, but the price series itself stays entirely synthetic: no real-world
+ * observed prices, benchmarks, or exchange tickers are used. FX rates are derived from relative
+ * purchasing power (productivity-per-capita) across the four generated economies rather than
+ * quoted market rates.
  */
 
 import { RegionId } from '../../types';
@@ -34,16 +37,21 @@ const CATEGORY_COST_FACTOR: Record<GeneratedCommodityCategory, number> = {
   Agriculture: 0.15,
 };
 
+// Generic-category real commodity names (Crude Oil, Copper, Wheat, etc.) rather than invented
+// tickers — these describe the actual physical resource a company's productLines/industry
+// input recipe (CATEGORY_INPUT_REQUIREMENTS) draws on, without tying to any specific real-world
+// benchmark, exchange, or observed price series (spot/futures prices here are still entirely
+// synthetic — see PRODUCTION_COST_UNIT below).
 export const GENERATED_COMMODITIES: GeneratedCommodityDef[] = [
-  { id: 'ENERGY_ALPHA', name: 'Energy Alpha Crude Stream', category: 'Energy', unit: '$/bbl', scarcityIndex: 1.9, convenienceYield: 0.032, volatility: 0.30 },
-  { id: 'ENERGY_BETA', name: 'Energy Beta Crude Stream', category: 'Energy', unit: '$/bbl', scarcityIndex: 2.0, convenienceYield: 0.035, volatility: 0.28 },
-  { id: 'ENERGY_GAMMA', name: 'Energy Gamma Gas Index', category: 'Energy', unit: '$/mmbtu', scarcityIndex: 0.075, convenienceYield: 0.060, volatility: 0.45 },
-  { id: 'METAL_ALPHA', name: 'Metal Alpha Bullion', category: 'Metals', unit: '$/oz', scarcityIndex: 19.5, convenienceYield: 0.005, volatility: 0.16 },
-  { id: 'METAL_BETA', name: 'Metal Beta Bullion', category: 'Metals', unit: '$/oz', scarcityIndex: 0.23, convenienceYield: 0.010, volatility: 0.26 },
-  { id: 'METAL_GAMMA', name: 'Metal Gamma Ore Grade', category: 'Metals', unit: '$/lb', scarcityIndex: 0.032, convenienceYield: 0.020, volatility: 0.22 },
-  { id: 'AGRI_ALPHA', name: 'Agri Alpha Grain', category: 'Agriculture', unit: '$/bu', scarcityIndex: 1.0, convenienceYield: 0.040, volatility: 0.28 },
-  { id: 'AGRI_BETA', name: 'Agri Beta Grain', category: 'Agriculture', unit: '$/bu', scarcityIndex: 0.72, convenienceYield: 0.035, volatility: 0.25 },
-  { id: 'AGRI_GAMMA', name: 'Agri Gamma Grain', category: 'Agriculture', unit: '$/bu', scarcityIndex: 1.75, convenienceYield: 0.030, volatility: 0.24 },
+  { id: 'CRUDE_OIL', name: 'Crude Oil', category: 'Energy', unit: '$/bbl', scarcityIndex: 1.9, convenienceYield: 0.032, volatility: 0.30 },
+  { id: 'HEAVY_CRUDE_OIL', name: 'Heavy Crude Oil', category: 'Energy', unit: '$/bbl', scarcityIndex: 2.0, convenienceYield: 0.035, volatility: 0.28 },
+  { id: 'NATURAL_GAS', name: 'Natural Gas', category: 'Energy', unit: '$/mmbtu', scarcityIndex: 0.075, convenienceYield: 0.060, volatility: 0.45 },
+  { id: 'GOLD', name: 'Gold', category: 'Metals', unit: '$/oz', scarcityIndex: 19.5, convenienceYield: 0.005, volatility: 0.16 },
+  { id: 'SILVER', name: 'Silver', category: 'Metals', unit: '$/oz', scarcityIndex: 0.23, convenienceYield: 0.010, volatility: 0.26 },
+  { id: 'COPPER', name: 'Copper', category: 'Metals', unit: '$/lb', scarcityIndex: 0.032, convenienceYield: 0.020, volatility: 0.22 },
+  { id: 'WHEAT', name: 'Wheat', category: 'Agriculture', unit: '$/bu', scarcityIndex: 1.0, convenienceYield: 0.040, volatility: 0.28 },
+  { id: 'CORN', name: 'Corn', category: 'Agriculture', unit: '$/bu', scarcityIndex: 0.72, convenienceYield: 0.035, volatility: 0.25 },
+  { id: 'SOYBEANS', name: 'Soybeans', category: 'Agriculture', unit: '$/bu', scarcityIndex: 1.75, convenienceYield: 0.030, volatility: 0.24 },
 ];
 
 export function getCommodityBaseSpotPrice(def: GeneratedCommodityDef): number {

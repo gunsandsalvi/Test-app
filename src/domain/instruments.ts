@@ -91,21 +91,28 @@ export interface Dealer {
 export type CommodityQuantityUnit = 'BARREL' | 'MMBTU' | 'TROY_OZ' | 'TONNE';
 
 export const COMMODITY_QUANTITY_UNIT: Record<string, CommodityQuantityUnit> = {
-  ENERGY_ALPHA: 'BARREL', ENERGY_BETA: 'BARREL', ENERGY_GAMMA: 'MMBTU',
-  METAL_ALPHA: 'TROY_OZ', METAL_BETA: 'TROY_OZ',
-  METAL_GAMMA: 'TONNE', AGRI_ALPHA: 'TONNE', AGRI_BETA: 'TONNE', AGRI_GAMMA: 'TONNE',
+  CRUDE_OIL: 'BARREL', HEAVY_CRUDE_OIL: 'BARREL', NATURAL_GAS: 'MMBTU',
+  GOLD: 'TROY_OZ', SILVER: 'TROY_OZ',
+  COPPER: 'TONNE', WHEAT: 'TONNE', CORN: 'TONNE', SOYBEANS: 'TONNE',
 };
 
+// 1$ is 1$: subUnitId here is the REAL industry input category a company's own productLines/
+// CATEGORY_INPUT_REQUIREMENTS recipe draws down (see 04-input-output.ts) — not just a demand-
+// side price-discovery proxy. Every producedCommodityId-tagged company (see companyGenerator.ts)
+// carries a matching productLines entry for its commodity's linked subUnitId, so "the company you
+// can trade" and "the company that really supplies this industrial input" are the same named
+// actor, and stage04 sources its real weekly supply directly from these commodities' own
+// weeklySupplyUnits/spotPrice instead of an independently invented figure.
 export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; intensityShare: number }> = {
-  ENERGY_ALPHA: { subUnitId: 'upstream_extraction', intensityShare: 0.35 },
-  ENERGY_BETA: { subUnitId: 'upstream_extraction', intensityShare: 0.30 },
-  ENERGY_GAMMA: { subUnitId: 'upstream_extraction', intensityShare: 0.20 },
-  METAL_ALPHA: { subUnitId: 'specialty_metals', intensityShare: 0.05 },
-  METAL_BETA: { subUnitId: 'specialty_metals', intensityShare: 0.08 },
-  METAL_GAMMA: { subUnitId: 'specialty_metals', intensityShare: 0.15 },
-  AGRI_ALPHA: { subUnitId: 'food_beverage', intensityShare: 0.04 },
-  AGRI_BETA: { subUnitId: 'food_beverage', intensityShare: 0.04 },
-  AGRI_GAMMA: { subUnitId: 'food_beverage', intensityShare: 0.03 },
+  CRUDE_OIL: { subUnitId: 'upstream_extraction', intensityShare: 0.35 },
+  HEAVY_CRUDE_OIL: { subUnitId: 'upstream_extraction', intensityShare: 0.30 },
+  NATURAL_GAS: { subUnitId: 'upstream_extraction', intensityShare: 0.20 },
+  GOLD: { subUnitId: 'specialty_metals', intensityShare: 0.05 },
+  SILVER: { subUnitId: 'specialty_metals', intensityShare: 0.08 },
+  COPPER: { subUnitId: 'specialty_metals', intensityShare: 0.15 },
+  WHEAT: { subUnitId: 'agricultural_commodities', intensityShare: 0.04 },
+  CORN: { subUnitId: 'agricultural_commodities', intensityShare: 0.04 },
+  SOYBEANS: { subUnitId: 'agricultural_commodities', intensityShare: 0.03 },
   industrial_automation: { subUnitId: 'industrial_automation', intensityShare: 0.15 },
 };
 

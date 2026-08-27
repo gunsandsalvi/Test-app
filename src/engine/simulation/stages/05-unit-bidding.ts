@@ -7,10 +7,50 @@
  * long-term B2B supply contracts from matched participants.
  */
 
-import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract } from '../../../types';
-import { INDUSTRY_SUBUNITS, CORPORATE_DEMAND_INTENSITY } from '../../../domain/industry';
-import { isActiveCompany } from '../../../domain/company';
+import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
+import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
+import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
+import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+
+// 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
+// real ticker so the post-clearing crediting step can tell it apart from a real company sale.
+const privateSegmentOfferId = (segmentType: string) => `PRIVATE:${segmentType}`;
+
+// 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal
+// recipe (CATEGORY_INPUT_REQUIREMENTS) that 08-company-fundamentals.ts uses to draw down input
+// inventory — bidding to this real, recipe-derived need (instead of a generic revenue-share
+// slice of aggregate corporate demand) is what makes what a company buys here actually match
+// what it consumes there, rather than two independently-sized, unrelated numbers.
+function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): number {
+  return (comp.productLines || []).reduce((sum, line) => {
+    const reqs = CATEGORY_INPUT_REQUIREMENTS[line.industry];
+    const intensity = reqs?.[inputSubUnitId];
+    if (!intensity) return sum;
+    return sum + (comp.annualRevenue / 52) * (line.revenueShare ?? 1.0) * intensity;
+  }, 0);
+}
+
+function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, unitPriceUSD: number) {
+  if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
+  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld, valueUSD: unitsHeld * unitPriceUSD };
+}
+
+// 1$ is 1$ Phase 2/6: credit a real purchase onto the buyer's persisted input inventory as a
+// NEW LOT — appended on top of whatever this same company already holds (and whatever it
+// already bought this same week via a different subUnitId's auction pass or a different real
+// seller), not merged into one blended average, since the whole point is to keep each real
+// purchase's real counterparty and real price distinguishable (see domain/company.ts's
+// InputLot doc comment) rather than collapsing them the moment they're credited.
+function addInputInventory(update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number) {
+  if (addedUnits <= 0.0001) return;
+  if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
+  const existingLots: InputLot[] = update.inputInventoryBySubUnit[subUnitId] ?? [...(baseComp.inputInventoryBySubUnit?.[subUnitId] ?? [])];
+  update.inputInventoryBySubUnit[subUnitId] = [
+    ...existingLots,
+    { sellerId, unitsHeld: addedUnits, unitPriceUSD: addedValueUSD / addedUnits, acquiredWeek: week },
+  ];
+}
 
 function executeSubUnitBiddingMarket(
   ctx: WeeklyStepContext,
@@ -28,9 +68,26 @@ function executeSubUnitBiddingMarket(
   }
   const currentUnitPrice = demandState.unitPriceUSD;
 
+  // Suppliers price their NEXT offer off the price this same clearing produces — a one-period
+  // feedback loop. Combined with how elastic productionResponseFactor is (up to 2x production
+  // for a ~33% price move), reacting to the raw, single-week cleared price is the textbook
+  // cobweb-cycle setup: overproduce this week because last week's price was high, crash the
+  // price, underproduce next week because it was low, repeat — with the swings growing, not
+  // damping. Suppliers instead react to a slow-moving average of price (an "expectation"),
+  // which is what breaks a cobweb cycle in practice.
+  if (!demandState.smoothedUnitPriceUSD || demandState.smoothedUnitPriceUSD <= 0) {
+    demandState.smoothedUnitPriceUSD = currentUnitPrice;
+  }
+  demandState.smoothedUnitPriceUSD = demandState.smoothedUnitPriceUSD * 0.75 + currentUnitPrice * 0.25;
+  const supplierExpectedUnitPrice = demandState.smoothedUnitPriceUSD;
+
   // 1. Process active contracts
   if (!targetReg.activeContracts) targetReg.activeContracts = [];
   const remainingContracts: SupplyContract[] = [];
+  // supUp.salesUnits/salesUSD are deliberately cross-sub-unit totals (other consumers want a
+  // company's whole-business sales) — but the inventory formula below needs THIS sub-unit's
+  // sales specifically, so track that separately rather than reading the contaminated total.
+  const contractSalesUnitsBySupplier: Record<string, number> = {};
 
   targetReg.activeContracts.forEach(contract => {
     if (contract.subUnitId !== subUnitId) {
@@ -51,7 +108,7 @@ function executeSubUnitBiddingMarket(
         contract.weeksRemaining -= 1;
         if (contract.weeksRemaining >= 0) {
           // Execute weekly contract transaction
-          const supplierUnits = supplier.finishedGoodsUnits ?? ((supplier.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
+          const supplierUnits = getOutputInventoryUnits(supplier, subUnitId);
           const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
           const paymentUSD = actualTransacted * contract.priceUSD;
           const fillRate = contract.quantityUnitsPerWeek > 0 ? actualTransacted / contract.quantityUnitsPerWeek : 1.0;
@@ -60,16 +117,17 @@ function executeSubUnitBiddingMarket(
           if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
 
           const supUp = companyUpdates[supplier.ticker];
-          supUp.finishedGoodsUnits = Math.max(0, supplierUnits - actualTransacted);
-          supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * currentUnitPrice;
+          setOutputInventory(supUp, subUnitId, Math.max(0, supplierUnits - actualTransacted), currentUnitPrice);
           supUp.cashChange = (supUp.cashChange ?? 0) + paymentUSD;
           supUp.salesUnits = (supUp.salesUnits ?? 0) + actualTransacted;
           supUp.salesUSD = (supUp.salesUSD ?? 0) + paymentUSD;
+          contractSalesUnitsBySupplier[supplier.ticker] = (contractSalesUnitsBySupplier[supplier.ticker] ?? 0) + actualTransacted;
 
           const custUp = companyUpdates[customer.ticker];
           custUp.cashChange = (custUp.cashChange ?? 0) - paymentUSD;
           custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
           custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
+          addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
           if (fillRate < 0.95) {
             // Named shock propagation: reduced fill rate constrains customer capacity directly
@@ -90,19 +148,50 @@ function executeSubUnitBiddingMarket(
   const regionActiveFirms = prevActiveFirms.filter(c => c.region === targetRegionId && isActiveCompany(c));
   const suppliers = regionActiveFirms.filter(c => (c.productLines || []).some(l => l.subUnitId === subUnitId));
 
-  const customers = regionActiveFirms.filter(c => !(c.productLines || []).some(l => l.subUnitId === subUnitId) && (CORPORATE_DEMAND_INTENSITY[subUnitId] ?? 0) > 0);
+  // A recipe-input category (upstream_extraction, specialty_metals) is bought by named
+  // companies for a literal, computable reason — their own production recipe — not a generic
+  // share of aggregate corporate demand; every company whose recipe actually needs this
+  // category becomes a real customer, sized to that same real need (computeRecipeInputNeedUSD),
+  // so what a company bids to buy here matches exactly what 08-company-fundamentals.ts later
+  // draws down from its input inventory.
+  const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => (reqs as any)?.[subUnitId] !== undefined);
+  // 1$ is 1$ Phase 4: a capital-goods category (heavy_equipment, industrial_automation,
+  // commercial_construction, enterprise_software, commercial_fleet) is bought by every company
+  // for the same literal, computable reason — its own real weekly capex — replacing
+  // 08b-capex-settlement.ts's parallel abstract demand-growth injection (retired) with real,
+  // named, per-company bids sized directly from each buyer's own maintenanceCapex+growthCapex.
+  const capexSupplierWeight = CAPEX_SUPPLIER_WEIGHTS[subUnitId];
+  const isCapexSupplierCategory = capexSupplierWeight !== undefined;
+  // Real, complete corporate demand for every OTHER category (see 03-category-demand.ts's
+  // corporateDemandUSD — the same buyerMix/aggregate-investment math that feeds the region's
+  // C+I+G identity, not a hand-picked per-category intensity list that only covered a handful
+  // of categories and let every other one starve for real corporate buyers).
+  const hasCorporateDemand = (demandState.corporateDemandUSD ?? 0) > 0;
+  const customers = regionActiveFirms.filter(c => {
+    if ((c.productLines || []).some(l => l.subUnitId === subUnitId)) return false;
+    if (isCapexSupplierCategory) return (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0;
+    return isRecipeInputCategory ? computeRecipeInputNeedUSD(c, subUnitId) > 0 : hasCorporateDemand;
+  });
+  const totalCustomerRevenueUSD = customers.reduce((s, c) => s + c.annualRevenue, 0) || 1;
   // Suppliers submit unit offers
   suppliers.forEach(comp => {
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
     const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-    const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
-    const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
-    const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
+    const currentInvUSD = getOutputInventoryUSD(comp, subUnitId);
+    // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
+    // crosses one threshold) is a bang-bang controller with no hysteresis — it doesn't damp
+    // toward equilibrium, it oscillates around the threshold forever (backlog clears -> snap
+    // back to full production -> oversupply -> throttle again), producing multi-x week-to-week
+    // swings in real cleared sales even when underlying demand is stable. A continuous response
+    // that scales down smoothly as the inventory/capacity ratio grows converges instead.
+    const inventoryToCapacityRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
+    const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
+    const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
     const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
     const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
-    const currentUnits = comp.finishedGoodsUnits ?? (currentInvUSD / currentUnitPrice);
+    const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     const contractSales = remainingContracts
       .filter(c => (c.supplierCompanyId === comp.ticker || c.supplierCompanyId === comp.id) && c.subUnitId === subUnitId)
       .reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
@@ -129,14 +218,62 @@ function executeSubUnitBiddingMarket(
     }
   });
 
+  // 1$ is 1$ Phase 3: a real, sellable private-sector offer for categories where public company
+  // supply can be sparse or entirely absent (confirmed: specialty_metals had zero real
+  // suppliers in a sampled region) — a genuine named counterparty, not a residual write-off.
+  const privateSegmentType = PRIVATE_SEGMENT_SUPPLY_CATEGORIES[subUnitId];
+  if (privateSegmentType) {
+    const segment = targetReg.privateSectorSegments?.find(s => s.segmentType === privateSegmentType);
+    if (segment) {
+      const segmentOfferUSD = (segment.annualRevenueUSD / 52) * PRIVATE_SEGMENT_SUPPLY_SHARE;
+      const segmentOfferUnits = segmentOfferUSD / currentUnitPrice;
+      if (segmentOfferUnits > 0.001) {
+        offers.push({
+          companyId: privateSegmentOfferId(privateSegmentType),
+          quantityUnits: segmentOfferUnits,
+          minPriceUSD: currentUnitPrice * 0.90,
+        });
+      }
+    }
+  }
+
+  // 1$ is 1$ Phase 4: for capital-goods categories, the private segment is a real seller of
+  // whatever share of the region's aggregate real capex demand in-region public producers don't
+  // cover — replacing 08b-capex-settlement.ts's identical economics (same
+  // CAPEX_PUBLIC_SUPPLY_SHARE split) with a real, price-competing offer in the actual auction
+  // instead of a direct, un-auctioned credit to the segment's revenue.
+  const capexPrivateSegmentType = isCapexSupplierCategory ? CAPEX_CATEGORY_PRIVATE_SEGMENT[subUnitId] : undefined;
+  if (capexPrivateSegmentType) {
+    const capexSegment = targetReg.privateSectorSegments?.find(s => s.segmentType === capexPrivateSegmentType);
+    if (capexSegment) {
+      const totalRegionCapexUSD = regionActiveFirms.reduce((s, c) => s + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)), 0);
+      const totalCategoryCapexDemandUSD = totalRegionCapexUSD * capexSupplierWeight!;
+      const privateShareUSD = (1 - CAPEX_PUBLIC_SUPPLY_SHARE) * totalCategoryCapexDemandUSD;
+      const capexSegmentOfferUnits = (privateShareUSD / 52) / currentUnitPrice;
+      if (capexSegmentOfferUnits > 0.001) {
+        offers.push({
+          companyId: privateSegmentOfferId(capexPrivateSegmentType),
+          quantityUnits: capexSegmentOfferUnits,
+          minPriceUSD: currentUnitPrice * 0.90,
+        });
+      }
+    }
+  }
+
   // Corporate Customers submit bids
   customers.forEach(comp => {
     let demandUSD = 0;
-    if (subUnitId === 'industrial_automation') {
+    if (isCapexSupplierCategory) {
       const realCapexUSD = (comp.maintenanceCapex ?? 0) + (comp.growthCapex ?? 0);
-      demandUSD = (realCapexUSD / 52) * 0.35;
+      demandUSD = (realCapexUSD / 52) * capexSupplierWeight!;
+    } else if (isRecipeInputCategory) {
+      demandUSD = computeRecipeInputNeedUSD(comp, subUnitId);
     } else {
-      demandUSD = (comp.annualRevenue * (CORPORATE_DEMAND_INTENSITY[subUnitId] ?? 0)) / 52;
+      // This company's real named bid is its revenue share of the category's real total
+      // corporate demand — every company that could plausibly buy this category gets a bid
+      // sized to its own scale, and the bids sum exactly to the real regional total.
+      const totalCorpDemandUSD = demandState.corporateDemandUSD ?? 0;
+      demandUSD = (totalCorpDemandUSD / 52) * (comp.annualRevenue / totalCustomerRevenueUSD);
     }
     const demandUnits = demandUSD / currentUnitPrice;
 
@@ -148,16 +285,76 @@ function executeSubUnitBiddingMarket(
 
     if (openBidUnits > 0.001) {
       const cashRatio = comp.cash / Math.max(1, comp.annualRevenue);
-      const cashModifier = cashRatio < 0.02 ? 0.85 : cashRatio > 0.15 ? 1.15 : 1.0;
-      const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashModifier;
+      // A cash-strapped buyer discounting its OWN bid price used to be the mechanism here —
+      // but under pro-rata clearing every in-the-money bid gets the same fill ratio regardless
+      // of how far above the clearing price it sits, so a discounted bid is either fully in the
+      // money like everyone else, or (once the clearing price rises past it) shut out entirely.
+      // Confirmed by direct A/B instrumentation (docs/ONE_DOLLAR_PROJECT.md, Phase 4 section):
+      // this produced a real, compounding death spiral with no recovery path — low cash -> lower
+      // bid price -> shut out -> can't get inputs -> less revenue -> less cash -> an even lower
+      // price next week. A capital-constrained real buyer instead orders LESS at a normal market
+      // price (real capital rationing), so whatever it does order actually clears — giving it a
+      // path back up as its cash position recovers, instead of a one-way ratchet toward zero.
+      const cashConstrainedQtyModifier = cashRatio < 0.02 ? 0.70 : 1.0;
+      const cashRichPricePremium = cashRatio > 0.15 ? 1.15 : 1.0;
+      const maxPriceUSD = currentUnitPrice * (0.95 + Math.random() * 0.1) * cashRichPricePremium;
 
       bids.push({
         companyId: comp.ticker,
-        quantityUnits: openBidUnits,
+        quantityUnits: openBidUnits * cashConstrainedQtyModifier,
         maxPriceUSD,
       });
     }
   });
+
+  // 1$ is 1$ Phase 3 (demand-side): the private sector spends real capex too — every segment
+  // bids for capital-goods categories from its own real capexUSD, the same mechanism already
+  // used for public companies, so a segment's capex dollars land on a real named supplier
+  // (a public company, or another segment's own supply offer above) instead of only ever being
+  // credited as an ambient revenue bump with no corresponding purchase anywhere in the auction.
+  if (isCapexSupplierCategory) {
+    (targetReg.privateSectorSegments || []).forEach(segment => {
+      const segCapexUSD = segment.capexUSD ?? 0;
+      if (segCapexUSD <= 0) return;
+      const demandUSD = (segCapexUSD / 52) * capexSupplierWeight!;
+      const demandUnits = demandUSD / currentUnitPrice;
+      if (demandUnits > 0.001) {
+        bids.push({
+          companyId: privateSegmentOfferId(segment.segmentType),
+          quantityUnits: demandUnits,
+          maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+        });
+      }
+    });
+  }
+
+  // 1$ is 1$ Phase 3 (demand-side): the MANUFACTURING segment is the private-sector stand-in
+  // for real industrial production — it already sells upstream_extraction/specialty_metals
+  // output and heavy_equipment/industrial_automation/commercial_fleet capacity (above) — so it
+  // also consumes the same literal recipe inputs a real IndustrialsMachinery company would,
+  // proportional to its own revenue, closing the loop on its supply-side role with a real
+  // purchase instead of leaving it a pure seller with no input demand of its own. (Other segment
+  // types — PROFESSIONAL_SERVICES, RETAIL_TRADE, CONSTRUCTION_REALESTATE, HEALTHCARE_SERVICES —
+  // aren't given a recipe-input demand here: which of these categories they'd plausibly consume
+  // isn't well-grounded in the existing data, so this is deliberately left for a future pass
+  // rather than guessed.)
+  if (isRecipeInputCategory) {
+    const manufacturingSegment = targetReg.privateSectorSegments?.find(s => s.segmentType === 'MANUFACTURING');
+    if (manufacturingSegment) {
+      const intensity = CATEGORY_INPUT_REQUIREMENTS['IndustrialsMachinery']?.[subUnitId];
+      if (intensity) {
+        const demandUSD = (manufacturingSegment.annualRevenueUSD / 52) * intensity;
+        const demandUnits = demandUSD / currentUnitPrice;
+        if (demandUnits > 0.001) {
+          bids.push({
+            companyId: privateSegmentOfferId('MANUFACTURING'),
+            quantityUnits: demandUnits,
+            maxPriceUSD: currentUnitPrice * (0.95 + Math.random() * 0.1),
+          });
+        }
+      }
+    }
+  }
 
   // Look up buyer mix for this subUnit
   const allSubUnits = Object.values(INDUSTRY_SUBUNITS).flat();
@@ -209,52 +406,106 @@ function executeSubUnitBiddingMarket(
   bids.sort((a, b) => b.maxPriceUSD - a.maxPriceUSD);
   offers.sort((a, b) => a.minPriceUSD - b.minPriceUSD);
 
+  // Discover the market-clearing price and total cleared quantity via the standard sequential
+  // double-auction walk — this correctly finds how much trades in aggregate and at what price.
+  // Crucially, this pass only DISCOVERS clearedPriceUSD/openUnitsCleared; it does not decide who
+  // gets how much (that used to double as the allocation mechanism too, via bidIdx/offerIdx
+  // walking through the sorted arrays and draining bid.quantityUnits/offer.quantityUnits in
+  // order) — a company sorted near the back of the queue could be shut out completely even when
+  // the region's aggregate supply and demand balanced exactly, confirmed by direct
+  // instrumentation (see docs/ONE_DOLLAR_PROJECT.md's Phase 2 section). Allocation below is
+  // pro-rata among everyone who clears at the market price instead, the way real double auctions
+  // and oversubscribed IPO allocations actually work.
   let clearedPriceUSD = currentUnitPrice;
   let openUnitsCleared = 0;
-  let bidIdx = 0;
-  let offerIdx = 0;
+  {
+    let bidIdx = 0;
+    let offerIdx = 0;
+    let remainingBidQty = bids.map(b => b.quantityUnits);
+    let remainingOfferQty = offers.map(o => o.quantityUnits);
+    let loopCounter = 0;
+    while (bidIdx < bids.length && offerIdx < offers.length) {
+      if (loopCounter++ > 10000) break;
+      const bid = bids[bidIdx];
+      const offer = offers[offerIdx];
+      if (bid.maxPriceUSD >= offer.minPriceUSD) {
+        const transactQty = Math.min(remainingBidQty[bidIdx], remainingOfferQty[offerIdx]);
+        if (!isFinite(transactQty) || isNaN(transactQty) || transactQty <= 0) {
+          bidIdx++;
+          offerIdx++;
+          continue;
+        }
+        clearedPriceUSD = (bid.maxPriceUSD + offer.minPriceUSD) / 2;
+        openUnitsCleared += transactQty;
+        remainingBidQty[bidIdx] -= transactQty;
+        remainingOfferQty[offerIdx] -= transactQty;
+        if (remainingBidQty[bidIdx] <= 0.0001) bidIdx++;
+        if (remainingOfferQty[offerIdx] <= 0.0001) offerIdx++;
+      } else {
+        break;
+      }
+    }
+  }
 
   const openSales: Record<string, { units: number; amount: number }> = {};
   const openPurchases: Record<string, { units: number; amount: number }> = {};
+  // Every bid/offer that would trade at all at the clearing price is "in the money"; everyone
+  // on the constrained side (whichever of demand/supply is smaller) gets the same fill ratio —
+  // no one is shut out just because of where their entry happened to land in a sorted array.
+  const inMoneyBids = bids.filter(b => b.maxPriceUSD >= clearedPriceUSD);
+  const inMoneyOffers = offers.filter(o => o.minPriceUSD <= clearedPriceUSD);
+  if (openUnitsCleared > 0.0001) {
+    const totalInMoneyBidQty = inMoneyBids.reduce((s, b) => s + b.quantityUnits, 0);
+    const totalInMoneyOfferQty = inMoneyOffers.reduce((s, o) => s + o.quantityUnits, 0);
+    const bidFillRatio = totalInMoneyBidQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyBidQty) : 0;
+    const offerFillRatio = totalInMoneyOfferQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyOfferQty) : 0;
 
-  let loopCounter = 0;
-  while (bidIdx < bids.length && offerIdx < offers.length) {
-    if (loopCounter++ > 10000) break;
-
-    const bid = bids[bidIdx];
-    const offer = offers[offerIdx];
-
-    if (bid.maxPriceUSD >= offer.minPriceUSD) {
-      let transactQty = Math.min(bid.quantityUnits, offer.quantityUnits);
-      if (!isFinite(transactQty) || isNaN(transactQty) || transactQty <= 0) {
-        bidIdx++;
-        offerIdx++;
-        continue;
-      }
-      const matchPrice = (bid.maxPriceUSD + offer.minPriceUSD) / 2;
-      clearedPriceUSD = matchPrice;
-      openUnitsCleared += transactQty;
-
+    inMoneyOffers.forEach(offer => {
+      const filledQty = offer.quantityUnits * offerFillRatio;
+      if (filledQty <= 0.0001) return;
       if (!openSales[offer.companyId]) openSales[offer.companyId] = { units: 0, amount: 0 };
-      openSales[offer.companyId].units += transactQty;
-      openSales[offer.companyId].amount += transactQty * matchPrice;
+      openSales[offer.companyId].units += filledQty;
+      openSales[offer.companyId].amount += filledQty * clearedPriceUSD;
+    });
 
+    inMoneyBids.forEach(bid => {
+      const filledQty = bid.quantityUnits * bidFillRatio;
+      if (filledQty <= 0.0001) return;
       if (bid.companyId) {
         if (!openPurchases[bid.companyId]) openPurchases[bid.companyId] = { units: 0, amount: 0 };
-        openPurchases[bid.companyId].units += transactQty;
-        openPurchases[bid.companyId].amount += transactQty * matchPrice;
+        openPurchases[bid.companyId].units += filledQty;
+        openPurchases[bid.companyId].amount += filledQty * clearedPriceUSD;
       }
       if (bid.isHouseholdAggregate && subUnitId === 'passenger_vehicles') {
-        targetReg.householdState.durableGoodsStockUnits = (targetReg.householdState.durableGoodsStockUnits ?? 0) + transactQty;
+        targetReg.householdState.durableGoodsStockUnits = (targetReg.householdState.durableGoodsStockUnits ?? 0) + filledQty;
       }
+    });
+  }
 
-      bid.quantityUnits -= transactQty;
-      offer.quantityUnits -= transactQty;
-
-      if (bid.quantityUnits <= 0.0001 || !isFinite(bid.quantityUnits)) bidIdx++;
-      if (offer.quantityUnits <= 0.0001 || !isFinite(offer.quantityUnits)) offerIdx++;
-    } else {
-      break;
+  // 1$ is 1$ Phase 6: real open-market purchase lots — WHO a company's cleared purchase this
+  // week actually came from, not just an anonymous pooled total. Pro-rata clearing doesn't pair
+  // specific buyers with specific sellers (unlike a contract, which already has a named
+  // supplier), but the aggregate quantities on both sides are fully known, so a simple
+  // northwest-corner allocation (walk both sides in order, filling from the current seller until
+  // either it or the current buyer is exhausted, then advance) produces a real, quantity-
+  // consistent buyer/seller pairing — the same real-double-auction assumption a clearinghouse
+  // actually uses to settle trades, not an invented attribution.
+  const purchaseLots: { buyerId: string; sellerId: string; units: number }[] = [];
+  if (openUnitsCleared > 0.0001) {
+    const totalInMoneyOfferQty = inMoneyOffers.reduce((s, o) => s + o.quantityUnits, 0);
+    const totalInMoneyBidQty = inMoneyBids.reduce((s, b) => s + b.quantityUnits, 0);
+    const offerFillRatio = totalInMoneyOfferQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyOfferQty) : 0;
+    const bidFillRatio = totalInMoneyBidQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyBidQty) : 0;
+    const sellerRemaining = inMoneyOffers.map(o => ({ id: o.companyId, qty: o.quantityUnits * offerFillRatio })).filter(s => s.qty > 0.0001);
+    const buyerRemaining = inMoneyBids.filter(b => b.companyId).map(b => ({ id: b.companyId!, qty: b.quantityUnits * bidFillRatio })).filter(b => b.qty > 0.0001);
+    let si = 0, bi = 0;
+    while (si < sellerRemaining.length && bi < buyerRemaining.length) {
+      const s = sellerRemaining[si], b = buyerRemaining[bi];
+      const qty = Math.min(s.qty, b.qty);
+      if (qty > 0.0001) purchaseLots.push({ buyerId: b.id, sellerId: s.id, units: qty });
+      s.qty -= qty; b.qty -= qty;
+      if (s.qty <= 0.0001) si++;
+      if (b.qty <= 0.0001) bi++;
     }
   }
 
@@ -263,29 +514,68 @@ function executeSubUnitBiddingMarket(
     const sale = openSales[comp.ticker];
     if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
     const supUp = companyUpdates[comp.ticker];
-    const initialUnits = comp.finishedGoodsUnits ?? ((comp.finishedGoodsInventoryUSD ?? 0) / currentUnitPrice);
+    const initialUnits = getOutputInventoryUnits(comp, subUnitId);
 
     const line = (comp.productLines || []).find(l => l.subUnitId === subUnitId)!;
     const warehouseCapacityUSD = comp.annualRevenue * 0.15;
-    const currentInvUSD = comp.finishedGoodsInventoryUSD ?? 0;
-    const productionThrottle = currentInvUSD > warehouseCapacityUSD ? 0.3 : 1.0;
-    const priceSignal = (currentUnitPrice / baseUnitPrice) - 1.0;
+    const currentInvUSD = getOutputInventoryUSD(comp, subUnitId);
+    // A hard on/off switch here (full production, then a sudden drop to 30% once inventory
+    // crosses one threshold) is a bang-bang controller with no hysteresis — it doesn't damp
+    // toward equilibrium, it oscillates around the threshold forever (backlog clears -> snap
+    // back to full production -> oversupply -> throttle again), producing multi-x week-to-week
+    // swings in real cleared sales even when underlying demand is stable. A continuous response
+    // that scales down smoothly as the inventory/capacity ratio grows converges instead.
+    const inventoryToCapacityRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
+    const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
+    const priceSignal = (supplierExpectedUnitPrice / baseUnitPrice) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
     const targetProductionUSD = (comp.annualRevenue / 52) * (line?.revenueShare ?? 1.0) * productionResponseFactor * productionThrottle;
     const targetProductionUnits = targetProductionUSD / currentUnitPrice;
 
+    const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
     if (sale) {
-      supUp.finishedGoodsUnits = Math.max(0, initialUnits + targetProductionUnits - (supUp.salesUnits ?? 0) - sale.units);
-      supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * clearedPriceUSD;
+      setOutputInventory(supUp, subUnitId, Math.max(0, initialUnits + targetProductionUnits - contractSalesUnitsThisSubUnit - sale.units), clearedPriceUSD);
       supUp.cashChange = (supUp.cashChange ?? 0) + sale.amount;
       supUp.salesUnits = (supUp.salesUnits ?? 0) + sale.units;
       supUp.salesUSD = (supUp.salesUSD ?? 0) + sale.amount;
     } else {
-      supUp.finishedGoodsUnits = Math.max(0, initialUnits + targetProductionUnits - (supUp.salesUnits ?? 0));
-      supUp.finishedGoodsInventoryUSD = supUp.finishedGoodsUnits * clearedPriceUSD;
+      setOutputInventory(supUp, subUnitId, Math.max(0, initialUnits + targetProductionUnits - contractSalesUnitsThisSubUnit), clearedPriceUSD);
     }
     supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + targetProductionUSD;
   });
+
+  // Credit the private segment's real cleared sale — not a Company, so it isn't in
+  // companyUpdates; annualRevenueUSD is a run-rate (not an accumulator), so replace THIS
+  // category's own prior contribution rather than stacking another annualized figure on top.
+  // Tracked per sub-unit category (not one shared scalar) since multiple categories can route
+  // to the same segment within the same week — see the field's own doc comment for why a
+  // shared scalar corrupted annualRevenueUSD.
+  if (privateSegmentType) {
+    const segment = targetReg.privateSectorSegments?.find(s => s.segmentType === privateSegmentType);
+    if (segment) {
+      const sale = openSales[privateSegmentOfferId(privateSegmentType)];
+      const newAnnualizedContribution = (sale?.amount ?? 0) * 52;
+      const priorContribution = segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit?.[subUnitId] ?? 0;
+      segment.annualRevenueUSD = Math.max(1, segment.annualRevenueUSD - priorContribution + newAnnualizedContribution);
+      if (!segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit) segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit = {};
+      segment.realSupplySalesDerivedAnnualRevenueUSDBySubUnit[subUnitId] = newAnnualizedContribution;
+    }
+  }
+
+  // Same real-crediting treatment for the capex private-segment offer, per sub-unit category
+  // for the identical reason (heavy_equipment, industrial_automation, and commercial_fleet all
+  // route to MANUFACTURING and must not clobber each other's contribution).
+  if (capexPrivateSegmentType) {
+    const capexSegment = targetReg.privateSectorSegments?.find(s => s.segmentType === capexPrivateSegmentType);
+    if (capexSegment) {
+      const sale = openSales[privateSegmentOfferId(capexPrivateSegmentType)];
+      const newAnnualizedContribution = (sale?.amount ?? 0) * 52;
+      const priorContribution = capexSegment.capexDerivedAnnualRevenueUSDBySubUnit?.[subUnitId] ?? 0;
+      capexSegment.annualRevenueUSD = Math.max(1, capexSegment.annualRevenueUSD - priorContribution + newAnnualizedContribution);
+      if (!capexSegment.capexDerivedAnnualRevenueUSDBySubUnit) capexSegment.capexDerivedAnnualRevenueUSDBySubUnit = {};
+      capexSegment.capexDerivedAnnualRevenueUSDBySubUnit[subUnitId] = newAnnualizedContribution;
+    }
+  }
 
   customers.forEach(comp => {
     const purchase = openPurchases[comp.ticker];
@@ -295,18 +585,33 @@ function executeSubUnitBiddingMarket(
       custUp.cashChange = (custUp.cashChange ?? 0) - purchase.amount;
       custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + purchase.units;
       custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + purchase.amount;
+      // Credit each real lot this buyer's cleared purchase actually came from (see
+      // purchaseLots above), not one blended total — a company can genuinely buy from more
+      // than one real seller (or a private-segment offer) in the same week's auction.
+      purchaseLots.filter(l => l.buyerId === comp.ticker).forEach(l => {
+        addInputInventory(custUp, comp, subUnitId, l.sellerId, l.units, l.units * clearedPriceUSD, nextWeek);
+      });
     }
   });
 
-  // 4. Contract Formation (B2B corporate matching only)
-  const matchedBids = bids.filter(b => b.companyId && b.quantityUnits < 0.01);
-  const matchedOffers = offers.filter(o => o.quantityUnits < 0.01);
+  // 4. Contract Formation (B2B corporate matching only) — candidates are whoever actually
+  // transacted this week (in the money at the clearing price), not "fully drained" as before
+  // (that concept no longer applies now that allocation is pro-rata, not sequential). Pro-rata
+  // allocation means most of both sides typically clear at once, so both pools can be as large
+  // as the whole supplier/customer base — pairing every bid with every offer here (as the old
+  // "usually only a couple of fully-filled entries" code did) is O(n²) and was confirmed to
+  // make a week's simulation step hang. One random candidate partner per bid keeps the same
+  // "each active bidder has some chance of striking a new long-term deal this week" behavior
+  // at O(n) instead.
+  const matchedBids = inMoneyBids.filter(b => b.companyId);
+  const matchedOffers = inMoneyOffers;
 
   matchedBids.forEach(bid => {
-    matchedOffers.forEach(offer => {
-      if (Math.random() < 0.15 && bid.companyId) {
-        const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
-        const customerComp = customers.find(c => c.ticker === bid.companyId);
+    if (matchedOffers.length === 0) return;
+    const offer = matchedOffers[Math.floor(Math.random() * matchedOffers.length)];
+    if (Math.random() < 0.15 && bid.companyId) {
+      const supplierComp = suppliers.find(s => s.ticker === offer.companyId);
+      const customerComp = customers.find(c => c.ticker === bid.companyId);
 
         if (supplierComp && customerComp) {
           const totalSuppliersRevenue = suppliers.reduce((s, c) => s + c.annualRevenue, 0);
@@ -353,8 +658,7 @@ function executeSubUnitBiddingMarket(
           };
           remainingContracts.push(newContract);
         }
-      }
-    });
+    }
   });
 
   targetReg.activeContracts = remainingContracts;
@@ -363,7 +667,10 @@ function executeSubUnitBiddingMarket(
   const activeSubUnitContracts = remainingContracts.filter(c => c.subUnitId === subUnitId);
   demandState.unitPriceUSD = Number(clearedPriceUSD.toFixed(2));
   demandState.totalUnitsSuppliedThisWeek = openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
-  demandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + openUnitsCleared + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
+  // bid.quantityUnits is each bid's original requested amount (no longer drained down during
+  // matching — allocation is pro-rata, computed separately above), so this sum already is the
+  // full open-market demand; adding openUnitsCleared again would double-count the filled share.
+  demandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
   demandState.clearedInputPriceIndex = Number((clearedPriceUSD / baseUnitPrice).toFixed(4));
 }
 

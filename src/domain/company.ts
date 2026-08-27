@@ -29,6 +29,15 @@ export interface ProductLine {
   marginByUnit?: Record<string, number>;
 }
 
+// 1$ is 1$ Phase 6: one real purchase lot — a specific quantity bought from a specific named
+// counterparty at a specific real price, in a specific week. See Company.inputInventoryBySubUnit.
+export interface InputLot {
+  sellerId: string;
+  unitsHeld: number;
+  unitPriceUSD: number;
+  acquiredWeek: number;
+}
+
 export interface SegmentFinancial {
   subUnitId: string;
   revenueUSD: number;
@@ -172,7 +181,6 @@ export interface Company {
   annualRevenue: number;
   productLines?: ProductLine[];
   primarySubUnitId?: string;
-  finishedGoodsUnits?: number;
   employeeCount: number;
   previousEmployeeCount: number;
   baselineEmployeeCount: number;
@@ -242,12 +250,63 @@ export interface Company {
   // Sentiment & Production
   sentiment: number;
   inputSupplyConstraintFactor: number;
-  finishedGoodsInventoryUSD: number;
+  // Output (finished-goods) inventory, keyed by sub-unit — a company producing multiple
+  // product lines (e.g. semiconductors + consumer_devices + enterprise_software at once) holds
+  // a genuinely separate inventory for each; a single shared scalar here was silently
+  // overwritten by whichever line's weekly bidding pass ran last. See getOutputInventoryUSD /
+  // getOutputInventoryUnits below for the aggregate reads most call sites actually want.
+  outputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }>;
+  // 1$ is 1$ Phase 2/6: real input inventory, keyed by the input sub-unit category (e.g.
+  // upstream_extraction, specialty_metals) a company has actually bought and holds. Each entry is
+  // a LIST of real purchase lots — not one blended average — because "you get out N output that
+  // sits in inventory until P buys it at L price" (the project's founding ask) means a company
+  // holding units bought from three different real sellers at three different prices should be
+  // able to say so, not report one indistinguishable average cost. Each lot remembers who it was
+  // bought from (a real company ticker, or a private-segment id like "PRIVATE:MANUFACTURING")
+  // and the real price paid — credited in 05-unit-bidding.ts when a purchase clears (both
+  // contract-settlement and open-market, the latter via an explicit buyer/seller lot allocation,
+  // not just an aggregate total), consumed oldest-lot-first in 08-company-fundamentals.ts.
+  inputInventoryBySubUnit?: Record<string, InputLot[]>;
   inventoryCarryingCostRate: number;
   recentFulfillmentEMA: number;
   _targetProductionUSD?: number;
+  // 1$ is 1$ Phase 6: this week's real settled sales/purchases (from 05-unit-bidding.ts's
+  // actual bid/offer clearing — open-market plus active-contract volume) — persisted onto the
+  // company so the UI can show real weekly production/purchasing activity, not just the target.
+  lastWeekSalesUSD?: number;
+  lastWeekPurchasesUSD?: number;
   treasuryHoldings: ItemizedHolding[];
   producedCommodityId?: string;
   demandShockLagBuffer?: number[];
 }
 export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && !c.mergerAcquired; }
+
+export function getOutputInventoryUSD(comp: Company, subUnitId?: string): number {
+  const inv = comp.outputInventoryBySubUnit;
+  if (!inv) return 0;
+  if (subUnitId) return inv[subUnitId]?.valueUSD ?? 0;
+  return Object.values(inv).reduce((s, entry) => s + entry.valueUSD, 0);
+}
+
+export function getOutputInventoryUnits(comp: Company, subUnitId?: string): number {
+  const inv = comp.outputInventoryBySubUnit;
+  if (!inv) return 0;
+  if (subUnitId) return inv[subUnitId]?.unitsHeld ?? 0;
+  return Object.values(inv).reduce((s, entry) => s + entry.unitsHeld, 0);
+}
+
+export function getInputInventoryUSD(comp: Company, subUnitId?: string): number {
+  const inv = comp.inputInventoryBySubUnit;
+  if (!inv) return 0;
+  const lotSum = (lots: InputLot[]) => lots.reduce((s, lot) => s + lot.unitsHeld * lot.unitPriceUSD, 0);
+  if (subUnitId) return lotSum(inv[subUnitId] ?? []);
+  return Object.values(inv).reduce((s, lots) => s + lotSum(lots), 0);
+}
+
+export function getInputInventoryUnits(comp: Company, subUnitId?: string): number {
+  const inv = comp.inputInventoryBySubUnit;
+  if (!inv) return 0;
+  const unitSum = (lots: InputLot[]) => lots.reduce((s, lot) => s + lot.unitsHeld, 0);
+  if (subUnitId) return unitSum(inv[subUnitId] ?? []);
+  return Object.values(inv).reduce((s, lots) => s + unitSum(lots), 0);
+}

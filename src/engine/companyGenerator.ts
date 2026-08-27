@@ -1,4 +1,4 @@
-import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile } from '../types';
+import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS, priceEquity } from './pricing';
 import { getInitialRegions } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
@@ -287,6 +287,7 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
 const SUBUNIT_TO_CATEGORY: Record<string, string> = {
   food_beverage: 'StapleHousehold',
   household_essentials: 'StapleHousehold',
+  agricultural_commodities: 'CorporateIndustrial',
   apparel_retail: 'StandardHousehold',
   home_furnishings: 'StandardHousehold',
   consumer_devices: 'StandardHousehold',
@@ -567,7 +568,8 @@ export function generateInitialCompanies(): Company[] {
         cdsSpreadBps,
         sentiment: 0.0,
         inputSupplyConstraintFactor: 1.0,
-        finishedGoodsInventoryUSD: 0,
+        outputInventoryBySubUnit: {},
+        inputInventoryBySubUnit: {},
         inventoryCarryingCostRate: 0.02,
         recentFulfillmentEMA: 1.0,
         treasuryHoldings: [],
@@ -648,8 +650,31 @@ export function generateInitialCompanies(): Company[] {
       comps.sort((a, b) => b.baselineAnnualRevenue - a.baselineAnnualRevenue);
       comps.forEach((c) => {
         let lines: any[] = [];
-        
-        if (sector === 'Tech') {
+
+        // 1$ is 1$: a producedCommodityId-tagged company (see bootstrap/firms.ts) was seeded
+        // specifically to be a real producer of one of the modeled commodities — it must carry
+        // the MATCHING industry productLines entry, not the generic per-sector template, or it
+        // never actually shows up as a real supplier in the industry input-output pipeline
+        // (04/05) even though it's a real, named seller on the commodity trading desk. Without
+        // this, a whole commodity category (e.g. specialty_metals, whose dedicated producers all
+        // fell into Industrials' generic template) can end up with ZERO real industrial
+        // suppliers, guaranteed by generation, regardless of any auction/pooling fix.
+        const commodityLinkage = c.producedCommodityId ? COMMODITY_CATEGORY_LINKAGE[c.producedCommodityId] : undefined;
+        if (commodityLinkage) {
+          const industryBySubUnit: Record<string, Industry> = {
+            upstream_extraction: 'Energy',
+            specialty_metals: 'MaterialsChemicals',
+            agricultural_commodities: 'MaterialsChemicals',
+          };
+          const industry = industryBySubUnit[commodityLinkage.subUnitId];
+          if (industry) {
+            lines = [{ industry, subUnitId: commodityLinkage.subUnitId, revenueShare: 1.0, competitiveness: 0 }];
+          }
+        }
+
+        if (lines.length > 0) {
+          // dedicated commodity-producer lines assigned above — skip the generic sector switch
+        } else if (sector === 'Tech') {
           lines = [
             { industry: 'SoftwareDigitalServices', subUnitId: 'enterprise_software', revenueShare: 0.55, competitiveness: 0 },
             { industry: 'TechHardwareSemis', subUnitId: 'semiconductors', revenueShare: 0.30, competitiveness: 0 },
@@ -727,11 +752,6 @@ export function generateInitialCompanies(): Company[] {
       });
       if (maxLine) {
         c.primarySubUnitId = maxLine.subUnitId;
-        // finishedGoodsUnits is intentionally left unset here (every company starts with
-        // finishedGoodsInventoryUSD: 0 above) rather than hardcoding a flat starting unit
-        // count for a few specific sub-units regardless of company size — stage05/08 already
-        // derive units from finishedGoodsInventoryUSD / unitPriceUSD once production starts,
-        // consistent with every other sub-unit.
       }
     });
   });
@@ -854,7 +874,8 @@ export function generateIPOCompany(regionId: RegionId, category: string, categor
     institutionalRole: null,
     sentiment: 0.0,
     inputSupplyConstraintFactor: 1.0,
-    finishedGoodsInventoryUSD: 0,
+    outputInventoryBySubUnit: {},
+    inputInventoryBySubUnit: {},
     inventoryCarryingCostRate: 0.02,
     recentFulfillmentEMA: 1.0,
     treasuryHoldings: [],
