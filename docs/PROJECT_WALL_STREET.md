@@ -42,6 +42,27 @@ system as real as the corporate one now is.
   that bug's dynamics: a single struggling bank can fail or get recapitalized without the whole
   region's capital ratio being dragged to zero as one monolithic number.
 
+## Known bug: initial instability + nonsensical bond pricing (reported by user, to investigate here)
+
+User-reported via screenshots (a company, `KBTK`/Omni Brands, Consumer/USA): revenue/EPS/stock
+price all decay over the first ~12 weeks of a run (a "cold start" instability, the same shape of
+issue this session has repeatedly found and fixed elsewhere — e.g. the pro-rata auction fix, the
+commodity-linkage fix — but not yet chased down for this specific early-weeks pattern), and a
+credit-pricing disconnect: the company is rated **A** but its bond-implied spread (OAS) reads
+**5000bps** — the hard ceiling of `Math.max(10, Math.min(5000, rawOas))` in
+`08-company-fundamentals.ts`, a spread level that in reality would imply deep distress (CCC or
+default-adjacent), not an A rating. This means either the rating isn't being recalculated in sync
+with whatever is driving the spread to its clamp ceiling, or the spread-driving mechanism itself
+has a real bug unrelated to actual credit quality. To investigate as part of this project (both
+issues sit squarely in Wall Street's territory — real credit pricing and market initialization):
+1. Trace a sample company's revenue/EPS/price from week 1 to identify the real mechanism behind
+   the early-weeks decay (likely a cold-start transient in the same family as prior fixes this
+   session, not a new class of bug).
+2. Trace the same company's OAS computation to find why it pins at the 5000bps ceiling while
+   still carrying an A rating — a real rating/spread reconciliation bug, not something to paper
+   over by loosening the clamp (the clamp itself, `[10, 5000]`, is a basic sanity bound and is
+   not the problem — a real A-rated company's spread should never approach it).
+
 ## Constituent ideas (full scope)
 
 ### 1. Diversified banking sector (new — foundation for everything else)
@@ -128,11 +149,33 @@ market — not an assumed peg. **Caveat, unchanged from the original scoping: on
 regions are meant to be distinct currency zones — confirm the premise before starting; skip
 entirely if all regions share one currency.**
 
+### 11. Hedge funds as real marginal demand for distressed/non-performing debt (new)
+A new institutional participant type — not a passive allocator like idea 8's asset managers, but
+an active, analysis-driven buyer of a specific named company's distressed paper. When a company
+is genuinely weak but has a real, identifiable path to recovery (the kind of company a distressed-
+debt/special-situations fund actually targets in reality), a named hedge fund entity places a real
+bid for that company's debt, equity, and/or CDS — the real marginal buyer for assets everyone else
+is exiting, giving non-performing debt an actual clearing price and a real path back into
+circulation instead of sitting unpriced/unbid. Needs idea 6's real hittable bid/ask markets to
+have somewhere to actually place that bid, and pairs naturally with idea 9 (hedging) since a fund
+buying distressed debt is itself taking on real credit risk it may choose to hedge.
+
+### 12. Banks hedge their own derivative counterparty exposure (new)
+When a bank is the counterparty to a real derivative position (a company's rate/FX/commodity
+hedge from idea 9, a hedge fund's CDS position from idea 11), the bank itself carries real
+resulting exposure — it shouldn't be left as an unhedged, invisible risk sitting on the bank's own
+book. The bank should lay off (hedge) that exposure itself, the way a real dealer bank actually
+manages its book — a direct extension of idea 1's real per-bank balance sheets (this is exactly
+the kind of position a bank's own capital ratio should feel the effect of) and a natural
+companion to idea 9's corporate hedging and idea 11's hedge-fund CDS activity.
+
 ## Target implementation scheme (sequencing and dependencies)
 
 Ideas 1-6 are new construction and form the actual "Wall Street" money-markets buildout the user
-asked for today; ideas 7-10 are the original three ideas from this bucket's first scoping pass,
-folded in at the point they naturally connect.
+asked for when starting this project; ideas 7-10 are the original three ideas from this bucket's
+first scoping pass, folded in at the point they naturally connect; ideas 11-12 (hedge funds as
+distressed-debt demand, banks hedging their own derivative exposure) were added once Phase 1 was
+already underway, alongside the known cold-start/bond-pricing bug reported above.
 
 1. **Phase 1 — Diversified banking sector.** Foundation for everything else: gives idea 2's CB
    facilities, idea 3's repo, and idea 4's MMFs real named bank counterparties to interact with,
@@ -160,6 +203,16 @@ folded in at the point they naturally connect.
    (Phase 1) to hedge against.
 9. **Phase 9 — International trade & FX (idea 10 / backlog #63).** Independent; confirm the
    currency-zone premise before starting.
+10. **Phase 10 — Hedge funds as distressed-debt demand (idea 11).** Needs idea 6's real hittable
+    markets to exist as somewhere to place the bid; benefits from Phase 1's real per-bank/company
+    credit data to identify genuinely-recoverable distressed names.
+11. **Phase 11 — Banks hedge their own derivative counterparty exposure (idea 12).** Needs Phase 1
+    (real per-bank balance sheets to feel the effect on) and idea 9/11's real derivative positions
+    to exist as the exposure being hedged.
+
+**Investigate alongside Phase 1** (not a separate phase — the same subsystem): the reported
+cold-start revenue/price decay and the credit-rating/OAS-spread disconnect (5000bps spread on an
+A-rated company) — see "Known bug" section above.
 
 ## Source
 - Original scoping (ideas 7/8/9/10 here, then numbered 1/2/3 in the first pass): proposed
@@ -168,3 +221,7 @@ folded in at the point they naturally connect.
 - Ideas 1-6 (diversified banking, CB reserves/repo facilities, private repo, money market funds,
   short-dated debt, real hittable bid/ask markets): user's explicit expanded scope, given when
   instructing Wall Street to start immediately after "1$ is 1$."
+- Ideas 11-12 (hedge funds as distressed-debt demand, banks hedging derivative counterparty
+  exposure) and the cold-start/bond-pricing bug report: user feedback while Phase 1 was already
+  underway, given via screenshots of a sample company showing early-run revenue/price decay and a
+  5000bps OAS spread on an A-rated name.
