@@ -206,6 +206,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       //    constraint nothing in the model can ever satisfy would be penalizing a company for a
       //    modeling gap, not a real economic condition.
       let physicalFulfillment = 1.0;
+      // 1$ is 1$ Phase 6: the real dollar cost of whatever was actually consumed from real lots
+      // this week — feeds the quarterly COGS breakdown's inputPriceCostUSD driver below, in
+      // place of the old inputPriceDrag*revenue statistical proxy, so "raw materials cost" in
+      // the financials reconciles to what this company genuinely paid its real suppliers for the
+      // inputs it actually used, not an invented intensity ratio.
+      let realInputConsumptionCostUSD = 0;
       linesNeedingInputs.forEach(l => {
         const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
         if (!reqs) return;
@@ -234,6 +240,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             if (remainingToConsume <= 0.0001) { remainingLots.push(lot); continue; }
             const consumedFromLot = Math.min(lot.unitsHeld, remainingToConsume);
             remainingToConsume -= consumedFromLot;
+            realInputConsumptionCostUSD += consumedFromLot * lot.unitPriceUSD;
             const unitsLeftInLot = lot.unitsHeld - consumedFromLot;
             if (unitsLeftInLot > 0.0001) remainingLots.push({ ...lot, unitsHeld: unitsLeftInLot });
           }
@@ -390,7 +397,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const revQ = newRevenue / 4;
       costDriversUSD = {
         wagePressureUSD: wageCompression * revQ,
-        inputPriceCostUSD: inputPriceDrag * 0.03 * revQ,
+        // 1$ is 1$ Phase 6: real dollars actually paid for real lots actually consumed this
+        // week (realInputConsumptionCostUSD, above), expressed as a share of this week's real
+        // production and scaled to the same quarterly-dollar convention as the other drivers —
+        // not inputPriceDrag's statistical intensity guess. A company with no real recipe
+        // input requirement (or no real supplier for one) correctly gets 0 here, falling to
+        // baseCostUSD's residual bucket instead of an invented nonzero cost.
+        inputPriceCostUSD: (realInputConsumptionCostUSD / Math.max(1, targetProductionUSD)) * revQ,
         capacityDecayCostUSD: capacityDecayPenalty * revQ,
         crowdingCostUSD: avgCrowdingIntensity * 0.08 * revQ,
       };
@@ -882,7 +895,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       weeklyDepreciation * 13,
       costDriversUSD,
       newShortTermDebtUSD,
-      annualInterest
+      annualInterest,
+      Object.values(newInputInventoryBySubUnit).reduce((s, lots) => s + lots.reduce((s2, lot) => s2 + lot.unitsHeld * lot.unitPriceUSD, 0), 0)
     );
     const histFundamentals = isReportingThisWeek
       ? [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot]

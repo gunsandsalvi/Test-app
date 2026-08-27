@@ -86,6 +86,11 @@ export interface QuarterlyBalanceSheet {
   treasuryHoldingsUSD: number;
   accountsReceivable: number;
   finishedGoodsInventoryUSD: number;
+  // 1$ is 1$ Phase 6: real held raw-material/input inventory value (sum of InputLot.unitsHeld *
+  // unitPriceUSD across every category, as of this filing date) — genuinely distinct from
+  // finished goods, and previously missing from the balance sheet entirely (real input stock
+  // existed on the company but nothing on the statements reflected its value as an asset).
+  rawMaterialsInventoryUSD: number;
   grossPPE: number;
   accumulatedDepreciation: number;
   netPPE: number;

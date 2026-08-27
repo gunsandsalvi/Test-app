@@ -353,6 +353,10 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     <span className="text-[var(--text-secondary)]">Finished Goods Inventory</span>
                     <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(latestFund.balanceSheet.finishedGoodsInventoryUSD, { compact: true })}</span>
                   </div>
+                  <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
+                    <span className="text-[var(--text-secondary)]">Raw Materials Inventory</span>
+                    <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(latestFund.balanceSheet.rawMaterialsInventoryUSD, { compact: true })}</span>
+                  </div>
                   {Object.entries(company.outputInventoryBySubUnit || {}).filter(([, inv]) => inv.unitsHeld > 0).map(([subUnitId, inv]) => (
                     <div key={subUnitId} className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
                       <span>· {Math.round(inv.unitsHeld).toLocaleString()} {subUnitId.replace(/_/g, ' ')} units</span>

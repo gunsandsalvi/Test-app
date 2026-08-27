@@ -109,6 +109,10 @@ export function buildQuarterlyFundamentalSnapshot(
   // expense actually reconciles to it instead of re-deriving a second, disconnected number from
   // a flat spread-over-totalDebt formula.
   annualInterestOverride?: number,
+  // 1$ is 1$ Phase 6: real held raw-material/input inventory value, as of this filing date (sum
+  // of InputLot.unitsHeld * unitPriceUSD) — genuine asset value the balance sheet previously had
+  // no line for at all, defaulting to 0 for the synthetic pre-history seed snapshots below.
+  rawMaterialsInventoryUSD: number = 0,
 ): FundamentalSnapshot {
   const revQ = annualRevenue / 4;
   const ebitdaQ = ebitda / 4;
@@ -165,7 +169,7 @@ export function buildQuarterlyFundamentalSnapshot(
   const grossPPE = grossPPEUSD ?? (annualRevenue * DEFAULT_PPE_INTENSITY / (1 - INITIAL_ACCUM_DEPRECIATION_FRACTION));
   const accumulatedDepreciation = accumulatedDepreciationUSD ?? (grossPPE * INITIAL_ACCUM_DEPRECIATION_FRACTION);
   const netPPE = grossPPE - accumulatedDepreciation;
-  const totalAssets = cash + accountsReceivable + finishedGoodsInventoryUSD + netPPE;
+  const totalAssets = cash + accountsReceivable + finishedGoodsInventoryUSD + rawMaterialsInventoryUSD + netPPE;
   const shortTermDebt = shortTermDebtUSD ?? (totalDebt * 0.15);
   const longTermDebt = totalDebt - shortTermDebt;
   const totalLiabilities = accountsPayable + totalDebt;
@@ -176,6 +180,7 @@ export function buildQuarterlyFundamentalSnapshot(
     treasuryHoldingsUSD,
     accountsReceivable,
     finishedGoodsInventoryUSD,
+    rawMaterialsInventoryUSD,
     grossPPE,
     accumulatedDepreciation,
     netPPE,
@@ -188,9 +193,9 @@ export function buildQuarterlyFundamentalSnapshot(
   };
 
   const prevWC = prevSnapshot
-    ? prevSnapshot.balanceSheet.accountsReceivable + prevSnapshot.balanceSheet.finishedGoodsInventoryUSD - prevSnapshot.balanceSheet.accountsPayable
+    ? prevSnapshot.balanceSheet.accountsReceivable + prevSnapshot.balanceSheet.finishedGoodsInventoryUSD + prevSnapshot.balanceSheet.rawMaterialsInventoryUSD - prevSnapshot.balanceSheet.accountsPayable
     : workingCapitalUSD;
-  const currentWC = accountsReceivable + finishedGoodsInventoryUSD - accountsPayable;
+  const currentWC = accountsReceivable + finishedGoodsInventoryUSD + rawMaterialsInventoryUSD - accountsPayable;
   const changeInWorkingCapital = -(currentWC - prevWC);
   const cashFromOperations = netIncQ + daQuarterly + changeInWorkingCapital;
 

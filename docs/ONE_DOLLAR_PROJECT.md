@@ -432,11 +432,33 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   real outsized revenue from sustained real scarcity pricing in a newly-linked commodity
   category, not a collapse; smaller than every prior phase's tracked residual, e.g. Phase 4's
   110-118).
-  **Not yet done:** reconciling the existing quarterly financials (COGS breakdown, balance-sheet
-  inventory line) to derive from these real lots rather than the statistical formulas they were
-  originally built from — a materially larger, riskier change to core financial-statement
-  mechanics than the additive UI/data work above, deliberately left for its own pass rather than
-  folded in here.
+  **Financials reconciliation (landed — final step, project at rest).** The quarterly COGS
+  breakdown's `inputPriceCostUSD` driver previously came from `inputPriceDrag * 0.03 * revQ` — a
+  statistical intensity guess, disconnected from what a company actually paid. Replaced with the
+  real dollar cost of lots actually consumed this week (tracked alongside the FIFO drawdown
+  above), expressed as a share of real production and scaled to the same quarterly-dollar
+  convention as the breakdown's other drivers — a company with no real recipe requirement (or no
+  real supplier) correctly gets 0 here rather than an invented nonzero cost, with `baseCostUSD`'s
+  existing residual-plug math absorbing the difference exactly as it already did for the other
+  drivers, so the total still reconciles to `cogs` by construction. The balance sheet had a
+  second, more basic gap: real held input inventory (genuine asset value, tracked since Phase 2)
+  had no line on the balance sheet at all — only `finishedGoodsInventoryUSD` existed. Added
+  `rawMaterialsInventoryUSD` to `QuarterlyBalanceSheet`, wired from the real post-consumption lot
+  value each reporting week, folded into `totalAssets` and working-capital (and therefore cash
+  flow from operations), and surfaced in `CompanyDeepDive.tsx` next to Finished Goods Inventory.
+  Verified via `tsc`, hygiene, and a 60-week revenue-ratio diagnostic (2 violations, avgRatio
+  ending healthy at 0.933 — the smallest residual of any phase this session).
+
+This closes the "1$ is 1$" project's core mandate: every corporate dollar — sales, purchases,
+capex, input inventory, and now the financial statements built from them — traces to a real
+named counterparty (another company, the private sector, government, or households), with real
+market mechanics (a real bid/offer auction, pro-rata clearing, real per-lot provenance) as the
+source of truth rather than parallel statistical formulas. Two items remain explicitly open as
+their own follow-ups, not blockers to calling this project done: task #67 (a pre-existing,
+unrelated bank-capital-ratio bug, confirmed via A/B test to predate this project) and the four
+generic-category demand gaps noted in Phase 3 (PROFESSIONAL_SERVICES/RETAIL_TRADE/
+CONSTRUCTION_REALESTATE/HEALTHCARE_SERVICES private-segment input demand, deliberately left
+unguessed). **Project status: at rest.**
 
 - **Phase 3 (demand-side) + auction cash-rationing fix + stage04 pooling fix (landed).**
   Three related fixes, verified together:
