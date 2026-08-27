@@ -82,6 +82,10 @@ export function createInitialGameState(): GameState {
     // weights, and a large cash sleeve that is real dry powder — the reason it can still bid
     // when everyone else is at their mandate limit.
     HEDGE_FUND: { govBondPct: 0.05, corpBondPct: 0.40, loanPct: 0.22, equityPct: 0.18, cashPct: 0.15 },
+    // A PE fund holds companies and dry powder, not securities: zero weights keep it out of the
+    // bond/loan/sovereign auctions entirely (no demand schedule, no budget). Its real assets are
+    // its portfolio stakes, marked in peFund below.
+    PRIVATE_EQUITY: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
   };
 
   Object.keys(regions).forEach(r => {
@@ -546,6 +550,66 @@ export function createInitialGameState(): GameState {
   };
 
   
+
+  // ---- HC4: private equity sponsors become real owners ----
+  // The sponsor-style leverage has existed since HC1 (it is where the economy's B/BB paper
+  // lives); HC4 gives it its real owner. Two funds per region hold the levered cohort; the LPs
+  // behind them are the same real institutions, holding fund interests recorded under the same
+  // doctrine as HC2's float seeding — the stakes existed, the owners were unmodeled, no cash
+  // moves at recognition. Committed-but-undrawn capital is a real claim on named LPs that HC6's
+  // deal flow will draw through the budget machinery like any other payment.
+  (Object.keys(regions) as RegionId[]).forEach(regionId => {
+    const firms = privateFirmsByRegion.get(regionId) ?? [];
+    const sponsorable = firms.filter(f => f.leverage >= 4.2 && !f.isDefaulted);
+    if (sponsorable.length === 0) return;
+    const lps = institutionalEntities.filter(e => e.region === regionId &&
+      (e.entityType === 'INSURER' || e.entityType === 'PENSION_FUND' || e.entityType === 'ASSET_MANAGER'));
+    const lpWeightSum = lps.reduce((a, e) => a + e.totalAssetsUSD, 0) || 1;
+    const stakeValue = (f: Company) => Math.max(0, 8 * f.ebitda - f.totalDebt) * 0.75;
+
+    for (let fundIdx = 0; fundIdx < 2; fundIdx++) {
+      const portfolio = sponsorable.filter((_, i) => i % 2 === fundIdx);
+      if (portfolio.length === 0) continue;
+      const fundId = `${regionId}_PEFUND_${fundIdx + 1}`;
+      const investedUSD = Math.round(portfolio.reduce((a, f) => a + stakeValue(f), 0));
+      // Real funds keep ~a third of commitments undrawn — the dry powder HC6 calls.
+      const committedUSD = Math.round(investedUSD / 0.65);
+      portfolio.forEach(f => {
+        f.ownership = { founderPct: 0.25, peSponsorId: fundId, peSponsorPct: 0.75 };
+      });
+      institutionalEntities.push({
+        id: fundId,
+        name: `${regionId} Capital Partners ${['I', 'II'][fundIdx]}`,
+        ticker: `PEF${fundIdx + 1}`,
+        region: regionId,
+        entityType: 'PRIVATE_EQUITY',
+        totalAssetsUSD: investedUSD,
+        equityCapitalUSD: investedUSD,
+        sharesOutstanding: 1,
+        stockPrice: 0,
+        itemizedHoldings: [],
+        cashUSD: 0,
+        assetAllocationTarget: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
+        isDefaulted: false,
+        historicalPrices: [],
+        peFund: {
+          portfolioCompanyIds: portfolio.map(f => f.id),
+          lpCommitments: lps.map(e => ({
+            lpEntityId: e.id,
+            committedUSD: Math.round(committedUSD * (e.totalAssetsUSD / lpWeightSum)),
+            drawnUSD: Math.round(investedUSD * (e.totalAssetsUSD / lpWeightSum)),
+          })),
+        },
+      });
+      lps.forEach(e => {
+        const interestUSD = Math.round(investedUSD * (e.totalAssetsUSD / lpWeightSum));
+        if (interestUSD > 1) {
+          e.itemizedHoldings.push({ instrumentId: fundId, instrumentType: 'PE_FUND_INTEREST', issuerRegion: regionId, quantityOrNotionalUSD: interestUSD });
+          e.totalAssetsUSD += interestUSD;
+        }
+      });
+    }
+  });
 
   // ---- HC2: the private tier's tradable float seeded onto its real holders ----
   // Runs last because it needs the institutional entities built above. The paper existed before

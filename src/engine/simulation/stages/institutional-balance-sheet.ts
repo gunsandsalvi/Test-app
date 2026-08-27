@@ -44,6 +44,8 @@ const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
   PENSION_FUND: 0,
   ASSET_MANAGER: 0,
   HEDGE_FUND: 0.5,
+  // The fund itself does not lever; the leverage lives on the portfolio companies' own ladders.
+  PRIVATE_EQUITY: 0,
 };
 
 /** An entity's real purchasing capacity right now, across all asset classes. */
@@ -115,7 +117,21 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
  * share registry.)
  */
 export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
+  const privateById = new Map(ctx.prevActivePrivateFirms.map((c) => [c.id, c]));
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
+    // HC4: a PE fund's assets are its portfolio companies, marked from their REAL earnings and
+    // real debt (an EV multiple on EBITDA less the ladder, at the fund's stake) — the same two
+    // numbers the credit market prices, so a portfolio company's deterioration hits its
+    // sponsor's NAV the week it happens.
+    if (entity.entityType === 'PRIVATE_EQUITY' && entity.peFund) {
+      const portfolioUSD = entity.peFund.portfolioCompanyIds.reduce((a, id) => {
+        const c = privateById.get(id);
+        if (!c || c.isDefaulted) return a;
+        const stakePct = c.ownership?.peSponsorPct ?? 0;
+        return a + Math.max(0, 8 * c.ebitda - c.totalDebt) * stakePct;
+      }, 0);
+      return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0) + portfolioUSD) };
+    }
     const holdingsUSD = entity.itemizedHoldings.reduce(
       (a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
     return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + holdingsUSD };

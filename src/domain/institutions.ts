@@ -20,7 +20,7 @@ export interface InstitutionalSector {
   itemizedHoldings: ItemizedHolding[];
 }
 
-export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND';
+export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY';
 
 export interface AssetAllocationTarget {
   equityPct: number;
@@ -55,6 +55,17 @@ export interface InstitutionalEntity {
    */
   cashUSD: number;
   assetAllocationTarget: AssetAllocationTarget;
+  /**
+   * PRIVATE_EQUITY only (HC4): the fund's real portfolio and the real LPs behind it. Portfolio
+   * companies are private firms whose ownership block names this fund as sponsor; the stakes'
+   * value is marked from those firms' real EBITDA and debt. Committed-but-undrawn capital is a
+   * real claim on the named LPs — HC6's deal flow draws it, debiting LP cash through the same
+   * budget machinery as any other real payment.
+   */
+  peFund?: {
+    portfolioCompanyIds: string[];
+    lpCommitments: { lpEntityId: string; committedUSD: number; drawnUSD: number }[];
+  };
   isDefaulted: boolean;
   historicalPrices: number[];
   revenueHistory?: number[];

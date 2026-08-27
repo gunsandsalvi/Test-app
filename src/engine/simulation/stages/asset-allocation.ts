@@ -89,6 +89,9 @@ export const REQUIRED_RETURN_ON_CAPITAL: Record<InstitutionalEntityType, number>
   // it the marginal buyer at the wides, the bid that arrests a widening after everyone with a
   // lower hurdle has already stopped.
   HEDGE_FUND: 0.22,
+  // A sponsor underwrites deals to a real LBO hurdle — higher than every liquid-market holder,
+  // which is why it owns companies rather than paper.
+  PRIVATE_EQUITY: 0.20,
 };
 
 /**

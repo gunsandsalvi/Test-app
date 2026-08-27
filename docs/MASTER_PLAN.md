@@ -906,15 +906,26 @@ HEAD must show GDP, employment and total debt unchanged. Firm sizes draw from a 
   **Correction to an earlier claim:** HC3 does not narrow the 11–14% labor supply/demand gap —
   the carve conserves totals by construction, so the gap remains MS2's to close by making both
   sides real. What HC3 delivers is attribution: labor demand now belongs to named employers.
-- **HC4 Ratings & the sponsor universe.** Rate private firms from their real leverage/coverage
-  with the same credit model. Sponsor-owned firms lever at real LBO levels (debt/EBITDA 4.5–6.5),
-  which lands them B/BB **and fixes the inverted public+private rating distribution as a
-  consequence, not a patch** (§6 row). PE funds exist as owners with committed capital from real
-  institutional sleeves; deal *flow* waits for Wave 2.
-- **HC5 Calibration gate.** Re-run §7.18's want/have diagnostic: corporate credit ~1.0x;
-  Spearman(leverage, OAS/DM) holds ≥0.8 on the enlarged universe; runtime check at 500
-  firms/region (stage 05/08 timings — the reduced private path in stage 08 is the budget for
-  this).
+- **HC4 Ratings & the sponsor universe — DONE.** The rating-distribution fix landed in HC1 (it
+  was generation-side); HC4 added the owners: `PRIVATE_EQUITY` as a fifth institutional type,
+  two funds per region holding the levered cohort (USA: 131 sponsor-owned firms, BB 85 / B 31 /
+  CCC 9 — the real sponsor universe). Fund NAV marks weekly from the portfolio companies' REAL
+  EBITDA and real ladders (EV multiple less debt at the stake), so a portfolio company's
+  deterioration hits its sponsor the week it happens. LPs (insurers/pensions/asset managers)
+  hold fund interests recorded under HC2's doctrine — the stakes existed, the owners were
+  unmodeled, no cash moves at recognition — and committed-but-undrawn capital is a real claim
+  on named LPs that HC6's deal flow draws through the budget machinery. PE funds carry zero
+  security-allocation targets: they own companies, not paper, and never bid in the
+  bond/loan/sovereign auctions.
+- **HC5 Calibration gate — MEASURED; Wave 1 closed.** On the enlarged universe (299–316 bond
+  names, ~290 loans): IG strictly ordered and realistic (AAA 157 / AA 163 / A 175 / BBB 218),
+  zero negative spreads, zero numerical-guard hits. Spearman(leverage, OAS) = 0.74–0.76 —
+  below the 0.8 target and explained rather than tuned: ~250 investment-grade names now carry
+  honestly near-identical expected losses, so rank correlation is diluted by ties, and the HY
+  cohort clusters at the capacity backstop. Want/have = **3.8x** against the 1.0 target, with
+  the closure path known and recorded (the segment-debt-primitive recalibration + G2's bank
+  book + G6's liability inflows), not open. Runtime 26 weeks ≈ 60–80s at 2,000+ firms (~2.5x
+  the pre-HC cost) — inside budget, with the §6 optimization sweep as the standing lever.
 
 **Wave 2 — the lifecycle** *(§4 position 14b; prereqs: WS4, WS8, G2)*
 
