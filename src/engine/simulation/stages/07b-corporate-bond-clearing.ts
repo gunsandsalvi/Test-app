@@ -86,11 +86,11 @@ const DEALER_SPREAD_BPS = 15;
 const IG_MANDATE_HY_AVOIDANCE_TILT = -0.7;
 
 function fixedDebtUSD(comp: Company): number {
-  return (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+  return (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
 }
 
 function creditDurationYears(comp: Company): number {
-  const fixedTranches = (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED');
+  const fixedTranches = (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED' && !t.isCommercialPaper);
   const totalFixed = fixedDebtUSD(comp);
   if (fixedTranches.length === 0 || totalFixed <= 0) return 3.5;
   const weightedTenor = fixedTranches.reduce((s, t) => {

@@ -206,7 +206,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
 | 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 11 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | — |
 | 12 | Private repo markets | WS6 | — |
 | 13 | Money market funds | WS7 | WS5, WS6 |
 | 14 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
@@ -334,29 +333,6 @@ fiscal counterparty), which owns that decomposition, and pay coupons to holders 
 Work §6's table in one or two commits. Nothing there is architectural.
 
 ---
-
-### WS5 — T-bills + commercial paper
-
-**Where:** new `07f-short-debt-clearing.ts`; stage 11 (bill issuance); `domain/company.ts`
-(CP as a short unsecured tranche kind).
-
-**Bills.** Extend the real gov ladder below 2Y (13/26/52w). Stage 11 splits deficit funding
-between bills and bonds by a real treasury rule — target bill share of stock (~15–25%) plus a
-cost lean toward the cheaper cleared end. Bills clear in the same engine (YIELD_LIKE,
-duration <1): banks bid off reserve arbitrage (reservation ≈ policy + a few bp — the same
-mechanism that anchors the 2Y), institutions bid their cash sleeves, MMFs dominate once WS7
-lands. The front end of the curve below 2Y then comes from cleared bills, not extrapolation.
-
-**CP.** Issuers are companies whose S5 ledger projects a genuine working-capital gap over the
-next ~13 weeks (real purchase obligations vs cash trajectory) and whose rating has market
-access; size = the gap. Buyers price it as bills + the issuer's short-horizon expected loss
-(annual PD scaled to tenor). CP outstanding is a real short tranche — it appears in
-`totalDebt`, pays real interest through the ledger, and can FAIL to roll: an issuer whose CP
-finds no bid inside its bank-line backstop draws the revolver (G2 hook) — that is the real
-mechanism of a funding squeeze, and it should exist here even in stub form.
-
-**Verify:** bill yields sit on the policy corridor's arbitrage band; CP–bill spread orders by
-rating; a rate hike moves bills within a week and CP with them.
 
 ### WS6 — Private repo
 
@@ -1505,8 +1481,8 @@ the complete simulation.
       whole "measure, change one thing, measure again" method was being applied to numbers that
       moved on their own. All engine draws now come from `engine/rng.ts` (mulberry32, one word of
       state), the seed and stream position live ON the GameState, so a saved game resumes its own
-      world and any measurement can be replayed exactly. Verified: two 260-week harness runs are
-      byte-identical. UI jitter deliberately not converted — animation noise is not part of the
+      world and any measurement can be replayed exactly. Verified: two 40-week runs from seed 42 are
+      state-identical (curve, GDP, market cap, RNG position all equal). UI jitter deliberately not converted — animation noise is not part of the
       world. Harness scripts take `SEED=<n>` to test a claim against a genuinely different world.
     - **`npm run profile`** (scripts/profile.ts + `advanceWeeklyStepProfiled`) prints per-stage
       mean/worst/share so optimization starts from measurement, not intuition (§7.27's lesson).
@@ -1516,6 +1492,36 @@ the complete simulation.
       settle in ONE pass at the end of stage 08 (ratios compose by product). Remaining cost, by
       measurement: stage 08 (42%), stage 05 (34%) — both already indexed; further cuts need
       algorithmic changes, logged not chased.
+32. **WS5 landed: bills and commercial paper — the front end is a market now.**
+    - **Bills.** ~18% of each sovereign ladder is 13/26/52-week paper (seeded at init in the
+      engine's own shape, §7.4), clearing weekly in `07f-short-debt-clearing.ts`: banks anchor at
+      policy + 5bp by the same reserve arbitrage that anchors the 2Y — expressed as a
+      reservation price, not asserted — and institutions bid half their cash sleeves above it for
+      a small term premium. The NS curve refits through ALL seven cleared points, so `tenor3M`
+      is a market print, not an extrapolation. Stage 11 runs bills as their own program: a
+      perpetual weekly roll plus a bill share of new money steered toward a 15–25% target with a
+      real cost lean off the cleared curve. `sovBucketKey` in shared-helpers is now the ONE
+      tranche-to-bucket mapping; the three independent nearest-of-[2,5,10,30] reducers it
+      replaced would each have silently folded a 13-week bill into the two-year bucket.
+    - **CP.** An investment-grade company whose projected quarter-end cash does not cover the
+      working-capital stock its own statements book (8% of revenue) runs a standing program:
+      13-week paper, rolled weekly by 07f, priced as cleared bills + the issuer's structural PD
+      scaled to a quarter + 15bp. It sits in `debtTranches` flagged `isCommercialPaper` — real
+      `totalDebt`, real interest through the ledger — and every bond-market consumer (07b float,
+      stage 08 refinance/prepay/call, holder settlement) explicitly skips it. **A failed roll
+      draws the revolver** at policy+350bp with a [FUNDING SQUEEZE] news event — the real
+      mechanism, present before G2 makes the line an asset on a bank's book.
+    - **First formulation was wrong and found no issuer in 60 weeks:** it looked for a projected
+      cash DEFICIT, and almost nobody projects negative cash. Real CP funds the working-capital
+      STOCK of issuers who run lean cash. Recorded because the failure mode generalises: sizing
+      a market off the tail event instead of the standing need finds no market.
+    - **Measured (seed 7, 60 weeks):** 3M sits 15–16bp over policy in steady state and follows a
+      175bp hike THE SAME WEEK; CP spread ladder orders by rating (A 40 < BBB 45 < BB 48 < B
+      51bp — the BB/B prints being fallen-angel runoff already headed to the revolver); bill
+      share holds ~18% and steers to target. **Honest finding:** CP outstanding decays to zero
+      by week 30 as corporate cash builds — cash-rich issuers genuinely run no program, but if
+      G2's lending dynamics later drain corporate cash, the market should re-emerge on its own;
+      watch it then.
 31. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.

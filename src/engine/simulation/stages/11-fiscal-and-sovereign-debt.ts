@@ -13,7 +13,7 @@ import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
 import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
-import { attributeItemizedHoldings } from './shared-helpers';
+import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView } from './holdings-view';
 
@@ -158,19 +158,17 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // so their redemption currently reduces holdings only — the matching cash leg lands with the
     // rest of clearing settlement (see the work order's cash-settlement item).
     if (maturedPrincipalUSD > 0) {
-      const bucketYears = [2, 5, 10, 30];
-      const nearestBucket = (tenorAtIssuanceYears: number) =>
-        bucketYears.reduce((best, y) =>
-          Math.abs(y - tenorAtIssuanceYears) < Math.abs(best - tenorAtIssuanceYears) ? y : best);
-
+      // sovBucketKey covers bills and bonds alike (WS5): a maturing 13-week bill redeems out of
+      // its holders' b13 positions, never out of the two-year bucket a nearest-of-[2,5,10,30]
+      // mapping would have silently folded it into.
       const maturedByBucket = new Map<string, number>();
       maturedTranches.forEach(t => {
-        const key = `t${nearestBucket(t.tenorAtIssuanceYears)}`;
+        const key = sovBucketKey(t.tenorAtIssuanceYears);
         maturedByBucket.set(key, (maturedByBucket.get(key) ?? 0) + t.principalUSD);
       });
       const preMaturityByBucket = new Map<string, number>();
       (reg.govDebtTranches || []).forEach(t => {
-        const key = `t${nearestBucket(t.tenorAtIssuanceYears)}`;
+        const key = sovBucketKey(t.tenorAtIssuanceYears);
         preMaturityByBucket.set(key, (preMaturityByBucket.get(key) ?? 0) + t.principalUSD);
       });
       const redeemedFractionByBucket = new Map<string, number>();
@@ -204,22 +202,73 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
         if (entity.region !== regionId) return entity;
         let touched = false;
+        let redeemedCashUSD = 0;
         const newHoldings = entity.itemizedHoldings.map(h => {
           if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
           const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
           const fraction = redeemedFractionByBucket.get(key) ?? 0;
           if (fraction <= 0) return h;
           touched = true;
+          redeemedCashUSD += h.quantityOrNotionalUSD * fraction;
           return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 - fraction) };
         }).filter(h => h.quantityOrNotionalUSD > 1);
-        return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
+        // The matching cash leg. The "no itemized cash line to credit yet" era this comment
+        // used to describe ended when S11 gave every entity a real cashUSD — and bills (WS5)
+        // made the gap weekly instead of quarterly, which is how the missing leg finally
+        // showed up as a conservation violation.
+        return touched
+          ? { ...entity, cashUSD: (entity.cashUSD ?? 0) + redeemedCashUSD, itemizedHoldings: newHoldings }
+          : entity;
       });
     }
 
-    const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedPrincipalUSD;
+    // WS5: bills and bonds are two funding programs. Maturing BILLS refinance as bills the same
+    // week (a bill program is a perpetual roll); maturing BONDS join the quarterly bond calendar
+    // as before. New deficit splits by a real treasury rule below.
+    const maturedBillPrincipalUSD = maturedTranches
+      .filter(t => sovBucketKey(t.tenorAtIssuanceYears).startsWith('b'))
+      .reduce((s2, t) => s2 + t.principalUSD, 0);
+    const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
+
+    const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedBondPrincipalUSD;
     const monetizationShare = (reg.balanceSheetStance * 0.5);
     const monetizedAmountUSD = weeklyDeficitUSD * monetizationShare;
-    const marketFundedDeficitUSD = weeklyDeficitUSD - monetizedAmountUSD;
+
+    // The treasury's bill rule: hold the bill share of the stock near target, leaning toward
+    // bills when the front end is genuinely cheaper than the belly (positive carve of the real
+    // cleared curve), away when it inverts. This is issuance policy, not a market outcome — the
+    // market's answer comes back through 07f's cleared bill yields next week.
+    const totalStockUSD = liveTranches.reduce((s2, t) => s2 + t.principalUSD, 0) || 1;
+    const billStockUSD = liveTranches
+      .filter(t => sovBucketKey(t.tenorAtIssuanceYears).startsWith('b'))
+      .reduce((s2, t) => s2 + t.principalUSD, 0);
+    const billShareOfStock = billStockUSD / totalStockUSD;
+    const costLean = Math.max(-0.05, Math.min(0.05, (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * 2));
+    const billShareTarget = Math.max(0.15, Math.min(0.25, 0.18 + costLean));
+    // Steer the share toward target with the new-money flow: fund more of the deficit with bills
+    // when under target, less when over.
+    const billShareOfNewMoney = Math.max(0, Math.min(0.5, billShareTarget + (billShareTarget - billShareOfStock) * 2));
+    const billFundedDeficitUSD = (weeklyDeficitUSD - monetizedAmountUSD) * billShareOfNewMoney;
+    const marketFundedDeficitUSD = weeklyDeficitUSD - monetizedAmountUSD - billFundedDeficitUSD;
+
+    // Weekly bill issuance: the roll plus the bill share of new money, split across the three
+    // programs, priced off the real cleared bill curve (07f ran before this stage).
+    const newTranches: GovDebtTranche[] = [];
+    const weeklyBillIssuanceUSD = maturedBillPrincipalUSD + billFundedDeficitUSD;
+    if (weeklyBillIssuanceUSD > 1000) {
+      ([[13, 0.25, 0.4], [26, 0.5, 0.35], [52, 1, 0.25]] as const).forEach(([weeks, tenorYears, weight]) => {
+        const principal = weeklyBillIssuanceUSD * weight;
+        if (principal < 100) return;
+        newTranches.push({
+          id: `${regionId}-GOV-B${weeks}-${nextWeek}`,
+          principalUSD: principal,
+          couponRate: Number((tenorYears <= 0.3 ? reg.zeroRates.tenor3M : calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams)).toFixed(4)),
+          originationWeek: nextWeek,
+          maturityWeek: nextWeek + weeks,
+          tenorAtIssuanceYears: tenorYears,
+        });
+      });
+    }
 
     // Sovereign debt issued in large, infrequent blocks
     const currentUnfundedDeficitUSD = (reg.pendingUnfundedDeficitUSD ?? 0) + marketFundedDeficitUSD;
@@ -227,7 +276,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     let quarterlyFundingNeedUSD = 0;
     let nextPendingUnfundedDeficitUSD = currentUnfundedDeficitUSD;
-    const newTranches: GovDebtTranche[] = [];
 
     // Curve-smart tenor allocation: read the actual yield curve shape already computed for this region.
     const curveSteepness = reg.zeroRates.tenor30Y - reg.zeroRates.tenor2Y;
@@ -293,10 +341,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // Those are the real primary market (see the work order's issuance item); this just stops the
     // secondary market from being handed a phantom seller every quarter.
     if (newTranches.length > 0) {
-      const bucketKeyOf = (tenorYears: number) => `t${tenorYears}`;
       const issuedByBucket = new Map<string, number>();
       newTranches.forEach(t => {
-        const key = bucketKeyOf(t.tenorAtIssuanceYears);
+        const key = sovBucketKey(t.tenorAtIssuanceYears);
         issuedByBucket.set(key, (issuedByBucket.get(key) ?? 0) + t.principalUSD);
       });
 
@@ -352,15 +399,21 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
         if (entity.region !== regionId) return entity;
         let touched = false;
+        let purchasedUSD = 0;
         const newHoldings = entity.itemizedHoldings.map(h => {
           if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
           const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
           const takeUp = takeUpFractionByBucket.get(key) ?? 0;
           if (takeUp <= 0) return h;
           touched = true;
+          purchasedUSD += h.quantityOrNotionalUSD * takeUp;
           return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 + takeUp) };
         });
-        return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
+        // Paid for out of real cash — placement is a purchase, and with weekly bill rolls (WS5)
+        // an unpaid one compounds fast enough to fail conservation inside a quarter.
+        return touched
+          ? { ...entity, cashUSD: (entity.cashUSD ?? 0) - purchasedUSD, itemizedHoldings: newHoldings }
+          : entity;
       });
     }
 

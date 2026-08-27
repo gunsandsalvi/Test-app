@@ -44,7 +44,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
-import { distributeRealTargetByWeight } from './shared-helpers';
+import { distributeRealTargetByWeight, SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
@@ -194,6 +194,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const outstandingByBucket = new Map<string, number>();
     TENOR_BUCKETS.forEach((b) => outstandingByBucket.set(b.key, 0));
     liveTranches.forEach((t) => {
+      // Bills (below 2Y) clear in 07f-short-debt-clearing.ts; folding them in here would count
+      // the same paper in two markets and hand the two-year bucket a phantom float.
+      if (t.tenorAtIssuanceYears < SOV_BILL_MAX_TENOR_YEARS) return;
       const bucket = TENOR_BUCKETS.reduce((best, b) =>
         Math.abs(b.years - t.tenorAtIssuanceYears) < Math.abs(best.years - t.tenorAtIssuanceYears) ? b : best
       );

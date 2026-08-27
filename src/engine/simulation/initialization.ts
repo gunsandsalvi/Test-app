@@ -9,6 +9,7 @@ import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTarge
 import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { refreshRegionalHoldingsView } from './stages/holdings-view';
+import { sovBucketKey } from './stages/shared-helpers';
 import { setSimulationSeed, getRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
@@ -243,22 +244,23 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // (07c-sovereign-bond-clearing.ts) uses (`${region}-GOV-t2/t5/t10/t30`), not per-tranche —
     // individual gov debt tranches roll off and reissue quarterly, so a per-tranche key here
     // would suffer the exact same silent reset-to-zero problem the corporate-bond seed had.
-    const SOV_TENOR_BUCKETS = [2, 5, 10, 30];
-    const sovBucketOutstandingUSD = new Map<number, number>();
-    SOV_TENOR_BUCKETS.forEach(y => sovBucketOutstandingUSD.set(y, 0));
+    // Keyed by sovBucketKey — bills (b13/b26/b52, WS5) and bonds (t2..t30) alike, so the seed
+    // covers the same seven buckets the weekly engines clear (07f clears the bills, 07c the
+    // bonds) and no bucket opens with a phantom gap.
+    const sovBucketOutstandingUSD = new Map<string, number>();
     govDebtTranches.forEach(gt => {
-      const bucket = SOV_TENOR_BUCKETS.reduce((best, y) => Math.abs(y - gt.tenorAtIssuanceYears) < Math.abs(best - gt.tenorAtIssuanceYears) ? y : best);
-      sovBucketOutstandingUSD.set(bucket, (sovBucketOutstandingUSD.get(bucket) ?? 0) + gt.principalUSD);
+      const key = sovBucketKey(gt.tenorAtIssuanceYears);
+      sovBucketOutstandingUSD.set(key, (sovBucketOutstandingUSD.get(key) ?? 0) + gt.principalUSD);
     });
     const totalSovBucketedUSD = Array.from(sovBucketOutstandingUSD.values()).reduce((s, v) => s + v, 0) || 1;
     const attributeSovBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
-      SOV_TENOR_BUCKETS
-        .filter(y => shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD) > 1)
-        .map(y => ({
-          instrumentId: `${regionId}-GOV-t${y}`,
+      Array.from(sovBucketOutstandingUSD.entries())
+        .filter(([, bucketUSD]) => shareUSD * (bucketUSD / totalSovBucketedUSD) > 1)
+        .map(([key, bucketUSD]) => ({
+          instrumentId: `${regionId}-GOV-${key}`,
           instrumentType: 'GOV_BOND' as const,
           issuerRegion: regionId,
-          quantityOrNotionalUSD: shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD),
+          quantityOrNotionalUSD: shareUSD * (bucketUSD / totalSovBucketedUSD),
         }));
 
     // Seed each named bank's real sovereign book across the same tenor buckets the weekly
@@ -282,9 +284,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       regionBanksForSov.forEach(bank => {
         const targetUSD = perBankTargets.get(bank.ticker) ?? 0;
         const byTenor: Record<string, number> = {};
-        SOV_TENOR_BUCKETS.forEach(y => {
-          const bucketUSD = targetUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD);
-          if (bucketUSD > 1) byTenor[`t${y}`] = bucketUSD;
+        sovBucketOutstandingUSD.forEach((bucketUSD_, key) => {
+          const bucketUSD = targetUSD * (bucketUSD_ / totalSovBucketedUSD);
+          if (bucketUSD > 1) byTenor[key] = bucketUSD;
         });
         bank.bankBalanceSheet!.sovereignBondHoldingsByTenor = byTenor;
         bank.bankBalanceSheet!.sovereignBondHoldingsUSD = Number(

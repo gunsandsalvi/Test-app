@@ -316,3 +316,29 @@ export function applyPendingCorporateActionSettlements(
   });
   pending.clear();
 }
+
+/**
+ * The sovereign ladder's bucket vocabulary — bills below 2Y (WS5), bonds at the four standard
+ * points. ONE function owns the mapping from a tranche's tenor to its bucket key: three separate
+ * nearest-of-[2,5,10,30] reducers existed before bills did, and any one of them left unconverted
+ * would have silently folded a 13-week bill into the two-year bucket.
+ */
+export const SOV_BILL_BUCKETS = [
+  { key: 'b13', years: 0.25, weeks: 13 },
+  { key: 'b26', years: 0.5, weeks: 26 },
+  { key: 'b52', years: 1.0, weeks: 52 },
+] as const;
+export const SOV_BOND_BUCKET_YEARS = [2, 5, 10, 30] as const;
+/** A tranche below this tenor is a bill; at or above, a bond. */
+export const SOV_BILL_MAX_TENOR_YEARS = 1.5;
+
+export function sovBucketKey(tenorAtIssuanceYears: number): string {
+  if (tenorAtIssuanceYears < SOV_BILL_MAX_TENOR_YEARS) {
+    const bucket = SOV_BILL_BUCKETS.reduce((best, b) =>
+      Math.abs(b.years - tenorAtIssuanceYears) < Math.abs(best.years - tenorAtIssuanceYears) ? b : best);
+    return bucket.key;
+  }
+  const years = SOV_BOND_BUCKET_YEARS.reduce((best, y) =>
+    Math.abs(y - tenorAtIssuanceYears) < Math.abs(best - tenorAtIssuanceYears) ? y : best);
+  return `t${years}`;
+}

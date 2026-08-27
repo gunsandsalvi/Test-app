@@ -13,6 +13,7 @@ import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clear
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
+import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
 import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
@@ -87,6 +88,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('07b-corporate-bond-clearing', () => runCorporateBondClearingStage(state, ctx));
   run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
+  run('07f-short-debt-clearing', () => runShortDebtClearingStage(state, ctx));
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
   run('institutional-marking', () => markInstitutionalBooks(ctx));
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));

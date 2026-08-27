@@ -70,6 +70,17 @@ export interface DebtTranche {
   originationWeek: number;
   maturityWeek: number;
   seniority: 'SENIOR' | 'SUBORDINATED';
+  /**
+   * WS5: commercial paper — a genuinely different market from the bond it superficially
+   * resembles. A 13-week unsecured note issued against a projected working-capital gap, priced
+   * off the cleared bill curve plus the issuer's short-horizon expected loss, and ROLLED (or
+   * failed) weekly by 07f-short-debt-clearing.ts, which owns its whole lifecycle. Every other
+   * consumer of the ladder (07b's bond float, stage 08's maturity refinancing and surplus-cash
+   * prepayment) must skip tranches carrying this flag — to them CP is someone else's market.
+   * It still counts in totalDebt and still pays real interest through the ledger, because it is
+   * real debt.
+   */
+  isCommercialPaper?: boolean;
   _refinanceInitiated?: boolean;
 }
 

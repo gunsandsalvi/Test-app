@@ -708,13 +708,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // by comparing against this. Snapshotting after the call block (the first attempt) missed the
     // single largest source of change: the call can retire an entire tranche in one week, and
     // sampled issuers lost ~88% of their fixed float to it inside five weeks.
-    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+    // CP excluded on both sides: bondholders own none of it, so a CP issue or roll must not
+    // scale their books (settleCorporateActionOnHolders keys off these two floats).
+    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
     const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
     companyTranches.forEach(tranche => {
-      if (tranche.rateType !== 'FIXED') return;
+      if (tranche.rateType !== 'FIXED' || tranche.isCommercialPaper) return;
       const currentFairRate = calculateNelsonSiegelZeroRate(Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52), reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
       const rateSavingsIfRefinanced = tranche.couponRate - currentFairRate;
       const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
@@ -751,6 +753,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (calledRefinanceTranches.length > 0) companyTranches = [...companyTranches, ...calledRefinanceTranches];
 
     const tranchesToRefinance = companyTranches.filter(tranche => {
+      if (tranche.isCommercialPaper) return false; // 07f owns the CP roll
       const weeksToMaturity = tranche.maturityWeek - state.currentWeek;
       return weeksToMaturity <= 52 && weeksToMaturity > 45 && !tranche._refinanceInitiated;
     });
@@ -787,8 +790,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       companyTranches.push(refinanceTranche);
     });
 
-    const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek);
-    let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek);
+    // CP never reaches this path: 07f rolls (or fails) it BEFORE this stage runs, so a maturing
+    // CP tranche here would be a bug in 07f, not a bond to refinance. Guarded anyway — the bond
+    // refinance below would turn a 13-week bridge into five-year term debt.
+    const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek && !t.isCommercialPaper);
+    let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek || t.isCommercialPaper);
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
     let buybacksThisWeek = 0;
@@ -877,7 +883,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             .slice()
             .sort((a, b) => a.maturityWeek - b.maturityWeek)
             .map(t => {
-              if (toPrepayUSD <= 0) return t;
+              if (toPrepayUSD <= 0 || t.isCommercialPaper) return t; // CP is 07f's to resize against the real gap
               const repaid = Math.min(t.principalUSD, toPrepayUSD);
               toPrepayUSD -= repaid;
               return { ...t, principalUSD: t.principalUSD - repaid };
@@ -1118,7 +1124,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // into the other rate type has moved between the bond market and the loan market, so their
     // position moves with it. Holdings that do not track the real stock are the difference
     // between a market and a random walk — see settleCorporateActionOnHolders.
-    const postActionFixedUSD = updatedTranches.filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+    const postActionFixedUSD = updatedTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
     const postActionFloatingUSD = updatedTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
     settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
