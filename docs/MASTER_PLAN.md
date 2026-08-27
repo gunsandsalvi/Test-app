@@ -49,6 +49,19 @@ These are standing user directives. They are not suggestions.
 8. **Reflect the real-world mechanism.** When in doubt about how something should work,
    the answer is: the way it actually works in the real world, modeled with real named
    counterparties. Ask the user before large scope decisions.
+9. **Periodicity is part of the number.** Every rate, growth figure, flow and index carries a
+   period — weekly, monthly, quarterly, annual, annualised, or a change over a trailing window —
+   and mixing two of them silently is one of the most common defects in this codebase. It has
+   already caused: a "year-over-year" GDP comparison taken 51 weeks apart; a first-year growth
+   rate that exponentiated one week's rate by 52; a `clearedInputPriceIndex` that measured
+   week-over-week while its consumers read it as a level versus baseline; and a weekly government
+   spending figure multiplied by 52 in one place and not another. **Before using or writing any
+   such value, confirm its period at the source and name it in the identifier or a comment**
+   (`...WeeklyUSD`, `...Annual`, `...AnnualisedPct`, `...YoY`). Never infer it from context.
+   **For anything displayed to the user, the convention is: show month-over-month AND
+   year-over-year.** Where there is not enough history to compute a change honestly, show the
+   level itself rather than a change derived from a partial or synthetic window — a missing
+   change is information; a fabricated one is a lie.
 
 ### 1.3 Verification ladder (every work item)
 
@@ -171,6 +184,8 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
 | 1 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | — (S1, S2, G1 done) |
+| — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
+| — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
 | 2 | Cash settlement in all clearing + stop bank sov-holdings drift | S4 | S3 |
 | 3 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 4 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
@@ -218,6 +233,61 @@ projects produce.
 ---
 
 ## 5. Detailed work instructions
+
+### P1 — Periodicity & units audit, and the MoM/YoY display convention
+
+**Not a phase — a standing sweep.** Rule 9 states the discipline; this item is the one-off pass
+that brings the existing code up to it, and it can be done incrementally alongside whatever else
+is in flight. Every defect of this shape found so far was invisible until someone traced the
+number to its source, so the work is mechanical rather than clever.
+
+**Engine side.** Walk every rate, growth figure, flow and index and confirm its period at the
+source. Rename to carry the period where the name is ambiguous (`governmentSpendingUSD` is
+weekly and reads annual; `demandLevelUSD` is annual and reads weekly; `wageGrowth`,
+`gdpGrowth`, `demandGrowthAnnual`, `m2GrowthRateAnnualized` are all different conventions in
+neighbouring lines). Known instances still open: `clearedInputPriceIndex` measures
+week-over-week but is read as a level versus baseline (also §5-S8); `historicalInflation` and
+`historicalZeroCurves` are appended in stage 02 and so lag the measurement stages by a week —
+consistent, but undocumented at every read site.
+
+**Display side.** Adopt one shared presentation helper and route every changing figure through
+it, so the rule cannot be re-litigated per component:
+- show **MoM** and **YoY** together for any series with enough history;
+- where a window is incomplete, show **the level**, not a change extrapolated from a partial or
+  synthetic window;
+- label the period on the figure itself, never only in surrounding prose.
+Start with the screens that already display changes (StatusBar, EconomyDashboard, WorldScreen,
+CompanyDeepDive's TapToChart rows, InteractiveChartModal's "in period"), and with
+`formatters.ts` as the natural home for the helper. Aurora will inherit the convention rather
+than re-inventing it.
+
+### G1b — Damp the inflation swing
+
+**Problem.** With inflation now genuinely measured (§7.12), the index is bounded and
+mean-reverting but volatile: ±10–17% swings over a year across regions, where a real economy
+with an inflation-targeting central bank runs a fraction of that. The measurement is not at
+fault — the goods market's own prices really do move that much.
+
+**Diagnose before fixing, in this order:**
+1. **Is it the auction's own cycle?** `05-unit-bidding.ts` already damps a cobweb by having
+   suppliers price off `smoothedUnitPriceUSD` rather than last week's clear. Check whether the
+   residual swing is that cycle at a longer wavelength — trace a single sub-unit's price,
+   supply and demand over 120 weeks and look for the phase relationship that identifies a
+   cobweb (supply responding to a price it can no longer sell into).
+2. **Is it missing monetary transmission?** The Taylor rule responds correctly but nothing
+   carries a rate change into demand: no real lending (G2), no household rate response (MS).
+   A central bank that can see inflation but cannot act on it is exactly an economy whose
+   prices oscillate freely. If (1) is clean, this is the cause, and the fix is G2/MS rather
+   than anything in the price index.
+3. **Are expectations doing any work?** `expectedInflation` is adaptive over the measured
+   series but feeds only the Taylor rule and the sovereign curve. In reality, anchored
+   expectations damp actual price setting, because sellers and buyers price against the
+   inflation they expect. Consider whether `05-unit-bidding.ts`'s real bid and offer prices
+   should carry an expectations term — a genuine behavioural channel, not a smoothing filter.
+
+**Do not** damp it by smoothing the index, widening the basket to average the swing away, or
+clamping inflation. The index is the measurement; if the measurement is volatile, the economy
+is, and the economy is what to fix.
 
 ### S3 — Sign off Wall Street slices 2–3
 
