@@ -202,7 +202,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
-| 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
 | 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
