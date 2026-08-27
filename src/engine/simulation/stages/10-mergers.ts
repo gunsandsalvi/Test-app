@@ -67,7 +67,11 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   const cashPaid = purchasePrice * 0.5;
   const stockPaid = purchasePrice * 0.5;
 
-  acquirer.cash = Math.max(10, acquirer.cash - cashPaid);
+  // S5 leak #4 fixed: the target's real cash comes WITH the target — the acquirer pays the
+  // consideration out and receives the acquired balance sheet, cash included. Before this the
+  // target's cash simply vanished from the economy at every merger.
+  acquirer.cash = Math.max(10, acquirer.cash - cashPaid + target.cash);
+  target.cash = 0;
   const newShares = stockPaid / Math.max(1, acquirer.stockPrice);
   acquirer.sharesOutstanding = Number((acquirer.sharesOutstanding + newShares).toFixed(3));
   acquirer.annualRevenue = Number((acquirer.annualRevenue + target.annualRevenue * 0.85).toFixed(1));

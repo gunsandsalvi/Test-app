@@ -222,6 +222,14 @@ export interface Company {
   lastEarningsSurprisePct: number;
   lastManagementCommentary: string;
 
+  /**
+   * S5: last week's cash walk as an explicit ledger — every real dollar in or out of `cash`,
+   * named. The invariant is structural: cash changes ONLY by the sum of these entries (one
+   * posting helper in stage 08 is the single write path), so any unexplained cash move is a
+   * missing entry, not a mystery.
+   */
+  lastCashLedger?: { label: string; amountUSD: number }[];
+
   // Capital Structure
   /**
    * The company's syndicated term loan, present only while it actually has floating-rate debt

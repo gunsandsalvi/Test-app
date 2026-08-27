@@ -204,7 +204,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 4 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 5 | Delete every duplicate price-setter (engine + UI) | S6 | — |
 | 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | — |
 | 7 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
@@ -333,29 +332,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### S5 — Company cash truth (one ledger, four leaks)
-
-**Design: an explicit weekly cash ledger, not four point-fixes.** In stage 08, build each
-company's week as `CashLedgerEntry[] = {label, amountUSD}` and fold it once into the cash delta;
-store the last ledger on the company (`comp.lastCashLedger`) so the UI and diagnostics can show
-where every dollar went. Entries, each sourced from the real system that produced it:
-settled sales (stage 05 lots), settled input purchases (same), wages paid (real payroll),
-interest paid per tranche at its real rate (and interest *received* on cash), taxes, capex
-actually settled (real capex bids), dividends, buybacks, debt issue proceeds / repayments /
-maturities (from `decideCorporateFinancing` and the real ladder), merger consideration.
-`sum(ledger) === cashChange` holds by construction — the invariant to add is that no cash-touching
-write exists in stage 08 *outside* the ledger (grep-able: one assignment site for `comp.cash`).
-
-The four leaks die as consequences, not as patches: the EBITDA/52 accrual leaves the cash walk
-and becomes reporting-only (kills the double-count with settled sales); dividends become a ledger
-entry (they are currently declared and never deducted); the 2.5×-cash prepayment rule retires
-real nearest-maturity tranches before `totalDebt` recomputes; `merger.ts` moves the target's cash
-to the acquirer net of the real consideration paid to target shareholders.
-
-**Verify:** 60-week run; for 3 sampled companies print the full ledger weekly and eyeball that
-every entry traces to a named counterparty; re-check #18's revenue-floor residual (this is its
-likely root); confirm aggregate corporate cash change equals the sum of ledgers.
 
 ### S6 — Delete every duplicate price-setter
 
@@ -965,7 +941,8 @@ the complete simulation.
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
 | open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
-| public default rate ~13%/yr | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. Expected root: S5's leaks. Re-measure immediately after S5; if it survives, the default trigger's inputs are next |
+| goods-market cash margin vs accrual margin | §7.23 finding #2: settled auction purchases ≈ 2x settled sales for sampled firms, so the real cash margin is deeply negative while formula EBITDA says +18%. Root-cause next: is input demand sized off target production that persistently exceeds sales (inventory spiral), are auction input prices too high relative to output prices, or is the EBITDA margin the fiction? Owns the residual default rate below and probably #18 |
+| public default rate ~10%/yr (was 13%) | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. S5 cut it 59 → 46/196 by wk121; the remainder tracks the goods-market cash-margin row above — re-measure after that item |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
 | generation-time unconditional fields | §7.17 found `leveragedLoan` attached to all 200 companies when only ~33 had loans. Sweep `companyGenerator.ts` for other fields attached unconditionally that only apply to a subset — same failure mode (a frozen record that reads as live downstream) |
@@ -1416,7 +1393,29 @@ the complete simulation.
       ladders, clean cash walk — shows zero, isolating the cause to the public path's cash
       accounting. S5 owns it; re-measure the decay after S5. HC8's births are the structural
       counterweight either way. Recorded in §6.
-23. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+23. **S5 landed: the cash walk is one explicit ledger, and it immediately found two things.**
+    `post(label, amount)` is the single write path to a company's cash; `lastCashLedger` stores
+    the week's named entries and the identity Σ(entries) = Δcash verifies to the dollar. The
+    four leaks died as consequences: the EBITDA/settled-sales/productionCost triple-count is
+    replaced by settled auction flows plus accruals only for what the auction does not settle;
+    dividends actually leave; the prepayment retires REAL tranches nearest-maturity-first (the
+    old version debited cash and decremented a scalar the ladder recomputation silently restored
+    — cash gone, debt not); mergers transfer the target's cash. Cash taxes now exist as a flow.
+    Public defaults by week 121: 59 → 46; issuers 237 → 261.
+    - **Ledger finding #1 (fixed in-pass): dividends were 10x real.** Sized as yield x market
+      cap on the known-inflated equity levels, they bled 15–25M/week from companies selling
+      20M/week — invisible for as long as dividends never actually left cash. Now bounded by the
+      board's real constraint: a payout ratio of earnings (`MAX_DIVIDEND_PAYOUT_RATIO`), with
+      the declared yield honored only when earnings cover it. Retire the bound into real payout
+      policy at WS4 when the equity level becomes real.
+    - **Ledger finding #2 (NEW ROOT CAUSE, recorded in §6): firms buy ~2x what they sell.**
+      Sampled ledgers show settled auction purchases running about twice settled sales week
+      after week (e.g. 37.5M vs 17.5M) — the real CASH margin of the goods business is deeply
+      negative while the formula EBITDA margin reports +18%. Two representations of one real
+      thing, at the heart of the stage 05/08 reconciliation, and now the leading suspect for the
+      residual ~10%/yr public default rate and for #18's revenue-floor residual. This was
+      invisible before the ledger existed, which is the ledger's whole argument.
+24. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

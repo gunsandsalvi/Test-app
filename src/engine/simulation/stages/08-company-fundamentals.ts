@@ -27,6 +27,8 @@ import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
+/** The most of its earnings a board will pay out as dividends — real payout discipline. */
+const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
 // Liquidity depth: a net weekly flow equal to this many multiples of a company's own market
 // cap is needed to move its price 100%.
 const EQUITY_LIQUIDITY_DEPTH = 6;
@@ -70,7 +72,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const da = revenue * 0.045;
       const ebit = Math.max(1, ebitda - da);
       const netIncome = (ebit - interestAnnual) * (1 - 0.21); // same flat rate the public path uses; BP5 makes it real
-      const cash = comp.cash + (ebitda - interestAnnual - comp.maintenanceCapex) / 52;
+      // Same S5 ledger discipline as the public path — smaller book, same honesty.
+      const privLedger: { label: string; amountUSD: number }[] = [
+        { label: 'operating cash flow (EBITDA accrual)', amountUSD: Math.round(ebitda / 52) },
+        { label: 'interest paid', amountUSD: -Math.round(interestAnnual / 52) },
+        { label: 'maintenance capex', amountUSD: -Math.round(comp.maintenanceCapex / 52) },
+        { label: 'cash taxes', amountUSD: -Math.round(Math.max(0, (ebit - interestAnnual)) * 0.21 / 52) },
+      ];
+      const cash = comp.cash + privLedger.reduce((a, e) => a + e.amountUSD, 0);
       const coverage = Number(Math.max(-50, Math.min(50, ebit / Math.max(0.5, interestAnnual))).toFixed(2));
       const leverage = comp.totalDebt / Math.max(1, ebitda);
       const defaulted = comp.isDefaulted || (cash < 0 && coverage < DEFAULT_COVERAGE_FLOOR);
@@ -81,6 +90,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         revenueHistory: [...(comp.revenueHistory || []).slice(-12), revenue],
         ebitda, ebit, netIncome: Math.round(netIncome),
         cash: Number(cash.toFixed(0)),
+        lastCashLedger: privLedger,
         leverage: Number(leverage.toFixed(2)),
         interestCoverage: coverage,
         isDefaulted: defaulted,
@@ -557,14 +567,53 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const newGrossPPEUSD = priorGrossPPE + newCapex / 52;
     const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
 
-    // Weekly Cash flow and debt amortization / prepayment
-    const weeklyFreeCashFlow = comp.sector === 'Banks'
-      ? (newNetIncome / 52)
-      : (newEbitda / 52 - newCapex / 52 - weeklyInterest + weeklyDebtFundedPortion - (productionCostUSD + carryingCostUSD));
-    let newCash = comp.cash + weeklyFreeCashFlow;
+    // ---- S5: the weekly cash walk is an explicit ledger ----
+    // One posting helper is the single write path to cash; every entry is a named real flow.
+    // The previous walk triple-counted the operating side: an EBITDA/52 accrual PLUS stage 05's
+    // real settled cashChange PLUS a separate productionCost subtraction — three overlapping
+    // descriptions of one week's operations. Here each real dollar enters exactly once:
+    // settled auction flows at their real amounts, and accruals ONLY for the parts of the
+    // business the auction does not settle (non-auction receipts; wages and other unsettled
+    // costs; capex beyond what was bought as real units). EBITDA is a reporting figure.
+    const cashLedger: { label: string; amountUSD: number }[] = [];
+    let newCash = comp.cash;
+    const post = (label: string, amountUSD: number) => {
+      if (!isFinite(amountUSD) || amountUSD === 0) return;
+      cashLedger.push({ label, amountUSD: Number(amountUSD.toFixed(0)) });
+      newCash += amountUSD;
+    };
+
     const update = companyUpdates[comp.ticker];
-    if (update && update.cashChange !== undefined) {
-      newCash += update.cashChange;
+    if (comp.sector === 'Banks') {
+      // A bank's real flows live on its named balance sheet (02b); the company-level cash line
+      // carries only the accrual bridge, as before, now as one visible entry.
+      post('bank net income accrual', newNetIncome / 52);
+    } else {
+      const settledSalesUSD = update?.salesUSD ?? 0;
+      const settledPurchasesUSD = update?.purchasesUSD ?? 0;
+      post('settled sales (real auction receipts)', settledSalesUSD);
+      post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD);
+      // Revenue recognized beyond what cleared in the auction still collects — customers in the
+      // parts of the business the modeled markets do not cover yet.
+      post('non-auction operating receipts', Math.max(0, newRevenue / 52 - settledSalesUSD));
+      // ...and the costs of running the whole business beyond what was bought as real units:
+      // wages, services, and the unsettled share of capex. Settled purchases already left as
+      // real cash above, so only the excess of total accrued outflows over them posts here.
+      const accruedOutflowsWeekly = (newRevenue - newEbitda) / 52 + newCapex / 52;
+      post('wages, other opex & capex beyond auction settlements', -Math.max(0, accruedOutflowsWeekly - settledPurchasesUSD));
+      post('inventory carrying cost', -carryingCostUSD);
+      post('interest paid', -weeklyInterest);
+      post('cash taxes', -Math.max(0, (newEbit - annualInterest)) * (reg.effectiveTaxRate ?? 0.21) / 52);
+      // Dividends actually leave (they were declared and never deducted — the plan's leak #2).
+      // Sized by the board's REAL constraint — earnings — not by yield x market cap: the equity
+      // level is a known-inflated formula until WS4, and paying a real 2-3% yield on a fake 30B
+      // cap bled 10x a real dividend out of every profitable company (measured in this ledger's
+      // first week of existence: 15-25M/wk against 20M/wk of sales). A board pays out a share of
+      // what the company earns; the declared yield stands only when earnings cover it.
+      const declaredDividendWeekly = Math.max(0, (comp.dividendYield ?? 0) * comp.marketCap) / 52;
+      const maxSustainableWeekly = Math.max(0, newNetIncome) * MAX_DIVIDEND_PAYOUT_RATIO / 52;
+      post('dividends paid', -Math.min(declaredDividendWeekly, maxSustainableWeekly));
+      post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion);
     }
     let newTotalDebt = comp.totalDebt;
 
@@ -575,12 +624,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const headcountPressure = newCash < 0 ? -0.015 : (newEbitdaMargin < baseEbitdaMargin - 0.01 ? -0.002 : (reg.cycleRegime === 'Expansion' ? 0.001 : (reg.cycleRegime === 'Recession' ? -0.002 : 0)));
     const newEmployeeCount = Math.max(10, Math.round(comp.employeeCount * (1 + headcountPressure)));
 
-    // Debt Prepayment Rule: When Cash > 2.5x Current Liabilities, retire debt principal
-    if (newCash > 2.5 * comp.currentLiabilities && newTotalDebt > 50) {
-      const prepayment = Math.min(newTotalDebt * 0.05, (newCash - 2.5 * comp.currentLiabilities) * 0.25);
-      newCash -= prepayment;
-      newTotalDebt -= prepayment;
-    }
+    // (S5: the prepayment rule moved below, where the real tranche ladder exists to retire —
+    // the old version here debited cash and decremented a scalar the ladder recomputation then
+    // silently restored: cash gone, debt not. Leak #3, and likely a real default driver.)
 
     // Credit metrics
     const rawLeverage = comp.sector === 'Banks'
@@ -663,7 +709,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (rateSavingsIfRefinanced > 0.01 && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
         const calledAmountUSD = Math.min(tranche.principalUSD, newCash - comp.annualRevenue * 0.15);
         tranche.principalUSD -= calledAmountUSD;
-        newCash -= calledAmountUSD;
+        post('accretive call: principal retired', -calledAmountUSD);
         // Calling a bond because it is expensive relative to the market is REFINANCING, not
         // deleveraging: the issuer replaces it at today's cheaper rate and keeps the money. The
         // saving is the lower coupon, which is what `rateSavingsIfRefinanced` above measures.
@@ -684,7 +730,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             maturityWeek: state.currentWeek + STANDARD_CORP_TENOR_YEARS * 52,
             seniority: 'SENIOR',
           });
-          newCash += calledAmountUSD; // proceeds of the replacement issue
+          post('accretive call: replacement issue proceeds', calledAmountUSD);
         }
       }
     });
@@ -807,6 +853,31 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // this simulation had no way to produce before.
     const costOfNewDebtAnnual =
       calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
+    // S5 leak #3 fixed for real: surplus-cash prepayment retires ACTUAL tranches (nearest
+    // maturity first — the paper a treasurer would take out), so cash and the ladder move
+    // together and the settled reduction reaches holders via settleCorporateActionOnHolders.
+    if (newCash > 2.5 * comp.currentLiabilities) {
+      const ladderTotalUSD = updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0);
+      if (ladderTotalUSD > 50) {
+        let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (newCash - 2.5 * comp.currentLiabilities) * 0.25);
+        if (toPrepayUSD > 1000) {
+          updatedTranches = updatedTranches
+            .slice()
+            .sort((a, b) => a.maturityWeek - b.maturityWeek)
+            .map(t => {
+              if (toPrepayUSD <= 0) return t;
+              const repaid = Math.min(t.principalUSD, toPrepayUSD);
+              toPrepayUSD -= repaid;
+              return { ...t, principalUSD: t.principalUSD - repaid };
+            })
+            .filter(t => t.principalUSD > 0.01);
+          const prepaidUSD = Math.min(ladderTotalUSD, ladderTotalUSD - updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0));
+          post('surplus-cash debt prepayment', -prepaidUSD);
+          debtRepaymentThisWeek += prepaidUSD;
+        }
+      }
+    }
+
     const financing = decideCorporateFinancing({
       comp,
       costOfDebtAnnual: costOfNewDebtAnnual,
@@ -830,7 +901,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         seniority: 'SENIOR',
       }];
       debtIssuanceThisWeek += financing.netDebtChangeUSD;
-      newCash += financing.netDebtChangeUSD;
+      post('opportunistic issuance proceeds', financing.netDebtChangeUSD);
     } else if (financing.reason === 'DELEVER_EXPENSIVE_DEBT' && financing.netDebtChangeUSD < -1000) {
       // Pay down real principal, newest and dearest paper first, out of real cash.
       let remainingToRepayUSD = -financing.netDebtChangeUSD;
@@ -846,7 +917,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         .filter(t => t.principalUSD > 0.01);
       const actuallyRepaidUSD = -financing.netDebtChangeUSD - remainingToRepayUSD;
       debtRepaymentThisWeek += actuallyRepaidUSD;
-      newCash -= actuallyRepaidUSD;
+      post('opportunistic deleveraging: principal repaid', -actuallyRepaidUSD);
     }
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.
@@ -982,7 +1053,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           issuerRegion: comp.region,
           quantityOrNotionalUSD: purchaseAmountUSD
         });
-        newCash -= purchaseAmountUSD; // debit the cash
+        post('treasury purchase (sovereign)', -purchaseAmountUSD);
       }
     } else if (targetTreasuryUSD < currentTreasuryUSD) {
       const sellAmountUSD = currentTreasuryUSD - targetTreasuryUSD;
@@ -992,7 +1063,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           ...h,
           quantityOrNotionalUSD: h.quantityOrNotionalUSD * scale
         })).filter(h => h.quantityOrNotionalUSD > 0.01);
-        newCash += sellAmountUSD; // credit the cash
+        post('treasury sale (sovereign)', sellAmountUSD);
       }
     }
 
@@ -1010,7 +1081,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (sharesToRetire > 0.001) {
         updatedSharesOutstanding = Math.max(1.0, comp.sharesOutstanding - sharesToRetire);
         buybacksThisWeek = sharesToRetire * newStockPrice;
-        newCash -= buybacksThisWeek;
+        post('share buybacks', -buybacksThisWeek);
       }
     }
     const newMarketCap = Number((newStockPrice * updatedSharesOutstanding).toFixed(0));
@@ -1150,6 +1221,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       insurancePremiumsWrittenUSD: comp.insurancePremiumsWrittenUSD,
       insuranceClaimsPaidUSD: comp.insuranceClaimsPaidUSD,
       cash: Number(newCash.toFixed(1)),
+      lastCashLedger: cashLedger,
       leverage: newLeverage,
       interestCoverage: newCoverage,
       creditRating: newRating,
