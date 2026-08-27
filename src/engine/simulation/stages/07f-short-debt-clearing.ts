@@ -36,7 +36,7 @@ import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nels
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
-import { MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD } from '../../macro/banking';
 
 const DEALER_SPREAD_BPS = 2; // the tightest market there is
 const MAX_WEEKLY_YIELD_MOVE_PCT = 0.25; // short paper reprices to policy fast; damping is looser here
@@ -110,8 +110,15 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // WS6: same funding budget and encumbrance floor as 07c — a bill bid is a claim on
         // real money, and pledged collateral cannot simultaneously be sold. (Bills cleared
         // here share the collateral pool with the bonds.)
-        const fundableUSD = Math.max(0, sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
-          + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts);
+        // Bounded by BOTH real constraints a treasury faces: what its money and collateral can
+        // fund, AND what its equity supports under the leverage floor — the only capital
+        // constraint that sees a zero-risk-weight sovereign book (see BASEL_MIN_LEVERAGE_RATIO's
+        // doc for the 260-week runaway that made this necessary).
+        const fundableUSD = Math.min(
+          Math.max(0, sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
+            + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts),
+          leverageHeadroomUSD(sheet)
+        );
         const totalBookUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
         const encumberedShare = totalBookUSD > 0
           ? Math.min(1, (sheet.repoEncumberedCollateralUSD ?? 0) / totalBookUSD)

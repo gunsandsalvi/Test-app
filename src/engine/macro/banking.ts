@@ -43,6 +43,31 @@ export const ON_RRP_SPREAD_BPS = 20;
  * Below it the bank funds itself (repo, then the SRF); this is a behavioural policy choice,
  * not a regulatory formula. */
 export const MIN_CASH_BUFFER_RATIO = 0.02;
+/**
+ * The Basel leverage-ratio floor: equity against UNWEIGHTED total assets. A posted regulatory
+ * minimum (rule 1's administered-number standing), and the one constraint that sees a
+ * sovereign book at all — risk weights are zero on sovereigns, which is exactly why the real
+ * framework added a leverage floor after risk-weighted capital let bond carry grow without
+ * limit. Measured before it existed here: over 260 weeks banks levered the repo carry into
+ * the growing government float until EUR banks had pledged 913B of collateral and USA bank
+ * capital printed NEGATIVE (−13.3%) — the flow ledger conserving a runaway that the deleted
+ * equity-rescale/recapitalization clamps used to hide. This bounds the SIZE of the bid
+ * (quantity, never price), the same doctrine as every other real capital constraint (§7.16's
+ * sub-IG charge). G2 refines it with per-bank supervisory buffers.
+ */
+export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
+
+/** Unweighted total assets — the leverage ratio's denominator. */
+export function bankTotalAssetsUSD(sheet: BankingSector): number {
+  const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+  return sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD
+    + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0);
+}
+
+/** How much balance sheet the bank's equity still supports under the leverage floor. */
+export function leverageHeadroomUSD(sheet: BankingSector): number {
+  return Math.max(0, sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet));
+}
 
 const TENOR_BUCKET_YEARS: Record<string, number> = {
   b13: 0.25, b26: 0.5, b52: 1, t2: 2, t5: 5, t10: 10, t30: 30,

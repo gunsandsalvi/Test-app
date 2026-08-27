@@ -51,7 +51,7 @@ import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
-import { MIN_CASH_BUFFER_RATIO } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD } from '../../macro/banking';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
 const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
@@ -308,8 +308,15 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // this budget, the honest ledger showed banks buying 241B of bonds against 232B of
       // deposits with the SRF financing 88B at penalty — a real bid must be a claim on real
       // funding (§7.6: a cash-constrained bidder rations quantity, never price).
-      const fundableUSD = Math.max(0, sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
-        + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts);
+      // Bounded by BOTH real constraints a treasury faces: what its money and collateral can
+      // fund, AND what its equity supports under the leverage floor — the only capital
+      // constraint that sees a zero-risk-weight sovereign book (see BASEL_MIN_LEVERAGE_RATIO's
+      // doc for the 260-week runaway that made this necessary).
+      const fundableUSD = Math.min(
+        Math.max(0, sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
+          + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts),
+        leverageHeadroomUSD(sheet)
+      );
       // Collateral already pledged overnight cannot simultaneously be sold: the encumbered
       // share of the book is a floor on holdings — size, never price, exactly like the
       // liability-driven core above.

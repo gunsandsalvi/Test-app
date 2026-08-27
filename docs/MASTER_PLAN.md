@@ -92,7 +92,7 @@ every cross-stage dependency is visible) and runs the stages in order:
 |---|---|---|
 | 01 | `01-macro-feedback.ts` | Cross-region contagion/systemic-stress signals |
 | 02 | `02-region-macro.ts` | Region macro evolution via `macro/evolution.ts` (GDP, inflation, wages, FX, ownership drift). Sets the administered policy rate; does NOT touch the yield curve |
-| 02b | `02b-bank-diversification.ts` | Per-bank balance-sheet evolution, SRF/ON RRP facilities, region aggregate = real sum of named banks |
+| 02b | `02b-bank-diversification.ts` | Per-bank flow-ledger evolution (`macro/banking.ts` — cash moves only by named flows), the weekly overnight GC repo session (`stages/repo-clearing.ts`, WS6) with the SRF as a posted-rate seat in the book, region aggregate = real sum of named banks |
 | 03 | `03-category-demand.ts` | C+I+G demand targets per sub-unit; `corporateDemandUSD` persisted per category |
 | 04 | `04-input-output.ts` | Input-category clearing: real supply from linked commodities, pooled multi-industry demand, pro-rata rationing |
 | 05 | `05-unit-bidding.ts` | THE real goods auction: named bids/offers, pro-rata clearing, contracts, per-lot settlement (northwest-corner), capex bids |
@@ -116,8 +116,8 @@ participant posts a real per-instrument demand schedule (`ParticipantDemand`: a
 total demanded quantity equals the real `tradableFloatUSD`. `statKind` orients the search
 (`YIELD_LIKE` demand rises with the statistic, `PRICE_LIKE` falls). The bank dealer carries
 whatever the participants do not take.
-**Every asset class is a thin adapter over this engine** (07b/07c/07d today; equity, bills,
-CP, repo tomorrow). Adapters own: who the participants are, what each one's reservation level
+**Every asset class is a thin adapter over this engine** (07b/07c/07d/07e/07f and WS6's
+overnight repo session today; derivatives and FX tomorrow). Adapters own: who the participants are, what each one's reservation level
 and size are, and the structural share of each name each participant is sized against
 (a relative weight on a real, already-bounded pool via `distributeRealTargetByWeight` — never
 an independent dollar figure).
@@ -205,23 +205,22 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
 | 1 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 2 | Private repo markets | WS6 | — |
-| 3 | Money market funds | WS7 | WS5, WS6 |
-| 4 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 5 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
-| 6 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
-| 7 | Unify the two dealer systems | G3 | S9 |
-| 8 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 9 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 10 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 11 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 12 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 13 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 14 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 15 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 16 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 17 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 18 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 2 | Money market funds | WS7 | WS5, WS6 |
+| 3 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 4 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
+| 5 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
+| 6 | Unify the two dealer systems | G3 | S9 |
+| 7 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 8 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 9 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 10 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 11 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 12 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 13 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 14 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 15 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 16 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 17 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
@@ -323,41 +322,6 @@ fiscal counterparty), which owns that decomposition, and pay coupons to holders 
 Work §6's table in one or two commits. Nothing there is architectural.
 
 ---
-
-### WS6 — Private repo
-
-**Where:** fold into 02b (it is interbank cash management); `domain/banking.ts`.
-
-One overnight GC repo market per region. Participants are the named banks: surplus banks lend
-cash against sovereign collateral, deficit banks borrow against their real tenor-book holdings
-(borrow capacity = holdings × (1 − haircut); encumbered collateral is flagged in the S7 ledger
-and cannot simultaneously be sold). Reservations are the administered alternatives, which is why
-the corridor holds without a clamp: no lender accepts below ON RRP + ε (it has the facility), no
-borrower pays above SRF + ε (it has the window). The engine clears one rate; positions are
-overnight, re-cleared weekly, carried as `repoLentUSD`/`repoBorrowedUSD` with real interest in
-each bank's P&L.
-
-**Measure first, before building any of it.** §6 records a bottom-up defect directly underneath
-this item: the bank balance-sheet identity runs −114B to −139B and a `Math.max` floor in
-`evolveBankingSector` manufactures the difference, which is also why measured SRF/ON RRP usage
-is 0.00B in every region in every week — there is currently no dispersion in bank cash for a
-repo market to intermediate, and the corridor this item relies on has never actually been
-tested. Establish whether the gap is missing funding or unbounded bank demand (07c caps nothing)
-before deciding what repo's float is. Building the market on an unexamined float would price a
-real rate over an invented quantity — §7.24.
-
-**Every number in it must be derived, not posted.** The two administered rates are the one
-exception rule 1 grants (a posted rate with real quantity response IS the mechanism). Everything
-else comes from something real: the haircut is the lender's protection against the collateral
-repricing before it can be sold, so it follows from the bucket's own duration and the realised
-volatility of its cleared yield (`historicalZeroCurves`) — per bucket, and it tightens capacity
-exactly when the curve turns volatile, which a posted percentage cannot do. Lender size is the
-cash a participant's own policy leaves genuinely uncommitted, and how much is actually lent is
-the auction's answer, not a ceiling.
-
-**Verify:** repo prints inside the corridor every week *because* volumes migrate to the
-facilities at the edges (check facility usage spikes when repo touches a bound); collateral
-encumbrance never exceeds holdings.
 
 ### WS7 — Money market funds
 
@@ -735,7 +699,10 @@ the complete simulation.
 | `macro/evolution.ts` wage/tightness | Nominal wage growth goes negative (−2.5% by week 40) while inflation runs at 10% — a 12% real-wage collapse per year. Partly a symptom of G1's runaway, partly the tightness→wage-growth formula having no real bargaining mechanism. Re-measure after G1; if it survives, it belongs to MS3 |
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
-| `macro/banking.ts` `evolveBankingSector` + `07c` bank demand | **The banking sector's balance sheet does not balance, and a `Math.max` hides it.** Reserves are set as `Math.max(newDeposits * 0.08, deposits + equity − loans − securities)`. The second term is the balance-sheet identity, and measured on the default seed it is **−138.9B for the USA banks at week 0 and −114.0B at week 60** (EUR −67.4B, UK −13.6B, JPN −53.1B at wk60) — so the floor branch binds in every region in every week, and the banks' securities book is funded by a number with nothing on the other side of it. Rule 3 in its purest form, present since the cold start. Two measured consequences: **(a)** every bank is pinned to exactly 8% of deposits, so it is never short or long of its own buffer — **SRF and ON RRP usage print 0.00B in all four regions in all 60 weeks**, i.e. the Phase-2 administered facilities (§7.8) are inert; **(b)** 07c gives banks no `maxNetPurchaseUSD` on the stated grounds that "their real constraint is the reserve position S2 already built", but that constraint does not exist while the floor refills reserves regardless — so bank sovereign demand is unbounded, and USA banks hold **147.4B of government bonds against 67.1B of deposits at week 0**, 122.1B at week 60. Which of the two is the root — missing funding, or unbounded demand — decides whether WS6's repo market funds a real gap or is built on top of a defect. **Measure that before starting WS6** (§7.18's lesson). Also a live suspect for #67, since banks currently earn a full sovereign yield on a book nothing funds |
+| banking boundary flows (audit 2026-08-27, each with its owner) | The flow ledger posts every bank flow double-entry, but several flow SIZES remain formula-driven and several counterparties are still model boundaries: deposit drift/beta and the consumer-loan target (G2 slices 1/4 + MS); loan yields policy+250/350bp (G2 slice 2); loss-rate formulas (G2/MS); M2 formula (G2 slice 5); the ~1e12 `centralBankReservesUSD` scalar + QE/QT drift beside real per-bank cash (G9); **bank sovereign carry is credited while the government debits nothing and institutions are denied the same coupons** — one asymmetric boundary, closed when BP5 pays real coupons to all holders |
+| `01-macro-feedback.ts` `regionFloatingPrincipal` → `banking.ts` business loan book | **The leveraged-loan market is double-counted**: the bank business-loan book is sized as the public firms' floating tranche principal — the same tranches 07d clears into institutional books — so the identical principal sits on two ledgers and its interest is expensed once (stage 08) but received twice (S11 holders + bank NIM). Meanwhile the segments' ~474B of SME "bank debt" has NO lender book anywhere. Both die in G2 slice 1 (itemize the book to real borrowers) |
+| stage 08 bank/institution equity branch | Banks and institutional companies are excluded from 07e's cleared equity book; their stock prices come from a book-value x cycle-P/B formula — the last formula price setter for a listed cohort. Bring them into 07e once bank earnings are real P&L readers (post-G2); the P/B branch then dies |
+| stage 13 IPO underwriting fee + `trade.ts` player fees | Both credit the AGGREGATE `bankingSector.bankEquityUSD`, which 02b overwrites with the per-bank sum next week — the fees vanish (a write to a derived view, §7.30). 07e's equity dealer revenue is dropped entirely (clients pay fees into nothing). All three route to a real named desk in G3 |
 | open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
 | public default rate ~10%/yr (was 13%) | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. S5 cut it 59 → 46/196 by wk121; the remainder tracks the goods-market cash-margin row above — re-measure after that item |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
@@ -1532,7 +1499,56 @@ the complete simulation.
       by week 30 as corporate cash builds — cash-rich issuers genuinely run no program, but if
       G2's lending dynamics later drain corporate cash, the market should re-emerge on its own;
       watch it then.
-35. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+36. **The bank balance sheet became a flow ledger, and WS6's repo market stands on it.**
+    Three connected changes, each measured (seed default and seed 7, 60 weeks):
+    - **The plug is dead.** `evolveBankingSector` computed reserves as
+      `Math.max(deposits * 0.08, deposits + equity − loans − securities)` — BOTH branches
+      discarded prior cash, so every real cash leg the clearing stages applied was erased the
+      following week; the identity was −138.9B (USA week 0) from the cold start, the floor
+      branch bound every week in every region, and both administered facilities printed 0.00B
+      for 60 weeks because every bank sat at exactly 8% of deposits. Cash now moves only by
+      named flows (S5's ledger discipline applied to banks); deleted with the plug: the
+      recapitalization with no investor, the `equity = RWA × 0.140` rescale (now a real
+      special dividend bounded by distributable cash), the NIM damping clamp, the phantom
+      reserve-requirement constraint, the 0.85 reserve tiering (reserves earn IOR = policy;
+      bank-side ON RRP parking removed — the RRP is the NON-bank floor), and securities income
+      now reads the bank's real tenor book at the real cleared curve. The funding side of the
+      seed is reconciled (§7.4 again): deposits are seeded as what the asset side requires —
+      the sov book was re-seeded from the market at S2 and nobody re-derived the deposits that
+      fund it. Seed NIM 2.59% (was printing 4.4–6.5% on the unfunded book).
+    - **The new per-bank identity invariant found a real pre-existing bug in its first run:**
+      07c's bank settlement rebuilt the whole tenor book from its own four bond buckets,
+      deleting every bank's seeded BILL positions with no cash leg — the exact §7.34 bug,
+      fixed on the institutional path at the time, unnoticed on the bank path. 26.6B of USA
+      bank bills vanished in week 1 of every run since WS5. Also fixed under the same
+      invariant: dealer revenue credited to equity with no cash leg in 07b/07c/07d, 07f's
+      dealer revenue dropped outright, and dealer fees paid in cash with no P&L debit.
+    - **WS6 landed on the honest base.** One overnight GC session per region in 02b: borrower
+      size = real shortfall to the bank's own buffer capped by unencumbered collateral ×
+      (1 − haircut); the haircut is DERIVED per bucket — duration × 2σ of that bucket's own
+      observed weekly cleared-yield changes, floored cold-start by the engine's minimum weekly
+      repricing allowance — so capacity tightens exactly when the curve turns volatile.
+      Lenders: surplus banks at IOR, institutional idle cash at the RRP rate (the overnight
+      half of WS5's cash sleeve; the unlent remainder parks at the RRP window and earns its
+      rate), and the SRF as a posted-rate seat IN the auction — which is why the corridor
+      holds without a clamp. Encumbered collateral floors the bank's 07c/07f holdings and is
+      excluded from further capacity, and the same secured-funding capacity is the
+      `maxNetPurchaseUSD` banks' bond bids now carry — the "reserve position" constraint 07c's
+      comment claimed has existed since S2 only as a comment; the honest ledger showed the sov
+      book at 241B against 232B of deposits with the SRF financing 88.4B at penalty before the
+      budget existed.
+    - **Seat-design lesson worth keeping:** a perfectly elastic posted-rate window stands at
+      FULL size exactly AT its rate, so the 1bp numerical step representing the vertical
+      schedule sits just BELOW the posted rate. A step that straddled it cleared 1bp above the
+      window (16 ceiling breaches), which no borrower with window access would pay.
+    - **Measured:** corridor breaches 0 on both seeds; per-bank identity residual 0.00M over
+      60 weeks; encumbrance breaches 0. The rate genuinely walks the corridor — 186
+      region-weeks at the floor (no need), 33 mid-corridor (private lenders pricing), 21 at
+      the ceiling, and ceiling weeks coincide with real SRF usage (§5-WS6's verify condition).
+      USA week 60: 91.8B borrowed from institutional lenders, SRF 0.00B. Harness unchanged at
+      4 violations (the known #18 names); 733 ms/week (was 824). Full 260-week close: see the
+      figures recorded in the §4 table note and re-measured at this section's close.
+37. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
