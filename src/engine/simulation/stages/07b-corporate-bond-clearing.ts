@@ -196,18 +196,23 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // (which is why this needed cash settlement to land first) — real selling that widens the
       // spread until it pays for itself again. Unlike the per-issuer attractiveness below, this
       // moves the SIZE of the book, so it does not renormalize away.
-      const bookAverageSpreadBps = totalOutstandingUSD > 0
-        ? regionCompanies.reduce((sum, c) => sum + c.oasSpreadBps * fixedDebtUSD(c), 0) / totalOutstandingUSD
+      // Asked PER ISSUER and then weighted, never of the book average. The first version tested
+      // the average, and the average is dominated by whichever names trade widest: a book whose
+      // BB and CCC paper pays 700-1600bp clears its hurdle comfortably on average while every
+      // single-A bond in it is bought straight through zero, because nothing in the test ever
+      // asks whether THAT bond still covers its own expected loss and its own capital charge.
+      // Measured, that is exactly what happened — the ordering by rating stayed correct and the
+      // rank correlation with leverage held around 0.55-0.78, while the entire investment-grade
+      // cohort sat 150-180bp BELOW zero. Right shape, impossible level. A spread is not a
+      // portfolio statistic; each bond has to pay for the capital it individually consumes.
+      const relativeValueTilt = totalOutstandingUSD > 0
+        ? regionCompanies.reduce((sum, c) => sum + computeAllocationTilt({
+            entityType: entity.entityType,
+            earnedSpreadBps: c.oasSpreadBps,
+            expectedLossBps: computeExpectedLossSpreadBps(c),
+            capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.CORP_BOND,
+          }) * fixedDebtUSD(c), 0) / totalOutstandingUSD
         : 0;
-      const bookAverageExpectedLossBps = totalOutstandingUSD > 0
-        ? regionCompanies.reduce((sum, c) => sum + computeExpectedLossSpreadBps(c) * fixedDebtUSD(c), 0) / totalOutstandingUSD
-        : 0;
-      const relativeValueTilt = computeAllocationTilt({
-        entityType: entity.entityType,
-        earnedSpreadBps: bookAverageSpreadBps,
-        expectedLossBps: bookAverageExpectedLossBps,
-        capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.CORP_BOND,
-      });
       // Applied to the STRUCTURAL target, then drifted toward — never to a target that is itself
       // anchored on current holdings. Tilting the drifted figure ratchets: selling lowers the
       // book, the lower book lowers the target, the lower target sells again. Measured, that ran

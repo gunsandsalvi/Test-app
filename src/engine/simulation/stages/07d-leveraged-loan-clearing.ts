@@ -131,18 +131,16 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // real, so they clear their cost at a tighter margin — which is exactly the structural
       // relationship between the two markets that a static allocation percentage cannot express.
       // Applied to the structural target and then drifted toward, never to the drifted figure.
-      const bookAverageDmBps = totalOutstandingUSD > 0
-        ? regionCompanies.reduce((sum, c) => sum + c.leveragedLoan.discountMarginBps * floatingDebtUSD(c), 0) / totalOutstandingUSD
+      // Per loan, then weighted — see the corporate-bond adapter for why the book average is the
+      // wrong granularity: it lets the widest names in the book vouch for the tightest ones.
+      const relativeValueTilt = totalOutstandingUSD > 0
+        ? regionCompanies.reduce((sum, c) => sum + computeAllocationTilt({
+            entityType: entity.entityType,
+            earnedSpreadBps: c.leveragedLoan.discountMarginBps,
+            expectedLossBps: computeExpectedLossSpreadBps(c) * SENIOR_LIEN_DISCOUNT,
+            capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.LEVERAGED_LOAN,
+          }) * floatingDebtUSD(c), 0) / totalOutstandingUSD
         : 0;
-      const bookAverageExpectedLossBps = totalOutstandingUSD > 0
-        ? regionCompanies.reduce((sum, c) => sum + computeExpectedLossSpreadBps(c) * SENIOR_LIEN_DISCOUNT * floatingDebtUSD(c), 0) / totalOutstandingUSD
-        : 0;
-      const relativeValueTilt = computeAllocationTilt({
-        entityType: entity.entityType,
-        earnedSpreadBps: bookAverageDmBps,
-        expectedLossBps: bookAverageExpectedLossBps,
-        capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.LEVERAGED_LOAN,
-      });
       const desiredTargetUSD = rawTargetUSD * (1 + relativeValueTilt);
       const targetTotalUSD = currentEntityTotalUSD + (desiredTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
 

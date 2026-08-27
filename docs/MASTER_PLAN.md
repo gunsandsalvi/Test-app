@@ -183,35 +183,36 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
-| 1 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | — (S1, S2, G1 done) |
+| 1 | **Clearing engine: price from a demand schedule, not a quantity target** | E1 | — |
+| 2 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | — (S1, S2, G1 done) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
 | — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, WS10 |
-| 2 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
-| 3 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
-| 4 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
-| 5 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
-| 6 | Player trades enter the real market | S9 | S4, S7 |
-| 7 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 8 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
-| 9 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
-| 10 | Private repo markets | WS6 | S4 |
-| 11 | Money market funds | WS7 | WS5, WS6 |
-| 12 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 13 | Hedge funds as distressed-debt demand | WS10 | WS4 |
-| 14 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
-| 15 | Unify the two dealer systems | G3 | S9 |
-| 16 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 17 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
-| 18 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 19 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 20 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 21 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 22 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
-| 23 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
-| 24 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
-| 25 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 26 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 3 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
+| 4 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
+| 5 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
+| 6 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
+| 7 | Player trades enter the real market | S9 | S4, S7 |
+| 8 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
+| 9 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
+| 10 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
+| 11 | Private repo markets | WS6 | S4 |
+| 12 | Money market funds | WS7 | WS5, WS6 |
+| 13 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 14 | Hedge funds as distressed-debt demand | WS10 | WS4 |
+| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
+| 16 | Unify the two dealer systems | G3 | S9 |
+| 17 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
+| 19 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 20 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 21 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 22 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 23 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
+| 24 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
+| 25 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
+| 26 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 27 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The three macro root causes are done (§7.10–§7.12): the ~110% fake GDP growth,
 the double-written yield curve, and the runaway formula CPI. Real growth now reads positive in
@@ -338,7 +339,49 @@ procurement and transfers, and in the limit a debt spiral — and it must stay c
 national-accounts identity established in §7.10. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
 
-### RVr — What remains after RV: damp the credit cycle's amplitude
+### E1 — The clearing engine prices a quantity target, not a demand curve  ← **the real defect**
+
+**This supersedes RVr's framing.** RV was built on the belief that spreads drifted because demand
+could not leave the asset class and supply could not respond. Both were true and both are now
+fixed — and spreads are still impossible. Measured after both halves landed:
+
+- the **shape** of the credit curve is right: median OAS rises monotonically by rating
+  (AAA/AA/A tightest through BB/B/CCC widest) and Spearman(leverage, OAS) holds at **0.64–0.78**.
+  This market is not random;
+- the **level** is impossible: the entire investment-grade cohort sits **150–180bp BELOW zero**;
+- it is **not** a thin-float artifact — the largest-float quartile has the same −124bp median as
+  the smallest;
+- and the dominant driver of a name's spread is **Spearman(OAS, institutional ownership share of
+  that name) = −0.731**, stronger than its correlation with the issuer's own leverage.
+
+**The cause.** `clearFinancialAsset` never asks a participant what price it would pay. It asks how
+far its holdings are from a target QUANTITY, trades a fraction of that gap, and moves the price by
+the resulting flow. The price is therefore a *residual of a quantity target*: participants buy
+until they own their target share of a name, and whatever spread that leaves is the spread. Nothing
+anywhere in the mechanism can say "below this level I simply will not buy," because nobody is ever
+pricing — they are filling a quota. That is precisely why a spread can settle below zero, and it is
+what the user meant from the start by the allocation levels feeling *forced*.
+
+RV's relative-value tilt makes the quota somewhat price-sensitive (±45%), which is why it halved
+the drift, but a price-sensitive quota is still a quota. **No amount of work on either side's
+demand or supply can fix this, because the defect is in how the two meet.**
+
+**The fix, and it is an engine change.** Demand must become a real schedule — quantity as a
+function of price — and clearing must find the price at which the schedule meets supply, instead
+of moving price by the flow implied by a quantity gap. Concretely, each participant supplies a
+reservation spread per instrument (below which it will not hold, derived from exactly the
+economics RV already computes: expected loss plus the capital charge times its required return),
+and the auction finds the clearing level where total demanded quantity equals the float. This is
+the same double-auction shape `05-unit-bidding.ts` already runs for goods, where bidders post a
+real maximum price — the goods market got this right and the financial one did not.
+
+**Sequencing.** This touches every asset class (07b/07c/07d and any future adapter), so it wants
+its own bounded slice with the sovereign curve re-verified afterwards. It also subsumes the
+remaining half of §5-S3 and makes RVr moot: an amplitude problem in a market that cannot price is
+not worth damping first. Keep everything RV built — the per-issuer capital-charge test and the
+issuer's financing decision are both correct and still needed once the engine can price.
+
+### RVr — Damp the credit cycle's amplitude *(blocked on E1 — do not start first)*
 
 **RV is built, both halves** (§7.16, §7.17). Spreads no longer drift monotonically: they now
 oscillate and mean-revert, which is the restoring force the item existed to create. Measured over
