@@ -11,6 +11,7 @@ import { GameState, RegionId, ItemizedHolding, GovDebtTranche } from '../../../t
 import { isActiveCompany } from '../../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
+import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts';
 import { attributeItemizedHoldings } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
@@ -88,8 +89,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + totalPrivateEmployment) / trackedEmployment : 1;
     const investmentComponentUSD = trackedInvestmentUSD * investmentScaleFactor;
 
-    // G — government spending, already established in Phase 2 (weekly flow, annualize)
-    const governmentComponentUSD = reg.governmentSpendingUSD * 52;
+    // G — government PURCHASES of goods and services. Transfer payments are the rest of the
+    // government's outlays and are deliberately not counted here: a transfer is not a purchase,
+    // it is household income, and it reaches GDP through C once households spend it. Counting
+    // 100% of outlays here (while the demand side in 03-category-demand.ts routed only the
+    // procurement share into real category bids) double-counted every transfer dollar.
+    const governmentComponentUSD = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD);
 
     // NX — net exports, already established in Phase 3 (already annualized-scale)
     const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
@@ -119,12 +124,20 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // in smoothedWeeklyRate into wild-looking +/-10-40% headline swings even though the
     // underlying weekly activity was actually stable — nominalGdpHistory was tracked but never
     // actually populated, so there was no real trailing window to compare against.
+    // A real year-over-year comparison: the window holds 53 levels so that index 0 is the level
+    // exactly 52 weeks before the newest one. It used to keep 52 and compare against index 0,
+    // which is 51 weeks back — a year-over-year reading taken a week short of a year.
     const gdpHistory = (reg as any).nominalGdpHistory ?? [];
-    const updatedGdpHistory = [...gdpHistory.slice(-51), newDerivedNominalGdpUSD];
-    const yearAgoGdpLevel = updatedGdpHistory.length >= 52 ? updatedGdpHistory[0] : null;
+    const updatedGdpHistory = [...gdpHistory.slice(-52), newDerivedNominalGdpUSD];
+    const yearAgoGdpLevel = updatedGdpHistory.length >= 53 ? updatedGdpHistory[0] : null;
+    // The bootstrap seeds a full trailing year (macro/initialization.ts), so the fallback below
+    // is unreachable in a normal run and exists only for a state restored without history. It
+    // reports the region's trend rate rather than annualizing one week via (1+x)^52: that
+    // extrapolation is what converted the cold-start level transient into ~110% headline growth,
+    // and it amplifies any weekly noise by construction whether or not a transient exists.
     const gdpGrowthBottomUp = (!isStartupTransition && yearAgoGdpLevel && yearAgoGdpLevel > 0 && isFinite(newDerivedNominalGdpUSD))
       ? (newDerivedNominalGdpUSD / yearAgoGdpLevel - 1) - reg.inflation
-      : Math.pow(1 + smoothedWeeklyRate, 52) - 1; // first year: no trailing-year level yet to compare against
+      : reg.potentialGdpGrowth;
 
     if (!isFinite(gdpGrowthBottomUp)) {
       throw new Error(`gdpGrowthBottomUp is non-finite for region ${regionId} at week ${nextWeek}: ${gdpGrowthBottomUp}. This must be fixed at its real source, not papered over with an assumed growth rate.`);

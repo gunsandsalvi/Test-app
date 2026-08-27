@@ -170,9 +170,9 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
-| 1 | Income/GDP identity + first-year growth fix | S1 | — |
-| 2 | Yield curve: single owner (kill stage 02's write) | S2 | S1 |
-| 3 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | S1, S2 |
+| 1 | Yield curve: single owner (kill stage 02's write) | S2 | — (S1 done) |
+| 2 | **CPI measured from the real cleared basket** — promoted, see note | G1 | — |
+| 3 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | S2, G1 |
 | 4 | Cash settlement in all clearing + stop bank sov-holdings drift | S4 | S3 |
 | 5 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 6 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
@@ -180,30 +180,35 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 8 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
 | 9 | Player trades enter the real market | S9 | S4, S7 |
 | 10 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 11 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S1–S7 |
+| 11 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
 | 12 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
 | 13 | Private repo markets | WS6 | S4 |
 | 14 | Money market funds | WS7 | WS5, WS6 |
 | 15 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
 | 16 | Hedge funds as distressed-debt demand | WS10 | WS4 |
-| 17 | CPI measured from the real cleared basket | G1 | S1 |
-| 18 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
-| 19 | Unify the two dealer systems | G3 | S9 |
-| 20 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 21 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
-| 22 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 23 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 24 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 25 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 26 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
-| 27 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
-| 28 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
-| 29 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 30 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 17 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
+| 18 | Unify the two dealer systems | G3 | S9 |
+| 19 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 20 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
+| 21 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 22 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 23 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 24 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 25 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
+| 26 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
+| 27 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
+| 28 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 29 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
-**Why this order.** S1/S2 first because the measured ~110% fake GDP growth poisons the Taylor
-rule, curve, FX and equity flows — nothing downstream can be validated until they're fixed,
-and the already-built 07c/07d can't be signed off (item 3) before them. S4–S9 restore the
+**Why this order.** S1 is done (§7.10): the ~110% fake GDP growth that poisoned the Taylor rule,
+curve, FX and equity flows is gone. S2 is next for the same reason it was second — the curve
+still has two owners. **G1 is promoted from 17th to 2nd** on evidence gathered while verifying
+S1: with the fake growth removed, the dominant remaining distortion is the CPI formula, which
+runs inflation away to ~10% by week 40 and ~11% in the pre-S1 baseline (A/B confirmed
+pre-existing, not caused by S1). Because headline real growth is computed as nominal minus
+inflation, that runaway alone drags reported growth to −20% by week 40 and feeds the Taylor
+rule and every real-rate calculation. Signing off the sovereign/loan slices (S3) against a
+9%-inflation macro backdrop would be measuring them in a broken environment. S4–S9 restore the
 money identities so every later market is built on books that actually balance. Wall Street
 resumes only then (building MMFs or equity clearing on broken identities is wasted work).
 G-items interleave where their prerequisites land. Main Street before Blueprint's fiscal loop
@@ -214,44 +219,7 @@ projects produce.
 
 ## 5. Detailed work instructions
 
-### S1 — Income/GDP identity + first-year growth (root cause 1)
-
-**Problem (verified numerically):** at init, household income = 106.6% of GDP: the wage bill
-is `GENERAL_WAGE_SHARE_OF_PRODUCTIVITY = 0.62` × occupation-tier multipliers averaging
-≈ ×1.495, plus 15% capital income. Bottom-up C+I+G+NX then clears ≈ 1.3× the initialized GDP
-and converges over the first weeks; `11-fiscal-and-sovereign-debt.ts`'s first-year fallback
-`Math.pow(1 + smoothedWeeklyRate, 52) − 1` annualizes that transient into ~26%→~110% headline
-`gdpGrowth`, which feeds `targetBeta2`, the Taylor rule, cycle regime, FX and equity flows.
-
-**Where:** `src/engine/simulation/initialization.ts` (wage generation),
-`src/engine/bootstrap/labor-and-wages.ts`, `src/engine/simulation/stages/11-fiscal-and-sovereign-debt.ts`,
-`src/engine/macro/utils.ts` (synthetic history helper already exists).
-
-**How:**
-1. Normalize the occupation-tier multipliers so their **employment-weighted mean is exactly
-   1.0** over the actual generated occupation mix (compute the mix first, then divide every
-   multiplier by the weighted mean). The tier *structure* (relative wages) is preserved; only
-   the level is anchored.
-2. Solve the level from the identity, not from productivity heuristics: pick one labor share
-   `α` (keep 0.62) and one capital-income share `κ` such that
-   `wageBill + capitalIncome = (α + κ) × GDP` and the household-income share is consistent
-   with the consumption the demand side actually spends (trace `estimatedHouseholdIncomeUSD`
-   consumers before choosing κ). Then **assert at init**:
-   `|estimatedHouseholdIncomeUSD / estimatedNominalGdpUSD − (α + κ)| < 1e-6` — make it a real
-   thrown error, so the identity can never silently regress.
-3. Reconcile G: the demand side routes 35% of `governmentSpendingUSD` into category demand
-   while the GDP identity counts 100%. Decide the real split (transfer payments vs. real
-   procurement), route the procurement share through real bids, count transfers in household
-   income — the identity and the demand side must use the same decomposition.
-4. First-year growth: seed a synthetic 52-week `nominalGdpHistory` at init (use
-   `macro/utils.ts`'s synthetic-history helper) consistent with `potentialGdpGrowth`, and make
-   the growth calculation always use the 52-week window — delete the
-   `pow(1 + smoothedWeeklyRate, 52) − 1` fallback entirely.
-
-**Verify:** rerun the GDP probe (income/GDP at init ≈ α+κ; week-1..10 `gdpGrowth` within
-±2pp of potential; C+I+G+NX within a few % of init GDP). 60-week revenue-ratio diagnostic.
-
-### S2 — Yield curve gets one owner (root cause 2)
+### S2 — Yield curve gets one owner
 
 **Problem:** `src/engine/macro/evolution.ts` (~lines 618–641) recomputes
 `beta0/beta1/beta2` + `zeroRates` from macro formulas weekly
@@ -465,7 +433,17 @@ feels residual exposure.
 
 ---
 
-### G1 — CPI measured from the real basket
+### G1 — CPI measured from the real basket  ← **promoted to 2nd; see §4**
+
+**Measured evidence (gathered while verifying S1, A/B against the committed baseline):** the
+current formula-driven CPI runs away — USA inflation climbs 1.6% → 4.2% by week 10, 6.8% by
+week 20, 9.8% by week 40, and reaches 11.4% in the pre-S1 baseline. It does not mean-revert to
+target and the Taylor rule does not contain it (policy rate lags to 5.3% while inflation is
+10%). Every region does the same. Because headline real growth is `nominal YoY − inflation`,
+this single formula drags reported real growth to −20% even when the nominal level is nearly
+flat, and it feeds every real-rate and discounting calculation downstream. It is now the
+largest remaining distortion in the macro layer.
+
 
 **Where:** `macro/evolution.ts` (delete the formula), new small module
 `engine/simulation/stages/price-index.ts` (or fold into stage 11).
@@ -608,6 +586,9 @@ the complete simulation.
 | `charts/Charts.tsx` | YieldCurveChart x-axis: nonlinear tenors plotted equally spaced, middle label wrong |
 | `NewsDrawer.tsx:94` | Verify `Commodity.symbol` matches `'CRUDE_OIL'` ids; else fallback always picks `commodities[0]` |
 | `ManualModal.tsx` | Restated engine constants (IM rates, axe discounts, Taylor coefficients) drifting from code — generate from the real constants or trim |
+| `macro/evolution.ts` wage/tightness | Nominal wage growth goes negative (−2.5% by week 40) while inflation runs at 10% — a 12% real-wage collapse per year. Partly a symptom of G1's runaway, partly the tightness→wage-growth formula having no real bargaining mechanism. Re-measure after G1; if it survives, it belongs to MS3 |
+| `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
+| `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
 | open (#67) | USA bank capital → 0 from ~week 149 (expect root cause via S4 + G2; re-verify then) |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 
@@ -640,6 +621,40 @@ the complete simulation.
    Phase 2 SRF/ON RRP administered facilities; slice 1 corp-bond clearing; generic engine
    extraction; slices 2–3 (sovereign + loans) built, pending S3 sign-off. Failed banks still
    lack deposit flight (known gap, revisit in G2).
-9. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+9. **S1 landed (income/GDP identity + first-year growth).** What was wrong and what fixed it:
+   - Tier wage premiums (1.35^tier) were applied on top of a GENERAL wage already set at 62% of
+     output per worker, so the aggregate wage bill was 0.62 × 1.4957 = 93% of output and
+     household income 106.6% of GDP. Fixed by normalizing the premiums by their
+     employment-weighted mean over the baseline occupation mix — relative wages preserved, the
+     level anchored. Normalize against the BASELINE mix, never the drifting live one, or a real
+     shift toward high-skill work gets silently cancelled.
+   - `bootstrap/national-accounts.ts` is now the single owner of the identity (labor share,
+     household capital-income share, government procurement share, household tax rate) and of
+     the two derivations that must agree: `computeHouseholdDisposableIncomeUSD` and
+     `computeExpenditureGdpUSD`. Three of the four shares are chosen primitives; the household
+     tax rate is what the identity then requires, and it lands at 13.2% — inside its own
+     realistic band, which is the check that the other three are sane.
+   - **Four duplicated definitions found and collapsed while doing it**: the occupation-share
+     table (written out twice, init + evolution), the `0.35` government-procurement literal
+     (three copies: init, stage 03, and absent entirely from stage 11 which counted 100% of
+     outlays), the household-income formula (init vs. evolution, materially different), and the
+     bilateral trade computation (now `computeBilateralTradeFlows`, shared by stage 06 and init).
+   - **Transfers are not purchases.** The GDP identity counted 100% of government outlays as G
+     while the demand side spent only 35% of them. Transfers are household income and reach GDP
+     through C; only the procurement share is G. Unemployment benefits sit *inside* the transfer
+     total rather than on top of it, or they are double-counted.
+   - **Cold start must open on the real economy, not a top-down sketch.** Three things were
+     seeded from an assumption and stepped the moment week 1 recomputed them for real:
+     employment (top-down headcount vs. real company labor demand, −4%), trade (exactly zero
+     exports and imports vs. the structural balance, −5.5% of output for the USA), and the GDP
+     history (empty). All three now seed from the same computation the weekly step uses.
+   - **Real bug found in the growth window:** `[...history.slice(-51), current]` keeps 52 entries
+     and compares against index 0 — a "year-over-year" reading taken 51 weeks apart. Now keeps 53.
+   - The `Math.pow(1 + smoothedWeeklyRate, 52) - 1` first-year fallback is deleted; it was the
+     amplifier that turned the level transient into ~110% headline growth.
+   - Result: week-2 USA growth reads **+1.54% against 1.80% potential** (was +113%); the identity
+     is asserted exactly at init; 26 weeks across all four regions produce zero non-finite values.
+     The residual decay in later weeks is G1's inflation runaway, confirmed pre-existing by A/B.
+10. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
    MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
    `npm run verify` gate closes #2/#14/#41.

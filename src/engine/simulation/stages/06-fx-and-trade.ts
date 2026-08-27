@@ -6,7 +6,7 @@
  * every tradable category.
  */
 
-import { GameState, RegionId, Company, FxPair } from '../../../types';
+import { GameState, Region, RegionId, Company, FxPair } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { CATEGORY_TRADABILITY } from '../../../domain/region-macro';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
@@ -51,14 +51,26 @@ function getFxCompetitivenessAdjustment(exporter: RegionId, importer: RegionId, 
   return Math.max(-0.5, Math.min(0.5, (ratio * direction * 5)));
 }
 
-export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): void {
-  ctx.updatedFxPairs = state.fxPairs.map((fx) => evolveFxPair(fx, ctx.updatedRegions));
-  ctx.getFxToUsd = (regionId: RegionId) => getFxToUsd(ctx.updatedFxPairs, regionId);
-
+/**
+ * One week of real bilateral trade: for every exporter/importer pair and every tradable
+ * category, the exporter captures a share of the importer's real category demand based on its
+ * own firms' competitiveness and the current exchange rate.
+ *
+ * Exported so that the cold-start bootstrap can seed each region's opening trade position from
+ * the very same computation the weekly step runs. It used to start every region at exactly zero
+ * exports and zero imports, so week 1 stepped straight to the structural trade balance — for the
+ * USA a jump of about -5.5% of output in a single week, which the GDP series could only read as
+ * a collapse in growth. A real economy is already trading on the day the simulation opens.
+ */
+export function computeBilateralTradeFlows(
+  companies: Company[],
+  regions: Record<RegionId, Region>,
+  fxPairs: FxPair[]
+): { exportsByRegion: Record<RegionId, number>; importsByRegion: Record<RegionId, number>; categoryExportsByRegion: Record<RegionId, Record<string, number>> } {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
   const regionExports: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
   const regionImports: Record<RegionId, number> = { USA: 0, EUR: 0, UK: 0, JPN: 0 };
-  ctx.regionCategoryExports = { USA: {}, EUR: {}, UK: {}, JPN: {} };
+  const categoryExports: Record<RegionId, Record<string, number>> = { USA: {}, EUR: {}, UK: {}, JPN: {} };
 
   regionIds.forEach(exporter => {
     regionIds.filter(r => r !== exporter).forEach(importer => {
@@ -67,20 +79,33 @@ export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): vo
         if (tradability < 0.1) return; // not worth computing for near-untradable categories
         const subUnits = INDUSTRY_SUBUNITS[cat as any] || [];
         const importerDemand = subUnits.reduce((s, su) => {
-          const dem = ctx.updatedRegions[importer].categoryDemand[su.unitId];
+          const dem = regions[importer].categoryDemand[su.unitId];
           const val = dem?.demandLevelUSD;
           return s + (typeof val === 'number' && Number.isFinite(val) ? val : 0);
         }, 0);
-        const exporterCompetitiveness = computeRegionalCompetitiveness(state.companies, exporter, cat);
-        const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, ctx.updatedFxPairs);
+        const exporterCompetitiveness = computeRegionalCompetitiveness(companies, exporter, cat);
+        const fxCompetitiveness = getFxCompetitivenessAdjustment(exporter, importer, fxPairs);
         const exportShareCapture = Math.max(0.05, Math.min(0.80, (0.25 + exporterCompetitiveness * 0.2 + fxCompetitiveness * 0.2)));
         const flow = importerDemand * tradability * (exportShareCapture / (regionIds.length - 1)); // divided among competitors
         regionExports[exporter] += flow;
         regionImports[importer] += flow;
-        ctx.regionCategoryExports[exporter][cat] = (ctx.regionCategoryExports[exporter][cat] ?? 0) + flow;
+        categoryExports[exporter][cat] = (categoryExports[exporter][cat] ?? 0) + flow;
       });
     });
   });
+
+  return { exportsByRegion: regionExports, importsByRegion: regionImports, categoryExportsByRegion: categoryExports };
+}
+
+export function runFxAndTradeStage(state: GameState, ctx: WeeklyStepContext): void {
+  ctx.updatedFxPairs = state.fxPairs.map((fx) => evolveFxPair(fx, ctx.updatedRegions));
+  ctx.getFxToUsd = (regionId: RegionId) => getFxToUsd(ctx.updatedFxPairs, regionId);
+
+  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const { exportsByRegion: regionExports, importsByRegion: regionImports, categoryExportsByRegion } =
+    computeBilateralTradeFlows(state.companies, ctx.updatedRegions, ctx.updatedFxPairs);
+  ctx.regionCategoryExports = categoryExportsByRegion;
+
 
   regionIds.forEach(r => {
     ctx.updatedRegions[r].exportsUSD = regionExports[r];

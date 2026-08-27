@@ -9,6 +9,7 @@
 
 import { RegionId, OccupationType } from '../../types';
 import { getRegionProductivityPerCapitaUSD } from './population';
+import { LABOR_SHARE_OF_OUTPUT } from './national-accounts';
 
 // Structural skill tier per occupation (1 = least specialized). The ordering is a modeling
 // choice about which occupations command a wage premium, not a copied wage survey.
@@ -24,19 +25,56 @@ const OCCUPATION_SKILL_TIER: Record<OccupationType, number> = {
 // coefficient, analogous to the sector/occupation mix ratios already used elsewhere).
 const SKILL_TIER_WAGE_STEP = 1.35;
 
-// GENERAL-tier annual wage as a share of the region's output-per-worker.
-const GENERAL_WAGE_SHARE_OF_PRODUCTIVITY = 0.62;
+/**
+ * Structural share of the labor force in each occupation at bootstrap. The single owner of this
+ * mix: it used to be written out twice, independently, in macro/initialization.ts and
+ * macro/evolution.ts. The weekly mix drifts from here as workers retrain
+ * (`Region.occupationLaborForceShare`), but this baseline stays fixed — it is what the wage
+ * table below is normalized against.
+ */
+export const BASELINE_OCCUPATION_LABOR_FORCE_SHARE: Record<OccupationType, number> = {
+  GENERAL: 0.55,
+  SKILLED_TRADES: 0.15,
+  TECHNICAL_ENGINEERING: 0.12,
+  SPECIALIZED_PROFESSIONAL: 0.08,
+  MANAGERIAL_FINANCIAL: 0.10,
+};
 
 /**
- * Per-region occupation wage table, derived from productivity instead of a flat constant.
+ * Employment-weighted mean of the raw tier premiums over the baseline occupation mix (~1.4957).
+ *
+ * The premiums say how occupations are paid RELATIVE to each other; they must not also move the
+ * absolute level of the wage bill, or the labor share silently becomes whatever the mix happens
+ * to imply. That was the bug: the GENERAL wage was set to 62% of output per worker and every
+ * higher tier multiplied up from there, so the aggregate wage bill came to 0.62 * 1.4957 = 93%
+ * of output — and with capital income on top, household income reached 106.6% of GDP. Dividing
+ * the premiums through by this mean preserves the entire relative wage structure while making
+ * the aggregate wage bill exactly LABOR_SHARE_OF_OUTPUT of output at the baseline mix.
+ *
+ * Normalizing against the BASELINE mix (not the current, drifting one) is deliberate: a real
+ * shift of the labor force toward higher-skill occupations genuinely should raise the average
+ * wage, and normalizing against the live mix every week would cancel exactly that real effect.
+ */
+const BASELINE_WEIGHTED_TIER_PREMIUM = (Object.keys(OCCUPATION_SKILL_TIER) as OccupationType[]).reduce(
+  (sum, occ) =>
+    sum +
+    BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] * Math.pow(SKILL_TIER_WAGE_STEP, OCCUPATION_SKILL_TIER[occ] - 1),
+  0
+);
+
+/**
+ * Per-region occupation wage table, derived from productivity instead of a flat constant, and
+ * scaled so that paying this table across the baseline occupation mix costs exactly
+ * LABOR_SHARE_OF_OUTPUT of the region's output.
  */
 export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType, number> {
   const productivity = getRegionProductivityPerCapitaUSD(regionId);
-  const generalWage = productivity * GENERAL_WAGE_SHARE_OF_PRODUCTIVITY;
+  const averageWage = productivity * LABOR_SHARE_OF_OUTPUT;
   const result = {} as Record<OccupationType, number>;
   (Object.keys(OCCUPATION_SKILL_TIER) as OccupationType[]).forEach((occ) => {
     const tier = OCCUPATION_SKILL_TIER[occ];
-    result[occ] = Number((generalWage * Math.pow(SKILL_TIER_WAGE_STEP, tier - 1)).toFixed(0));
+    const relativePremium = Math.pow(SKILL_TIER_WAGE_STEP, tier - 1) / BASELINE_WEIGHTED_TIER_PREMIUM;
+    result[occ] = Number((averageWage * relativePremium).toFixed(0));
   });
   return result;
 }

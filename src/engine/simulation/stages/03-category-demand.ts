@@ -9,6 +9,7 @@ import { GameState, RegionId } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
+import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts';
 import { WeeklyStepContext } from './context';
 
 export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -29,7 +30,10 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     // Compute active GDP components for bottom-up demand targets
     const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    const G = reg.governmentSpendingUSD * 52 * 0.35 * (1 + reg.fiscalStanceScore * 0.25);
+    // Government purchases only — the transfer share of outlays reaches demand through C, not
+    // here. Shares the one procurement constant with the GDP identity in stage 11 so the two
+    // cannot disagree about what the government actually buys.
+    const G = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD) * (1 + reg.fiscalStanceScore * 0.25);
     const rawCorporateDemandBase = ctx.prevActiveFirms.filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
     const newLaggedCorporateDemandBase = reg.laggedCorporateDemandBase * 0.95 + rawCorporateDemandBase * 0.05;
     reg.laggedCorporateDemandBase = newLaggedCorporateDemandBase;

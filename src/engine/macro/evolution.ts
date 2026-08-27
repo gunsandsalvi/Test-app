@@ -2,7 +2,11 @@ import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
-import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
+import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
+import {
+  computeHouseholdDisposableIncomeUSD,
+  UNEMPLOYMENT_REPLACEMENT_RATE,
+} from '../bootstrap/national-accounts';
 import { evolveBankingSector } from './banking';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
@@ -289,13 +293,7 @@ export function evolveRegionMacro(
   const newOtherLoanDebtUSD = Math.max(0, (prevHS.otherConsumerLoanDebtUSD || 0) * (1 - otherLoanPaydownRate) + weeklyNewOtherLoansUSD);
 
   // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
-  const defaultOccupationShares: Record<OccupationType, number> = {
-    GENERAL: 0.55,
-    SKILLED_TRADES: 0.15,
-    TECHNICAL_ENGINEERING: 0.12,
-    SPECIALIZED_PROFESSIONAL: 0.08,
-    MANAGERIAL_FINANCIAL: 0.10,
-  };
+  const defaultOccupationShares: Record<OccupationType, number> = BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
   const currentLaborForceShares = region.occupationLaborForceShare || defaultOccupationShares;
   const currentOccupationPools = region.occupationPools || {
     GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
@@ -442,15 +440,21 @@ export function evolveRegionMacro(
     const pool = newOccupationPools[occ];
     return sum + baseAnnualWageUSD[occ] * pool.wageIndex * pool.employed;
   }, 0);
-  const unemploymentReplacementRate = 0.35;
-  const unemploymentTransferIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
+  const unemploymentBenefitsUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
     const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
     const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
-    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * unemploymentReplacementRate;
+    return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * UNEMPLOYMENT_REPLACEMENT_RATE;
   }, 0);
-  const capitalIncomeUSD = totalWageIncomeUSD * 0.15;
-  const newEstimatedHouseholdIncomeUSD = Number((totalWageIncomeUSD + unemploymentTransferIncomeUSD + capitalIncomeUSD).toFixed(0));
+  // The same national-accounts derivation the cold-start bootstrap uses. It used to be written
+  // out separately here (wages + unemployment transfers + a flat 15% capital income, no tax and
+  // no government transfers), so the week-1 economy did not describe the same one the bootstrap
+  // had built — the two definitions have to be one definition.
+  const newEstimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+    wageIncomeUSD: totalWageIncomeUSD,
+    governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
+    unemploymentBenefitsUSD,
+  }).toFixed(0));
 
   const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
   
