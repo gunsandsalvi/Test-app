@@ -1,5 +1,5 @@
 import { isActiveCompany } from '../../domain/company';
-import { NelsonSiegelParams, calculateTenorZeroRates } from '../nelsonSiegel';
+import { NelsonSiegelParams } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
@@ -68,7 +68,6 @@ export function evolveRegionMacro(
     publicCompanyEmployment: number;
     occupationDemand?: Record<OccupationType, number>;
     monetizedAmountUSD?: number;
-    sovereignAuctionPremiumBps?: number;
   },
   week: number,
   equityReturn: number = 0,
@@ -617,32 +616,31 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const dotPlot1Y = Number((newPolicyRate * 0.4 + smoothedTargetRate * 0.6).toFixed(4));
   const dotPlot2Y = Number((smoothedTargetRate * 0.35 + (rStar + piStar) * 0.65).toFixed(4));
 
-  const qePremium = (cbChangePct * -0.5);
-
-  // Update Nelson-Siegel yield curve parameters. The long-run level (beta0) is driven by an
-  // auction-outcome signal (issuance supply vs. absorbed bank/institutional demand, computed
-  // in core.ts's sovereign-debt section from the same 40/60 split used to allocate holdings)
-  // rather than an ad-hoc macro formula: under-absorption (a positive premium) raises yields,
-  // over-subscription (a negative premium) lowers them, anchored on the region's own
-  // generated neutral rate instead of a flat literal.
-  const targetBeta0 = region.neutralRate + (microFeedback.sovereignAuctionPremiumBps ?? 0) / 10000 + qePremium * 2;
-  const newBeta0 = Math.max(
-    0.012,
-    region.yieldCurveParams.beta0 * 0.98 + targetBeta0 * 0.02 + (Math.random() - 0.5) * 0.0003
-  );
-  const newBeta1 = newPolicyRate - newBeta0 + (Math.random() - 0.5) * 0.0002;
-  const targetBeta2 = (newGdpGrowth - region.potentialGdpGrowth) * 2.0;
-  const newBeta2 =
-    region.yieldCurveParams.beta2 * 0.95 + targetBeta2 * 0.05 + (Math.random() - 0.5) * 0.0003;
-
-  const newCurveParams: NelsonSiegelParams = {
-    beta0: newBeta0,
-    beta1: newBeta1,
-    beta2: newBeta2,
-    lambda: region.yieldCurveParams.lambda,
-  };
-
-  const newZeroRates = calculateTenorZeroRates(newCurveParams);
+  // The yield curve is NOT set here. It has exactly one owner: the real sovereign auction in
+  // 07c-sovereign-bond-clearing.ts, where named banks and institutions trade real tenor buckets
+  // against the government's real outstanding stock and the Nelson-Siegel parameters are refit
+  // to the yields that actually clear.
+  //
+  // This block used to recompute beta0/beta1/beta2 from macro formulas every week and overwrite
+  // whatever the auction had cleared — two price-setters for one curve, with the formula running
+  // first and the market's answer discarded a stage later. `targetBeta2 = (gdpGrowth -
+  // potentialGdpGrowth) * 2.0` in particular was the path that turned the cold-start GDP
+  // transient into a 4% -> 26% two-year yield spiral.
+  //
+  // Macro conditions still reach the curve, but the way they do in reality — through what
+  // participants are willing to pay. The policy rate reaches the front end because banks
+  // arbitrage bonds against reserves at the central bank; inflation expectations reach the long
+  // end because what a bond is worth to its holder is its real yield. Both now live in 07c's
+  // attractiveness functions. The one rate still set here is the policy rate itself, which is
+  // genuinely administered rather than traded — a posted central-bank rate IS the real-world
+  // mechanism, not a formula standing in for a missing market.
+  //
+  // Central-bank balance-sheet policy (QE/QT) reached the curve here too, via qePremium. That
+  // is real, but it belongs in the auction as real central-bank demand for real bonds rather
+  // than as a nudge to a curve parameter; it is tracked as its own work item (G9) and is
+  // deliberately absent rather than approximated in the meantime.
+  const newCurveParams: NelsonSiegelParams = region.yieldCurveParams;
+  const newZeroRates = region.zeroRates;
 
   let newInversionCount = region.inversionWeeksCount;
   if (newZeroRates.tenor2Y > newZeroRates.tenor10Y) {

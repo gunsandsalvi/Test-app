@@ -30,8 +30,14 @@
  * pass through them (fitNelsonSiegelParams) — the standard real-world technique for building a
  * full curve from a handful of actually observed points — so every other consumer of the curve
  * (corporate bond and loan pricing, swaps, FX, position mark-to-market) keeps working unchanged,
- * now riding on real cleared prices instead of evolution.ts's macro formula for beta0/beta1/beta2
- * (which still runs first each week but is immediately superseded here).
+ * now riding on real cleared prices.
+ *
+ * This stage is the curve's ONLY owner. macro/evolution.ts used to recompute beta0/beta1/beta2
+ * from macro formulas every week and overwrite whatever cleared here; that write is gone. Macro
+ * conditions reach the curve exclusively through the participants' own attractiveness views
+ * below: the administered policy rate via banks' real front-end arbitrage against central-bank
+ * reserves, and inflation expectations via every holder's real yield and how much duration it is
+ * being paid for.
  *
  * Must run after stage 2b (so banks' own balance sheets already reflect this week) and before
  * stage 8, 11, and 12 (all of which read yieldCurveParams/zeroRates as already-real values).
@@ -63,12 +69,42 @@ const DEALER_SPREAD_BPS = 5;
 const BANK_PREFERRED_TENOR_YEARS = 3; // a bank's HQLA book skews shorter/more liquid than a typical bond investor
 const INSTITUTIONAL_PREFERRED_TENOR_YEARS = 12; // insurers/pension funds match long-dated liabilities
 
+// How macro conditions reach the curve now that no formula writes it (see this file's header
+// and the deleted block in macro/evolution.ts). Both signals are comparisons against real,
+// already-existing quantities in the same units — the administered policy rate and the region's
+// own expected inflation — never an independently invented "fair yield" level, which has no
+// guaranteed relationship to the bootstrapped curve and saturates into a one-way tilt.
+const POLICY_SPREAD_SCALE_BPS = 300; // pickup over the policy rate that fully forms a bank's front-end view
+const MAX_POLICY_TILT = 0.20;
+const FRONT_END_SUBSTITUTION_TENOR_YEARS = 3; // how far along the curve a bond still substitutes for cash at the CB
+const RESERVE_SUBSTITUTION_SCALE_BPS = 300; // pickup over the policy rate that fully swings the bond-vs-reserves choice
+const MAX_RESERVE_SUBSTITUTION = 0.5; // a bank must always carry some HQLA and cannot lever into unlimited bonds
+const REAL_YIELD_SCALE_BPS = 1000; // real yield that fully forms a duration view
+const MAX_INFLATION_TILT = 0.15;
+const LONG_END_TENOR_YEARS = 20; // tenor at which a holder is fully exposed to the inflation view
+
 function bucketInstrumentId(regionId: RegionId, tenorKey: string): string {
   return `${regionId}-GOV-${tenorKey}`;
 }
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Every holder's view of what a bond is really paying: its nominal yield less the inflation the
+ * region actually expects, weighted by how much of that holder's money the tenor commits. Shared
+ * by banks and institutions because it is not a mandate preference — it is arithmetic that
+ * applies to anyone holding the paper.
+ */
+function realYieldSignal(
+  reg: { expectedInflation: number },
+  bucket: { years: number },
+  currentYieldBps: number
+): number {
+  const realYieldBps = currentYieldBps - reg.expectedInflation * 10000;
+  const durationExposure = Math.min(1, bucket.years / LONG_END_TENOR_YEARS);
+  return clamp((realYieldBps / REAL_YIELD_SCALE_BPS) * durationExposure, -MAX_INFLATION_TILT, MAX_INFLATION_TILT);
 }
 
 export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -168,7 +204,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         const meanReversionSignal = clamp((currentYieldBps - historicalYieldBps) / MOMENTUM_SCALE_BPS, -MAX_MOMENTUM_TILT, MAX_MOMENTUM_TILT);
         const durationGap = Math.abs(b.years - INSTITUTIONAL_PREFERRED_TENOR_YEARS);
         const durationSignal = clamp(MAX_DURATION_TILT - durationGap * 0.01, -MAX_DURATION_TILT, MAX_DURATION_TILT);
-        attractivenessByInstrumentId.set(id, clamp(meanReversionSignal + durationSignal, -1, 1));
+        // What a bond is actually worth to whoever holds it is its REAL yield, so rising
+        // inflation expectations make the compensation on offer worse — and worse by more the
+        // longer the money is committed, which is why a real term premium widens the curve
+        // rather than shifting it in parallel. This is how inflation reaches the long end now
+        // that no formula writes beta2.
+        attractivenessByInstrumentId.set(id, clamp(meanReversionSignal + durationSignal + realYieldSignal(reg, b, currentYieldBps), -1, 1));
       });
 
       return {
@@ -186,14 +227,60 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         currentByBucket.set(bucketInstrumentId(regionId, key), v);
       });
       const currentTotalUSD = Array.from(currentByBucket.values()).reduce((s, v) => s + v, 0);
-      const rawTargetUSD = rawBankTargets.get(bank.ticker) ?? 0;
-      const slowTargetUSD = currentTotalUSD + (rawTargetUSD - currentTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
+      // A bank's sovereign book and its reserve account at the central bank compete for the same
+      // cash: both are high-quality liquid assets, and the central bank pays an administered rate
+      // on one of them. So the SIZE of the book, not just its shape, responds to what the curve
+      // pays relative to that rate — a tilt across tenors alone can only ever decide which bond
+      // to own, never whether to own bonds at all. Without this the front end drifted hundreds of
+      // basis points below the policy rate with nothing to stop it: every participant crowded
+      // into short paper to escape duration, and no one had the one option a real bank always
+      // has, which is to hold the cash instead.
+      //
+      // Weighted toward the tenors that genuinely substitute for cash, because that is where the
+      // choice is actually being made. The bound is structural rather than a price limit: a bank
+      // must carry some liquid assets whatever the rate says, and cannot fund an unbounded bond
+      // book off its balance sheet.
+      const substitutabilityWeights = activeBuckets.map((b) => 1 / (1 + b.years / FRONT_END_SUBSTITUTION_TENOR_YEARS));
+      const weightSum = substitutabilityWeights.reduce((sum, w) => sum + w, 0) || 1;
+      const cashComparableYieldBps = activeBuckets.reduce(
+        (sum, b, i) => sum + reg.zeroRates[b.zeroRateField] * 10000 * substitutabilityWeights[i], 0
+      ) / weightSum;
+      const reserveSubstitution = clamp(
+        (cashComparableYieldBps - reg.policyRate * 10000) / RESERVE_SUBSTITUTION_SCALE_BPS,
+        -MAX_RESERVE_SUBSTITUTION,
+        MAX_RESERVE_SUBSTITUTION
+      );
+      // The structural share moves slowly, the way a real strategic allocation does; the
+      // bond-versus-reserves choice is layered on top of it rather than inside it, because that
+      // is a treasury decision taken on the day the rate changes, not a policy review. Folding it
+      // into the slow drift throttled a central-bank hike down to well under half its real
+      // pass-through into front-end yields.
+      const structuralTargetUSD = rawBankTargets.get(bank.ticker) ?? 0;
+      const slowTargetUSD = (currentTotalUSD + (structuralTargetUSD - currentTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE)
+        * (1 + reserveSubstitution);
 
       const attractivenessByInstrumentId = new Map<string, number>();
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
+        const currentYieldBps = reg.zeroRates[b.zeroRateField] * 10000;
         const durationGap = Math.abs(b.years - BANK_PREFERRED_TENOR_YEARS);
-        attractivenessByInstrumentId.set(id, clamp(MAX_DURATION_TILT - durationGap * 0.02, -MAX_DURATION_TILT, MAX_DURATION_TILT));
+        const durationSignal = clamp(MAX_DURATION_TILT - durationGap * 0.02, -MAX_DURATION_TILT, MAX_DURATION_TILT);
+        // Real front-end arbitrage, and the reason the policy rate still reaches the curve
+        // without anyone writing it there: a bank holding this bond is choosing not to leave the
+        // cash at the central bank earning the administered rate (it funds and places at the
+        // SRF/ON RRP corridor around exactly that rate). A bond yielding more than the corridor
+        // is worth owning; when the central bank hikes past it, the same bond is worth selling.
+        // The two are near-perfect substitutes at the front end and barely substitutes at all
+        // far out, so the signal fades along the curve — which is why a hike bites hardest on
+        // short yields.
+        const yieldPickupOverPolicyBps = currentYieldBps - reg.policyRate * 10000;
+        const cashSubstitutability = 1 / (1 + b.years / FRONT_END_SUBSTITUTION_TENOR_YEARS);
+        const policyCorridorSignal = clamp(
+          (yieldPickupOverPolicyBps / POLICY_SPREAD_SCALE_BPS) * cashSubstitutability,
+          -MAX_POLICY_TILT,
+          MAX_POLICY_TILT
+        );
+        attractivenessByInstrumentId.set(id, clamp(durationSignal + policyCorridorSignal + realYieldSignal(reg, b, currentYieldBps), -1, 1));
       });
 
       return {

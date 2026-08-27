@@ -149,6 +149,78 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const liveTranches = (reg.govDebtTranches || []).filter(t => t.maturityWeek > nextWeek);
     const maturedPrincipalUSD = maturedTranches.reduce((s, t) => s + t.principalUSD, 0);
 
+    // Redeem the maturing principal out of whoever actually holds it. Without this, a maturing
+    // tranche vanished from the government's books while the banks and institutions that owned
+    // it went on holding it: measured at week 52, holders owned 1.30x the ENTIRE two-year float,
+    // bonds that no longer existed. The clearing engine then tried to trade that phantom position
+    // down against a float a third of its former size, and since price impact scales with flow
+    // over float, the two-year yield ran from 6% to 25% over the following weeks. Bonds that
+    // matured have to leave the holder's book on the week they mature — that is what maturity is.
+    //
+    // Pro-rata within the tenor bucket, because a bucket is fungible: every holder of it owns a
+    // proportional slice of every tranche inside it. Banks are credited the cash, which keeps
+    // their balance sheet whole. Institutional entities have no itemized cash line to credit yet,
+    // so their redemption currently reduces holdings only — the matching cash leg lands with the
+    // rest of clearing settlement (see the work order's cash-settlement item).
+    if (maturedPrincipalUSD > 0) {
+      const bucketYears = [2, 5, 10, 30];
+      const nearestBucket = (tenorAtIssuanceYears: number) =>
+        bucketYears.reduce((best, y) =>
+          Math.abs(y - tenorAtIssuanceYears) < Math.abs(best - tenorAtIssuanceYears) ? y : best);
+
+      const maturedByBucket = new Map<string, number>();
+      maturedTranches.forEach(t => {
+        const key = `t${nearestBucket(t.tenorAtIssuanceYears)}`;
+        maturedByBucket.set(key, (maturedByBucket.get(key) ?? 0) + t.principalUSD);
+      });
+      const preMaturityByBucket = new Map<string, number>();
+      (reg.govDebtTranches || []).forEach(t => {
+        const key = `t${nearestBucket(t.tenorAtIssuanceYears)}`;
+        preMaturityByBucket.set(key, (preMaturityByBucket.get(key) ?? 0) + t.principalUSD);
+      });
+      const redeemedFractionByBucket = new Map<string, number>();
+      maturedByBucket.forEach((maturedUSD, key) => {
+        const preUSD = preMaturityByBucket.get(key) ?? 0;
+        if (preUSD > 0) redeemedFractionByBucket.set(key, Math.min(1, maturedUSD / preUSD));
+      });
+
+      ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
+        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
+        const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByTenor || {};
+        let redeemedUSD = 0;
+        const newByTenor: Record<string, number> = {};
+        Object.entries(byTenor).forEach(([key, heldUSD]) => {
+          const fraction = redeemedFractionByBucket.get(key) ?? 0;
+          redeemedUSD += heldUSD * fraction;
+          newByTenor[key] = heldUSD * (1 - fraction);
+        });
+        if (redeemedUSD <= 0) return c;
+        return {
+          ...c,
+          bankBalanceSheet: {
+            ...c.bankBalanceSheet,
+            sovereignBondHoldingsByTenor: newByTenor,
+            sovereignBondHoldingsUSD: Number(Object.values(newByTenor).reduce((sum, v) => sum + v, 0).toFixed(0)),
+            cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + redeemedUSD,
+          },
+        };
+      });
+
+      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
+        if (entity.region !== regionId) return entity;
+        let touched = false;
+        const newHoldings = entity.itemizedHoldings.map(h => {
+          if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
+          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
+          const fraction = redeemedFractionByBucket.get(key) ?? 0;
+          if (fraction <= 0) return h;
+          touched = true;
+          return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 - fraction) };
+        }).filter(h => h.quantityOrNotionalUSD > 1);
+        return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
+      });
+    }
+
     const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedPrincipalUSD;
     const monetizationShare = (reg.balanceSheetStance * 0.5);
     const monetizedAmountUSD = weeklyDeficitUSD * monetizationShare;

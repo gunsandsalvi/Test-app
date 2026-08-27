@@ -78,7 +78,7 @@ every cross-stage dependency is visible) and runs the stages in order:
 | Stage | File | Owns |
 |---|---|---|
 | 01 | `01-macro-feedback.ts` | Cross-region contagion/systemic-stress signals |
-| 02 | `02-region-macro.ts` | Region macro evolution via `macro/evolution.ts` (GDP, inflation, wages, FX, ownership drift). **Currently also writes the yield curve — that write must die (§5-A2)** |
+| 02 | `02-region-macro.ts` | Region macro evolution via `macro/evolution.ts` (GDP, inflation, wages, FX, ownership drift). Sets the administered policy rate; does NOT touch the yield curve |
 | 02b | `02b-bank-diversification.ts` | Per-bank balance-sheet evolution, SRF/ON RRP facilities, region aggregate = real sum of named banks |
 | 03 | `03-category-demand.ts` | C+I+G demand targets per sub-unit; `corporateDemandUSD` persisted per category |
 | 04 | `04-input-output.ts` | Input-category clearing: real supply from linked commodities, pooled multi-industry demand, pro-rata rationing |
@@ -86,7 +86,7 @@ every cross-stage dependency is visible) and runs the stages in order:
 | 06 | `06-fx-and-trade.ts` | FX evolution + trade flows (still formula — see §5-WS9) |
 | 07 | `07-commodities.ts` | Commodity spot evolution |
 | 07b | `07b-corporate-bond-clearing.ts` | Corp bond clearing (FIXED tranches) — adapter over the generic engine |
-| 07c | `07c-sovereign-bond-clearing.ts` | Sovereign tenor-bucket clearing (2/5/10/30Y) + Nelson-Siegel refit to cleared yields |
+| 07c | `07c-sovereign-bond-clearing.ts` | Sovereign tenor-bucket clearing (2/5/10/30Y) + Nelson-Siegel refit to cleared yields. **The curve's only owner**; macro reaches it through banks' reserve arbitrage and every holder's real yield |
 | 07d | `07d-leveraged-loan-clearing.ts` | Leveraged loan clearing (FLOATING tranches), CLO/loan-fund base via `loanPct` |
 | 08 | `08-company-fundamentals.ts` | Per-company weekly update: revenue (anchored to stage 05 real sales), costs, capex/debt, rating, earnings, equity price. Largest stage; reads cleared credit stats, never sets them |
 | 09 | `09-concentration-risk.ts` | >40% supplier/customer concentration flags |
@@ -170,40 +170,38 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
-| 1 | Yield curve: single owner (kill stage 02's write) | S2 | — (S1 done) |
-| 2 | **CPI measured from the real cleared basket** — promoted, see note | G1 | — |
-| 3 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | S2, G1 |
-| 4 | Cash settlement in all clearing + stop bank sov-holdings drift | S4 | S3 |
-| 5 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
-| 6 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
-| 7 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
-| 8 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
-| 9 | Player trades enter the real market | S9 | S4, S7 |
-| 10 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 11 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
-| 12 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
-| 13 | Private repo markets | WS6 | S4 |
-| 14 | Money market funds | WS7 | WS5, WS6 |
-| 15 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 16 | Hedge funds as distressed-debt demand | WS10 | WS4 |
-| 17 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
-| 18 | Unify the two dealer systems | G3 | S9 |
-| 19 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 20 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
-| 21 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 22 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 23 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 24 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 25 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
-| 26 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
-| 27 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
-| 28 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 29 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | **CPI measured from the real cleared basket** — promoted, see note | G1 | — (S1, S2 done) |
+| 2 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | G1 |
+| 3 | Cash settlement in all clearing + stop bank sov-holdings drift | S4 | S3 |
+| 4 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
+| 5 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
+| 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
+| 7 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
+| 8 | Player trades enter the real market | S9 | S4, S7 |
+| 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
+| 10 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
+| 11 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
+| 12 | Private repo markets | WS6 | S4 |
+| 13 | Money market funds | WS7 | WS5, WS6 |
+| 14 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 15 | Hedge funds as distressed-debt demand | WS10 | WS4 |
+| 16 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
+| 17 | Unify the two dealer systems | G3 | S9 |
+| 18 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 19 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
+| 20 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 21 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 22 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 23 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 24 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
+| 25 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
+| 26 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
+| 27 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 28 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
-**Why this order.** S1 is done (§7.10): the ~110% fake GDP growth that poisoned the Taylor rule,
-curve, FX and equity flows is gone. S2 is next for the same reason it was second — the curve
-still has two owners. **G1 is promoted from 17th to 2nd** on evidence gathered while verifying
-S1: with the fake growth removed, the dominant remaining distortion is the CPI formula, which
+**Why this order.** S1 and S2 are done (§7.10, §7.11): the ~110% fake GDP growth is gone and the
+yield curve now has exactly one owner, the real auction. **G1 is promoted to first** on evidence
+gathered while verifying both: with the fake growth removed, the dominant remaining distortion is the CPI formula, which
 runs inflation away to ~10% by week 40 and ~11% in the pre-S1 baseline (A/B confirmed
 pre-existing, not caused by S1). Because headline real growth is computed as nominal minus
 inflation, that runaway alone drags reported growth to −20% by week 40 and feeds the Taylor
@@ -218,30 +216,6 @@ projects produce.
 ---
 
 ## 5. Detailed work instructions
-
-### S2 — Yield curve gets one owner
-
-**Problem:** `src/engine/macro/evolution.ts` (~lines 618–641) recomputes
-`beta0/beta1/beta2` + `zeroRates` from macro formulas weekly
-(`targetBeta2 = (gdpGrowth − potential) × 2.0` …), overwriting 07c's cleared curve. Two
-price-setters; with S1's fake growth this is the verified 4%→26% 2Y spiral.
-
-**Where:** `macro/evolution.ts` (delete the write), `07c-sovereign-bond-clearing.ts`
-(absorb the macro influence as demand).
-
-**How:** delete the beta/zeroRates write from stage 02 (keep the Taylor-rule policy rate —
-that's the administered short-end anchor, rule 1's exception). Macro conditions reach the
-curve **only through 07c participants' behavior**: (a) anchor the short end by making the
-2Y bucket's participant attractiveness include distance from the policy-rate corridor
-(banks arbitrage the front end against reserves/SRF/ON RRP — real behavior); (b) inflation
-expectations shift every participant's willingness to hold duration (a real term-premium
-demand effect), implemented inside 07c's attractiveness function, not as a curve write;
-(c) keep the existing mean-reverting recent-yield-change signal (see lesson §7.2 — NEVER
-trend-following, and NEVER an independent invented fair-yield level).
-
-**Verify:** 15–30 week trace of `zeroRates` per region: curve moves only on real flow;
-2Y stays within a plausible corridor of the policy rate; no monotonic drift. Then re-run
-with a forced policy-rate change and confirm transmission happens through demand.
 
 ### S3 — Sign off Wall Street slices 2–3
 
@@ -586,6 +560,7 @@ the complete simulation.
 | `charts/Charts.tsx` | YieldCurveChart x-axis: nonlinear tenors plotted equally spaced, middle label wrong |
 | `NewsDrawer.tsx:94` | Verify `Commodity.symbol` matches `'CRUDE_OIL'` ids; else fallback always picks `commodities[0]` |
 | `ManualModal.tsx` | Restated engine constants (IM rates, axe discounts, Taylor coefficients) drifting from code — generate from the real constants or trim |
+| `11-fiscal-and-sovereign-debt.ts` issuance | New government issuance enters the market as unheld float — nobody is allocated it at auction, so the clearing engine absorbs it over the following weeks and yields dip while it is digested (visible as a 2Y dip after each maturity/reissuance wave). Real primary placement with banks as underwriters is **WS8**; until then this is a known, bounded artifact rather than a defect in the secondary-market clearing |
 | `macro/evolution.ts` wage/tightness | Nominal wage growth goes negative (−2.5% by week 40) while inflation runs at 10% — a 12% real-wage collapse per year. Partly a symptom of G1's runaway, partly the tightness→wage-growth formula having no real bargaining mechanism. Re-measure after G1; if it survives, it belongs to MS3 |
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
@@ -655,6 +630,39 @@ the complete simulation.
    - Result: week-2 USA growth reads **+1.54% against 1.80% potential** (was +113%); the identity
      is asserted exactly at init; 26 weeks across all four regions produce zero non-finite values.
      The residual decay in later weeks is G1's inflation runaway, confirmed pre-existing by A/B.
-10. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+11. **S2 landed (the yield curve has one owner).** `macro/evolution.ts` no longer computes
+    beta0/beta1/beta2 or zeroRates at all; 07c's auction is the curve's sole author. Macro
+    reaches it the way it does in reality:
+    - **The policy rate reaches the front end through banks' reserve arbitrage.** A bank holding
+      a government bond is choosing not to leave the cash at the central bank earning the
+      administered rate, so a bond yielding more than the corridor is worth owning and one
+      yielding less is worth selling — strongest at the short end, fading along the curve.
+      Verified: a forced +100bp policy shock raises the 2Y by 43bp in the first week and ~93bp by
+      the third, while the 10Y moves under 20bp. A hike flattens the curve, through demand.
+    - **Inflation expectations reach the long end through every holder's real yield**, weighted
+      by how much duration the tenor commits — so rising expected inflation steepens the curve
+      rather than shifting it in parallel. Verified: 30Y rises 3.81% → 4.41% over 30 weeks as
+      expectations climb, while the 2Y stays within ±10bp of the policy rate.
+    - **A tilt alone cannot anchor a level.** The first attempt gave participants only a
+      cross-tenor tilt; everyone crowded into short paper to escape duration and the 2Y sank
+      349bp BELOW the policy rate with nothing to stop it. A bank must also be able to choose
+      bonds-versus-cash at all, so the SIZE of its book responds to the corridor, not just its
+      shape. That substitution is a treasury decision and belongs OUTSIDE the slow strategic
+      drift — folding it inside throttled a hike to under half its real pass-through.
+    - **Two real bugs found and fixed doing this**, both instances of §7.4 and §7.5:
+      (a) banks carried a scalar `sovereignBondHoldingsUSD` but an EMPTY
+      `sovereignBondHoldingsByTenor`, which is the field 07c reads — so every bank opened ~$147B
+      under target in a $670B market and bought into it every week, the entire banking sector
+      permanently on the bid, expressed as a monotonic slide in yields;
+      (b) maturing government tranches left the government's books without leaving their
+      HOLDERS' books, so at week 52 banks and institutions owned **1.30x the entire two-year
+      float** — bonds that did not exist — and trading that phantom position down against a float
+      a third of its former size ran the 2Y from 6% to 25%. Maturity now redeems pro-rata from
+      the tenor buckets, banks credited the cash.
+    - Result: no spiral, and across all four regions over 60 weeks the 2Y holds a plausible band
+      and tracks the policy rate. The deleted `computeSupplyDemandPremium` call in stage 02 went
+      with it (it compared an ownership share times sector equity against principal outstanding —
+      not commensurable quantities — purely to feed the old curve write).
+12. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
    MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
    `npm run verify` gate closes #2/#14/#41.

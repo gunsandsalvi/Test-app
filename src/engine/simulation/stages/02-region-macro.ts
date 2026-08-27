@@ -10,7 +10,7 @@
 import { GameState, RegionId } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { evolveRegionMacro } from '../../macro/evolution';
-import { computeOccupationDemand, computeSupplyDemandPremium, computeTargetOwnershipShares } from './shared-helpers';
+import { computeOccupationDemand, computeTargetOwnershipShares } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
 // Bank/institutional/foreign/central-bank ownership is capped well under 100% so household
@@ -58,16 +58,11 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     const monetizationSharePrev = ((state.regions[regionId].balanceSheetStance ?? 0) * 0.5);
     const monetizedAmountUSD = weeklyDeficitUSDPrev * monetizationSharePrev;
 
-    // Auction-outcome driver for the yield curve level: compare outstanding sovereign supply
-    // against bank/institutional absorption capacity, using the same demand/supply premium
-    // pattern as corporate bond pricing and the same ownership shares the 40/60 issuance
-    // split allocates holdings against.
-    const totalGovDebtUSDPrev = (state.regions[regionId].govDebtTranches || []).reduce((s, t) => s + t.principalUSD, 0);
-    const sovereignAuctionPremiumBps = computeSupplyDemandPremium(
-      state.regions[regionId].sovBondOwnership,
-      { bank: state.regions[regionId].bankingSector.bankEquityUSD, institutional: state.regions[regionId].institutionalSector.sectorEquityUSD },
-      totalGovDebtUSDPrev
-    );
+    // (The sovereign "auction premium" that used to be computed here is gone along with the
+    // curve write it fed. It compared an ownership SHARE times sector EQUITY against total
+    // principal outstanding — quantities that are not commensurable — to synthesise a yield
+    // premium. The real version of that comparison is the auction itself, in 07c, where real
+    // demand meets real supply.)
 
     const { updatedRegion, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
@@ -80,7 +75,6 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         publicCompanyEmployment: ctx.regionPublicCompanyEmployment[regionId],
         occupationDemand: regionOccDemand,
         monetizedAmountUSD, marginCompression: 0, creditContagionBps: 0,
-        sovereignAuctionPremiumBps,
       },
       ctx.nextWeek,
       equityRet,

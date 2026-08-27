@@ -170,6 +170,38 @@ export function createInitialGameState(): GameState {
           quantityOrNotionalUSD: shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD),
         }));
 
+    // Seed each named bank's real sovereign book across the same tenor buckets the weekly
+    // auction clears, using the same target derivation it uses (the region's real bank ownership
+    // share of the real outstanding stock, split across banks by deposit size) and the same
+    // outstanding-weighted split across tenors.
+    //
+    // This was missing: banks carried a scalar `sovereignBondHoldingsUSD` but an EMPTY
+    // `sovereignBondHoldingsByTenor`, and 07c reads the buckets. So every bank opened ~$147B
+    // below its own target in a $670B market and bought into it every single week, which the
+    // auction could only express as a monotonic slide in yields — the whole banking sector
+    // permanently on the bid. Two representations of one book, and the engine was reading the
+    // empty one. Seed shape must match engine shape.
+    const regionBanksForSov = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
+    if (regionBanksForSov.length > 0 && totalSovBucketedUSD > 1) {
+      const bankSovTargetUSD = reg.sovBondOwnership.bankShare * totalSovBucketedUSD;
+      const perBankTargets = distributeRealTargetByWeight(
+        regionBanksForSov.map(b => ({ id: b.ticker, sizeWeight: b.bankBalanceSheet!.depositsUSD, targetPct: 1 })),
+        bankSovTargetUSD
+      );
+      regionBanksForSov.forEach(bank => {
+        const targetUSD = perBankTargets.get(bank.ticker) ?? 0;
+        const byTenor: Record<string, number> = {};
+        SOV_TENOR_BUCKETS.forEach(y => {
+          const bucketUSD = targetUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD);
+          if (bucketUSD > 1) byTenor[`t${y}`] = bucketUSD;
+        });
+        bank.bankBalanceSheet!.sovereignBondHoldingsByTenor = byTenor;
+        bank.bankBalanceSheet!.sovereignBondHoldingsUSD = Number(
+          Object.values(byTenor).reduce((sum, v) => sum + v, 0).toFixed(0)
+        );
+      });
+    }
+
     reg.institutionalSector.itemizedHoldings = [
       ...attributeItemizedHoldings(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
       ...attributeItemizedHoldings(reg.institutionalSector.sovBondHoldingsUSD, sovCandidates),
