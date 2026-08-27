@@ -204,7 +204,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, HC W1 |
 | 4 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 5 | Delete every duplicate price-setter (engine + UI) | S6 | — |
 | 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | — |
@@ -334,36 +333,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### RVr — Damp the credit cycle's amplitude
-
-**RV is built, both halves** (§7.14, §7.15). Spreads oscillate and mean-revert rather than
-drifting monotonically, which is the restoring force the item existed to create. Measured over
-80 weeks, the corporate float grows 77B → 104B as issuers take advantage of tight spreads, the
-spread recovers from −22bp to **+86bp** as that supply lands, and the deleveraging leg follows
-(float 113B → 98B). That is a credit cycle produced entirely by real agents responding to real
-prices.
-
-**Re-measure before starting: this item's numbers predate §7.16.** The overshoot into negative
-spreads that originally defined it (median −160bp at week 80) **no longer occurs at all** — the
-demand-schedule engine produces zero negative spreads at every rating in every week measured,
-because a participant's reservation level already covers its own costs and demand below that is
-genuinely zero. What remains of RVr is therefore an open question rather than a known defect:
-*is* the cycle's amplitude still unrealistic once the tights are bounded by real economics? Do
-not start until HC Wave 1 has landed (E2 landed, §7.20), then measure the cycle again over 120 weeks and decide
-whether there is anything left to damp.
-
-**If there is, do not damp it by shrinking the response rates or bounding the spread.** The
-real-world damper is anticipation: investors and issuers both price against the spread they
-expect, not only the one they see, and an expectation that spreads will widen stops the last
-marginal buyer before the tights. That is the same missing mechanism as **G1b item 3**
-(expectations doing no work in real bid/offer pricing), and the two should be built together — a
-single expectations channel serving the goods auction and the credit markets alike.
-
-One contributor worth measuring first: **issuer count decays** (200 → 127 over 80 weeks) as
-companies delever out of the bond market entirely, thinning the float and amplifying the next
-move. HC's births and recap issuance are the obvious counterweight, which is another reason to
-sequence it first.
 
 ### S5 — Company cash truth (one ledger, four leaks)
 
@@ -996,6 +965,7 @@ the complete simulation.
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
 | open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
+| public default rate ~13%/yr | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. Expected root: S5's leaks. Re-measure immediately after S5; if it survives, the default trigger's inputs are next |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
 | generation-time unconditional fields | §7.17 found `leveragedLoan` attached to all 200 companies when only ~33 had loans. Sweep `companyGenerator.ts` for other fields attached unconditionally that only apply to a subset — same failure mode (a frozen record that reads as live downstream) |
@@ -1426,7 +1396,27 @@ the complete simulation.
       not yet chase the cheap asset class across books; that is G6/RVr's expectations-and-
       liabilities work. IG unchanged and correct (AAA 157 / AA 157 / A 171 / BBB 215 at wk40);
       Spearman 0.74–0.87; ownership correlation 0.06.
-22. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+22. **RVr closed: the credit cycle's amplitude is real, and the residual was never amplitude.**
+    Re-measured over 120 weeks post-E2/S11/HC-Wave-1, as the item required:
+    - **Price amplitude is healthy.** Median IG OAS breathes over a 75bp band (166–241): tights
+      draw real issuance, the supply lands on budget-constrained buyers and spreads widen to
+      ~240, issuance slows, spreads ease. A genuine two-sided cycle, no negative spreads, no
+      overshoot — the thing RVr existed to create. The expectations channel (G1b item 3) is NOT
+      needed for credit amplitude on current evidence; it remains a goods-market question.
+    - **The quantity drain was a real defect, found and fixed here.** `decideCorporateFinancing`
+      measured "what capital earns in the business" as EBITDA over debt + MARKET cap — the CFO's
+      internal hurdle was a function of the stock market's mood, so rich equities made every IG
+      firm read its 150bp debt as too dear (33 of 60 sampled IG names delevering perpetually;
+      the float halved in 60 weeks). Replaced with return on INVESTED capital (NOPAT over net
+      PP&E + working capital) plus a real deployment-flow cap — cheap coupons do not create
+      projects; covenants bound the STOCK of debt, the pipeline bounds the FLOW. Float now grows
+      into tights and oscillates (~130B) instead of draining.
+    - **The remaining issuer decay is a default-rate problem, not a financing one:** 59 of 196
+      public firms default by week 121 (~13%/yr vs a real ~1–2%) while the private tier — real
+      ladders, clean cash walk — shows zero, isolating the cause to the public path's cash
+      accounting. S5 owns it; re-measure the decay after S5. HC8's births are the structural
+      counterweight either way. Recorded in §6.
+23. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
