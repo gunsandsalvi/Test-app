@@ -412,15 +412,31 @@ flow in stage 08 no longer separately debiting it) before those companies can jo
   from `05-unit-bidding.ts`'s real cleared amounts — previously only visible transiently within
   a single week's `companyUpdates`, never persisted for the UI to read). Purely additive (no
   simulation-mechanics changes); verified via a 5-week smoke test.
-  **Not yet done:** input inventory is still a blended average per category, not itemized lots
-  with named seller provenance ("bought Y from N, Z from L at such prices") — the underlying
-  model tracks one aggregate (units, value) per category, not a list of individual purchase
-  lots; a real lot-level model would need its own design pass. Capex/COGS destination (which
-  specific supplier or private-segment counterparty a company's capex/COGS dollars went to this
-  week) is also not yet surfaced, though the data is real since Phase 4 (the private-segment
-  offer IDs make the counterparty identifiable). Reconciling the existing quarterly financials
-  to this real underlying data (rather than the statistical formulas they were built from) is
-  also not yet done.
+  **Lot-level provenance + purchase destinations (landed).** `Company.inputInventoryBySubUnit`
+  is now `Record<string, InputLot[]>` (`domain/company.ts`'s new `InputLot` type: `sellerId`,
+  `unitsHeld`, `unitPriceUSD`, `acquiredWeek`) instead of one blended `{unitsHeld, valueUSD}`
+  average — each real purchase is credited as its OWN lot, consumed oldest-first (FIFO) in
+  `08-company-fundamentals.ts`'s physical-fulfillment drawdown. Contract-settlement purchases
+  already had a real named counterparty (`contract.supplierCompanyId`); open-market purchases
+  did not — pro-rata clearing only produces aggregate totals per side, not buyer/seller pairs.
+  Added a real northwest-corner lot allocation in `05-unit-bidding.ts` (walk both sides' filled
+  quantities in order, filling from the current seller until either side is exhausted, then
+  advance) — the same assumption a real clearinghouse uses to settle pooled trades, not an
+  invented attribution, and O(buyers+sellers) so it carries no performance risk. `CompanyDeepDive.
+  tsx` now shows real per-lot holdings ("N units from TICKER at $P/unit," or "private: SEGMENT")
+  and a new "This Week's Purchase Destinations" panel (this week's real spend grouped by real
+  counterparty, covering both COGS-input and capex-category purchases — the same lot data serves
+  both, since a capex purchase is just a purchase in a capex-supplier subUnitId). Verified via
+  `tsc`, hygiene, a 30-week smoke test (0 violations) and a 60-week revenue-ratio diagnostic (9
+  violations, avgRatio ending healthy at 0.920 — driven by what looks like one producer earning
+  real outsized revenue from sustained real scarcity pricing in a newly-linked commodity
+  category, not a collapse; smaller than every prior phase's tracked residual, e.g. Phase 4's
+  110-118).
+  **Not yet done:** reconciling the existing quarterly financials (COGS breakdown, balance-sheet
+  inventory line) to derive from these real lots rather than the statistical formulas they were
+  originally built from — a materially larger, riskier change to core financial-statement
+  mechanics than the additive UI/data work above, deliberately left for its own pass rather than
+  folded in here.
 
 - **Phase 3 (demand-side) + auction cash-rationing fix + stage04 pooling fix (landed).**
   Three related fixes, verified together:

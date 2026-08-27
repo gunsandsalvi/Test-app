@@ -10,7 +10,7 @@
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
-import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, getInputInventoryUnits, getInputInventoryUSD } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 
 // 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
@@ -36,20 +36,20 @@ function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, u
   update.outputInventoryBySubUnit[subUnitId] = { unitsHeld, valueUSD: unitsHeld * unitPriceUSD };
 }
 
-// 1$ is 1$ Phase 2: credit a real purchase onto the buyer's persisted input inventory —
-// accumulate on top of whatever this same company already holds (and whatever it already
-// bought this same week via a different subUnitId's auction pass), not a fresh snapshot like
-// output inventory, since input stock is genuinely carried and drawn down over many weeks.
-function addInputInventory(update: any, baseComp: Company, subUnitId: string, addedUnits: number, addedValueUSD: number) {
+// 1$ is 1$ Phase 2/6: credit a real purchase onto the buyer's persisted input inventory as a
+// NEW LOT — appended on top of whatever this same company already holds (and whatever it
+// already bought this same week via a different subUnitId's auction pass or a different real
+// seller), not merged into one blended average, since the whole point is to keep each real
+// purchase's real counterparty and real price distinguishable (see domain/company.ts's
+// InputLot doc comment) rather than collapsing them the moment they're credited.
+function addInputInventory(update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number) {
+  if (addedUnits <= 0.0001) return;
   if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
-  const existing = update.inputInventoryBySubUnit[subUnitId] ?? {
-    unitsHeld: getInputInventoryUnits(baseComp, subUnitId),
-    valueUSD: getInputInventoryUSD(baseComp, subUnitId),
-  };
-  update.inputInventoryBySubUnit[subUnitId] = {
-    unitsHeld: existing.unitsHeld + addedUnits,
-    valueUSD: existing.valueUSD + addedValueUSD,
-  };
+  const existingLots: InputLot[] = update.inputInventoryBySubUnit[subUnitId] ?? [...(baseComp.inputInventoryBySubUnit?.[subUnitId] ?? [])];
+  update.inputInventoryBySubUnit[subUnitId] = [
+    ...existingLots,
+    { sellerId, unitsHeld: addedUnits, unitPriceUSD: addedValueUSD / addedUnits, acquiredWeek: week },
+  ];
 }
 
 function executeSubUnitBiddingMarket(
@@ -127,7 +127,7 @@ function executeSubUnitBiddingMarket(
           custUp.cashChange = (custUp.cashChange ?? 0) - paymentUSD;
           custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
           custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
-          addInputInventory(custUp, customer, subUnitId, actualTransacted, paymentUSD);
+          addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
           if (fillRate < 0.95) {
             // Named shock propagation: reduced fill rate constrains customer capacity directly
@@ -482,6 +482,33 @@ function executeSubUnitBiddingMarket(
     });
   }
 
+  // 1$ is 1$ Phase 6: real open-market purchase lots — WHO a company's cleared purchase this
+  // week actually came from, not just an anonymous pooled total. Pro-rata clearing doesn't pair
+  // specific buyers with specific sellers (unlike a contract, which already has a named
+  // supplier), but the aggregate quantities on both sides are fully known, so a simple
+  // northwest-corner allocation (walk both sides in order, filling from the current seller until
+  // either it or the current buyer is exhausted, then advance) produces a real, quantity-
+  // consistent buyer/seller pairing — the same real-double-auction assumption a clearinghouse
+  // actually uses to settle trades, not an invented attribution.
+  const purchaseLots: { buyerId: string; sellerId: string; units: number }[] = [];
+  if (openUnitsCleared > 0.0001) {
+    const totalInMoneyOfferQty = inMoneyOffers.reduce((s, o) => s + o.quantityUnits, 0);
+    const totalInMoneyBidQty = inMoneyBids.reduce((s, b) => s + b.quantityUnits, 0);
+    const offerFillRatio = totalInMoneyOfferQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyOfferQty) : 0;
+    const bidFillRatio = totalInMoneyBidQty > 0 ? Math.min(1, openUnitsCleared / totalInMoneyBidQty) : 0;
+    const sellerRemaining = inMoneyOffers.map(o => ({ id: o.companyId, qty: o.quantityUnits * offerFillRatio })).filter(s => s.qty > 0.0001);
+    const buyerRemaining = inMoneyBids.filter(b => b.companyId).map(b => ({ id: b.companyId!, qty: b.quantityUnits * bidFillRatio })).filter(b => b.qty > 0.0001);
+    let si = 0, bi = 0;
+    while (si < sellerRemaining.length && bi < buyerRemaining.length) {
+      const s = sellerRemaining[si], b = buyerRemaining[bi];
+      const qty = Math.min(s.qty, b.qty);
+      if (qty > 0.0001) purchaseLots.push({ buyerId: b.id, sellerId: s.id, units: qty });
+      s.qty -= qty; b.qty -= qty;
+      if (s.qty <= 0.0001) si++;
+      if (b.qty <= 0.0001) bi++;
+    }
+  }
+
   // 3. Save matching results to updates
   suppliers.forEach(comp => {
     const sale = openSales[comp.ticker];
@@ -558,7 +585,12 @@ function executeSubUnitBiddingMarket(
       custUp.cashChange = (custUp.cashChange ?? 0) - purchase.amount;
       custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + purchase.units;
       custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + purchase.amount;
-      addInputInventory(custUp, comp, subUnitId, purchase.units, purchase.amount);
+      // Credit each real lot this buyer's cleared purchase actually came from (see
+      // purchaseLots above), not one blended total — a company can genuinely buy from more
+      // than one real seller (or a private-segment offer) in the same week's auction.
+      purchaseLots.filter(l => l.buyerId === comp.ticker).forEach(l => {
+        addInputInventory(custUp, comp, subUnitId, l.sellerId, l.units, l.units * clearedPriceUSD, nextWeek);
+      });
     }
   });
 

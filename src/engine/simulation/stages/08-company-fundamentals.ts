@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial,
 } from '../../../types';
-import { isActiveCompany, getOutputInventoryUSD, getInputInventoryUnits, getInputInventoryUSD } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
@@ -78,15 +78,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // 1$ is 1$ Phase 2: this week's real input inventory baseline is last week's held stock
     // plus whatever stage05 (which runs before this stage) already credited from real
     // purchases that cleared this week — consumption below draws down from that real total.
-    const newInputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = {};
-    Object.keys(comp.inputInventoryBySubUnit || {}).forEach(su => {
-      newInputInventoryBySubUnit[su] = {
-        unitsHeld: getInputInventoryUnits(comp, su),
-        valueUSD: getInputInventoryUSD(comp, su),
-      };
+    const newInputInventoryBySubUnit: Record<string, InputLot[]> = {};
+    Object.entries(comp.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
+      newInputInventoryBySubUnit[su] = [...lots];
     });
-    Object.entries(companyUpdates[comp.ticker]?.inputInventoryBySubUnit || {}).forEach(([su, inv]) => {
-      newInputInventoryBySubUnit[su] = inv as { unitsHeld: number; valueUSD: number };
+    Object.entries(companyUpdates[comp.ticker]?.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
+      newInputInventoryBySubUnit[su] = lots as InputLot[];
     });
 
     const executionNoise = (Math.random() - 0.5) * 0.3;
@@ -223,16 +220,24 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           if (!hasRealSupply) return;
           const inputUnitPrice = (reg.categoryDemand[inputSubUnit as any] as any)?.unitPriceUSD ?? 1;
           const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
-          const availableEntry = newInputInventoryBySubUnit[inputSubUnit] ?? { unitsHeld: 0, valueUSD: 0 };
-          const availableUnits = availableEntry.unitsHeld;
+          // 1$ is 1$ Phase 6: consume the OLDEST real lot first (FIFO) — a company holding units
+          // bought from three different real sellers at three different prices draws down the
+          // earliest purchase first, the way physical inventory actually gets used, rather than
+          // one blended average cost standing in for all of them.
+          const lots = (newInputInventoryBySubUnit[inputSubUnit] ?? []).slice().sort((a, b) => a.acquiredWeek - b.acquiredWeek);
+          const availableUnits = lots.reduce((s, lot) => s + lot.unitsHeld, 0);
           const lineFulfillment = neededUnits > 0 ? Math.min(1, availableUnits / neededUnits) : 1;
           physicalFulfillment = Math.min(physicalFulfillment, lineFulfillment);
-          const consumedUnits = Math.min(availableUnits, neededUnits);
-          const avgUnitCost = availableUnits > 0 ? availableEntry.valueUSD / availableUnits : inputUnitPrice;
-          newInputInventoryBySubUnit[inputSubUnit] = {
-            unitsHeld: availableUnits - consumedUnits,
-            valueUSD: Math.max(0, availableEntry.valueUSD - consumedUnits * avgUnitCost),
-          };
+          let remainingToConsume = Math.min(availableUnits, neededUnits);
+          const remainingLots: InputLot[] = [];
+          for (const lot of lots) {
+            if (remainingToConsume <= 0.0001) { remainingLots.push(lot); continue; }
+            const consumedFromLot = Math.min(lot.unitsHeld, remainingToConsume);
+            remainingToConsume -= consumedFromLot;
+            const unitsLeftInLot = lot.unitsHeld - consumedFromLot;
+            if (unitsLeftInLot > 0.0001) remainingLots.push({ ...lot, unitsHeld: unitsLeftInLot });
+          }
+          newInputInventoryBySubUnit[inputSubUnit] = remainingLots;
         });
       });
       const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);

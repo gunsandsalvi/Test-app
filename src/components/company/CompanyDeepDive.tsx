@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { GameState, Company } from '../../types';
-import { getOutputInventoryUSD } from '../../domain/company';
+import { getOutputInventoryUSD, getInputInventoryUSD, getInputInventoryUnits } from '../../domain/company';
 import { formatCurrency, formatPercent, formatBondName } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
 import { priceCorporateBond, priceLeveragedLoan } from '../../engine/pricing';
@@ -359,18 +359,26 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                       <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit</span>
                     </div>
                   ))}
-                  {Object.values(company.inputInventoryBySubUnit || {}).some(inv => inv.unitsHeld > 0) && (
+                  {getInputInventoryUnits(company) > 0 && (
                     <div className="flex justify-between text-xs py-1 pt-2 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Input Inventory (Raw Materials Held)</span>
                       <span className="font-[var(--font-numeric)] font-bold">
-                        {formatCurrency(Object.values(company.inputInventoryBySubUnit || {}).reduce((s, inv) => s + inv.valueUSD, 0), { compact: true })}
+                        {formatCurrency(getInputInventoryUSD(company), { compact: true })}
                       </span>
                     </div>
                   )}
-                  {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, inv]) => inv.unitsHeld > 0).map(([subUnitId, inv]) => (
-                    <div key={`in-${subUnitId}`} className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
-                      <span>· {Math.round(inv.unitsHeld).toLocaleString()} {subUnitId.replace(/_/g, ' ')} units bought</span>
-                      <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit avg cost</span>
+                  {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, lots]) => lots.some(l => l.unitsHeld > 0.001)).map(([subUnitId, lots]) => (
+                    <div key={`in-${subUnitId}`} className="pl-3 pb-1 border-b border-[var(--border-hairline)]">
+                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{subUnitId.replace(/_/g, ' ')}</div>
+                      {/* 1$ is 1$ Phase 6: real per-lot provenance — which named counterparty each
+                          held batch was actually bought from, at what real price, not one
+                          blended average across every purchase ever made. */}
+                      {lots.filter(l => l.unitsHeld > 0.001).map((lot, i) => (
+                        <div key={i} className="flex justify-between text-[11px] text-[var(--text-tertiary)]">
+                          <span>· {Math.round(lot.unitsHeld).toLocaleString()} units from {lot.sellerId.replace('PRIVATE:', 'private: ')}</span>
+                          <span className="font-[var(--font-numeric)]">{formatCurrency(lot.unitPriceUSD, { compact: true })}/unit</span>
+                        </div>
+                      ))}
                     </div>
                   ))}
 
@@ -584,12 +592,42 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit</span>
               </div>
             ))}
-            {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, inv]) => inv.unitsHeld > 0).map(([subUnitId, inv]) => (
-              <div key={`sc-in-${subUnitId}`} className="flex justify-between text-[11px] pl-3 pb-1 border-b border-[var(--border-hairline)] text-[var(--text-tertiary)]">
-                <span>· {Math.round(inv.unitsHeld).toLocaleString()} {subUnitId.replace(/_/g, ' ')} units bought (input stock)</span>
-                <span className="font-[var(--font-numeric)]">{formatCurrency(inv.valueUSD / Math.max(1, inv.unitsHeld), { compact: true })}/unit avg cost</span>
+            {Object.entries(company.inputInventoryBySubUnit || {}).filter(([, lots]) => lots.some(l => l.unitsHeld > 0.001)).map(([subUnitId, lots]) => (
+              <div key={`sc-in-${subUnitId}`} className="pl-3 pb-1 border-b border-[var(--border-hairline)]">
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{subUnitId.replace(/_/g, ' ')} (input stock)</div>
+                {lots.filter(l => l.unitsHeld > 0.001).map((lot, i) => (
+                  <div key={i} className="flex justify-between text-[11px] text-[var(--text-tertiary)]">
+                    <span>· {Math.round(lot.unitsHeld).toLocaleString()} units from {lot.sellerId.replace('PRIVATE:', 'private: ')}</span>
+                    <span className="font-[var(--font-numeric)]">{formatCurrency(lot.unitPriceUSD, { compact: true })}/unit</span>
+                  </div>
+                ))}
               </div>
             ))}
+            {(() => {
+              // 1$ is 1$ Phase 6: this week's real purchase destinations — which real
+              // counterparty this week's COGS/capex spend actually went to, grouped from the
+              // same real lots (each lot remembers the week it was acquired).
+              const thisWeekBySeller: Record<string, number> = {};
+              Object.values(company.inputInventoryBySubUnit || {}).forEach(lots => {
+                lots.forEach(lot => {
+                  if (lot.acquiredWeek !== state.currentWeek) return;
+                  thisWeekBySeller[lot.sellerId] = (thisWeekBySeller[lot.sellerId] ?? 0) + lot.unitsHeld * lot.unitPriceUSD;
+                });
+              });
+              const entries = Object.entries(thisWeekBySeller);
+              if (entries.length === 0) return null;
+              return (
+                <div className="pt-2 pb-1 border-b border-[var(--border-hairline)]">
+                  <div className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold mb-1">This Week's Purchase Destinations</div>
+                  {entries.map(([sellerId, amount]) => (
+                    <div key={sellerId} className="flex justify-between text-[11px] text-[var(--text-tertiary)]">
+                      <span>· {sellerId.replace('PRIVATE:', 'private: ')}</span>
+                      <span className="font-[var(--font-numeric)]">{formatCurrency(amount, { compact: true })}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">This Week's Real Sales (settled)</span>
               <span className="font-[var(--font-numeric)] font-bold">{formatCurrency(company.lastWeekSalesUSD ?? 0, { compact: true })}</span>
