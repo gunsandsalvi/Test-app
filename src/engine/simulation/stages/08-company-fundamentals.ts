@@ -23,6 +23,7 @@ import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
 import { getRatingBucket, settleCorporateActionOnHolders } from './shared-helpers';
+import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
@@ -734,6 +735,59 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (maintenanceFundingTranches.length > 0) {
       updatedTranches = [...updatedTranches, ...maintenanceFundingTranches];
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
+    }
+
+    // The supply side of what bounds a credit spread: the issuer's own call on whether debt is
+    // worth raising at the price the market is quoting it. Every other change to this stack above
+    // happens TO the company — a tranche matures, maintenance needs funding — so the amount of
+    // paper outstanding never responded to what it cost. That leaves a market with only one of
+    // the two forces that hold a spread in place, and it is why spreads still drifted once
+    // investors alone were made price-sensitive.
+    //
+    // Priced off this company's OWN cleared cost of debt this week, so tight spreads genuinely
+    // invite the supply that widens them and wide spreads choke it off — the credit cycle, which
+    // this simulation had no way to produce before.
+    const costOfNewDebtAnnual =
+      calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
+    const financing = decideCorporateFinancing({
+      comp,
+      costOfDebtAnnual: costOfNewDebtAnnual,
+      effectiveTaxRate: reg.effectiveTaxRate,
+      ebitdaAnnual: newEbitda,
+      totalDebtUSD: updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0),
+      cashUSD: newCash,
+      rating: newRating,
+    });
+
+    if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000) {
+      // Real new paper, priced at this week's real cost, and real cash raised against it.
+      updatedTranches = [...updatedTranches, {
+        id: `${comp.id}-OPP-${nextWeek}`,
+        principalUSD: financing.netDebtChangeUSD,
+        rateType: 'FIXED',
+        couponRate: costOfNewDebtAnnual,
+        originationWeek: nextWeek,
+        maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+        seniority: 'SENIOR',
+      }];
+      debtIssuanceThisWeek += financing.netDebtChangeUSD;
+      newCash += financing.netDebtChangeUSD;
+    } else if (financing.reason === 'DELEVER_EXPENSIVE_DEBT' && financing.netDebtChangeUSD < -1000) {
+      // Pay down real principal, newest and dearest paper first, out of real cash.
+      let remainingToRepayUSD = -financing.netDebtChangeUSD;
+      updatedTranches = updatedTranches
+        .slice()
+        .sort((a, b) => b.originationWeek - a.originationWeek)
+        .map(t => {
+          if (remainingToRepayUSD <= 0) return t;
+          const repaidUSD = Math.min(t.principalUSD, remainingToRepayUSD);
+          remainingToRepayUSD -= repaidUSD;
+          return { ...t, principalUSD: t.principalUSD - repaidUSD };
+        })
+        .filter(t => t.principalUSD > 0.01);
+      const actuallyRepaidUSD = -financing.netDebtChangeUSD - remainingToRepayUSD;
+      debtRepaymentThisWeek += actuallyRepaidUSD;
+      newCash -= actuallyRepaidUSD;
     }
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.

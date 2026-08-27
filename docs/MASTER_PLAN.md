@@ -186,32 +186,32 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | Verify & land Wall St slices 2–3 (sovereign, loans) for real | S3 | — (S1, S2, G1 done) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 2 | **Allocation as an outcome: relative value + opportunistic issuance** | RV | — (S4 done) |
-| 3 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
-| 4 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
-| 5 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
-| 6 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
-| 7 | Player trades enter the real market | S9 | S4, S7 |
-| 8 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 9 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
-| 10 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
-| 11 | Private repo markets | WS6 | S4 |
-| 12 | Money market funds | WS7 | WS5, WS6 |
-| 13 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 14 | Hedge funds as distressed-debt demand | WS10 | WS4 |
-| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
-| 16 | Unify the two dealer systems | G3 | S9 |
-| 17 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
-| 19 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 20 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 21 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 22 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 23 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
-| 24 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
-| 25 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
-| 26 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 27 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, WS10 |
+| 2 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
+| 3 | Delete every duplicate price-setter (engine + UI) | S6 | S3 |
+| 4 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S4 |
+| 5 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
+| 6 | Player trades enter the real market | S9 | S4, S7 |
+| 7 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
+| 8 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S2–S7 |
+| 9 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | S3, S4 |
+| 10 | Private repo markets | WS6 | S4 |
+| 11 | Money market funds | WS7 | WS5, WS6 |
+| 12 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 13 | Hedge funds as distressed-debt demand | WS10 | WS4 |
+| 14 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S4 |
+| 15 | Unify the two dealer systems | G3 | S9 |
+| 16 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 17 | Default resolution: recovery as an outcome, not a constant | G5 | G2, WS10 |
+| 18 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 19 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 20 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 21 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 22 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | S3, G2 |
+| 23 | Main Street (households → labor market → corporate wage system) | MS | G1 (ideally G2) |
+| 24 | Blueprint (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust → private sector detail) | BP | MS for the fiscal loop's household taxes |
+| 25 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 26 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The three macro root causes are done (§7.10–§7.12): the ~110% fake GDP growth,
 the double-written yield curve, and the runaway formula CPI. Real growth now reads positive in
@@ -338,73 +338,31 @@ procurement and transfers, and in the limit a debt spiral — and it must stay c
 national-accounts identity established in §7.10. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
 
-### RV — Allocation as an outcome: cross-asset relative value + opportunistic issuance
-*(demand side landed — see §7.16; **supply side is what remains and is the next item**)*
+### RVr — What remains after RV: damp the credit cycle's amplitude
 
-**The defect this fixes, stated properly.** Every market here is a *closed pot*. A participant's
-total is fixed (`share × outstanding`) and attractiveness only redistributes that total across
-instruments — and since the engine renormalizes tilted weights, a view every participant shares
-cancels out exactly. The model can say "issuer A is cheap versus issuer B"; it has no way to say
-"corporate credit as a whole is too tight." The float is fixed too, so the asset cannot respond
-to its own price either. **Both of the real world's restoring forces on a spread level are
-structurally absent** — which is why corporate OAS random-walks to −350bp (§5-S3) and why only a
-clamp would stop it. S2 hit the same wall on the sovereign curve and only anchored the front end
-once banks could choose bonds-versus-reserves *at all*; that was the level mechanism, built as a
-one-off for one participant in one market. This item generalises it.
+**RV is built, both halves** (§7.16, §7.17). Spreads no longer drift monotonically: they now
+oscillate and mean-revert, which is the restoring force the item existed to create. Measured over
+80 weeks, the corporate float grows 77B → 104B as issuers take advantage of tight spreads, the
+spread recovers from −22bp to **+86bp** as that supply lands, and the deleveraging leg follows
+(float 113B → 98B). That is a credit cycle, roughly 50–60 weeks long, produced entirely by real
+agents responding to real prices.
 
-**The idea: allocation percentages become an output, not an input.** Replace the fixed
-`assetAllocationTarget` with what actually pins a real institution's portfolio, and let the
-percentages fall out of solving it at today's cleared prices. Each institution carries:
-- a **hurdle** from its own liabilities — an insurer's reserve discount rate, a pension fund's
-  actuarial assumption, an asset manager's benchmark plus fee, a money fund's overnight rate;
-- a **risk budget**, which in reality is a capital charge per asset class and rating bucket
-  (Solvency II, NAIC, bank RWA): governments near zero, IG credit modest, HY credit heavy,
-  equity heaviest;
-- **constraints**: duration against the liability profile, mandate limits (an IG fund cannot own
-  HY at any price), liquidity minima.
+**What is left is amplitude, not direction.** The cycle still overshoots into negative spreads at
+its tights (median −160bp at week 80), and negative OAS is unphysical. The diagnosis is a
+classic cobweb overshoot: both sides respond with a lag — investors through a 5%/week strategic
+drift, issuers through a 4%/week take-up of covenant headroom — so each acts on a spread that has
+already moved by the time the response lands.
 
-Each week it ranks the opportunity set by **expected return per unit of capital charge**,
-computed only from what already clears: corporate bonds = cleared yield − expected loss; loans =
-DM + reference rate − expected loss at the senior-lien recovery; sovereigns = the cleared curve;
-cash = the policy rate. When credit compresses toward zero its return-per-charge falls below
-governments', which carry almost no charge, and capital genuinely leaves. That moves the size of
-the pot rather than its distribution, so unlike a tilt it survives renormalization.
-
-**Percentages don't disappear — they change meaning.** A real investment policy statement says
-"corporate credit 30%, range 20–40%": the *band* is the guideline, the *point inside it* is
-relative value. So `assetAllocationTarget` becomes the centre of a band and the position inside
-is chosen by the ranking above. That is a far smaller change than it sounds and keeps everything
-already built.
-
-**The supply side, which is the other half.** Make issuance a real CFO decision rather than a
-mechanical roll: a company compares its own cleared cost of debt against what it would do with
-the money — fund growth capex, retire equity when its earnings yield exceeds after-tax cost of
-debt, pay a special dividend, pre-refinance. Cheap credit pulls issuance forward; expensive
-credit stops it and turns companies into deleveragers. Everything that decision needs is already
-on the company (real `oasSpreadBps`, earnings yield, `growthCapex`, dividend and buyback
-machinery). This is worth more than the stabilisation: **it is the credit cycle** — tight spreads
-breeding supply that widens them, wide spreads choking supply until they tighten — which the
-simulation currently has no way to produce.
-
-**Two practical notes.**
-1. Equity clearing is NOT a prerequisite. Corporate credit versus governments versus cash is
-   enough to bound spreads, and all three clear today; WS4 later just widens the rotation set.
-2. This makes markets genuinely coupled for the first time, so money leaving credit has to
-   arrive somewhere and the accounting has to close. **That is why S4 comes first** — without
-   real cash settlement the rotation leaks.
-
-**Status.** The demand half is built (`stages/asset-allocation.ts`, wired into 07b and 07d) and
-halves the corporate spread drift — median USA OAS at week 36 moved from −350bp to −203bp, and
-loan discount margins from a median of −93bp to +101bp. It did not close it, which is the
-expected result and the reason the item was always two halves: **demand alone can only decide how
-much of a fixed pile of paper to own.** The remaining drift is supply — the float grows every
-week from maintenance funding and refinancing regardless of what credit costs, so there is
-permanent new paper to absorb. Build the CFO decision next; only then re-measure, and only then
-revisit S3's diagnosis list.
-
-**Scope note:** this subsumes **WS8** (issuance with placement agents — same mechanism, and the
-CFO decision is the missing half of it) and is expected to resolve the open half of **S3**
-(negative corporate OAS). Re-check S3's diagnosis list after this lands rather than before.
+**Do not damp it by shrinking the response rates or bounding the spread.** The real-world damper
+is anticipation: investors and issuers both price against the spread they expect, not only the
+one they see, and an expectation that spreads will widen stops the last marginal buyer before the
+tights. That is the same missing mechanism as **G1b item 3** (expectations doing no work in real
+bid/offer pricing), and the two should be built together — a single expectations channel serving
+the goods auction and the credit markets alike. Two further contributors worth measuring first:
+- **the marginal buyer is missing at the wides**: distressed and levered buyers (WS10) are exactly
+  who arrests a widening, and they do not exist yet;
+- **issuer count decays** (200 → 127 over 80 weeks) as companies delever out of the bond market
+  entirely, thinning the float and amplifying the next move.
 
 ### S5 — Company cash truth (four leaks, one pass)
 
@@ -912,6 +870,24 @@ the complete simulation.
       this project has recorded.
     - **What it cannot do alone, by construction**: decide how much paper exists. That is the
       supply half.
-17. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+17. **RV supply side landed (the float responds to its own price).** `stages/corporate-financing.ts`
+    gives each issuer the decision every other change to its debt stack lacked: whether debt is
+    worth raising at the price the market is quoting *this week*. It compares the after-tax cost of
+    its own cleared spread against the better of what capital earns inside the business and its own
+    earnings yield — the two real uses of opportunistic debt — and issues, holds, or pays down.
+    - **The one hard limit is real**: a covenant-style leverage ceiling by rating, because lenders
+      do not fund unlimited leverage, and no market access at all for defaulted issuers. That is a
+      lending constraint, not a clamp on a price.
+    - **Result — the restoring force works.** Spreads stopped drifting monotonically and started
+      oscillating: over 80 weeks the float grows 77B → 104B into tight spreads, the spread recovers
+      from −22bp to +86bp as that supply arrives, then the deleveraging leg runs (113B → 98B). The
+      simulation now produces a credit cycle, which it previously had no mechanism to generate.
+    - **Lesson**: a price that will not stay put usually means one side of its market is missing
+      entirely. Corporate spreads had investors who could not leave and an issuer who never chose
+      to issue; no amount of tuning either side's *reaction* would have bounded it, because the
+      quantity of paper was fixed by construction. Ask what is structurally absent before tuning
+      what is present.
+    - Residual is amplitude rather than direction — see §5-RVr.
+18. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
    MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
    `npm run verify` gate closes #2/#14/#41.
