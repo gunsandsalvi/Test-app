@@ -16,6 +16,9 @@ import { WeeklyStepContext } from './context';
 // 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
 // real ticker so the post-clearing crediting step can tell it apart from a real company sale.
 const privateSegmentOfferId = (segmentType: string) => `PRIVATE:${segmentType}`;
+// Share of a buyer's real weekly input need it locks under a long-term contract when one forms;
+// the rest stays spot-purchased. Real procurement splits roughly this way.
+const CONTRACTED_DEMAND_SHARE = 0.6;
 
 // 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal
 // recipe (CATEGORY_INPUT_REQUIREMENTS) that 08-company-fundamentals.ts uses to draw down input
@@ -644,15 +647,21 @@ function executeSubUnitBiddingMarket(
             contractPrice *= (1.0 + hedgingPremium);
           }
 
-          const baseContractUnits = subUnitId === 'industrial_automation'
-            ? (Math.random() * 2 + 0.5)
-            : subUnitId === 'passenger_vehicles'
-            ? (Math.random() * 15 + 3)
-            : subUnitId === 'pharmaceuticals'
-            ? (Math.random() * 800 + 200)
-            : subUnitId === 'refined_products'
-            ? (Math.random() * 5000 + 1000)
-            : (Math.random() * 10000 + 2000);
+          // A contract is the locked-price form of the buyer's REAL demand — never an
+          // independent quantity. The previous sizing was a hardcoded random ladder
+          // (default 2,000–12,000 units/week regardless of who was buying), which for a
+          // five-figure-per-unit input meant committing a buyer to tens of millions a week it
+          // had no use for. For as long as cash never actually settled (pre-S5) this was
+          // invisible; the S5 ledger exposed it in its first measured week: firms paying 2-3x
+          // their entire cost structure for inputs, 48 weeks of unusable inventory, and a large
+          // share of measured "energy sales" being this fantasy contract flow. Recorded in the
+          // plan (§7.24). The buyer locks a share of the weekly need its own bid already
+          // expresses, capped by what this supplier actually offered — spot covers the rest.
+          const baseContractUnits = Math.min(
+            bid.quantityUnits * CONTRACTED_DEMAND_SHARE,
+            offer.quantityUnits
+          );
+          if (baseContractUnits <= 0.001) return;
 
           const newContract: SupplyContract = {
             supplierCompanyId: offer.companyId,
