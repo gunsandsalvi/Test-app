@@ -775,7 +775,13 @@ function executeSubUnitBiddingMarket(
   // matching — allocation is pro-rata, computed separately above), so this sum already is the
   // full open-market demand; adding openUnitsCleared again would double-count the filled share.
   demandState.totalUnitsDemandedThisWeek = bids.reduce((s, b) => s + b.quantityUnits, 0) + activeSubUnitContracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
-  demandState.clearedInputPriceIndex = Number((clearedPriceUSD / baseUnitPrice).toFixed(4));
+  // S8: measured against a FIXED baseline, not against last week. `baseUnitPrice` here is the
+  // caller's seed — this category's price LAST week — so the old form made this a week-over-week
+  // change while every consumer read it as a level versus baseline (1.0 = at baseline). Two
+  // different periodicities in one field, exactly what rule 9 exists to catch. The baseline is
+  // captured the first time the category clears and never rewritten.
+  if (!(demandState.baseUnitPriceUSD > 0)) demandState.baseUnitPriceUSD = clearedPriceUSD;
+  demandState.clearedInputPriceIndex = Number((clearedPriceUSD / demandState.baseUnitPriceUSD).toFixed(4));
 }
 
 function computeRealizedVol(historicalValues: number[], window: number): number {

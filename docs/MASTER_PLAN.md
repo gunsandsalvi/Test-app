@@ -204,7 +204,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 7 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
 | 8 | Player trades enter the real market | S9 | S7 |
 | 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
 | 10 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S5–S7 |
@@ -330,18 +329,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### S8 — Three mechanical fixes
-
-- **Contagion decay:** `creditContagionBps` (stage 01) = defaults in a rolling ~52-week
-  window × 12, decaying — not cumulative-ever.
-- **Input price index baseline:** stage 05's `clearedInputPriceIndex` must measure vs. a
-  fixed baseline (store `baseUnitPrice` once at init per category), not week-over-week.
-  Audit its consumers for level-vs-delta semantics when changing.
-- **Housing supply:** `macro/evolution.ts:682` reads `residential_construction`'s
-  `inventoryLevelUSD`, frozen at init for output-only categories. Real fix: housing supply =
-  the real cleared output of the `residential_construction` auction (stage 05 units/inventory
-  by sub-unit), not `categoryDemand` inventory at all.
 
 ### S9 — Player flow enters the real market
 
@@ -1474,7 +1461,29 @@ the complete simulation.
       ±50% on a smoothed price may over-respond), the seeded capacity LEVEL (an initial deflation
       to −13% suggests the cold-start floods supply), and G1b items 2/3 — monetary transmission
       (G2) and an expectations term in real bid/offer pricing.
-29. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+29. **S8 landed — and its contagion fix was most of G1b's remaining cycle.**
+    - **Credit contagion now decays.** `recentDefaultsCount` counted every company that had EVER
+      defaulted, so a default in week 3 still tightened credit in week 200 — a permanent scar
+      that could only ratchet upward, and with the universe at 2,000+ firms it dominated the
+      signal entirely. Now: defaults inside a rolling 52-week window, weighted so the freshest
+      carry most of it, plus the currently-distressed cohort (a live state, not a memory).
+      Companies record `defaultedWeek` so the window is real.
+    - **`clearedInputPriceIndex` measured week-over-week while every consumer read it as a level
+      versus baseline** — two periodicities in one field, exactly what rule 9 exists to catch.
+      A fixed `baseUnitPriceUSD` is now captured the first time a category clears.
+    - **Housing supply was a frozen number.** It read `inventoryLevelUSD`, which never updates for
+      output-only categories, so the supply/demand ratio driving house prices was a constant
+      pretending to be a market signal. Now the real cleared output units against real demand.
+    - **Measured (110 weeks, same seed), and this is the headline:** before S8, inflation
+      oscillated ±20% (USA +21.6% at wk60, −10.5% at wk100; JPN spiking to 62.8%). After, every
+      region sits in a narrow band with NO spikes — USA −2.8% to −7.7%, UK −0.5% to −8.1%,
+      JPN −2.0% to −12.1%. The permanent contagion scar was driving the boom-bust.
+    - **What remains of G1b is now a LEVEL problem, not a cycle:** a persistent mild deflation of
+      roughly −3% to −10% against a 2% target. That is the cold-start capacity level (§7.28's
+      note that seeded capacity floods supply) plus the still-absent monetary transmission (G2)
+      and expectations channel — a much smaller and better-posed problem than the runaway or the
+      cycle it replaced.
+30. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

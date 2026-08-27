@@ -667,6 +667,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newRating = 'D';
       if (!comp.isDefaulted) {
         ctx.defaultedTickers.push(comp.ticker);
+        comp.defaultedWeek = nextWeek;
         newRevenue = Number((newRevenue * 0.4).toFixed(1));
         newEbitda = 0;
         newEbit = 0;

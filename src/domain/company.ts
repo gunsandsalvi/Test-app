@@ -309,6 +309,9 @@ export interface Company {
   ownership?: { founderPct: number; peSponsorId?: string; peSponsorPct?: number };
   // Mirrors InstitutionalEntityType in domain/institutions.ts; inlined because that module
   // already imports from this one and a type import here would close the cycle.
+  /** Week this company first defaulted — lets credit contagion decay out of a rolling window
+   *  instead of counting every default that ever happened (S8). */
+  defaultedWeek?: number;
   institutionalRole: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | null;
   institutionalMarketShare?: number;
   beta: number;

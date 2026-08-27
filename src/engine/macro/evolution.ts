@@ -664,9 +664,17 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
 
   // Housing market evolution as a real asset class
   const prevHousing = region.housingMarket ?? createHousingMarket(region.id, region.estimatedHouseholdIncomeUSD, region.totalPopulation);
-  const resDemand = region.categoryDemand?.['residential_construction']?.demandLevelUSD ?? 1e9;
-  const resSupply = region.categoryDemand?.['residential_construction']?.inventoryLevelUSD ?? (resDemand * 0.1);
-  const supplyDemandRatio = resSupply / Math.max(1, resDemand);
+  // S8: housing supply is the real cleared OUTPUT of the residential_construction auction, not
+  // its `inventoryLevelUSD` — that field is frozen at initialization for output-only categories,
+  // so the ratio below was a constant pretending to be a market signal and house prices drifted
+  // on a number that never changed. Units cleared this week x the cleared price is the real
+  // weekly supply, against the same week's real demand.
+  const resCat = region.categoryDemand?.['residential_construction'];
+  const resDemandUnits = resCat?.totalUnitsDemandedThisWeek ?? 0;
+  const resSupplyUnits = resCat?.totalUnitsSuppliedThisWeek ?? 0;
+  const supplyDemandRatio = resDemandUnits > 0
+    ? resSupplyUnits / resDemandUnits
+    : 1.0; // no real demand cleared this week — treat as balanced rather than inventing pressure
   const creditFactor = Math.max(0.5, Math.min(1.5, 1.0 + (newPolicyRate < 0.05 ? 0.02 : -0.02)));
   const priceIndexDelta = (1.0 - supplyDemandRatio) * 0.002 * creditFactor;
   const newPriceIndex = Math.max(0.5, Math.min(3.0, prevHousing.priceIndex + priceIndexDelta));
