@@ -870,14 +870,21 @@ HEAD must show GDP, employment and total debt unchanged. Firm sizes draw from a 
   rather than 8x; the remaining ~474B stays as the SME mass's bank debt (G2's loan book) and the
   2x-revenue primitive itself is flagged in §6 for recalibration against what serviceable
   leverage plus the real bank book can actually support.
-- **HC2 Real debt.** Allocate the carved-out debt by what each firm would really have:
-  sponsor-owned and mid-size firms carry **leveraged loans** (real FLOATING tranches clearing in
-  07d — the loan universe grows from ~30 to a few hundred real names, fixing §6's small-n),the
-  largest carry **private placements/bonds** (FIXED tranches clearing in 07b), the rest is
-  **bank term debt** (aggregate per-bank books until G2 itemizes them). The bank/market split is
-  **not chosen — it is solved** from two real constraints: institutional want/have → ~1.0x
-  (§7.18's diagnostic) and bank balance-sheet capacity at real capital ratios. Coupons flow
-  through real ledgers; institutions hold the paper in the S7 ledger like any other.
+- **HC2 Real debt — DONE** (commit "HC2: the private tier's debt enters the markets"). The
+  tier's real ladders clear in 07b (fixed) and 07d (floating), the tradable float seeded onto
+  the same holders in the engines' own shape with no cash movement (recognising an existing
+  stock — §7.4 honored), coupons accruing to holders, private defaults counting as market
+  credit events. Measured at week 26: bond universe 317 names (126 private), **loan universe
+  292 names, 246 private** — the leveraged-loan market is now mostly sponsor-owned private
+  paper, as the real one is; IG medians unchanged (168–226bp); want/have **6.4x → 3.8x**. The
+  remaining gap is exactly HC1's finding: real leverage services ~75B of tier debt, not the
+  segment scalar's ~330B — full closure runs through the §6 segment-debt-primitive
+  recalibration plus G2's bank book, not more tier issuance. HY (bonds and loans both) still
+  clears at the distressed saturation backstop, and loans there print slightly WIDE of
+  same-rated bonds: with the buyer base fully invested (cash 0.0%) and budgets binding, the
+  level is set by the most reluctant current holder rather than two-sided schedules — the
+  honest price of a market with no new money, resolving via G6's liability inflows and HC5's
+  calibration, not by seeding more generous sleeves.
 - **HC3 Real employment & goods-market handover.** Private firms get real occupation demand
   (same sector mixes); their stage-05 participation replaces the equivalent share of segment
   participation. Verify: the labor supply/demand gap (§6 root item) narrows materially — this is
