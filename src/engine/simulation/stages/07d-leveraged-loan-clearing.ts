@@ -26,6 +26,8 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
+import { computeAllocationTilt, CAPITAL_CHARGE_BY_ASSET_CLASS } from './asset-allocation';
+import { computeExpectedLossSpreadBps } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './financial-clearing-engine';
@@ -123,11 +125,30 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const currentEntityTotalUSD = Array.from(currentHoldingByCompany.values()).reduce((s, v) => s + v, 0);
       const rawTargetUSD = rawEntityTargets.get(entity.id) ?? 0;
-      const slowTargetTotalUSD = currentEntityTotalUSD + (rawTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
+      // Same cross-asset test the bond book gets (see asset-allocation.ts): does the discount
+      // margin on offer cover the expected loss and the capital a secured loan consumes? Loans
+      // carry a lower charge than the same issuer's unsecured paper because the collateral is
+      // real, so they clear their cost at a tighter margin — which is exactly the structural
+      // relationship between the two markets that a static allocation percentage cannot express.
+      // Applied to the structural target and then drifted toward, never to the drifted figure.
+      const bookAverageDmBps = totalOutstandingUSD > 0
+        ? regionCompanies.reduce((sum, c) => sum + c.leveragedLoan.discountMarginBps * floatingDebtUSD(c), 0) / totalOutstandingUSD
+        : 0;
+      const bookAverageExpectedLossBps = totalOutstandingUSD > 0
+        ? regionCompanies.reduce((sum, c) => sum + computeExpectedLossSpreadBps(c) * SENIOR_LIEN_DISCOUNT * floatingDebtUSD(c), 0) / totalOutstandingUSD
+        : 0;
+      const relativeValueTilt = computeAllocationTilt({
+        entityType: entity.entityType,
+        earnedSpreadBps: bookAverageDmBps,
+        expectedLossBps: bookAverageExpectedLossBps,
+        capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.LEVERAGED_LOAN,
+      });
+      const desiredTargetUSD = rawTargetUSD * (1 + relativeValueTilt);
+      const targetTotalUSD = currentEntityTotalUSD + (desiredTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
 
       return {
         id: entity.id,
-        targetTotalUSD: slowTargetTotalUSD,
+        targetTotalUSD,
         currentHoldingsByInstrumentId: currentHoldingByCompany,
         // Real loan investors don't hold sharply differing views of the same issuer the way bond
         // investors with different mandates/duration targets do — the same value+momentum view

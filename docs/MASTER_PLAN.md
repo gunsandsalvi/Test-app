@@ -339,6 +339,7 @@ national-accounts identity established in §7.10. **Do it as part of BP5** (gove
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
 
 ### RV — Allocation as an outcome: cross-asset relative value + opportunistic issuance
+*(demand side landed — see §7.16; **supply side is what remains and is the next item**)*
 
 **The defect this fixes, stated properly.** Every market here is a *closed pot*. A participant's
 total is fixed (`share × outstanding`) and attractiveness only redistributes that total across
@@ -391,6 +392,15 @@ simulation currently has no way to produce.
 2. This makes markets genuinely coupled for the first time, so money leaving credit has to
    arrive somewhere and the accounting has to close. **That is why S4 comes first** — without
    real cash settlement the rotation leaks.
+
+**Status.** The demand half is built (`stages/asset-allocation.ts`, wired into 07b and 07d) and
+halves the corporate spread drift — median USA OAS at week 36 moved from −350bp to −203bp, and
+loan discount margins from a median of −93bp to +101bp. It did not close it, which is the
+expected result and the reason the item was always two halves: **demand alone can only decide how
+much of a fixed pile of paper to own.** The remaining drift is supply — the float grows every
+week from maintenance funding and refinancing regardless of what credit costs, so there is
+permanent new paper to absorb. Build the CFO decision next; only then re-measure, and only then
+revisit S3's diagnosis list.
 
 **Scope note:** this subsumes **WS8** (issuance with placement agents — same mechanism, and the
 CFO decision is the missing half of it) and is expected to resolve the open half of **S3**
@@ -877,6 +887,31 @@ the complete simulation.
       fund bond purchases from reserves and reach for the SRF when they run low, which is the real
       behaviour Phase 2 already models; capital ratio unchanged versus baseline (#67 unaffected,
       as expected).
-15. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+16. **RV demand side landed (allocation responds to price).** `stages/asset-allocation.ts` asks
+    the question a static percentage cannot: does this asset class currently pay for itself?
+    `excess = (spread earned − expected credit loss) − (capital charge × required return)`. Every
+    term is real and already computed — the cleared OAS or discount margin, the issuer's own
+    expected loss from its leverage and coverage, and what regulation costs an institution to hold
+    the asset. The policy percentage becomes the centre of a band and the book sits inside it
+    according to that test; money released becomes real cash on the entity's balance sheet, which
+    is why S4 had to come first.
+    - **Why it can act on the level when a tilt cannot**: it scales the SIZE of the real, already
+      bounded pool instead of redistributing a fixed one, so it does not renormalize away. Same
+      mechanism S2 gave banks when it let them choose bonds versus reserves, now generalised.
+    - **It is not an invented fair-value level** (§7.2's failure): the comparison is against the
+      entity's own cost of capital and the asset's own expected loss, both real.
+    - **A ratchet found on the first attempt**: applying the tilt to a target that is itself
+      anchored on current holdings feeds back — selling lowers the book, the lower book lowers the
+      target, the lower target sells again. That ran spreads monotonically 78bp → 1388bp, the same
+      failure as the drift it was meant to stop, in the opposite direction. The tilt must apply to
+      the STRUCTURAL target, which is then drifted toward. S2 hit exactly this: the bank reserve
+      substitution only transmitted properly once it sat outside the slow drift.
+    - Result: corporate spread drift halved (median −350bp → −203bp at week 36), loan margins
+      median −93bp → +101bp, book conservation holds at 0.40% worst week, and the revenue-ratio
+      diagnostic returned **zero violations at both week 45 and week 60** — the first clean run
+      this project has recorded.
+    - **What it cannot do alone, by construction**: decide how much paper exists. That is the
+      supply half.
+17. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
    MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
    `npm run verify` gate closes #2/#14/#41.

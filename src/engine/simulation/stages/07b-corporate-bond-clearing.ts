@@ -45,6 +45,7 @@
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { computeExpectedLossSpreadBps, getRatingBucket, distributeRealTargetByWeight } from './shared-helpers';
+import { computeAllocationTilt, CAPITAL_CHARGE_BY_ASSET_CLASS } from './asset-allocation';
 import { WeeklyStepContext } from './context';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant } from './financial-clearing-engine';
 
@@ -186,16 +187,42 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const currentEntityTotalUSD = Array.from(currentHoldingByCompany.values()).reduce((s, v) => s + v, 0);
       const rawTargetUSD = rawEntityTargets.get(entity.id) ?? 0;
-      // The policy target is a long-term guide the entity's actual book drifts toward slowly —
-      // not a number it instantly reallocates to (see STRATEGIC_TARGET_DRIFT_RATE's doc comment).
-      const slowTargetTotalUSD = currentEntityTotalUSD + (rawTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
+
+      // How much of the asset class is worth owning AT ALL at today's price, which the policy
+      // percentage alone cannot express. The policy weight is the centre of a band; the book sits
+      // inside that band according to whether the spread on offer covers the expected loss and
+      // the capital the position consumes. When credit compresses past that point the entity
+      // genuinely holds less of it and the released money becomes real cash on its balance sheet
+      // (which is why this needed cash settlement to land first) — real selling that widens the
+      // spread until it pays for itself again. Unlike the per-issuer attractiveness below, this
+      // moves the SIZE of the book, so it does not renormalize away.
+      const bookAverageSpreadBps = totalOutstandingUSD > 0
+        ? regionCompanies.reduce((sum, c) => sum + c.oasSpreadBps * fixedDebtUSD(c), 0) / totalOutstandingUSD
+        : 0;
+      const bookAverageExpectedLossBps = totalOutstandingUSD > 0
+        ? regionCompanies.reduce((sum, c) => sum + computeExpectedLossSpreadBps(c) * fixedDebtUSD(c), 0) / totalOutstandingUSD
+        : 0;
+      const relativeValueTilt = computeAllocationTilt({
+        entityType: entity.entityType,
+        earnedSpreadBps: bookAverageSpreadBps,
+        expectedLossBps: bookAverageExpectedLossBps,
+        capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.CORP_BOND,
+      });
+      // Applied to the STRUCTURAL target, then drifted toward — never to a target that is itself
+      // anchored on current holdings. Tilting the drifted figure ratchets: selling lowers the
+      // book, the lower book lowers the target, the lower target sells again. Measured, that ran
+      // spreads monotonically from 78bp to 1388bp — the same failure, in the opposite direction,
+      // as the drift it was meant to stop. (S2 hit this too: the bank reserve substitution only
+      // transmitted properly once it sat outside the slow drift rather than inside it.)
+      const desiredTargetUSD = rawTargetUSD * (1 + relativeValueTilt);
+      const targetTotalUSD = currentEntityTotalUSD + (desiredTargetUSD - currentEntityTotalUSD) * STRATEGIC_TARGET_DRIFT_RATE;
 
       const attractivenessByInstrumentId = new Map<string, number>();
       regionCompanies.forEach((c) => attractivenessByInstrumentId.set(c.id, computeEntityAttractiveness(entity, c, creditConditionsIndex)));
 
       return {
         id: entity.id,
-        targetTotalUSD: slowTargetTotalUSD,
+        targetTotalUSD,
         currentHoldingsByInstrumentId: currentHoldingByCompany,
         attractivenessByInstrumentId,
       };
