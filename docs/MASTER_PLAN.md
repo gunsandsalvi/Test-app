@@ -104,7 +104,7 @@ every cross-stage dependency is visible) and runs the stages in order:
 | 08 | `08-company-fundamentals.ts` | Per-company weekly update: revenue (anchored to stage 05 real sales), costs, capex/debt, rating, earnings, equity price. Largest stage; reads cleared credit stats, never sets them |
 | 09 | `09-concentration-risk.ts` | >40% supplier/customer concentration flags |
 | 10 | `10-mergers.ts` | Quarterly M&A |
-| 11 | `11-fiscal-and-sovereign-debt.ts` | The statistics stage: measures bottom-up GDP **and the consumer price index** (`stages/price-index.ts` — the only place inflation is set); deficit → real gov tranche issuance, placed with and redeemed from real holders; itemized-holdings attribution (**mechanical rebuild — must die, §5-S7**), news generation |
+| 11 | `11-fiscal-and-sovereign-debt.ts` | The statistics stage: measures bottom-up GDP **and the consumer price index** (`stages/price-index.ts` — the only place inflation is set); deficit → real gov tranche issuance, placed with and redeemed from real holders; refreshes the derived holdings view (`stages/holdings-view.ts`, §7.26), news generation |
 | 12 | `12-portfolio-and-positions.ts` | Index recomputation + player portfolio mark-to-market |
 | 13 | `13-news-and-turn-summary.ts` | IPO checks, cash/NAV settlement, turn summary |
 
@@ -158,13 +158,12 @@ UI reads `GameState` only. Several components still contain second price-setters
 numbers — see §5-G and §6. Invariants harness: `scripts/invariants.ts` via `npm run verify`
 (NaN purity, ownership conservation, NAV identity, fee conservation, MTM unfreezing, policy
 rate stability, default/merger disjointness, bank capital & NIM bands, IPO EPS, revenue 20x
-ceiling, sovereign absorption, equity-demand-moves-price, auction-moves-yields). Known
-harness state (all pre-existing, A/B confirmed): bank-capital band fails from ~week 70 and NIM
-from ~week 180 (task #67); the sovereign-absorption check no longer references nonexistent
-fields but **fails with baseline and shocked identical to 8 decimal places** — the auction shock
-reaches the curve not weakly but not at all, which is a real defect and not a tolerance issue
-(§6); the institutional-book check fires in a periodic burst (§6); revenue-ceiling has a small
-tracked residual (#18).
+ceiling, sovereign absorption, equity-demand-moves-price, auction-moves-yields). Known harness state, measured at the WS5 close (§7.32/§7.34): **60 weeks, seed default —
+4 violations, every one a known #18 revenue-runaway name**; 260 weeks — 12, same kind, with zero
+bank-NIM breaches, zero book-conservation breaches and zero ledgers minting claims. The
+sovereign-absorption check was repaired in S6 (§7.25) and now measures a real +6.5bp week-1
+response. Still open: the institutional-book check fires in a periodic burst (§6), plus #67
+and #18.
 
 ---
 
@@ -187,10 +186,11 @@ household/labor blob (Main Street) and the government fiscal loop (Blueprint).
 **Real but structurally undersupplied** — a category worth naming separately, because these are
 not formulas and they still produce wrong prices. The clearing markets are honest mechanisms
 running on an asset universe that does not match the money pointed at it: institutional
-corporate-credit appetite is **~6x the corporate credit that exists** (§7.18), the hidden
-corporate sector's 549B of debt is a scalar no one can own (§5-HC), and institutions face no
-no budget constraint existed at all (fixed — §7.21). A correct auction over a 6x-short float
-still gives a wrong price, and no amount of work inside the auction fixes it.
+corporate-credit appetite ran **~6x the corporate credit that existed** (§7.18). HC Wave 1 took
+that to 3.8x by making the hidden sector's debt real and ownable (§7.33), and S11 gave entities
+the budget constraint they never had (§7.21); the residual closes through the §6 segment-debt
+primitive, G2's bank book and G6's liability inflows. The lesson stands on its own: a correct
+auction over a short float still gives a wrong price, and no work inside the auction fixes it.
 
 ---
 
@@ -204,24 +204,24 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 12 | Private repo markets | WS6 | — |
-| 13 | Money market funds | WS7 | WS5, WS6 |
-| 14 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
-| 14b | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
-| 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
-| 16 | Unify the two dealer systems | G3 | S9 |
-| 17 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 19 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 20 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 21 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 22 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 23 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 24 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 25 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 26 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 27 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
+| 2 | Private repo markets | WS6 | — |
+| 3 | Money market funds | WS7 | WS5, WS6 |
+| 4 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 5 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
+| 6 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
+| 7 | Unify the two dealer systems | G3 | S9 |
+| 8 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 9 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 10 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 11 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 12 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 13 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 14 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 15 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 16 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 17 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 18 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
@@ -229,20 +229,11 @@ priced a quantity target instead of a demand curve. Real growth reads positive i
 at week 26, inflation is a measured statistic, and corporate spreads now track credit
 (Spearman 0.78–0.93) instead of ownership.
 
-**What the top three items have in common.** Each is a case of the credit market being right in
-mechanism and wrong in inputs, and each was found by measuring rather than reading:
-
-- **HC Wave 1 because the asset universe is 6x short of the money pointed at it** (§7.18), the
-  labor market is short of employers by a similar order, and both missing halves are the same
-  missing thing: the hidden corporate sector as real firms.
-
-**Sequencing settled with the user (2026-08-27):** Hidden Corporates runs in **two waves**.
-Wave 1 (position 3): firmify the upper tail, real debt, real employment, PE ownership — because
-every credit item below is currently calibrated against a 6x-short float, and signing off a
-market in a broken environment measures the environment, not the market. Wave 2 (after WS4, WS8
-and G2 exist to receive it): the lifecycle — LBO/recap/exit flow, real IPOs replacing the
-synthetic generator, firm births, defaults into estates. **Do not reorder further without
-asking.**
+**Hidden Corporates Wave 1 is closed** (§7.33). It led the queue because the asset universe was
+6x short of the money pointed at it; the named private tier took want/have to 3.8x and the
+remaining gap has a known closure path (the §6 segment-debt primitive, G2's bank book, G6's
+liability inflows). **Wave 2 stays where it is** — after WS4, WS8 and G2 exist to receive the
+lifecycle. **Do not reorder further without asking.**
 
 Otherwise the shape holds: restore the money and holdings identities (S5–S9), then the
 remaining markets, then Main Street before Blueprint's fiscal loop (taxes need households).
@@ -345,6 +336,24 @@ the corridor holds without a clamp: no lender accepts below ON RRP + ε (it has 
 borrower pays above SRF + ε (it has the window). The engine clears one rate; positions are
 overnight, re-cleared weekly, carried as `repoLentUSD`/`repoBorrowedUSD` with real interest in
 each bank's P&L.
+
+**Measure first, before building any of it.** §6 records a bottom-up defect directly underneath
+this item: the bank balance-sheet identity runs −114B to −139B and a `Math.max` floor in
+`evolveBankingSector` manufactures the difference, which is also why measured SRF/ON RRP usage
+is 0.00B in every region in every week — there is currently no dispersion in bank cash for a
+repo market to intermediate, and the corridor this item relies on has never actually been
+tested. Establish whether the gap is missing funding or unbounded bank demand (07c caps nothing)
+before deciding what repo's float is. Building the market on an unexamined float would price a
+real rate over an invented quantity — §7.24.
+
+**Every number in it must be derived, not posted.** The two administered rates are the one
+exception rule 1 grants (a posted rate with real quantity response IS the mechanism). Everything
+else comes from something real: the haircut is the lender's protection against the collateral
+repricing before it can be sold, so it follows from the bucket's own duration and the realised
+volatility of its cleared yield (`historicalZeroCurves`) — per bucket, and it tightens capacity
+exactly when the curve turns volatile, which a posted percentage cannot do. Lender size is the
+cash a participant's own policy leaves genuinely uncommitted, and how much is actually lent is
+the auction's answer, not a ceiling.
 
 **Verify:** repo prints inside the corridor every week *because* volumes migrate to the
 facilities at the edges (check facility usage spikes when repo touches a bound); collateral
@@ -618,120 +627,48 @@ go public**. Decisions settled with the user (2026-08-27): ~300 named private fi
 private equity sponsors as a real institutional type, in this project; two waves; the synthetic
 IPO generator is replaced entirely.
 
-**Why it leads the queue (the measurements, §7.18 + §6):** the sector is 56.5% of the economy by
-revenue and carries 549.4B of debt — 86% of all corporate debt — as a scalar nobody can own,
-which is why institutional corporate-credit appetite runs **6.4x** the credit that exists.
-The bootstrap's firms also demand 11–14% fewer workers than the population supplies — the
-missing employers are these same firms. And the public universe's generated rating distribution
-has **zero BBB and zero high yield**, while in reality the B-rated universe *is* mostly
-PE-owned private firms. One missing sector explains three separate standing defects.
+**Status.** Wave 1 is closed — the named private tier, its real debt in the markets, real
+employment and capex, the sponsor universe, and the calibration gate. The record, the measured
+numbers and the lessons are in §7.33. What follows is the architecture Wave 2 still builds on,
+then Wave 2 itself.
 
 **Architecture: two tiers, one firm model, listing as a state.**
 
 - **Tier 1 — named private firms** (~300/region): real `Company` objects with
-  `listingStatus: 'PRIVATE' | 'PUBLIC'` replacing today's implicit always-public. A private firm
-  has no traded equity (no `stockPrice`, no share registry entry, no consensus/earnings theater —
-  stage 08 runs a reduced, cheaper path for them, which is also the realistic one: private firms
-  do not report quarterly), an `ownership` block ({founderPct, peSponsorId?, peSponsorPct}), and
-  everything else real firms have: product lines bidding in stage 05, occupation demand, a debt
-  ladder, a rating, a cash ledger (S5). Every stage that takes `Company` works on them with the
-  listing flag deciding the few genuinely public-only behaviours. **No parallel type** — a
-  second firm type would be two representations of one real thing.
+  `listingStatus: 'PRIVATE' | 'PUBLIC'`. A private firm has no traded equity (no `stockPrice`, no
+  share registry entry, no consensus/earnings theater — stage 08 runs a reduced path, which is
+  also the realistic one: private firms do not report quarterly), an `ownership` block
+  ({founderPct, peSponsorId?, peSponsorPct}), and everything else real firms have. Every stage
+  that takes `Company` works on them, with the listing flag deciding the few genuinely
+  public-only behaviours. **No parallel type** — a second firm type would be two representations
+  of one real thing.
 - **Tier 2 — the SME mass**: the long tail stays aggregate but re-keyed to BP1's registry
-  categories (finer than today's five segments), bank-financed only, with real aggregate
-  entry/exit and employment. It is a real pool, not a formula: its revenue is its real stage-05
-  participation (already built in 1$-Phase 3), its debt is real bank loans (G2's book), its
-  losses are the banks' real loan losses.
-- **PE sponsors**: new `InstitutionalEntityType: 'PRIVATE_EQUITY'`, 2–3 funds per region.
-  Balance sheet: committed capital (insurers/pensions/asset managers allocate a real
-  `privateEquityPct` sleeve — real, illiquid, drawn down when called), dry powder, and a
-  portfolio of companyIds. The sponsor is what makes the leveraged-loan market make sense: in
-  reality PE-owned issuers ARE the B/BB loan universe, dividend recaps are the opportunistic
-  supply RVr needs, and exits are the IPO pipeline.
+  categories, bank-financed only, with real aggregate entry/exit and employment. A real pool,
+  not a formula: its revenue is its real stage-05 participation, its debt is real bank loans
+  (G2's book), its losses are the banks' real loan losses.
+- **PE sponsors**: `InstitutionalEntityType: 'PRIVATE_EQUITY'`, two funds per region. Committed
+  capital from real LP sleeves, dry powder, and a portfolio of companyIds. The sponsor is what
+  makes the leveraged-loan market make sense: PE-owned issuers ARE the B/BB loan universe,
+  dividend recaps are the opportunistic supply RVr needs, exits are the IPO pipeline.
 
-**Conservation is the build discipline.** Tier 1 firms are **carved out of** the existing
-segment aggregates, never added on top: at cutover, Σ(named firms) + (SME residual) must equal
-the prior segment totals for revenue, debt, and employment exactly, and a same-week A/B against
-HEAD must show GDP, employment and total debt unchanged. Firm sizes draw from a Pareto tail
-(real firm-size distributions are power-law) calibrated so the sums close.
+**Conservation is the build discipline.** Tier 1 firms are **carved out of** the existing segment
+aggregates, never added on top: Σ(named firms) + (SME residual) must equal the prior segment
+totals for revenue, debt and employment exactly, and a same-week A/B must show GDP, employment
+and total debt unchanged. Wave 2's births and exits carry the same rule.
+
+**Still owed from Wave 1, deferred with a reason:**
+- **HC3b — the real product-market handover — waits for BP1.** The auctioned sub-unit categories'
+  demand is calibrated against public supply, while the hidden tier's output genuinely sells
+  OUTSIDE the modeled taxonomy (services, local trade — categories that do not exist yet).
+  Injecting the tier's 165B/region of supply into markets sized for 211B of public revenue
+  collapsed both (−10% to −22% growth). BP1's registry carries the hidden sector's real
+  categories, demand routes to them by real buyer mixes, private firms get product lines in
+  THEIR markets, segment `annualRevenueUSD` is carved in the same pass, and the sales-anchored
+  revenue path (already written, gated on market presence) switches on.
 
 ---
 
-**Wave 1 — real firms, real debt, real employment** *(§4 position 3; prereqs: none)*
-
-- **HC1 Generation & carve-out — DONE** (see the commit "HC1: the named private tier exists").
-  301 firms/region carved from the segments (`bootstrap/private-firms.ts` Pareto-quantile seeds,
-  `generatePrivateCompanies`), `listingStatus`/`ownership` on Company, `ctx.prevActiveFirms` as
-  the public-only containment gate with `prevActivePrivateFirms` for per-wave opt-in, a reduced
-  stage-08 path (real ladder interest, cash walk, coverage, the same default trigger — no equity
-  or reporting theater). Measured: debt conservation exact to the decimal (USA 549.4B before =
-  75.5B firms + 473.9B segment residual after), zero spurious defaults over 26 weeks, zero
-  non-finite fields across 2,006 companies, 26 weeks in ~27s.
-  **Finding that reshapes HC2's numbers:** the segment primitive `debtUSD = 2 x revenue` implies
-  ~15x debt/EBITDA on the private sector as a whole — the first carve scaled real ladders up to
-  meet it and killed a third of the cohort in 26 weeks. The tier now carries what real leverage
-  services (~75B USA, not ~330B), so HC2 brings roughly 3x today's investable credit supply
-  rather than 8x; the remaining ~474B stays as the SME mass's bank debt (G2's loan book) and the
-  2x-revenue primitive itself is flagged in §6 for recalibration against what serviceable
-  leverage plus the real bank book can actually support.
-- **HC2 Real debt — DONE** (commit "HC2: the private tier's debt enters the markets"). The
-  tier's real ladders clear in 07b (fixed) and 07d (floating), the tradable float seeded onto
-  the same holders in the engines' own shape with no cash movement (recognising an existing
-  stock — §7.4 honored), coupons accruing to holders, private defaults counting as market
-  credit events. Measured at week 26: bond universe 317 names (126 private), **loan universe
-  292 names, 246 private** — the leveraged-loan market is now mostly sponsor-owned private
-  paper, as the real one is; IG medians unchanged (168–226bp); want/have **6.4x → 3.8x**. The
-  remaining gap is exactly HC1's finding: real leverage services ~75B of tier debt, not the
-  segment scalar's ~330B — full closure runs through the §6 segment-debt-primitive
-  recalibration plus G2's bank book, not more tier issuance. HY (bonds and loans both) still
-  clears at the distressed saturation backstop, and loans there print slightly WIDE of
-  same-rated bonds: with the buyer base fully invested (cash 0.0%) and budgets binding, the
-  level is set by the most reluctant current holder rather than two-sided schedules — the
-  honest price of a market with no new money, resolving via G6's liability inflows and HC5's
-  calibration, not by seeding more generous sleeves.
-- **HC3 Employment & capex handover — DONE; goods handover re-scoped as HC3b.**
-  What landed: private firms are real employers (occupation demand with real sector mixes;
-  segment employment reduced by exactly the carved headcount — USA 6.9M total conserved to the
-  worker) and real capex demanders (their capex in the corporate demand base; segment capexUSD
-  reduced identically). Two of this pass's own bugs are worth remembering: employment change
-  must be measured over the SAME firm universe on both sides of the week (an asymmetric pair
-  read the tier's arrival as a mass layoff and pinned unemployment at its 25% cap), and an
-  unsold-production penalty must only exist for a firm that actually offers into a modeled
-  market.
-  **HC3b — the real product-market handover — waits for BP1, and the reason is a measured
-  structural fact, not caution:** the auctioned sub-unit categories' demand is calibrated
-  against public supply, while the hidden tier's output genuinely sells OUTSIDE the modeled
-  taxonomy (services, local trade — categories that do not exist yet). Injecting the tier's
-  165B/region of supply into markets sized for 211B of public revenue collapsed both (−10% to
-  −22% growth). The right fix is BP1's registry carrying the hidden sector's real categories,
-  with demand routed to them by real buyer mixes — then private firms get product lines in
-  THEIR markets, segment annualRevenueUSD is carved in the same pass, and the sales-anchored
-  revenue path (already written, gated on market presence) switches on.
-  **Correction to an earlier claim:** HC3 does not narrow the 11–14% labor supply/demand gap —
-  the carve conserves totals by construction, so the gap remains MS2's to close by making both
-  sides real. What HC3 delivers is attribution: labor demand now belongs to named employers.
-- **HC4 Ratings & the sponsor universe — DONE.** The rating-distribution fix landed in HC1 (it
-  was generation-side); HC4 added the owners: `PRIVATE_EQUITY` as a fifth institutional type,
-  two funds per region holding the levered cohort (USA: 131 sponsor-owned firms, BB 85 / B 31 /
-  CCC 9 — the real sponsor universe). Fund NAV marks weekly from the portfolio companies' REAL
-  EBITDA and real ladders (EV multiple less debt at the stake), so a portfolio company's
-  deterioration hits its sponsor the week it happens. LPs (insurers/pensions/asset managers)
-  hold fund interests recorded under HC2's doctrine — the stakes existed, the owners were
-  unmodeled, no cash moves at recognition — and committed-but-undrawn capital is a real claim
-  on named LPs that HC6's deal flow draws through the budget machinery. PE funds carry zero
-  security-allocation targets: they own companies, not paper, and never bid in the
-  bond/loan/sovereign auctions.
-- **HC5 Calibration gate — MEASURED; Wave 1 closed.** On the enlarged universe (299–316 bond
-  names, ~290 loans): IG strictly ordered and realistic (AAA 157 / AA 163 / A 175 / BBB 218),
-  zero negative spreads, zero numerical-guard hits. Spearman(leverage, OAS) = 0.74–0.76 —
-  below the 0.8 target and explained rather than tuned: ~250 investment-grade names now carry
-  honestly near-identical expected losses, so rank correlation is diluted by ties, and the HY
-  cohort clusters at the capacity backstop. Want/have = **3.8x** against the 1.0 target, with
-  the closure path known and recorded (the segment-debt-primitive recalibration + G2's bank
-  book + G6's liability inflows), not open. Runtime 26 weeks ≈ 60–80s at 2,000+ firms (~2.5x
-  the pre-HC cost) — inside budget, with the §6 optimization sweep as the standing lever.
-
-**Wave 2 — the lifecycle** *(§4 position 14b; prereqs: WS4, WS8, G2)*
+**Wave 2 — the lifecycle** *(§4; prereqs: WS4, WS8, G2)*
 
 - **HC6 PE deal flow.** LBOs: sponsor buys a private firm (or takes a public one private —
   delisting is just the listing flag, the same one-firm-model payoff) at a real EV/EBITDA price,
@@ -798,6 +735,7 @@ the complete simulation.
 | `macro/evolution.ts` wage/tightness | Nominal wage growth goes negative (−2.5% by week 40) while inflation runs at 10% — a 12% real-wage collapse per year. Partly a symptom of G1's runaway, partly the tightness→wage-growth formula having no real bargaining mechanism. Re-measure after G1; if it survives, it belongs to MS3 |
 | `macro/initialization.ts` + `computeOccupationDemand` | **Labor supply and labor demand disagree at the root**: the firms the bootstrap generates demand ~11-14% fewer workers than the population/participation primitives supply, so the occupation pools imply 11-14% unemployment while `reg.unemploymentRate` and the weekly evolution report ~4.5%. Two representations of one real thing. Writing the pool-implied rate into the field was tried during S1 and deliberately reverted (it trades a hidden inconsistency for a visible one without making the sides agree). Real fix = make firm generation and labor supply consistent → **MS2** |
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
+| `macro/banking.ts` `evolveBankingSector` + `07c` bank demand | **The banking sector's balance sheet does not balance, and a `Math.max` hides it.** Reserves are set as `Math.max(newDeposits * 0.08, deposits + equity − loans − securities)`. The second term is the balance-sheet identity, and measured on the default seed it is **−138.9B for the USA banks at week 0 and −114.0B at week 60** (EUR −67.4B, UK −13.6B, JPN −53.1B at wk60) — so the floor branch binds in every region in every week, and the banks' securities book is funded by a number with nothing on the other side of it. Rule 3 in its purest form, present since the cold start. Two measured consequences: **(a)** every bank is pinned to exactly 8% of deposits, so it is never short or long of its own buffer — **SRF and ON RRP usage print 0.00B in all four regions in all 60 weeks**, i.e. the Phase-2 administered facilities (§7.8) are inert; **(b)** 07c gives banks no `maxNetPurchaseUSD` on the stated grounds that "their real constraint is the reserve position S2 already built", but that constraint does not exist while the floor refills reserves regardless — so bank sovereign demand is unbounded, and USA banks hold **147.4B of government bonds against 67.1B of deposits at week 0**, 122.1B at week 60. Which of the two is the root — missing funding, or unbounded demand — decides whether WS6's repo market funds a real gap or is built on top of a defect. **Measure that before starting WS6** (§7.18's lesson). Also a live suspect for #67, since banks currently earn a full sovereign yield on a book nothing funds |
 | open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
 | public default rate ~10%/yr (was 13%) | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. S5 cut it 59 → 46/196 by wk121; the remainder tracks the goods-market cash-margin row above — re-measure after that item |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
@@ -1040,7 +978,7 @@ the complete simulation.
       to issue; no amount of tuning either side's *reaction* would have bounded it, because the
       quantity of paper was fixed by construction. Ask what is structurally absent before tuning
       what is present.
-    - Residual is amplitude rather than direction — see §5-RVr.
+    - Residual is amplitude rather than direction — closed and re-measured in §7.22.
 16. **E1 landed: the engine prices a demand schedule, and hedge funds are in it.** The clearing
     engine is now a real double auction. Each participant posts a per-instrument schedule —
     reservation level, full size, and the range it scales in over — and `solveClearingStat`
@@ -1474,7 +1412,7 @@ the complete simulation.
       their valuation — real gapping, but worth confirming it is the tail and not a discontinuity
       at the branch boundary. Households/banks/treasury are not yet participants in this book
       (the float is the institutional share); they arrive with MS and WS8.
-31. **Determinism + measurement: the engine is seeded, and one guess-free profiler.**
+32. **Determinism + measurement: the engine is seeded, and one guess-free profiler.**
     - **Every run was a different world.** 51 raw `Math.random()` sites across the engine meant
       no before/after measurement in this file ever compared the same economy to itself — the
       whole "measure, change one thing, measure again" method was being applied to numbers that
@@ -1510,7 +1448,8 @@ the complete simulation.
       **The generalisation, three for three on the wins: when a stage is slow, it is scanning a
       collection per item.** Look for the grouping pass before looking at anything else — and
       re-measure after, because the fourth one looked identical and was not.
-    - **SECTION CLOSE, full 260-week harness: 12 violations, all one kind.** Every one is the
+    - **SECTION CLOSE, full 260-week harness: 12 violations, all one kind.** (Re-measured
+      after WS5 as §7.34's 60-week figure.) Every one is the
       known #18 revenue-runaway name. **Zero** bank-NIM breaches (298 in the pre-seed baseline —
       #67's symptom is gone at long horizon), **zero** book-conservation breaches (23-138 across
       earlier runs), zero ledgers minting claims. The run takes 3m53s where it took ~25 minutes.
@@ -1520,7 +1459,40 @@ the complete simulation.
       settle in ONE pass at the end of stage 08 (ratios compose by product). Remaining cost, by
       measurement: stage 08 (42%), stage 05 (34%) — both already indexed; further cuts need
       algorithmic changes, logged not chased.
-32. **WS5 landed: bills and commercial paper — the front end is a market now.**
+33. **HC Wave 1 landed: the hidden sector is real firms.** ~301 named private firms per region
+    carved out of the segment aggregates (`bootstrap/private-firms.ts`, Pareto-quantile seeds),
+    with `listingStatus`/`ownership` on `Company`, real debt ladders clearing in 07b/07d, real
+    occupation demand and capex, and `PRIVATE_EQUITY` as a fifth institutional type owning the
+    levered cohort. `ctx.prevActiveFirms` stays the public-only containment gate, with
+    `prevActivePrivateFirms` as the per-stage opt-in.
+    - **Measured:** debt conservation exact to the decimal (USA 549.4B before = 75.5B firms +
+      473.9B segment residual after); bond universe 317 names (126 private), **loan universe 292
+      names, 246 private** — the leveraged-loan market is now mostly sponsor-owned private paper,
+      as the real one is. Want/have **6.4x → 3.8x**. At the HC5 gate: IG strictly ordered and
+      realistic (AAA 157 / AA 163 / A 175 / BBB 218), zero negative spreads, zero guard hits.
+      Sponsor universe USA: 131 firms, BB 85 / B 31 / CCC 9. Runtime ~2.5x the pre-HC cost at
+      2,000+ firms.
+    - **The finding that reshaped the project's numbers:** the segment primitive
+      `debtUSD = 2 x revenue` implies ~15x debt/EBITDA on the private sector as a whole. The
+      first carve scaled real ladders up to meet it and killed a third of the cohort in 26 weeks.
+      The tier now carries what real leverage services (~75B USA, not ~330B) and the residual
+      ~474B stays as the SME mass's bank debt — so the want/have gap closes through the §6
+      primitive recalibration plus G2's bank book, **not** through more tier issuance.
+    - **Spearman(leverage, OAS) = 0.74–0.76, below the 0.8 target, and explained rather than
+      tuned:** ~250 investment-grade names now carry honestly near-identical expected losses, so
+      the rank correlation is diluted by ties. §7.20's lesson in a new place — when an honest
+      model flattens a distribution, do not re-inflate the input.
+    - **Two bugs worth remembering, both about measurement rather than economics:** an employment
+      change must be measured over the SAME firm universe on both sides of the week (an
+      asymmetric pair read the tier's arrival as a mass layoff and pinned unemployment at its 25%
+      cap), and an unsold-production penalty must only exist for a firm that actually offers into
+      a modeled market.
+    - **Correction to an earlier claim:** HC3 does NOT narrow the 11–14% labor supply/demand gap.
+      The carve conserves totals by construction, so the gap remains MS2's to close by making
+      both sides real. What HC3 delivers is attribution — labor demand now belongs to named
+      employers.
+    - HC3b (the product-market handover) is deferred to BP1 with a measured reason — see §5-HC.
+34. **WS5 landed: bills and commercial paper — the front end is a market now.**
     - **Bills.** ~18% of each sovereign ladder is 13/26/52-week paper (seeded at init in the
       engine's own shape, §7.4), clearing weekly in `07f-short-debt-clearing.ts`: banks anchor at
       policy + 5bp by the same reserve arbitrage that anchors the 2Y — expressed as a
@@ -1560,7 +1532,7 @@ the complete simulation.
       by week 30 as corporate cash builds — cash-rich issuers genuinely run no program, but if
       G2's lending dynamics later drain corporate cash, the market should re-emerge on its own;
       watch it then.
-31. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+35. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
