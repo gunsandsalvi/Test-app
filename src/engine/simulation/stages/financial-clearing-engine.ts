@@ -248,11 +248,32 @@ export function clearFinancialAsset(
     newStatById.set(inst.id, isFinite(clearedStat) ? clearedStat : inst.currentStat);
 
     // Everyone holds what they wanted at the level that cleared; the dealer carries any residual.
-    let allocatedUSD = 0;
+    //
+    // The printed level is the DAMPED one, so at that level demand and float need not be equal —
+    // damping is a discrete-time device and the market still has to settle a real quantity
+    // against it. When the schedules want more than exists, the fills are rationed pro rata:
+    // the same allocation rule the goods auction uses (#49), and the only honest one, because
+    // nobody can be handed a security that was never issued. Without this, a level held below
+    // its solve by the damping let every participant book its full unclamped size and the books
+    // together claimed multiples of the float — measured at 200% of shares outstanding in the
+    // equity slice, which is where it finally became impossible to miss.
+    const wantedByParticipant = new Map<string, number>();
+    let wantedTotalUSD = 0;
     participants.forEach((p) => {
       const d = p.demandByInstrumentId.get(inst.id);
       const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
       const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind, previousUSD) : 0;
+      wantedByParticipant.set(p.id, filledUSD);
+      wantedTotalUSD += filledUSD;
+    });
+    const rationFactor = wantedTotalUSD > inst.tradableFloatUSD
+      ? inst.tradableFloatUSD / wantedTotalUSD
+      : 1;
+
+    let allocatedUSD = 0;
+    participants.forEach((p) => {
+      const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
+      const filledUSD = (wantedByParticipant.get(p.id) ?? 0) * rationFactor;
       const tradedUSD = filledUSD - previousUSD;
       const feeUSD = Math.abs(tradedUSD) * (params.dealerSpreadBps / 10000);
 

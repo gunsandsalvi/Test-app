@@ -25,16 +25,14 @@ import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrive
 import { getRatingBucket, settleCorporateActionOnHolders, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
+import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
 const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
-// Liquidity depth: a net weekly flow equal to this many multiples of a company's own market
-// cap is needed to move its price 100%.
-const EQUITY_LIQUIDITY_DEPTH = 6;
 
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
-  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, regionCategoryExports, systemicStressFactorGlobal, regionEquityNetFlowUSD } = ctx;
+  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, regionCategoryExports, systemicStressFactorGlobal } = ctx;
   const refinanceNews: NewsItem[] = [];
 
   // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
@@ -42,11 +40,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // scan of a multi-thousand-element array executed once per company.
   const entityById = new Map(state.institutionalEntities.map(e => [e.id, e]));
   const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
-  const listedCapByRegion = new Map<string, number>();
-  state.companies.forEach(c => {
-    if (!isActiveCompany(c) || !isPubliclyListed(c)) return;
-    listedCapByRegion.set(c.region, (listedCapByRegion.get(c.region) ?? 0) + c.marketCap);
-  });
   const suppliedSubUnitsByRegion = new Map<string, Set<string>>();
   prevActiveFirms.forEach(c => {
     let set = suppliedSubUnitsByRegion.get(c.region);
@@ -1016,14 +1009,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // Equity price now moves from holder-class rebalancing flow (see computeTargetOwnershipShares
     // and the region-level equity flow computed in stage 2) rather than an eps x sectorPE formula.
     // Forward P/E becomes an output of that price, not an input to it.
+    // WS4: the share price is CLEARED, in 07e-equity-clearing.ts, before this stage runs — read
+    // it, never recompute it, exactly as this stage reads the cleared OAS. The old line moved
+    // price by a holder-class rebalancing flow plus `comp.sentiment x 0.35`: a free parameter
+    // that existed only because nothing real was setting the price. Sentiment survives as a
+    // narrative/news signal; it no longer moves a market.
     const newSentiment = (comp.sentiment * 0.85 + sentimentDelta);
-    const totalRegionEquityCapUSD = listedCapByRegion.get(comp.region) ?? 0;
-    const companyEquityFlowUSD = totalRegionEquityCapUSD > 0
-      ? (regionEquityNetFlowUSD[comp.region] ?? 0) * (comp.marketCap / totalRegionEquityCapUSD)
-      : 0;
-    const flowPct = comp.marketCap > 0 ? companyEquityFlowUSD / (comp.marketCap * EQUITY_LIQUIDITY_DEPTH) : 0;
-    const sentimentPct = newSentiment * 0.35;
-    let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((comp.stockPrice * (1 + flowPct + sentimentPct)).toFixed(2)));
+    let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number(comp.stockPrice.toFixed(2)));
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
     if (comp.isBankEntity) {
       // Wall Street Phase 1: this bank's own real equity (computed this week in
@@ -1092,7 +1084,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * comp.sharesOutstanding));
     if (excessCash > 5 && debtToEquity < 0.6 && comp.sharesOutstanding > 10 && !isDefaulted && newStockPrice > 0) {
       const estimatedBookValuePerShare = Math.max(0.5, (newCash + newRevenue * 0.8 - newTotalDebt) / comp.sharesOutstanding);
-      const isCheap = newStockPrice < estimatedBookValuePerShare || newForwardPE < ((SECTOR_BENCHMARKS[comp.sector]?.basePE ?? 15) * 0.95);
+      // "Cheap" against the same arithmetic the market itself prices this company with (07e /
+      // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E
+      // table. A board that buys back stock is taking the other side of that auction, so it has
+      // to be reading the same book; comparing to a multiple the market no longer uses would be
+      // two valuations of one company again.
+      const boardFairValuePerShare = companyFairValuePerShare(
+        { ...comp, netIncome: newNetIncome, cash: newCash, totalDebt: newTotalDebt },
+        reg.zeroRates?.tenor10Y ?? reg.policyRate,
+        REPRESENTATIVE_HOLDER_REQUIRED_RETURN
+      );
+      const isCheap = newStockPrice < estimatedBookValuePerShare || newStockPrice < boardFairValuePerShare * 0.95;
       const buybackShare = isCheap ? 0.60 : 0.25;
       const buybackSpendM = (excessCash * 0.05 / 52) * buybackShare;
       const sharesToRetire = Math.min(comp.sharesOutstanding * 0.005, buybackSpendM / Math.max(0.1, newStockPrice));

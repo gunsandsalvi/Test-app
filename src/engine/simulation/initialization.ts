@@ -202,6 +202,28 @@ export function createInitialGameState(): GameState {
           quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalCorpCandidatesUSD),
         }));
 
+    // Equity is seeded in SHARES, proportional to each name's market cap — the same shape
+    // 07e-equity-clearing.ts builds its structural demand in (§7.4). The greedy size-sorted fill
+    // used before concentrated every entity's book in the two or three largest names, so week 1
+    // opened with a systemic buy gap in every smaller name; and it stored dollars only, which is
+    // the circularity the share registry exists to kill — a book whose size depends on the price
+    // it is supposed to set (#28).
+    const totalEquityCandidatesUSD = equityCandidates.reduce((s2, c) => s2 + c.outstandingUSD, 0) || 1;
+    const equityPriceById = new Map(regionCompanies.map(c => [c.id, c.stockPrice]));
+    const attributeEquityHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+      equityCandidates
+        .filter(c => shareUSD * (c.outstandingUSD / totalEquityCandidatesUSD) > 1)
+        .map(c => {
+          const nameUSD = shareUSD * (c.outstandingUSD / totalEquityCandidatesUSD);
+          return {
+            instrumentId: c.id,
+            instrumentType: c.type,
+            issuerRegion: c.region,
+            quantityShares: nameUSD / Math.max(0.01, equityPriceById.get(c.id) ?? 1),
+            quantityOrNotionalUSD: nameUSD,
+          };
+        });
+
     const govDebtTranches = reg.govDebtTranches || [];
     const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = govDebtTranches.map(gt => ({
       id: gt.id,
@@ -267,7 +289,7 @@ export function createInitialGameState(): GameState {
     reg.institutionalSector.itemizedHoldings = [
       ...attributeItemizedHoldings(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
       ...attributeItemizedHoldings(reg.institutionalSector.sovBondHoldingsUSD, sovCandidates),
-      ...attributeItemizedHoldings(reg.institutionalSector.equityHoldingsUSD, equityCandidates),
+      ...attributeEquityHoldingsProportionally(reg.institutionalSector.equityHoldingsUSD),
     ];
 
     // Build the individual InstitutionalEntity objects mapping to regional Companies
@@ -359,7 +381,7 @@ export function createInitialGameState(): GameState {
         ...attributeCorpBondHoldingsProportionally(entCorpShareUSD),
         ...attributeSovBondHoldingsProportionally(entSovShareUSD),
         ...attributeLoanHoldingsProportionally(entLoanShareUSD),
-        ...attributeItemizedHoldings(entEquityShareUSD, equityCandidates),
+        ...attributeEquityHoldingsProportionally(entEquityShareUSD),
       ];
 
       institutionalEntities.push({

@@ -12,6 +12,7 @@ import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clear
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
+import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
@@ -44,6 +45,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
   runCorporateBondClearingStage(state, ctx);
   runSovereignBondClearingStage(state, ctx);
   runLeveragedLoanClearingStage(state, ctx);
+  runEquityClearingStage(state, ctx);
   markInstitutionalBooks(ctx);
   runCompanyFundamentalsStage(state, ctx);
   runConcentrationRiskStage(state, ctx);

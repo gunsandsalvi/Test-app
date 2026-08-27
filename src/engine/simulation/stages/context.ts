@@ -32,7 +32,6 @@ export interface WeeklyStepContext {
   diagnosticLogs: any[];
   newsItems: NewsItem[];
   rateChanges: { region: RegionId; deltaBps: number }[];
-  regionEquityNetFlowUSD: Partial<Record<RegionId, number>>;
   ratingChanges: { ticker: string; from: CreditRating; to: CreditRating; name: string }[];
   earningsReportedThisTurn: any[];
   defaultedTickers: string[];
@@ -99,7 +98,6 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     diagnosticLogs: [],
     newsItems: [],
     rateChanges: [],
-    regionEquityNetFlowUSD: {},
     ratingChanges: [],
     earningsReportedThisTurn: [],
     defaultedTickers: [],

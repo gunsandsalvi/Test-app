@@ -74,10 +74,6 @@ const MAX_DURATION_TILT = 0.15;
 // -1..+1 index) shifts what "fair value" means right now — real credit investors price a bond
 // against the current market, not against an idiosyncratic PD estimate in a vacuum.
 const CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS = 150;
-// Net weekly order flow equal to this many multiples of an issuer's own total debt outstanding
-// is needed to move its bond price 100% — corporate bonds are less liquid than the equivalent
-// large-cap equity float, hence a shallower depth than EQUITY_LIQUIDITY_DEPTH (6).
-const BOND_LIQUIDITY_DEPTH = 3;
 // The dealer's own standing inventory creates its own convergence pressure each week (a dealer
 // sitting long leans its quotes to sell it back down, and vice versa) — real market-making
 // inventory-risk behavior, not client flow.

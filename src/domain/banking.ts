@@ -13,6 +13,13 @@ export interface ItemizedHolding {
   instrumentType: 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'PE_FUND_INTEREST';
   issuerRegion: RegionId;
   quantityOrNotionalUSD: number; // dollar-denominated market value at cost
+  /**
+   * EQUITY only (WS4): the real SHARE COUNT held. Shares are the thing owned; the USD figure
+   * above is shares x the cleared price and is therefore a derived view of this. Storing only
+   * dollars would make the size of the book depend on the price the book itself is supposed to
+   * set — the circularity that broke ownership convergence once already (task #28).
+   */
+  quantityShares?: number;
 }
 
 export interface AssetOwnershipShares {

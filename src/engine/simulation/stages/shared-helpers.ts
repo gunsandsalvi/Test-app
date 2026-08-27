@@ -92,9 +92,12 @@ export function computeAnnualDefaultProbability(comp: Company): number {
 
   const shockToCoverage = 1 - (DEFAULT_COVERAGE_FLOOR * interest) / ebitda;
   // Dividends live on the quarterly snapshot (there is no annual field on Company) — annualize
-  // the latest quarter. Zero when no snapshot exists yet.
+  // the latest quarter. Zero when no snapshot exists yet. The statement stores dividends the way
+  // a cash flow statement does, as a NEGATIVE financing outflow; this needs the magnitude of the
+  // outflow, so take the absolute value — added signed, it subtracted from fixed outflows and
+  // made a dividend-paying company look SAFER for paying one.
   const latestSnap = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
-  const dividendsAnnualUSD = (latestSnap?.cashFlowStatement?.dividendsPaid ?? 0) * 4;
+  const dividendsAnnualUSD = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0) * 4;
   const fixedOutflowsUSD = interest + (comp.maintenanceCapex ?? 0) + dividendsAnnualUSD;
   const shockToCash = 1 - (fixedOutflowsUSD - Math.max(0, comp.cash)) / ebitda;
   const distance = Math.max(shockToCoverage, shockToCash);

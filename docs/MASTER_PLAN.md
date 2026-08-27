@@ -128,6 +128,8 @@ target*, and the reasons that failed are recorded there.
 holdings attribution. `initialization.ts` — `createInitialGameState` (must seed holdings with
 the SAME shape the weekly engine produces — see lesson §7.4). `credit.ts` ratings;
 `ipo.ts`; `merger.ts`; `trade.ts` (player trade execution); `constants.ts`.
+`equity-valuation.ts` (src/engine/) — the ONE answer to what a share is worth: 07e's holders,
+the bootstrap that opens the market, and a board sizing a buyback all read it.
 
 ### 2.2 Engine support (`src/engine/`)
 
@@ -177,11 +179,10 @@ single-owner sovereign curve, and the 07b/07c/07d clearing markets — which sin
 from real demand schedules rather than quantity targets.
 
 **Still formula-driven** (each is a §4 work item): bank lending/borrowers + endogenous money
-(G2), the dual dealer system (G3), equity price (WS4), FX (WS9), derivatives markets incl.
+(G2), the dual dealer system (G3), FX (WS9), derivatives markets incl.
 implied vol (G4), default resolution/recovery (G5), institutional liability side (G6),
-commodity futures/speculators (G7), sentiment (G8), the CB balance sheet (G9), player-trade
-market impact (S9), plus the aggregate household/labor blob (Main Street) and the government
-fiscal loop (Blueprint).
+commodity futures/speculators (G7), the CB balance sheet (G9), plus the aggregate
+household/labor blob (Main Street) and the government fiscal loop (Blueprint).
 
 **Real but structurally undersupplied** — a category worth naming separately, because these are
 not formulas and they still produce wrong prices. The clearing markets are honest mechanisms
@@ -205,7 +206,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
 | 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
-| 10 | Equity clearing (slice 4) + retire sentiment as free parameter | WS4 | S5–S7 |
 | 11 | Short-dated debt: T-bills + commercial paper (slice 5) | WS5 | — |
 | 12 | Private repo markets | WS6 | — |
 | 13 | Money market funds | WS7 | WS5, WS6 |
@@ -334,37 +334,6 @@ fiscal counterparty), which owns that decomposition, and pay coupons to holders 
 Work §6's table in one or two commits. Nothing there is architectural.
 
 ---
-
-### WS4 — Equity clearing (slice 4) + sentiment retirement
-
-**The biggest lift.** Prereq: S5–S7.
-**Where:** new `07e-equity-clearing.ts`; share registry in `domain/company.ts` holdings.
-
-1. **The registry holds SHARES, not dollars.** Add `instrumentType: 'EQUITY'` holdings whose
-   quantity is a share count; USD value is always shares × cleared price, derived. Storing
-   dollars would make the book's size depend on the price the book is supposed to set — the
-   circularity that broke ownership convergence once already (#28). Holders: institutional
-   entities (equityPct), a per-region household aggregate participant (the passive base until MS
-   makes it cohorts), banks' small trading books, and the company itself (treasury shares from
-   buybacks). Seed from `equityOwnership` with the engine's own shape (§7.4).
-2. **Instrument:** the stock, `statKind: 'PRICE_LIKE'`; float = shares outstanding × tradable
-   share. Each participant's reservation price is its own fair value from real primitives:
-   expected EPS (real trailing + real revenue trajectory, not consensus theater) capitalised at
-   its own required equity return — 10Y cleared yield + β × its equity risk premium — with growth
-   from the company's real reinvestment. For loss-makers the reservation comes from real book
-   value at a distress haircut, which retires the |loss|×PE branch (bigger losses currently price
-   HIGHER — pricing.ts:66). Heterogeneous fair values across holders give the demand curve its
-   slope; `fullSizeStatRange` is a % of price.
-3. **Real corporate flow:** buybacks are the company's own bid (sized by S5's real cash and
-   payout policy) retiring shares into treasury; IPO/secondary issuance is real new float
-   (WS8 prices it in this book). Dividends already flow through S5's ledger.
-4. **Then delete `comp.sentiment` as an input** — flow is now the real thing sentiment faked —
-   and G8's dead plumbing with it. `priceEquity` survives only as a fallback/derivation.
-   Indices become cap-weighted cleared prices (no separate index dynamics).
-
-**Verify:** 60-week — share conservation (Σ holdings + treasury = outstanding, every week);
-no monotonic index drift; realistic weekly vol (roughly 1–3%); earnings surprises move the
-surprised name, not the market; Spearman(earnings yield, subsequent return) positive.
 
 ### WS5 — T-bills + commercial paper
 
@@ -582,11 +551,13 @@ P&L (same test as WS11).
 **Verify:** contango when inventories are high, backwardation when scarce — measured, since both
 states genuinely occur in stage 07; expiry convergence within the dealer spread.
 
-### G8 — Sentiment retirement  *(not in §4: folded into WS4)*
+### G8 — Sentiment retirement remainder  *(not in §4: WS4 did the price half)*
 
-Delete `comp.sentiment` inputs once WS4's real flow exists (folded into WS4 — listed here so
-it isn't forgotten as a standalone cleanup: also delete the dead `sectorSentimentShocks`
-plumbing and `NewsItem.sentimentDelta`, or wire news to the real flows that now exist).
+WS4 retired `comp.sentiment` as a PRICE input — the stock price is cleared now, and sentiment no
+longer touches it. What is left is the dead plumbing around it: `sectorSentimentShocks`, and
+`NewsItem.sentimentDelta`, which every producer still fills in and nothing now consumes. Either
+delete both, or wire news into the real flows that exist (an earnings surprise already moves the
+price through the earnings it reports; a downgrade already moves it through the cleared spread).
 
 ### G9 — Central bank as counterparty
 
@@ -842,7 +813,6 @@ the complete simulation.
 | `simulation/initialization.ts:311` | `COMMODITY_CATEGORY_LINKAGE` module-global mutated at init — copy, don't mutate |
 | init / macro-init / stage 03 | Three parallel demand-seed constructors — one constructor owns `CategoryDemandState` creation |
 | `instruments.ts:116`, `evolution.ts:929-941` | `industrial_automation` pseudo-commodity special-case cluster — make it a plain category (its supply/demand already clear in stages 04/05) and delete the bespoke branches |
-| `pricing.ts:66` | Negative-EPS equity branch prices bigger losses higher (absorbed by WS4) |
 | `CompanyDeepDive.tsx:783` | `assetType: 'LEV_LOAN'` not in the `AssetType` union (`'LEVERAGED_LOAN'`); MyBook string-matches both — unify |
 | `TradeTicketModal.tsx` | Option expiry hardcoded `+8` weeks & carry tenor `8/52`; IRS/CDS payoff scenarios labeled "±10%" but computed as ±10bps; "Unencumbered Cash" row shows raw cash while the gate uses free cash |
 | `MyBookScreen.tsx:92-98` | Corp-bond P&L attribution uses issuer-level OAS + `tenorYears ?? 5` for tranche positions — use the tranche's cleared stat |
@@ -1480,6 +1450,55 @@ the complete simulation.
     - Recorded because it generalises: **a write to a derived view is a write to nothing.** S7
       converted these aggregates deliberately, and any code still writing to them is now a silent
       no-op rather than a visible error. Worth a sweep as later items convert more state to views.
+31. **WS4 landed: the stock price is cleared, and three things fell out of it.**
+    - **The price.** `07e-equity-clearing.ts` clears every listed name through the same auction
+      the credit slices use, but **in shares** rather than dollars: a book denominated in dollars
+      would have its size depend on the price it is supposed to set, which is the circularity
+      behind #28. `ItemizedHolding.quantityShares` is the registry. Each holder posts its own
+      fair value — real earnings capitalised at ITS own required return — so holders genuinely
+      disagree, and that disagreement is what gives the demand curve its slope. Stage 08 now
+      READS the price the way it reads the cleared OAS. `comp.sentiment` is gone as a price
+      input; `priceEquity` is deleted outright, and with it the branch that priced a bigger loss
+      HIGHER (a loss-maker is now priced off real book equity at a distress haircut).
+    - **A real engine bug, found only because equity made it visible.** The damped level and the
+      allocated quantity were inconsistent: participants booked their full unclamped schedule at
+      a level the damping had held away from its solve, so the books together could claim more
+      than the float. In credit that hid inside dollar targets; in shares it printed as
+      institutions holding **229% of a company's shares outstanding**. Fills are now rationed
+      pro rata to the float — the same allocation rule the goods auction uses (#49), and the
+      only honest one, since nobody can be handed a security that was never issued. Measured:
+      the worst holder concentration now sits at 27–42%, always under the 42% float.
+    - **§7.4 again, and it cost more than anything else here.** Companies were seeded at
+      `eps x sector basePE` — a table capitalising earnings at ~1.5% net of growth — while the
+      holders in the auction capitalise them at 4–10%. Week 1 therefore opened at roughly four
+      times any real bid, and the market spent **ten consecutive weeks falling at its 18% damping
+      limit** to get back. The seed and the market now share one function,
+      `engine/equity-valuation.ts`; nothing else may price a share.
+    - **Measured (60 weeks, same seed).** Before: opening cap 1482B, median P/E 66.7, every week
+      pinned at the ±18% damping cap for the whole run, worst holder 229% of shares. After:
+      opening cap 230B, median P/E **10.1 at week 0 and 11.1 at week 60** (no drift), median
+      weekly move settling to **~1–2%** — the realistic band the plan asked for — with a p90 tail
+      that still gaps, which is what a real cross-section does.
+    - **Two real bugs found while doing it,** both the same shape as §7.5 (a number whose sign or
+      source was never checked): the structural default probability annualised
+      `cashFlowStatement.dividendsPaid` **signed**, and a cash flow statement stores dividends as
+      a negative outflow — so a company that paid a dividend was scored as SAFER for paying it.
+      And the buyback test asked whether the stock was cheap against the sector P/E table, i.e.
+      against a valuation the market no longer used; a board taking the other side of this
+      auction now reads the same book the auction does.
+    - **Whole-harness delta (260 weeks, same seed): 349 violations -> 248**, bank-NIM breaches
+      298 -> 183. One line moved the WRONG way and is recorded rather than explained away:
+      "institutional book moved >10% in one week" went 23 -> 36. Both distributions sit almost
+      entirely past week 130 (baseline 21 of 23, now 32 of 36) — the late-horizon degraded regime
+      that #67 and #18 already live in, where the baseline itself prints a 144.5% move. Inside
+      the first 60 weeks it went 2 -> 1. The mechanism is real though: equity now marks weekly at
+      a price that can gap 18%, so a book with a large equity sleeve moves more than it used to.
+      Revisit when G6 gives institutions a liability side to mark against.
+    - **Still open, logged not fixed:** the p90 weekly move still reaches the damping cap for a
+      tail of small and loss-making names flipping between the earnings and net-asset branches of
+      their valuation — real gapping, but worth confirming it is the tail and not a discontinuity
+      at the branch boundary. Households/banks/treasury are not yet participants in this book
+      (the float is the institutional share); they arrive with MS and WS8.
 31. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.

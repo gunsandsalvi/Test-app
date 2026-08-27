@@ -106,13 +106,6 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         centralBankShare: current.centralBankShare + (target.centralBankShare - current.centralBankShare) * 0.05,
       };
 
-      if (assetClass === 'equity') {
-        const totalRegionEquityCapUSD = state.companies.filter(c => c.region === regionId && isActiveCompany(c) && c.listingStatus !== 'PRIVATE').reduce((s, c) => s + c.marketCap, 0);
-        const foreignShareDelta = Object.keys(updatedShares.foreignShare).reduce((s, r) => s + (updatedShares.foreignShare[r as RegionId] - current.foreignShare[r as RegionId]), 0);
-        const shareDelta = (updatedShares.bankShare - current.bankShare) + (updatedShares.institutionalShare - current.institutionalShare) + foreignShareDelta;
-        ctx.regionEquityNetFlowUSD[regionId] = shareDelta * totalRegionEquityCapUSD;
-      }
-
       // Bank/institutional/foreign/central-bank shares are meant to leave a real residual for
       // household ownership (every other ownership display in the app computes household as
       // 1 - these four) — only rescale them down when they'd otherwise exceed a cap that
