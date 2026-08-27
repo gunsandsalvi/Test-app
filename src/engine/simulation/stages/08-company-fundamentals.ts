@@ -812,6 +812,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       costOfDebtAnnual: costOfNewDebtAnnual,
       effectiveTaxRate: reg.effectiveTaxRate,
       ebitdaAnnual: newEbitda,
+      ebitAnnual: newEbit,
       totalDebtUSD: updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0),
       cashUSD: newCash,
       rating: newRating,

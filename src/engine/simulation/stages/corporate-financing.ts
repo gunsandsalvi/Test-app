@@ -47,6 +47,16 @@ const WEEKLY_ISSUANCE_TAKEUP_RATE = 0.04;
 /** Share of surplus cash a company applies to paying debt down when debt is expensive. */
 const WEEKLY_DELEVERAGING_RATE = 0.06;
 
+/** Working capital as a share of revenue — the non-PP&E half of invested capital. */
+const WORKING_CAPITAL_SHARE_OF_REVENUE = 0.15;
+/**
+ * How much faster than its standing growth-capex run-rate a company can actually deploy new
+ * money. Cheap debt does not create projects: a CFO can pull the pipeline forward and lever
+ * buybacks, but cannot invest unlimited capital at the firm's return just because the coupon is
+ * low. Without this cap the issuance decision reads covenant headroom as deployment capacity.
+ */
+const DEPLOYMENT_MULTIPLE = 3;
+
 /** Spread of return over cost, in decimal, wide enough to be worth acting on either way. */
 const ACTION_THRESHOLD = 0.005;
 
@@ -66,6 +76,8 @@ export function decideCorporateFinancing(params: {
   costOfDebtAnnual: number;
   effectiveTaxRate: number;
   ebitdaAnnual: number;
+  /** Annual EBIT — the operating profit invested capital actually produces after depreciation. */
+  ebitAnnual?: number;
   totalDebtUSD: number;
   cashUSD: number;
   rating: CreditRating;
@@ -75,23 +87,37 @@ export function decideCorporateFinancing(params: {
     return { netDebtChangeUSD: 0, reason: 'NONE' };
   }
 
-  // Debt interest is deductible, so what the company actually pays is the after-tax cost. What it
-  // can earn is whichever is higher of putting the money to work in the business or buying back
-  // its own equity — the two real uses of opportunistic debt.
+  // Debt interest is deductible, so what the company actually pays is the after-tax cost. What
+  // it can earn is whichever is higher of putting the money to work in the business or buying
+  // back its own equity — the two real uses of opportunistic debt.
+  //
+  // "In the business" means return on INVESTED capital: after-tax operating profit over the
+  // capital actually employed (net PP&E plus working capital). The first version divided EBITDA
+  // by debt + MARKET cap — enterprise value — which made the CFO's internal hurdle a function
+  // of the stock market's mood: a firm whose equity rallied concluded its own factories earned
+  // less, read its 150bp debt as too dear, and joined a sector-wide deleveraging drain
+  // (measured: 33 of 60 sampled IG firms perpetually delevering, the float halving in 60 weeks,
+  // and the issuer count decaying 324 → 252 — recorded in the plan's RVr close-out).
   const afterTaxCostOfDebt = costOfDebtAnnual * (1 - effectiveTaxRate);
-  const returnOnCapital = ebitdaAnnual / Math.max(1, totalDebtUSD + comp.marketCap);
+  const nopatAnnual = Math.max(0, (params.ebitAnnual ?? ebitdaAnnual * 0.75)) * (1 - effectiveTaxRate);
+  const netPPEUSD = Math.max(1, (comp.grossPPEUSD ?? 0) - (comp.accumulatedDepreciationUSD ?? 0));
+  const investedCapitalUSD = netPPEUSD + comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
+  const returnOnInvestedCapital = nopatAnnual / investedCapitalUSD;
   const earningsYield = comp.stockPrice > 0 ? comp.eps / comp.stockPrice : 0;
-  const bestUseOfProceeds = Math.max(returnOnCapital, earningsYield);
+  const bestUseOfProceeds = Math.max(returnOnInvestedCapital, earningsYield);
   const spreadOverCost = bestUseOfProceeds - afterTaxCostOfDebt;
 
   const currentLeverage = totalDebtUSD / ebitdaAnnual;
   const covenantCeiling = COVENANT_LEVERAGE_CEILING[rating] ?? 4.0;
 
   if (spreadOverCost > ACTION_THRESHOLD && currentLeverage < covenantCeiling) {
-    // Cheap debt, and room under the covenant to raise it.
+    // Cheap debt, room under the covenant — and a real limit on how fast the money can be put
+    // to work: the covenant bounds the STOCK, the deployment pipeline bounds the FLOW.
     const headroomUSD = (covenantCeiling - currentLeverage) * ebitdaAnnual;
+    const weeklyDeploymentCapUSD =
+      (Math.max(comp.growthCapex ?? 0, comp.marketCap * 0.02) / 52) * DEPLOYMENT_MULTIPLE;
     return {
-      netDebtChangeUSD: headroomUSD * WEEKLY_ISSUANCE_TAKEUP_RATE,
+      netDebtChangeUSD: Math.min(headroomUSD * WEEKLY_ISSUANCE_TAKEUP_RATE, weeklyDeploymentCapUSD),
       reason: 'ISSUE_CHEAP_DEBT',
     };
   }
