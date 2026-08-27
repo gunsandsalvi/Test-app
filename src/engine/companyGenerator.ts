@@ -561,6 +561,34 @@ export function generateInitialCompanies(): Company[] {
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         bankMarketShare: tmpl.bankMarketShare,
+        // Wall Street Phase 1: this bank's own real starting balance sheet — its share of the
+        // region's initial aggregate, not a value it will ever re-derive from that aggregate
+        // again (02b-bank-diversification.ts evolves it independently from here on).
+        bankBalanceSheet: tmpl.sector === 'Banks' ? (() => {
+          const seedReg = getInitialRegions()[region];
+          const bs = seedReg?.bankingSector;
+          const share = tmpl.bankMarketShare ?? 0.25;
+          if (!bs) return undefined;
+          return {
+            businessLoanBookUSD: bs.businessLoanBookUSD * share,
+            consumerLoanBookUSD: bs.consumerLoanBookUSD * share,
+            depositsUSD: bs.depositsUSD * share,
+            sovereignBondHoldingsUSD: bs.sovereignBondHoldingsUSD * share,
+            cashReservesUSD: bs.cashReservesUSD * share,
+            bankEquityUSD: bs.bankEquityUSD * share,
+            bankCapitalRatio: bs.bankCapitalRatio,
+            netInterestMarginPct: bs.netInterestMarginPct,
+            loanLossProvisionRateAnnualPct: bs.loanLossProvisionRateAnnualPct,
+            creditConditionsIndex: bs.creditConditionsIndex,
+            centralBankReservesUSD: bs.centralBankReservesUSD * share,
+            moneySupplyM2USD: bs.moneySupplyM2USD * share,
+            itemizedHoldings: [],
+          };
+        })() : undefined,
+        // Persistent idiosyncratic risk: smaller/higher-rank banks run a real, generated risk
+        // premium (concentrated commercial exposure is a genuine real-world pattern for
+        // smaller/regional banks), not a random re-roll each week — seeded once, here.
+        bankRiskFactor: tmpl.sector === 'Banks' ? Number((0.75 + tmpl.rank * 0.18 + (Math.random() - 0.5) * 0.25).toFixed(3)) : undefined,
         isBankEntity: tmpl.sector === 'Banks',
         isInstitutionalEntity: !!tmpl.institutionalRole,
         institutionalEntityType: tmpl.institutionalRole as any,
@@ -588,7 +616,16 @@ export function generateInitialCompanies(): Company[] {
     // per region (breadth of the roster a player can pick from), not the region's economic
     // scale, which is already carried by each firm's own (region-scaled) revenue.
     const targetCount = 200;
-    const baseCompanies = companies.filter(c => c.region === region);
+    // Wall Street Phase 1 finding: a bank/institutional entity's marketShare (and, for banks,
+    // bankBalanceSheet) is a real, calibrated figure meant to describe ONE specific named
+    // institution — cloning it via `...parent` for roster padding duplicates that exact figure
+    // under a new ticker rather than scaling it down (unlike revenue/debt/cash, which the clone
+    // loop below does scale), so the SUM of bankMarketShare/institutionalMarketShare across all
+    // "banks"/institutions in a region silently grows past 1.0 every time a padding clone picks
+    // one as its parent. BANKS_PER_REGION/institutional counts are deliberately exact (4 banks,
+    // 3 specialty institutions) — unlike generic sector companies, they aren't meant to be
+    // padded out for roster depth, so excluded here rather than patched post hoc.
+    const baseCompanies = companies.filter(c => c.region === region && !c.isBankEntity && !c.institutionalRole);
     // Reuse the same globally-shared sets as seed generation (not a fresh rebuild from
     // `companies`) — a per-call rebuild here would still miss a subsequent region's seed
     // tickers colliding with this region's padding clones, since seed generation and padding

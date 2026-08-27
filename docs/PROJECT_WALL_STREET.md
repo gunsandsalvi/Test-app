@@ -63,6 +63,34 @@ issues sit squarely in Wall Street's territory — real credit pricing and marke
    over by loosening the clamp (the clamp itself, `[10, 5000]`, is a basic sanity bound and is
    not the problem — a real A-rated company's spread should never approach it).
 
+## Phase 1 landed: diversified banking sector
+
+Each region's 4 real `isBankEntity` companies now carry their own `bankBalanceSheet` (loan book,
+deposits, capital ratio, CB reserves) and a persistent `bankRiskFactor`, evolved independently in
+a new stage (`02b-bank-diversification.ts`, runs after region-macro, before company-fundamentals)
+— `reg.bankingSector` is now a real sum/weighted-average of these named banks, not the sole source
+of truth they used to merely slice proportionally. Bank stock pricing in `08-company-fundamentals.
+ts` now reads each bank's own real equity. `BankDeepDive.tsx` shows a new "Individual Banks" panel
+alongside the (now genuinely-derived) regional aggregate.
+
+**Real bug found and fixed while landing this**: the existing roster-padding step (which clones
+random companies to fill each region out to 200 names) was cloning bank AND institutional-entity
+companies too, copying their `bankMarketShare`/`institutionalMarketShare`/`bankBalanceSheet`
+verbatim without scaling — so a region ended up with far more "banks" than the intended 4, each
+duplicating (not diversifying) a real bank's exact figures, inflating the real aggregate ~4x.
+Fixed by excluding bank/institutional entities from the padding clone-parent pool entirely (their
+counts are deliberately exact, unlike generic sector companies padded for roster depth) — this
+incidentally fixes the identical latent bug for `institutionalMarketShare`, not just banks.
+
+Verified via `tsc`, hygiene, a 220-week per-bank trace, and a 60-week revenue-ratio diagnostic.
+The per-bank trace confirms genuine, risk-ordered divergence: the highest-`bankRiskFactor` bank
+fails first (capital ratio hits 0 around week 100), each successively lower-risk bank follows a
+few weeks later, rather than all four hitting zero in lockstep as the single pre-existing
+aggregate did — real progress on the spirit of task #67 even though the underlying collapse
+mechanism itself (still pending root-cause) isn't fixed by this phase. Revenue-ratio diagnostic:
+10 violations at week 60 (avgRatio 0.735, one company briefly dipping below threshold) — within
+the noise band established across every phase this session, not a new regression.
+
 ## Constituent ideas (full scope)
 
 ### 1. Diversified banking sector (new — foundation for everything else)

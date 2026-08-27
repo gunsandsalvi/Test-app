@@ -787,7 +787,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((comp.stockPrice * (1 + flowPct + sentimentPct)).toFixed(2)));
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
     if (comp.isBankEntity) {
-      const bankBookValue = Math.max(10, reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25));
+      // Wall Street Phase 1: this bank's own real equity (computed this week in
+      // 02b-bank-diversification.ts, before this stage runs) — no longer a proportional slice
+      // of the regional aggregate, which is now itself just the sum of banks like this one.
+      const realBankEquityUSD = companyUpdates[comp.ticker]?.bankBalanceSheet?.bankEquityUSD ?? comp.bankBalanceSheet?.bankEquityUSD;
+      const bankBookValue = Math.max(10, realBankEquityUSD ?? (reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25)));
       const cycle = reg.cycleRegime;
       let pbMultiple = 1.0;
       if ((cycle as string) === 'Boom') pbMultiple = 1.1;
@@ -976,6 +980,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       netIncome: Number(newNetIncome.toFixed(1)),
       eps: newEps,
       sharesOutstanding: Number(updatedSharesOutstanding.toFixed(3)),
+      // Wall Street Phase 1: real per-bank balance sheet computed this week in
+      // 02b-bank-diversification.ts (which runs before this stage), carried forward otherwise.
+      bankBalanceSheet: companyUpdates[comp.ticker]?.bankBalanceSheet ?? comp.bankBalanceSheet,
+      bankRiskFactor: comp.bankRiskFactor,
       technicalReservesUSD: comp.technicalReservesUSD,
       aumUSD: comp.aumUSD,
       managementFeeRate: comp.managementFeeRate,

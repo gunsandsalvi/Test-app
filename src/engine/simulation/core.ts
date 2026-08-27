@@ -2,6 +2,7 @@ import { GameState } from '../../types';
 import { createInitialContext } from './stages/context';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
+import { runBankDiversificationStage } from './stages/02b-bank-diversification';
 import { runCategoryDemandStage } from './stages/03-category-demand';
 import { runInputOutputStage } from './stages/04-input-output';
 import { runUnitBiddingStage } from './stages/05-unit-bidding';
@@ -27,6 +28,7 @@ export function advanceWeeklyStep(state: GameState): GameState {
 
   runMacroFeedbackStage(state, ctx);
   runRegionMacroStage(state, ctx);
+  runBankDiversificationStage(state, ctx);
   runCategoryDemandStage(state, ctx);
   runInputOutputStage(state, ctx);
   runUnitBiddingStage(state, ctx);
