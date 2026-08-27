@@ -88,17 +88,12 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     );
     ctx.updatedRegions[regionId] = updatedRegion;
 
-    if (updatedRegion.institutionalSector) {
-      const macroSector = updatedRegion.institutionalSector;
-      const investmentIncomeUSD =
-        ((macroSector.equityHoldingsUSD || 0) +
-         (macroSector.corpBondHoldingsUSD || 0) +
-         (macroSector.sovBondHoldingsUSD || 0)) *
-        ((macroSector.investmentIncomeMarginPct || 0.03) / 52);
-
-      macroSector.cashUSD = (macroSector.cashUSD || 0) + investmentIncomeUSD;
-      macroSector.sectorEquityUSD = (macroSector.sectorEquityUSD || 0) + investmentIncomeUSD;
-    }
+    // S7: the macro institutional-sector accrual is deleted. It applied a flat
+    // investmentIncomeMarginPct to three aggregates and accreted the result into sector cash and
+    // sector equity every week — a second, formula-driven income stream running beside the real
+    // one (S11 credits every entity its real coupons at its issuers' real terms), and a second
+    // writer of numbers that are now derived from the real books each week in holdings-view.ts.
+    // Two representations of one real thing; the real one survives.
 
     (['equity', 'corpBond', 'sovBond'] as const).forEach(assetClass => {
       const fieldName = `${assetClass}Ownership` as 'equityOwnership' | 'corpBondOwnership' | 'sovBondOwnership';

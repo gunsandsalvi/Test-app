@@ -15,63 +15,26 @@ import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings } from './shared-helpers';
 import { WeeklyStepContext } from './context';
+import { refreshRegionalHoldingsView } from './holdings-view';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
   const { updatedRegions, updatedCompanies, nextWeek } = ctx;
 
-  // Part ME: Itemized holdings attribution
+  // S7: the sector holdings VIEW, derived from the real books. This replaces a weekly
+  // mechanical rebuild that attributed an ownership-share-times-outstanding figure across
+  // issuers with a greedy fill — a parallel ledger computed from a formula, sitting beside the
+  // real per-entity books and free to disagree with them. Everything sector-level is now a
+  // projection of what the clearing stages actually wrote; see stages/holdings-view.ts.
+  //
+  // Runs here because stage 11 is the statistics stage and every clearing stage (07b/07c/07d)
+  // and S11's mark have already written their books by this point in the week.
   (Object.keys(updatedRegions) as RegionId[]).forEach(regionId => {
-    const reg = updatedRegions[regionId];
-    const regionCompanies = updatedCompanies.filter(c => c.region === regionId && isActiveCompany(c));
-
-    const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
-    const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = [];
-
-    regionCompanies.forEach(c => {
-      equityCandidates.push({ id: c.id, type: 'EQUITY', region: regionId, outstandingUSD: c.marketCap });
-      (c.debtTranches || []).forEach(t => {
-        corpCandidates.push({
-          id: t.id,
-          type: t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN',
-          region: regionId,
-          outstandingUSD: t.principalUSD
-        });
-      });
-    });
-
-    const sovCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = (reg.govDebtTranches || []).map(gt => ({
-      id: gt.id,
-      type: 'GOV_BOND',
-      region: regionId,
-      outstandingUSD: gt.principalUSD
-    }));
-
-    const totalCorpUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0);
-    const totalSovUSD = sovCandidates.reduce((s, c) => s + c.outstandingUSD, 0);
-    const totalEquityUSD = equityCandidates.reduce((s, c) => s + c.outstandingUSD, 0);
-
-    // Banking Sector
-    const bankCorpShareUSD = reg.corpBondOwnership.bankShare * totalCorpUSD;
-    const bankSovShareUSD = reg.sovBondOwnership.bankShare * totalSovUSD;
-    const bankEquityShareUSD = reg.equityOwnership.bankShare * totalEquityUSD;
-
-    reg.bankingSector.itemizedHoldings = [
-      ...attributeItemizedHoldings(bankCorpShareUSD, corpCandidates),
-      ...attributeItemizedHoldings(bankSovShareUSD, sovCandidates),
-      ...attributeItemizedHoldings(bankEquityShareUSD, equityCandidates),
-    ];
-
-    // Institutional Sector
-    const instCorpShareUSD = reg.corpBondOwnership.institutionalShare * totalCorpUSD;
-    const instSovShareUSD = reg.sovBondOwnership.institutionalShare * totalSovUSD;
-    const instEquityShareUSD = reg.equityOwnership.institutionalShare * totalEquityUSD;
-
-    reg.institutionalSector.itemizedHoldings = [
-      ...attributeItemizedHoldings(instCorpShareUSD, corpCandidates),
-      ...attributeItemizedHoldings(instSovShareUSD, sovCandidates),
-      ...attributeItemizedHoldings(instEquityShareUSD, equityCandidates),
-    ];
+    refreshRegionalHoldingsView(
+      { ...state, institutionalEntities: ctx.updatedInstitutionalEntities, companies: updatedCompanies },
+      regionId,
+      updatedRegions[regionId]
+    );
   });
 
   // Measure this week's real consumer price level from the prices stage 05's auction actually

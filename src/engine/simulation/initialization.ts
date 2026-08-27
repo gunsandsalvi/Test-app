@@ -8,6 +8,7 @@ import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateC
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
+import { refreshRegionalHoldingsView } from './stages/holdings-view';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import {
@@ -648,6 +649,18 @@ export function createInitialGameState(): GameState {
       });
     });
   });
+
+  // S7: project the real seeded books onto the sector aggregates before the first week runs, so
+  // week 0's displayed numbers are the same derivation every later week uses. The aggregates
+  // written earlier in this function are the SEEDS the entity targets were sized against (they
+  // have to exist first); this replaces them with what the resulting real books actually hold —
+  // notably including the HC private tier, which the share-times-outstanding seeds never saw.
+  {
+    const seeded = { regions, companies, institutionalEntities } as unknown as GameState;
+    (Object.keys(regions) as RegionId[]).forEach(regionId => {
+      refreshRegionalHoldingsView(seeded, regionId, regions[regionId]);
+    });
+  }
 
   return {
     currentWeek: 1,

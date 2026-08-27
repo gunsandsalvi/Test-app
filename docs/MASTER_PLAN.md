@@ -204,7 +204,6 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 1 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | — |
 | 7 | Contagion decay + input-price-index baseline + housing supply | S8 | — |
 | 8 | Player trades enter the real market | S9 | S7 |
 | 9 | Batch: §6 backlog (dead code, UI bugs, minor logic) | S10 | — |
@@ -331,30 +330,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### S7 — One holdings ledger
-
-**The design decision, made explicit: the real books written by the clearing stages ARE the
-ledger.** Per-entity `itemizedHoldings` (07b/07c/07d write them), per-bank tenor books, and
-dealer inventories are the only stores anyone writes. Everything else becomes a *view*:
-
-1. Delete stage 11's weekly mechanical rebuild of `bankingSector.itemizedHoldings` and the greedy
-   init attribution wherever a real book now exists. Init seeding uses the engines' own
-   proportional shapes (lesson §7.4).
-2. Region-level aggregates (`institutionalSector.corpBondHoldingsUSD` etc.) become derived sums
-   computed in one selector module (`stages/holdings-view.ts`): `aggregateRegionalHoldings(state,
-   regionId)`. Stage 02's residual ownership drift on any aggregate that now has a real
-   underlying book is deleted — a drift on a derived number is a second writer.
-3. **Ownership shares split into two kinds, and the file must say which is which.** Shares whose
-   holders are all real (institutional vs bank vs dealer) become measured outputs of the real
-   books. Shares whose complement is *not yet modeled as holders* (household + foreign share of
-   corp bonds — the complement of `corpBondOwnership.institutionalShare`) stay structural
-   parameters feeding `tradableFloatUSD`, clearly labeled as bootstrap parameters that retire
-   when MS (households hold assets) and WS9 (foreign holders) land.
-
-**Verify:** a conservation invariant per instrument — Σ(entity holdings) + Σ(bank books) +
-dealer inventory + passive share × outstanding = outstanding, every week; UI ownership panels
-read the selector and change nothing else.
 
 ### S8 — Three mechanical fixes
 
@@ -915,6 +890,7 @@ the complete simulation.
 | `macro/initialization.ts` | Consequence of the above: bottom-up GDP starts ~6-9% below the supply-side potential anchor (`estimatedNominalGdpUSD`). Reads as a permanent output gap. Harmless to the growth series (it is a level, not a transient) but it means displayed GDP sits below potential from week 1. Resolved by the same MS2 reconciliation |
 | open (#67) | USA bank capital → 0. Measured on current HEAD it arrives by **week ~70**, not week 149 as previously recorded — the earlier figure predates the macro fixes. A/B confirms the S1/S2/G1 work does not cause it and slightly delays it (1.60% vs 0.27% at week 70). Expect the root cause via S4 + G2; re-verify then |
 | public default rate ~10%/yr (was 13%) | Measured in RVr's close-out (§7.22): 59 of 196 public firms default by week 121 via the cash-exhaustion trigger, vs ~1–2%/yr in reality — while the private tier (real ladders, clean cash walk) shows zero, isolating the cause to the PUBLIC path's cash accounting. S5 cut it 59 → 46/196 by wk121; the remainder tracks the goods-market cash-margin row above — re-measure after that item |
+| institutional sovereign book collapses (§7.26) | USA institutional GOV_BOND holdings fall ~284B (wk20) → ~1B (wk40) while entity cash goes 20B → 309B. Exposed by S7 making the aggregate live; the behaviour pre-dates it. Likely mechanism: 07c's reservation yield (real-return floor + duration premium) rises above the cleared yield, so demand goes to zero and holders liquidate the whole class — directionally real, unbounded in magnitude. Investigate whether the reservation floor is too high, whether liability-driven demand (G6) is the missing anchor that keeps a pension fund in duration regardless, and whether a sell should face the same budget/participation discipline a buy does |
 | open (#18) | ~small residual of companies at revenue floor over long runs (re-check after S5) |
 | `scripts/invariants.ts` "Institutional book moved N%" | Fires in a **periodic burst ~130 weeks apart** (weeks 129 and 259 in every run measured), 4 regions at once, always a 9-10% one-week DROP. Pre-existing (A/B confirmed against HEAD before E1). The regularity says a scheduled event, not market movement — find what runs on that cadence (annual/quarterly rebase or a history-window roll) before assuming a cash-settlement leak |
 | generation-time unconditional fields | §7.17 found `leveragedLoan` attached to all 200 companies when only ~33 had loans. Sweep `companyGenerator.ts` for other fields attached unconditionally that only apply to a subset — same failure mode (a frozen record that reads as live downstream) |
@@ -1419,7 +1395,31 @@ the complete simulation.
       scalars the engine stopped reading at S2/S11 — measured, the shocked 10Y prints +6.5bp
       over baseline in week 1, widening to +12.7bp by week 4. A check that shocks retired fields
       is a check that tests nothing.
-26. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+26. **S7 landed: one holdings ledger, and it exposed a hidden sovereign collapse.**
+    `stages/holdings-view.ts` is now the single derivation of every sector-level holdings figure.
+    The real books the clearing stages write (per-entity `itemizedHoldings`, per-bank tenor books,
+    dealer inventories) are the ledger; everything sector-level is a projection of them,
+    refreshed in stage 11 after every clearing stage has written.
+    - **Two opposite defects died together.** Stage 11 rebuilt both sector `itemizedHoldings`
+      every week by attributing share×outstanding across issuers with a greedy fill — a parallel
+      formula ledger sitting beside the real per-entity books, free to disagree. And the macro
+      aggregates (`corpBondHoldingsUSD` and siblings) were written ONCE at initialization and
+      never again — frozen week-0 snapshots that the UI, stage 08's institutional book value and
+      stage 02's investment income all read as current. A formula-built ledger and a frozen
+      aggregate, neither reconciled to the real books.
+    - Stage 02's macro investment-income accrual is deleted with them: it applied a flat margin to
+      three aggregates and accreted the result into sector cash and equity weekly — a second
+      income stream beside S11's real coupon credits, and a second writer of now-derived numbers.
+    - A per-instrument conservation invariant is added: entity books + bank books + dealer
+      inventory must not exceed outstanding (a ledger that claims more is minting claims).
+    - **The finding, and it is the item's whole justification:** with the aggregates live rather
+      than frozen, USA institutional sovereign holdings are seen to collapse from ~284B at week 20
+      to ~1B by week 40, with entity cash ballooning 20B → 309B. The books were doing this all
+      along; the frozen aggregate reported a steady 201B and nobody could see it. Root-cause
+      recorded in §6 — the demand schedule lets a holder go to 100% cash when its reservation
+      yield sits above the cleared yield, which is directionally right and unbounded in magnitude
+      (real money does not liquidate an entire asset class in twenty weeks).
+27. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

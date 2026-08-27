@@ -22,6 +22,60 @@ let prevStateForBookCheck: GameState | null = null;
  * The tolerance is per-week and generous enough to cover real dealer spread and coupon/redemption
  * flows while still catching a leg that is missing entirely.
  */
+/**
+ * S7: the one-ledger conservation check. Every dollar of an instrument is held by exactly one of
+ * the real books, or sits with the passive share the model does not yet name as holders
+ * (households, foreign, central bank — the complement of the tradable share, which retires when
+ * MS and WS9 land). Overshoot is the failure that matters: if the real books together claim MORE
+ * than the instrument's outstanding, some formula is minting claims.
+ */
+function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
+  const out: Violation[] = [];
+  (['USA', 'EUR', 'UK', 'JPN'] as const).forEach(regionId => {
+    const reg: any = (state as any).regions[regionId];
+    const cos = state.companies.filter((c: any) => c.region === regionId && !c.isDefaulted && !c.mergerAcquired);
+    const fixedOutstanding = cos.reduce((a: number, c: any) =>
+      a + (c.debtTranches || []).filter((t: any) => t.rateType === 'FIXED').reduce((x: number, t: any) => x + t.principalUSD, 0), 0);
+    const floatOutstanding = cos.reduce((a: number, c: any) =>
+      a + (c.debtTranches || []).filter((t: any) => t.rateType === 'FLOATING').reduce((x: number, t: any) => x + t.principalUSD, 0), 0);
+    const sovOutstanding = (reg.govDebtTranches || []).reduce((a: number, t: any) => a + t.principalUSD, 0);
+
+    let heldCorp = 0, heldLoan = 0, heldSov = 0;
+    state.institutionalEntities.forEach((e: any) => {
+      if (e.region !== regionId) return;
+      e.itemizedHoldings.forEach((h: any) => {
+        const v = h.quantityOrNotionalUSD ?? 0;
+        if (h.instrumentType === 'CORP_BOND') heldCorp += v;
+        else if (h.instrumentType === 'LEVERAGED_LOAN') heldLoan += v;
+        else if (h.instrumentType === 'GOV_BOND') heldSov += v;
+      });
+    });
+    state.companies.forEach((c: any) => {
+      if (c.region !== regionId || !c.bankBalanceSheet) return;
+      heldSov += (Object.values(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}) as any[])
+        .reduce((a: number, v: any) => a + (Number(v) || 0), 0);
+    });
+    (reg.bankingSector.corpBondDealerInventory || []).forEach((p: any) => { heldCorp += p.inventoryUSD; });
+    (reg.bankingSector.loanDealerInventory || []).forEach((p: any) => { heldLoan += p.inventoryUSD; });
+
+    const cases: [string, number, number][] = [
+      ['corporate bonds', heldCorp, fixedOutstanding],
+      ['leveraged loans', heldLoan, floatOutstanding],
+      ['sovereign bonds', heldSov, sovOutstanding],
+    ];
+    cases.forEach(([label, held, outstanding]) => {
+      if (outstanding <= 0) return;
+      if (held > outstanding * 1.02) {
+        out.push({
+          week,
+          message: `${regionId} ${label}: real books hold ${(held / 1e9).toFixed(1)}B against ${(outstanding / 1e9).toFixed(1)}B outstanding (${((held / outstanding - 1) * 100).toFixed(1)}% over) — a ledger is minting claims`
+        });
+      }
+    });
+  });
+  return out;
+}
+
 function checkInstitutionalBookConservation(prev: GameState, state: GameState, week: number) {
   const bookOf = (s: GameState, region: RegionId) =>
     (s.institutionalEntities || [])
@@ -389,6 +443,7 @@ function runInvariantsHarness() {
     // 5. NAV identity
     checkNavIdentity(state, w);
     if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
+    violations.push(...checkHoldingsLedgerConservation(state, w));
     prevStateForBookCheck = state;
 
     // 6. Bank capital ratio & NIM bands for USA
