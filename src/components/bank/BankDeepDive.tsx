@@ -198,6 +198,26 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
             </div>
           </div>
 
+          {/* Wall Street Phase 2: real central bank facility usage — a bank short of its own
+              cash buffer borrows from the Standing Repo Facility; a bank with excess cash
+              places it at the reverse repo facility. Both are real, named operations against
+              the central bank, not policyRate read as an ambient parameter. */}
+          {((bank.srfBorrowingUSD ?? 0) > 0 || (bank.onRrpLendingUSD ?? 0) > 0) && (
+            <div className="p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
+              <h3 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">Central Bank Facilities</h3>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)]">
+                  <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Standing Repo Facility (borrowed)</div>
+                  <div className="font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">{formatCurrency(bank.srfBorrowingUSD ?? 0, { compact: true })}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)]">
+                  <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Reverse Repo Facility (lent)</div>
+                  <div className="font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">{formatCurrency(bank.onRrpLendingUSD ?? 0, { compact: true })}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Regional Asset Ownership Shares */}
           <div className="p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-3">
             <h3 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">Macro Asset Ownership Distribution ({regionId})</h3>

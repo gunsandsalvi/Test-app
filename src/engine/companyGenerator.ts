@@ -583,6 +583,8 @@ export function generateInitialCompanies(): Company[] {
             centralBankReservesUSD: bs.centralBankReservesUSD * share,
             moneySupplyM2USD: bs.moneySupplyM2USD * share,
             itemizedHoldings: [],
+            srfBorrowingUSD: 0,
+            onRrpLendingUSD: 0,
           };
         })() : undefined,
         // Persistent idiosyncratic risk: smaller/higher-rank banks run a real, generated risk

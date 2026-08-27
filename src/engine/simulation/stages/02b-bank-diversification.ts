@@ -1,7 +1,7 @@
 /**
- * Stage 2b: Bank Diversification
+ * Stage 2b: Bank Diversification + Central Bank Facilities
  *
- * Wall Street Phase 1. Evolves each region's real, individually-named banks (the isBankEntity
+ * Wall Street Phase 1: evolves each region's real, individually-named banks (the isBankEntity
  * companies) as genuinely distinct balance sheets — their own loan book, deposits, capital
  * ratio, and central-bank reserves — instead of the single regional bankingSector aggregate
  * being the only real figure and each bank a cosmetic proportional slice of it. Runs after
@@ -9,6 +9,12 @@
  * and overwrites that aggregate with the real sum of these per-bank sheets, so it stays a
  * genuine derived total rather than a second, parallel source of truth. Must run before stage 8
  * (company fundamentals), which prices each bank's stock off its own bankBalanceSheet.
+ *
+ * Wall Street Phase 2: real central bank facilities on top of each bank's own evolved sheet — a
+ * bank short of its own target cash buffer borrows from the Standing Repo Facility (against
+ * government-bond collateral, at policyRate + a spread); a bank with cash above its target
+ * buffer places the excess at the reverse repo facility (earning policyRate - a spread) instead
+ * of policyRate being an ambient parameter every formula reads directly.
  */
 
 import { GameState, RegionId, Company } from '../../../types';
@@ -31,6 +37,50 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     centralBankReservesUSD: bs.centralBankReservesUSD * share,
     moneySupplyM2USD: bs.moneySupplyM2USD * share,
     itemizedHoldings: [],
+    srfBorrowingUSD: bs.srfBorrowingUSD * share,
+    onRrpLendingUSD: bs.onRrpLendingUSD * share,
+  };
+}
+
+// Real posted spreads over/under policyRate — mirrors how the real Fed's Standing Repo Facility
+// and overnight reverse repo facility are priced relative to the policy rate, rather than an
+// invented "emergency injection" formula reacting after the fact.
+const SRF_SPREAD_BPS = 25;
+const ON_RRP_SPREAD_BPS = 20;
+// A bank wants to hold at least this share of its deposits as ready cash; short of that, it
+// borrows the shortfall from the Standing Repo Facility rather than running cash negative.
+const MIN_CASH_BUFFER_RATIO = 0.02;
+// Above this share of deposits, cash is genuinely excess — placed at the reverse repo facility
+// (a real, interest-bearing use) instead of sitting idle in the aggregate.
+const EXCESS_CASH_RATIO = 0.15;
+
+function applyCentralBankFacilities(sheet: BankingSector, policyRate: number): BankingSector {
+  const targetMinCash = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
+  const targetMaxCash = sheet.depositsUSD * EXCESS_CASH_RATIO;
+
+  let cashReservesUSD = sheet.cashReservesUSD;
+  let bankEquityUSD = sheet.bankEquityUSD;
+  let srfBorrowingUSD = 0;
+  let onRrpLendingUSD = 0;
+
+  if (cashReservesUSD < targetMinCash) {
+    srfBorrowingUSD = targetMinCash - cashReservesUSD;
+    cashReservesUSD += srfBorrowingUSD;
+    const weeklyInterestCost = (srfBorrowingUSD * (policyRate + SRF_SPREAD_BPS / 10000)) / 52;
+    bankEquityUSD = Math.max(0, bankEquityUSD - weeklyInterestCost);
+  } else if (cashReservesUSD > targetMaxCash) {
+    onRrpLendingUSD = cashReservesUSD - targetMaxCash;
+    cashReservesUSD -= onRrpLendingUSD;
+    const weeklyInterestIncome = (onRrpLendingUSD * Math.max(0, policyRate - ON_RRP_SPREAD_BPS / 10000)) / 52;
+    bankEquityUSD += weeklyInterestIncome;
+  }
+
+  return {
+    ...sheet,
+    cashReservesUSD: Number(cashReservesUSD.toFixed(0)),
+    bankEquityUSD: Number(bankEquityUSD.toFixed(0)),
+    srfBorrowingUSD: Number(srfBorrowingUSD.toFixed(0)),
+    onRrpLendingUSD: Number(onRrpLendingUSD.toFixed(0)),
   };
 }
 
@@ -75,7 +125,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         0,
         reg.householdState.creditTierBooks
       );
-      return { bank, sheet };
+      return { bank, sheet: applyCentralBankFacilities(sheet, reg.policyRate) };
     });
 
     newSheets.forEach(({ bank, sheet }) => {
@@ -108,6 +158,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       centralBankReservesUSD: sumField((s) => s.centralBankReservesUSD),
       moneySupplyM2USD: sumField((s) => s.moneySupplyM2USD),
       itemizedHoldings: priorAggregate.itemizedHoldings || [],
+      srfBorrowingUSD: sumField((s) => s.srfBorrowingUSD),
+      onRrpLendingUSD: sumField((s) => s.onRrpLendingUSD),
     };
   });
 }

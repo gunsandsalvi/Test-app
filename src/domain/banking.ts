@@ -36,4 +36,13 @@ export interface BankingSector {
   centralBankReservesUSD: number;
   moneySupplyM2USD: number;
   itemizedHoldings: ItemizedHolding[];
+  // Wall Street Phase 2: real central bank facility usage — a genuine, named operation each
+  // week, not policyRate read as an ambient parameter. A bank short of its own target cash
+  // buffer borrows from the Standing Repo Facility (against government-bond collateral, at
+  // policyRate + a spread); a bank with cash above its target buffer places the excess at the
+  // reverse repo facility (earning policyRate - a spread) rather than letting idle cash sit
+  // unremunerated or invisibly disappear into the aggregate. See
+  // 02b-bank-diversification.ts's applyCentralBankFacilities.
+  srfBorrowingUSD: number;
+  onRrpLendingUSD: number;
 }

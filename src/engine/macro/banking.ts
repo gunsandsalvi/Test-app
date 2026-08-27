@@ -119,5 +119,11 @@ export function evolveBankingSector(
     centralBankReservesUSD: Number(newCentralBankReservesWithMonetization.toFixed(0)),
     moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
     itemizedHoldings: prevBanking.itemizedHoldings || [],
+    // Real facility usage is decided per-bank after this function returns (see
+    // 02b-bank-diversification.ts's applyCentralBankFacilities) — reset here, not carried
+    // forward, since a bank's cash position (and therefore its real facility need) is only
+    // final once this week's evolution above has run.
+    srfBorrowingUSD: 0,
+    onRrpLendingUSD: 0,
   };
 }

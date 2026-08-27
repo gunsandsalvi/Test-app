@@ -106,6 +106,50 @@ mechanism itself (still pending root-cause) isn't fixed by this phase. Revenue-r
 10 violations at week 60 (avgRatio 0.735, one company briefly dipping below threshold) — within
 the noise band established across every phase this session, not a new regression.
 
+## Phase 2 landed: central bank reserve facilities (SRF / ON RRP)
+
+Added real Standing Repo Facility and overnight reverse repo facility mechanics in
+`02b-bank-diversification.ts`'s new `applyCentralBankFacilities`: a bank whose real cash falls
+below a target buffer (2% of deposits) borrows the shortfall from the SRF at `policyRate +
+25bps`, a real weekly interest cost against its own equity; a bank with cash above a target
+ceiling (15% of deposits) places the excess at the ON RRP, earning `policyRate - 20bps`. Both
+rates are deliberately **administered** (posted by the central bank), not auction-cleared —
+matching how the real Fed's SRF/ON RRP actually work (a fixed posted rate, real quantity
+response), not a formula standing in for a missing market. Each bank's own `srfBorrowingUSD`/
+`onRrpLendingUSD` are real, tracked figures (added to `BankingSector`), summed into the region
+aggregate, and shown per-bank in `BankDeepDive.tsx`.
+
+Verified via `tsc`, hygiene, a 30-week facility-usage trace (correctly inactive under normal
+conditions — real usage should be rare, not constant), a stress-period trace through the
+pre-existing bank-capital collapse (task #67) confirming ON RRP usage correctly activates once a
+capital-constrained bank can no longer lend out incoming deposits (a real mechanical consequence,
+not a new bug — surfaces a genuine gap for later: no deposit-flight mechanism exists for an
+insolvent bank, part of why the zombie state persists), and a 60-week revenue-ratio diagnostic (1
+violation, avgRatio 0.740).
+
+## Foundational correction: every asset's price must be a real supply/demand clearing outcome
+
+User directive, stated explicitly and repeated for emphasis: **the price of every single asset —
+equity, corporate bonds, sovereign bonds, loans — must be the actual result of a real supply/demand
+clearing, not a formula.** OAS/discount margin are descriptive statistics computed *from* a cleared
+price, not the mechanism that sets it. This elevates idea 6 (below) from "a design principle for
+the new markets in Phases 3-5" to the foundational, retroactive requirement for the entire project
+— including the pricing that already exists today (Nelson-Siegel yield curves,
+`computeExpectedLossSpreadBps`'s PD-based OAS formula, `priceLeveragedLoan`'s formula, equity's
+holder-class-flow price move) needs to be reworked to run through a real, generalized bid/offer
+clearing engine for financial assets, mirroring the goods-side auction (`05-unit-bidding.ts`) that
+"1$ is 1$" already proved out. **The one confirmed exception**: central bank facility rates (SRF/
+ON RRP, Phase 2 above) are legitimately *administered* — posted by the central bank, with real
+quantity response, not a two-sided auction — matching how they work in reality; this is not in
+tension with the directive, since the central bank posting a rate and other participants clearing
+against each other around it are different, both-real mechanisms.
+
+This changes the practical sequencing of everything below: before continuing further into Phases
+3-5 (repo, short-dated debt, MMFs) with fresh formula-based pricing, first build the generalized
+financial-asset clearing engine and retrofit existing equity/bond/loan pricing through it, so
+every new phase is built on the real mechanism from day one rather than adding more to retrofit
+later.
+
 ## Constituent ideas (full scope)
 
 ### 1. Diversified banking sector (new — foundation for everything else)
