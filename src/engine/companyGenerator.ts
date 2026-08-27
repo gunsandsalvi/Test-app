@@ -1029,7 +1029,12 @@ export function generatePrivateCompanies(
       occupationMixDrift: {},
       creditRating: rating, ratingHistory: [rating],
       isDefaulted: false,
-      oasSpreadBps: 0, cdsSpreadBps: 0, seniorBondYield: 0,
+      // Seeded from the same rating-keyed primitive the public bootstrap uses, so the name's
+      // first real clearing week (HC2) starts from a defensible level instead of zero and the
+      // weekly damper does not spend months walking it up from nothing.
+      oasSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
+      cdsSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
+      seniorBondYield: 0,
       dividendYield: 0, baselineDividendYield: 0,
       beta: 1.0,
       recoveryRate: 0.40, baselineRecoveryRate: 0.40,

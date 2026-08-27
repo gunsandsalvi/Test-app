@@ -146,7 +146,11 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
-    const regionCompanies = ctx.prevActiveFirms.filter(
+    // HC2: the named private tier's paper trades here alongside the public universe — the
+    // market prices an issuer's credit, not its listing status. Private issuers arrived with
+    // their tradable float already seeded onto these same holders (initialization), so their
+    // first clearing week opens with genuine small gaps, not a systemic buy-in.
+    const regionCompanies = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
       (c) => c.region === regionId && isActiveCompany(c) && fixedDebtUSD(c) > 0
     );
     if (regionCompanies.length === 0) return;

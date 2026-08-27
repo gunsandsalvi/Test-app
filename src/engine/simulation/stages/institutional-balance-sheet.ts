@@ -77,7 +77,8 @@ export function stagePurchaseBudgetUSD(
  * income can fund the week's bids.
  */
 export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
-  const companyById = new Map<string, Company>(ctx.prevActiveFirms.map((c) => [c.id, c]));
+  const companyById = new Map<string, Company>(
+    [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c]));
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let weeklyIncomeUSD = 0;

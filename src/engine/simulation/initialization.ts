@@ -1,5 +1,5 @@
 
-import { RegionId, Portfolio, OccupationType, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
+import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
@@ -524,6 +524,41 @@ export function createInitialGameState(): GameState {
       seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - carvedUSD));
     });
     companies.push(...firms);
+
+    // ---- HC2: the tier's tradable float is seeded onto its real holders ----
+    // The paper existed before the market did — the claims were simply held by nobody the model
+    // named. Institutions now hold the tradable share from week 0, in the same proportional
+    // shape the clearing engines produce (lesson §7.4: seed shape must equal engine shape), so
+    // the first real clearing week opens with small genuine gaps instead of a systemic buy-in.
+    // No cash moves: this is recognising an existing stock, not a purchase. S11's weekly mark
+    // then carries the enlarged book in totalAssetsUSD from week 1.
+    const regionEntities = institutionalEntities.filter(e => e.region === regionId);
+    const fixedOf = (f: Company) => (f.debtTranches || []).filter(t => t.rateType === 'FIXED').reduce((a, t) => a + t.principalUSD, 0);
+    const floatOf = (f: Company) => (f.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((a, t) => a + t.principalUSD, 0);
+    const instShare = reg.corpBondOwnership.institutionalShare;
+    const IG = ['AAA', 'AA', 'A', 'BBB'];
+    const sleeve = (t: InstitutionalEntityType, ig: boolean) =>
+      ig ? 1 : t === 'INSURER' ? 0.08 : t === 'PENSION_FUND' ? 0.10 : t === 'ASSET_MANAGER' ? 2.0 : 4.0;
+    firms.forEach(f => {
+      const ig = IG.includes(f.creditRating);
+      (['CORP_BOND', 'LEVERAGED_LOAN'] as const).forEach(kind => {
+        const outstanding = kind === 'CORP_BOND' ? fixedOf(f) : floatOf(f);
+        if (outstanding <= 0) return;
+        const tradable = outstanding * instShare;
+        const weights = regionEntities.map(e => {
+          const pct = kind === 'CORP_BOND' ? e.assetAllocationTarget.corpBondPct : e.assetAllocationTarget.loanPct;
+          return e.totalAssetsUSD * pct * sleeve(e.entityType, ig);
+        });
+        const wSum = weights.reduce((a, b) => a + b, 0) || 1;
+        regionEntities.forEach((e, i) => {
+          const qty = tradable * (weights[i] / wSum);
+          if (qty > 1) {
+            e.itemizedHoldings.push({ instrumentId: f.id, instrumentType: kind, issuerRegion: regionId, quantityOrNotionalUSD: Math.round(qty) });
+            e.totalAssetsUSD += Math.round(qty);
+          }
+        });
+      });
+    });
   });
 
 

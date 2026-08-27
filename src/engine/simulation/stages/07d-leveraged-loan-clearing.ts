@@ -68,7 +68,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // quote outlived the loan, and since the clearing below (rightly) skips a company with no
     // floating debt, those orphaned quotes froze at whatever level generation gave them and then
     // reported themselves as live prices for the rest of the run.
-    ctx.prevActiveFirms.forEach((c) => {
+    [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].forEach((c) => {
       if (c.region !== regionId || !isActiveCompany(c)) return;
       const hasLoan = floatingDebtUSD(c) > 0;
       if (!hasLoan) {
@@ -92,7 +92,9 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       };
     });
 
-    const regionCompanies = ctx.prevActiveFirms.filter(
+    // HC2: private issuers' loans trade here too — and in reality the leveraged-loan market is
+    // MOSTLY private, sponsor-owned issuers; the public-only version was the anomaly.
+    const regionCompanies = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
       (c) => c.region === regionId && isActiveCompany(c) && floatingDebtUSD(c) > 0 && !!c.leveragedLoan
     );
     if (regionCompanies.length === 0) return;
