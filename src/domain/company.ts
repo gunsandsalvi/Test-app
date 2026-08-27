@@ -160,6 +160,9 @@ export interface LeveragedLoanInfo {
   tenorYears: number;
   seniority: 'Senior Secured First Lien';
   recoveryRate: number;
+  // Rolling weekly history of real cleared discountMarginBps — same real momentum signal as
+  // Company.oasSpreadBpsHistory. See 07d-leveraged-loan-clearing.ts.
+  discountMarginBpsHistory?: number[];
 }
 
 export interface Company {

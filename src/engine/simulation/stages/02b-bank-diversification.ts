@@ -23,6 +23,8 @@ import { evolveBankingSector } from '../../macro/banking';
 import { WeeklyStepContext } from './context';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
+  const scaledBuckets: Record<string, number> = {};
+  Object.entries(bs.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => { scaledBuckets[k] = v * share; });
   return {
     businessLoanBookUSD: bs.businessLoanBookUSD * share,
     consumerLoanBookUSD: bs.consumerLoanBookUSD * share,
@@ -40,6 +42,9 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     srfBorrowingUSD: bs.srfBorrowingUSD * share,
     onRrpLendingUSD: bs.onRrpLendingUSD * share,
     corpBondDealerInventory: [],
+    sovereignBondHoldingsByTenor: scaledBuckets,
+    sovBondDealerInventory: [],
+    loanDealerInventory: [],
   };
 }
 
@@ -161,10 +166,26 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       itemizedHoldings: priorAggregate.itemizedHoldings || [],
       srfBorrowingUSD: sumField((s) => s.srfBorrowingUSD),
       onRrpLendingUSD: sumField((s) => s.onRrpLendingUSD),
+      // Real per-bank sovereign holdings, summed across named banks — each bank is its own real
+      // participant in the sovereign-bond clearing engine (07c-sovereign-bond-clearing.ts).
+      sovereignBondHoldingsByTenor: (() => {
+        const buckets: Record<string, number> = {};
+        newSheets.forEach(({ sheet }) => {
+          Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => {
+            buckets[k] = (buckets[k] ?? 0) + v;
+          });
+        });
+        return buckets;
+      })(),
       // Real dealer inventory is a shared regional book (see corpBondDealerInventory's domain
       // comment) owned and updated by 07b-corporate-bond-clearing.ts, which runs right after
       // this stage — carried forward unchanged here, not recomputed as a per-bank sum.
       corpBondDealerInventory: priorAggregate.corpBondDealerInventory || [],
+      // Same shared-regional-dealer-desk pattern for sovereign bonds — owned by
+      // 07c-sovereign-bond-clearing.ts, carried forward unchanged here.
+      sovBondDealerInventory: priorAggregate.sovBondDealerInventory || [],
+      // Same for leveraged loans — owned by 07d-leveraged-loan-clearing.ts.
+      loanDealerInventory: priorAggregate.loanDealerInventory || [],
     };
   });
 }

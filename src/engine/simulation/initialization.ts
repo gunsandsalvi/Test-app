@@ -14,10 +14,14 @@ export function createInitialGameState(): GameState {
 
   const institutionalEntities: InstitutionalEntity[] = [];
 
+  // corpBondPct + loanPct together are each type's total real corporate-credit appetite (same
+  // totals as before this split: INSURER 0.35, ASSET_MANAGER 0.20, PENSION_FUND 0.30) — real
+  // insurers/pension funds rarely hold broadly syndicated loans directly, while real loan
+  // funds/CLOs are predominantly an asset-manager product.
   const allocationTargets: Record<InstitutionalEntityType, AssetAllocationTarget> = {
-    INSURER: { govBondPct: 0.50, corpBondPct: 0.35, equityPct: 0.10, cashPct: 0.05 },
-    ASSET_MANAGER: { govBondPct: 0.10, corpBondPct: 0.20, equityPct: 0.65, cashPct: 0.05 },
-    PENSION_FUND: { govBondPct: 0.25, corpBondPct: 0.30, equityPct: 0.40, cashPct: 0.05 },
+    INSURER: { govBondPct: 0.50, corpBondPct: 0.32, loanPct: 0.03, equityPct: 0.10, cashPct: 0.05 },
+    ASSET_MANAGER: { govBondPct: 0.10, corpBondPct: 0.12, loanPct: 0.08, equityPct: 0.65, cashPct: 0.05 },
+    PENSION_FUND: { govBondPct: 0.25, corpBondPct: 0.25, loanPct: 0.05, equityPct: 0.40, cashPct: 0.05 },
   };
 
   Object.keys(regions).forEach(r => {
@@ -90,15 +94,27 @@ export function createInitialGameState(): GameState {
     // together off one real cleared oasSpreadBps. A per-tranche key here would never match that
     // stage's per-company lookups, silently resetting every entity's real starting position to
     // zero on its very first real clearing week.
+    // Real bonds are an issuer's FIXED-rate tranches only — floating tranches are real leveraged
+    // loans, a genuinely different market with its own real clearing and its own candidate list
+    // (loanCandidates below) — see 07b-corporate-bond-clearing.ts / 07d-leveraged-loan-clearing.ts.
     const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
-      .filter(c => (c.debtTranches || []).length > 0)
-      .map(c => ({
-        id: c.id,
-        type: 'CORP_BOND',
-        region: regionId,
-        outstandingUSD: c.totalDebt,
-      }));
+      .map(c => ({ id: c.id, type: 'CORP_BOND' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0) }))
+      .filter(c => c.outstandingUSD > 0);
     const totalCorpCandidatesUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
+
+    const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
+      .map(c => ({ id: c.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0) }))
+      .filter(c => c.outstandingUSD > 0);
+    const totalLoanCandidatesUSD = loanCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
+    const attributeLoanHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+      loanCandidates
+        .filter(c => shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD) > 1)
+        .map(c => ({
+          instrumentId: c.id,
+          instrumentType: c.type,
+          issuerRegion: c.region,
+          quantityOrNotionalUSD: shareUSD * (c.outstandingUSD / totalLoanCandidatesUSD),
+        }));
     // Proportional-by-size, not attributeItemizedHoldings' size-sorted-greedy-with-a-40%-cap
     // fill: the real weekly clearing engine (07b-corporate-bond-clearing.ts) distributes an
     // entity's target across issuers by real debt-outstanding weight (tilted only by real
@@ -123,6 +139,28 @@ export function createInitialGameState(): GameState {
       region: regionId,
       outstandingUSD: gt.principalUSD
     }));
+
+    // Keyed by the same tenor-bucket ids the real sovereign-bond clearing engine
+    // (07c-sovereign-bond-clearing.ts) uses (`${region}-GOV-t2/t5/t10/t30`), not per-tranche —
+    // individual gov debt tranches roll off and reissue quarterly, so a per-tranche key here
+    // would suffer the exact same silent reset-to-zero problem the corporate-bond seed had.
+    const SOV_TENOR_BUCKETS = [2, 5, 10, 30];
+    const sovBucketOutstandingUSD = new Map<number, number>();
+    SOV_TENOR_BUCKETS.forEach(y => sovBucketOutstandingUSD.set(y, 0));
+    govDebtTranches.forEach(gt => {
+      const bucket = SOV_TENOR_BUCKETS.reduce((best, y) => Math.abs(y - gt.tenorAtIssuanceYears) < Math.abs(best - gt.tenorAtIssuanceYears) ? y : best);
+      sovBucketOutstandingUSD.set(bucket, (sovBucketOutstandingUSD.get(bucket) ?? 0) + gt.principalUSD);
+    });
+    const totalSovBucketedUSD = Array.from(sovBucketOutstandingUSD.values()).reduce((s, v) => s + v, 0) || 1;
+    const attributeSovBondHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
+      SOV_TENOR_BUCKETS
+        .filter(y => shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD) > 1)
+        .map(y => ({
+          instrumentId: `${regionId}-GOV-t${y}`,
+          instrumentType: 'GOV_BOND' as const,
+          issuerRegion: regionId,
+          quantityOrNotionalUSD: shareUSD * ((sovBucketOutstandingUSD.get(y) ?? 0) / totalSovBucketedUSD),
+        }));
 
     reg.institutionalSector.itemizedHoldings = [
       ...attributeItemizedHoldings(reg.institutionalSector.corpBondHoldingsUSD, corpCandidates),
@@ -157,6 +195,43 @@ export function createInitialGameState(): GameState {
         }),
       reg.institutionalSector.corpBondHoldingsUSD || 0
     );
+    // Same real, bottom-up derivation for sovereign bonds (govBondPct as a relative weight on
+    // the real institutional sovereign-debt pool) — matches 07c-sovereign-bond-clearing.ts.
+    const rawEntitySovTargetsUSD = distributeRealTargetByWeight(
+      regionalInstCompanies
+        .filter(comp => comp.institutionalEntityType)
+        .map(comp => {
+          const role = comp.institutionalEntityType!;
+          const share = comp.institutionalMarketShare ?? 0.33;
+          const totalMacroAssetsUSD =
+            (reg.institutionalSector.equityHoldingsUSD || 0) +
+            (reg.institutionalSector.corpBondHoldingsUSD || 0) +
+            (reg.institutionalSector.sovBondHoldingsUSD || 0) +
+            (reg.institutionalSector.cashUSD || 0);
+          return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: allocationTargets[role].govBondPct };
+        }),
+      reg.institutionalSector.sovBondHoldingsUSD || 0
+    );
+    // Same real, bottom-up derivation for leveraged loans — no dedicated region-level loan
+    // ownership share is tracked, so this reuses corpBondOwnership.institutionalShare (the same
+    // institutional-vs-market share that governs the sibling corporate-bond market) as a real,
+    // defensible proxy, applied to the real bottom-up floating-debt float rather than an
+    // independent number. Matches 07d-leveraged-loan-clearing.ts.
+    const rawEntityLoanTargetsUSD = distributeRealTargetByWeight(
+      regionalInstCompanies
+        .filter(comp => comp.institutionalEntityType)
+        .map(comp => {
+          const role = comp.institutionalEntityType!;
+          const share = comp.institutionalMarketShare ?? 0.33;
+          const totalMacroAssetsUSD =
+            (reg.institutionalSector.equityHoldingsUSD || 0) +
+            (reg.institutionalSector.corpBondHoldingsUSD || 0) +
+            (reg.institutionalSector.sovBondHoldingsUSD || 0) +
+            (reg.institutionalSector.cashUSD || 0);
+          return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: allocationTargets[role].loanPct };
+        }),
+      reg.corpBondOwnership.institutionalShare * totalLoanCandidatesUSD
+    );
 
     regionalInstCompanies.forEach(comp => {
       const role = comp.institutionalEntityType;
@@ -174,12 +249,14 @@ export function createInitialGameState(): GameState {
       const equityCapitalUSD = totalAssetsUSD * 0.12; // 12% capital ratio
 
       const entCorpShareUSD = rawEntityCorpTargetsUSD.get(comp.id) ?? 0;
-      const entSovShareUSD = (macroSector.sovBondHoldingsUSD || 0) * share;
+      const entSovShareUSD = rawEntitySovTargetsUSD.get(comp.id) ?? 0;
+      const entLoanShareUSD = rawEntityLoanTargetsUSD.get(comp.id) ?? 0;
       const entEquityShareUSD = (macroSector.equityHoldingsUSD || 0) * share;
 
       const itemizedHoldings = [
         ...attributeCorpBondHoldingsProportionally(entCorpShareUSD),
-        ...attributeItemizedHoldings(entSovShareUSD, sovCandidates),
+        ...attributeSovBondHoldingsProportionally(entSovShareUSD),
+        ...attributeLoanHoldingsProportionally(entLoanShareUSD),
         ...attributeItemizedHoldings(entEquityShareUSD, equityCandidates),
       ];
 

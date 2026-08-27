@@ -28,8 +28,9 @@
  * class, and they're supplied by the caller rather than hardcoded here:
  *   1. what counts as a "participant", its real bottom-up target, and its own attractiveness view
  *      of each instrument,
- *   2. the quoted statistic's direction of travel relative to price (a yield/spread-like stat
- *      falls when price rises; a price-like stat rises with it) and its real min/max bounds.
+ *   2. the quoted statistic's kind (yield/spread-like, converted via duration; or price-like,
+ *      moving directly with the price-impact percentage) and its direction of travel relative
+ *      to price — plus any genuinely mathematical bound (there is no realism floor or ceiling).
  * Adding a new asset class (or a new participant type, e.g. hedge funds, foreign flows) means
  * writing a small adapter that builds these inputs, not re-implementing the auction.
  */
@@ -40,18 +41,28 @@ export interface ClearingInstrument {
   // much of the asset-class universe this instrument represents) and liquidity depth (how much
   // net flow it takes, relative to its own size, to move its price).
   outstandingUSD: number;
-  // The instrument's current quoted statistic (oasSpreadBps, discountMarginBps, a sovereign
-  // yield in bps, etc.) — read here only to compute this week's new value from real flow.
+  // The instrument's current quoted statistic — oasSpreadBps, discountMarginBps, a sovereign
+  // yield in bps (YIELD_LIKE), or the price itself, e.g. stockPrice (PRICE_LIKE) — read here
+  // only to compute this week's new value from real flow.
   currentStat: number;
-  // How sensitive the quoted statistic is to a price move (bond/loan duration in years; an
-  // equivalent constant for other asset classes) — used to convert a price-impact percentage
-  // into a change in the quoted statistic.
+  // YIELD_LIKE statistics (a spread or yield in bps) move via duration math: a price-impact
+  // percentage converts into a bps change in the statistic, and it moves opposite price (net
+  // buying -> price up -> yield/spread down). PRICE_LIKE statistics (the traded price itself,
+  // e.g. equity) just move by the price-impact percentage directly, no duration involved — the
+  // statistic *is* the price, there's nothing to invert.
+  statKind: 'YIELD_LIKE' | 'PRICE_LIKE';
+  // How sensitive the quoted statistic is to a price move (bond/loan duration in years) — only
+  // meaningful for YIELD_LIKE statistics; ignored for PRICE_LIKE ones.
   durationYears: number;
   // Does the quoted statistic rise (+1) or fall (-1) when price rises on net buying? Yield and
   // spread statistics are -1 (price up -> yield/spread down); a price-like statistic is +1.
   statDirection: 1 | -1;
-  minStat: number;
-  maxStat: number;
+  // Bounds on the resulting statistic. Real markets don't impose an artificial floor or ceiling
+  // on a spread or a price beyond basic mathematical sanity (finiteness) — the actual minimum or
+  // maximum is whatever real supply and demand clears to. Omit for no bound; only pass a real,
+  // mathematically-necessary limit (e.g. a price can't go negative).
+  minStat?: number;
+  maxStat?: number;
 }
 
 export interface ClearingParticipant {
@@ -153,11 +164,14 @@ export function clearFinancialAsset(
 
     const totalNetBuyPressureUSD = clientNetDemandUSD - oldInventoryUSD * params.dealerInventoryPressureRate;
     const priceImpactPct = totalNetBuyPressureUSD / (inst.outstandingUSD * params.liquidityDepth);
-    const statDeltaMagnitude = (priceImpactPct / Math.max(0.1, inst.durationYears)) * 10000;
-    const rawNewStat = inst.currentStat + inst.statDirection * statDeltaMagnitude;
+    const rawNewStat = inst.statKind === 'PRICE_LIKE'
+      ? inst.currentStat * (1 + inst.statDirection * priceImpactPct)
+      : inst.currentStat + inst.statDirection * (priceImpactPct / Math.max(0.1, inst.durationYears)) * 10000;
+    const minStat = inst.minStat ?? -Infinity;
+    const maxStat = inst.maxStat ?? Infinity;
     newStatById.set(
       inst.id,
-      isFinite(rawNewStat) ? Number(Math.max(inst.minStat, Math.min(inst.maxStat, rawNewStat)).toFixed(2)) : inst.currentStat
+      isFinite(rawNewStat) ? Number(Math.max(minStat, Math.min(maxStat, rawNewStat)).toFixed(4)) : inst.currentStat
     );
 
     const newInventoryUSD = oldInventoryUSD - clientNetDemandUSD;

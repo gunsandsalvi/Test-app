@@ -586,6 +586,9 @@ export function generateInitialCompanies(): Company[] {
             srfBorrowingUSD: 0,
             onRrpLendingUSD: 0,
             corpBondDealerInventory: [],
+            sovereignBondHoldingsByTenor: {},
+            sovBondDealerInventory: [],
+            loanDealerInventory: [],
           };
         })() : undefined,
         // Persistent idiosyncratic risk: smaller/higher-rank banks run a real, generated risk

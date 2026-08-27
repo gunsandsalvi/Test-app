@@ -27,6 +27,12 @@ export interface AssetAllocationTarget {
   corpBondPct: number;
   govBondPct: number;
   cashPct: number;
+  // Real leveraged-loan allocation, carved out of the entity's total corporate-credit appetite
+  // (corpBondPct + loanPct together represent that total) — loans and bonds of the same issuer
+  // trade in genuinely different real markets with different investor bases (CLOs/loan funds vs
+  // bond funds), so they get their own real clearing engine
+  // (07d-leveraged-loan-clearing.ts) rather than being a byproduct of the bond one.
+  loanPct: number;
 }
 
 export interface InstitutionalEntity {

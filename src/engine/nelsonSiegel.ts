@@ -26,6 +26,65 @@ export function calculateNelsonSiegelZeroRate(t: number, params: NelsonSiegelPar
 }
 
 /**
+ * Fits Nelson-Siegel beta0/beta1/beta2 (keeping lambda fixed) to a small set of real, observed
+ * yields at given tenors via ordinary least squares — the standard real-world technique for
+ * building a smooth curve from a handful of actually-cleared benchmark points (e.g. 2Y/5Y/10Y/
+ * 30Y), so every consumer of calculateNelsonSiegelZeroRate at an arbitrary tenor rides on real
+ * cleared prices rather than an independent macro formula. Wall Street: see
+ * stages/07c-sovereign-bond-clearing.ts, which clears those benchmark points via the same real
+ * supply/demand engine as every other asset class, then calls this to refit the curve.
+ */
+export function fitNelsonSiegelParams(
+  observedPoints: { tenorYears: number; yield: number }[],
+  lambda: number
+): NelsonSiegelParams {
+  // Design matrix rows: [1, f1(t), f2(t)] per NS's linear-in-beta structure at fixed lambda.
+  const rows = observedPoints.map(({ tenorYears: t, yield: y }) => {
+    const tau = Math.max(0.001, t) / lambda;
+    const f1 = (1 - Math.exp(-tau)) / tau;
+    const f2 = f1 - Math.exp(-tau);
+    return { x: [1, f1, f2], y };
+  });
+
+  // Normal equations: (X^T X) beta = X^T y, a 3x3 solve.
+  const XtX = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  const Xty = [0, 0, 0];
+  rows.forEach(({ x, y }) => {
+    for (let i = 0; i < 3; i++) {
+      Xty[i] += x[i] * y;
+      for (let j = 0; j < 3; j++) XtX[i][j] += x[i] * x[j];
+    }
+  });
+
+  const beta = solve3x3(XtX, Xty);
+  if (!beta) {
+    // Degenerate (e.g. all observed tenors identical) — fall back to a flat curve at the
+    // average observed yield rather than propagate a non-finite fit.
+    const avgYield = observedPoints.reduce((s, p) => s + p.yield, 0) / Math.max(1, observedPoints.length);
+    return { beta0: avgYield, beta1: 0, beta2: 0, lambda };
+  }
+  return { beta0: beta[0], beta1: beta[1], beta2: beta[2], lambda };
+}
+
+function solve3x3(A: number[][], b: number[]): number[] | null {
+  const det =
+    A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1]) -
+    A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0]) +
+    A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]);
+  if (!isFinite(det) || Math.abs(det) < 1e-12) return null;
+
+  const replaceCol = (col: number) => {
+    const M = A.map((row) => [...row]);
+    for (let i = 0; i < 3; i++) M[i][col] = b[i];
+    return M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) -
+      M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+      M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+  };
+
+  return [replaceCol(0) / det, replaceCol(1) / det, replaceCol(2) / det];
+}
+
+/**
  * Calculates zero rates for standard tenors (3M, 2Y, 5Y, 10Y, 30Y)
  */
 export function calculateTenorZeroRates(params: NelsonSiegelParams) {

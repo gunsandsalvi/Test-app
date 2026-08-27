@@ -16,13 +16,13 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
-import { SECTOR_BENCHMARKS, priceLeveragedLoan } from '../../pricing';
+import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
 import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket, computeBucketDemandPremiumBps } from './shared-helpers';
+import { getRatingBucket } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
@@ -578,13 +578,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     }
 
-    // Wall Street: comp.oasSpreadBps is now a real, already-cleared value — set by
-    // 07b-corporate-bond-clearing.ts from actual institutional-entity order flow against the
-    // bank dealer desk, before this stage ever runs. Nothing here computes or smooths it; it's
-    // read as this week's real market level. Leveraged-loan pricing still applies its own
-    // bucket demand premium on top (loans have their own clearing engine as a follow-on slice).
-    const bucket = getRatingBucket(newRating);
-    const bucketPeers = state.companies.filter(c => c.region === comp.region && getRatingBucket(c.creditRating) === bucket);
+    // Wall Street: comp.oasSpreadBps (07b-corporate-bond-clearing.ts) and
+    // comp.leveragedLoan.discountMarginBps (07d-leveraged-loan-clearing.ts) are both now real,
+    // already-cleared values, set from actual institutional-entity order flow against the bank
+    // dealer desk before this stage ever runs. Nothing here computes or smooths either one.
 
     // Pre-refinancing trigger roughly one year before maturity
     let companyTranches = comp.debtTranches.map(t => ({ ...t }));
@@ -712,15 +709,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const rawNewCds = newOasBps + Math.floor(Math.random() * 8 - 4);
     const newCdsSpreadBps = isFinite(rawNewCds) ? Math.round(Math.max(10, Math.min(5000, rawNewCds))) : 150;
 
-    const loanBucketDemandPremiumBps = computeBucketDemandPremiumBps(bucket, reg, bucketPeers);
-    const loanPricing = priceLeveragedLoan(
-      comp.leveragedLoan.quotedMarginBps,
-      newOasBps,
-      comp.leveragedLoan.tenorYears,
-      isDefaulted,
-      0.65,
-      loanBucketDemandPremiumBps
-    );
+    // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
 
     // Asynchronous Quarterly Earnings cycle
     const isReportingThisWeek = !isDefaulted && comp.earningsWeekModulo === currentWeekMod13;
@@ -1024,11 +1013,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       dealerConsensus: updatedConsensus,
       lastEarningsSurprisePct,
       lastManagementCommentary,
-      leveragedLoan: {
-        ...comp.leveragedLoan,
-        pricePar: loanPricing.pricePar,
-        discountMarginBps: loanPricing.discountMarginBps,
-      },
+      // Already real and already-cleared (07d-leveraged-loan-clearing.ts) — passed through as-is.
+      leveragedLoan: comp.leveragedLoan,
       treasuryHoldings: newTreasuryHoldings,
     };
   });

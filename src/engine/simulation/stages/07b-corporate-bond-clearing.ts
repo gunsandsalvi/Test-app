@@ -20,8 +20,12 @@
  *   — the target allocation is only the long-term guide for how much total capital sits in this
  *   asset class; which specific issuers get that capital is driven by these real characteristics.
  * - How the cleared price maps onto this asset class's quoted statistic (OAS moves opposite
- *   price, with a real floor — no corporate credit trades at a zero spread — and the existing
- *   distressed-pricing ceiling).
+ *   price — no realism floor or ceiling, purely a function of real demand versus govies).
+ *
+ * This adapter only covers each issuer's FIXED-rate tranches (real corporate bonds). Floating
+ * tranches are real leveraged loans — a genuinely different market with a different investor
+ * base (CLOs/loan funds, not bond funds) and different technicals — and get their own real
+ * clearing (07d-leveraged-loan-clearing.ts), not a byproduct split of this one's fills.
  *
  * The actual auction — per-participant tilted index weighting, dealer inventory absorption and
  * pressure, price-impact-to-statistic conversion — lives once in the shared engine; sovereign
@@ -73,12 +77,18 @@ const DEALER_SPREAD_BPS = 15;
 // practice — a genuine structural avoidance of high-yield paper, not a soft preference.
 const IG_MANDATE_HY_AVOIDANCE_TILT = -0.7;
 
+function fixedDebtUSD(comp: Company): number {
+  return (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0);
+}
+
 function creditDurationYears(comp: Company): number {
-  if (!comp.debtTranches || comp.debtTranches.length === 0 || comp.totalDebt <= 0) return 3.5;
-  const weightedTenor = comp.debtTranches.reduce((s, t) => {
+  const fixedTranches = (comp.debtTranches || []).filter((t) => t.rateType === 'FIXED');
+  const totalFixed = fixedDebtUSD(comp);
+  if (fixedTranches.length === 0 || totalFixed <= 0) return 3.5;
+  const weightedTenor = fixedTranches.reduce((s, t) => {
     const tenorYears = Math.max(0.5, (t.maturityWeek - t.originationWeek) / 52);
     return s + tenorYears * t.principalUSD;
-  }, 0) / comp.totalDebt;
+  }, 0) / totalFixed;
   return Math.max(1.0, Math.min(8.0, weightedTenor * 0.75));
 }
 
@@ -125,24 +135,23 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
     const regionCompanies = ctx.prevActiveFirms.filter(
-      (c) => c.region === regionId && isActiveCompany(c) && c.debtTranches && c.debtTranches.length > 0
+      (c) => c.region === regionId && isActiveCompany(c) && fixedDebtUSD(c) > 0
     );
     if (regionCompanies.length === 0) return;
 
-    const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + c.totalDebt, 0) || 1;
+    const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + fixedDebtUSD(c), 0) || 1;
     const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
-      outstandingUSD: c.totalDebt,
+      outstandingUSD: fixedDebtUSD(c),
       currentStat: c.oasSpreadBps,
+      statKind: 'YIELD_LIKE',
       durationYears: creditDurationYears(c),
       statDirection: -1, // OAS falls when net buying pushes the bond's price up
-      // Real floor: no real corporate credit trades at a zero or near-zero spread over its
-      // sovereign benchmark, however deep the bid — even the tightest AAA paper still carries
-      // some spread. 5000bps ceiling matches the existing CCC/distressed pricing bound.
-      minStat: 25,
-      maxStat: 5000,
+      // No floor or ceiling at all — how tight or wide a spread gets versus the sovereign
+      // benchmark is purely a function of real demand, not a realism bound. A corporate name
+      // trading through its own sovereign is rare but not mathematically impossible.
     }));
 
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
@@ -153,7 +162,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const currentHoldingByCompany = new Map<string, number>();
       const otherHoldings: ItemizedHolding[] = [];
       entity.itemizedHoldings.forEach((h) => {
-        if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN') {
+        if (h.instrumentType === 'CORP_BOND') {
           currentHoldingByCompany.set(h.instrumentId, (currentHoldingByCompany.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
         } else {
           otherHoldings.push(h);
@@ -214,24 +223,16 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       comp.oasSpreadBps = newOasBps;
     });
 
-    // Apply: each entity's real new holdings, split back into CORP_BOND/LEVERAGED_LOAN per the
-    // issuer's own fixed/floating tranche mix (matches how itemized holdings are classified
-    // elsewhere, e.g. stage 11).
+    // Apply: each entity's real new CORP_BOND holdings. Loans are a genuinely different real
+    // market (different investor base, different technicals) and get their own real clearing
+    // (07d-leveraged-loan-clearing.ts), not a byproduct split of this fill.
     if (regionEntities.length > 0) {
       const updatedEntitiesById = new Map<string, InstitutionalEntity>();
       regionEntities.forEach((entity) => {
         const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
         const newCorpHoldings: ItemizedHolding[] = [];
         newHoldings.forEach((newHoldingUSD, companyId) => {
-          const comp = companyById.get(companyId);
-          if (!comp) return;
-          const fixedShare = comp.debtTranches.filter((t) => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0) / comp.totalDebt;
-          if (fixedShare > 0) {
-            newCorpHoldings.push({ instrumentId: companyId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD * fixedShare });
-          }
-          if (fixedShare < 1) {
-            newCorpHoldings.push({ instrumentId: companyId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD * (1 - fixedShare) });
-          }
+          if (newHoldingUSD > 1) newCorpHoldings.push({ instrumentId: companyId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
         });
         updatedEntitiesById.set(entity.id, {
           ...entity,

@@ -9,6 +9,8 @@ import { runUnitBiddingStage } from './stages/05-unit-bidding';
 import { runFxAndTradeStage } from './stages/06-fx-and-trade';
 import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
+import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
+import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
@@ -36,6 +38,8 @@ export function advanceWeeklyStep(state: GameState): GameState {
   runFxAndTradeStage(state, ctx);
   runCommoditiesStage(state, ctx);
   runCorporateBondClearingStage(state, ctx);
+  runSovereignBondClearingStage(state, ctx);
+  runLeveragedLoanClearingStage(state, ctx);
   runCompanyFundamentalsStage(state, ctx);
   runConcentrationRiskStage(state, ctx);
   runMergersStage(state, ctx);
