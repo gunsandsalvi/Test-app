@@ -139,6 +139,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       totalRealInstitutionalTargetUSD
     );
 
+    // Same per-region memoization as 07b — see the optimization note in the plan's §6.
+    const pdByCompanyId = new Map<string, number>();
+    regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(c)));
+
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
@@ -160,7 +164,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         // The loan's recovery is derived from the same senior-lien discount that scales its
         // expected loss: a loss 0.85x the unsecured claim's IS a recovery that much higher.
         // Derived rather than stated so the two cannot drift apart.
-        const annualPd = computeAnnualDefaultProbability(c);
+        const annualPd = pdByCompanyId.get(c.id)!;
         const loanRecoveryRate = 1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE);
         const reservationBps = entity.entityType === 'HEDGE_FUND'
           ? computeDistressedReservationSpreadBps({

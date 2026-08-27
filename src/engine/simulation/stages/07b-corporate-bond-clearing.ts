@@ -200,6 +200,12 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       totalRealInstitutionalTargetUSD
     );
 
+    // Per-company quantities memoized ONCE per region-week, never inside the participants loop
+    // (§6's optimization rule): the structural PD reads the debt ladder and revenue history and
+    // was being recomputed once per entity x company — 4x the work for identical answers.
+    const pdByCompanyId = new Map<string, number>();
+    regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(c)));
+
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
@@ -232,7 +238,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         // loss + capital cost; the distressed fund prices cash price vs discounted expected
         // recovery (see computeDistressedReservationSpreadBps) — naturally absent from
         // performing paper, always present at some price for broken paper.
-        const annualPd = computeAnnualDefaultProbability(c);
+        const annualPd = pdByCompanyId.get(c.id)!;
         const reservationBps = entity.entityType === 'HEDGE_FUND'
           ? computeDistressedReservationSpreadBps({
               annualDefaultProbability: annualPd,
