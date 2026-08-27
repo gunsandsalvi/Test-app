@@ -22,7 +22,7 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket, settleCorporateActionOnHolders } from './shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { decideCorporateFinancing } from './corporate-financing';
 import { WeeklyStepContext } from './context';
 
@@ -538,8 +538,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       : (newEbit / Math.max(0.5, annualInterest));
     const newCoverage = isFinite(rawCoverage) ? Number(Math.max(-50, Math.min(50, rawCoverage)).toFixed(2)) : 1.5;
 
-    // Default trigger: Cash < 0 and Coverage < 0.8x (or previously defaulted, provided not merger-acquired)
-    let isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < 0.8));
+    // Default trigger: cash exhausted AND coverage below the shared floor (or previously
+    // defaulted, provided not merger-acquired). DEFAULT_COVERAGE_FLOOR is the single definition
+    // of this trigger — the same object the credit market prices its hazard against
+    // (computeAnnualDefaultProbability), so priced risk and realized risk are one model.
+    let isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < DEFAULT_COVERAGE_FLOOR));
     let newRating = comp.creditRating;
 
     if (isDefaulted) {

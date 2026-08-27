@@ -201,12 +201,11 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 
 | # | Item | §5 ref | Prereqs |
 |---|---|---|---|
-| 1 | **Retire the recovery-value ceiling; distressed paper prices off recovery** | E2 | — (fixes a known-wrong mechanism now in the code) |
-| 2 | **Institutional balance sheet: bids bounded by money; live total assets** | S11 | — |
-| 3 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
+| 1 | **Institutional balance sheet: bids bounded by money; live total assets** | S11 | — |
+| 2 | **Hidden Corporates Wave 1: real named private firms, real debt, real employment** | HC | — (see the sequencing note below) |
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, E2, HC W1 |
+| — | **Damp the credit cycle's amplitude** (build with G1b's expectations channel) | RVr | G1b, HC W1 |
 | 4 | Company cash truth: double-count, dividends, prepayment, merger cash | S5 | — |
 | 5 | Delete every duplicate price-setter (engine + UI) | S6 | — |
 | 6 | One holdings ledger (kill mechanical itemizedHoldings rebuild) | S7 | S11 |
@@ -222,7 +221,7 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 | 15 | Itemized bank lending + endogenous money (loans create deposits) | G2 | S11, HC W1 |
 | 16 | Unify the two dealer systems | G3 | S9 |
 | 17 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2, E2 |
+| 18 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
 | 19 | Institutional liability side (claims, benefits) drives demand | G6 | WS7, S11 |
 | 20 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
 | 21 | Corporate hedging + banks hedge their own book | WS11 | G4 |
@@ -242,11 +241,7 @@ at week 26, inflation is a measured statistic, and corporate spreads now track c
 **What the top three items have in common.** Each is a case of the credit market being right in
 mechanism and wrong in inputs, and each was found by measuring rather than reading:
 
-- **E2 first because it is a defect currently in the code.** The recovery-value ceiling shipped
-  in §7.16 rests on a false premise — a bond cannot trade below recovery — and bonds trade below
-  recovery constantly. It is the one item here that makes the simulation *less* correct while it
-  stands.
-- **S11 next because there is no link between money and assets at all.** An institution's bid is
+- **S11 first because there is no link between money and assets at all.** An institution's bid is
   bounded by a policy ceiling and by nothing else; measured, institutional cash reaches −10% of
   assets by week 20 and stays there, and `totalAssetsUSD` — the size weight driving every
   entity's structural share in all three clearing stages — is never written after
@@ -270,64 +265,6 @@ Aurora is deliberately last: it re-renders everything the other projects produce
 ---
 
 ## 5. Detailed work instructions
-
-### E2 — Retire the recovery-value ceiling; distressed paper prices off recovery
-
-**This corrects a defect introduced in §7.16.** That work added
-`ClearingInstrument.maxStat`, a ceiling on how wide a spread can go, justified as: a bond cannot
-trade below its recovery value, so the spread implied by that price floor
-(`recoveryImpliedMaxSpreadBps` = −ln(recovery)/duration) is where the market ends.
-
-**The premise is false, and it is false in exactly the place the model cares about.** Bonds
-trade below recovery routinely, and that gap is where distressed investors make their money:
-
-1. **Recovery is realized later and is uncertain.** It arrives after a 1–3 year workout and is a
-   distribution, not a number. A distressed buyer discounts expected recovery at its own hurdle:
-   a 40% recovery two years out at a 25% required return is worth **~26 cents today**, not 40.
-   A rational, willing, unlevered buyer therefore bids well below recovery.
-2. **Forced sellers.** Investment-grade mandates sell on downgrade and index funds sell on index
-   exit, both price-insensitively. That is the fallen-angel trade, and it exists precisely
-   because the seller is not optimising price.
-3. **Distressed capital is finite.** In a dislocation the price clears where a limited pool of
-   capital is indifferent, not at intrinsic value.
-
-**The fix is not a wider bound — it is a second pricing regime.** Performing credit prices off
-spread versus expected loss plus capital cost (what the engine does now, correctly). Distressed
-credit prices off **cash price versus expected recovery, discounted at the distressed hurdle**.
-Real desks do exactly this: distressed paper quotes in price rather than spread, with the
-convention crossing over around 1,000bp.
-
-**How, concretely:**
-- Give the distressed participant (`HEDGE_FUND`, and any regime-crossing holder) a reservation
-  derived from recovery economics: the cash price at which expected recovery over an expected
-  workout period clears `REQUIRED_RETURN_ON_CAPITAL.HEDGE_FUND`, converted back to a spread for
-  the auction. Expected recovery should come from the issuer's real balance sheet, not a
-  constant — and when G5 lands, from the same estate valuation G5 uses, so the two agree.
-- **Delete `maxStat` and `recoveryImpliedMaxSpreadBps`.** A recovery-based bidder always has a
-  bid at *some* price, so no ceiling is needed: as the spread widens the implied cash price
-  falls until the IRR clears. That bid is the real thing that arrests a widening.
-- The solver still needs a numerical bracket. Keep one, make it wide enough never to bind, and
-  **label it a numerical guard, not economics** — the original sin was dressing a search bound
-  as a price.
-
-**One dependency to keep honest.** `MAX_ANNUAL_DEFAULT_PROBABILITY` was lowered 0.30 → 0.15 in
-§7.16 partly on consistency with this ceiling. That argument retires with the ceiling. 15% is
-independently the better number (observed one-year default rates for the weakest cohort run
-~10–13%), so the value stands — but re-derive it on its own terms rather than leaving it resting
-on a retired premise.
-
-**Verify:** distressed names must show real price dispersion rather than clustering at any single
-level; a downgraded issuer's spread must widen continuously through the IG/HY boundary with no
-discontinuity; and the distressed fund's holdings must rise as spreads widen (it is buying) while
-regulated holders' fall.
-
-**In the same pass (both are §7.19 review items):** unify the default model — the hazard priced by
-`computeExpectedLossSpreadBps` must be the same object that decides actual defaults in stage 08,
-so the market's expected loss and its experienced loss are one number (G5 later makes the
-*recovery* side of it an outcome too). And once real recovery-based bids exist alongside S11's
-budgets, delete 07b's per-name weight normalisation: demand should meet float because real buyers
-with real money choose to hold it, with the dealer absorbing any genuine residual — not because
-the shares are renormalised to 1 by construction.
 
 ### S11 — Institutional balance sheet: bids bounded by money, live total assets
 
@@ -364,6 +301,11 @@ money in the system and the price of assets.**
 clamp (if it goes negative, the constraint is not binding — find why, do not floor it); the
 periodic institutional-book warnings in §6 stop or are shown to be unrelated; and
 `totalAssetsUSD` tracks the real book.
+**Then delete 07b's per-name weight normalisation** (§7.19 item 2; its other gate, the
+distressed pricing regime, landed in §7.20): with real budgets bounding bids and a real
+recovery-based bid always present, demand should meet float because real buyers with real money
+choose to hold it, with the dealer absorbing any genuine residual — not because shares are
+renormalised to 1 by construction.
 Also reconcile the two representations of each institution that is *also* a listed company:
 company-level `aumUSD` and entity-level `totalAssetsUSD` describe one balance sheet — derive the
 company's AUM (and thus its fee revenue in stage 08) from the entity's real book, one direction
@@ -459,7 +401,7 @@ demand-schedule engine produces zero negative spreads at every rating in every w
 because a participant's reservation level already covers its own costs and demand below that is
 genuinely zero. What remains of RVr is therefore an open question rather than a known defect:
 *is* the cycle's amplitude still unrealistic once the tights are bounded by real economics? Do
-not start until E2 and HC Wave 1 have landed, then measure the cycle again over 120 weeks and decide
+not start until HC Wave 1 has landed (E2 landed, §7.20), then measure the cycle again over 120 weeks and decide
 whether there is anything left to damp.
 
 **If there is, do not damp it by shrinking the response rates or bounding the spread.** The
@@ -794,11 +736,11 @@ real assets (cash, receivables, inventory at real lot values, PP&E at a haircut)
 ~26–78 weeks *through the real markets* — inventory into stage 05 as distressed offers, PP&E to
 peers as cheap capex — and proceeds waterfall to claims by real seniority (first-lien loans,
 then bonds, equity residual, usually 0). While the workout runs, the defaulted claims keep
-trading in 07b/07d at E2's recovery-based reservations, marked against the estate's own evolving
+trading in 07b/07d at the §7.20 recovery-based reservations, marked against the estate's own evolving
 asset value — the model's distressed pricing and its resolution process read one book.
-**Recovery becomes an output, and it closes the E2 loop:** realized recoveries calibrate the
+**Recovery becomes an output, and it closes the §7.20 loop:** realized recoveries calibrate the
 priced LGD (a rolling realized-recovery average replaces the `CREDIT_RECOVERY_RATE` constant),
-completing the one-default-model requirement of §7.19 item 1.
+completing the one-default-model unification begun in §7.20 (the hazard side landed there; the recovery side lands here).
 
 **Verify:** recoveries disperse by asset-heaviness (an asset-rich defaulter recovers more);
 waterfall conservation (proceeds = distributions exactly); loans recover above bonds.
@@ -1015,7 +957,7 @@ HEAD must show GDP, employment and total debt unchanged. Firm sizes draw from a 
 HC2 becomes itemized loans; mass losses are its loss experience), MS2 (private firms are the
 missing labor demand; cohorts later work at them by name), WS4/WS8 (IPO and LBO paper price in
 the real books), G5 (estates), S7 (private loan/bond holdings live in the one ledger), RVr
-(recap supply and issuer births are the counterweight to issuer-count decay), E2 (distressed
+(recap supply and issuer births are the counterweight to issuer-count decay), §7.20 (distressed
 private loans price off recovery like everything else).
 
 **Verify (whole project):** conservation A/B at every carve; want/have ~1.0x; labor gap
@@ -1067,7 +1009,6 @@ the complete simulation.
 | `07b`/`07c`/`asset-allocation.ts` dead tilt-era code | `computeEntityAttractiveness` (07b:125, defined, never called), `STRATEGIC_TARGET_DRIFT_RATE`/`MAX_*_TILT` constants in 07b and 07c, and `computeAllocationTilt`+`MAX_ALLOCATION_BAND`+`EXCESS_SPREAD_FULL_TILT` in asset-allocation.ts (module-internal only) all survive from the quantity-target engine. Delete in S10. 07b's header comment (lines ~15–33) still *describes* that engine — "tilted index weighting, price-impact-to-statistic conversion" — rewrite it to describe the demand-schedule auction |
 | `shared-helpers.ts` `computeBucketDemandPremiumBps` | Only remaining consumers are the two duplicate price-setters S6 deletes (pricing.ts, stage 12). Delete the helper in the same pass |
 | clearing damper diagnostic | `maxWeeklyStatMovePct` is legitimate discrete-time smoothing, but it must never *bind persistently* — a name clamped ≥3 consecutive weeks means the posted schedules disagree with the printed level and the print is the damper, not the market. Add a cheap per-week clamped-count to the invariants harness; alert on persistent binding |
-| priced PD vs realized defaults | See §7.19 review item 1 — the market prices a logistic PD while actual defaults come from a different deterministic rule. Owned by E2 (pricing side) + G5 (realization side) |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1335,7 +1276,7 @@ the complete simulation.
       3. The auction had no economic upper bound and returned its **search bracket** (50,000bp) as
          a spread whenever demand could not absorb the float. `ClearingInstrument.maxStat` was
          given a bound derived from the recovery-value price floor (−ln(recovery)/duration).
-         **This third fix was wrong and is being retired — see §5-E2.** A bond trades below
+         **This third fix was wrong and has been retired — see §7.20.** A bond trades below
          recovery routinely, and that gap is exactly where a distressed investor earns its
          return. The bug it fixed (a search bracket printing as a price) was real; the economics
          used to fix it were not. Recorded here rather than quietly amended, because the mistake
@@ -1419,7 +1360,39 @@ the complete simulation.
        `totalAssetsUSD` (share of the macro pool) are two unreconciled representations of one
        balance sheet. Fold the link into S11's derived `totalAssetsUSD`.
     6. Dead code and a stale header survive from the quantity-target engine (see §6) — S10.
-20. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+20. **E2 landed: two pricing regimes, one default model, no ceiling.** Three connected changes:
+    - **The priced hazard is now a structural forecast of the real default trigger.** The logistic
+      on (leverage − coverage) with its tuned cap/midpoint/width is gone.
+      `computeAnnualDefaultProbability` asks how large a relative EBITDA shock would put the
+      company inside the actual trigger — coverage below `DEFAULT_COVERAGE_FLOOR` AND cash
+      exhausted, the AND honoured by taking the larger required shock, so a levered company with
+      a real cash runway is safer than its coverage alone says — and how likely that shock is
+      given the company's own measured revenue volatility. The trigger constant is defined once
+      and imported by stage 08's default check and credit.ts's rating ladder: priced risk and
+      realized risk are one model (§7.19 item 1 closed on the hazard side; G5 closes recovery).
+    - **Distressed paper prices off recovery, as a second regime, not a bound.**
+      `computeDistressedReservationSpreadBps`: expected terminal value (recovery on default over
+      a 2-year workout, par on survival) discounted at the fund's 22% hurdle, converted to
+      spread. Measured: the HF reservation sits ~795bp on performing paper (it holds ZERO
+      investment grade; its corp book is 100% HY vs the insurer's 11.6%) and its bid arrests a
+      genuine widening around 1,200–2,700bp depending on the issuer's real PD. `maxStat` and
+      `recoveryImpliedMaxSpreadBps` are deleted; the engine's brackets are labelled numerical
+      guards and nothing hit them in any measured week.
+    - **The IG ladder's slope now comes from the real place: rating- and duration-granular
+      spread-risk capital** (`spreadRiskCapitalChargeRate`, Solvency-SCR-shaped). This was forced
+      by an honest failure worth recording: with the structural PD, expected loss on ALL
+      investment grade is a truthful ~0bp, and with the old flat-within-IG capital charge every
+      IG reservation collapsed to the same number — AAA through BBB printed identical medians.
+      Real IG spread differences are mostly risk-capital premium, not expected loss, and every
+      real capital regime steps the charge by notch and scales it with duration. With the real
+      structure in: AAA 160 / AA 161 / A 173 / BBB 222 / BB 394 / B 560 / CCC 576 at week 40,
+      loans strictly monotonic (Spearman 0.86–0.90 at real n), ownership correlation still weak
+      (0.11–0.18), zero negative spreads, zero guard hits.
+    - **Lesson:** when a defensible model change flattens a distribution, the missing dispersion
+      was probably being smuggled in by the old model's error. The logistic's inflated PDs were
+      doing the capital schedule's job; making PD honest exposed that the capital side had been
+      flat all along. Fix the newly exposed structure, don't re-inflate the input.
+21. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

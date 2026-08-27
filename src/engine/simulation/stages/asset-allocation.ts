@@ -47,18 +47,32 @@ import { CreditRating, InstitutionalEntityType } from '../../../types';
  */
 export const CAPITAL_CHARGE_BY_ASSET_CLASS = {
   GOV_BOND: 0.01,
-  CORP_BOND: 0.08,
+  CORP_BOND: 0.08, // legacy flat charge — superseded for credit by the rating x duration schedule below
   LEVERAGED_LOAN: 0.06,
 } as const;
 
 /**
- * What a sub-investment-grade exposure costs in capital instead. Every real regime steps the
- * charge up sharply below the investment-grade line rather than forbidding the asset, and that
- * step is the whole reason regulated books are structurally light in high yield: the position has
- * to clear a much higher bar to be worth its capital, so these holders only appear once the paper
- * is genuinely cheap.
+ * Spread-risk capital per notch, PER YEAR OF DURATION — the real structure every capital regime
+ * shares (Solvency-style spread SCR, NAIC C1, ratings-based RWA all step the charge by rating
+ * and scale it with duration). This is what gives the investment-grade ladder its slope: the
+ * honest expected loss on an A versus a AA is a handful of basis points, yet the market prices
+ * them tens apart, because what actually differs is the CAPITAL a regulated holder must carry
+ * against spread volatility — and that volatility steps with rating. A flat within-IG charge
+ * (the first version of this file) made every IG reservation identical and flattened the whole
+ * ladder; the fix is the real regulatory structure, not a fitted curve. Magnitudes are
+ * structural modelling choices in the range real regimes occupy (rule 4), roughly geometric
+ * through investment grade and steepening below it.
  */
-export const SUB_INVESTMENT_GRADE_CAPITAL_CHARGE = 0.20;
+const SPREAD_RISK_CAPITAL_PER_DURATION_YEAR: Record<CreditRating, number> = {
+  AAA: 0.009, AA: 0.011, A: 0.014, BBB: 0.025, BB: 0.045, B: 0.075, CCC: 0.075, D: 0.075,
+};
+/** Real regimes taper the marginal duration factor on long paper; cap the linear scaling. */
+const MAX_CHARGEABLE_DURATION_YEARS = 7;
+
+export function spreadRiskCapitalChargeRate(rating: CreditRating, durationYears: number): number {
+  const d = Math.min(MAX_CHARGEABLE_DURATION_YEARS, Math.max(0.5, durationYears));
+  return SPREAD_RISK_CAPITAL_PER_DURATION_YEAR[rating] * d;
+}
 
 /**
  * What each institution needs to earn on the capital it puts at risk, which is what its own
@@ -196,20 +210,48 @@ export function subInvestmentGradeSizeFactor(entityType: InstitutionalEntityType
 }
 
 /**
- * The widest spread a bond can trade at: the one implied by its price sitting on the floor that
- * recovery in default puts under it.
+ * The distressed buyer's reservation — a SECOND PRICING REGIME, not a wider version of the
+ * spread one.
  *
- * Nobody sells a claim for less than what defaulting on it would hand them, so a bond's price
- * cannot fall below its recovery value, and a bounded price is a bounded spread. Discounting at
- * spread s over d years puts the price at exp(-s*d), so the price floor at the recovery rate
- * fixes the spread ceiling at -ln(recovery)/d. For a 40% recovery on five-year paper that is
- * about 1,830bp — a real distressed level, which is the point: this is where the arithmetic of
- * recovery says the market ends, not a chosen cap.
+ * Performing credit prices off spread versus expected loss plus capital cost (the regime above).
+ * A distressed buyer does not think in spread at all: it thinks in CASH PRICE versus what the
+ * claim will actually pay. Recovery arrives only after a workout measured in years, and the
+ * buyer discounts it at its own hurdle — which is why a bond can and does trade BELOW its
+ * recovery value: 40 cents recovered two years from now at a 22% required return is worth about
+ * 27 cents today, and the earlier version of this file that treated recovery as a price floor
+ * had that exactly backwards (recorded in the plan, §7.16's amendment). The gap between price
+ * and recovery IS the distressed return.
+ *
+ * The arithmetic: over the expected workout horizon the claim either defaults (probability
+ * compounded from the issuer's real annual hazard) and pays recovery, or survives and pays
+ * roughly par. The most the buyer pays is that expected terminal value discounted at its
+ * hurdle; the auction quotes in spread, so the price converts via the same exp(-s·d)
+ * approximation used everywhere else.
+ *
+ * Two properties matter, and both are consequences rather than rules:
+ *   - For a healthy issuer this reservation sits FAR wider than any regulated holder's (there
+ *     is no distressed return in a performing bond), so the fund is naturally absent from
+ *     expensive paper.
+ *   - There is NO spread at which the fund has no bid — as the level widens, the implied cash
+ *     price falls until the IRR clears. That standing bid at some price is what actually
+ *     arrests a widening, and it is why the engine needs no economic ceiling at all.
  */
-export function recoveryImpliedMaxSpreadBps(recoveryRate: number, durationYears: number): number {
-  const r = Math.min(0.95, Math.max(0.01, recoveryRate));
-  const d = Math.max(0.25, durationYears);
-  return (-Math.log(r) / d) * 10000;
+export const EXPECTED_WORKOUT_YEARS = 2;
+
+export function computeDistressedReservationSpreadBps(params: {
+  annualDefaultProbability: number;
+  recoveryRate: number;
+  durationYears: number;
+}): number {
+  const h = REQUIRED_RETURN_ON_CAPITAL.HEDGE_FUND;
+  const T = EXPECTED_WORKOUT_YEARS;
+  const pd = Math.min(0.99, Math.max(0, params.annualDefaultProbability));
+  const defaultProbOverWorkout = 1 - Math.pow(1 - pd, T);
+  const expectedTerminalValuePerPar =
+    defaultProbOverWorkout * params.recoveryRate + (1 - defaultProbOverWorkout) * 1.0;
+  const maxPricePerPar = expectedTerminalValuePerPar / Math.pow(1 + h, T);
+  const d = Math.max(0.5, params.durationYears);
+  return (-Math.log(Math.max(1e-6, maxPricePerPar)) / d) * 10000;
 }
 
 /**

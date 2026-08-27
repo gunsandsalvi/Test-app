@@ -59,18 +59,6 @@ export interface ClearingInstrument {
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE';
   /** Duration in years — retained for adapters that convert the cleared level into a price. */
   durationYears: number;
-  /**
-   * The widest level the asset can reach for a real economic reason, supplied by the adapter that
-   * knows what that reason is — for credit, the spread implied by the price sitting on its
-   * recovery-value floor. Not a chosen cap and not a damper: the market genuinely does not exist
-   * beyond it, because past it the asset is worth more defaulted than held.
-   *
-   * It matters because the solve below has to return SOMETHING when demand cannot absorb the
-   * float at any level, and without this it returned the search bound — a number with no meaning
-   * that nonetheless printed as a spread. With it, the answer is the real edge of the market and
-   * the dealer is left holding what would not clear even there.
-   */
-  maxStat?: number;
 }
 
 /**
@@ -132,13 +120,11 @@ function demandAtStat(demand: ParticipantDemand, stat: number, statKind: Clearin
  * Solves for the level at which the participants collectively want exactly the tradable float.
  * Total demand is monotonic in the level, so bisection is exact and cannot oscillate.
  *
- * The bracket's lower end is deliberately wide and is not an economic bound: if every
+ * Both bracket ends are numerical guards, deliberately far outside any real schedule: if every
  * participant's reservation level is above some spread, demand there is zero on its own and the
- * solve simply never goes there. The upper end IS economic where the adapter supplies one
- * (ClearingInstrument.maxStat) — for credit, the level at which the price has fallen to recovery
- * value and the market ends. Where even that level cannot attract enough demand to absorb the
- * float, the auction clears there and the dealer is left holding the difference, which is what a
- * dealer of last resort actually is.
+ * solve simply never goes there. Where demand cannot absorb the float at the level the schedules
+ * do support, the market clears wide and the dealer is left holding the difference, which is
+ * what a dealer of last resort actually is.
  */
 function solveClearingStat(
   inst: ClearingInstrument,
@@ -194,11 +180,15 @@ export function clearFinancialAsset(
 
     // Wide, non-economic search bounds. See solveClearingStat: the participants' own reservation
     // levels decide where the market can actually clear, not these.
+    // NUMERICAL guards only, never economics — wide enough that no real schedule reaches them.
+    // The demand side always contains a bid at some level (the distressed regime's recovery
+    // arithmetic guarantees it for credit), so the solve finds a real crossing inside the
+    // bracket; a solve that returns a bracket edge is a bug in an adapter's schedules, not a
+    // market outcome, and the earlier version of this file that dressed the upper bound in a
+    // recovery-value story is recorded in the plan as a mistake not to repeat.
     const isYieldLike = inst.statKind === 'YIELD_LIKE';
     const bracketLow = isYieldLike ? -2000 : Math.max(1e-6, inst.currentStat * 0.01);
-    const bracketHigh = isYieldLike
-      ? (inst.maxStat ?? 50000)
-      : Math.min(inst.maxStat ?? Infinity, inst.currentStat * 100);
+    const bracketHigh = isYieldLike ? 100000 : inst.currentStat * 100;
 
     const solvedStat = solveClearingStat(inst, participants, bracketLow, bracketHigh);
 

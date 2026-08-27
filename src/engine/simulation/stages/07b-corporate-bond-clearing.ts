@@ -44,17 +44,16 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { computeExpectedLossSpreadBps, getRatingBucket, distributeRealTargetByWeight, CREDIT_RECOVERY_RATE } from './shared-helpers';
+import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, CREDIT_RECOVERY_RATE } from './shared-helpers';
 import {
-  CAPITAL_CHARGE_BY_ASSET_CLASS,
   computeReservationSpreadBps,
   FULL_SIZE_SPREAD_RANGE_BPS,
   isInvestmentGrade,
   subInvestmentGradeSizeFactor,
-  SUB_INVESTMENT_GRADE_CAPITAL_CHARGE,
+  spreadRiskCapitalChargeRate,
   MAX_OVERWEIGHT_MULTIPLE,
   DISTRESSED_CONVICTION_MULTIPLE,
-  recoveryImpliedMaxSpreadBps,
+  computeDistressedReservationSpreadBps,
 } from './asset-allocation';
 import { WeeklyStepContext } from './context';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -164,14 +163,12 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
       durationYears: creditDurationYears(c),
-      // No floor. Where a spread can settle from below is decided by what the bidders below will
-      // pay, and every one of their reservation levels already covers its own expected loss and
-      // capital cost — so the floor is an outcome of their economics, not a bound on the price.
-      //
-      // The ceiling is not a bound on the price either; it is the price. A bond cannot trade
-      // below what defaulting on it would pay out, so the spread implied by that recovery-value
-      // floor is where this market ends.
-      maxStat: recoveryImpliedMaxSpreadBps(CREDIT_RECOVERY_RATE, creditDurationYears(c)),
+      // No floor and no ceiling. The floor is an outcome: every bidder's reservation already
+      // covers its own expected loss and capital cost, so demand tighter than that is genuinely
+      // zero. The ceiling is an outcome too: the distressed regime below always has a bid at
+      // SOME price — as the level widens, the implied cash price falls until the buyer's IRR on
+      // expected recovery clears — so the widening arrests where that bid stands, not where a
+      // bound says.
     }));
 
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
@@ -248,19 +245,28 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       regionCompanies.forEach((c) => {
         // Rating enters this book in the two places it really acts: the capital the position
-        // consumes (which steps up sharply below investment grade and so widens the level at
-        // which a regulated holder is indifferent) and the size of the sleeve the holder will
-        // run there. It is deliberately NOT a prohibition — see subInvestmentGradeSizeFactor for
-        // what modelling it as one did to high-yield clearing.
+        // consumes (stepping by notch and scaling with duration — see
+        // spreadRiskCapitalChargeRate) and the size of the sub-IG sleeve the holder will run.
+        // It is deliberately NOT a prohibition — see subInvestmentGradeSizeFactor for what
+        // modelling it as one did to high-yield clearing.
         const subIG = !isInvestmentGrade(c.creditRating);
-        const reservationBps = computeReservationSpreadBps({
-          entityType: entity.entityType,
-          expectedLossBps: computeExpectedLossSpreadBps(c),
-          capitalChargeRate: subIG
-            ? SUB_INVESTMENT_GRADE_CAPITAL_CHARGE
-            : CAPITAL_CHARGE_BY_ASSET_CLASS.CORP_BOND,
-          creditConditionsIndex,
-        });
+        // Two pricing regimes, one issuer hazard. Regulated holders price spread vs expected
+        // loss + capital cost; the distressed fund prices cash price vs discounted expected
+        // recovery (see computeDistressedReservationSpreadBps) — naturally absent from
+        // performing paper, always present at some price for broken paper.
+        const annualPd = computeAnnualDefaultProbability(c);
+        const reservationBps = entity.entityType === 'HEDGE_FUND'
+          ? computeDistressedReservationSpreadBps({
+              annualDefaultProbability: annualPd,
+              recoveryRate: CREDIT_RECOVERY_RATE,
+              durationYears: creditDurationYears(c),
+            })
+          : computeReservationSpreadBps({
+              entityType: entity.entityType,
+              expectedLossBps: annualPd * (1 - CREDIT_RECOVERY_RATE) * 10000,
+              capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, creditDurationYears(c)),
+              creditConditionsIndex,
+            });
         const structuralSizeUSD =
           fixedDebtUSD(c) * tradableShare * (structuralShareByEntityByCompany.get(c.id)?.get(entity.id) ?? 0);
         const overweightMultiple =

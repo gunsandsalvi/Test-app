@@ -1,4 +1,5 @@
 import { CreditRating } from '../../types';
+import { DEFAULT_COVERAGE_FLOOR } from './stages/shared-helpers';
 
 /**
  * Credit rating cutoffs are a geometric progression anchored on two structural constants
@@ -10,7 +11,7 @@ import { CreditRating } from '../../types';
  * thresholds copied from any real rating agency's published scale.
  */
 const LEVERAGE_CEILING = 9.0; // leverage at the CCC/default boundary
-const COVERAGE_FLOOR = 0.8; // coverage at the CCC/default boundary
+const COVERAGE_FLOOR = DEFAULT_COVERAGE_FLOOR; // coverage at the CCC/default boundary — the one shared trigger definition
 const DECAY_RATIO = 0.7; // proportional safety-margin step between adjacent rating notches
 
 function leverageCutoff(notch: number): number {

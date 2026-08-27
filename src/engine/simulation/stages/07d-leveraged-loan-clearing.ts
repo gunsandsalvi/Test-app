@@ -27,14 +27,14 @@
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import {
-  CAPITAL_CHARGE_BY_ASSET_CLASS,
   computeReservationSpreadBps,
   FULL_SIZE_SPREAD_RANGE_BPS,
   MAX_OVERWEIGHT_MULTIPLE,
   DISTRESSED_CONVICTION_MULTIPLE,
-  recoveryImpliedMaxSpreadBps,
+  computeDistressedReservationSpreadBps,
+  spreadRiskCapitalChargeRate,
 } from './asset-allocation';
-import { computeExpectedLossSpreadBps, CREDIT_RECOVERY_RATE } from './shared-helpers';
+import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -106,14 +106,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       currentStat: c.leveragedLoan!.discountMarginBps,
       statKind: 'YIELD_LIKE',
       durationYears: loanCreditDurationYears(c),
-      // Same recovery-value price floor as the bond book, at the loan's own recovery. The senior
-      // lien is worth exactly what SENIOR_LIEN_DISCOUNT already says it is worth: expected loss
-      // is PD x (1 - recovery), so a loss 0.85x the unsecured claim's IS a recovery that much
-      // higher. Derived rather than stated so the two cannot drift apart.
-      maxStat: recoveryImpliedMaxSpreadBps(
-        1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE),
-        loanCreditDurationYears(c)
-      ),
+      // No ceiling — same reasoning as the bond book (07b): the distressed regime always bids at
+      // some price, and where it stands is where a widening arrests.
     }));
 
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
@@ -156,12 +150,26 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // each set of holders will pay — rather than as a fixed multiple between two statistics.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       regionCompanies.forEach((c) => {
-        const reservationBps = computeReservationSpreadBps({
-          entityType: entity.entityType,
-          expectedLossBps: computeExpectedLossSpreadBps(c) * SENIOR_LIEN_DISCOUNT,
-          capitalChargeRate: CAPITAL_CHARGE_BY_ASSET_CLASS.LEVERAGED_LOAN,
-          creditConditionsIndex: reg.bankingSector.creditConditionsIndex ?? 0,
-        });
+        // The loan's recovery is derived from the same senior-lien discount that scales its
+        // expected loss: a loss 0.85x the unsecured claim's IS a recovery that much higher.
+        // Derived rather than stated so the two cannot drift apart.
+        const annualPd = computeAnnualDefaultProbability(c);
+        const loanRecoveryRate = 1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE);
+        const reservationBps = entity.entityType === 'HEDGE_FUND'
+          ? computeDistressedReservationSpreadBps({
+              annualDefaultProbability: annualPd,
+              recoveryRate: loanRecoveryRate,
+              durationYears: loanCreditDurationYears(c),
+            })
+          : computeReservationSpreadBps({
+              entityType: entity.entityType,
+              expectedLossBps: annualPd * (1 - loanRecoveryRate) * 10000,
+              // Same rating x duration schedule as the bond book at the secured discount: the
+              // collateral that raises the loan's recovery also lowers the capital its spread
+              // risk consumes — one lien, both consequences.
+              capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, loanCreditDurationYears(c)) * SENIOR_LIEN_DISCOUNT,
+              creditConditionsIndex: reg.bankingSector.creditConditionsIndex ?? 0,
+            });
         const structuralSizeUSD = floatingDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal);
         demandByInstrumentId.set(c.id, {
           reservationStat: reservationBps,
