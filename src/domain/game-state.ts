@@ -25,6 +25,9 @@ export interface GameState {
    */
   rngSeed: number;
   rngState: number;
+  /** WS8 — pending primary offerings: enqueued by issuers in stage 08, priced by the relevant
+   * clearing book the following week, then settled or withdrawn and removed. */
+  primaryOfferings: import('./primary-market').PrimaryOffering[];
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;

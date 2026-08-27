@@ -749,6 +749,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     year: 2026,
     rngSeed: seed,
     rngState: getRngState(),
+    primaryOfferings: [],
     regions,
     fxPairs,
     companies,

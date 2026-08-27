@@ -40,6 +40,12 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** WS8 — this week's working copy of the offering queue: adapters consume entries they
+   * price (recording outcomes below), stage 08 appends new enqueues, core writes the
+   * survivors back to state. */
+  primaryOfferingsWorking: import('../../../domain/primary-market').PrimaryOffering[];
+  /** WS8 — per-offering pricing outcomes for stage 08 to settle onto the issuers. */
+  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; proceedsUSD: number }>;
 
   // Main working state, threaded and reassigned stage to stage
   updatedRegions: Record<RegionId, Region>;
@@ -113,6 +119,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     earningsReportedThisTurn: [],
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
+    primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
+    primarySettlements: new Map(),
 
     updatedRegions: { ...state.regions },
     updatedFxPairs: [...state.fxPairs],

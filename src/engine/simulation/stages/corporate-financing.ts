@@ -64,6 +64,12 @@ export interface FinancingDecision {
   /** Positive: raise this much new debt. Negative: pay down this much. Zero: do nothing. */
   netDebtChangeUSD: number;
   reason: 'ISSUE_CHEAP_DEBT' | 'DELEVER_EXPENSIVE_DEBT' | 'NONE';
+  /**
+   * WS8 — the all-in annual cost at which this issuer is indifferent to raising: the best use
+   * of proceeds grossed back up for tax. Beyond it a launched offering is WITHDRAWN — the
+   * walk-away is the CFO's own arithmetic, never a market bound.
+   */
+  walkAwayCostAnnual: number;
 }
 
 /**
@@ -84,7 +90,7 @@ export function decideCorporateFinancing(params: {
 }): FinancingDecision {
   const { comp, costOfDebtAnnual, effectiveTaxRate, ebitdaAnnual, totalDebtUSD, cashUSD, rating } = params;
   if (MARKET_ACCESS_DENIED.includes(rating) || !(ebitdaAnnual > 0)) {
-    return { netDebtChangeUSD: 0, reason: 'NONE' };
+    return { netDebtChangeUSD: 0, reason: 'NONE', walkAwayCostAnnual: 0 };
   }
 
   // Debt interest is deductible, so what the company actually pays is the after-tax cost. What
@@ -106,6 +112,7 @@ export function decideCorporateFinancing(params: {
   const earningsYield = comp.stockPrice > 0 ? comp.eps / comp.stockPrice : 0;
   const bestUseOfProceeds = Math.max(returnOnInvestedCapital, earningsYield);
   const spreadOverCost = bestUseOfProceeds - afterTaxCostOfDebt;
+  const walkAwayCostAnnual = bestUseOfProceeds / Math.max(0.01, 1 - effectiveTaxRate);
 
   const currentLeverage = totalDebtUSD / ebitdaAnnual;
   const covenantCeiling = COVENANT_LEVERAGE_CEILING[rating] ?? 4.0;
@@ -119,6 +126,7 @@ export function decideCorporateFinancing(params: {
     return {
       netDebtChangeUSD: Math.min(headroomUSD * WEEKLY_ISSUANCE_TAKEUP_RATE, weeklyDeploymentCapUSD),
       reason: 'ISSUE_CHEAP_DEBT',
+      walkAwayCostAnnual,
     };
   }
 
@@ -127,8 +135,9 @@ export function decideCorporateFinancing(params: {
     return {
       netDebtChangeUSD: -Math.min(cashUSD * WEEKLY_DELEVERAGING_RATE, totalDebtUSD * WEEKLY_DELEVERAGING_RATE),
       reason: 'DELEVER_EXPENSIVE_DEBT',
+      walkAwayCostAnnual,
     };
   }
 
-  return { netDebtChangeUSD: 0, reason: 'NONE' };
+  return { netDebtChangeUSD: 0, reason: 'NONE', walkAwayCostAnnual };
 }

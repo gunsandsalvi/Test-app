@@ -59,6 +59,20 @@ export interface ClearingInstrument {
   statKind: 'YIELD_LIKE' | 'PRICE_LIKE';
   /** Duration in years — retained for adapters that convert the cleared level into a price. */
   durationYears: number;
+  /**
+   * WS8 — a PRIMARY OFFERING in this week's book: new paper sold alongside the outstanding
+   * stock, so the auction prices both together and the new issue concedes exactly as much as
+   * real demand requires. Added to the tradable float for the solve and the allocation.
+   */
+  primaryOfferingUSD?: number;
+  /**
+   * The issuer's walk-away: the level beyond which it pulls the deal rather than pay it
+   * (YIELD_LIKE: withdrawn if the solve clears ABOVE this; PRICE_LIKE: below). On withdrawal
+   * the instrument re-solves WITHOUT the offering float — a pulled deal never traded, and the
+   * market clears on the stock that actually exists. The issuer's own economics limit the
+   * SIZE brought to market, never the price of the outstanding stock.
+   */
+  primaryWithdrawStat?: number;
 }
 
 /**
@@ -142,6 +156,13 @@ export interface ClearingResult {
    * the market. The invariants harness tracks consecutive-week counts off this.
    */
   damperBoundInstrumentIds: string[];
+  /**
+   * WS8 — outcome of each instrument's primary offering, when it carried one: whether the
+   * issuer withdrew at its walk-away, and how much of the new paper the PARTICIPANTS actually
+   * took (the rest is the lead underwriter's residual — the adapter settles that against the
+   * lead bank's real cash).
+   */
+  primaryOutcomeById: Map<string, { withdrawn: boolean; marketTakeUSD: number; clearedStat: number }>;
 }
 
 /**
@@ -231,6 +252,7 @@ export function clearFinancialAsset(
   const newParticipantHoldings = new Map<string, Map<string, number>>();
   const netCashDeltaByParticipantId = new Map<string, number>();
   const damperBoundInstrumentIds: string[] = [];
+  const primaryOutcomeById = new Map<string, { withdrawn: boolean; marketTakeUSD: number; clearedStat: number }>();
   participants.forEach((p) => {
     newParticipantHoldings.set(p.id, new Map<string, number>());
     netCashDeltaByParticipantId.set(p.id, 0);
@@ -255,7 +277,22 @@ export function clearFinancialAsset(
     const bracketLow = isYieldLike ? -2000 : Math.max(1e-6, inst.currentStat * 0.01);
     const bracketHigh = isYieldLike ? 100000 : inst.currentStat * 100;
 
-    const solvedStat = solveClearingStat(inst, participants, bracketLow, bracketHigh);
+    const offeringUSD = Math.max(0, inst.primaryOfferingUSD ?? 0);
+    let liveFloatUSD = inst.tradableFloatUSD + offeringUSD;
+    let solvedStat = solveClearingStat({ ...inst, tradableFloatUSD: liveFloatUSD }, participants, bracketLow, bracketHigh);
+    let offeringWithdrawn = false;
+    if (offeringUSD > 0 && inst.primaryWithdrawStat !== undefined) {
+      const beyondWalkAway = isYieldLike
+        ? solvedStat > inst.primaryWithdrawStat
+        : solvedStat < inst.primaryWithdrawStat;
+      if (beyondWalkAway) {
+        // The deal is pulled before pricing: the market never absorbs the new paper, and the
+        // outstanding stock clears on its own.
+        offeringWithdrawn = true;
+        liveFloatUSD = inst.tradableFloatUSD;
+        solvedStat = solveClearingStat(inst, participants, bracketLow, bracketHigh);
+      }
+    }
 
     // Discrete-time damping, not a price bound: see maxWeeklyStatMovePct.
     const maxMove = Math.abs(inst.currentStat) * params.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0);
@@ -301,8 +338,8 @@ export function clearFinancialAsset(
       wantedTotalUSD += filledUSD;
       coreTotalUSD += coreUSD;
     });
-    const coreScale = coreTotalUSD > inst.tradableFloatUSD ? inst.tradableFloatUSD / coreTotalUSD : 1;
-    const discretionaryFloatUSD = Math.max(0, inst.tradableFloatUSD - coreTotalUSD * coreScale);
+    const coreScale = coreTotalUSD > liveFloatUSD ? liveFloatUSD / coreTotalUSD : 1;
+    const discretionaryFloatUSD = Math.max(0, liveFloatUSD - coreTotalUSD * coreScale);
     const discretionaryWantedUSD = wantedTotalUSD - coreTotalUSD;
     const discretionaryScale = discretionaryWantedUSD > discretionaryFloatUSD
       ? discretionaryFloatUSD / Math.max(1e-9, discretionaryWantedUSD)
@@ -323,7 +360,23 @@ export function clearFinancialAsset(
       allocatedUSD += filledUSD;
     });
 
-    newDealerInventoryById.set(inst.id, Number((inst.tradableFloatUSD - allocatedUSD).toFixed(0)));
+    newDealerInventoryById.set(inst.id, Number((liveFloatUSD - allocatedUSD).toFixed(0)));
+
+    if (offeringUSD > 0) {
+      // What the participants actually ADDED this week, attributed to the new paper first —
+      // capped at the offering (a fungible book cannot say which dollar bought which vintage,
+      // but the primary cannot place more than its own size).
+      let priorTotalUSD = 0;
+      participants.forEach((p) => { priorTotalUSD += p.currentHoldingsByInstrumentId.get(inst.id) ?? 0; });
+      const marketTakeUSD = offeringWithdrawn
+        ? 0
+        : Math.max(0, Math.min(offeringUSD, allocatedUSD - priorTotalUSD));
+      primaryOutcomeById.set(inst.id, {
+        withdrawn: offeringWithdrawn,
+        marketTakeUSD: Number(marketTakeUSD.toFixed(0)),
+        clearedStat,
+      });
+    }
   });
 
   return {
@@ -333,5 +386,6 @@ export function clearFinancialAsset(
     totalDealerRevenueUSD,
     netCashDeltaByParticipantId,
     damperBoundInstrumentIds,
+    primaryOutcomeById,
   };
 }

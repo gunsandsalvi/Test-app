@@ -213,27 +213,30 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 1 | Corporate debt/equity issuance with bank placement agents | WS8 | WS4, WS5 |
+| 1 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
 | 2 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
-| 3 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
-| 4 | Unify the two dealer systems | G3 | S9 |
-| 5 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 6 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 7 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 8 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 9 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 10 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 11 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 12 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 13 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 14 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 15 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 3 | Unify the two dealer systems | G3 | S9 |
+| 4 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 5 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 6 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 7 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 8 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 9 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 10 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 11 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 12 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 13 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 14 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
 priced a quantity target instead of a demand curve. Real growth reads positive in every region
 at week 26, inflation is a measured statistic, and corporate spreads now track credit
 (Spearman 0.78–0.93) instead of ownership.
+
+**Ordering resolved with the user (2026-08-27): G2 runs BEFORE HC Wave 2.** The table had
+carried Wave 2 ahead of a prereq it lists — now consistent: WS8 → G2 → Wave 2, so deal-flow
+loans originate against G2's real bank book from day one and HC9 lands whole.
 
 **Hidden Corporates Wave 1 is closed** (§7.33). It led the queue because the asset universe was
 6x short of the money pointed at it; the named private tier took want/have to 3.8x and the
@@ -329,28 +332,6 @@ the simulation a real and important mechanism — rising debt and rising rates c
 procurement and transfers, and in the limit a debt spiral — and it must stay consistent with the
 national-accounts identity established in §7.9. **Do it as part of BP5** (government as a real
 fiscal counterparty), which owns that decomposition, and pay coupons to holders in the same pass.
-
-### WS8 — Issuance with placement agents  *(the primary market)*
-
-Today `decideCorporateFinancing`'s issuance settles instantly at the current stat via
-`settleCorporateActionOnHolders`, and stage 08's maintenance/refi rolls at formula terms. Both
-become real primary offerings:
-
-1. A `PrimaryOffering {issuerId, instrumentType, sizeUSD}` queue feeds the relevant clearing
-   book (07b/07d/07e/CP) as **extra float in that week's solve** — the auction prices the new
-   paper and the outstanding stock together, which is how a real new issue concedes.
-2. A named bank is lead (pick by `bankMarketShare`, rotate); it earns a real underwriting fee
-   and its dealer desk (G3) takes any unsold residual at the cleared level — underwriting risk
-   is real inventory risk.
-3. Maintenance funding and refi rollovers route through the same queue: a company refinances at
-   the price the market clears that week, not at a formula. A failed offering (cleared level
-   beyond the issuer's walk-away, from `decideCorporateFinancing`'s own economics) is withdrawn —
-   real market access, closing when spreads gap.
-`settleCorporateActionOnHolders` survives only for corporate actions that are genuinely
-pro-rata (calls, full redemptions).
-
-**Verify:** heavy issuance weeks print visibly wider (the concession exists); a CCC issuer's
-offering fails in a wide market rather than printing anyway.
 
 ### WS9 — Real trade & FX
 
@@ -1598,7 +1579,42 @@ the complete simulation.
     - CP holdings wiring deliberately skipped: the CP market sits at ~0 outstanding (§7.34's
       honest finding) — when G2's cash drain revives it, the fund's sleeve machinery is the
       natural holder; wire it then.
-39. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+39. **WS8 landed: the primary market — supply meets demand in the same book.** A
+    `PrimaryOffering` has a real lifecycle: ANNOUNCED by the issuer's own decision in stage 08,
+    PRICED next week as extra float in the same auction that clears the outstanding stock (the
+    engine gained first-class primary support: the solve runs on stock + offering, and an
+    issuer whose walk-away is crossed has its deal PULLED with a re-solve on the stock alone),
+    then SETTLED — issuer receives the market take minus the fee through the S5 ledger, the
+    tranche is created at the CLEARED terms, the house bank (deterministic market-share-
+    weighted relationship lead) earns the fee cash-and-equity — or WITHDRAWN, where a
+    refinancing's fallback is the revolver at policy+350bp, the same real funding-squeeze
+    mechanism as a failed CP roll. All three issuance paths route through the queue: the
+    opportunistic CFO deal (quarterly-sized, launched in the issuer's own post-earnings
+    window), the maturity roll (the year-early pre-refi and at-maturity formula roll are both
+    deleted; maturity repayment finally has a cash leg — it never posted before), and the
+    maintenance term-out (weekly bridges term out at benchmark size; IG in bonds, sub-IG in
+    loans).
+    - **Best-efforts until G3, stated plainly:** the first build had the lead bank pay real
+      cash for the unsold residual — and the per-bank identity invariant broke by exactly the
+      residual in its first run, because the paper sits on the REGION dealer book, an asset on
+      no bank's sheet (§7.19's recorded gap). Firm-commitment underwriting needs the desk to BE
+      a named balance sheet, which is G3's item; until then the issuer raises what the market
+      takes and the residual sits unfunded like all dealer inventory.
+    - **Two calibration defects the diagnostics caught:** every issuer re-announced the week
+      its deal settled — a standing conveyor at 13× the intended flow (17,006 deals in 30
+      weeks, float +63%, spreads pinned) — fixed by the cooldown a quarterly-sized deal
+      implies; and the whole cohort then launched in one synchronized quarterly burst — fixed
+      by launching in each issuer's own post-earnings window, which is also the real behaviour.
+    - **Measured (26 weeks):** ~50 staggered deals/week, USA fixed float 88.4B → 91.3B (supply
+      growing into tights at a realistic pace), 12 revolver catches from genuinely withdrawn
+      refinancings, holder double-count prevented by counting settled primaries as
+      pre-existing in the corporate-action snapshot. Harness: 11 violations, the two accepted
+      families (#18 cohort, late-NIM prints of the recorded inflation escape), zero identity
+      breaks.
+    - Equity offerings ride the same machinery and are consumed by HC7's real IPOs; the
+      accretive-call replacement still prices instantly at the cleared stat (market level, no
+      concession) — noted as the one issuance path left outside the queue.
+40. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

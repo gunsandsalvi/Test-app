@@ -263,6 +263,9 @@ export interface Company {
    * working-capital need and redeems the moment operations need it back.
    */
   mmfSharesUSD?: number;
+  /** WS8: week of this issuer's last OPPORTUNISTIC primary announcement. A quarterly-sized deal
+   * covers a quarter's deployment, so the CFO does not return to the market for one. */
+  lastOpportunisticOfferingWeek?: number;
 
   // Capital Structure
   /**

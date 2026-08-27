@@ -25,6 +25,8 @@ import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrive
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
+import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
+import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
 import { random } from '../../rng';
@@ -69,6 +71,21 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
   // WS7: per-region redemption capacity for the treasury sweeps below — the funds' real cash.
   const mmfSweepBooks = openCorporateSweepBooks(ctx);
+
+  // WS8: this week's priced offerings, indexed by issuer, and the pending queue by issuer so a
+  // company never runs two books at once. Lead banks are chosen per region from the named banks.
+  const primarySettlementByIssuerId = new Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; proceedsUSD: number }>();
+  ctx.primarySettlements.forEach((s) => primarySettlementByIssuerId.set(s.offering.issuerId, s));
+  const pendingOfferingIssuerIds = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
+  const regionBanksForLeads: Record<string, { ticker: string; bankMarketShare?: number }[]> = {};
+  ctx.prevActiveFirms.forEach((c) => {
+    if (!c.isBankEntity) return;
+    (regionBanksForLeads[c.region] ??= []).push({ ticker: c.ticker, bankMarketShare: c.bankMarketShare });
+  });
+  const enqueueOffering = (o: PrimaryOffering) => {
+    ctx.primaryOfferingsWorking.push(o);
+    pendingOfferingIssuerIds.add(o.issuerId);
+  };
 
   ctx.updatedCompanies = state.companies.map((comp) => {
     if (!isActiveCompany(comp)) {
@@ -732,8 +749,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // sampled issuers lost ~88% of their fixed float to it inside five weeks.
     // CP excluded on both sides: bondholders own none of it, so a CP issue or roll must not
     // scale their books (settleCorporateActionOnHolders keys off these two floats).
-    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
-    const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
+    // WS8: a settled primary was ALREADY placed with the holders by the auction itself — the
+    // engine allocated the new float and settled the cash legs. Count its size as pre-existing
+    // here, or the pro-rata action settlement below hands holders the same paper twice.
+    const settlement = primarySettlementByIssuerId.get(comp.id);
+    const primaryFixedAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? settlement.marketTakeUSD : 0;
+    const primaryFloatingAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? settlement.marketTakeUSD : 0;
+    const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0) + primaryFixedAdjUSD;
+    const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0) + primaryFloatingAdjUSD;
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
@@ -774,110 +797,152 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     companyTranches = companyTranches.filter(t => t.principalUSD > 0.01);
     if (calledRefinanceTranches.length > 0) companyTranches = [...companyTranches, ...calledRefinanceTranches];
 
-    const tranchesToRefinance = companyTranches.filter(tranche => {
-      if (tranche.isCommercialPaper) return false; // 07f owns the CP roll
-      const weeksToMaturity = tranche.maturityWeek - state.currentWeek;
-      return weeksToMaturity <= 52 && weeksToMaturity > 45 && !tranche._refinanceInitiated;
+    // WS8: the year-early pre-refi and the at-maturity formula roll are both gone — a roll now
+    // happens in the MARKET. A tranche one week from maturity is announced as a REFINANCE
+    // offering (rate type per the issuer's CURRENT rating mix); next week 07b/07d price it
+    // alongside the outstanding stock, and the settlement below either delivers the new
+    // tranche at the CLEARED terms or — withdrawn/unpriced — the revolver catches the issuer
+    // at its penalty rate, the same real funding-squeeze mechanism as a failed CP roll.
+    const fiveYearSovRate = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
+    companyTranches.forEach((tranche) => {
+      if (tranche.isCommercialPaper) return;
+      if (tranche.maturityWeek !== nextWeek + 1) return;
+      if (pendingOfferingIssuerIds.has(comp.id)) return; // one live book per issuer
+      const refinanceAsFixed = (FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5) >= 0.5;
+      const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
+      enqueueOffering({
+        id: `PO-${comp.id}-${nextWeek}-REFI`,
+        issuerId: comp.id,
+        issuerTicker: comp.ticker,
+        region: comp.region,
+        instrumentType: refinanceAsFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
+        purpose: 'REFINANCE',
+        sizeUSD: tranche.principalUSD,
+        // Need-driven: the issuer walks only where the market is worse than its revolver.
+        walkAwayStat: refinanceAsFixed
+          ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
+          : REVOLVER_MARGIN_BPS,
+        rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
+        leadBankTicker: chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+        announcedWeek: nextWeek,
+      });
     });
 
-    tranchesToRefinance.forEach(tranche => {
-      const originalTranche = companyTranches.find(t => t.id === tranche.id);
-      if (originalTranche) {
-        originalTranche._refinanceInitiated = true;
-      }
-      const fiveYearSovRateForRefi = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
-      const currentBaseSpreadBpsForRefi = comp.oasSpreadBps;
-      const currentFairCouponRate = fiveYearSovRateForRefi + currentBaseSpreadBpsForRefi / 10000;
-      const currentFloatingMarginBps = Math.round(currentBaseSpreadBpsForRefi * 0.85);
-
-      const refinanceTranche: DebtTranche = tranche.rateType === 'FIXED'
-        ? {
-            id: `${comp.id}-REFI-${state.currentWeek}`,
-            principalUSD: tranche.principalUSD,
-            rateType: 'FIXED',
-            couponRate: currentFairCouponRate,
-            originationWeek: state.currentWeek,
-            maturityWeek: state.currentWeek + STANDARD_CORP_TENOR_YEARS * 52,
-            seniority: 'SENIOR',
-          }
-        : {
-            id: `${comp.id}-REFI-${state.currentWeek}`,
-            principalUSD: tranche.principalUSD,
-            rateType: 'FLOATING',
-            floatingMarginBps: currentFloatingMarginBps,
-            originationWeek: state.currentWeek,
-            maturityWeek: state.currentWeek + STANDARD_CORP_TENOR_YEARS * 52,
-            seniority: 'SENIOR',
-          };
-      companyTranches.push(refinanceTranche);
-    });
-
-    // CP never reaches this path: 07f rolls (or fails) it BEFORE this stage runs, so a maturing
-    // CP tranche here would be a bug in 07f, not a bond to refinance. Guarded anyway — the bond
-    // refinance below would turn a 13-week bridge into five-year term debt.
     const maturingTranche = companyTranches.find(t => t.maturityWeek === nextWeek && !t.isCommercialPaper);
     let updatedTranches = companyTranches.filter(t => t.maturityWeek !== nextWeek || t.isCommercialPaper);
     let debtIssuanceThisWeek = 0;
     let debtRepaymentThisWeek = 0;
     let buybacksThisWeek = 0;
 
-    if (maturingTranche) {
-      debtRepaymentThisWeek = maturingTranche.principalUSD;
-
-      if (maturingTranche._refinanceInitiated) {
-        // Already pre-refinanced a year ago. Just repay the maturing principal without issuing a new tranche now.
-        debtIssuanceThisWeek = 0;
-      } else {
-        // Fallback: standard refinancing at maturity
-        const currentFixedShare = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5; // re-evaluated at CURRENT rating
-        const refinanceAsFixed = random() < currentFixedShare;
-        const currentBaseSpreadBps = comp.oasSpreadBps;
-        const fiveYearSovRateAtMaturity = calculateNelsonSiegelZeroRate(5, updatedRegions[comp.region].yieldCurveParams);
-
-        debtIssuanceThisWeek = maturingTranche.principalUSD;
-
-        const newTranche: DebtTranche = refinanceAsFixed
-          ? {
-              id: `${comp.ticker}-T${nextWeek}`,
-              principalUSD: maturingTranche.principalUSD,
-              rateType: 'FIXED',
-              couponRate: fiveYearSovRateAtMaturity + currentBaseSpreadBps / 10000,
-              originationWeek: nextWeek,
-              maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
-              seniority: 'SENIOR',
-            }
-          : {
-              id: `${comp.ticker}-T${nextWeek}`,
-              principalUSD: maturingTranche.principalUSD,
-              rateType: 'FLOATING',
-              floatingMarginBps: Math.round(currentBaseSpreadBps * 0.85),
-              originationWeek: nextWeek,
-              maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
-              seniority: 'SENIOR',
-            };
-        updatedTranches = [...updatedTranches, newTranche];
-
-        const oldRateDescription = maturingTranche.rateType === 'FIXED' ? `${((maturingTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${maturingTranche.floatingMarginBps}bps floating`;
-        const newRateDescription = newTranche.rateType === 'FIXED' ? `${((newTranche.couponRate ?? 0) * 100).toFixed(1)}% fixed` : `policy+${newTranche.floatingMarginBps}bps floating`;
-        const refinancingNewsItem: NewsItem = {
-          id: `refinance-${comp.ticker}-${nextWeek}`,
-          week: nextWeek,
-          title: `${comp.ticker} Refinances Maturing Tranche`,
-          description: `${comp.name} refinanced a maturing ${formatCurrency(maturingTranche.principalUSD, { compact: true })} tranche (was ${oldRateDescription}) into a new ${newRateDescription} tranche.`,
-          category: 'CREDIT',
-          impactBadge: newTranche.rateType === 'FLOATING' && maturingTranche.rateType === 'FIXED' ? '[REFINANCING SQUEEZE]' : '[REFINANCING]',
-          impactRegion: comp.region,
-          impactSector: comp.sector,
-          affectedTicker: comp.ticker,
-          urgent: true,
-        };
-        refinanceNews.push(refinancingNewsItem);
+    // WS8: consume this week's priced offering, if any (settlement snapshot taken above, where
+    // the holder-settlement baseline is built).
+    if (settlement && !settlement.withdrawn) {
+      const o = settlement.offering;
+      // Best-efforts until G3: the tranche created is what the market actually took — a
+      // partially-placed deal raises less, which is real.
+      const placedUSD = Math.max(0, Math.min(o.sizeUSD, (settlement as any).marketTakeUSD ?? o.sizeUSD));
+      const newTranche: DebtTranche = o.rateType === 'FIXED'
+        ? {
+            id: `${comp.id}-${o.purpose}-${nextWeek}`,
+            principalUSD: placedUSD,
+            rateType: 'FIXED',
+            // The CLEARED terms — the whole point of the primary market.
+            couponRate: fiveYearSovRate + settlement.clearedStat / 10000,
+            originationWeek: nextWeek,
+            maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+            seniority: 'SENIOR',
+          }
+        : {
+            id: `${comp.id}-${o.purpose}-${nextWeek}`,
+            principalUSD: placedUSD,
+            rateType: 'FLOATING',
+            floatingMarginBps: Math.round(settlement.clearedStat),
+            originationWeek: nextWeek,
+            maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
+            seniority: 'SENIOR',
+          };
+      // A term-out retires the bridges it refinances.
+      if (o.purpose === 'MAINTENANCE_TERM_OUT' && o.refinancesTrancheIds?.length) {
+        const retire = new Set(o.refinancesTrancheIds);
+        const retiredUSD = updatedTranches.filter(t => retire.has(t.id)).reduce((a, t) => a + t.principalUSD, 0);
+        updatedTranches = updatedTranches.filter(t => !retire.has(t.id));
+        debtRepaymentThisWeek += retiredUSD;
+        post('term-out: maintenance bridges retired', -retiredUSD);
       }
+      if (placedUSD > 1000) updatedTranches = [...updatedTranches, newTranche];
+      debtIssuanceThisWeek += placedUSD;
+      post(`primary ${o.purpose.toLowerCase()} proceeds (net of underwriting fee)`, settlement.proceedsUSD);
+    } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingTranche) {
+      // The market said no and the paper still matures: the revolver catches it — real market
+      // access closing when spreads gap, with a real penalty cost.
+      const revolverTranche: DebtTranche = {
+        id: `${comp.id}-REVOLVER-${nextWeek}`,
+        principalUSD: maturingTranche.principalUSD,
+        rateType: 'FLOATING',
+        floatingMarginBps: REVOLVER_MARGIN_BPS,
+        originationWeek: nextWeek,
+        maturityWeek: nextWeek + 52,
+        seniority: 'SENIOR',
+      };
+      updatedTranches = [...updatedTranches, revolverTranche];
+      debtIssuanceThisWeek += revolverTranche.principalUSD;
+      post('revolver draw: withdrawn refinancing', revolverTranche.principalUSD);
+      refinanceNews.push({
+        id: `refi-fail-${comp.ticker}-${nextWeek}`,
+        week: nextWeek,
+        title: `${comp.ticker} Pulls Refinancing, Draws Revolver`,
+        description: `${comp.name} withdrew a ${formatCurrency(settlement.offering.sizeUSD, { compact: true })} refinancing at its walk-away and drew its revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
+        category: 'CREDIT',
+        impactBadge: '[FUNDING SQUEEZE]',
+        impactRegion: comp.region,
+        impactSector: comp.sector,
+        affectedTicker: comp.ticker,
+        urgent: true,
+      } as NewsItem);
+    }
+
+    if (maturingTranche) {
+      debtRepaymentThisWeek += maturingTranche.principalUSD;
+      // The principal leaves through the ledger; the refinancing proceeds (if the offering
+      // settled) arrived above. A maturity with neither settlement nor revolver above means the
+      // company simply repays from cash — deleveraging by default, which is real.
+      post('maturing tranche principal repaid', -maturingTranche.principalUSD);
     }
 
     if (maintenanceFundingTranches.length > 0) {
       updatedTranches = [...updatedTranches, ...maintenanceFundingTranches];
       debtIssuanceThisWeek += maintenanceFundingTranches.reduce((s, t) => s + t.principalUSD, 0);
+    }
+
+    // WS8: the weekly maintenance drip stays a revolver-style bridge (it already prices wide),
+    // and once the accumulated bridges reach benchmark size the treasurer TERMS THEM OUT
+    // through a real offering — bridge-then-term-out, the actual corporate funding pattern.
+    // IG issuers term out in the bond market, sub-IG in the loan market.
+    if (!pendingOfferingIssuerIds.has(comp.id) && !primarySettlementByIssuerId.has(comp.id)) {
+      const bridges = updatedTranches.filter(t => t.id.includes('-MAINT-'));
+      const bridgeUSD = bridges.reduce((a, t) => a + t.principalUSD, 0);
+      const totalDebtForGate = updatedTranches.reduce((a, t) => a + t.principalUSD, 0);
+      if (bridgeUSD > Math.max(1e6, totalDebtForGate * 0.02)) {
+        const asFixed = (FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5) >= 0.5;
+        const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
+        enqueueOffering({
+          id: `PO-${comp.id}-${nextWeek}-MAINT`,
+          issuerId: comp.id,
+          issuerTicker: comp.ticker,
+          region: comp.region,
+          instrumentType: asFixed ? 'CORP_BOND' : 'LEVERAGED_LOAN',
+          purpose: 'MAINTENANCE_TERM_OUT',
+          sizeUSD: bridgeUSD,
+          // Terming out only makes sense below the bridge's own cost.
+          walkAwayStat: asFixed
+            ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
+            : REVOLVER_MARGIN_BPS,
+          rateType: asFixed ? 'FIXED' : 'FLOATING',
+          refinancesTrancheIds: bridges.map(t => t.id),
+          leadBankTicker: chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+          announcedWeek: nextWeek,
+        });
+      }
     }
 
     // The supply side of what bounds a credit spread: the issuer's own call on whether debt is
@@ -928,19 +993,40 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       rating: newRating,
     });
 
-    if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000) {
-      // Real new paper, priced at this week's real cost, and real cash raised against it.
-      updatedTranches = [...updatedTranches, {
-        id: `${comp.id}-OPP-${nextWeek}`,
-        principalUSD: financing.netDebtChangeUSD,
+    // A quarterly-sized deal IS a quarter's issuance: no new opportunistic book until it has
+    // been digested (without this, every issuer re-announced the week its deal settled and the
+    // market ran a standing conveyor at 13x the intended flow — measured 17,006 deals in 30
+    // weeks with the median OAS pinned at the wides).
+    const opportunisticCooldownOver = nextWeek - (comp.lastOpportunisticOfferingWeek ?? -999) >= 13
+      // Launch in the issuer's own post-earnings window — real deals price off fresh numbers,
+      // and the stagger stops the whole cohort announcing in one synchronized quarterly burst.
+      && (nextWeek % 13) === ((comp.earningsWeekModulo + 1) % 13);
+    let newLastOpportunisticOfferingWeek = comp.lastOpportunisticOfferingWeek;
+    if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000 && !pendingOfferingIssuerIds.has(comp.id) && opportunisticCooldownOver) {
+      // WS8: the CFO ANNOUNCES a deal instead of conjuring a tranche at the current stat. Real
+      // issuance is chunky — a quarter's worth of the weekly flow in one book — and it is
+      // priced NEXT week alongside the outstanding stock, conceding what real demand requires.
+      // The walk-away is the CFO's own indifference cost; a deal launched into a market that
+      // then gaps past it is pulled, which is what a real busted bookbuild is.
+      const dealSizeUSD = financing.netDebtChangeUSD * 13;
+      const walkAwayOasBps = Math.max(
+        comp.oasSpreadBps,
+        Math.round((financing.walkAwayCostAnnual - calculateNelsonSiegelZeroRate(STANDARD_CORP_TENOR_YEARS, reg.yieldCurveParams)) * 10000)
+      );
+      enqueueOffering({
+        id: `PO-${comp.id}-${nextWeek}-OPP`,
+        issuerId: comp.id,
+        issuerTicker: comp.ticker,
+        region: comp.region,
+        instrumentType: 'CORP_BOND',
+        purpose: 'OPPORTUNISTIC',
+        sizeUSD: dealSizeUSD,
+        walkAwayStat: walkAwayOasBps,
         rateType: 'FIXED',
-        couponRate: costOfNewDebtAnnual,
-        originationWeek: nextWeek,
-        maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
-        seniority: 'SENIOR',
-      }];
-      debtIssuanceThisWeek += financing.netDebtChangeUSD;
-      post('opportunistic issuance proceeds', financing.netDebtChangeUSD);
+        leadBankTicker: chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+        announcedWeek: nextWeek,
+      });
+      newLastOpportunisticOfferingWeek = nextWeek;
     } else if (financing.reason === 'DELEVER_EXPENSIVE_DEBT' && financing.netDebtChangeUSD < -1000) {
       // Pay down real principal, newest and dearest paper first, out of real cash.
       let remainingToRepayUSD = -financing.netDebtChangeUSD;
@@ -1288,6 +1374,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       insuranceClaimsPaidUSD: comp.insuranceClaimsPaidUSD,
       cash: Number(newCash.toFixed(1)),
       mmfSharesUSD: newMmfSharesUSD,
+      lastOpportunisticOfferingWeek: newLastOpportunisticOfferingWeek,
       lastCashLedger: cashLedger,
       leverage: newLeverage,
       interestCoverage: newCoverage,

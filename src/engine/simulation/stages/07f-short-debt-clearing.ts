@@ -56,7 +56,7 @@ const CP_TENOR_WEEKS = 13;
 /** Liquidity premium over bills + expected loss — CP is not a bill even for a AAA name. */
 const CP_LIQUIDITY_PREMIUM_BPS = 15;
 /** The revolver a failed roll draws: policy + this margin. Committed lines price ~300bp drawn. */
-const REVOLVER_MARGIN_BPS = 350;
+export const REVOLVER_MARGIN_BPS = 350;
 /** CP outstanding is capped at this share of revenue — a treasurer bridges with CP, never term-funds with it. */
 const CP_MAX_SHARE_OF_REVENUE = 0.10;
 /** Gaps smaller than this share of revenue are cash-managed, not papered. */

@@ -98,5 +98,5 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
-  return { state: { ...nextState, rngState: getRngState(), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds }, timings };
+  return { state: { ...nextState, rngState: getRngState(), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, primaryOfferings: ctx.primaryOfferingsWorking }, timings };
 }

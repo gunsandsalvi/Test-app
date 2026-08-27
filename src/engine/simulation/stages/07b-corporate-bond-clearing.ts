@@ -55,6 +55,7 @@ import {
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { settlePricedOfferings } from './primary-settlement';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
@@ -125,6 +126,14 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // The float genuinely in play is what the bidders below can hold between them. The rest of
     // each issue sits with holders who do not bid in this auction, and was never for sale.
     const tradableShare = reg.corpBondOwnership.institutionalShare;
+    // WS8: this week's primary offerings in THIS book — new fixed-rate paper priced alongside
+    // the outstanding stock. The issuer's walk-away rides on the instrument; the engine
+    // re-solves without the offering when it is pulled.
+    const offeringsByIssuerId = new Map<string, import('../../../types').PrimaryOffering>();
+    ctx.primaryOfferingsWorking.forEach((o) => {
+      if (o.region === regionId && o.instrumentType === 'CORP_BOND') offeringsByIssuerId.set(o.issuerId, o);
+    });
+
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: fixedDebtUSD(c),
@@ -132,6 +141,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
       durationYears: creditDurationYears(c),
+      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeUSD,
+      primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
       // No floor and no ceiling. The floor is an outcome: every bidder's reservation already
       // covers its own expected loss and capital cost, so demand tighter than that is genuinely
       // zero. The ceiling is an outcome too: the distressed regime below always has a bid at
@@ -248,6 +259,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    // WS8: settle this week's priced offerings — lead bank pays the unsold residual and takes
+    // the fee; stage 08 posts the issuer's proceeds and creates the tranche at cleared terms.
+    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD);
 
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
     // week's already-real value rather than recomputing one. Also extend each company's rolling

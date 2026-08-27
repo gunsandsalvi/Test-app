@@ -39,6 +39,7 @@ import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { settlePricedOfferings } from './primary-settlement';
 
 const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
@@ -102,6 +103,13 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + floatingDebtUSD(c), 0) || 1;
 
     const tradableShare = reg.corpBondOwnership.institutionalShare;
+    // WS8: primary loan offerings priced alongside the outstanding stock (HC6's LBO/recap
+    // financings arrive through this same gate).
+    const offeringsByIssuerId = new Map<string, import('../../../types').PrimaryOffering>();
+    ctx.primaryOfferingsWorking.forEach((o) => {
+      if (o.region === regionId && o.instrumentType === 'LEVERAGED_LOAN') offeringsByIssuerId.set(o.issuerId, o);
+    });
+
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: floatingDebtUSD(c),
@@ -109,6 +117,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       currentStat: c.leveragedLoan!.discountMarginBps,
       statKind: 'YIELD_LIKE',
       durationYears: loanCreditDurationYears(c),
+      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeUSD,
+      primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
       // No ceiling — same reasoning as the bond book (07b): the distressed regime always bids at
       // some price, and where it stands is where a widening arrests.
     }));
@@ -206,6 +216,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD);
 
     // Apply: real cleared discount margin + derived price-to-par, mutated in place so stage 8
     // reads it as an already-real value. Also extend the rolling history for momentum.
