@@ -311,7 +311,7 @@ metrics to watch rather than work.
 | 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
 | 8 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
 | 9 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f/XB3a done (§7.72–76), XB3b/XB4 remain. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
+| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f done (§7.72–75); XB3a rescoped to landed-cost sourcing and underway; XB3b/XB4/XB6 remain. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
 | 11 | depth | **CAL — Payment calendars** | none |
 | 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
 | 13 | depth | **HC3b — The product-market handover** | BP1 |
@@ -945,7 +945,7 @@ depreciate slowly against sticky flows; no drift term anywhere; the global funds
 
 ### XB — Cross-border portfolios and trade  *(Tier 2, item 10; IN PROGRESS)*
 
-**Status: XB1, XB2, XB2b–XB2f, XB3a DONE (§7.72–76). XB3b, XB4 REMAIN.**
+**Status: XB1, XB2, XB2b–XB2f DONE (§7.72–75). XB3a RESCOPED and IN PROGRESS (§7.76's correction), XB3b, XB4, XB6 REMAIN.**
 **The 60-week harness is deliberately RED while this runs — see §6 and rule 1 of `CLAUDE.md`.**
 
 **XB1 — DONE (§7.72).** `foreignShare` deleted: it assigned each region a share of every other
@@ -972,20 +972,106 @@ Deletes `evolveFxPair`'s whole drift and five invented constants.
 
 ---
 
-**XB3a — DONE (§7.76).** Every sub-unit clears in five books: one WORLD book all four regions
-bid and offer into, and one LOCAL book per region, split by `CATEGORY_TRADABILITY` — the
-continuous parameter the model already carried, so no threshold constant decides which categories
-are tradable. Trade became ACCOUNTING: an export is a fill whose buyer and seller sat in different
-regions. `exportShareCapture`, `getFxCompetitivenessAdjustment`, `computeBilateralTradeFlows` and
-stage 08's separate export crediting are all deleted — a firm no longer has two independent ways
-to make a sale. Invoice currency is emergent and contested per TRADE (never assigned, never
-USD-by-default), and transaction FX exposure falls out of a one-week receivable with no
-re-denomination. Measured: law of one price emerges where tradability is high (four local prices
-2.5% apart against 0.5% for the posted ones at tau 0.80; 45% apart at tau 0.02); world exports =
-world imports exactly; 23,104 input lots name a foreign seller. **The named finding it leaves is
-in §6: invoicing locks to 100% USD by week 5, because the coalescing weight exceeds the maximum
-the market-power term can reach.** Cost, measured before and after as the user asked: stage 05
-265.1 -> 361.3 ms/week, whole step 1,577 -> 1,755 ms.
+**XB3a — RESCOPED 2026-08-28: sourcing is a landed-cost decision.** *(First build partly
+reverted — see §7.76's correction. What stands and what does not is listed at the end.)*
+
+**What was wrong.** The first build split each sub-unit's supply and demand into a world book and
+a local book by `CATEGORY_TRADABILITY`. That table is a real-world EQUILIBRIUM, not a primitive —
+it is the observed trade share of each category — so using it as the splitting rule imports the
+answer and the model can never say anything about what gets traded (rule 4's sharper half).
+Software is not traded *because* it is tradable; it is traded because moving a dollar of it costs
+nothing and takes no time, while a dollar of concrete costs a fortune and takes weeks. **Trade
+share is an OUTCOME and the primitives under it are physical.**
+
+**The mechanism, from how a firm actually sources inventory.** It compares LANDED COST per unit
+delivered on time: the ex-works price at the seller, plus freight (which depends on the good's
+physical bulk per dollar of value and the distance, at a rate that itself moves), plus duty, plus
+the cost of paying in another currency, plus the carrying cost of the extra inventory the LEAD
+TIME forces it to hold, plus the expected cost of RISK — late or short delivery against its own
+production schedule. And it SPLITS its buying rather than picking one source: the cheap slow
+source covers the base, the dear fast one covers surprises. Dual sourcing is the normal case, and
+it is what makes the local/foreign mix an outcome rather than a parameter.
+
+**Decisions taken with the user (2026-08-28), all four toward the fuller mechanism:**
+1. **Per-producing-region books.** The world book is deleted. Each sub-unit clears ONE book per
+   PRODUCING region, quoting ex-works; every region's buyers bid into all four at their own
+   landed cost. One price per book, so the engine's one-stat-per-instrument rule holds, and the
+   wedge sits on each buyer's own reservation — which is exactly how it works, a mill quotes
+   ex-works and the buyer pays freight. `CATEGORY_TRADABILITY` is deleted. **This reverses the
+   "option (b) of three" recorded above; the reversal is the point.** A consequence worth having:
+   an exporting region's domestic price rises when foreign demand is strong, which is the real
+   terms-of-trade channel for free.
+2. **A minimal shipping-properties table now, which BP1 absorbs.** The properties needed (physical
+   bulk per unit of value, shelf life) are exactly what BP1's registry is specified to own. One
+   table, marked as BP1's to fold in — never a second one.
+3. **Carriers are real firms.** Shipping companies with real fleets, real capacity, real balance
+   sheets and real costs, offering into a freight auction. Not a cost function: every dollar of
+   freight traces to a named counterparty, and a freight rate is one of the most real prices there
+   is.
+4. **Real delay and real safety stock, for domestic and foreign alike.** Goods ordered in week N
+   arrive in week N+k. Buyers hold stock against lead time and demand variance; a stockout costs
+   real lost production. Applying the delay only to imports would itself be an imported
+   assumption.
+
+**XB3a-1 — Physical goods and geography.** Per-sub-unit physical properties (bulk per unit of
+value; shelf life) and real inter-region distances. Distance and mass are physical primitives,
+which rule 4 allows; what is forbidden is the observed trade share they produce.
+
+**XB3a-2 — Carriers and the freight market.** Shipping firms with real fleets, deployed per LANE
+(a directed region pair, plus domestic), because a vessel on one lane is not available on another
+and that is what makes rates differ by route. Capacity offered into a per-lane auction against
+real cargo demand; the cleared rate is the freight price. Real costs: fuel from the energy
+commodity that already exists, crew from the labour market, vessels as real PP&E bought as real
+capex from `commercial_fleet`. Redeployment responds to rate differentials. **Sequencing inside
+the week is a spot freight market's own: the rate is QUOTED first off last week's bookings and
+this week's capacity, buyers source against the quote, and this week's bookings set next week's
+rate.** No simultaneity and no iteration — you book at today's quote, which is what a shipper
+actually does.
+
+**XB3a-3 — Landed cost and the sourcing decision.** Buyers bid into every producing region's book
+at their own landed cost. `CATEGORY_TRADABILITY` and the world book are deleted here. Trade stays
+what the first build made it — who bought from whom, from the auction's own lots. Freight demand
+is the real shipments this produces, closing the loop with XB3a-2.
+
+**XB3a-4 — Transit, safety stock and stockouts.** Goods in transit are a real asset with a real
+owner. Buyers size safety stock against real lead time and their own demand variance; a shortfall
+costs real production through the existing `inputSupplyConstraintFactor` channel. Dual sourcing
+emerges rather than being coded.
+
+**XB3a-5 — Payment terms and FX exposure.** Real payment terms (user's choice), so the exposure
+runs its actual length rather than a uniform week. **Invoice currency is NOT built here** — it
+waits on XB6, because with USD as the numéraire the cheapest vehicle currency is decided by the
+model's plumbing rather than by anything economic.
+
+**Verify:** trade share by category is an OUTCOME that correlates with bulk-per-dollar rather than
+with any table; a freight shock visibly redraws sourcing; a weaker currency wins a region share
+through real landed cost with no competitiveness formula anywhere; firms hold more safety stock
+against longer lead times and dual-source rather than single-source; a carrier can fail; every
+dollar of freight lands on a named carrier.
+
+**Named gaps, not silently dropped:** tariffs and duties; the distributor between a household and
+a foreign seller (households do not import directly); and invoice currency, above.
+
+**What stands from the first build** (§7.76): the per-firm settle-ONCE restructure across books,
+the global counterparty lookup, cross-border contracts filed in the customer's region, trade as
+accounting from the auction's own lots, seeding the opening position by running the engine, and
+the deletion of the dead `companyUpdates.cashChange`. **What is deleted:** the world book,
+`CATEGORY_TRADABILITY`, and the whole invoice-currency slice.
+
+---
+
+### XB6 — Non-USD pairs clear directly  *(prerequisite for invoice currency)*
+
+XB2f made each currency's value clear against the USD, with every cross rate triangulated from
+two of those — which guarantees triangular consistency and was the right call for that slice. Its
+cost only became visible in XB3a: **hedging EUR/JPY is then structurally two USD legs, so USD is
+the cheapest vehicle currency BY CONSTRUCTION.** Any cost-based rule for choosing an invoice
+currency would rediscover the model's own numéraire and report it as a result — rule 4 again, in
+the plumbing rather than in a table. The user's decision is to fix the market: non-USD pairs clear
+directly, so depth differs by PAIR at the source and a vehicle currency can win or lose on its
+own merits. Triangular consistency then has to be an outcome of arbitrage between the direct pair
+and the two USD legs rather than a property of the representation — which is what it is in
+reality, and the arbitrageur is a real participant with real capital.
 
 **XB3b — Pass-through (AFTER XB3a).** The model has NO FX pass-through: every price, wage and
 revenue is USD (`unitPriceUSD`, `getBaseAnnualWageUSD`, `annualRevenue`), and there are zero FX
@@ -1127,7 +1213,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | Defect | State and next action |
 |---|---|
 | **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the goods market, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). **XB3a widened this further**: the goods auction was repartitioned and the RNG stream relabelled, so every count taken before it describes a different world. Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3b, then run the harness and `scripts/xb-battery.ts` ONCE and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
-| **Invoicing locks to 100% USD by week 5 — a DECISION on three constants, not a defect** | **Found in XB3a (§7.76); do not tune it away unilaterally.** The mechanism is genuinely contested and week 1 prints a real distribution from a dead-level seed: USA 69.9% / EUR 18.2% / JPN 11.8% / UK 0.1% of world trade by value. It then goes to 100% USD by week 5 and never moves. That is arithmetic, not economics: `INVOICE_FORCE_WEIGHTS` puts coalescing at 0.45 and caps market power at 0.35, so **any 100% share is absorbing** — no concentration, however extreme, can dislodge an incumbent, and no seed could ever produce a different vehicle currency. The plan's own text says a vehicle currency "may emerge, and if it is EUR or JPY on a given seed that is a result", which the corner makes unreachable. Turning the weights until the output looks less extreme is fitting a constant to a desired outcome (§7.66's line: a constant is allowed to fix a number only when it is a fact about the world). Options: keep it and call 100% the model's answer; raise market power above coalescing so extreme concentration can flip a trade; or make coalescing read the MARKET's own invoicing mix rather than the world's. **XB4's battery should measure it across seeds first.** |
+| ~~**Invoicing locks to 100% USD by week 5**~~ | **The mechanism was DELETED, not fixed (§7.76 correction).** The lock-in was arithmetic between three weights I invented — a weighted score with an argmax is not how anyone chooses an invoice currency, and reporting its corner solution as a finding about the world was wrong. Invoice currency is now owned by **XB3a-5**, gated on **XB6**: while USD is the FX numéraire the cheapest vehicle currency is decided by the model's plumbing, so the question is not askable yet. |
 | **G1b — the inflation escape** | The measured band is SEED-SENSITIVE: one world holds −10..0%, others escape upward by week 40 (the default-stream world reaches 50%+ by week 52 with the 10Y following to 17%). **The measurement is not at fault** — the goods market's prices really do move that much. G2 measurably damped it and did not cure it (0.66% of demand against a goods cycle orders of magnitude larger), exactly as predicted. Remaining owners: **MS** (the household rate response, the missing stabiliser) and **PUB** (the fiscal loop). Two diagnostics still unrun and worth doing first: trace one sub-unit's price, supply and demand over 120 weeks for a long-wavelength cobweb; and consider whether stage 05's real bid and offer prices should carry an expectations term — a genuine behavioural channel, since anchored expectations damp actual price setting. **Do not** smooth the index, widen the basket, or clamp inflation: the index is the measurement, and if it is volatile the economy is. |
 | ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
 | ~~**#67 — USA bank capital → 0**~~ | **CLOSED (§7.55) — re-measured after HH3 and the collapse is gone.** Capital ratio runs 11.6% → 14.7% through week 80 (was: → 0 by week ~70), NIM in band throughout. The bleed was the fictional consumer book: a formula target earning a formula yield and losing a formula loss rate, none of which the bank's capital could price or gate. With the book real — real margins quoted off measured tier losses, real amortization, origination capital-gated at the 8% floor — the banking system carries its full household book and earns its keep. |
@@ -2261,3 +2347,25 @@ that proved it, the lesson.
       clearing walk is duplicated at a different partition. **The plan's recorded 604 ms/week
       baseline was stale by 2.6x**, and stage 05 is no longer the expensive stage: the credit
       books are 50.6% of the step against its 20.5%. §1.10 updated.
+    - **CORRECTION, same day: half of this was reverted, and the half that was wrong was the
+      premise.** `CATEGORY_TRADABILITY` is a real-world EQUILIBRIUM — the observed trade share of
+      each category — not a primitive. Splitting supply and demand by it imports the answer, so
+      the model could never say what gets traded or why; the world-book architecture built on it
+      went with it. **A parameter can be perfectly real, perfectly measured, and still be the
+      answer rather than an input** — the test is not "is this number true", it is "is this number
+      a RESULT of the history I am trying to simulate". The physical primitives underneath — how
+      much it costs to move a dollar of a good, and how long it takes — are what the model was
+      missing, and it had NONE of them: no distance between regions, no freight, no lead time, no
+      physical property of any good.
+    - **And the invoice-currency half was worse.** Three weights (0.45/0.35/0.20), a
+      `depth/(1+vol)` form invented on the spot, a 26-week window, and an argmax over the
+      resulting score. Nobody chooses an invoice currency by scoring four options on three
+      weighted axes; it is a formula wearing a mechanism's clothes, which §7.52 already names as
+      this project's most likely failure once deriving things becomes the habit. **The corner
+      solution I then "recorded rather than tuned" was not a finding about the world — it was
+      arithmetic between two of my own invented numbers, and reporting it as a result was the
+      real error.** Deleted rather than patched.
+    - **What stands:** the per-firm settle-ONCE restructure across books, the global counterparty
+      lookup, cross-border contracts filed in the customer's region, trade as accounting from the
+      auction's own lots, seeding the opening position by running the engine, and the deletion of
+      the dead `companyUpdates.cashChange`. The rescoped project is §5-XB3a.
