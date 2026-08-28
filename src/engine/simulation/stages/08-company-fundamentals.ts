@@ -679,14 +679,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const settledPurchasesUSD = update?.purchasesUSD ?? 0;
       post('settled sales (real auction receipts)', settledSalesUSD);
       post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD);
-      // XB3a: an export was delivered and invoiced, not collected — back it out of this week's
-      // receipts and post the collection when the invoice actually settles a week later, at
-      // whatever the invoice currency is then worth. The gap between the two is the transaction
-      // FX exposure, and it lands here as real cash rather than as a reported statistic.
-      post('cross-border sales invoiced, not yet collected', -(update?.tradeReceivableBookedUSD ?? 0));
-      post('cross-border invoices collected', update?.tradeReceivableCollectedUSD ?? 0);
-      post('cross-border purchases invoiced, not yet paid', update?.tradePayableBookedUSD ?? 0);
-      post('cross-border invoices paid', -(update?.tradePayableSettledUSD ?? 0));
       // Revenue recognized beyond what cleared in the auction still collects — customers in the
       // parts of the business the modeled markets do not cover yet.
       post('non-auction operating receipts', Math.max(0, newRevenue / 52 - settledSalesUSD));

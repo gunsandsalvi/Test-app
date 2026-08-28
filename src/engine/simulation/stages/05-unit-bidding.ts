@@ -30,8 +30,6 @@ import { WeeklyStepContext } from './context';
 import { random, getRngState, setRngState } from '../../rng';
 import { createInitialContext } from './context';
 import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
-import { chooseInvoiceRegion, measureInvoiceCurrencyShares, carriedInvoiceCurrencyShares, invoiceCurrencyOf, inflationVolatility, CurrencyStanding } from '../../../domain/invoice-currency';
-import { getFxToUsd } from './06-fx-and-trade';
 
 export const MARKET_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
@@ -192,39 +190,6 @@ interface DemandPlan {
   isGovernmentAggregate?: boolean;
   demandUnits: number;
   maxPriceUSD: number;
-}
-
-/**
- * What the invoice-currency choice needs, measured once a week for the whole world rather than
- * per market: three of the four inputs are properties of a CURRENCY, not of a goods market.
- */
-interface InvoicingInputs {
-  standings: Record<string, CurrencyStanding>;
-  networkShare: Record<string, number>;
-  usdPerRegionCurrency: Record<string, number>;
-}
-
-/**
- * Money-market depth and price-level stability, from books that already exist: the government's
- * own bill stock, the banking system's repo book, and the money funds' assets.
- */
-function measureCurrencyStandings(state: GameState, ctx: WeeklyStepContext): Record<string, CurrencyStanding> {
-  const standings: Record<string, CurrencyStanding> = {};
-  MARKET_REGION_IDS.forEach(regionId => {
-    const reg = ctx.updatedRegions[regionId];
-    const billStockUSD = (reg.govDebtTranches ?? [])
-      .filter(t => t.tenorAtIssuanceYears < 1)
-      .reduce((sum, t) => sum + Math.max(0, t.principalUSD), 0);
-    const repoUSD = Math.max(0, reg.bankingSector?.repoLentUSD ?? 0);
-    const moneyFundUSD = state.institutionalEntities
-      .filter(e => e.region === regionId && e.entityType === 'MONEY_MARKET_FUND')
-      .reduce((sum, e) => sum + Math.max(0, e.totalAssetsUSD ?? 0), 0);
-    standings[regionId] = {
-      depthUSD: billStockUSD + repoUSD + moneyFundUSD,
-      inflationVol: inflationVolatility(reg.historicalInflation),
-    };
-  });
-  return standings;
 }
 
 interface BookFill {
@@ -776,8 +741,7 @@ function runSubUnitMarkets(
   hhShare: number,
   indexes: Record<RegionId, RegionMarketIndex>,
   lookup: GlobalFirmLookup,
-  contractsByRegion: Record<RegionId, SupplyContract[]>,
-  invoicing: InvoicingInputs
+  contractsByRegion: Record<RegionId, SupplyContract[]>
 ): Record<RegionId, SupplyContract[]> {
   const { companyUpdates, nextWeek } = ctx;
   const tradability = subUnitTradability(subUnitId);
@@ -919,70 +883,18 @@ function runSubUnitMarkets(
   });
 
   // --- 6. Trade accounting: an export is a fill whose two sides sat in different regions.
-  //        The same pass decides whose currency the market invoices in and writes the invoices
-  //        that carry the FX exposure — the currency choice is a property of THIS market's own
-  //        concentration, so it is made where that concentration is known.
-  const deferredSalesUSD = new Map<string, number>();
-  const deferredPurchasesUSD = new Map<string, number>();
   if (globalMarket && globalResult.clearedUnits > 0.0001) {
     globalMarket.clearedUnitsThisWeek = globalResult.clearedUnits;
-
-    const supplyByRegion: Record<string, number> = {};
-    const demandByRegion: Record<string, number> = {};
-    globalOffers.forEach(o => { supplyByRegion[o.regionId] = (supplyByRegion[o.regionId] ?? 0) + o.quantityUnits; });
-    globalBids.forEach(b => { demandByRegion[b.regionId] = (demandByRegion[b.regionId] ?? 0) + b.quantityUnits; });
-    // The invoice currency is decided per TRADE, below — a market has no single one, only a
-    // distribution over the deals struck in it. This tallies that distribution for reporting.
-    const invoicedValueByRegion: Record<string, number> = {};
-
     globalResult.lotsByBuyer.forEach((lots, buyerKey) => {
       const buyerRegion = buyerRegionOfKey(buyerKey, lookup);
       if (!buyerRegion) return;
-      const buyerCompany = lookup.byTicker.get(buyerKey);
       lots.forEach(lot => {
         if (lot.sellerRegion === buyerRegion) return;
         const valueUSD = lot.units * globalResult.clearedPriceUSD;
         ctx.bilateralTradeWeeklyUSD[lot.sellerRegion][buyerRegion] += valueUSD;
         globalMarket!.crossBorderValueUSD += valueUSD;
-
-        // The invoice, and therefore the exposure, exists only where BOTH legs are real books.
-        // A household or government aggregate has no cash leg in this stage to defer, and
-        // deferring a flow that only has one side would invent an exposure rather than model one.
-        const sellerCompany = lookup.byTicker.get(lot.sellerKey);
-        if (!sellerCompany || !buyerCompany) return;
-        const invoiceRegion = chooseInvoiceRegion(
-          lot.sellerRegion, buyerRegion, supplyByRegion, demandByRegion,
-          invoicing.networkShare, invoicing.standings
-        );
-        const currency = invoiceCurrencyOf(invoiceRegion);
-        const usdPerCurrency = invoicing.usdPerRegionCurrency[invoiceRegion];
-        if (!(usdPerCurrency > 0)) return;
-        invoicedValueByRegion[invoiceRegion] = (invoicedValueByRegion[invoiceRegion] ?? 0) + valueUSD;
-        ctx.tradeInvoicesBooked.push({
-          sellerTicker: lot.sellerKey,
-          sellerRegion: lot.sellerRegion,
-          buyerTicker: buyerKey,
-          buyerRegion,
-          subUnitId,
-          currency,
-          amountCurrency: valueUSD / usdPerCurrency,
-          bookedUsdPerCurrency: usdPerCurrency,
-          weekBooked: nextWeek,
-        });
-        deferredSalesUSD.set(lot.sellerKey, (deferredSalesUSD.get(lot.sellerKey) ?? 0) + valueUSD);
-        deferredPurchasesUSD.set(buyerKey, (deferredPurchasesUSD.get(buyerKey) ?? 0) + valueUSD);
       });
     });
-
-    // The market's dominant invoice currency, for reporting only — the deals themselves each
-    // carry their own, and a market that splits 60/40 is a real and interesting thing to see.
-    let dominant: RegionId | undefined;
-    let dominantValue = 0;
-    MARKET_REGION_IDS.forEach(r => {
-      const v = invoicedValueByRegion[r] ?? 0;
-      if (v > dominantValue) { dominantValue = v; dominant = r; }
-    });
-    globalMarket.invoiceRegion = dominant;
   }
 
   // --- 7. Each region's published price: what its buyers actually paid, across both books.
@@ -1021,11 +933,6 @@ function runSubUnitMarkets(
       if (soldUnits > 0) {
         supUp.salesUnits = (supUp.salesUnits ?? 0) + soldUnits;
         supUp.salesUSD = (supUp.salesUSD ?? 0) + soldUSD;
-        // XB3a: revenue is recognised at delivery, in full. What is deferred is the CASH — an
-        // export was invoiced, not collected, and stage 08's ledger backs it out of this week's
-        // receipts against the collection posted when the invoice settles.
-        const invoiced = deferredSalesUSD.get(plan.key) ?? 0;
-        if (invoiced > 0) supUp.tradeReceivableBookedUSD = (supUp.tradeReceivableBookedUSD ?? 0) + invoiced;
       }
       supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + plan.targetProductionUSD;
     }
@@ -1069,9 +976,6 @@ function runSubUnitMarkets(
     const custUp = companyUpdates[comp.ticker];
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + units;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + amount;
-    // The mirror of the seller's receivable: the goods arrived, the payment has not left yet.
-    const owed = deferredPurchasesUSD.get(plan.key) ?? 0;
-    if (owed > 0) custUp.tradePayableBookedUSD = (custUp.tradePayableBookedUSD ?? 0) + owed;
     (globalResult.lotsByBuyer.get(plan.key) ?? []).forEach(l => {
       addInputInventory(custUp, comp, subUnitId, l.sellerKey, l.units, l.units * globalResult.clearedPriceUSD, nextWeek);
     });
@@ -1242,21 +1146,6 @@ function computeRealizedVol(historicalValues: number[], window: number): number 
 export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): void {
   const { byRegion: indexes, lookup } = buildMarketIndexes(ctx);
 
-  // The invoice-currency inputs are read ONCE, from where they stood at the start of the week.
-  // Recomputing the network share as markets were assigned would let this week's first sub-unit
-  // decide the rest of them — a feedback loop inside a single pass, not a network effect.
-  const usdPerRegionCurrency: Record<string, number> = {};
-  MARKET_REGION_IDS.forEach(r => { usdPerRegionCurrency[r] = getFxToUsd(state.fxPairs, r); });
-  const invoicing: InvoicingInputs = {
-    standings: measureCurrencyStandings(state, ctx),
-    // Last week's standing, held fixed for the whole pass: recomputing it as trades were struck
-    // would let the first sub-unit decide the rest of them — a feedback loop inside one week,
-    // which is not what a network effect is.
-    networkShare: carriedInvoiceCurrencyShares(state.invoiceCurrencyShare),
-    usdPerRegionCurrency,
-  };
-  ctx.tradeInvoicesBooked = [];
-
   MARKET_REGION_IDS.forEach(exporter => {
     MARKET_REGION_IDS.forEach(importer => { ctx.bilateralTradeWeeklyUSD[exporter][importer] = 0; });
   });
@@ -1280,7 +1169,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     const survivors = runSubUnitMarkets(
       ctx, state, subUnit.unitId,
       subUnit.buyerMix.GOVERNMENT ?? 0, subUnit.buyerMix.HOUSEHOLD ?? 0,
-      indexes, lookup, own, invoicing
+      indexes, lookup, own
     );
     MARKET_REGION_IDS.forEach(r => { contractsByRegionBySubUnit[r].set(subUnit.unitId, survivors[r]); });
   });
@@ -1290,13 +1179,6 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     contractsByRegionBySubUnit[regionId].forEach(bucket => { bucket.forEach(c => reassembled.push(c)); });
     ctx.updatedRegions[regionId].activeContracts = reassembled;
   });
-
-  // This week's cross-border deliveries join the outstanding book; trade-settlement collects
-  // them next week, at whatever their invoice currency is worth then.
-  state.tradeInvoices = [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked];
-
-  // Force 2's state variable, restruck from what this week's trades actually chose.
-  state.invoiceCurrencyShare = measureInvoiceCurrencyShares(ctx.tradeInvoicesBooked, state.invoiceCurrencyShare);
 
   const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);
   const baselineVol = 0.16;

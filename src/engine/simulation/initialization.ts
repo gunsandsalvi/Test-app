@@ -969,10 +969,6 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // first week it clears, off the regions' own bootstrapped prices. Writing a level here would
     // be a stated version of what the auction produces.
     globalGoodsMarkets: {},
-    tradeInvoices: [],
-    // The four currencies open exactly level. Seeding a dominant invoice currency would import
-    // the one result this mechanism exists to produce (rule 4).
-    invoiceCurrencyShare: {},
     // Born EMPTY: the first weekly pass strikes every index's membership from the market that
     // actually exists, at base 100. Seeding a constituent list here would be a second, stated
     // version of a rule the engine already runs (§7.4's seed-shape rule).

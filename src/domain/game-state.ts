@@ -35,14 +35,6 @@ export interface GameState {
    *  region's supply and demand clears here; an export is a fill whose buyer and seller sat in
    *  different regions. See domain/global-goods.ts. */
   globalGoodsMarkets: Record<string, import('./global-goods').GlobalGoodsMarketState>;
-  /** XB3a — cross-border sales delivered and not yet paid for, in the market's own emergent
-   *  invoice currency. Settled a week later at the then-current rate, which is where transaction
-   *  FX exposure comes from. See domain/trade-invoice.ts. */
-  tradeInvoices: import('./trade-invoice').TradeInvoice[];
-  /** XB3a — the share of the world's markets invoicing in each currency, weighted by what
-   *  crossed a border in them. The coalescing force's state variable: it is what makes a vehicle
-   *  currency self-reinforcing, and it opens with the four currencies exactly level. */
-  invoiceCurrencyShare: Record<string, number>;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;
