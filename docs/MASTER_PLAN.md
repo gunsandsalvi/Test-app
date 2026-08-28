@@ -311,7 +311,7 @@ metrics to watch rather than work.
 | 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
 | 8 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
 | 9 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f done (§7.72–75); XB3a rescoped to landed-cost sourcing and underway; XB3b/XB4/XB6 remain. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
+| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f, XB3a-1/2/3/4, XB3b, XB4, XB5 done (§7.72–77). XB6 remains, and XB3a-5 is gated on it. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
 | 11 | depth | **CAL — Payment calendars** | none |
 | 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
 | 13 | depth | **HC3b — The product-market handover** | BP1 |
@@ -738,7 +738,7 @@ The §6 watch it adds is the sovereign book's price elasticity to a size-only bi
 
 ---
 
-### XB5 — Central-bank FX reserves  *(blocks XB close; small)*
+### XB5 — Central-bank FX reserves  *(DONE — §7.77)*
 
 A central bank's FX participation is currently sized off its domestic bond book (§6), and reserves
 are the missing asset. Real reserve management is also one of the largest single participants in
@@ -945,7 +945,7 @@ depreciate slowly against sticky flows; no drift term anywhere; the global funds
 
 ### XB — Cross-border portfolios and trade  *(Tier 2, item 10; IN PROGRESS)*
 
-**Status: XB1, XB2, XB2b–XB2f DONE (§7.72–75). XB3a RESCOPED and IN PROGRESS (§7.76's correction), XB3b, XB4, XB6 REMAIN.**
+**Status: XB1, XB2, XB2b–XB2f, XB3a-1/2/3/4, XB3b, XB4, XB5 DONE (§7.72–77). XB3a-5 and XB6 REMAIN — and XB3a-5 is gated on XB6.**
 **The 60-week harness is deliberately RED while this runs — see §6 and rule 1 of `CLAUDE.md`.**
 
 **XB1 — DONE (§7.72).** `foreignShare` deleted: it assigned each region a share of every other
@@ -1237,6 +1237,9 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 |---|---|
 | **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the goods market, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). **XB3a widened this further**: the goods auction was repartitioned and the RNG stream relabelled, so every count taken before it describes a different world. Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3b, then run the harness and `scripts/xb-battery.ts` ONCE and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
 | ~~**Invoicing locks to 100% USD by week 5**~~ | **The mechanism was DELETED, not fixed (§7.76 correction).** The lock-in was arithmetic between three weights I invented — a weighted score with an argmax is not how anyone chooses an invoice currency, and reporting its corner solution as a finding about the world was wrong. Invoice currency is now owned by **XB3a-5**, gated on **XB6**: while USD is the FX numéraire the cheapest vehicle currency is decided by the model's plumbing, so the question is not askable yet. |
+| **Freight rates run away on some lanes** | **Found by the XB battery (§7.77).** Over 40 weeks EUR>UK goes 6.28 -> 292,929 per tonne and JPN>USA 7.63 -> 704, while EUR>EUR falls 59% and JPN>UK falls 94%. Freight as a share of cargo value then prints above 100% for the bulk goods (upstream_extraction at 58,255%), which is not a price, it is a market that has come apart. Two candidates and they interact: capacity on a lane is a physical stock that cannot respond inside a week, so a demand spike has nothing to meet it; and the rate is quoted in the ORIGIN's money, so a collapsing origin currency inflates it mechanically (see the row below, which is probably the root). **Do not cap the rate** — a bound is not a price (§7.21, §7.75). Diagnose which of the two dominates by holding FX fixed in an A/B, then fix the one that is real. |
+| **The exchange rates collapse once trade is real** | **Found by the XB battery (§7.77); probably the root of the row above.** EUR runs 1.4655 -> 0.2415 USD per unit over 40 weeks, UK 1.2650 -> 0.2457, JPN 1.3708 -> 0.2122 — every non-USD currency losing ~six-sevenths of its value. The converted price levels end at 0.62-0.70 of the USA's rather than converging on 1.000, so the law of one price does NOT hold and the competitiveness channel is running one way. The likely cause is that `fx-clearing.ts` takes `(exportsUSD - importsUSD)/52` as inelastic flow, and XB3a made that number both far larger and far more volatile than the formula it replaced (30B to 200B week to week) — so the FX book is absorbing a real flow it was sized against a smooth one. Owner: **XB6**, which reopens that stage anyway. |
+| **Logistics is 0.4% of GDP against a real 5-6%** | **Found by the XB battery (§7.77).** The sector exists and every dollar of it reaches a named carrier, but it is an order of magnitude too small. Domestic tonnage is the gap: in reality inland freight dwarfs the international kind, and here the merit order still sends buyers abroad on 3-6% price differences because the frictions that keep sourcing local — reliability, relationships, minimum order sizes, the distributor between a household and a foreign seller — are not modelled. Watch it up as those land; do NOT inflate freight rates to close it. |
 | **G1b — the inflation escape** | The measured band is SEED-SENSITIVE: one world holds −10..0%, others escape upward by week 40 (the default-stream world reaches 50%+ by week 52 with the 10Y following to 17%). **The measurement is not at fault** — the goods market's prices really do move that much. G2 measurably damped it and did not cure it (0.66% of demand against a goods cycle orders of magnitude larger), exactly as predicted. Remaining owners: **MS** (the household rate response, the missing stabiliser) and **PUB** (the fiscal loop). Two diagnostics still unrun and worth doing first: trace one sub-unit's price, supply and demand over 120 weeks for a long-wavelength cobweb; and consider whether stage 05's real bid and offer prices should carry an expectations term — a genuine behavioural channel, since anchored expectations damp actual price setting. **Do not** smooth the index, widen the basket, or clamp inflation: the index is the measurement, and if it is volatile the economy is. |
 | ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
 | ~~**#67 — USA bank capital → 0**~~ | **CLOSED (§7.55) — re-measured after HH3 and the collapse is gone.** Capital ratio runs 11.6% → 14.7% through week 80 (was: → 0 by week ~70), NIM in band throughout. The bleed was the fictional consumer book: a formula target earning a formula yield and losing a formula loss rate, none of which the bank's capital could price or gate. With the book real — real margins quoted off measured tier losses, real amortization, origination capital-gated at the 8% floor — the banking system carries its full household book and earns its keep. |
@@ -2392,3 +2395,53 @@ that proved it, the lesson.
       lookup, cross-border contracts filed in the customer's region, trade as accounting from the
       auction's own lots, seeding the opening position by running the engine, and the deletion of
       the dead `companyUpdates.cashChange`. The rescoped project is §5-XB3a.
+
+77. **XB3a rebuilt, XB3b, XB5, and the battery: tradability became an outcome.**
+    - **The premise was the defect.** `CATEGORY_TRADABILITY` is an observed trade share — a
+      real-world EQUILIBRIUM — and splitting supply and demand by it meant the model could never
+      say what gets traded or why (rule 4's sharper half). Replaced by physics: value density per
+      tonne (a technological fact), real inter-region distances, and three delivery modes.
+      **Measured at the close: Spearman(value density, −freight as a share of value) = 0.897.**
+      The denser the value the less distance matters, with no table saying so — which is the
+      whole point, and it is the number the rescope was for.
+    - **The physics carries a result the old table could not state.** A domestic American road
+      haul costs $19.24 a tonne against $3.45 for a transatlantic crossing — 5.6x over a quarter
+      of the distance — because a truck burns seventeen times the fuel and carries three thousand
+      times the crew per tonne-mile. That is why globalisation happened, and under the deleted
+      table a foreign supplier was categorically harder to reach than a domestic one.
+    - **XB3b: money had a currency and nobody had applied it.** Every monetary figure is
+      denominated in its region's price level — goods prices track productivity almost exactly,
+      and the seed FX rate is the precise inverse of that ratio (1/0.6824 = 1.4655, the EUR rate
+      to the digit). Compared raw, the lowest-price-level region undercut everyone on every good
+      and supplied the world while the USA exported nothing. **That is not competitiveness, it is
+      a missing conversion**, and it had been invisible only because nothing had ever compared two
+      regions. Local money stays local; every crossing converts.
+    - **Four defects of mine, each found by running the thing rather than reasoning about it.**
+      The intent promised each origin's output to every buyer independently, sizing four times the
+      ships. A booking's alternative was the cheapest origin overall rather than the next one
+      still holding stock, so every origin but the world's cheapest showed a negative surplus and
+      three regions exported nothing. Carriers were seeded at 21x leverage because ship finance
+      was sized against the hull alone, when a lender lends against the cash flow too. And the
+      pipeline carry was charged at the goods market's inventory rate — 2% a WEEK, a physical
+      decay figure — which put nearly ten percent of cargo value on a five-week voyage, killed
+      cross-border trade, and **defaulted the entire carrier fleet by week twelve**.
+    - **Two rates called "cost of holding stock" were eight times apart.** What is tied up in a
+      pipeline is capital, so what it costs is the cost of capital — the region's own policy rate
+      over a week, which moves with policy and is one of the real channels by which tight money
+      shortens supply chains. **Rule 9's discipline applies to rates, not only to periods: name a
+      rate for what it MEASURES, or the wrong one gets picked up.**
+    - **A running economy's pipeline is FULL.** Seeding it empty meant the first arrivals landed a
+      month in and importers starved until they did — §7.4 again, and it compounded the carry
+      defect rather than being visible beside it.
+    - **XB5:** the central bank intervened with its DOMESTIC BOND BOOK. It now holds real FX
+      reserves, intervention moves them, and a bank at zero simply stops bidding — which is what
+      makes a defence fail. Seeded at three months of import cover, the standard reserve managers
+      actually hold to.
+    - **What the battery found that nothing else could see** (all §6, none of them fixed here):
+      freight rates run away on some lanes (EUR>UK 6.28 → 292,929/tonne over 40 weeks); **every
+      non-USD currency loses six-sevenths of its value** once trade is real, which is probably the
+      root of the first and is XB6's; and logistics is 0.4% of GDP against a real 5-6%.
+    - **Still open:** XB3a-5 (payment terms and transaction FX exposure) is gated on **XB6**,
+      because while the USD is the FX numéraire the cheapest vehicle currency is decided by the
+      model's plumbing rather than by anything economic — so the question invoice currency exists
+      to answer is not yet askable.
