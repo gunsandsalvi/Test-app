@@ -62,6 +62,13 @@ export interface WeeklyStepContext {
    * stage — see applyPendingCorporateActionSettlements.
    */
   pendingHolderSettlements: Map<string, number>;
+  /**
+   * Cash an issuer owes its holders this week for a corporate action, keyed the same way as
+   * `pendingHolderSettlements` — today the CALL PREMIUM paid to retire paper early. Settled pro
+   * rata to holders of record in the same single pass, so the money the issuer's ledger posts
+   * out arrives on somebody's book instead of vanishing.
+   */
+  pendingHolderCashUSD: Map<string, number>;
   updatedCommodities: Commodity[];
   updatedCompositeIndices: CompositeBenchmarkIndices;
   marketVolPremium: number;
@@ -132,6 +139,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     updatedCompanies: [...state.companies],
     updatedInstitutionalEntities: [...state.institutionalEntities],
     pendingHolderSettlements: new Map<string, number>(),
+    pendingHolderCashUSD: new Map<string, number>(),
     updatedCommodities: [...state.commodities],
     updatedCompositeIndices: { ...state.compositeIndices },
     marketVolPremium: state.marketVolPremium || 0,

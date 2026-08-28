@@ -273,7 +273,7 @@ export function attributeItemizedHoldings(
 export function settleCorporateActionOnHolders(
   ctx: { pendingHolderSettlements: Map<string, number> },
   issuerId: string,
-  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN',
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY',
   oldFloatUSD: number,
   newFloatUSD: number
 ): void {
@@ -297,24 +297,75 @@ export function settleCorporateActionOnHolders(
  * and settling them once at the end of the stage is the same arithmetic at 1/800th the traversal.
  */
 export function applyPendingCorporateActionSettlements(
-  ctx: { updatedInstitutionalEntities: InstitutionalEntity[]; pendingHolderSettlements: Map<string, number> }
+  ctx: {
+    updatedInstitutionalEntities: InstitutionalEntity[];
+    pendingHolderSettlements: Map<string, number>;
+    pendingHolderCashUSD?: Map<string, number>;
+  }
 ): void {
   const pending = ctx.pendingHolderSettlements;
-  if (pending.size === 0) return;
+  const pendingCash = ctx.pendingHolderCashUSD;
+  const hasCash = !!pendingCash && pendingCash.size > 0;
+  if (pending.size === 0 && !hasCash) return;
+
+  // Holders OF RECORD — the books as they stand before this week's actions scale them. A call
+  // premium belongs to whoever owned the paper when it was called, so the shares are taken from
+  // the pre-action notionals and the scaling happens after.
+  const preActionTotalByKey = new Map<string, number>();
+  if (hasCash) {
+    ctx.updatedInstitutionalEntities.forEach((entity) => {
+      entity.itemizedHoldings.forEach((h) => {
+        const key = `${h.instrumentType}:${h.instrumentId}`;
+        if (!pendingCash!.has(key)) return;
+        preActionTotalByKey.set(key, (preActionTotalByKey.get(key) ?? 0) + h.quantityOrNotionalUSD);
+      });
+    });
+  }
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let touched = false;
+    let cashUSD = 0;
     const newHoldings = entity.itemizedHoldings
       .map((h) => {
-        const ratio = pending.get(`${h.instrumentType}:${h.instrumentId}`);
+        const key = `${h.instrumentType}:${h.instrumentId}`;
+        if (hasCash) {
+          const owedUSD = pendingCash!.get(key);
+          const totalUSD = preActionTotalByKey.get(key) ?? 0;
+          if (owedUSD !== undefined && totalUSD > 0) {
+            cashUSD += owedUSD * (h.quantityOrNotionalUSD / totalUSD);
+            touched = true;
+          }
+        }
+        const ratio = pending.get(key);
         if (ratio === undefined) return h;
         touched = true;
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
       })
       .filter((h) => h.quantityOrNotionalUSD > 1);
-    return touched ? { ...entity, itemizedHoldings: newHoldings } : entity;
+    if (!touched) return entity;
+    return {
+      ...entity,
+      cashUSD: (entity.cashUSD ?? 0) + cashUSD,
+      itemizedHoldings: newHoldings,
+    };
   });
   pending.clear();
+  pendingCash?.clear();
+}
+
+/**
+ * Record cash an issuer owes its holders for a corporate action — the call premium. Settled pro
+ * rata to holders of record by `applyPendingCorporateActionSettlements`.
+ */
+export function payHoldersCash(
+  ctx: { pendingHolderCashUSD: Map<string, number> },
+  issuerId: string,
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY',
+  amountUSD: number
+): void {
+  if (!(amountUSD > 0)) return;
+  const key = `${instrumentType}:${issuerId}`;
+  ctx.pendingHolderCashUSD.set(key, (ctx.pendingHolderCashUSD.get(key) ?? 0) + amountUSD);
 }
 
 /**

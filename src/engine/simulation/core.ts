@@ -17,6 +17,7 @@ import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
 import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
+import { applyPendingCorporateActionSettlements } from './stages/shared-helpers';
 import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
@@ -106,6 +107,12 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       const born = runFirmBirthsForRegion(regionId, reg, ctx, ctx.nextWeek, generatePrivateCompanies);
       if (born.length > 0) ctx.updatedCompanies.push(...born);
     });
+    // A take-private's tender is a corporate action recorded on the same per-week maps stage 08
+    // uses — and stage 08 has already drained them by the time this stage runs, so settling here
+    // is not optional. Without it the register was extinguished and the shareholders were paid
+    // nothing: measured, institutional equity buying power fell 53.9B -> 43.0B against the
+    // control because the capital calls went out and the tender proceeds never came back.
+    applyPendingCorporateActionSettlements(ctx);
   });
 
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));

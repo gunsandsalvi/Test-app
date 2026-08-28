@@ -219,33 +219,50 @@ function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
   return null;
 }
 
+/**
+ * Does sustained institutional demand actually move an equity price?
+ *
+ * Measured against a CONTROL WORLD rather than against the company's own EPS. The earlier version
+ * divided the price move by the EPS move and asked whether anything was left over, which made the
+ * test unreliable in exactly the case it most needed to be trusted: `eps` is stored to two
+ * decimals, so at an EPS near 0.08 the rounding band is about +/-6% while the test's tolerance was
+ * 2%, and a name whose earnings had collapsed 60% could trip it on rounding alone. It also used a
+ * company with collapsing fundamentals as its control, which is no control at all.
+ *
+ * Two worlds from the same seed, identical but for the ownership shock, compared on the SAME
+ * company: any difference in price is the flow and nothing else.
+ */
 function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
-  let state = createInitialGameState(SEED);
-  const ticker = state.companies.find(c => c.region === 'USA' && !c.isBankEntity && !c.isInstitutionalEntity)?.ticker;
+  const ticker = createInitialGameState(SEED).companies
+    .find(c => c.region === 'USA' && !c.isBankEntity && !c.isInstitutionalEntity)?.ticker;
   if (!ticker) return null;
-  // Force a large institutional under-allocation so the holder-class rebalancing flow
-  // produces a sustained multi-week inflow into USA equities.
-  state.regions.USA.equityOwnership.institutionalShare = 0.05;
 
-  const startComp = state.companies.find(c => c.ticker === ticker)!;
-  const startPrice = startComp.stockPrice;
-  const startEps = startComp.eps;
+  const advance = (shocked: boolean) => {
+    let state = createInitialGameState(SEED);
+    // Force a large institutional under-allocation so the holder-class rebalancing flow produces
+    // a sustained multi-week inflow into USA equities.
+    if (shocked) state.regions.USA.equityOwnership.institutionalShare = 0.05;
+    for (let w = 0; w < 20; w++) state = advanceWeeklyStep(state);
+    return state.companies.find(c => c.ticker === ticker);
+  };
 
-  for (let w = 0; w < 20; w++) {
-    state = advanceWeeklyStep(state);
-  }
-
-  const endComp = state.companies.find(c => c.ticker === ticker);
-  if (!endComp || endComp.isDefaulted) return null; // company left the sample; not a flow-mechanism failure
-
-  const priceRatio = Math.max(0.01, endComp.stockPrice) / Math.max(0.01, startPrice);
-  const epsRatio = (Math.abs(endComp.eps) > 0.01 && Math.abs(startEps) > 0.01) ? endComp.eps / startEps : 1;
-  const priceMoveExEpsLog = Math.abs(Math.log(priceRatio) - Math.log(Math.max(0.01, Math.abs(epsRatio))));
-
-  if (priceMoveExEpsLog < 0.02) {
+  const control = advance(false);
+  const shocked = advance(true);
+  if (!control || !shocked || control.isDefaulted || shocked.isDefaulted) return null; // left the sample
+  // Also left the sample: a name pinned at the price floor in BOTH worlds, or one that was taken
+  // private in one of them. There is no price left for flow to move, so this says nothing about
+  // the mechanism.
+  const controlPrice = control.stockPrice;
+  const shockedPrice = shocked.stockPrice;
+  if (!(controlPrice > 0.01) || !(shockedPrice > 0.01)) return null;
+  const flowEffect = Math.abs(shockedPrice - controlPrice) / controlPrice;
+  if (flowEffect < 0.01) {
     return {
       week: 20,
-      message: `Sustained institutional equity demand did not visibly move ${ticker}'s price beyond what EPS explains (price ${startPrice} -> ${endComp.stockPrice}, eps ${startEps} -> ${endComp.eps})`
+      message:
+        `Sustained institutional equity demand did not move ${ticker}'s price against an ` +
+        `otherwise identical control world (control ${controlPrice.toFixed(2)} vs shocked ` +
+        `${shockedPrice.toFixed(2)}, ${(flowEffect * 100).toFixed(2)}% apart)`
     };
   }
   return null;

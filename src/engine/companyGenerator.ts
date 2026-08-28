@@ -1,4 +1,6 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
+import { callProtectionForIssue } from '../domain/call-protection';
+import { isInvestmentGrade } from './simulation/stages/asset-allocation';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
 import { getInitialRegions } from './macro/initialization';
 import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUniqueTicker } from './bootstrap/firms';
@@ -300,6 +302,7 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
           originationWeek: 0,
           maturityWeek,
           seniority: 'SENIOR' as const,
+          callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(initialRating) }),
         }
       : {
           id: `${ticker}-T${i + 1}`,
@@ -309,6 +312,7 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
           originationWeek: 0,
           maturityWeek,
           seniority: 'SENIOR' as const,
+          callProtection: callProtectionForIssue({ rateType: 'FLOATING', isInvestmentGrade: isInvestmentGrade(initialRating) }),
         };
   });
 }

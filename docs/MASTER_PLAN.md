@@ -162,7 +162,10 @@ inventories), `company.ts` (incl. `InputLot` provenance, per-sub-unit inventorie
 `LeveragedLoanInfo`), `institutions.ts` (`AssetAllocationTarget` incl. `loanPct`),
 `instruments.ts` (AssetType, `COMMODITY_CATEGORY_LINKAGE`), `market-microstructure.ts`
 (`CATEGORY_INPUT_REQUIREMENTS`), `industry.ts` (`INDUSTRY_SUBUNITS`, buyerMix),
-`region-macro.ts`, `geography.ts`, `game-state.ts`, `portfolio.ts`, `markets.ts`, `events.ts`.
+`region-macro.ts`, `geography.ts`, `game-state.ts`, `portfolio.ts`, `markets.ts`, `events.ts`,
+`primary-market.ts` (WS8 offerings, underwriting fees, relationship lead banks),
+`call-protection.ts` (what it costs to retire paper early — soft call, non-call schedules and
+make-whole, and the ONE dealer spread both 07b and the make-whole read).
 
 ### 2.4 UI (`src/components/`) and invariants
 
@@ -614,6 +617,8 @@ the complete simulation.
 | late-horizon NIM band (seed 7: 21 breaches, NIM to 7.4%) | The G2-owned formula sizes — loan yields `policy+250/350bp`, deposit beta 0.45 — produce an unreal margin when the late inflation regime steepens the curve. Not the repo market's doing (measured: breaches occur with repo/SRF at zero). Dies with G2 slice 2 (real per-loan yields, competitive deposit pricing) |
 | PE fundraising does not exist (HC Wave 2, §7.41) | A fund calls its LP commitments, deploys them and then stops forever: measured, undrawn commitments run 13.6B → 0.25B by week 90 and deal flow ends. Real sponsors raise a new vintage, and real LPs size that commitment from their own target allocation to the asset class. `AssetAllocationTarget` has no private-equity bucket, which is why this was not built here — adding one touches every entity type's initialization. The honest fix belongs with **G6** (institutional liabilities), where an LP's allocation becomes a real decision rather than a seeded constant. The other half of the recycling loop is an **exit by sale** (sponsor-to-sponsor or strategic), which returns capital where a listing will not; **G5**'s estate work is the natural place, or stage 10's merger path |
 | `companyGenerator.ts` private firms: `sharesOutstanding: 1_000_000` | Every generated private firm carries a fabricated share register and `eps: 0` — a share count for a company with no traded shares, and a per-share figure that does not divide by it. Harmless today because 07e excludes private names and a real listing now OVERWRITES the register with `postIssueSharesOutstanding`, but it is a made-up number sitting where a real one belongs, and it is what made the harness's newly-listed EPS check fire on all 12 HC8 births (the check is now correctly scoped to listed names). Set it to zero when something makes stage 08's private path stop dividing by it |
+| `07f-short-debt-clearing.ts` CP-failure revolver | The revolver drawn when a CP roll fails is NOT marked `isBankFacility`, while the identical revolver stage 08 draws for a failed refinancing is. So one of them lives on the house bank's itemized book and the other sits in the syndicated loan market's float — the same real instrument represented two ways (rule 3), and the §6 double-count class G2 slice 1 was meant to close. Found while stamping call protection (an unmarked revolver also picks up a six-month soft call, which a revolver should never carry). Not fixed in that batch because it moves the loan float and would have made the call-protection measurements unattributable |
+| bond and loan REDEMPTION has no cash leg | When a tranche is retired, `settleCorporateActionOnHolders` scales the holders' notionals down and they receive nothing — the principal simply leaves their books. The call PREMIUM now settles as real cash (§7.42) but the principal it rides on still does not, so a redemption is a transfer from lenders to nobody. Left alone deliberately in the call-protection batch: mixing it in would have made any harness movement unattributable between the two. The machinery to fix it now exists (`payHoldersCash`) — it needs its own change and its own A/B |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1660,7 +1665,75 @@ the complete simulation.
     - `generateIPOCompany` is DELETED and `simulation/ipo.ts` is gutted. Firm creation now has
       exactly one path: born small in a pool, carved into a named private firm, public only by
       choosing to list.
-42. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+42. **Call protection landed, and the free call died with it.** An issuer used to retire a bond
+    at PAR the moment its coupon sat 1% above the market, costing nothing. That is an option no
+    lender writes, and it is why call protection exists. `domain/call-protection.ts` now owns
+    three real regimes, each the market convention for its instrument: **SOFT_CALL** on leveraged
+    loans (101 for six months — floating paper exposes the lender to spread, not rates, so what
+    is protected is the spread it underwrote); **HARD_NC** on high yield (non-call one year, then
+    a schedule opening at par plus half the coupon and declining to par, derived from the issue's
+    own coupon); and **MAKE_WHOLE** on investment grade (no non-call period at all — callable
+    whenever, at the greater of par and the present value of everything the holder was going to
+    receive). There is always a price: inside a non-call period the issuer pays a make-whole to
+    the first call date, which is what "non-call" means in practice.
+    - **The make-whole spread is not an invented number.** It is what the holder needs beyond the
+      cash flows to go back to the market and replace the bond — the corporate bond dealer's
+      bid-offer. So `BOND_DEALER_SPREAD_BPS` is one constant read by both 07b's clearing and the
+      make-whole, and it lands where real make-whole spreads sit (T+15).
+    - **The decision changed, not just the price.** A treasurer discounts the coupon saving over
+      the paper's remaining life and compares it to the premium. For an IG bond the premium IS
+      the present value of the saving, so a purely rate-driven call never clears the test — which
+      is exactly what a make-whole is designed to do. **Measured: accretive calls fell to 0.00B
+      over 60 weeks** (the residual 0.4M is the handful that are genuinely economic).
+    - **The premium is real money and it reaches the lender.** `payHoldersCash` settles it pro
+      rata to holders OF RECORD in the same single pass that scales their notionals — shares
+      taken from pre-action books, because a premium belongs to whoever owned the paper when it
+      was called.
+    - **Two behaviours had to change to stop the model paying premiums no treasurer would pay.**
+      The delever path retired the NEWEST tranche first, which with call protection is precisely
+      the most protected one; and surplus-cash prepayment make-whole'd long bonds. Both now rank
+      by rate given up per dollar of call cost and skip paper that is not worth retiring —
+      **premiums 1,388M → 0.9M over 60 weeks, prepayment still active at 3.5B**, now directed at
+      revolvers and loans whose soft call has expired, which is what real treasuries pay down.
+      One wrong turn on the way: gating par-callable paper on the same arbitrage test cut
+      prepayment 97%, because retiring debt that costs nothing to retire needs no arbitrage.
+    - **Harness: 14 → 9 violations**, the NIM breach cluster halving from ten weeks to five. Banks'
+      loan books stop churning when issuers stop calling for free.
+43. **The take-private, and an honest answer to "does LBO activity lift equity multiples?"**
+    Asked and measured: **no, and it structurally could not**, because a sponsor could only buy
+    PRIVATE firms. An A/B with the whole lifecycle switched off produced public multiples
+    indistinguishable from one with it (USA 4.32x vs 4.25x at week 90, signs going both ways
+    across regions), and the one effect that did register ran BACKWARDS — capital calls drain the
+    insurers' and pensions' cash, which is exactly the cash that funds their equity bids:
+    institutional equity budget 51.6B with PE against 53.4B without.
+    - **What was missing is the only channel by which private equity touches the public market.**
+      HC6c now screens LISTED companies, and the control premium is derived rather than chosen:
+      to buy EVERY share you must clear the reservation of the holder who values the company
+      most, not the marginal one who sets the printed price — which is where a control premium
+      comes from. The takeout is what a holder at the lowest required return in the market would
+      pay; the sponsor proceeds only when its OWN levered return still clears its higher hurdle.
+      The consequence is the real one: **the sponsor bid appears when equities are cheap**,
+      because a lower price means a smaller equity cheque and a higher levered yield on it.
+    - **A bug the measurement caught.** `applyPendingCorporateActionSettlements` drains its maps
+      at the end of stage 08, and `hc-lifecycle` runs after it — so the tender's cash leg was
+      recorded into a per-week map nothing ever read. The register was extinguished and the
+      shareholders were paid NOTHING: measured, institutional equity buying power fell to 43.0B
+      against a 53.9B control. Settling at the end of the lifecycle stage too fixed it (52.9B).
+    - **MEASURED, 90 weeks: 36 take-privates**, public names 800 → 628, zero stale equity holdings
+      left in delisted names, and **institutional equity buying power now 39.5B with PE against
+      36.2B without — the channel runs forwards, +8.9%.** Aggregate market cap ends higher with
+      PE in two regions of four despite companies leaving the market.
+    - **The multiple effect is NOT clean, and I am not going to claim it is.** Medians at week 90
+      land 4.33 vs 4.41 (USA), 4.87 vs 4.88 (EUR), 4.63 vs 4.89 (UK), 5.05 vs 4.56 (JPN) — mixed
+      in both directions. The demand leg is real and measurable; the price leg is swamped by the
+      recorded G1b de-rating (comps fall 8.0x → 3.5x over the same window) and by composition,
+      since the names the sponsors remove are not a random sample of the index. Re-measure after
+      G1b rather than reading a multiple effect into this.
+    - Harness 9 → 13: the NIM family grows to eight weeks and now breaches BOTH edges (0.1015
+      high, −0.0001 at week 59), which is new and recorded to watch. The equity-flow check also
+      needed a second guard — a name pinned at the 0.01 price floor in both worlds has no price
+      for flow to move and is not evidence about the mechanism.
+44. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

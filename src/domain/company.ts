@@ -93,6 +93,14 @@ export interface DebtTranche {
   isBankFacility?: boolean;
   /** G2: the named bank holding this facility (the issuer's house bank at origination). */
   facilityBankTicker?: string;
+  /**
+   * What it costs to retire this tranche early — see `domain/call-protection.ts`. Stamped at
+   * issuance from what the issue IS (floating paper gets a soft call, high yield a non-call
+   * period, investment grade a make-whole), because the regime is a property of the instrument
+   * and not of the week it happens to be called in. Absent on bank facilities and CP, which are
+   * repayable at par by construction.
+   */
+  callProtection?: import('./call-protection').CallProtectionKind;
   _refinanceInitiated?: boolean;
 }
 

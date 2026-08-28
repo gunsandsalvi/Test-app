@@ -12,6 +12,8 @@ import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial,
 } from '../../../types';
 import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot } from '../../../domain/company';
+import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
+import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
@@ -22,7 +24,7 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, payHoldersCash, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
@@ -532,8 +534,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     // 2. What the company can actually fund this week — operating cash + a small cash draw + limited new borrowing (IG only), never unlimited
     const weeklyOperatingCashFlow = newEbitda / 52 - weeklyInterest;
-    const isInvestmentGrade = ['AAA', 'AA', 'A', 'BBB'].includes(comp.creditRating);
-    const maintenanceBorrowingCapacity = isInvestmentGrade ? weeklyDesiredMaintenanceCapex * 0.5 : 0; // a distressed company cannot borrow its way out of deferred upkeep
+    // Was a second inline copy of the same rating list the allocator owns (rule 3) — and it
+    // shadowed the imported helper, which is how the shadowing surfaced.
+    const maintenanceBorrowingCapacity = isInvestmentGrade(comp.creditRating) ? weeklyDesiredMaintenanceCapex * 0.5 : 0; // a distressed company cannot borrow its way out of deferred upkeep
     const availableFundingForMaintenance = Math.max(0, weeklyOperatingCashFlow) + Math.max(0, comp.cash) * 0.05 + maintenanceBorrowingCapacity;
 
     // 3. Fund what's affordable, defer the rest
@@ -762,17 +765,89 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0) + primaryFixedAdjUSD;
     const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0) + primaryFloatingAdjUSD;
 
+    /**
+     * What retiring `amountUSD` of `tranche` early costs this issuer ON TOP of the principal —
+     * the call premium (`domain/call-protection.ts`). Zero at maturity and on bank facilities;
+     * real everywhere else, which is what makes a refinancing an economic decision.
+     */
+    const callPremiumUSD = (t: DebtTranche, amountUSD: number): number => {
+      if (!(amountUSD > 0)) return 0;
+      const remainingYears = Math.max(0.5, (t.maturityWeek - state.currentWeek) / 52);
+      const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
+      return amountUSD * (callPricePerDollar(t, state.currentWeek, riskFree) - 1);
+    };
+    /**
+     * Is retiring this paper early worth what it costs, and how does it rank against the rest of
+     * the stack? The saving is the rate the tranche carries ABOVE what this issuer would pay for
+     * the same money today, over the paper's remaining life; the cost is the call premium.
+     *
+     * This is the test a make-whole is built to fail — the premium IS the present value of the
+     * saving — and that is the point: a company with surplus cash pays down its revolver and its
+     * loans whose soft call has expired, and leaves its long bonds alone, which is what real
+     * treasuries do. Without the test, surplus-cash prepayment make-whole'd 10-year paper at a
+     * measured 15% premium and handed bondholders 854M in sixty weeks for nothing.
+     */
+    const retirementEconomics = (t: DebtTranche) => {
+      const remainingYears = Math.max(0.5, (t.maturityWeek - state.currentWeek) / 52);
+      const riskFree = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams);
+      const annualRate = t.rateType === 'FIXED'
+        ? (t.couponRate ?? 0)
+        : reg.policyRate + (t.floatingMarginBps ?? 0) / 10000;
+      const fairRateToday = t.rateType === 'FIXED'
+        ? riskFree + comp.oasSpreadBps / 10000
+        : reg.policyRate + comp.oasSpreadBps / 10000;
+      const premiumPerDollar = callPremiumUSD(t, 1);
+      const discount = Math.max(1e-6, fairRateToday);
+      const savingPvPerDollar =
+        (annualRate - fairRateToday) * ((1 - Math.pow(1 + discount, -remainingYears)) / discount);
+      return {
+        premiumPerDollar,
+        // Paper that can be retired at PAR is always worth retiring with surplus cash: it costs
+        // nothing and stops the interest. Only paper that charges to get out has to clear the
+        // arbitrage. Gating both alike blocked the revolver paydown too and cut prepayment 97%,
+        // which is not what call protection is supposed to do.
+        worthRetiring: premiumPerDollar <= 1e-9 || savingPvPerDollar > premiumPerDollar,
+        // Rate given up per dollar it costs to give it up — the treasurer's ranking.
+        valuePerCost: annualRate / (1 + premiumPerDollar),
+      };
+    };
+
+    /** Premiums owed to holders this week, by the book that owns the paper. */
+    let bondCallPremiumUSD = 0;
+    let loanCallPremiumUSD = 0;
+    const recordPremium = (t: DebtTranche, premiumUSD: number) => {
+      if (!(premiumUSD > 0)) return;
+      if (t.rateType === 'FIXED') bondCallPremiumUSD += premiumUSD;
+      else loanCallPremiumUSD += premiumUSD;
+      post('call premium paid to holders', -premiumUSD);
+    };
+
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
     companyTranches.forEach(tranche => {
       if (tranche.rateType !== 'FIXED' || tranche.isCommercialPaper) return;
-      const currentFairRate = calculateNelsonSiegelZeroRate(Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52), reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
+      const remainingYears = Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52);
+      const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
       const rateSavingsIfRefinanced = tranche.couponRate - currentFairRate;
       const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
-      if (rateSavingsIfRefinanced > 0.01 && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
-        const calledAmountUSD = Math.min(tranche.principalUSD, newCash - comp.annualRevenue * 0.15);
+      // The real test is not "is the coupon above the market" — it is whether the saving is worth
+      // what the call costs. A treasurer discounts the coupon saving over the paper's remaining
+      // life and compares it to the premium; below that line the bond stays outstanding.
+      //
+      // Without this an issuer called at PAR for free the moment rates moved 1% its way, which is
+      // an option no lender writes. It is also what a make-whole exists to neutralise: for an IG
+      // bond the premium IS the present value of the saving, so a purely rate-driven call never
+      // clears this test and an IG issuer calls for a real reason instead.
+      const premiumPerDollar = callPricePerDollar(tranche, state.currentWeek, currentFairRate - comp.oasSpreadBps / 10000) - 1;
+      const discount = Math.max(1e-6, currentFairRate);
+      const savingPvPerDollar = rateSavingsIfRefinanced * ((1 - Math.pow(1 + discount, -remainingYears)) / discount);
+      if (savingPvPerDollar > premiumPerDollar && rateSavingsIfRefinanced > 0.01 && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
+        // Cash has to cover the premium too, so the callable size is smaller than the free version.
+        const budgetUSD = newCash - comp.annualRevenue * 0.15;
+        const calledAmountUSD = Math.min(tranche.principalUSD, budgetUSD / (1 + premiumPerDollar));
         tranche.principalUSD -= calledAmountUSD;
         post('accretive call: principal retired', -calledAmountUSD);
+        recordPremium(tranche, calledAmountUSD * premiumPerDollar);
         // Calling a bond because it is expensive relative to the market is REFINANCING, not
         // deleveraging: the issuer replaces it at today's cheaper rate and keeps the money. The
         // saving is the lower coupon, which is what `rateSavingsIfRefinanced` above measures.
@@ -792,6 +867,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             originationWeek: state.currentWeek,
             maturityWeek: state.currentWeek + STANDARD_CORP_TENOR_YEARS * 52,
             seniority: 'SENIOR',
+            callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(newRating) }),
           });
           post('accretive call: replacement issue proceeds', calledAmountUSD);
         }
@@ -855,6 +931,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             originationWeek: nextWeek,
             maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
             seniority: 'SENIOR',
+            callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(newRating) }),
           }
         : {
             id: `${comp.id}-${o.purpose}-${nextWeek}`,
@@ -864,6 +941,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             originationWeek: nextWeek,
             maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
             seniority: 'SENIOR',
+            callProtection: callProtectionForIssue({ rateType: 'FLOATING', isInvestmentGrade: isInvestmentGrade(newRating) }),
           };
       // A term-out retires the bridges it refinances.
       if (o.purpose === 'MAINTENANCE_TERM_OUT' && o.refinancesTrancheIds?.length) {
@@ -972,13 +1050,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (ladderTotalUSD > 50) {
         let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (newCash - 2.5 * comp.currentLiabilities) * 0.25);
         if (toPrepayUSD > 1000) {
+          // Cheapest debt to be rid of first, and only paper that is actually worth retiring.
           updatedTranches = updatedTranches
             .slice()
-            .sort((a, b) => a.maturityWeek - b.maturityWeek)
+            .sort((a, b) => retirementEconomics(b).valuePerCost - retirementEconomics(a).valuePerCost)
             .map(t => {
               if (toPrepayUSD <= 0 || t.isCommercialPaper) return t; // CP is 07f's to resize against the real gap
-              const repaid = Math.min(t.principalUSD, toPrepayUSD);
-              toPrepayUSD -= repaid;
+              const { premiumPerDollar, worthRetiring } = retirementEconomics(t);
+              if (!worthRetiring) return t;
+              // The budget buys principal AND the premium, so early repayment retires less per
+              // dollar of surplus cash than it used to. That is the point: it is not free.
+              const repaid = Math.min(t.principalUSD, toPrepayUSD / (1 + premiumPerDollar));
+              toPrepayUSD -= repaid * (1 + premiumPerDollar);
+              recordPremium(t, repaid * premiumPerDollar);
               return { ...t, principalUSD: t.principalUSD - repaid };
             })
             .filter(t => t.principalUSD > 0.01);
@@ -1035,15 +1119,28 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       });
       newLastOpportunisticOfferingWeek = nextWeek;
     } else if (financing.reason === 'DELEVER_EXPENSIVE_DEBT' && financing.netDebtChangeUSD < -1000) {
-      // Pay down real principal, newest and dearest paper first, out of real cash.
+      // Pay down real principal out of real cash, retiring the paper that gives up the most
+      // interest per dollar it costs to retire.
+      //
+      // This used to take the NEWEST tranche first, on the reasoning that new paper is dear.
+      // Once call protection exists that is precisely backwards: the newest tranche is the most
+      // protected one, so a treasurer deleveraging into it pays the largest make-whole in the
+      // stack. Measured on the free-call version of this path, premiums ran 24% of principal
+      // retired. Ranking by rate-saved per dollar of call cost is what a treasury actually does,
+      // and it uses the same call-price arithmetic the decision above does.
       let remainingToRepayUSD = -financing.netDebtChangeUSD;
       updatedTranches = updatedTranches
         .slice()
-        .sort((a, b) => b.originationWeek - a.originationWeek)
+        .sort((a, b) => retirementEconomics(b).valuePerCost - retirementEconomics(a).valuePerCost)
         .map(t => {
           if (remainingToRepayUSD <= 0) return t;
-          const repaidUSD = Math.min(t.principalUSD, remainingToRepayUSD);
-          remainingToRepayUSD -= repaidUSD;
+          const { premiumPerDollar, worthRetiring } = retirementEconomics(t);
+          // A company that wants less leverage still will not pay a make-whole to get it: if
+          // nothing in the stack is economic to retire this week, it holds the cash and waits.
+          if (!worthRetiring) return t;
+          const repaidUSD = Math.min(t.principalUSD, remainingToRepayUSD / (1 + premiumPerDollar));
+          remainingToRepayUSD -= repaidUSD * (1 + premiumPerDollar);
+          recordPremium(t, repaidUSD * premiumPerDollar);
           return { ...t, principalUSD: t.principalUSD - repaidUSD };
         })
         .filter(t => t.principalUSD > 0.01);
@@ -1245,6 +1342,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const postActionFloatingUSD = updatedTranches.filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0);
     settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
+    // The premium the issuer's ledger just posted out reaches the holders of record — the whole
+    // reason call protection changes anything is that the money goes to the lender.
+    payHoldersCash(ctx, comp.id, 'CORP_BOND', bondCallPremiumUSD);
+    payHoldersCash(ctx, comp.id, 'LEVERAGED_LOAN', loanCallPremiumUSD);
 
     const newShortTermDebtUSD = updatedTranches.filter(t => t.maturityWeek - nextWeek <= 52).reduce((s, t) => s + t.principalUSD, 0);
 

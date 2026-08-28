@@ -25,6 +25,20 @@ import { WeeklyStepContext } from './context';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { isActiveCompany } from '../../../domain/company';
 import { random } from '../../rng';
+import { companyFairValuePerShare } from '../../equity-valuation';
+import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
+import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
+
+/**
+ * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
+ * WHOLE company has to clear the most optimistic holder's reservation, not the marginal one's,
+ * which is what a control premium is.
+ */
+const PATIENT_HOLDER_REQUIRED_RETURN = Math.min(
+  REQUIRED_RETURN_ON_CAPITAL.PENSION_FUND,
+  REQUIRED_RETURN_ON_CAPITAL.INSURER,
+  REQUIRED_RETURN_ON_CAPITAL.ASSET_MANAGER
+);
 
 /**
  * What a private company is WORTH: the multiple the public market is actually paying for
@@ -340,6 +354,73 @@ export function runPeLifecycleForRegion(
         }
       }
     }
+
+    // ---- HC6c: the TAKE-PRIVATE. A sponsor buys a LISTED company and delists it. This is the
+    // only route by which private equity touches the public market, and without it LBO activity
+    // was an economy running beside the equity market rather than in it: measured, a run with the
+    // whole lifecycle switched off produced public multiples indistinguishable from one with it
+    // (USA 4.32x vs 4.25x at week 90), and the ONE effect that did show up ran backwards — the
+    // capital calls drained the insurers' and pensions' cash, cutting institutional equity
+    // buying power 51.6B -> 53.4B against the control.
+    //
+    // The premium is not a chosen number. To buy every share you must clear the reservation of
+    // the holder who values the company MOST, not the marginal one who sets the printed price —
+    // and that is exactly where a control premium comes from. So the takeout is what a holder
+    // with the lowest required return in the market would pay, and the sponsor does the deal only
+    // when its OWN levered return still clears its higher hurdle. The consequence is the real
+    // one: the sponsor bid appears when equities are CHEAP, because a lower price means a smaller
+    // equity cheque and a higher levered yield on it.
+    if (availablePowderUSD > 1e6) {
+      const owned = new Set(sponsor.peFund!.portfolioCompanyIds);
+      const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
+      const listedTarget = ctx.updatedCompanies.find((c) => {
+        if (c.region !== regionId || !isActiveCompany(c) || c.listingStatus === 'PRIVATE') return false;
+        if (c.isBankEntity || c.isInstitutionalEntity) return false;
+        if (owned.has(c.id) || c.ownership?.peSponsorId || pendingIssuers.has(c.id)) return false;
+        if (!(ebitdaOf(c) > 0) || !(c.sharesOutstanding > 0) || !(c.stockPrice > 0)) return false;
+        return c.totalDebt / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2;
+      });
+      if (listedTarget) {
+        // What the most patient liquid-market holder thinks a share is worth — the price at which
+        // the last seller is willing to tender. Never below the printed price: nobody sells the
+        // market a discount.
+        const patientValuePerShare = companyFairValuePerShare(
+          listedTarget, riskFreeRate, PATIENT_HOLDER_REQUIRED_RETURN
+        );
+        const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);
+        const takeoutValueUSD = takeoutPricePerShare * listedTarget.sharesOutstanding;
+        const debtUSD = Math.min(
+          takeoutValueUSD * LBO_DEBT_SHARE,
+          Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(listedTarget) - listedTarget.totalDebt)
+        );
+        const equityUSD = takeoutValueUSD - debtUSD;
+        // The sponsor's underwriting test: cash the business throws off after servicing the whole
+        // post-deal stack, against the cheque it has to write. Its hurdle is higher than any
+        // liquid holder's, which is why it needs the leverage to get there.
+        const allInDebtUSD = listedTarget.totalDebt + debtUSD;
+        const debtCostAnnual = reg.policyRate + listedTarget.oasSpreadBps / 10000;
+        const leveredCashFlowUSD = ebitdaOf(listedTarget) - allInDebtUSD * debtCostAnnual;
+        const clearsHurdle =
+          equityUSD > 0 && leveredCashFlowUSD / equityUSD > REQUIRED_RETURN_ON_CAPITAL.PRIVATE_EQUITY;
+        if (clearsHurdle && equityUSD <= availablePowderUSD && debtUSD > 1e6) {
+          ctx.primaryOfferingsWorking.push({
+            id: `PO-${listedTarget.id}-${nextWeek}-TAKEPRIVATE`,
+            issuerId: listedTarget.id,
+            issuerTicker: listedTarget.ticker,
+            region: regionId,
+            instrumentType: 'LEVERAGED_LOAN',
+            purpose: 'OPPORTUNISTIC',
+            sizeUSD: debtUSD,
+            walkAwayStat: RECAP_DM_THRESHOLD_BPS * 2,
+            rateType: 'FLOATING',
+            leadBankTicker: chooseLeadBank(listedTarget.id, banksForLeads),
+            announcedWeek: nextWeek,
+            peDeal: { kind: 'TAKE_PRIVATE', sponsorId: sponsor.id, equityUSD, takeoutPricePerShare },
+          } as PrimaryOffering);
+          pendingIssuers.add(listedTarget.id);
+        }
+      }
+    }
   });
 }
 
@@ -387,6 +468,48 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
         founderPct: 0.05, peSponsorId: deal.sponsorId, peSponsorPct: 0.95, acquiredWeek: nextWeek,
         entryEvMultiple: comp.ebitda > 0 ? (comp.totalDebt + equityUSD) / comp.ebitda : 0,
       };
+      return;
+    }
+
+    if (deal.kind === 'TAKE_PRIVATE') {
+      if (failed) return; // the loan market would not fund it: the company stays public
+      const equityUSD = deal.equityUSD ?? 0;
+      const pricePerShare = deal.takeoutPricePerShare ?? 0;
+      const shares = comp.sharesOutstanding;
+      if (!(pricePerShare > 0) || !(shares > 0)) return;
+      const calledUSD = callCapitalUSD(ctx, deal.sponsorId, equityUSD);
+      if (calledUSD < equityUSD * 0.999) {
+        if (calledUSD > 0) distributeToLps(ctx, deal.sponsorId, calledUSD);
+        return;
+      }
+      // The tender settles: every public shareholder is PAID for its stake and the register is
+      // extinguished. This is the leg the equity market feels — institutions hand over shares and
+      // receive cash they then have to put somewhere, which is why a take-private is a bid under
+      // the whole market and not just under its target.
+      const takeoutValueUSD = pricePerShare * shares;
+      settleCorporateActionOnHolders(ctx, comp.id, 'EQUITY', shares, 0);
+      payHoldersCash(ctx, comp.id, 'EQUITY', takeoutValueUSD);
+      // The sponsor funds the cheque; the debt raised alongside it is already on the company.
+      // What the holders receive above the equity cheque is what the new debt paid for.
+      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
+        if (e.id !== deal.sponsorId || !e.peFund) return e;
+        return {
+          ...e,
+          peFund: { ...e.peFund, portfolioCompanyIds: [...e.peFund.portfolioCompanyIds, comp.id] },
+        };
+      });
+      comp.listingStatus = 'PRIVATE';
+      comp.stockPrice = 0;
+      comp.marketCap = 0;
+      comp.sharesOutstanding = 0;
+      comp.ownership = {
+        founderPct: 0, peSponsorId: deal.sponsorId, peSponsorPct: 1, acquiredWeek: nextWeek,
+        entryEvMultiple: comp.ebitda > 0 ? (comp.totalDebt + takeoutValueUSD) / comp.ebitda : 0,
+      };
+      comp.lastCashLedger = [
+        ...(comp.lastCashLedger ?? []),
+        { label: 'taken private: public register bought out', amountUSD: 0 },
+      ];
       return;
     }
 

@@ -71,10 +71,12 @@ export interface PrimaryOffering {
    * offering persists in GameState, so the deal rides with its own financing.
    */
   peDeal?: {
-    kind: 'LBO' | 'RECAP' | 'IPO';
+    kind: 'LBO' | 'TAKE_PRIVATE' | 'RECAP' | 'IPO';
     sponsorId: string;
-    /** LBO: the sponsor's equity cheque, paid from dry powder at settlement. */
+    /** LBO and TAKE_PRIVATE: the sponsor's equity cheque, paid from dry powder at settlement. */
     equityUSD?: number;
+    /** TAKE_PRIVATE: what the sponsor pays each public shareholder to tender. */
+    takeoutPricePerShare?: number;
   };
 }
 
