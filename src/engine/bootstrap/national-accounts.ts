@@ -71,6 +71,19 @@ export const GOV_PROCUREMENT_SHARE_OF_SPENDING = 0.35;
 export const HOUSEHOLD_EFFECTIVE_TAX_RATE = 0.1322;
 
 /**
+ * PUB1c — the two tax instruments the model had no base for, which is why real collections
+ * covered only about half of what the government spent.
+ *
+ * Neither touches the identity above. **Employer payroll tax** is a cost to the FIRM, so it
+ * reduces profit (and the corporate tax on it) without changing household disposable income.
+ * **Consumption tax** is a wedge inside the household's consumption budget: disposable income is
+ * unchanged and real purchases fall, which is exactly what a VAT does. So the identity assert
+ * still holds while the revenue becomes real.
+ */
+export const EMPLOYER_PAYROLL_TAX_RATE = 0.0765;
+export const CONSUMPTION_TAX_RATE = 0.10;
+
+/**
  * Share of a lost wage that unemployment insurance replaces. A transfer-policy primitive; it
  * lived as a bare literal inside the weekly evolution before, where the cold-start bootstrap
  * could not see it.
@@ -109,19 +122,34 @@ export function computeGovernmentPurchasesUSD(
  * real automatic stabilizer, and the reason this takes the larger of the two rather than summing
  * them (which would double-count benefits).
  */
+/**
+ * PUB1c — the labor share is TOTAL COMPENSATION, so the employer's payroll tax comes out of it
+ * before households see a wage. Splits a wage bill into what the treasury gets and what is paid.
+ */
+export function splitWageBill(totalCompensationUSD: number): { grossWagesUSD: number; employerPayrollTaxUSD: number } {
+  const grossWagesUSD = totalCompensationUSD / (1 + EMPLOYER_PAYROLL_TAX_RATE);
+  return { grossWagesUSD, employerPayrollTaxUSD: totalCompensationUSD - grossWagesUSD };
+}
+
 export function computeHouseholdDisposableIncomeUSD(parts: {
+  /** TOTAL COMPENSATION (the labor share). The employer payroll tax is split out inside, so
+   * callers pass one number and cannot disagree about where the split happens. */
   wageIncomeUSD: number;
   governmentSpendingWeeklyUSD: number;
   unemploymentBenefitsUSD: number;
   /** PUB1: debt service leaves the transfer base — it is paid to bondholders. */
   interestWeeklyUSD?: number;
 }): number {
+  // Capital income is a share of OUTPUT, keyed off total compensation — it has nothing to do
+  // with the payroll tax, and deriving it from post-tax wages shrank it by the payroll rate
+  // (measured: the identity assert fired at 78.66% against a required 79.46%).
   const capitalIncomeUSD = parts.wageIncomeUSD * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
+  const { grossWagesUSD } = splitWageBill(parts.wageIncomeUSD);
   const transfersUSD = Math.max(
     computeGovernmentTransfersUSD(parts.governmentSpendingWeeklyUSD, parts.interestWeeklyUSD ?? 0),
     parts.unemploymentBenefitsUSD
   );
-  const grossIncomeUSD = parts.wageIncomeUSD + capitalIncomeUSD + transfersUSD;
+  const grossIncomeUSD = grossWagesUSD + capitalIncomeUSD + transfersUSD;
   return grossIncomeUSD * (1 - HOUSEHOLD_EFFECTIVE_TAX_RATE);
 }
 
@@ -146,8 +174,10 @@ export function assertHouseholdIncomeIdentity(
 ): void {
   const govSpendShareOfOutput = (Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD) * 52) / outputUSD;
   const transferShare = govSpendShareOfOutput * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
+  // PUB1c: households receive the labor share NET of the employer's payroll tax.
   const expectedShare =
-    (LABOR_SHARE_OF_OUTPUT + HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT + transferShare) *
+    (LABOR_SHARE_OF_OUTPUT / (1 + EMPLOYER_PAYROLL_TAX_RATE)
+      + HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT + transferShare) *
     (1 - HOUSEHOLD_EFFECTIVE_TAX_RATE);
   const actualShare = householdIncomeUSD / outputUSD;
   if (Math.abs(actualShare - expectedShare) > 1e-4) {

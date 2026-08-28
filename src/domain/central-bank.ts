@@ -38,8 +38,14 @@ export interface CentralBank {
 
 /** Share of the sovereign stock the central bank holds at seed. */
 export const CENTRAL_BANK_SOVEREIGN_SHARE = 0.15;
-/** Weeks of government spending the treasury keeps on hand — its operating balance. */
-export const TGA_TARGET_WEEKS_OF_SPENDING = 4;
+/**
+ * Weeks of spending the treasury keeps on hand. Sized to the real dry spell: since PUB1c put
+ * receipts on real calendars (monthly withholding and payroll, quarterly business and
+ * consumption tax), the treasury pays out smoothly and is paid in lumps, and a four-week buffer
+ * ran the account negative by week 10. A real treasury either holds a bigger balance or issues
+ * cash-management bills to bridge; this is the first, and the second is PUB's issuance slice.
+ */
+export const TGA_TARGET_WEEKS_OF_SPENDING = 10;
 
 /** Total CB assets: the sovereign book. */
 export function centralBankAssetsUSD(cb: CentralBank): number {

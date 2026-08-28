@@ -285,8 +285,11 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     // Expected against the debt service the cohorts actually PAY (their recorded burden) —
     // the allocated-but-unpayable slice is arrears, priced bank-side as delinquency.
     const sumEffectiveDs = cohorts.reduce((a, c) => a + c.debtServiceUSD, 0);
+    // PUB1c: consumption tax is a wedge inside the budget — the money is in the identity, the
+    // purchases are not, so add it back before comparing.
+    const sumConsumptionTax = cohorts.reduce((a, c) => a + (c.consumptionTaxUSD ?? 0), 0);
     const expectedBudgets = sumDisposable - sumSavings
-      - sumEffectiveDs + (hs.capitalReceiptsAnnualUSD ?? 0);
+      - sumEffectiveDs + (hs.capitalReceiptsAnnualUSD ?? 0) - sumConsumptionTax;
     if (agg > 0 && Math.abs(sumBudgets - expectedBudgets) / agg > 5e-3) {
       violations.push({
         week,

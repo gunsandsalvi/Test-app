@@ -12,6 +12,7 @@ import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
+import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
 /**
@@ -463,6 +464,8 @@ export function evolveRegionMacro(
     const pool = newOccupationPools[occ];
     return sum + baseAnnualWageUSD[occ] * pool.wageIndex * pool.employed;
   }, 0);
+  // PUB1c: the wage bill is total compensation; the employer's payroll tax leaves it first.
+  const { grossWagesUSD, employerPayrollTaxUSD } = splitWageBill(totalWageIncomeUSD);
   const unemploymentBenefitsUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
     const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
@@ -858,6 +861,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     governmentRevenueUSD: newGovernmentRevenueUSD,
     governmentSpendingUSD: newGovernmentSpendingUSD,
     governmentInterestWeeklyUSD: Number(govInterestWeeklyUSD.toFixed(0)),
+    employerPayrollTaxWeeklyUSD: Number((employerPayrollTaxUSD / 52).toFixed(0)),
     householdState: {
       consumerConfidence: newCCI,
       creditTierBooks: normalizedTiers,

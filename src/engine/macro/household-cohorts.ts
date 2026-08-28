@@ -19,7 +19,7 @@ import {
 } from '../../domain/region-macro';
 import {
   computeGovernmentTransfersUSD, HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR,
-  HOUSEHOLD_EFFECTIVE_TAX_RATE, UNEMPLOYMENT_REPLACEMENT_RATE,
+  HOUSEHOLD_EFFECTIVE_TAX_RATE, UNEMPLOYMENT_REPLACEMENT_RATE, CONSUMPTION_TAX_RATE, splitWageBill, EMPLOYER_PAYROLL_TAX_RATE,
 } from '../bootstrap/national-accounts';
 
 export const WEALTH_TIERS: WealthTier[] = ['BOTTOM_50', 'NEXT_40', 'TOP_9', 'TOP_1'];
@@ -207,7 +207,9 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     WEALTH_TIERS.forEach((tier) => {
       const w = weights[tier];
       if (!(w > 0)) return;
-      const cellWage = occWage * (TIER_WAGE_MULTIPLIER[tier] / multNorm);
+      // PUB1c: the occupation wage is TOTAL COMPENSATION; households are paid it net of the
+      // employer's payroll tax, exactly as the aggregate derivation nets it.
+      const cellWage = splitWageBill(occWage * (TIER_WAGE_MULTIPLIER[tier] / multNorm)).grossWagesUSD;
       const employed = pool.employed * w;
       const unemployed = unemployedInPool * w;
       cells.push({
@@ -229,7 +231,9 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     computeGovernmentTransfersUSD(governmentSpendingWeeklyUSD), totalBenefitsUSD
   );
   const excessTransfersUSD = aggregateTransfersUSD - totalBenefitsUSD;
-  const totalCapitalUSD = totalWageUSD * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
+  // Keyed off TOTAL COMPENSATION, matching the aggregate derivation — capital income is a share
+  // of output and does not shrink because the employer's payroll tax was split out of wages.
+  const totalCapitalUSD = totalWageUSD * (1 + EMPLOYER_PAYROLL_TAX_RATE) * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
 
   const earnersByTier = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => { earnersByTier[t] = 0; });
@@ -354,7 +358,13 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
       // STOPS SAVING before it stops eating (squeezedSavingsUSD below) — the real order of a
       // distressed household's cuts.
       savingsUSD: Number(squeezedSavingsUSD.toFixed(0)),
-      consumptionBudgetUSD: Number(Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD).toFixed(0)),
+      // PUB1c: consumption tax is a wedge inside the budget — the cohort's money is unchanged,
+      // what it buys is smaller, and the difference is remitted by merchants. Recorded so the
+      // treasury can collect it; the budget below is what actually reaches the goods market.
+      consumptionTaxUSD: Number((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
+        * (CONSUMPTION_TAX_RATE / (1 + CONSUMPTION_TAX_RATE))).toFixed(0)),
+      consumptionBudgetUSD: Number((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
+        / (1 + CONSUMPTION_TAX_RATE)).toFixed(0)),
     };
   });
 

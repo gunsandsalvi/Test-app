@@ -14,6 +14,7 @@ import { CPI_BASE_LEVEL, seedCpiHistory } from '../simulation/stages/price-index
 import {
   assertHouseholdIncomeIdentity,
   computeHouseholdDisposableIncomeUSD,
+  splitWageBill,
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { deriveSubUnitUnitPrice, TARGET_FIRMS_PER_REGION } from '../bootstrap/category-demand';
@@ -294,6 +295,7 @@ function buildRegion(regionId: RegionId): Region {
   // PUB1 (§7.4): the debt stack exists at week 0, so its interest is in the decomposition from
   // week 0 too — otherwise the seed opens on a transfer base the engine immediately shrinks.
   const seedInterestWeeklyUSD = weeklyInterestExpenseUSD(govDebtTranches);
+  const seedWageSplit = splitWageBill(totalWageIncomeUSD);
   const estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
     wageIncomeUSD: totalWageIncomeUSD,
     governmentSpendingWeeklyUSD: governmentSpendingUSD,
@@ -480,6 +482,7 @@ function buildRegion(regionId: RegionId): Region {
     governmentRevenueUSD,
     governmentSpendingUSD,
     governmentInterestWeeklyUSD: Number(seedInterestWeeklyUSD.toFixed(0)),
+    employerPayrollTaxWeeklyUSD: Number((seedWageSplit.employerPayrollTaxUSD / 52).toFixed(0)),
     // PUB2 (§7.4): the CB opens holding its real share of the stock, with the TGA at its
     // operating balance and currency as the residual that closes the balance sheet. Bank
     // reserves are the banks' own cash and are not stored here — one representation.

@@ -20,7 +20,7 @@ import { refreshRegionalHoldingsView } from './holdings-view';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
-  const { updatedRegions, updatedCompanies, nextWeek } = ctx;
+  const { updatedRegions, updatedCompanies, nextWeek, currentWeekMod13 } = ctx;
 
   // S7: the sector holdings VIEW, derived from the real books. This replaces a weekly
   // mechanical rebuild that attributed an ownership-share-times-outstanding figure across
@@ -237,22 +237,49 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // named gap below — the model has no consumption or payroll tax, which is roughly half of a
     // real take, and shrinking the state to fit the bases that do exist would model a different
     // economy rather than a more honest one.
-    const smeTaxWeeklyUSD = (reg.privateSectorSegments || []).reduce(
+    // Each stream accrues weekly and is REMITTED on its own real calendar. Nothing here is paid
+    // weekly any more: a business files quarterly, an employer deposits withheld income tax and
+    // payroll tax monthly, and a merchant files its consumption-tax return quarterly. The
+    // calendars are the point — they are what make a treasury account swing.
+    const isQuarterEnd = currentWeekMod13 === 13;
+    const isMonthEnd = nextWeek % 4 === 0;
+
+    const smeAccrualWeeklyUSD = (reg.privateSectorSegments || []).reduce(
       (a, sg) => a + Math.max(0, sg.annualRevenueUSD * sg.marginPct) * (reg.effectiveTaxRate ?? 0.21) / 52, 0
     );
-    const householdTaxWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxUSD, 0) / 52;
+    const householdAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxUSD, 0) / 52;
+    const consumptionAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + (c.consumptionTaxUSD ?? 0), 0) / 52;
+    const payrollAccrualWeeklyUSD = reg.employerPayrollTaxWeeklyUSD ?? 0;
+
+    reg.accruedSmeTaxUSD = (reg.accruedSmeTaxUSD ?? 0) + smeAccrualWeeklyUSD;
+    reg.accruedHouseholdTaxUSD = (reg.accruedHouseholdTaxUSD ?? 0) + householdAccrualWeeklyUSD;
+    reg.accruedConsumptionTaxUSD = (reg.accruedConsumptionTaxUSD ?? 0) + consumptionAccrualWeeklyUSD;
+    reg.accruedPayrollTaxUSD = (reg.accruedPayrollTaxUSD ?? 0) + payrollAccrualWeeklyUSD;
+
+    const smeTaxWeeklyUSD = isQuarterEnd ? reg.accruedSmeTaxUSD : 0;
+    const consumptionTaxWeeklyUSD = isQuarterEnd ? reg.accruedConsumptionTaxUSD : 0;
+    const householdTaxWeeklyUSD = isMonthEnd ? reg.accruedHouseholdTaxUSD : 0;
+    const payrollTaxWeeklyUSD = isMonthEnd ? reg.accruedPayrollTaxUSD : 0;
+    if (isQuarterEnd) { reg.accruedSmeTaxUSD = 0; reg.accruedConsumptionTaxUSD = 0; }
+    if (isMonthEnd) { reg.accruedHouseholdTaxUSD = 0; reg.accruedPayrollTaxUSD = 0; }
+
     const corporateTaxWeeklyUSD = ctx.taxCollectedByRegion[regionId] ?? 0;
     reg.taxCollectedCorporateUSD = Number(corporateTaxWeeklyUSD.toFixed(0));
     reg.taxCollectedSmeUSD = Number(smeTaxWeeklyUSD.toFixed(0));
     reg.taxCollectedHouseholdUSD = Number(householdTaxWeeklyUSD.toFixed(0));
+    reg.taxCollectedPayrollUSD = Number(payrollTaxWeeklyUSD.toFixed(0));
+    reg.taxCollectedConsumptionUSD = Number(consumptionTaxWeeklyUSD.toFixed(0));
     // The gap is sized against the SMOOTH expectation (corporate ACCRUAL, not the quarterly
     // remittance), so revenue keeps the real lumpiness instead of the residual absorbing it —
     // which is what makes a tax date swing the treasury's account at all.
-    const smoothRealUSD = (ctx.taxAccruedByRegion[regionId] ?? 0) + smeTaxWeeklyUSD + householdTaxWeeklyUSD;
+    const smoothRealUSD = (ctx.taxAccruedByRegion[regionId] ?? 0)
+      + smeAccrualWeeklyUSD + householdAccrualWeeklyUSD + consumptionAccrualWeeklyUSD + payrollAccrualWeeklyUSD;
     reg.unmodeledTaxRevenueUSD = Number(Math.max(0, reg.governmentRevenueUSD - smoothRealUSD).toFixed(0));
-    // Revenue IS what arrived: real collections plus the bases the model cannot yet tax.
+    // Revenue IS what arrived: real collections on their own calendars, plus whatever base the
+    // model still cannot tax.
     reg.governmentRevenueUSD = Number((
-      corporateTaxWeeklyUSD + smeTaxWeeklyUSD + householdTaxWeeklyUSD + reg.unmodeledTaxRevenueUSD
+      corporateTaxWeeklyUSD + smeTaxWeeklyUSD + householdTaxWeeklyUSD
+      + payrollTaxWeeklyUSD + consumptionTaxWeeklyUSD + reg.unmodeledTaxRevenueUSD
     ).toFixed(0));
 
     // PUB1: the government's real interest bill. The treasury's ACCOUNT is the TGA, a liability
