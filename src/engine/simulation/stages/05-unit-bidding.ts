@@ -185,6 +185,12 @@ interface SourcingContext {
   /** Whether that week's book for a good left unfilled DEMAND rather than unsold supply — which
    *  is what decides who can insist on being paid in their own money. */
   sellerIsShort: (subUnitId: string, origin: RegionId) => boolean;
+  /** Per-week memoisation, because both are deterministic within a week and the lot loop asked
+   *  for them once per LOT — ~14k structural-PD evaluations for ~2k distinct buyers, the same
+   *  per-item-recomputation shape §7.32's optimization lessons record. Caching changes nothing
+   *  but the clock: same inputs, same answers, byte-identical world. */
+  buyerAnnualPdByTicker: Map<string, number>;
+  invoiceRegionByKey: Map<string, RegionId>;
 }
 
 /**
@@ -964,20 +970,30 @@ function runSubUnitMarkets(
         // aggregate has no cash leg here to defer, so deferring one would invent an exposure.
         const seller = lookup.byTicker.get(l.sellerKey);
         if (!seller || origin === plan.regionId) return;
-        const invoiceRegion = chooseInvoiceRegion({
-          sellerRegion: origin,
-          buyerRegion: plan.regionId,
-          candidates: MARKET_REGION_IDS,
-          illiquidity: sourcing.fxPairIlliquidity,
-          quotedPairs: sourcing.quotedPairs,
-          sellerIsShort: sourcing.sellerIsShort(subUnitId, origin),
-        });
+        const invoiceCacheKey = `${origin}|${plan.regionId}|${subUnitId}`;
+        let invoiceRegion = sourcing.invoiceRegionByKey.get(invoiceCacheKey);
+        if (invoiceRegion === undefined) {
+          invoiceRegion = chooseInvoiceRegion({
+            sellerRegion: origin,
+            buyerRegion: plan.regionId,
+            candidates: MARKET_REGION_IDS,
+            illiquidity: sourcing.fxPairIlliquidity,
+            quotedPairs: sourcing.quotedPairs,
+            sellerIsShort: sourcing.sellerIsShort(subUnitId, origin),
+          });
+          sourcing.invoiceRegionByKey.set(invoiceCacheKey, invoiceRegion);
+        }
         const currency = invoiceCurrencyOf(invoiceRegion);
         const usdPerCurrency = sourcing.fxToUsd(invoiceRegion);
         if (!(usdPerCurrency > 0)) return;
         const valueUSD = localToUsd(l.units * perUnit, plan.regionId, sourcing.fxToUsd);
+        let buyerPd = sourcing.buyerAnnualPdByTicker.get(comp.ticker);
+        if (buyerPd === undefined) {
+          buyerPd = computeAnnualDefaultProbability(comp);
+          sourcing.buyerAnnualPdByTicker.set(comp.ticker, buyerPd);
+        }
         const termWeeks = paymentTermWeeks({
-          buyerAnnualDefaultProbability: computeAnnualDefaultProbability(comp),
+          buyerAnnualDefaultProbability: buyerPd,
           recoveryRate: seller.recoveryRate ?? 0.4,
           sellerMarginShare: Math.max(0, (seller.ebitda ?? 0) / Math.max(1, seller.annualRevenue ?? 1)),
           sellerCashUSD: seller.cash ?? 0,
@@ -1170,6 +1186,8 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       const d = ctx.updatedRegions[origin]?.categoryDemand[subUnitId] as any;
       return (Number(d?.totalUnitsDemandedThisWeek) || 0) > (Number(d?.totalUnitsSuppliedThisWeek) || 0);
     },
+    buyerAnnualPdByTicker: new Map(),
+    invoiceRegionByKey: new Map(),
   };
 
   const contractsByRegionBySubUnit = {} as Record<RegionId, Map<string, SupplyContract[]>>;

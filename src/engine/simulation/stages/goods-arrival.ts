@@ -35,13 +35,21 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
   let arrivedUnits = 0;
   const { companyUpdates } = ctx;
 
+  // One index, not a scan per shipment. The `.find` this replaces walked ~2,000 firms for every
+  // one of ~10,000 in-transit consignments — O(shipments x firms), the exact per-item-scan
+  // anti-pattern §7.32 records three prior instances of, and it made a stage that hands boxes to
+  // their owners cost 99ms a week. Public firms first so a duplicate ticker resolves the same
+  // way the sequential find did (tickers are unique by construction; this is belt and braces).
+  const firmByTicker = new Map<string, (typeof ctx.prevActiveFirms)[number]>();
+  ctx.prevActivePrivateFirms.forEach(c => firmByTicker.set(c.ticker, c));
+  ctx.prevActiveFirms.forEach(c => firmByTicker.set(c.ticker, c));
+
   inFlight.forEach(shipment => {
     if (shipment.arrivalWeek > state.currentWeek) { stillMoving.push(shipment); return; }
     if (!companyUpdates[shipment.buyerTicker]) companyUpdates[shipment.buyerTicker] = {};
     const update = companyUpdates[shipment.buyerTicker];
     if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
-    const buyer = ctx.prevActiveFirms.find(c => c.ticker === shipment.buyerTicker)
-      ?? ctx.prevActivePrivateFirms.find(c => c.ticker === shipment.buyerTicker);
+    const buyer = firmByTicker.get(shipment.buyerTicker);
     // A buyer that no longer exists cannot take delivery; the consignment is written off rather
     // than landed on nobody, which would be inventory with no owner.
     if (!buyer) return;

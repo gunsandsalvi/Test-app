@@ -1,5 +1,6 @@
 
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
+import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../domain/institutions';
@@ -1117,7 +1118,8 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     diagnosticsLogs: [
       {
         week: 1,
-        timestamp: new Date().toISOString(),
+        // Sim calendar, never wall clock — see 02-region-macro's twin comment.
+        timestamp: getSimulationDate(1).toISOString(),
         category: 'EXECUTION',
         message: 'Engine Initialized: Multi-Region Macro <-> Micro Feedback Loop Active (Jan 05, 2026)',
         deltaText: '200 Corporate Issuers • 4 Nelson-Siegel Yield Curves • 9 Commodities Desk',

@@ -8,6 +8,7 @@
  */
 
 import { GameState, DebtTranche } from '../../../types';
+import { getSimulationDate } from '../../formatters';
 import { isActiveCompany } from '../../../domain/company';
 import { checkForMerger } from '../merger';
 import { WeeklyStepContext } from './context';
@@ -218,7 +219,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
 
   ctx.diagnosticLogs.push({
     week: ctx.nextWeek,
-    timestamp: new Date().toISOString(),
+    // Sim calendar, never wall clock — see 02-region-macro's twin comment.
+    timestamp: getSimulationDate(ctx.nextWeek).toISOString(),
     category: 'MICRO',
     message: `Merger Executed: ${acquirer.name} acquired ${target.name}`,
     deltaText: '',

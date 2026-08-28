@@ -172,7 +172,8 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     // here while the engine counts them made the identity fail by exactly their size — 231 of
     // 273 violations at the XB close, and a harness bug rather than an engine one.
     const sovereignBook = Object.values(cb.sovereignHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    const fxReserves = Object.values((cb as any).fxReservesByRegion || {}).reduce((a: number, v) => a + (Number(v) || 0), 0);
+    const fxBook: Record<string, number> = (cb as any).fxReservesByRegion ?? {};
+    const fxReserves = Object.keys(fxBook).reduce((a, k) => a + (Number(fxBook[k]) || 0), 0);
     const assets = sovereignBook + fxReserves;
     const residual = assets - (reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD) + cb.unbackedBankCashUSD;
     if (assets > 0 && Math.abs(residual) / assets > 1e-3) {

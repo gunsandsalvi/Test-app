@@ -202,17 +202,47 @@ function demandAtStat(
  * do support, the market clears wide and the dealer is left holding the difference, which is
  * what a dealer of last resort actually is.
  */
+/**
+ * A participant's schedule with everything that does NOT depend on the level precomputed once.
+ * The bisection evaluates total demand ~62 times per instrument, and the original recomputed the
+ * range clamp, the affordability cap and the mandated core on every one of those evaluations for
+ * every participant — including the majority with no interest in the instrument at all, whose
+ * contribution is an exact +0. Same arithmetic, same participant order, byte-identical world
+ * (§7.32's constraint); only the redundant work is gone.
+ */
+interface PreparedDemand {
+  reservationStat: number;
+  range: number;
+  maxHoldingUSD: number;
+  affordableUSD: number;
+  mandatedCoreUSD: number;
+}
+
+function prepareDemand(demand: ParticipantDemand, previousHoldingUSD: number): PreparedDemand {
+  const range = Math.max(1e-6, demand.fullSizeStatRange);
+  const affordableUSD = demand.maxNetPurchaseUSD === undefined
+    ? Infinity
+    : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
+  const mandatedCoreUSD = Math.min(demand.minHoldingUSD ?? 0, affordableUSD);
+  return { reservationStat: demand.reservationStat, range, maxHoldingUSD: demand.maxHoldingUSD, affordableUSD, mandatedCoreUSD };
+}
+
+function preparedDemandAtStat(e: PreparedDemand, stat: number, isYieldLike: boolean): number {
+  const distanceIntoTheMoney = isYieldLike ? stat - e.reservationStat : e.reservationStat - stat;
+  const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / e.range));
+  const wantedUSD = e.maxHoldingUSD * fraction;
+  return Math.max(e.mandatedCoreUSD, Math.min(wantedUSD, e.affordableUSD));
+}
+
 function solveClearingStat(
   inst: ClearingInstrument,
-  participants: ClearingParticipant[],
+  prepared: PreparedDemand[],
   bracketLow: number,
   bracketHigh: number
 ): number {
+  const isYieldLike = inst.statKind === 'YIELD_LIKE';
   const totalDemandAt = (stat: number) =>
-    participants.reduce((sum, p) => {
-      const d = p.demandByInstrumentId.get(inst.id);
-      return sum + (d ? demandAtStat(d, stat, inst.statKind, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0) : 0);
-    }, 0);
+    prepared.reduce((sum, e) => sum + preparedDemandAtStat(e, stat, isYieldLike), 0);
 
   // Demand rises with the statistic for YIELD_LIKE and falls for PRICE_LIKE; orient the search so
   // that `lo` is always the low-demand end.
@@ -283,8 +313,17 @@ export function clearFinancialAsset(
     const bracketLow = isYieldLike ? -2000 : Math.max(1e-6, inst.currentStat * 0.01);
     const bracketHigh = isYieldLike ? 100000 : inst.currentStat * 100;
 
+    // The stat-independent half of every schedule, once — in participants order, so the demand
+    // sum runs through the same non-zero terms in the same sequence the per-participant walk did.
+    const prepared: PreparedDemand[] = [];
+    participants.forEach((p) => {
+      const d = p.demandByInstrumentId.get(inst.id);
+      if (!d) return;
+      prepared.push(prepareDemand(d, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0));
+    });
+
     let liveFloatUSD = inst.tradableFloatUSD + offeringUSD;
-    let solvedStat = solveClearingStat({ ...inst, tradableFloatUSD: liveFloatUSD }, participants, bracketLow, bracketHigh);
+    let solvedStat = solveClearingStat({ ...inst, tradableFloatUSD: liveFloatUSD }, prepared, bracketLow, bracketHigh);
     let offeringWithdrawn = false;
     if (offeringUSD > 0 && inst.primaryWithdrawStat !== undefined) {
       const beyondWalkAway = isYieldLike
@@ -295,7 +334,7 @@ export function clearFinancialAsset(
         // outstanding stock clears on its own.
         offeringWithdrawn = true;
         liveFloatUSD = inst.tradableFloatUSD;
-        solvedStat = solveClearingStat(inst, participants, bracketLow, bracketHigh);
+        solvedStat = solveClearingStat(inst, prepared, bracketLow, bracketHigh);
       }
     }
 

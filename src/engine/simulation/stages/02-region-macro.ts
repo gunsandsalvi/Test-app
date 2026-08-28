@@ -8,6 +8,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { getSimulationDate } from '../../formatters';
 import { isActiveCompany } from '../../../domain/company';
 import { evolveRegionMacro } from '../../macro/evolution';
 import { computeOccupationDemand, computeTargetOwnershipShares } from './shared-helpers';
@@ -134,7 +135,9 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     // Add Macro Diagnostic Telemetry to Log
     ctx.diagnosticLogs.push({
       week: ctx.nextWeek,
-      timestamp: new Date().toISOString(),
+      // The WORLD'S date, not the operator's clock. A wall-clock timestamp inside GameState made
+      // two same-seed runs hash differently and masked a real determinism check (§7.32).
+      timestamp: getSimulationDate(ctx.nextWeek).toISOString(),
       category: 'MACRO',
       message: `[MACRO] ${regionId} GDP Breakdown:`,
       deltaText: diagnosticString,
