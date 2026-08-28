@@ -110,6 +110,9 @@ export interface InstitutionalEntity {
    * bank on the other side, marked every week, not a discount applied to a yield.
    */
   fxForwards?: FxForward[];
+  /** WS9/XB2d: last week's foreign holdings by issuer region, so this week's CHANGE is the real
+   * cross-border settlement flow that has to buy or sell currency. */
+  priorForeignHoldingsByRegion?: Record<string, number>;
   /**
    * MONEY_MARKET_FUND only (WS7): the fund's share liabilities at its fixed $1 NAV — every
    * dollar of shares is a dollar some real holder (a corporate treasury's `mmfSharesUSD`, the

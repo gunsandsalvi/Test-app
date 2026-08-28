@@ -17,7 +17,6 @@ import {
   GOV_HIRING_RESPONSE_TO_STANCE,
 } from '../../domain/government';
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
-import { FX_SPOT_PRICE_IMPACT_PER_GDP } from '../../domain/dealer-derivatives';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
@@ -951,59 +950,22 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
  * FX Uncovered Interest Rate Parity with stochastic drift and trade balance shocks
  */
 
+/**
+ * WS9/XB2d: the RATE is no longer computed here. It clears in stages/fx-clearing.ts against every
+ * participant's real demand — dealers flattening inventory, cross-border settlement, trade
+ * receipts, speculators and central banks. What used to live here was a drift: an interest
+ * differential, a trade-imbalance term, an attractiveness comparison and a noise term, none of
+ * which had a counterparty on the other side of the trade.
+ *
+ * What remains is the cross-currency basis quote, which is a dealer's price and not a rate.
+ */
 export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxPair {
-  const dt = 1 / 52;
-  const baseRegion = regions[fx.base];
-  const quoteRegion = regions[fx.quote];
-
-  const rDomestic = quoteRegion.policyRate;
-  const rForeign = baseRegion.policyRate;
-
-  const rateDiff = rDomestic - rForeign;
-  const sigmaFx = 0.08;
-  const eps = (random() - 0.5) * Math.sqrt(dt) * 2;
-
-  // Trade-balance term is now the dominant driver: a sustained current-account imbalance
-  // (as a share of each region's own GDP) should actually clear over time rather than being
-  // squeezed into a small capped nudge.
-  const tradeImbalancePctGdp = baseRegion.currentAccountPctGdp - quoteRegion.currentAccountPctGdp;
-  const tradeTerm = tradeImbalancePctGdp * 0.15;
-
-  // Capital-flow term: reuses the same growth/yield attractiveness signal that drives
-  // cross-border equity ownership rebalancing (computeTargetOwnershipShares in core.ts) —
-  // capital flows toward, and appreciates the currency of, the relatively more attractive region.
-  const baseAttractiveness = (baseRegion.gdpGrowth + baseRegion.inflation) - baseRegion.zeroRates.tenor10Y;
-  const quoteAttractiveness = (quoteRegion.gdpGrowth + quoteRegion.inflation) - quoteRegion.zeroRates.tenor10Y;
-  const capitalFlowTerm = (baseAttractiveness - quoteAttractiveness) * 0.5;
-
-  // §6 UIP-sign fix: fx.rate is quote-per-base, so rate UP = base appreciating. Carry flows
-  // toward the HIGHER-yielding currency — a higher quote rate (rateDiff > 0) attracts flow
-  // into the quote currency and the pair falls. The old positive term appreciated the LOWER
-  // yielder's counterpart, backwards. WS9 deletes this whole drift for real FX clearing.
-  // XB2c: the dealers' delta hedge is REAL FLOW, not an attractiveness signal. Having bought a
-  // currency forward from hedgers, the desks sell it spot — so a large hedged foreign bond
-  // portfolio weighs on the currency it is invested in. Scaled by each region's own output so a
-  // given flow matters more to a small economy, which is exactly how it works.
-  const hedgeFlow = (r: Region) =>
-    (r.fxHedgeSpotFlowUSD ?? 0) / Math.max(1, r.estimatedNominalGdpUSD);
-  const hedgeFlowTerm =
-    (hedgeFlow(baseRegion) - hedgeFlow(quoteRegion)) * FX_SPOT_PRICE_IMPACT_PER_GDP;
-
-  const drift = -rateDiff * dt * 0.3 + sigmaFx * eps + tradeTerm + capitalFlowTerm + hedgeFlowTerm;
-  const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));
-  const change1W = Number((newRate - fx.rate).toFixed(4));
-
+  const rDomestic = regions[fx.quote].policyRate;
+  const rForeign = regions[fx.base].policyRate;
   const basisNoise = (random() - 0.5) * 2.0;
-  const newBasisBps = Math.round(fx.basisSpreadBps + basisNoise + (rDomestic - rForeign) * 20);
-
-  const hist = [...fx.historicalRates.slice(-51), newRate];
-
   return {
     ...fx,
-    rate: newRate,
-    change1W,
-    historicalRates: hist,
-    basisSpreadBps: Math.min(-2, Math.max(-80, newBasisBps)),
+    basisSpreadBps: Math.round(fx.basisSpreadBps + basisNoise + (rDomestic - rForeign) * 20),
   };
 }
 

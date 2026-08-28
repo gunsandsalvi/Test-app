@@ -13,20 +13,21 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { evolveFxPair } from '../../macro/evolution';
 import { WeeklyStepContext } from './context';
 
+/**
+ * USD per one unit of a region's currency.
+ *
+ * It used to look pairs up by NAME — 'EUR/USD', 'GBP/USD', 'USD/JPY' — none of which this model
+ * builds: pairs are named `${base}/${quote}` over RegionIds, so they are 'EUR/USA', 'UK/USA',
+ * 'USA/JPN'. Every lookup missed and every caller silently got the hardcoded fallback, which is
+ * why the exchange rate has never moved anything: the one function that converts to USD returned
+ * a constant. Matching on base/quote instead makes it read the real cleared rate.
+ */
 export function getFxToUsd(updatedFxPairs: FxPair[], regionId: RegionId): number {
   if (regionId === 'USA') return 1.0;
-  if (regionId === 'EUR') {
-    const eurUsd = updatedFxPairs.find((p) => p.pair === 'EUR/USD');
-    return eurUsd ? eurUsd.rate : 1.08;
-  }
-  if (regionId === 'UK') {
-    const gbpUsd = updatedFxPairs.find((p) => p.pair === 'GBP/USD');
-    return gbpUsd ? gbpUsd.rate : 1.29;
-  }
-  if (regionId === 'JPN') {
-    const usdjpy = updatedFxPairs.find((p) => p.pair === 'USD/JPY');
-    return usdjpy ? 1 / usdjpy.rate : 1 / 154;
-  }
+  const direct = updatedFxPairs.find((p) => p.base === regionId && p.quote === 'USA');
+  if (direct && direct.rate > 0 && isFinite(direct.rate)) return direct.rate;
+  const inverse = updatedFxPairs.find((p) => p.base === 'USA' && p.quote === regionId);
+  if (inverse && inverse.rate > 0 && isFinite(inverse.rate)) return 1 / inverse.rate;
   return 1.0;
 }
 

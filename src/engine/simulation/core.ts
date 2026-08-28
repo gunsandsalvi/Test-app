@@ -30,6 +30,7 @@ import { runMergersStage } from './stages/10-mergers';
 import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign-debt';
 import { runBillAccretionStage } from './stages/bill-accretion';
 import { runFxHedgingStage } from './stages/fx-hedging';
+import { runFxClearingStage, recordForeignHoldingsSnapshot } from './stages/fx-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 import { distributeMoneyFundIncome } from './stages/money-market-fund';
@@ -153,6 +154,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // A stable-NAV fund pays its yield as new shares and its fee leaves to the manager.
   // XB2: hedge the cross-border book that the clearing stages actually left behind.
   run('fx-hedging', () => runFxHedgingStage(state, ctx));
+  // WS9/XB2d: the FX market clears against every participant's real demand — including the
+  // hedging flow the desks just generated, which now has a counterparty.
+  run('fx-clearing', () => { runFxClearingStage(state, ctx); recordForeignHoldingsSnapshot(ctx); });
   run('money-fund-income', () => distributeMoneyFundIncome(ctx));
   run('bill-accretion', () => runBillAccretionStage(state, ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));

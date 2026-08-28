@@ -98,6 +98,9 @@ export interface WeeklyStepContext {
   // Stage 05/06 boundary outputs, read by stage 08/12
   marketVolComponent: number;
   getFxToUsd: (regionId: RegionId) => number;
+  /** WS9/XB2d: each currency's cleared value in USD. Every pair is derived from two of these,
+   * so no set of pair moves can violate triangular arbitrage. */
+  currencyValueUSD?: Record<string, number>;
   regionCategoryExports: Record<RegionId, Record<string, number>>;
 
   // Stage 11 output, read by stage 13
@@ -171,6 +174,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
 
     marketVolComponent: 0,
     getFxToUsd: () => 1.0,
+    currencyValueUSD: undefined,
     regionCategoryExports: { USA: {}, EUR: {}, UK: {}, JPN: {} },
 
     weeklyInterestIncomeUSD: 0,

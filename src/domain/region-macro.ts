@@ -457,6 +457,11 @@ export interface Region {
   equityOwnership: AssetOwnershipShares;
   corpBondOwnership: AssetOwnershipShares;
   sovBondOwnership: AssetOwnershipShares;
+  /** WS9/XB2d: what the FX market cleared this week, and what it could not clear. A large
+   * persistent residual means the elastic side is too thin — a real signal, not noise. */
+  fxClearedMovePct?: number;
+  fxUnclearedResidualUSD?: number;
+  fxGrossDemandUSD?: number;
   /** XB2c: net spot FX the dealers had to execute this week delta-hedging their forward book.
    * Negative = selling pressure on this region's currency. */
   fxHedgeSpotFlowUSD?: number;
