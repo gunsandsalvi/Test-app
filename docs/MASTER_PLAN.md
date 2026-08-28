@@ -362,6 +362,22 @@ Both sides close together, because they are one thing:
   undrawn capital runs 13.6B → 0.25B by week 90 and deal flow ends (§7.41). Real LPs size a new
   vintage from their own allocation, which is a real decision only once their liabilities are.
 
+**HH1b — One institution, not two.** *(scope discovered while building HH1a — §7.49)*
+The Company shell and the InstitutionalEntity that share an `id` are the same firm and do not
+agree. An insurer reports 0.05B of revenue and 0.10B of market cap against an entity holding
+241.4B; its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability. The insurer
+branch of stage 08 explicitly refuses to read the entity, on a comment that predates S11 making
+`totalAssetsUSD` a real per-firm marked book — the asset-manager branch beside it already reads it
+and says so. Pension funds and hedge funds fall through to the generic consumer-revenue path.
+- Insurer float, premiums, claims and reserves come from the entity's real book, and
+  `technicalReservesUSD` becomes the beneficiary liability rather than a second version of it.
+- Pension funds and hedge funds get their own P&L off their own books instead of a consumer beta.
+- **Then the constants become derivable**, which is why they wait: an entity's required return is
+  its real liability cost, and there is no liability cost until the flows above are real.
+  `REQUIRED_RETURN_ON_CAPITAL` and `INSTITUTIONAL_REAL_RETURN_BPS` retire here.
+- This also repairs what L4 exposed: institutions clear in 07e now, and until their P&L is their
+  real book they are priced on a shell.
+
 **HH2 — The house joins the balance sheet.** Households carry **1,061B of mortgage debt and own no
 house**: a balance sheet with the liability and not the asset. The model already has median home
 prices, a baseline, a price index and a 62% ownership rate — the housing stock is computable
@@ -711,8 +727,9 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | Defect | State and next action |
 |---|---|
 | **G1b — the inflation escape** | The measured band is SEED-SENSITIVE: one world holds −10..0%, others escape upward by week 40 (the default-stream world reaches 50%+ by week 52 with the 10Y following to 17%). **The measurement is not at fault** — the goods market's prices really do move that much. G2 measurably damped it and did not cure it (0.66% of demand against a goods cycle orders of magnitude larger), exactly as predicted. Remaining owners: **MS** (the household rate response, the missing stabiliser) and **PUB** (the fiscal loop). Two diagnostics still unrun and worth doing first: trace one sub-unit's price, supply and demand over 120 weeks for a long-wavelength cobweb; and consider whether stage 05's real bid and offer prices should carry an expectations term — a genuine behavioural channel, since anchored expectations damp actual price setting. **Do not** smooth the index, widen the basket, or clamp inflation: the index is the measurement, and if it is volatile the economy is. |
+| **The institutional Company and the InstitutionalEntity are two firms** | Found in HH1 (§7.49) and the largest thing left in this sector. `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. PENSION_FUND and HEDGE_FUND fall through to the generic CONSUMER-revenue path. **This is HH1b's remaining scope**, and until it lands, L4's decision to clear institutions in 07e prices them on the shell rather than the balance sheet. |
 | **#67 — USA bank capital → 0** | Arrives by **week ~70** on current HEAD; the harness has PRINTED the collapse since the flow ledger (§7.36), where the deleted recapitalization-from-nowhere used to prop the ratio. A/B confirms the S1/S2/G1 work does not cause it. G2 was its owner and has landed, and call protection halved the related NIM cluster — **re-measure before assigning further work**; if it survives, the bleed is in the loss-rate and yield formulas on the loan books. |
-| **#18 — companies at the revenue floor** | Four names in the 60-week harness, and the only violations left in it. Live and visible; owner is the goods-market cash-margin path. |
+| ~~**#18 — companies at the revenue floor**~~ | **CLOSED (§7.49), and the diagnosis was wrong for a year.** The four names were the four regional HEDGE FUNDS, whose "revenue" is a fee on their book — the harness was applying an operating company's growth ceiling to a fund. And they had not grown: their book SHRANK 76.8B → 62.4B while the reported revenue rose 29x, because the generator seeded `aumUSD` as a multiple of an operating company's revenue while the entity carried the real marked book. A §7.4 cold start, not a runaway. Seeding the shell at the size it actually manages took it to 1.1x. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closes that 740B on both sides at once; HH2 adds the house households already carry a mortgage against. Watch this line fall toward zero as each slice lands. |
@@ -2012,7 +2029,32 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
     - **The lesson generalises past this sector.** When a number has to be labelled "unmodeled",
       check first whether the model already contains it somewhere it is not attributed. A missing
       counterparty looks exactly like a missing asset from one side of the ledger.
-49. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+49. **HH1a landed, and the harness went GREEN for the first time — via a defect that had been
+    misfiled for a year.**
+    - **The claims:** 740B of insurer reserves, pension entitlements and fund shares had no holder.
+      Both sides now exist, derived as the residual on a real balance sheet and re-marked weekly,
+      with an invariant checking them against each other. Measured: 795B of claims at week 1,
+      both sides reconciling to 802.6B at week 40 with zero per-claim mismatches, and the unmodeled
+      placeholder falling **1,759B → 964B on attribution alone, then to 469B by week 60** — a 73%
+      reduction in this project's scoreboard.
+    - **#18 was never a revenue runaway.** The four names flagged for a year were the four regional
+      HEDGE FUNDS, whose revenue is a fee on their book, so the harness was applying an operating
+      company's growth ceiling to a fund. And they had not grown: **their book SHRANK 76.8B →
+      62.4B while reported revenue rose 29x.** The generator seeded `aumUSD` as a multiple of an
+      operating company's revenue; the entity carried the real marked book; week 1 swapped one for
+      the other. A §7.4 cold start wearing a growth defect's name. Seeding the shell at the size it
+      actually manages: **29x → 1.1x, and the 60-week harness passes with zero violations.**
+    - **The lesson is the one §7.4 already taught and this project keeps re-learning.** A quantity
+      that jumps at week 1 is almost never the engine misbehaving; it is the seed and the engine
+      disagreeing about what the quantity IS. The tell was available the whole time — the violation
+      was always at week 60 with the same four names and no new ones, which is a step change
+      compounding, not a process running away.
+    - **And a bigger thing was underneath it:** the institutional Company and the InstitutionalEntity
+      that share an `id` are two firms that do not agree (an insurer at 0.10B of market cap against
+      a 241.4B book). Recorded in §6 and scoped as HH1b. It also means L4's decision to clear
+      institutions in 07e is currently pricing them on the shell — right in principle, and not yet
+      right in fact.
+50. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

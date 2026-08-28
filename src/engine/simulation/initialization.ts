@@ -481,6 +481,35 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       });
     });
 
+    // The same effective rate the macro bootstrap uses, so the seed's after-tax shape matches
+    // what stage 08 will produce from week 1.
+    const INSTITUTIONAL_EFFECTIVE_TAX_RATE = 0.31;
+    // ---- HH1b: seed an institution at the size it actually manages (§7.4, seed shape = engine
+    // shape). The Company shell and the InstitutionalEntity are the SAME firm, and their two
+    // notions of AUM disagreed: the generator seeded `aumUSD` as a multiple of an operating
+    // company's revenue, while the entity's `totalAssetsUSD` is its real marked book. Stage 08
+    // reads the entity, so week 1 replaced the seeded revenue with a fee on a book orders of
+    // magnitude larger — the company did not grow, the model switched formulas.
+    //
+    // Measured: the four hedge funds' fee revenue rose 29x in sixty weeks while their book SHRANK
+    // 76.8B → 62.4B, and those four were the last four violations in the invariants harness,
+    // logged for a year as "#18 revenue runaway". It was never a runaway; it was a cold start.
+    regionalInstCompanies.forEach(comp => {
+      if (comp.financialStatementProfile !== 'ASSET_MANAGER') return;
+      const entity = institutionalEntities.find(e => e.id === comp.id);
+      if (!entity || !(comp.managementFeeRate > 0)) return;
+      comp.aumUSD = entity.totalAssetsUSD;
+      const revenueUSD = Math.max(10, comp.aumUSD * comp.managementFeeRate);
+      const ebitdaUSD = revenueUSD * 0.35;
+      comp.annualRevenue = revenueUSD;
+      comp.baselineAnnualRevenue = revenueUSD;
+      comp.revenueHistory = [revenueUSD];
+      comp.ebitda = ebitdaUSD;
+      comp.ebit = Math.max(1, ebitdaUSD);
+      comp.netIncome = comp.ebit * (1 - INSTITUTIONAL_EFFECTIVE_TAX_RATE);
+      comp.eps = comp.sharesOutstanding > 0 ? Number((comp.netIncome / comp.sharesOutstanding).toFixed(2)) : 0;
+    });
+
     // Calibrate initial occupationLaborForceShare from actual week-1 demand across companies & private segments
     // with realistic occupational tightness differentials
     const week1OccDemand = computeOccupationDemand(regionCompanies, reg.privateSectorSegments, regionId, reg.governmentEmployment) as Record<OccupationType, number>;
