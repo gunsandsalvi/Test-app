@@ -293,49 +293,12 @@ home. Aurora inherits the convention rather than re-inventing it.
 
 ---
 
-### L — Ledger integrity batch  *(Tier 1, item 1)*
+### L — Ledger integrity batch  *(CLOSED — §7.46)*
 
-Seven small defects that are each a violation of a rule the rest of the model rests on. None is
-big; together they are one batch, and they come first because every measurement taken above them
-inherits their error. Do them as separate commits with separate A/Bs — several were deliberately
-left out of earlier batches precisely so their effect would stay attributable.
-
-1. **Bond and loan redemption has no cash leg.** When a tranche is retired,
-   `settleCorporateActionOnHolders` scales holders' notionals down and they receive nothing — the
-   principal leaves their books and arrives nowhere. A redemption is currently a transfer from
-   lenders to no one. The machinery exists (`payHoldersCash`, §7.42); this needs its own change
-   and its own A/B. **Highest value in the batch** — it is a conservation break in the securities
-   ledger.
-2. **The CP-failure revolver is not marked `isBankFacility`** (`07f-short-debt-clearing.ts`),
-   while the identical revolver stage 08 draws for a failed refinancing is. One lives on the
-   house bank's book, the other in the syndicated loan float: the same real instrument
-   represented two ways (rule 3), and an unmarked revolver also picks up a six-month soft call it
-   should never carry.
-3. **Private firms carry a fabricated share register** — `sharesOutstanding: 1_000_000` with
-   `eps: 0`, a share count for a company with no traded shares and a per-share figure that does
-   not divide by it. Set it to zero and make stage 08's private path stop dividing by it.
-4. **Banks and institutions are still formula-priced.** They are excluded from 07e's cleared
-   equity book and get a book-value x cycle-P/B price — the last formula price setter for a
-   listed cohort. G2 made bank earnings real P&L, so the blocker is gone: bring them into 07e and
-   delete the P/B branch.
-5. **The sentiment remainder** (ex-G8). WS4 retired `comp.sentiment` as a price input; what
-   remains is dead plumbing — `sectorSentimentShocks` and `NewsItem.sentimentDelta`, which every
-   producer fills and nothing consumes. Delete both; news already moves prices through the
-   earnings and spreads it reports.
-6. **Generation-time unconditional fields.** §7.17 found `leveragedLoan` attached to all 200
-   companies when ~33 had loans. Sweep `companyGenerator.ts` for other fields attached to
-   everything that apply to a subset — the same failure mode, a frozen record reading as live.
-7. ~~The periodic institutional-book burst.~~ **CLOSED by measurement, §7.46** — it no longer
-   reproduces. Measured over 135 weeks on current HEAD, the institutional book moves **+3.10B
-   (~0.3%)** at week 129: cash −50.3B against GOV_BOND +54.4B, a placement properly paid for. The
-   investigation found a different, real defect underneath it, now owned by **PUB**: sovereign
-   placement is not budget-constrained.
-
-**Verify:** the securities ledger conserves across a redemption (holders' cash rises by exactly
-the principal retired); no instrument appears on two books; the 130-week burst is explained and
-gone; harness violations do not rise.
-
----
+Seven items, six of them real defects and now fixed: the redemption cash leg, the unmarked
+CP-failure revolver, the phantom private share register, the book-value P/B price on banks and
+institutions, the dead sentiment field, and the earnings desk private firms were given at
+generation. The seventh did not reproduce and produced PUB1b instead. Harness 5 → 4 violations.
 
 ### MS — Main Street: households become real  *(Tier 1, item 2)*
 
@@ -353,7 +316,11 @@ It is also the missing demand side for two other things already built: the broad
 funds have no buyer because **households are the truest source of ETF demand** and they were not
 in the model, and G1b's missing stabiliser is the household rate response.
 
-**MS1 — The household balance sheet becomes real.** *(independently shippable; do it first)*
+**MS1 — DONE (§7.47).** The household balance sheet is real claims plus one named gap; households
+buy index funds out of saving through the real AP mechanism, and the rate response that decides
+how much comes from cleared prices. What follows is the original scope, kept for MS2-MS4's sake.
+
+**MS1 — The household balance sheet becomes real.** *(shipped)*
 Households hold real instruments: deposits (G2's real bank liabilities), MMF shares (WS7), ETF
 shares (the ETF machinery — a household has no research capacity, so the coverage rule already
 in `etf-flows.ts` makes it a 100% indexer by construction, which is exactly the buyer the
@@ -737,12 +704,14 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **#18 — companies at the revenue floor** | Four names in the 60-week harness, and the only violations left in it. Live and visible; owner is the goods-market cash-margin path. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
+| **`unmodeledFinancialAssetsUSD`** | 1,312B of household financial wealth the asset universe cannot back (§7.47), down from 1,759B and falling as real claims are found. Not a defect to fix directly — it is the measured size of §7.18's want/have gap on the household side, and the honest number to watch as HC births, real IPOs, BP1's registry and G6's pension claims give households more real things to own. It earns nothing and moves with nothing by design. |
+
 ### 6.2 Watchlist — measure, do not fix
 
 | Metric | Why it is here |
 |---|---|
 | **Damper-bound instruments** | 1,961 persistently bound (3+ consecutive weeks) on the 60-week harness. The number to watch DOWN as the wides get a real buyer base; it rose when the loan book grew, which is expected. Not a defect on its own — a print held away from its solve is only wrong if it stays there. |
-| **Listed universe too small for broad-market indexing** | 15 of 27 index funds have no possible buyer: a region carries only ~25 large-cap names and 8–65 HY issuers, and every institution here can research that many directly. The coverage rule is right and the universe is small — §7.18's want/have problem in another form. Closes as HC births, real IPOs and BP1's registry grow the universe. **Do NOT fix it by tuning the research-capacity primitive until the funds fill** — that is fitting a constant to a desired outcome. |
+| **Index funds without a buyer** | Was 15 of 27; **MS1 took it to 10** by adding households, who index everything and fill all four broad-market funds (§7.47). The diagnosis in this row was partly wrong and worth correcting: the empty all-cap funds were not a universe-size problem, they were a missing SECTOR. What remains — the large-cap and high-yield funds — is the genuine version: ~25 large-cap names and 8–65 HY issuers are few enough for any institution here to research directly, and households buy the broad market rather than a size tier. That closes as HC births, real IPOs and BP1's registry grow the universe. **Still do NOT tune the research-capacity primitive until the funds fill** — that would be fitting a constant to a desired outcome. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1965,7 +1934,41 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       allowance can end an issuance week with negative cash (−50.3B across institutions in one
       week). Every clearing stage respects S11's budget constraint; this path predates it and does
       not, and 07c already exists to price the auction properly.
-47. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+47. **MS1 landed: households own real things, and the gap that remains has a name.**
+    The last sector whose wealth was a formula. `equityHoldingsUSD` was seeded at `income x 1.5`
+    and multiplied weekly by a market-return index — 2,224B against a 1,052B market, in no
+    register, clearing in no book, and driving net worth, the wealth effect and consumption.
+    - **It is now a sum of what households really hold:** index-fund shares created through the
+      real authorised-participant mechanism, the listed float institutions do not own (the same
+      `institutionalShare` 07e uses to decide what is in play, so both sides of the register agree
+      by construction), and **founder stakes in the private tier** — households own the unlisted
+      economy, HC gave every private firm an `ownership.founderPct`, and that block was entirely
+      invisible until now. Marked at the same cleared multiple sponsors mark at, so a private
+      company is worth one thing no matter who holds it.
+    - **The remainder is NAMED, not deleted.** Real households hold ~1.5x income in financial
+      assets and the seed says so; the assets that exist here add to about a third of that,
+      because the universe is 6x short of the money pointed at it (§7.18). Marking households down
+      to what exists would have imported that shortfall straight into consumption — **fixing a
+      local inconsistency by making the macro worse**, which is the trade this project keeps
+      refusing. `unmodeledFinancialAssetsUSD` earns nothing, moves with nothing, is set once at
+      the opening gap and thereafter only SHRINKS as real claims are found. Households do not get
+      richer because the model learned to see what they already owned.
+    - **The household rate response, which G1b has been missing, falls out of it.** How much of a
+      week's saving goes to funds rather than deposits is the earnings yield the region's listed
+      market is actually throwing off, less what the money fund pays — when cash pays more than
+      equities earn, households stop buying equities. The same shape WS7 already used for the
+      deposit-versus-money-fund split, now on the equity side and off cleared prices.
+    - **MEASURED, 60 weeks:** household equity decomposes 2,121B → direct 335B + ETF 36.5B +
+      private business 98B + unmodeled 1,312B, with **the unmodeled line falling 1,759B → 1,312B
+      (−25%)** as real claims displace it. Net worth runs continuously (1,590B → 1,452B) — no
+      discontinuity at the seed, which is what made the change attributable at all.
+    - **The ETF answer the user asked for:** all four broad-market ALL_CAP funds go from **0/4 to
+      4/4 live**, funded funds 12 → 17 of 27, and **fund AUM 53.5B → 97.8B**. A household runs no
+      research desk, so the ETF project's coverage rule already made it a 100% indexer by
+      construction — the buyer was specified before it existed. The empty broad-market funds were
+      never a universe-size problem after all; they were a missing sector.
+    - Harness holds at 4 (the #18 names), determinism verified, build green.
+48. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

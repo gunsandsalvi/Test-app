@@ -78,7 +78,37 @@ export interface HouseholdState {
   netWorthUSD: number;
   durableGoodsStockUnits?: number;
   depositsUSD: number;
+  /**
+   * MS1 — household equity wealth, now a DERIVED SUM of the four lines below rather than a stock
+   * that appreciates by a formula return. It was seeded as `income x 1.5` and multiplied weekly
+   * by a market-return index: owned in no share register, cleared in no book, no cash ever moving
+   * for it, while feeding net worth, the wealth effect and consumption. Measured at 2,224B against
+   * a total real market capitalisation of 1,052B (§7.45).
+   */
   equityHoldingsUSD: number;
+  /** Listed shares households really hold — the float institutions do not, marked at 07e's prices. */
+  directEquityUSD: number;
+  /** Index-fund shares, created through the real AP mechanism and marked at the fund's NAV. */
+  etfShares: { fundId: string; shares: number }[];
+  /** Marked value of the above, carried so net worth does not have to reach into the fund list. */
+  etfHoldingsUSD: number;
+  /**
+   * Founder stakes in the private tier. Households own the unlisted economy — HC gave every
+   * private firm an `ownership.founderPct`, and this is what that block is worth at the same
+   * cleared multiple the sponsors mark at. The single largest real component, and it was invisible.
+   */
+  privateBusinessEquityUSD: number;
+  /**
+   * The part of household financial wealth the model's asset universe cannot yet back.
+   *
+   * Real households hold roughly 1.5x income in financial assets and the seed says so; the assets
+   * that exist here add to about a third of that, because the universe is 6x short of the money
+   * pointed at it (§7.18's want/have). Marking households down to what exists would import that
+   * shortfall straight into consumption and the wealth effect — fixing a local inconsistency by
+   * making the macro worse. So the gap is NAMED instead of hidden: it earns nothing, moves with
+   * nothing, and shrinks as a share of wealth as the universe grows. §6 owns it.
+   */
+  unmodeledFinancialAssetsUSD: number;
   mortgageDebtUSD: number;
   creditCardDebtUSD: number;
   otherConsumerLoanDebtUSD: number;

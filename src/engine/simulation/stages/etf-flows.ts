@@ -29,6 +29,9 @@ import { WeeklyStepContext } from './context';
 import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
 import { AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
+import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
+import { householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
+import { publicComparableEvMultiple } from './pe-lifecycle';
 
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
@@ -144,6 +147,52 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       });
   });
 
+  // ---- 2b. HOUSEHOLDS. The truest source of index-fund demand, and the buyer the broad-market
+  // funds never had. A household runs no research desk at all, so the coverage rule that decides
+  // who indexes makes it a 100% indexer by construction — it is the one holder for which the
+  // answer is not a judgement call.
+  //
+  // How much of this week's saving goes to funds rather than deposits is the HOUSEHOLD RATE
+  // RESPONSE, and it comes from cleared prices against the real deposit rate: the earnings yield
+  // the region's listed market is actually throwing off, less what a deposit pays. When cash pays
+  // more than equities earn, households stop buying equities. That is the channel G1b is missing,
+  // and it is the same shape WS7 already uses for the deposit-versus-money-fund split.
+  const householdDemandByFund = new Map<string, number>();
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+    const reg = ctx.updatedRegions[region];
+    const hs = reg?.householdState;
+    if (!hs) return;
+
+    const listed = ctx.updatedCompanies.filter(
+      (c) => c.region === region && isActiveCompany(c) && isPubliclyListed(c) && c.marketCap > 0
+    );
+    const capUSD = listed.reduce((a2, c) => a2 + c.marketCap, 0);
+    const earningsUSD = listed.reduce((a2, c) => a2 + c.netIncome, 0);
+    const earningsYield = capUSD > 0 ? earningsUSD / capUSD : 0;
+    // What household cash earns as an alternative: the region's money fund's own cleared net
+    // yield (WS7), which is the real competing rate deposits are priced against.
+    const mmf = ctx.updatedInstitutionalEntities.find(
+      (e) => e.region === region && e.entityType === 'MONEY_MARKET_FUND'
+    );
+    const depositYield = mmf?.mmfNetYieldAnnual ?? reg.policyRate ?? 0;
+    const equityShareOfSaving = earningsYield > 0
+      ? Math.max(0, Math.min(1, (earningsYield - depositYield) / earningsYield))
+      : 0;
+
+    // The saving actually available this week, out of the deposits stage 02 just credited.
+    const weeklySavingUSD = (reg.estimatedHouseholdIncomeUSD * (hs.savingsRate ?? 0)) / 52;
+    const intoFundsUSD = Math.max(0, weeklySavingUSD * equityShareOfSaving);
+    if (!(intoFundsUSD > 0)) return;
+
+    // Households buy the BROAD market: they are not picking a size tier, which is exactly what an
+    // all-cap fund is for and why it had no buyer while institutions were the only investors.
+    const broad = funds.find((f) => {
+      const def = defById.get(f.etf!.indexId);
+      return !!def && def.region === region && def.assetClass === 'EQUITY' && def.tier === 'ALL_CAP';
+    });
+    if (broad) householdDemandByFund.set(broad.id, (householdDemandByFund.get(broad.id) ?? 0) + intoFundsUSD);
+  });
+
   // ---- 3. The authorised participants' capacity: real dealer balance sheet, per region. ----
   const apCapacityByRegion = new Map<RegionId, number>();
   (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => {
@@ -157,6 +206,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // Allocating the whole regional capacity to every fund independently would let ten funds each
   // spend the same dollar of dealer equity.
   const netFlowByFund = new Map<string, number>();
+  const householdExecutedByFund = new Map<string, number>();
   const cashDeltaByEntity = new Map<string, number>();
   const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
   const addCash = (id: string, usd: number) => cashDeltaByEntity.set(id, (cashDeltaByEntity.get(id) ?? 0) + usd);
@@ -165,6 +215,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
    *  execution, because the AP capacity split depends on the whole week's demand at once. */
   const flowPlanByFund = new Map<string, {
     navPerShare: number; wantDelta: Map<string, number>; grossCreateUSD: number; grossRedeemUSD: number;
+    householdUSD: number;
   }>();
   funds.forEach((fund) => {
     const desired = desiredByFund.get(fund.id)!;
@@ -200,7 +251,12 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       if (deltaUSD > 0) grossCreateUSD += deltaUSD; else grossRedeemUSD += -deltaUSD;
     });
 
-    flowPlanByFund.set(fund.id, { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD });
+    // Household saving is a creation order like any other and competes for the same AP capacity.
+    const householdUSD = householdDemandByFund.get(fund.id) ?? 0;
+    if (householdUSD > 0) grossCreateUSD += householdUSD;
+    flowPlanByFund.set(fund.id, {
+      navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD, householdUSD,
+    });
     netFlowByFund.set(fund.id, grossCreateUSD - grossRedeemUSD);
   });
 
@@ -220,7 +276,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   funds.forEach((fund) => {
     const plan = flowPlanByFund.get(fund.id);
     if (!plan) return;
-    const { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD } = plan;
+    const { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD, householdUSD } = plan;
     const sharesOutstanding = fund.etf!.sharesOutstanding;
     const netUSD = grossCreateUSD - grossRedeemUSD;
     const capacityUSD = capacityByFund.get(fund.id) ?? 0;
@@ -242,6 +298,14 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
 
     let fundCashDeltaUSD = 0;
+    // The household leg, rationed at the same fill the institutions get — the AP cannot choose
+    // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
+    // money genuinely leaves the household balance sheet to buy the shares.
+    const householdExecutedUSD = householdUSD * fillRatio;
+    if (householdExecutedUSD > 0) {
+      fundCashDeltaUSD += householdExecutedUSD;
+      householdExecutedByFund.set(fund.id, householdExecutedUSD);
+    }
     executedByInvestor.forEach((executedUSD, id) => {
       addCash(id, -executedUSD);
       fundCashDeltaUSD += executedUSD;
@@ -328,6 +392,66 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         if (navPerShare === undefined) return h;
         return { ...h, quantityOrNotionalUSD: (h.quantityShares ?? 0) * navPerShare };
       }),
+    };
+  });
+
+  // ---- 6. MS1: the household balance sheet, marked from this week's cleared prices. ----
+  // The last place in the model where a sector's wealth was a formula. `equityHoldingsUSD` is now
+  // the SUM of what households really hold, and the part the asset universe cannot yet back is a
+  // named line rather than an unexplained excess — see `unmodeledFinancialAssetsUSD`.
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+    const reg = ctx.updatedRegions[region];
+    const hs = reg?.householdState;
+    if (!hs) return;
+
+    // Shares bought this week settle onto the household register at the fund's own NAV.
+    const boughtUSD = funds.reduce((sum, f) => sum + (householdExecutedByFund.get(f.id) ?? 0) * (f.region === region ? 1 : 0), 0);
+    let etfShares = [...(hs.etfShares ?? [])];
+    if (boughtUSD > 0) {
+      funds.forEach((f) => {
+        if (f.region !== region) return;
+        const spentUSD = householdExecutedByFund.get(f.id) ?? 0;
+        if (!(spentUSD > 0)) return;
+        const navPerShare = finalNavPerShareByFund.get(f.id) ?? ETF_INCEPTION_NAV_PER_SHARE;
+        const shares = spentUSD / navPerShare;
+        const idx = etfShares.findIndex((x) => x.fundId === f.id);
+        if (idx >= 0) etfShares[idx] = { ...etfShares[idx], shares: etfShares[idx].shares + shares };
+        else etfShares.push({ fundId: f.id, shares });
+      });
+    }
+
+    const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
+    const etfHoldingsUSD = householdEtfHoldingsUSD({ etfShares }, ctx.updatedInstitutionalEntities);
+    const directEquityUSD = householdDirectEquityUSD(
+      region, ctx.updatedCompanies, reg.equityOwnership.institutionalShare
+    );
+    const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
+
+    // The unmodeled line is paid DOWN as real claims are found, never up: households did not get
+    // richer because the model learned to see what they already owned. It is set once, at the
+    // opening gap, and thereafter only shrinks — which is exactly how a placeholder should behave.
+    const realClaimsUSD = etfHoldingsUSD + directEquityUSD + privateBusinessEquityUSD;
+    const openingUnmodeledUSD = hs.unmodeledFinancialAssetsUSD ?? hs.equityHoldingsUSD ?? 0;
+    const unmodeledFinancialAssetsUSD = Math.max(0, Math.min(
+      openingUnmodeledUSD,
+      Math.max(0, (hs.equityHoldingsUSD ?? 0) - realClaimsUSD)
+    ));
+
+    // Cash left the household balance sheet to buy the shares — the deposits stage 02 credited.
+    const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
+    const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
+
+    reg.householdState = {
+      ...hs,
+      depositsUSD,
+      etfShares,
+      etfHoldingsUSD,
+      directEquityUSD,
+      privateBusinessEquityUSD,
+      unmodeledFinancialAssetsUSD,
+      equityHoldingsUSD,
+      netWorthUSD: depositsUSD + equityHoldingsUSD
+        - ((hs.mortgageDebtUSD ?? 0) + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
     };
   });
 }

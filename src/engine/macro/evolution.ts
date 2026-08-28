@@ -108,6 +108,11 @@ export function evolveRegionMacro(
     luxurySpendShare: 0.15,
     depositsUSD: region.estimatedHouseholdIncomeUSD * 0.6,
     equityHoldingsUSD: region.estimatedHouseholdIncomeUSD * 1.5,
+    directEquityUSD: 0,
+    etfShares: [],
+    etfHoldingsUSD: 0,
+    privateBusinessEquityUSD: 0,
+    unmodeledFinancialAssetsUSD: region.estimatedHouseholdIncomeUSD * 1.5,
     mortgageDebtUSD: region.estimatedHouseholdIncomeUSD * 0.8,
     creditCardDebtUSD: region.estimatedHouseholdIncomeUSD * 0.05,
     otherConsumerLoanDebtUSD: region.estimatedHouseholdIncomeUSD * 0.1,
@@ -262,8 +267,13 @@ export function evolveRegionMacro(
   const depositInterestUSD = (prevHS.depositsUSD || 0) * (region.policyRate * 0.6) / 52;
   const newDepositsUSD = Math.max(0, (prevHS.depositsUSD || 0) + weeklySavingsUSD + depositInterestUSD + netNewLending * 0.15);
 
-  // Equities appreciate / depreciate with the region's market return
-  const newEquityHoldingsUSD = Math.max(0, (prevHS.equityHoldingsUSD || 0) * (1 + equityReturn));
+  // MS1: household equity is no longer a stock that appreciates by a formula return. It is the
+  // sum of real claims — index-fund shares, listed float, founder stakes in the private tier —
+  // plus the named gap for assets the universe cannot yet back, and every one of those is MARKED
+  // from cleared prices in `stages/etf-flows.ts`, which runs after the clearing books. This stage
+  // runs before them, so it carries the line forward and lets the marking stage own its value.
+  // The one-week lag is the same one stage 08 has against the prices it reads.
+  const newEquityHoldingsUSD = Math.max(0, prevHS.equityHoldingsUSD || 0);
 
   // 2. Liability side
   // Principal paydown rates (weekly)
@@ -846,6 +856,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       netWorthUSD: newNetWorthUSD,
       depositsUSD: newDepositsUSD,
       equityHoldingsUSD: newEquityHoldingsUSD,
+      // Carried forward untouched; `stages/etf-flows.ts` marks them against this week's clears.
+      directEquityUSD: prevHS.directEquityUSD ?? 0,
+      etfShares: prevHS.etfShares ?? [],
+      etfHoldingsUSD: prevHS.etfHoldingsUSD ?? 0,
+      privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
+      unmodeledFinancialAssetsUSD: prevHS.unmodeledFinancialAssetsUSD ?? newEquityHoldingsUSD,
       mortgageDebtUSD: newMortgageDebtUSD,
       creditCardDebtUSD: newCreditCardDebtUSD,
       otherConsumerLoanDebtUSD: newOtherLoanDebtUSD,

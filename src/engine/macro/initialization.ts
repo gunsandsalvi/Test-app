@@ -455,7 +455,16 @@ function buildRegion(regionId: RegionId): Region {
       standardSpendShare: HOUSEHOLD_SPEND_SHARES.standard,
       luxurySpendShare: HOUSEHOLD_SPEND_SHARES.luxury,
       depositsUSD,
+      // MS1: the real components are struck by the simulation's first weekly pass, which is the
+      // only place that knows the cleared prices and the private tier. The seed therefore opens
+      // with the whole stock UNMODELED and lets that line be paid down as real claims are found —
+      // §7.4's seed-shape rule: seed the shape the engine produces, never a second version of it.
       equityHoldingsUSD,
+      directEquityUSD: 0,
+      etfShares: [],
+      etfHoldingsUSD: 0,
+      privateBusinessEquityUSD: 0,
+      unmodeledFinancialAssetsUSD: equityHoldingsUSD,
       mortgageDebtUSD,
       creditCardDebtUSD,
       otherConsumerLoanDebtUSD,
