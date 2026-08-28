@@ -213,20 +213,19 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 1 | Itemized bank lending + endogenous money (loans create deposits) | G2 | HC W1 |
-| 2 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
-| 3 | Unify the two dealer systems | G3 | S9 |
-| 4 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 5 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 6 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 7 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 8 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 9 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 10 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 11 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 12 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 13 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 14 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
+| 2 | Unify the two dealer systems | G3 | S9 |
+| 3 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 4 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 5 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 6 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 7 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 8 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 9 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 10 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 11 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 12 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 13 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
@@ -362,35 +361,6 @@ companies then genuinely feel less P&L from the shocks they hedged — measure t
 point of the item.
 
 ---
-
-### G2 — Itemized lending + endogenous money
-
-**The deepest remaining money item; likely root of #67. Build in five ordered slices, each
-verified before the next:**
-
-1. **Itemize the stock.** `BankLoan {id, borrowerId, principalUSD, marginBps, originationWeek,
-   termWeeks, status}` per named bank; migrate today's aggregate business-loan number into real
-   loans to real borrowers (companies + HC's SME pools; households arrive with MS),
-   allocated by the borrowers' real existing bank debt. Aggregates become sums.
-2. **Real interest, both directions.** Borrowers' S5 ledgers pay loan interest to the named
-   bank; banks pay real deposit interest. NIM stops being a formula — it is revenue minus cost
-   on real books. (This is the #67 test: if capital still collapses with real interest flows,
-   the leak is elsewhere and now visible.)
-3. **Origination is a priced decision, reusing the reservation logic.** A borrower asks (S5
-   working-capital gap, capex funding, revolver draw on CP failure); the bank quotes
-   policy + margin from the same expected-loss + capital-cost arithmetic the bond market uses
-   (`computeReservationSpreadBps` with loan charge) IF it has capital headroom (CET1 vs
-   rating-weighted RWA) and funding; otherwise it declines. A declined borrower is a real credit
-   crunch, not an index.
-4. **Loans create deposits.** Origination credits the borrower's deposit at that bank (both
-   sides of the bank's sheet grow); spending moves deposits between banks with reserve
-   settlement (Phase-2 machinery already exists); repayment destroys deposit and loan.
-5. **M2 becomes a derived sum** (deposits + currency); delete the growth formula. Deposit rates
-   are set per bank competing with the MMF yield (WS7) — funding cost is real.
-
-**Verify per slice;** end state: money-stock changes decompose exactly into net origination;
-bank capital ratio explained by real P&L; a policy hike measurably slows origination (the
-transmission channel G1b item 2 says is missing).
 
 ### G3 — One dealer system
 
@@ -1614,7 +1584,48 @@ the complete simulation.
     - Equity offerings ride the same machinery and are consumed by HC7's real IPOs; the
       accretive-call replacement still prices instantly at the cleared stat (market level, no
       concession) — noted as the one issuance path left outside the queue.
-40. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+40. **G2 landed: the loan book is real and money transmits.** Five slices.
+    - **Itemized (1).** `BankLoan` per named borrower on each named bank's book. The SME seed
+      scalar (`debtUSD = 2 × revenue`, ~17.8x EBITDA) is migrated at cold start to what is real
+      twice over — serviceable at a covenant 3x AND carriable by bank capital (measured USA:
+      79.9B vs 21.2B, so the book opens at 45.6B and GROWS through real origination instead of
+      opening at an impossible 474B nobody lent). The last `?? revenue × 2` fallback is deleted.
+      **The §6 double-count dies:** revolvers and maintenance bridges are BANK debt
+      (`isBankFacility`), so the same floating principal no longer sits on the bank book AND in
+      institutional 07d holdings, expensed once and received twice.
+    - **Real interest (2), priced origination (3).** Each loan accrues at its own terms; the
+      business-loan yield formula and contagion loss rate are gone (SME losses are real
+      write-offs at each pool's measured default rate). The house bank quotes
+      policy + expected loss + capital × ROE and DECLINES at its regulatory floor; declined
+      demand accumulates per region as a measurable crunch.
+    - **Loans create deposits (4), M2 derived (5).** An SME origination puts new money on the
+      lending bank's funding line with no reserve movement. M2 is the real money that exists —
+      deposits plus money-fund shares; `deposits + centralBankReserves × 0.1` (a tenth of a
+      phantom 1e12 scalar) is deleted, and weekly M2 changes decompose into real flows to
+      within ~0.1B on ~1.5B. Deposit rates now compete with the MMF yield in proportion to the
+      funding actually being lost — WS7's discipline, finally imposed.
+    - **THE TRANSMISSION CHAIN, measured end to end** (+300bp shock, A/B): quoted margin
+      582 → 857bp, **SME origination −51.3%**, **segment capex −21.5%**, **category demand
+      −0.66%**. The first build moved origination 0.5% — priced correctly and inert, because
+      demand was a pure quantity target (§7.24's shape). Borrowers now carry their own hurdle
+      (a pool does not borrow at 12% to earn 9%), and borrowed money FUNDS REAL CAPEX at
+      origination, so a rate change reaches the goods market through the credit it suppresses
+      rather than stopping at a debt number nobody spends.
+    - **Two identity lessons, both caught by the invariant rather than reasoning.** Corporate
+      deposits are a reporting VIEW, not a bank liability: company cash lives outside the
+      banking system, and counting it as funding left the matching asset missing (the residual
+      came out exactly equal to the line). And a facility draw is therefore a real cash outflow
+      from the lending bank — loan +X, reserves −X — until MS makes company cash settle through
+      banks and it becomes deposit creation like the SME side.
+    - **SECTION CLOSE, 260-week harness: 236 violations, three known families and no others** —
+      148 bank-capital and 84 NIM prints of the recorded G1b escape (this seed reaches 249%
+      inflation with the 10Y at 17.85% and banks 61% in sovereigns, so honest carry on a
+      diseased curve prints an impossible margin), plus the 4 #18 names. **Zero identity
+      breaks, zero corridor breaches, zero encumbrance breaches, zero ledgers minting claims.**
+      G2's channel measurably damps the escape but does not cure it: 0.66% of demand against a
+      goods-market cycle orders of magnitude larger. Recorded per §1.10, not chased — the
+      remaining stabilisers are MS's household rate response and BP5's fiscal loop.
+41. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

@@ -296,10 +296,15 @@ export function runBankWeeklyLending(
       businessLoans: loans,
       businessLoanBookUSD,
       bankEquityUSD: sheet.bankEquityUSD - loanLossWeeklyUSD,
-      // Loans create deposits: SME originations put the pool's new money on the bank's own
-      // funding line the same moment the loan appears — no reserves move. (Facility deposits
-      // ride the corporate-deposit VIEW, since the company's cash is the deposit.)
+      // Loans create deposits: an SME origination puts the pool's new money on the bank's own
+      // funding line the same moment the loan appears — no reserves move, which is endogenous
+      // money (the pools bank here; they have no cash ledger of their own until MS).
       depositsUSD: sheet.depositsUSD + smeOriginationUSD,
+      // A corporate FACILITY is different in this model: the borrower's cash lives in its own
+      // S5 ledger, outside the banking system, so drawing one is a real cash outflow from the
+      // bank and a repayment is an inflow. Loan +X / reserves −X keeps the sheet balanced;
+      // when MS makes company cash settle through banks this becomes deposit creation too.
+      cashReservesUSD: sheet.cashReservesUSD - facilityNetOriginationUSD,
     },
     loanInterestWeeklyUSD,
     loanLossWeeklyUSD,
