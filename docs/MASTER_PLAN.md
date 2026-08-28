@@ -1017,16 +1017,39 @@ it is what makes the local/foreign mix an outcome rather than a parameter.
 value; shelf life) and real inter-region distances. Distance and mass are physical primitives,
 which rule 4 allows; what is forbidden is the observed trade share they produce.
 
+**The week's sequence, and why it has no simultaneity** *(decided with the user, 2026-08-28)*.
+Landed cost needs a freight rate; the rate needs the cargo that sourcing produces. That resolves
+into four passes, which is also how procurement and chartering actually work:
+1. **Intent.** Each buyer computes its real weekly need, evaluates every producing region's
+   EXPECTED landed cost from last week's ex-works prices and the last cleared freight rate, and
+   allocates the need across sources in merit order — cheapest first, up to what that source
+   offered, spilling to the next. This is the forward booking a real shipper places, and it is
+   also the sourcing split. No constant decides the split; it is an ordering.
+2. **Freight clears.** Per LANE, carriers' real capacity offers at their own marginal cost
+   against those bookings. **A booking's reservation is the surplus on that specific trade** —
+   what sourcing from THAT origin saves the buyer versus its next-best source. That is what makes
+   freight demand slope: when rates rise, distant sourcing stops being worth it and the cargo
+   simply is not there. Without it the book has perfectly inelastic demand and the rate is a
+   bound, not a price (§7.21, §7.75).
+3. **Goods clear.** Each buyer bids the allocated quantity into each producing region's book at a
+   max EX-WORKS price equal to its delivered willingness to pay less that origin's freight and FX
+   cost. Every book clears one ex-works price; the wedge lives on each buyer's own reservation,
+   which is what the engine is built for.
+4. **Settlement.** Goods and freight both move, freight to the named carrier that carried it.
+
 **XB3a-2 — Carriers and the freight market.** Shipping firms with real fleets, deployed per LANE
 (a directed region pair, plus domestic), because a vessel on one lane is not available on another
 and that is what makes rates differ by route. Capacity offered into a per-lane auction against
 real cargo demand; the cleared rate is the freight price. Real costs: fuel from the energy
 commodity that already exists, crew from the labour market, vessels as real PP&E bought as real
-capex from `commercial_fleet`. Redeployment responds to rate differentials. **Sequencing inside
-the week is a spot freight market's own: the rate is QUOTED first off last week's bookings and
-this week's capacity, buyers source against the quote, and this week's bookings set next week's
-rate.** No simultaneity and no iteration — you book at today's quote, which is what a shipper
-actually does.
+capex from `commercial_fleet`. Redeployment responds to rate differentials.
+**The opening fleet is seeded at what the seed economy actually needs to move**, so the freight
+market opens clearing at carriers' own marginal cost rather than on a rate spike or collapse that
+is an artifact of a guessed fleet (§7.4's seed-shape rule). It is a starting condition, not a
+target: after week 1 capacity is an outcome of real ordering and scrapping economics.
+**Domestic freight becomes a real cost too.** Goods currently move between firms inside a region
+at zero transport cost, which is simply wrong — the lane diagonal is a real haul, and a domestic
+supplier that is merely CLOSER than a foreign one is the honest comparison.
 
 **XB3a-3 — Landed cost and the sourcing decision.** Buyers bid into every producing region's book
 at their own landed cost. `CATEGORY_TRADABILITY` and the world book are deleted here. Trade stays
