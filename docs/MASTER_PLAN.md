@@ -132,11 +132,12 @@ npm run build                      # build — safe at any time
 bash scripts/check-hygiene.sh      # no root-level scratch files
 npm run verify                     # hygiene + 60-week invariants harness (~1 min)
                                    # END OF PROJECT ONLY — see rule 12
-npm run profile                    # per-stage runtime. Baseline after §7.79: ~1,000 ms/week
-                                   # (±30 run variance) — 05 at ~25%, 08 ~18%, 07b ~11%,
-                                   # 07d ~10%, 07e ~8%. Every earlier figure is stale. NOTE:
-                                   # §7.79's exact solve relabeled the world (gently — hashes
-                                   # identical through week 10, divergent by 25).
+npm run profile                    # per-stage runtime. Baseline after §7.80: ~955 ms/week
+                                   # serial, ~942 with CLEARING_WORKERS=6 (Node-only, off by
+                                   # default, byte-identical either way). 05 ~28%, 08 ~20%,
+                                   # books ~22%. NOTE: §7.79's exact solve relabeled the world
+                                   # (gently — hashes identical through week 10, divergent by
+                                   # 25). CLEARING_WORKERS=6 speeds up verify/batteries free.
 npx tsx scripts/hh-battery.ts 120  # household close-out battery (~2 min)
 npx tsx scripts/pub-battery.ts 120 # public-sector close-out battery (~2 min)
 WEEKS=260 npm run verify           # ASK THE USER FIRST — long run, section close only
@@ -1179,7 +1180,16 @@ FRONTIER (names vs seconds/week), not a feeling.
   truncating books, skipping small names — those change the market, not the speed).
 - **Then push the count** through the front doors that exist: generator counts for public names,
   HC births for private ones. Measure the frontier and pick the operating point with the user.
-- **Worker-parallel clearing books** (moved here from the §7.79 optimization push, user-authorized):
+- **DONE (§7.80): worker-parallel clearing books.** Delivered as the pack/kernel/accumulate
+  engine with a synchronous, env-gated Node pool — byte-identical to serial. What it measured is
+  the next item's charter.
+- **Columnar state (the path below 300 ms/week, §7.80's wall):** move the hot per-company and
+  per-holding numbers into typed-array columns owned by the engine, with the object graph
+  rebuilt as a VIEW for the UI and saves. This is what lets stage 05/08 and the adapters'
+  extract/apply layers shard like the kernel does, and it is the SCALE-grade rewrite it sounds
+  like: determinism gates at every step, RNG lanes restructured once (a declared relabel), UI
+  contract preserved. Do not start it as a side effect of anything else.
+- **Superseded scoping note** (kept for the record):
   07b/07c/07d/07e/07f draw no RNG, so they can clear in worker threads without touching the
   stream — the engineering is the state boundary (the adapters read companies, entities and
   region state; a naive per-week structured clone could eat the win). Reordering of result
@@ -2508,3 +2518,30 @@ that proved it, the lesson.
       reorder floating-point accumulation — both world relabels, both SCALE's (§5-SCALE now
       carries the item with this measurement). User authorized the full push; the parallel leg
       is scoped there rather than rushed here.
+
+80. **Worker-thread clearing landed, and the 300 ms question got a measured answer.**
+    - `clearFinancialAsset` is pack → kernel → accumulate: the per-instrument compute is a pure
+      function over flat typed arrays, shardable across a synchronous Node worker pool
+      (SharedArrayBuffer packing read zero-copy, Atomics doorbells WITH TIMEOUTS, shards merged
+      in instrument order so every floating-point sum keeps its sequence). Serial and worker
+      paths are one kernel and hash byte-identically; the browser build keeps the serial path.
+      Books with workers: 07b 106 → 78, 07d 97 → 73, 07e 77 → 65 ms/week.
+    - **Why ship-the-objects died first:** a structuredClone of the companies array measures
+      328 ms, regions 335 ms, entities 136 ms — PER COPY. Any worker design that serializes the
+      object graph costs more than it saves. Packing is not an optimization detail; it is the
+      only door.
+    - **Three build lessons.** Never `Atomics.wait` unbounded — a worker that failed to start
+      hung a 15-second run past five minutes; wait with a timeout and downgrade to serial. tsx's
+      resolver inside worker threads cannot follow extensionless relative imports — the engine
+      now imports nothing at runtime, the worker graph is the engine alone, and the pool
+      self-registers from the main thread. And the V8 profiler attributes inlined callees to
+      their caller, so a "105 ms function" can be worth 25 (§7.79's solve) — only replacement
+      measures a component honestly.
+    - **The measured wall, for the sub-300 ms target the user set:** of the ~942 ms/week, stage
+      05 is 272 (RNG-bearing, object-graph), stage 08 is 190 (same), the books' serial
+      extract/apply layer ~215, the tail stages ~230, GC ~100. The worker-parallelizable part is
+      gone. Every remaining millisecond lives in serial walks of the OBJECT GRAPH, and the clone
+      numbers above say why workers cannot touch it. **Sub-300 requires the state itself to move
+      to columnar typed arrays** — companies, holdings, demand — with the object graph as a view
+      for the UI: a real project (weeks, not a session), now scoped under §5-SCALE. 1,793 → 942
+      (−47%) is what this codebase yields without changing what a GameState IS.
