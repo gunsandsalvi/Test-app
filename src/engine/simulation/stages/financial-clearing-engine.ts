@@ -340,117 +340,284 @@ function solveClearingStat(
   return toStat(uHi);
 }
 
-export function clearFinancialAsset(
+/**
+ * The packed, kernel form of a clearing call (XB-perf / §5-SCALE).
+ *
+ * Everything a book's clear needs, as flat typed arrays: instruments as columns, demand as a
+ * dense (participant x instrument) matrix in PARTICIPANT ORDER, prior holdings likewise. Packing
+ * exists because the per-instrument compute is fully independent — budgets are pre-sliced per
+ * name by the adapters, so no instrument's outcome feeds another's inside one call — which makes
+ * the kernel shardable across worker threads. The accumulation that IS order-sensitive (cash
+ * deltas are floating-point sums) happens on the main thread, in instrument order, exactly as
+ * the un-sharded loop did. NaN is the "absent" sentinel for the two optional demand fields,
+ * because 0 is a legitimate value for both.
+ */
+export interface PackedClearing {
+  n: number;
+  pCount: number;
+  // per instrument
+  float: Float64Array;
+  offering: Float64Array;
+  withdrawStat: Float64Array; // NaN = none
+  currentStat: Float64Array;
+  yieldLike: Uint8Array;
+  skip: Uint8Array; // nothing to sell: pass current stat through
+  // per (participant x instrument), row-major by participant
+  present: Uint8Array;
+  dRes: Float64Array;
+  dRange: Float64Array;
+  dMaxH: Float64Array;
+  dMaxNet: Float64Array; // NaN = unbounded
+  dMinH: Float64Array;
+  prevHolding: Float64Array;
+  dealerSpreadBps: number;
+  maxWeeklyStatMovePct: number;
+}
+
+/** One shard's raw results, in (instrument, participant) order within the shard. */
+export interface KernelShardResult {
+  from: number;
+  to: number;
+  clearedStat: Float64Array;      // per instrument in [from, to)
+  damper: Uint8Array;
+  dealerInventory: Float64Array;
+  primaryWithdrawn: Uint8Array;
+  primaryMarketTake: Float64Array;
+  hasPrimary: Uint8Array;
+  // sparse fills, appended in (instrument, participant) order
+  fillInst: Int32Array;
+  fillPart: Int32Array;
+  fillFilled: Float64Array;
+  fillTraded: Float64Array;
+  fillFee: Float64Array;
+  fillCount: number;
+}
+
+/** Bytes a packed clearing occupies, so a caller can allocate it on shared memory. */
+export function packedClearingBytes(n: number, pCount: number): number {
+  const f64 = 8 * (4 * n + 6 * n * pCount);
+  const u8 = 2 * n + n * pCount;
+  return f64 + u8 + 64; // alignment slack
+}
+
+export function packClearing(
   instruments: ClearingInstrument[],
   participants: ClearingParticipant[],
-  priorDealerInventoryById: Map<string, number>,
-  params: ClearingParams
-): ClearingResult {
-  const newStatById = new Map<string, number>();
-  const newDealerInventoryById = new Map<string, number>();
-  const newParticipantHoldings = new Map<string, Map<string, number>>();
-  const netCashDeltaByParticipantId = new Map<string, number>();
-  const damperBoundInstrumentIds: string[] = [];
-  const primaryOutcomeById = new Map<string, { withdrawn: boolean; marketTakeUSD: number; clearedStat: number }>();
-  participants.forEach((p) => {
-    newParticipantHoldings.set(p.id, new Map<string, number>());
-    netCashDeltaByParticipantId.set(p.id, 0);
-  });
-  let totalDealerRevenueUSD = 0;
-
-  instruments.forEach((inst, instIdx) => {
+  params: ClearingParams,
+  buffer?: ArrayBufferLike
+): PackedClearing {
+  const n = instruments.length;
+  const pCount = participants.length;
+  let packed: PackedClearing;
+  if (buffer !== undefined) {
+    // Laid out on the caller's buffer (a SharedArrayBuffer in the worker path) so every worker
+    // reads the same memory with no copy. Float64 views first for alignment.
+    let off = 0;
+    const f64 = (len: number) => { const v = new Float64Array(buffer, off, len); off += len * 8; return v; };
+    const np = n * pCount;
+    const float = f64(n), offering = f64(n), withdrawStat = f64(n), currentStat = f64(n);
+    const dRes = f64(np), dRange = f64(np), dMaxH = f64(np), dMaxNet = f64(np), dMinH = f64(np), prevHolding = f64(np);
+    const u8 = (len: number) => { const v = new Uint8Array(buffer, off, len); off += len; return v; };
+    const yieldLike = u8(n), skip = u8(n), present = u8(np);
+    packed = {
+      n, pCount, float, offering, withdrawStat, currentStat, yieldLike, skip,
+      present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
+      dealerSpreadBps: params.dealerSpreadBps,
+      maxWeeklyStatMovePct: params.maxWeeklyStatMovePct ?? Number.NaN,
+    };
+    // Shared memory is reused across calls; zero what the packers below only conditionally set.
+    present.fill(0); skip.fill(0); yieldLike.fill(0);
+    dRes.fill(0); dRange.fill(0); dMaxH.fill(0); dMaxNet.fill(0); dMinH.fill(0); prevHolding.fill(0);
+  } else {
+    packed = {
+      n, pCount,
+      float: new Float64Array(n),
+      offering: new Float64Array(n),
+      withdrawStat: new Float64Array(n),
+      currentStat: new Float64Array(n),
+      yieldLike: new Uint8Array(n),
+      skip: new Uint8Array(n),
+      present: new Uint8Array(n * pCount),
+      dRes: new Float64Array(n * pCount),
+      dRange: new Float64Array(n * pCount),
+      dMaxH: new Float64Array(n * pCount),
+      dMaxNet: new Float64Array(n * pCount),
+      dMinH: new Float64Array(n * pCount),
+      prevHolding: new Float64Array(n * pCount),
+      dealerSpreadBps: params.dealerSpreadBps,
+      maxWeeklyStatMovePct: params.maxWeeklyStatMovePct ?? Number.NaN,
+    };
+  }
+  instruments.forEach((inst, i) => {
     const offeringUSD = Math.max(0, inst.primaryOfferingUSD ?? 0);
-    // A DEBUT issuer — an LBO financing, a first term loan, an IPO — has NO outstanding stock:
-    // its entire book is the offering itself. Gating on the outstanding float alone dropped it
-    // before the solve, so it never got a primary outcome, was never settled or pulled, and the
-    // offering sat queued forever (measured: 767 offering-weeks of LBO financings, zero deals
-    // done in 120 weeks). A market with something to sell is a market.
-    if (!(inst.tradableFloatUSD + offeringUSD > 0)) {
-      newStatById.set(inst.id, inst.currentStat);
-      return;
+    packed.float[i] = inst.tradableFloatUSD;
+    packed.offering[i] = offeringUSD;
+    packed.withdrawStat[i] = inst.primaryWithdrawStat === undefined ? Number.NaN : inst.primaryWithdrawStat;
+    packed.currentStat[i] = inst.currentStat;
+    packed.yieldLike[i] = inst.statKind === 'YIELD_LIKE' ? 1 : 0;
+    packed.skip[i] = inst.tradableFloatUSD + offeringUSD > 0 ? 0 : 1;
+  });
+  participants.forEach((p, pi) => {
+    const base = pi * n;
+    if (p.demandByIndex !== undefined) {
+      const arr = p.demandByIndex;
+      for (let i = 0; i < n; i++) {
+        const d = arr[i];
+        if (!d) continue;
+        packed.present[base + i] = 1;
+        packed.dRes[base + i] = d.reservationStat;
+        packed.dRange[base + i] = d.fullSizeStatRange;
+        packed.dMaxH[base + i] = d.maxHoldingUSD;
+        packed.dMaxNet[base + i] = d.maxNetPurchaseUSD === undefined ? Number.NaN : d.maxNetPurchaseUSD;
+        packed.dMinH[base + i] = d.minHoldingUSD ?? 0;
+      }
+    } else {
+      instruments.forEach((inst, i) => {
+        const d = p.demandByInstrumentId.get(inst.id);
+        if (!d) return;
+        packed.present[base + i] = 1;
+        packed.dRes[base + i] = d.reservationStat;
+        packed.dRange[base + i] = d.fullSizeStatRange;
+        packed.dMaxH[base + i] = d.maxHoldingUSD;
+        packed.dMaxNet[base + i] = d.maxNetPurchaseUSD === undefined ? Number.NaN : d.maxNetPurchaseUSD;
+        packed.dMinH[base + i] = d.minHoldingUSD ?? 0;
+      });
+    }
+    p.currentHoldingsByInstrumentId.forEach((qty, instId) => {
+      const i = instIndexOf(instruments, instId);
+      if (i >= 0) packed.prevHolding[base + i] = qty;
+    });
+  });
+  return packed;
+}
+
+// Holdings arrive keyed by instrument id; resolve against the call's own instruments. One map
+// per call, rebuilt cheaply — ids are already unique within a book.
+let instIndexCache: Map<string, number> | null = null;
+let instIndexCacheFor: ClearingInstrument[] | null = null;
+function instIndexOf(instruments: ClearingInstrument[], id: string): number {
+  if (instIndexCacheFor !== instruments) {
+    instIndexCache = new Map(instruments.map((inst, i) => [inst.id, i]));
+    instIndexCacheFor = instruments;
+  }
+  return instIndexCache!.get(id) ?? -1;
+}
+
+/**
+ * The per-instrument kernel over [from, to): pure arithmetic on the packed arrays, no Maps and
+ * no objects, so it runs identically on the main thread and inside a worker. Fill rows are
+ * appended in (instrument, participant) order — the exact order the un-sharded loop touched
+ * them — so the main thread's accumulation reproduces today's floating-point sums bit for bit.
+ */
+export function runClearingKernel(packed: PackedClearing, from: number, to: number): KernelShardResult {
+  const n = packed.n;
+  const pCount = packed.pCount;
+  growKernelScratch(pCount);
+  const span = to - from;
+  const out: KernelShardResult = {
+    from, to,
+    clearedStat: new Float64Array(span),
+    damper: new Uint8Array(span),
+    dealerInventory: new Float64Array(span),
+    primaryWithdrawn: new Uint8Array(span),
+    primaryMarketTake: new Float64Array(span),
+    hasPrimary: new Uint8Array(span),
+    fillInst: new Int32Array(span * pCount),
+    fillPart: new Int32Array(span * pCount),
+    fillFilled: new Float64Array(span * pCount),
+    fillTraded: new Float64Array(span * pCount),
+    fillFee: new Float64Array(span * pCount),
+    fillCount: 0,
+  };
+
+  for (let i = from; i < to; i++) {
+    const o = i - from;
+    const currentStat = packed.currentStat[i];
+    if (packed.skip[i]) {
+      out.clearedStat[o] = currentStat;
+      out.dealerInventory[o] = Number.NaN; // marker: no entry (matches the old early-return)
+      continue;
+    }
+    const isYieldLike = packed.yieldLike[i] === 1;
+    const offeringUSD = packed.offering[i];
+    const bracketLow = isYieldLike ? -2000 : Math.max(1e-6, currentStat * 0.01);
+    const bracketHigh = isYieldLike ? 100000 : currentStat * 100;
+
+    // Build the solve columns for this instrument, in participant order.
+    colCount = 0;
+    for (let pi = 0; pi < pCount; pi++) {
+      const k = pi * n + i;
+      if (!packed.present[k]) continue;
+      growColumns(colCount + 1);
+      const range = Math.max(1e-6, packed.dRange[k]);
+      const maxNet = packed.dMaxNet[k];
+      const affordableUSD = Number.isNaN(maxNet)
+        ? Infinity
+        : packed.prevHolding[k] + Math.max(0, maxNet);
+      colReservation[colCount] = packed.dRes[k];
+      colRange[colCount] = range;
+      colMaxHolding[colCount] = packed.dMaxH[k];
+      colAffordable[colCount] = affordableUSD;
+      colCore[colCount] = Math.min(packed.dMinH[k], affordableUSD);
+      colCount++;
     }
 
-    // Wide, non-economic search bounds. See solveClearingStat: the participants' own reservation
-    // levels decide where the market can actually clear, not these.
-    // NUMERICAL guards only, never economics — wide enough that no real schedule reaches them.
-    // The demand side always contains a bid at some level (the distressed regime's recovery
-    // arithmetic guarantees it for credit), so the solve finds a real crossing inside the
-    // bracket; a solve that returns a bracket edge is a bug in an adapter's schedules, not a
-    // market outcome, and the earlier version of this file that dressed the upper bound in a
-    // recovery-value story is recorded in the plan as a mistake not to repeat.
-    const isYieldLike = inst.statKind === 'YIELD_LIKE';
-    const bracketLow = isYieldLike ? -2000 : Math.max(1e-6, inst.currentStat * 0.01);
-    const bracketHigh = isYieldLike ? 100000 : inst.currentStat * 100;
-
-    // The stat-independent half of every schedule, once — in participants order, so the demand
-    // sum runs through the same non-zero terms in the same sequence the per-participant walk did.
-    colCount = 0;
-    participants.forEach((p) => {
-      const d = p.demandByIndex !== undefined ? p.demandByIndex[instIdx] : p.demandByInstrumentId.get(inst.id);
-      if (!d) return;
-      pushPreparedDemand(d, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0);
-    });
-
-    let liveFloatUSD = inst.tradableFloatUSD + offeringUSD;
-    let solvedStat = solveClearingStat({ statKind: inst.statKind, tradableFloatUSD: liveFloatUSD }, bracketLow, bracketHigh);
+    let liveFloatUSD = packed.float[i] + offeringUSD;
+    let solvedStat = solveClearingStat(
+      { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatUSD: liveFloatUSD },
+      bracketLow, bracketHigh
+    );
     let offeringWithdrawn = false;
-    if (offeringUSD > 0 && inst.primaryWithdrawStat !== undefined) {
-      const beyondWalkAway = isYieldLike
-        ? solvedStat > inst.primaryWithdrawStat
-        : solvedStat < inst.primaryWithdrawStat;
+    const withdrawStat = packed.withdrawStat[i];
+    if (offeringUSD > 0 && !Number.isNaN(withdrawStat)) {
+      const beyondWalkAway = isYieldLike ? solvedStat > withdrawStat : solvedStat < withdrawStat;
       if (beyondWalkAway) {
-        // The deal is pulled before pricing: the market never absorbs the new paper, and the
-        // outstanding stock clears on its own.
         offeringWithdrawn = true;
-        liveFloatUSD = inst.tradableFloatUSD;
-        solvedStat = solveClearingStat(inst, bracketLow, bracketHigh);
+        liveFloatUSD = packed.float[i];
+        solvedStat = solveClearingStat(
+          { statKind: isYieldLike ? 'YIELD_LIKE' : 'PRICE_LIKE', tradableFloatUSD: liveFloatUSD },
+          bracketLow, bracketHigh
+        );
       }
     }
 
-    // Discrete-time damping, not a price bound: see maxWeeklyStatMovePct.
-    const maxMove = Math.abs(inst.currentStat) * params.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0);
+    // Discrete-time damping, not a price bound: see maxWeeklyStatMovePct. Undamped when omitted.
+    const maxMove = Number.isNaN(packed.maxWeeklyStatMovePct)
+      ? Infinity
+      : Math.abs(currentStat) * packed.maxWeeklyStatMovePct + (isYieldLike ? YIELD_LIKE_MIN_WEEKLY_MOVE_BPS : 0);
     const clearedStat = Number(
-      Math.max(inst.currentStat - maxMove, Math.min(inst.currentStat + maxMove, solvedStat)).toFixed(4)
+      Math.max(currentStat - maxMove, Math.min(currentStat + maxMove, solvedStat)).toFixed(4)
     );
     if (Math.abs(solvedStat - clearedStat) > Math.max(1e-6, Math.abs(solvedStat) * 1e-6)) {
-      damperBoundInstrumentIds.push(inst.id);
+      out.damper[o] = 1;
     }
-    newStatById.set(inst.id, isFinite(clearedStat) ? clearedStat : inst.currentStat);
+    out.clearedStat[o] = isFinite(clearedStat) ? clearedStat : currentStat;
 
-    // Everyone holds what they wanted at the level that cleared; the dealer carries any residual.
-    //
-    // The printed level is the DAMPED one, so at that level demand and float need not be equal —
-    // damping is a discrete-time device and the market still has to settle a real quantity
-    // against it. When the schedules want more than exists, the fills are rationed pro rata:
-    // the same allocation rule the goods auction uses (#49), and the only honest one, because
-    // nobody can be handed a security that was never issued. Without this, a level held below
-    // its solve by the damping let every participant book its full unclamped size and the books
-    // together claimed multiples of the float — measured at 200% of shares outstanding in the
-    // equity slice, which is where it finally became impossible to miss.
-    // §6 cores-first refinement: a mandated core (`minHoldingUSD` — the liability-driven
-    // sovereign core, WS6's pledged collateral) is a SIZE the holder cannot go below, and the
-    // old uniform pro-rata ration scaled fills straight through it (measured: pledged
-    // collateral printing ~1% above holdings at late-horizon scale). Cores are satisfied
-    // first; only the discretionary layer above them is rationed. If the cores alone exceed
-    // the float, the ledger cannot honor them all and they scale together — that case is a
-    // float-accounting bug upstream, not a market outcome.
-    const wantedByParticipant = new Map<string, number>();
-    const coreByParticipant = new Map<string, number>();
+    // Settle: cores first, then the discretionary layer pro rata — identical arithmetic to the
+    // un-sharded loop, participant order preserved.
     let wantedTotalUSD = 0;
     let coreTotalUSD = 0;
-    participants.forEach((p) => {
-      const d = p.demandByIndex !== undefined ? p.demandByIndex[instIdx] : p.demandByInstrumentId.get(inst.id);
-      const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
-      const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind, previousUSD) : 0;
-      const affordableUSD = d?.maxNetPurchaseUSD === undefined
-        ? Infinity
-        : previousUSD + Math.max(0, d.maxNetPurchaseUSD);
-      const coreUSD = Math.min(d?.minHoldingUSD ?? 0, affordableUSD, filledUSD);
-      wantedByParticipant.set(p.id, filledUSD);
-      coreByParticipant.set(p.id, coreUSD);
+    for (let pi = 0; pi < pCount; pi++) {
+      const k = pi * n + i;
+      const previousUSD = packed.prevHolding[k];
+      let filledUSD = 0;
+      let coreUSD = 0;
+      if (packed.present[k]) {
+        const range = Math.max(1e-6, packed.dRange[k]);
+        const distanceIntoTheMoney = isYieldLike ? clearedStat - packed.dRes[k] : packed.dRes[k] - clearedStat;
+        const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / range));
+        const wantedUSD = packed.dMaxH[k] * fraction;
+        const maxNet = packed.dMaxNet[k];
+        const affordableUSD = Number.isNaN(maxNet) ? Infinity : previousUSD + Math.max(0, maxNet);
+        const mandatedCoreUSD = Math.min(packed.dMinH[k], affordableUSD);
+        filledUSD = Math.max(mandatedCoreUSD, Math.min(wantedUSD, affordableUSD));
+        coreUSD = Math.min(packed.dMinH[k], affordableUSD, filledUSD);
+      }
+      kernWanted[pi] = filledUSD;
+      kernCore[pi] = coreUSD;
       wantedTotalUSD += filledUSD;
       coreTotalUSD += coreUSD;
-    });
+    }
     const coreScale = coreTotalUSD > liveFloatUSD ? liveFloatUSD / coreTotalUSD : 1;
     const discretionaryFloatUSD = Math.max(0, liveFloatUSD - coreTotalUSD * coreScale);
     const discretionaryWantedUSD = wantedTotalUSD - coreTotalUSD;
@@ -459,46 +626,155 @@ export function clearFinancialAsset(
       : 1;
 
     let allocatedUSD = 0;
-    participants.forEach((p) => {
-      const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
-      const coreUSD = (coreByParticipant.get(p.id) ?? 0) * coreScale;
-      const discretionaryUSD = Math.max(0, (wantedByParticipant.get(p.id) ?? 0) - (coreByParticipant.get(p.id) ?? 0));
+    let priorTotalUSD = 0;
+    for (let pi = 0; pi < pCount; pi++) {
+      const k = pi * n + i;
+      const previousUSD = packed.prevHolding[k];
+      priorTotalUSD += previousUSD;
+      const coreUSD = kernCore[pi] * coreScale;
+      const discretionaryUSD = Math.max(0, kernWanted[pi] - kernCore[pi]);
       const filledUSD = coreUSD + discretionaryUSD * discretionaryScale;
       const tradedUSD = filledUSD - previousUSD;
-      const feeUSD = Math.abs(tradedUSD) * (params.dealerSpreadBps / 10000);
-
-      if (filledUSD > 1) newParticipantHoldings.get(p.id)!.set(inst.id, filledUSD);
-      netCashDeltaByParticipantId.set(p.id, (netCashDeltaByParticipantId.get(p.id) ?? 0) - tradedUSD - feeUSD);
-      totalDealerRevenueUSD += feeUSD;
+      const feeUSD = Math.abs(tradedUSD) * (packed.dealerSpreadBps / 10000);
       allocatedUSD += filledUSD;
-    });
-
-    newDealerInventoryById.set(inst.id, Number((liveFloatUSD - allocatedUSD).toFixed(0)));
+      // Emit only rows that can move anything: a participant with no demand and no prior
+      // holding contributes exact zeros everywhere (the old loop added -0-0 to its cash).
+      if (packed.present[k] || previousUSD !== 0) {
+        const f = out.fillCount++;
+        out.fillInst[f] = i;
+        out.fillPart[f] = pi;
+        out.fillFilled[f] = filledUSD;
+        out.fillTraded[f] = tradedUSD;
+        out.fillFee[f] = feeUSD;
+      }
+    }
+    out.dealerInventory[o] = Number((liveFloatUSD - allocatedUSD).toFixed(0));
 
     if (offeringUSD > 0) {
-      // What the participants actually ADDED this week, attributed to the new paper first —
-      // capped at the offering (a fungible book cannot say which dollar bought which vintage,
-      // but the primary cannot place more than its own size).
-      let priorTotalUSD = 0;
-      participants.forEach((p) => { priorTotalUSD += p.currentHoldingsByInstrumentId.get(inst.id) ?? 0; });
+      out.hasPrimary[o] = 1;
+      out.primaryWithdrawn[o] = offeringWithdrawn ? 1 : 0;
       const marketTakeUSD = offeringWithdrawn
         ? 0
         : Math.max(0, Math.min(offeringUSD, allocatedUSD - priorTotalUSD));
-      primaryOutcomeById.set(inst.id, {
-        withdrawn: offeringWithdrawn,
-        marketTakeUSD: Number(marketTakeUSD.toFixed(0)),
-        clearedStat,
+      out.primaryMarketTake[o] = Number(marketTakeUSD.toFixed(0));
+    }
+  }
+  return out;
+}
+
+// Kernel scratch for the settle pass, module-scope like the solve columns.
+let kernWanted = new Float64Array(64);
+let kernCore = new Float64Array(64);
+function growKernelScratch(pCount: number) {
+  if (pCount <= kernWanted.length) return;
+  let size = kernWanted.length;
+  while (size < pCount) size *= 2;
+  kernWanted = new Float64Array(size);
+  kernCore = new Float64Array(size);
+}
+
+/**
+ * Accumulate shard results into the result maps, in instrument order — the fill rows arrive in
+ * (instrument, participant) order within each shard and shards are contiguous ranges walked in
+ * order, so every floating-point sum here runs through the same terms in the same sequence the
+ * un-sharded loop produced.
+ */
+function accumulateShard(
+  shard: KernelShardResult,
+  instruments: ClearingInstrument[],
+  participants: ClearingParticipant[],
+  result: ClearingResult
+): void {
+  for (let i = shard.from; i < shard.to; i++) {
+    const o = i - shard.from;
+    result.newStatById.set(instruments[i].id, shard.clearedStat[o]);
+    if (shard.damper[o]) result.damperBoundInstrumentIds.push(instruments[i].id);
+    if (!Number.isNaN(shard.dealerInventory[o])) {
+      result.newDealerInventoryById.set(instruments[i].id, shard.dealerInventory[o]);
+    }
+    if (shard.hasPrimary[o]) {
+      result.primaryOutcomeById.set(instruments[i].id, {
+        withdrawn: shard.primaryWithdrawn[o] === 1,
+        marketTakeUSD: shard.primaryMarketTake[o],
+        clearedStat: shard.clearedStat[o],
       });
     }
+  }
+  let f = 0;
+  // Fill rows are already globally ordered within the shard.
+  for (; f < shard.fillCount; f++) {
+    const pi = shard.fillPart[f];
+    const p = participants[pi];
+    const filledUSD = shard.fillFilled[f];
+    const tradedUSD = shard.fillTraded[f];
+    const feeUSD = shard.fillFee[f];
+    if (filledUSD > 1) result.newParticipantHoldings.get(p.id)!.set(instruments[shard.fillInst[f]].id, filledUSD);
+    result.netCashDeltaByParticipantId.set(p.id, (result.netCashDeltaByParticipantId.get(p.id) ?? 0) - tradedUSD - feeUSD);
+    result.totalDealerRevenueUSD += feeUSD;
+  }
+}
+
+/**
+ * The worker pool injects itself here (see clearing-worker-pool.ts). The engine deliberately
+ * imports NOTHING at runtime: the worker thread loads this module alone, and tsx's resolver
+ * inside workers cannot follow extensionless relative imports — the dependency points the other
+ * way instead.
+ */
+export interface ShardedKernelApi {
+  workerCount: () => number;
+  sharedBuffer: (bytes: number) => SharedArrayBuffer | null;
+  run: (packed: PackedClearing, sab: SharedArrayBuffer) => KernelShardResult[] | null;
+}
+let shardedKernel: ShardedKernelApi | null = null;
+export function registerShardedKernel(api: ShardedKernelApi): void { shardedKernel = api; }
+
+export function clearFinancialAsset(
+  instruments: ClearingInstrument[],
+  participants: ClearingParticipant[],
+  priorDealerInventoryById: Map<string, number>,
+  params: ClearingParams
+): ClearingResult {
+  void priorDealerInventoryById;
+  const result: ClearingResult = {
+    newStatById: new Map(),
+    newParticipantHoldings: new Map(),
+    newDealerInventoryById: new Map(),
+    totalDealerRevenueUSD: 0,
+    netCashDeltaByParticipantId: new Map(),
+    damperBoundInstrumentIds: [],
+    primaryOutcomeById: new Map(),
+  };
+  participants.forEach((p) => {
+    result.newParticipantHoldings.set(p.id, new Map<string, number>());
+    result.netCashDeltaByParticipantId.set(p.id, 0);
   });
 
-  return {
-    newStatById,
-    newParticipantHoldings,
-    newDealerInventoryById,
-    totalDealerRevenueUSD,
-    netCashDeltaByParticipantId,
-    damperBoundInstrumentIds,
-    primaryOutcomeById,
-  };
+  // Worker path (opt-in, Node-only): pack onto shared memory, shard the kernel across the pool,
+  // accumulate the shards in instrument order. Serial path otherwise — the SAME kernel, so the
+  // two paths are one arithmetic and the state hash cannot tell them apart.
+  const n = instruments.length;
+  const pCount = participants.length;
+  if (n >= 32 && shardedKernel && shardedKernel.workerCount() > 0) {
+    const sab = shardedKernel.sharedBuffer(packedClearingBytes(n, pCount));
+    if (sab) {
+      const packed = packClearing(instruments, participants, params, sab);
+      const shards = shardedKernel.run(packed, sab);
+      if (shards) {
+        for (const shard of shards) accumulateShard(shard as never, instruments, participants, result);
+        return result;
+      }
+      // Pool refused (too small, or a worker failed): the packed views are ordinary arrays to
+      // the kernel, so fall straight through to the serial path on the same packing.
+      growKernelScratch(pCount);
+      const shard = runClearingKernel(packed, 0, packed.n);
+      accumulateShard(shard, instruments, participants, result);
+      return result;
+    }
+  }
+
+  const packed = packClearing(instruments, participants, params);
+  growKernelScratch(packed.pCount);
+  const shard = runClearingKernel(packed, 0, packed.n);
+  accumulateShard(shard, instruments, participants, result);
+  return result;
 }
