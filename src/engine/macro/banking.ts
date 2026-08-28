@@ -287,11 +287,9 @@ export function evolveBankingSector(
   const capitalGap = 0.12 - newBankCapitalRatio;
   const newCreditConditionsIndex = (capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment);
 
-  // The central-bank reserve scalar is carried unchanged — a macro-level second representation
-  // recorded in the plan (G9 makes the CB a real counterparty). Nothing here reads it to move
-  // money.
-  const reserveInjectionRate = balanceSheetStance * 0.002;
-  const newCentralBankReservesUSD = Math.max(0, (prevBanking.centralBankReservesUSD ?? 1e12) * (1 + reserveInjectionRate) + (monetizedAmountUSD ?? 0));
+  // PUB2: the phantom 1e12 reserves scalar and its stance drift are gone. Reserves are this
+  // bank's own cash, which is what the central bank's balance sheet counts as its liability.
+  const newCentralBankReservesUSD = Math.max(0, cashUSD);
   // G2 slice 5: M2 is a DERIVED SUM of the real money that exists — this bank's household and
   // corporate deposits, plus the money-fund shares its region's holders own (02b adds those
   // once per region). The `deposits + centralBankReserves x 0.1` formula is deleted: it added

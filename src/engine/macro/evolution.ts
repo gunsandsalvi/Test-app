@@ -586,9 +586,10 @@ export function evolveRegionMacro(
     (Math.max(0, newInflation - 0.04) * -6)
   );
   const newBalanceSheetStance = (region.balanceSheetStance ?? 0) * 0.95 + targetBalanceSheetStance * 0.05;
-  const cbFloor = 300e9; // Structural floor for central bank assets (currency in circulation & baseline reserves)
-  const newCbBalance = Math.max(cbFloor, region.centralBankBalanceSheet * (1 + newBalanceSheetStance * 0.001));
-  const cbChangePct = (newCbBalance - region.centralBankBalanceSheet) / Math.max(cbFloor, region.centralBankBalanceSheet);
+  // PUB2: the CB's balance sheet is its real sovereign book, written by stages/central-bank.ts.
+  // The GDP-ratio scalar that used to drift on the policy stance here is gone.
+  const newCbBalance = region.centralBankBalanceSheet;
+  const cbChangePct = 0;
 
   const newBankingSector = evolveBankingSector(
     region.bankingSector,

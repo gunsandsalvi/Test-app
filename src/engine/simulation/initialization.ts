@@ -7,6 +7,7 @@ import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed } from './stages/bank-lending';
 import { isActiveCompany } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
+import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
 import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
@@ -372,6 +373,17 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       reg.bankingSector.bankEquityUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0);
       reg.bankingSector.depositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
       reg.bankingSector.wholesaleFundingUSD = regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
+
+      // PUB2 (§7.4): close the central bank's balance sheet at birth, now that the banks whose
+      // cash is its reserve liability exist. Currency is the residual; the weekly stage
+      // re-derives it by the same arithmetic.
+      const cbSheet = reg.centralBankSheet;
+      if (cbSheet) {
+        const reservesUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0);
+        cbSheet.currencyInCirculationUSD = Number(centralBankCurrencyResidualUSD(cbSheet, reservesUSD).toFixed(0));
+        cbSheet.unbackedBankCashUSD = Number(unbackedBankCashUSD(cbSheet, reservesUSD).toFixed(0));
+        reg.centralBankBalanceSheet = Number(centralBankAssetsUSD(cbSheet).toFixed(0));
+      }
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
       // relationship lead WS8 mandates for its offerings, so one firm has one bank).

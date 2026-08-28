@@ -231,9 +231,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       .reduce((s2, t) => s2 + t.principalUSD, 0);
     const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
 
-    // PUB1: the treasury's account. Revenue in, the whole spending programme out (interest to
-    // bondholders, procurement and transfers to the economy), and issuance funds the gap. The
-    // interest leg is the one that used to exist on the holders' side only.
+    // PUB1: the government's real interest bill. The treasury's ACCOUNT is the TGA, a liability
+    // of the central bank — see stages/central-bank.ts, which moves it and the reserves with it.
     const interestWeeklyUSD = weeklyInterestExpenseUSD(reg.govDebtTranches);
     reg.governmentInterestWeeklyUSD = Number(interestWeeklyUSD.toFixed(0));
     // What the bill pays to holders that exist. The rest is the named boundary above.
@@ -250,9 +249,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             .reduce((x, h) => x + ((h.quantityOrNotionalUSD ?? 0) * (cb[h.instrumentId.replace(`${regionId}-GOV-`, '')] ?? 0)) / 52, 0), 0);
       reg.governmentInterestToUnmodeledHoldersUSD = Number(Math.max(0, interestWeeklyUSD - held).toFixed(0));
     }
-    reg.governmentAccountUSD = Number((
-      (reg.governmentAccountUSD ?? 0) + reg.governmentRevenueUSD - reg.governmentSpendingUSD
-    ).toFixed(0));
 
     const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedBondPrincipalUSD;
     const monetizationShare = (reg.balanceSheetStance * 0.5);
@@ -440,6 +436,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           : entity;
       });
     }
+
+    // PUB2: the financing legs the TGA needs — proceeds in, redemptions out.
+    reg.lastIssuanceProceedsUSD = Number(newTranches.reduce((a, t) => a + t.principalUSD, 0).toFixed(0));
+    reg.lastRedemptionPaidUSD = Number(maturedPrincipalUSD.toFixed(0));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
     const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);

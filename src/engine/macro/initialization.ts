@@ -3,6 +3,8 @@ import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, PrivateSectorSegment, PrivateSegmentType, GovDebtTranche } from '../../types';
 import { buildHouseholdCohorts } from './household-cohorts';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
+import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
+import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
@@ -478,7 +480,23 @@ function buildRegion(regionId: RegionId): Region {
     governmentRevenueUSD,
     governmentSpendingUSD,
     governmentInterestWeeklyUSD: Number(seedInterestWeeklyUSD.toFixed(0)),
-    governmentAccountUSD: 0,
+    // PUB2 (§7.4): the CB opens holding its real share of the stock, with the TGA at its
+    // operating balance and currency as the residual that closes the balance sheet. Bank
+    // reserves are the banks' own cash and are not stored here — one representation.
+    centralBankSheet: {
+      region: regionId,
+      sovereignHoldingsByTenor: govDebtTranches.reduce((acc, t) => {
+        const k = sovBucketKey(t.tenorAtIssuanceYears);
+        acc[k] = (acc[k] ?? 0) + t.principalUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
+        return acc;
+      }, {} as Record<string, number>),
+      treasuryAccountUSD: Number((governmentSpendingUSD * TGA_TARGET_WEEKS_OF_SPENDING).toFixed(0)),
+      // Closes the balance sheet at birth; the weekly stage re-derives it (§7.4).
+      currencyInCirculationUSD: 0,
+      unbackedBankCashUSD: 0,
+      lastRemittanceUSD: 0,
+      lastReserveDrainUSD: 0,
+    },
     govDebtTranches,
     debtToGdpPctBottomUp: 0,
     householdState: {

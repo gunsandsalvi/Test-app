@@ -630,7 +630,15 @@ underwriting: no fee, no book-building, no auction price discovery" — and 07c,
 clearing book, already exists. The fix is to route issuance through it, which is what makes an
 undersubscribed auction a real event rather than a forced take-up.
 
-**PUB2 — The central bank as a real counterparty.** Seed the CB book from `centralBankShare` of
+**PUB2a — DONE (§7.62).** The CB has a real balance sheet: its sovereign book as assets, and
+reserves + the **Treasury General Account** + currency as liabilities. The TGA is the point — a
+treasury account is a LIABILITY OF THE CENTRAL BANK, so its flows move money in and out of the
+banking system. Remittances (coupon income less interest on reserves) go to the treasury and turn
+NEGATIVE when policy exceeds the portfolio yield, which is the real post-hiking-cycle phenomenon
+reproduced rather than modelled. Retires the phantom 1e12 `centralBankReservesUSD` and the
+balance-sheet drift. Identity asserted weekly; TGA asserted non-negative.
+
+**PUB2b — The central bank as a real counterparty (remaining).** Seed the CB book from `centralBankShare` of
 the sovereign stock; roll maturities as real inelastic at-market bids in 07c sized to redemptions.
 Policy then gets a real quantity lever: QT is redemptions not reinvested (real supply 07c must
 price), QE a real purchase flow at the effective lower bound. **Retires the ~1e12

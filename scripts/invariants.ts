@@ -159,6 +159,32 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
  * must be the reading of the same stock. Before HH5 there were three disagreeing numbers (a
  * GDP-gap formula at 4.5%, a dead bottom-up field at 37%, and pool-implied 8-17%).
  */
+/** PUB2: the central bank's balance sheet must close — assets = reserves + TGA + currency,
+ * with the named unbacked residual. And the TGA is a real account: it may not go negative. */
+function checkCentralBankIdentity(state: GameState, week: number) {
+  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+    const cb = state.regions[region]?.centralBankSheet;
+    if (!cb) return;
+    const reserves = state.companies
+      .filter((c) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+      .reduce((a, c) => a + c.bankBalanceSheet!.cashReservesUSD, 0);
+    const assets = Object.values(cb.sovereignHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    const residual = assets - (reserves + cb.treasuryAccountUSD + cb.currencyInCirculationUSD) + cb.unbackedBankCashUSD;
+    if (assets > 0 && Math.abs(residual) / assets > 1e-3) {
+      violations.push({
+        week,
+        message: `${region} central bank balance sheet does not close: ${(residual / 1e9).toFixed(2)}B against ${(assets / 1e9).toFixed(1)}B of assets`,
+      });
+    }
+    if (cb.treasuryAccountUSD < 0) {
+      violations.push({
+        week,
+        message: `${region} treasury account is negative (${(cb.treasuryAccountUSD / 1e9).toFixed(2)}B) — the government spent money it had not financed`,
+      });
+    }
+  });
+}
+
 function checkLaborMarketIdentity(state: GameState, week: number) {
   (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
     const reg = state.regions[region];
@@ -654,6 +680,7 @@ function runInvariantsHarness() {
     if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
     checkHouseholdCohortIdentity(state, w);
     checkLaborMarketIdentity(state, w);
+    checkCentralBankIdentity(state, w);
     violations.push(...checkHoldingsLedgerConservation(state, w));
     checkBeneficiaryClaimsHaveHolders(state, w);
     prevStateForBookCheck = state;

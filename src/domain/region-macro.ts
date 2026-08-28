@@ -7,6 +7,7 @@
  */
 
 import { RegionId } from './geography';
+import { CentralBank } from './central-bank';
 import { BankingSector, AssetOwnershipShares } from './banking';
 import { InstitutionalSector } from './institutions';
 import { SupplyContract, CategoryDemandState, SupplyRelationship } from './market-microstructure';
@@ -535,8 +536,13 @@ export interface Region {
   /** PUB1 — real weekly interest on the debt stack, paid to holders. Comes off the top of
    * spending, so procurement and transfers get the primary budget only. */
   governmentInterestWeeklyUSD?: number;
-  /** PUB1 — the treasury's cash balance. Revenue in, spending out, issuance funds the gap. */
-  governmentAccountUSD?: number;
+  /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
+   * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
+  centralBankSheet?: CentralBank;
+  /** PUB2 — this week's gross issuance proceeds and principal redeemed, so the TGA has the
+   * financing leg that funds the deficit it is debited by. Written by stage 11. */
+  lastIssuanceProceedsUSD?: number;
+  lastRedemptionPaidUSD?: number;
   /**
    * PUB1 — the slice of the interest bill paid to holders that do not exist yet: the central
    * bank (15% of the stock, and in reality remitted straight back — PUB2) and foreign holders

@@ -6,6 +6,7 @@ import { runRegionMacroStage } from './stages/02-region-macro';
 import { runBankDiversificationStage } from './stages/02b-bank-diversification';
 import { runCategoryDemandStage } from './stages/03-category-demand';
 import { runLaborMarketStage, runLaborReconciliationStage } from './stages/labor-market';
+import { runCentralBankStage } from './stages/central-bank';
 import { runInputOutputStage } from './stages/04-input-output';
 import { runUnitBiddingStage } from './stages/05-unit-bidding';
 import { runFxAndTradeStage } from './stages/06-fx-and-trade';
@@ -148,6 +149,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // HH5: employment's one representation, re-read after defaults (08), mergers (10) and births
   // have landed — a bankrupt firm's staff are unemployed the week the firm goes, not the next.
   run('labor-reconciliation', () => runLaborReconciliationStage(state, ctx));
+  // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
+  // After stage 11 so every treasury flow of the week has posted.
+  run('central-bank', () => runCentralBankStage(state, ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
