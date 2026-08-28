@@ -36,7 +36,7 @@
  * what finally anchored the front end of the sovereign curve — generalised here.
  */
 
-import { CreditRating, InstitutionalEntityType } from '../../../types';
+import { CreditRating, InstitutionalEntityType, InstitutionalEntity } from '../../../types';
 
 /**
  * What holding a dollar of each asset class costs an institution in regulatory capital. The
@@ -81,6 +81,10 @@ export function spreadRiskCapitalChargeRate(rating: CreditRating, durationYears:
  * before the asset is worth owning.
  */
 export const REQUIRED_RETURN_ON_CAPITAL: Record<InstitutionalEntityType, number> = {
+  // HH1c: for an INSURER and a PENSION_FUND these are now FALLBACKS, not the answer. Both have
+  // real liabilities with real flows, so both have a real cost of carrying them, and
+  // `entityRequiredReturn` below derives it. These survive only for an entity whose flows have not
+  // been struck yet — the first week, or a fund with no entitlements.
   INSURER: 0.09,
   PENSION_FUND: 0.07,
   ASSET_MANAGER: 0.11,
@@ -121,12 +125,18 @@ export const REQUIRED_RETURN_ON_CAPITAL: Record<InstitutionalEntityType, number>
  */
 export function computeReservationSpreadBps(params: {
   entityType: InstitutionalEntityType;
+  /**
+   * HH1c — the holder's OWN required return where it has one that can be measured (an insurer's
+   * cost of float, a pension fund's funding need). Omitted falls back to the type's stated hurdle,
+   * which is what the credit books did for every holder before their liabilities were real.
+   */
+  requiredReturn?: number;
   expectedLossBps: number;
   capitalChargeRate: number;
   creditConditionsIndex: number;
 }): number {
   const capitalCostBps =
-    params.capitalChargeRate * REQUIRED_RETURN_ON_CAPITAL[params.entityType] * 10000;
+    params.capitalChargeRate * (params.requiredReturn ?? REQUIRED_RETURN_ON_CAPITAL[params.entityType]) * 10000;
   const creditConditionsBps = params.creditConditionsIndex * CREDIT_CONDITIONS_REQUIRED_SPREAD_BPS;
   return params.expectedLossBps + capitalCostBps + creditConditionsBps;
 }
@@ -147,6 +157,49 @@ export const FULL_SIZE_SPREAD_RANGE_BPS = 250;
  * concentration in a single issuer is its own risk regardless of how well it pays.
  */
 export const MAX_OVERWEIGHT_MULTIPLE = 2.2;
+
+
+/**
+ * What THIS entity needs to earn, from what its own liabilities actually cost it.
+ *
+ * Two of these are measured rather than stated, and each is the real metric its industry uses:
+ *
+ *   - **An insurer's cost of float.** Underwriting either pays for itself or it does not. Premiums
+ *     less claims less expenses, over the float being carried, is what the liabilities cost — the
+ *     figure the business is actually run against. Underwrite at a profit and the float is FREE,
+ *     so the insurer can accept a lower return on its assets than anyone else, which is the real
+ *     advantage a well-run insurer has. Underwrite at a loss and the assets have to make it back.
+ *   - **A pension fund's funding need.** Benefits go out every week against entitlements it has
+ *     promised. What it must earn to keep meeting them is that outflow over its assets, and a fund
+ *     whose assets have fallen behind its promises needs MORE — which is why underfunded schemes
+ *     reach for return and fully-funded ones derisk, the behaviour §5-HH exists to produce.
+ *
+ * The others stay stated, honestly: an asset manager's hurdle is its investors' benchmark, a hedge
+ * fund's is its own mandate, a sponsor's is what it underwrites deals to. None of those is a
+ * liability cost, so none is derivable from one — there is nothing here to measure, and pretending
+ * otherwise would be a formula wearing a derivation's clothes.
+ */
+export function entityRequiredReturn(entity: InstitutionalEntity): number {
+  const fallback = REQUIRED_RETURN_ON_CAPITAL[entity.entityType];
+  const liabilityUSD = entity.beneficiaryLiabilityUSD ?? 0;
+  if (!(liabilityUSD > 0)) return fallback;
+
+  if (entity.entityType === 'INSURER') {
+    if (entity.lastAnnualUnderwritingResultUSD === undefined) return fallback;
+    const costOfFloatAnnual = -entity.lastAnnualUnderwritingResultUSD / liabilityUSD;
+    return Math.max(0.02, Math.min(0.30, fallback + costOfFloatAnnual));
+  }
+
+  if (entity.entityType === 'PENSION_FUND') {
+    const benefitOutflowAnnual = entity.lastAnnualBenefitOutflowUSD ?? 0;
+    if (!(benefitOutflowAnnual > 0)) return fallback;
+    const fundedRatio = entity.totalAssetsUSD / liabilityUSD;
+    const need = (benefitOutflowAnnual / Math.max(1, entity.totalAssetsUSD)) / Math.max(0.2, fundedRatio);
+    return Math.max(0.02, Math.min(0.30, need));
+  }
+
+  return fallback;
+}
 
 const INVESTMENT_GRADE: CreditRating[] = ['AAA', 'AA', 'A', 'BBB'];
 

@@ -389,11 +389,21 @@ and says so. Pension funds and hedge funds fall through to the generic consumer-
   `technicalReservesUSD` becomes the beneficiary liability rather than a second version of it.
 - (Pension and hedge funds already read their entity's book via the `ASSET_MANAGER` profile —
   an earlier draft of this section wrongly said they did not.)
-- **Then the constants become derivable**, which is why they wait: an entity's required return is
-  its real liability cost, and there is no liability cost until the flows above are real.
-  `REQUIRED_RETURN_ON_CAPITAL` and `INSTITUTIONAL_REAL_RETURN_BPS` retire here.
+- **The constants: two retired, two kept honestly (§7.52).** An insurer's hurdle is now its real
+  COST OF FLOAT and a pension fund's its real FUNDING NEED. An asset manager's, a hedge fund's and
+  a sponsor's are not liability costs and stay stated — there is nothing there to measure, and
+  deriving them anyway would be a formula wearing a derivation's clothes.
+  `INSTITUTIONAL_REAL_RETURN_BPS` in 07c is still stated and still owed.
 - This also repairs what L4 exposed: institutions clear in 07e now, and until their P&L is their
   real book they are priced on a shell.
+
+**HH1c — DONE (§7.52).** The liability flows are real and two of the four required-return
+constants are derived from them. What is NOT yet real, and is the honest next step for insurance:
+**claims are allocated in proportion to premiums**, which is right in aggregate and wrong in the
+way that matters — real claims are LUMPY, and the entire economic point of insurance is that the
+loss lands on one firm and the pool absorbs it. A claim against a real loss event needs a loss
+model; **G5**'s estates and the existing weather anomalies are the natural hooks. Until then this
+moves real money on a real schedule without yet transferring real risk.
 
 **HH2 — The house joins the balance sheet.** Households carry **1,061B of mortgage debt and own no
 house**: a balance sheet with the liability and not the asset. The model already has median home
@@ -2171,7 +2181,37 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
     - Correction to §7.49's write-up: it said pension and hedge funds fall through to a
       consumer-revenue path. They do not — they carry the `ASSET_MANAGER` profile and already read
       their entity's book. Only the insurer was disconnected.
-52. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+52. **HH1c: somebody now pays the premiums, and two hurdles stopped being constants.**
+    - Insurers wrote **48.0B of premiums a year that nobody paid** and settled **37.3B of claims
+      nobody received**; pension funds held 136.9B contributed by nobody. An income statement
+      describing a business no counterparty was in. Every leg now nets: companies and households
+      pay premiums, insurers receive them, claims come back, the insurer's own operating cost
+      leaves as somebody's wage, contributions go in and benefits come out.
+    - **Who pays is derived from what each sector has to lose** — a company's plant and revenue, a
+      household's net worth and income — so the commercial/personal split is an outcome rather
+      than a number chosen to look right.
+    - **A leak I built in deliberately and then closed.** The first version zeroed the insurer's
+      operating expense to avoid an unfunded outflow, which left its cash outrunning the income its
+      own P&L reported by the whole expense ratio. Routing it to households as wages conserves and
+      is what actually happens. Writing `* 0` with a note is a fine way to defer a decision for an
+      hour; it is not a fine way to ship one.
+    - **Two constants retired into measurements, and each is the metric its industry really uses.**
+      An insurer's hurdle is its **cost of float**: premiums less claims less expenses over the
+      float carried. Measured at **−1.57%** — underwriting is profitable, so the float is FREE and
+      the insurer accepts **7.43% where the constant said 9%**. That is the real advantage a
+      well-run insurer has over every other holder, and it emerged from the flows rather than being
+      asserted. A pension fund's is its **funding need**: benefits out over assets, scaled by how
+      far assets are from promises. At 107% funded it needs **4.38% against a stated 7%**, and an
+      underfunded one needs more — which is the "underfunded schemes reach for return" behaviour
+      §5-HH exists to produce, now falling out of arithmetic instead of being described.
+    - **The other three stay stated, and that is the honest answer.** An asset manager's hurdle is
+      its investors' benchmark, a hedge fund's its mandate, a sponsor's what it underwrites deals
+      to. None is a liability cost, so none is derivable from one. **Deriving them anyway would be
+      a formula wearing a derivation's clothes** — the failure mode this project is most at risk of
+      now that deriving things is the habit.
+    - Harness green, determinism verified. Damper-bound instruments 1,956 → 1,920 as the hurdles
+      fell.
+53. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

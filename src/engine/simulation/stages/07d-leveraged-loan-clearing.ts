@@ -33,6 +33,7 @@ import {
   DISTRESSED_CONVICTION_MULTIPLE,
   computeDistressedReservationSpreadBps,
   spreadRiskCapitalChargeRate,
+  entityRequiredReturn,
 } from './asset-allocation';
 import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
@@ -247,6 +248,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             })
           : computeReservationSpreadBps({
               entityType: entity.entityType,
+              requiredReturn: entityRequiredReturn(entity),
               expectedLossBps: annualPd * (1 - loanRecoveryRate) * 10000,
               // Same rating x duration schedule as the bond book at the secured discount: the
               // collateral that raises the loan's recovery also lowers the capital its spread

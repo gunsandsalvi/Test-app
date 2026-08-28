@@ -51,6 +51,7 @@ import {
   MAX_OVERWEIGHT_MULTIPLE,
   DISTRESSED_CONVICTION_MULTIPLE,
   computeDistressedReservationSpreadBps,
+  entityRequiredReturn,
 } from './asset-allocation';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
@@ -260,6 +261,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             })
           : computeReservationSpreadBps({
               entityType: entity.entityType,
+              requiredReturn: entityRequiredReturn(entity),
               expectedLossBps: annualPd * (1 - CREDIT_RECOVERY_RATE) * 10000,
               capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, creditDurationYears(c)),
               creditConditionsIndex,

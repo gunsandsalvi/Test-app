@@ -30,7 +30,7 @@
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
-import { REQUIRED_RETURN_ON_CAPITAL, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
+import { entityRequiredReturn, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
@@ -230,7 +230,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           netInvestmentRate: netInvestmentRateById.get(c.id) ?? 0,
           riskFreeRate,
           beta: c.beta ?? 1,
-          holderRequiredReturn: REQUIRED_RETURN_ON_CAPITAL[entity.entityType],
+          holderRequiredReturn: entityRequiredReturn(entity),
         });
         // Structural size: this entity's share of the region's equity pool, allocated to this
         // name by its share of the float's value — the same real-pool discipline the credit

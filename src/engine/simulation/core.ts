@@ -21,6 +21,7 @@ import { applyPendingCorporateActionSettlements } from './stages/shared-helpers'
 import { runIndexCalculationStage } from './stages/index-calculation';
 import { runEtfFlowsStage } from './stages/etf-flows';
 import { runHouseholdBalanceSheetStage } from './stages/household-balance-sheet';
+import { runInsuranceAndPensionsStage } from './stages/insurance-and-pensions';
 import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
@@ -117,6 +118,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // control because the capital calls went out and the tender proceeds never came back.
     applyPendingCorporateActionSettlements(ctx);
   });
+
+  // HH1c: the liability flows. After stage 08, so the insurers' own P&L for the week is struck
+  // and this stage moves the cash that P&L implies; before the household books, which mark what
+  // is left. Somebody pays the premiums and somebody receives the claims.
+  run('insurance-and-pensions', () => runInsuranceAndPensionsStage(state, ctx));
 
   // Indexes after the lifecycle: this week's listings, delistings and cleared prices are all in,
   // so a rebalance sees the market as it finally stands rather than as it opened.

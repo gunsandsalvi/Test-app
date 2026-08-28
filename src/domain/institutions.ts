@@ -77,6 +77,14 @@ export interface InstitutionalEntity {
    * rather than computing a second, formula version of it from a different asset base.
    */
   lastWeeklyInvestmentIncomeUSD?: number;
+  /**
+   * HH1c — INSURER: premiums less claims less expenses over the last year. The sign is the whole
+   * point: positive means the float is free and this insurer can accept a lower return on its
+   * assets than anyone else. Read by `entityRequiredReturn`.
+   */
+  lastAnnualUnderwritingResultUSD?: number;
+  /** HH1c — PENSION_FUND: benefits paid out over the last year, against the promises it holds. */
+  lastAnnualBenefitOutflowUSD?: number;
   sharesOutstanding: number;
   stockPrice: number;
   itemizedHoldings: ItemizedHolding[];
