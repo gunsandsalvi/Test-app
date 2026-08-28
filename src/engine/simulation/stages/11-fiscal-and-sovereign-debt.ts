@@ -231,6 +231,30 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       .reduce((s2, t) => s2 + t.principalUSD, 0);
     const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
 
+    // ---- PUB1b: what the government actually collected this week, from real payers. ----
+    // Corporate tax arrives quarterly off the accrued liability (stage 08 remits it); the SME
+    // pools and households pay weekly. `governmentRevenueUSD` is the sum of these plus the
+    // named gap below — the model has no consumption or payroll tax, which is roughly half of a
+    // real take, and shrinking the state to fit the bases that do exist would model a different
+    // economy rather than a more honest one.
+    const smeTaxWeeklyUSD = (reg.privateSectorSegments || []).reduce(
+      (a, sg) => a + Math.max(0, sg.annualRevenueUSD * sg.marginPct) * (reg.effectiveTaxRate ?? 0.21) / 52, 0
+    );
+    const householdTaxWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxUSD, 0) / 52;
+    const corporateTaxWeeklyUSD = ctx.taxCollectedByRegion[regionId] ?? 0;
+    reg.taxCollectedCorporateUSD = Number(corporateTaxWeeklyUSD.toFixed(0));
+    reg.taxCollectedSmeUSD = Number(smeTaxWeeklyUSD.toFixed(0));
+    reg.taxCollectedHouseholdUSD = Number(householdTaxWeeklyUSD.toFixed(0));
+    // The gap is sized against the SMOOTH expectation (corporate ACCRUAL, not the quarterly
+    // remittance), so revenue keeps the real lumpiness instead of the residual absorbing it —
+    // which is what makes a tax date swing the treasury's account at all.
+    const smoothRealUSD = (ctx.taxAccruedByRegion[regionId] ?? 0) + smeTaxWeeklyUSD + householdTaxWeeklyUSD;
+    reg.unmodeledTaxRevenueUSD = Number(Math.max(0, reg.governmentRevenueUSD - smoothRealUSD).toFixed(0));
+    // Revenue IS what arrived: real collections plus the bases the model cannot yet tax.
+    reg.governmentRevenueUSD = Number((
+      corporateTaxWeeklyUSD + smeTaxWeeklyUSD + householdTaxWeeklyUSD + reg.unmodeledTaxRevenueUSD
+    ).toFixed(0));
+
     // PUB1: the government's real interest bill. The treasury's ACCOUNT is the TGA, a liability
     // of the central bank — see stages/central-bank.ts, which moves it and the reserves with it.
     const interestWeeklyUSD = weeklyInterestExpenseUSD(reg.govDebtTranches);

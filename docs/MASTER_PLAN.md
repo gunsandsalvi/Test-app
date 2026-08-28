@@ -612,7 +612,16 @@ spending as debt/GDP runs 108% → 171%. **Named boundary:** only 52% of the bil
 holder (banks 22% + institutions 30%); the central bank's 15% and foreign 24% have no entity yet,
 so `governmentInterestToUnmodeledHoldersUSD` carries the rest and shrinks as PUB2 and XB land.
 
-**PUB1 (remaining) — Real fiscal counterparty.** Real tax collection (corporate from real quarterly profits
+**PUB1b — DONE (§7.63).** Tax is collected from real payers into the TGA: corporates accrue
+weekly and **remit quarterly** off a real accrued liability, SME pools and households pay weekly
+(households at HH4a's own progressive cohort rates). `governmentRevenueUSD` is now what actually
+arrived, so the treasury's account visibly draws down between tax dates and jumps on them —
+the swing a TGA exists to express. **The finding:** the fiscal block thought it collected 25% of
+GDP while the modelled tax bases support ~50–60% of that, because there is no consumption or
+payroll tax anywhere. Named as `unmodeledTaxRevenueUSD` rather than closed by shrinking the
+state, which would model a different economy.
+
+**PUB1c — Real fiscal counterparty (remaining).** Real tax collection (corporate from real quarterly profits
 via the S5 ledgers; household from real wages, post-MS); spending decomposed as above; coupons
 actually paid to holders out of the account; procurement through real stage-05 bids; the funded
 deficit fully derived. **This also closes the asymmetric boundary** §6 has carried: bank sovereign
@@ -968,6 +977,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **`unmodeledCapitalReceiptShareOfIncome`** | HH4b's named residual: the slice of the debt-service recycle whose return path to household income is unbuilt (bank retained earnings, institutional dividend passthrough). Derived once at seed (≈ debt service less deposit interest, per region), it decays only when a receipt channel becomes real — real institutional dividend income to claims (CAL/PUB territory), real bank payout routing. Watch it DOWN like the unmodeled-assets line; never re-derive it to a bigger value. |
 | ~~**Bottom-up GDP below the supply anchor**~~ | **The comparison no longer exists — do not re-measure it this way.** HH5's scope named a 6–9% permanent output gap between bottom-up GDP and the supply-side anchor. Re-measured at the start of HH6 it prints exactly 0.0% every week from week 1, because `estimatedNominalGdpUSD` is now set to `lastWeekNominalGdpUSD` — the anchor IS the lagged bottom-up series, so the test compares a number to a copy of itself. The gap is neither closed nor open; the independent supply-side anchor was collapsed into the demand-side measure by an earlier change and nothing records when. A real potential-output series (PUB's, or a capital-and-labor production function) has to exist before this can be asked again. |
 | **`governmentInterestToUnmodeledHoldersUSD`** | PUB1a's named boundary: ~48% of the government's interest bill has no recipient, because the central bank (15% of the stock) and foreign holders (24%) are not entities yet. The debit is real and the crowding-out it causes is real; the credit is missing. **PUB2** closes the central-bank half — and in reality that half is remitted straight back to the treasury, so it is a wash rather than a cost — and **XB** closes the foreign half, which genuinely does leave. Watch this line down; do not net it out by shrinking the interest bill, which would understate the debt burden. |
+| **`unmodeledTaxRevenueUSD`** | PUB1b's named gap: real collections (corporate + SME + household) cover only ~50–60% of the government's take, rising as SME profits grow. The missing bases are **consumption and payroll taxes**, which have no instrument in the model — together roughly half of a real government's revenue. Do NOT close this by cutting spending to what the existing bases yield: that models a smaller state, not a more honest one. Closing it properly means a VAT on stage-05 household purchases and a payroll tax on the real wage bill, both with the S1 household tax rate re-derived so the total burden is unchanged. |
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 

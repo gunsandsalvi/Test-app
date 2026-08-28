@@ -23,6 +23,10 @@ export interface WeeklyStepContext {
 
   // Cross-stage accumulators
   companyUpdates: Record<string, any>;
+  /** PUB1b: corporate tax remitted this week, by region — collected into the TGA in stage 11. */
+  taxCollectedByRegion: Record<string, number>;
+  /** PUB1b: corporate tax ACCRUED this week — the smooth expectation behind the lumpy remittance. */
+  taxAccruedByRegion: Record<string, number>;
   prevActiveFirms: Company[];
   /** Active PRIVATE companies (HC Wave 1) — consumed only by stages that have explicitly taken
    * the handover; see the note on prevActiveFirms below. */
@@ -122,6 +126,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     currentWeekMod13: ((nextWeek - 1) % 13) + 1,
 
     companyUpdates: {},
+    taxCollectedByRegion: {},
+    taxAccruedByRegion: {},
     // The containment gate for the private tier (HC Wave 1): every existing stage consumes
     // prevActiveFirms and therefore sees only the public universe it was built against. Private
     // firms opt IN per handover wave — debt markets in HC2, goods/labor in HC3 — so nothing

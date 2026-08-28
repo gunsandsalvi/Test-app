@@ -422,6 +422,9 @@ export interface Company {
   // 1$ is 1$ Phase 6: this week's real settled sales/purchases (from 05-unit-bidding.ts's
   // actual bid/offer clearing — open-market plus active-contract volume) — persisted onto the
   // company so the UI can show real weekly production/purchasing activity, not just the target.
+  /** PUB1b — tax accrued but not yet remitted. Real firms accrue weekly and pay quarterly, and
+   * that lumpiness is most of what makes a treasury account swing. */
+  accruedTaxLiabilityUSD?: number;
   lastWeekSalesUSD?: number;
   /**
    * HH6 — the wage this firm OFFERS, as a multiple of the going rate for its own occupation

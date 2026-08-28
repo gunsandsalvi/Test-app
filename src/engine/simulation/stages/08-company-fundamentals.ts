@@ -218,6 +218,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newInputInventoryBySubUnit[su] = lots as InputLot[];
     });
 
+    let accruedTaxUSD = comp.accruedTaxLiabilityUSD ?? 0;
     const executionNoise = (random() - 0.5) * 0.3;
     const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
 
@@ -692,7 +693,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       post('wages, other opex & capex beyond auction settlements', -Math.max(0, accruedOutflowsWeekly - settledPurchasesUSD));
       post('inventory carrying cost', -carryingCostUSD);
       post('interest paid', -weeklyInterest);
-      post('cash taxes', -Math.max(0, (newEbit - annualInterest)) * (reg.effectiveTaxRate ?? 0.21) / 52);
+      // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
+      // now arrives somewhere — the treasury's account — instead of leaving the model.
+      const weeklyAccrualUSD = Math.max(0, (newEbit - annualInterest)) * (reg.effectiveTaxRate ?? 0.21) / 52;
+      accruedTaxUSD += weeklyAccrualUSD;
+      ctx.taxAccruedByRegion[comp.region] = (ctx.taxAccruedByRegion[comp.region] ?? 0) + weeklyAccrualUSD;
+      // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
+      if (currentWeekMod13 === 13 && accruedTaxUSD > 0) {
+        post('cash taxes (quarterly remittance)', -accruedTaxUSD);
+        ctx.taxCollectedByRegion[comp.region] = (ctx.taxCollectedByRegion[comp.region] ?? 0) + accruedTaxUSD;
+        accruedTaxUSD = 0;
+      }
       // Dividends actually leave (they were declared and never deducted — the plan's leak #2).
       // Sized by the board's REAL constraint — earnings — not by yield x market cap: the equity
       // level is a known-inflated formula until WS4, and paying a real 2-3% yield on a fake 30B
@@ -1452,6 +1463,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       baselineRecoveryRate: newBaselineRecoveryRate,
       baselineDividendYield: newBaselineDividendYield,
       previousEmployeeCount: comp.employeeCount,
+      accruedTaxLiabilityUSD: Number(accruedTaxUSD.toFixed(0)),
       // HH6: the wage this firm offers and the hiring difficulty behind it are the labor
       // market stage's decisions — carried through explicitly, like employeeCount above,
       // because this stage rebuilds the company from a fixed field list and anything not

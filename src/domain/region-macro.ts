@@ -539,6 +539,17 @@ export interface Region {
   /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
    * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
   centralBankSheet?: CentralBank;
+  /**
+   * PUB1b — tax actually collected this week from real payers: corporate (quarterly, off accrued
+   * liability), SME pools, and households. `governmentRevenueUSD` is these plus
+   * `unmodeledTaxRevenueUSD`, which covers the bases this model has no instrument for —
+   * consumption and payroll taxes, roughly half of a real government's take. Named rather than
+   * closed by shrinking the state, which would model a different economy.
+   */
+  taxCollectedCorporateUSD?: number;
+  taxCollectedSmeUSD?: number;
+  taxCollectedHouseholdUSD?: number;
+  unmodeledTaxRevenueUSD?: number;
   /** PUB2 — this week's gross issuance proceeds and principal redeemed, so the TGA has the
    * financing leg that funds the deficit it is debited by. Written by stage 11. */
   lastIssuanceProceedsUSD?: number;
