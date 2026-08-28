@@ -132,9 +132,11 @@ npm run build                      # build — safe at any time
 bash scripts/check-hygiene.sh      # no root-level scratch files
 npm run verify                     # hygiene + 60-week invariants harness (~1 min)
                                    # END OF PROJECT ONLY — see rule 12
-npm run profile                    # per-stage runtime. Baseline: 604 ms/week, stage 05 at
-                                   # 31.0% (183.9 ms) and stage 08 at 21.2%. A code comment
-                                   # claiming stage 05 is 72.6% is stale.
+npm run profile                    # per-stage runtime. Baseline after XB3a (§7.76): 1,755
+                                   # ms/week; the CREDIT books dominate — 07b 21.2% + 07d 17.4%
+                                   # + 07e 12.0% = 50.6% — with stage 05 at 20.5% (361.3 ms) and
+                                   # stage 08 at 11.6%. The 604 ms/604-era figures and the code
+                                   # comment claiming stage 05 is 72.6% are both stale.
 npx tsx scripts/hh-battery.ts 120  # household close-out battery (~2 min)
 npx tsx scripts/pub-battery.ts 120 # public-sector close-out battery (~2 min)
 WEEKS=260 npm run verify           # ASK THE USER FIRST — long run, section close only
@@ -163,8 +165,8 @@ every cross-stage dependency is visible) and runs the stages in order:
 | 02b | `02b-bank-diversification.ts` | Per-bank flow-ledger evolution (`macro/banking.ts` — cash moves only by named flows), the weekly overnight GC repo session (`stages/repo-clearing.ts`, WS6) with the SRF as a posted-rate seat in the book, the household deposit-vs-MMF split and fund quotes (`stages/money-market-fund.ts`, WS7), region aggregate = real sum of named banks |
 | 03 | `03-category-demand.ts` | C+I+G demand targets per sub-unit; `corporateDemandUSD` persisted per category |
 | 04 | `04-input-output.ts` | Input-category clearing: real supply from linked commodities, pooled multi-industry demand, pro-rata rationing |
-| 05 | `05-unit-bidding.ts` | THE real goods auction: named bids/offers, pro-rata clearing, contracts, per-lot settlement (northwest-corner), capex bids |
-| 06 | `06-fx-and-trade.ts` | FX evolution + trade flows (still formula — see §5-WS9) |
+| 05 | `05-unit-bidding.ts` | THE real goods auction: named bids/offers, pro-rata clearing, contracts, per-lot settlement (northwest-corner), capex bids. **XB3a — five books per sub-unit**: one WORLD book all four regions trade in and one LOCAL book each, split by `CATEGORY_TRADABILITY`; production and inventory settle ONCE per firm across both. Owns the emergent invoice currency and the cross-border invoices it strikes |
+| 06 | `06-fx-and-trade.ts` | FX forward-basis evolution and the USD conversion every stage reads. Trade is REPORTED here, not computed: stage 05's world book already sold every tradable good to a named buyer |
 | 07 | `07-commodities.ts` | Commodity spot evolution |
 | 07b | `07b-corporate-bond-clearing.ts` | Corp bond clearing (FIXED tranches) — adapter over the generic engine |
 | 07c | `07c-sovereign-bond-clearing.ts` | Sovereign tenor-bucket clearing (2/5/10/30Y) + Nelson-Siegel refit to cleared yields. **The curve's only owner**; macro reaches it through banks' reserve arbitrage and every holder's real yield |
@@ -175,6 +177,7 @@ every cross-stage dependency is visible) and runs the stages in order:
 | 08d | `stages/etf-flows.ts` | Who indexes what (research capacity against the names to cover), creations and redemptions through the dealers as authorised participants, the sponsor's fee, and the unmet-flow residual. Sets NEXT week's fund demand, which 07b/07d/07e read through `stages/etf-demand.ts` — a SIZE with no reservation level, the price-insensitive buyer |
 | 09 | `09-concentration-risk.ts` | >40% supplier/customer concentration flags |
 | 10 | `10-mergers.ts` | Quarterly M&A |
+| — | `stages/trade-settlement.ts` | XB3a — last week's cross-border invoices come due at today's rate, which is where transaction FX exposure is realised. Runs before 05 so an invoice carries exactly one week of it |
 | 11 | `11-fiscal-and-sovereign-debt.ts` | The statistics stage: measures bottom-up GDP **and the consumer price index** (`stages/price-index.ts` — the only place inflation is set); deficit → real gov tranche issuance, placed with and redeemed from real holders; refreshes the derived holdings view (`stages/holdings-view.ts`, §7.26), news generation |
 | 12 | `12-portfolio-and-positions.ts` | Index recomputation + player portfolio mark-to-market |
 | 13 | `13-news-and-turn-summary.ts` | Cash/NAV settlement, turn summary |
@@ -225,6 +228,9 @@ inventories), `company.ts` (incl. `InputLot` provenance, per-sub-unit inventorie
 (`CATEGORY_INPUT_REQUIREMENTS`), `industry.ts` (`INDUSTRY_SUBUNITS`, buyerMix),
 `region-macro.ts`, `geography.ts`, `game-state.ts`, `portfolio.ts`, `markets.ts`, `events.ts`,
 `primary-market.ts` (WS8 offerings, underwriting fees, relationship lead banks),
+`global-goods.ts` (XB3a — the world book per sub-unit, and `subUnitTradability`),
+`invoice-currency.ts` (which currency a cross-border trade is invoiced in — three contested
+forces, nothing assigned), `trade-invoice.ts` (a delivered, unpaid cross-border sale),
 `call-protection.ts` (what it costs to retire paper early — soft call, non-call schedules and
 make-whole, and the ONE dealer spread both 07b and the make-whole read), `indexes.ts` (index
 definitions as RULES — membership, weighting, rebalance calendar), `etf.ts` (fund shape, fee
@@ -305,7 +311,7 @@ metrics to watch rather than work.
 | 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
 | 8 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
 | 9 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f done (§7.72–75), XB3a/3b/XB4 remain. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
+| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f/XB3a done (§7.72–76), XB3b/XB4 remain. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
 | 11 | depth | **CAL — Payment calendars** | none |
 | 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
 | 13 | depth | **HC3b — The product-market handover** | BP1 |
@@ -939,7 +945,7 @@ depreciate slowly against sticky flows; no drift term anywhere; the global funds
 
 ### XB — Cross-border portfolios and trade  *(Tier 2, item 10; IN PROGRESS)*
 
-**Status: XB1, XB2, XB2b–XB2f DONE (§7.72–75). XB3a, XB3b, XB4 REMAIN.**
+**Status: XB1, XB2, XB2b–XB2f, XB3a DONE (§7.72–76). XB3b, XB4 REMAIN.**
 **The 60-week harness is deliberately RED while this runs — see §6 and rule 1 of `CLAUDE.md`.**
 
 **XB1 — DONE (§7.72).** `foreignShare` deleted: it assigned each region a share of every other
@@ -966,40 +972,20 @@ Deletes `evolveFxPair`'s whole drift and five invented constants.
 
 ---
 
-**XB3a — Global goods books (NEXT).** Trade is still `exportShareCapture = clamp(0.05, 0.80,
-0.25 + competitiveness×0.2 + fx×0.2)` in `06-fx-and-trade.ts`, applied to the importer's aggregate
-demand and credited to firms in `08-company-fundamentals.ts` — so **a firm's sales come from two
-independent mechanisms** (that auction and stage 05's), which is the Rule 3 violation to delete.
-
-Design decided with the user, **option (b) of three**:
-- **Split each sub-unit by `CATEGORY_TRADABILITY`** (already exists, `domain/region-macro.ts`,
-  0.02 RealEstateConstruction to 0.85 SoftwareDigitalServices). The tradable SHARE of every
-  region's supply and demand goes into ONE global book per sub-unit; the remainder stays in the
-  region's local book. No new threshold constant — the existing continuous parameter does the work.
-- Rejected (a) "threshold: tradable categories clear globally" — halves auction count but invents
-  a cut on a continuous property. Rejected (c) "one global book with a per-buyer trade wedge" —
-  fastest, but the clearing engine prices ONE stat per instrument and a per-buyer wedge means
-  there is no single price.
-- **Cost:** today stage 05 runs 4 regions × 30 sub-units = **120 auctions/week** and is **31.0% of
-  the weekly step** (183.9ms of 604ms; stage 08 is 21.2%). The code comment claiming 72.6% is
-  stale. (b) adds ~30 global books on top of the 120, so **measure the real auction cost before
-  and after** — the user asked for this explicitly.
-- **Trade flows become ACCOUNTING**: exports and imports are who bought from whom in the global
-  book. Delete `exportShareCapture`, `getFxCompetitivenessAdjustment`, and stage 08's separate
-  export crediting.
-- **Invoice currency is EMERGENT, never assigned.** Do NOT hardcode USD invoicing: dollar
-  dominance is a RESULT of a history this simulation does not have, and assuming it means the
-  model can never say anything about currency dominance. It is contested by three forces the model
-  can already measure: (1) **relative market power in that specific market** — `suppliersBySubUnit`
-  gives supply concentration by region, recipe buyers plus household/government demand give the
-  buyer side, and the more concentrated side invoices in its own currency; (2) **coalescing** —
-  firms price in the same currency as their competitors so relative prices do not swing on FX,
-  which is the network effect that CREATES a vehicle currency and needs a state variable tracking
-  the share of markets already invoicing in each; (3) **stability and depth** — inflation
-  volatility and money-market depth (bill stock, repo, MMF size), all real and present. A vehicle
-  currency may emerge, and if it is EUR or JPY on a given seed that is a result, not a bug.
-- **Transaction FX exposure** falls out: whoever is not invoicing in its own currency carries a
-  real gain or loss on the receivable/payable. This does NOT require re-denomination.
+**XB3a — DONE (§7.76).** Every sub-unit clears in five books: one WORLD book all four regions
+bid and offer into, and one LOCAL book per region, split by `CATEGORY_TRADABILITY` — the
+continuous parameter the model already carried, so no threshold constant decides which categories
+are tradable. Trade became ACCOUNTING: an export is a fill whose buyer and seller sat in different
+regions. `exportShareCapture`, `getFxCompetitivenessAdjustment`, `computeBilateralTradeFlows` and
+stage 08's separate export crediting are all deleted — a firm no longer has two independent ways
+to make a sale. Invoice currency is emergent and contested per TRADE (never assigned, never
+USD-by-default), and transaction FX exposure falls out of a one-week receivable with no
+re-denomination. Measured: law of one price emerges where tradability is high (four local prices
+2.5% apart against 0.5% for the posted ones at tau 0.80; 45% apart at tau 0.02); world exports =
+world imports exactly; 23,104 input lots name a foreign seller. **The named finding it leaves is
+in §6: invoicing locks to 100% USD by week 5, because the coalescing weight exceeds the maximum
+the market-power term can reach.** Cost, measured before and after as the user asked: stage 05
+265.1 -> 361.3 ms/week, whole step 1,577 -> 1,755 ms.
 
 **XB3b — Pass-through (AFTER XB3a).** The model has NO FX pass-through: every price, wage and
 revenue is USD (`unitPriceUSD`, `getBaseAnnualWageUSD`, `annualRevenue`), and there are zero FX
@@ -1140,7 +1126,8 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 
 | Defect | State and next action |
 |---|---|
-| **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3a/3b, then run the harness and `scripts/xb-battery.ts` ONCE and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
+| **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the goods market, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). **XB3a widened this further**: the goods auction was repartitioned and the RNG stream relabelled, so every count taken before it describes a different world. Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3b, then run the harness and `scripts/xb-battery.ts` ONCE and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
+| **Invoicing locks to 100% USD by week 5 — a DECISION on three constants, not a defect** | **Found in XB3a (§7.76); do not tune it away unilaterally.** The mechanism is genuinely contested and week 1 prints a real distribution from a dead-level seed: USA 69.9% / EUR 18.2% / JPN 11.8% / UK 0.1% of world trade by value. It then goes to 100% USD by week 5 and never moves. That is arithmetic, not economics: `INVOICE_FORCE_WEIGHTS` puts coalescing at 0.45 and caps market power at 0.35, so **any 100% share is absorbing** — no concentration, however extreme, can dislodge an incumbent, and no seed could ever produce a different vehicle currency. The plan's own text says a vehicle currency "may emerge, and if it is EUR or JPY on a given seed that is a result", which the corner makes unreachable. Turning the weights until the output looks less extreme is fitting a constant to a desired outcome (§7.66's line: a constant is allowed to fix a number only when it is a fact about the world). Options: keep it and call 100% the model's answer; raise market power above coalescing so extreme concentration can flip a trade; or make coalescing read the MARKET's own invoicing mix rather than the world's. **XB4's battery should measure it across seeds first.** |
 | **G1b — the inflation escape** | The measured band is SEED-SENSITIVE: one world holds −10..0%, others escape upward by week 40 (the default-stream world reaches 50%+ by week 52 with the 10Y following to 17%). **The measurement is not at fault** — the goods market's prices really do move that much. G2 measurably damped it and did not cure it (0.66% of demand against a goods cycle orders of magnitude larger), exactly as predicted. Remaining owners: **MS** (the household rate response, the missing stabiliser) and **PUB** (the fiscal loop). Two diagnostics still unrun and worth doing first: trace one sub-unit's price, supply and demand over 120 weeks for a long-wavelength cobweb; and consider whether stage 05's real bid and offer prices should carry an expectations term — a genuine behavioural channel, since anchored expectations damp actual price setting. **Do not** smooth the index, widen the basket, or clamp inflation: the index is the measurement, and if it is volatile the economy is. |
 | ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
 | ~~**#67 — USA bank capital → 0**~~ | **CLOSED (§7.55) — re-measured after HH3 and the collapse is gone.** Capital ratio runs 11.6% → 14.7% through week 80 (was: → 0 by week ~70), NIM in band throughout. The bleed was the fictional consumer book: a formula target earning a formula yield and losing a formula loss rate, none of which the bank's capital could price or gate. With the book real — real margins quoted off measured tier losses, real amortization, origination capital-gated at the 8% floor — the banking system carries its full household book and earns its keep. |
@@ -2210,3 +2197,67 @@ that proved it, the lesson.
     - **Triangular consistency by construction.** What clears is each currency's VALUE against the
       USD; every pair is derived from two of those. Four independently drifting pairs could
       violate triangular arbitrage; three cleared values cannot.
+
+76. **XB3a: a good has a world price, and trade stops being a formula.** `exportShareCapture`
+    handed an exporter a clamped share of the importer's aggregate demand on a competitiveness-
+    and-FX score, and stage 08 credited the resulting revenue to firms — **a second, independent
+    way for a company to make a sale, beside the stage-05 auction already selling its output.**
+    Now every sub-unit clears in five books: one WORLD book all four regions bid and offer into,
+    and one LOCAL book per region, split by `CATEGORY_TRADABILITY`. An export is a fill whose two
+    sides sat in different regions.
+    - **The continuous parameter did the work.** Option (b) of the three the user chose between
+      needed no new threshold: tradability is already a number between 0.02 and 0.85, so a firm
+      offers that share of its output to the world and keeps the rest at home. **Measured, and it
+      is the test that the split is real:** at tau 0.80 the four regions' local prices sit 2.5%
+      apart while the four posted prices sit 0.5% apart — the law of one price EMERGING, not
+      imposed; at tau 0.02 the local spread is 45% and the posted prices barely move off it.
+    - **Settle once, clear twice.** Production, inventory and the cash ledger settle ONCE per firm
+      per sub-unit against the sum of its fills in both books. The obvious build — split the firm
+      and let each auction settle its own inventory — is §7.5's shared-field collision waiting to
+      happen: the second write silently wins.
+    - **Two conservation checks, both exact.** World exports = world imports to the dollar, and
+      23,104 input lots on real firms name a foreign seller. A trade flow that does not reconcile
+      to who bought from whom is not accounting, it is still a formula.
+    - **The invoice currency is contested per TRADE, and getting that wrong first is the lesson.**
+      The first version chose it once per MARKET. That makes each market a 0/1 outcome, so the
+      largest region took all of them in week 1 — before coalescing carried any information — and
+      the network term then made it permanent. **That was a property of an argmax over a
+      market-wide score, not of any mechanism**, and it would have meant no seed could ever
+      produce a different answer, which is the exact failure rule 4 exists to prevent. The choice
+      belongs to the transaction: a Japanese seller may invoice a European buyer in euros and an
+      American one in dollars in the same market. Moving it there produced a genuinely contested
+      week 1 — USA 69.9% / EUR 18.2% / JPN 11.8% / UK 0.1% from a dead-level seed.
+    - **What it still does, recorded in §6 rather than tuned away.** It locks to 100% USD by week
+      5 because the coalescing weight (0.45) exceeds the maximum the market-power term can reach
+      (0.35), so a 100% share is absorbing. **A corner solution produced by the relative size of
+      two stated constants is a fact about the constants, not a finding about the world** — and
+      turning them until the output looked less extreme would be the thing §7.66 draws the line
+      at. The weights are the user's call.
+    - **Transaction FX exposure, with no re-denomination.** A cross-border sale is delivered now
+      and paid a week later at whatever the invoice currency is then worth; revenue and cost stay
+      recognised in USD at delivery and only the cash moves. Measured: 4,191 non-USD invoices
+      booked in week 1 settled in week 2 for **-10.46m** of realised FX loss as EUR/USD ran
+      1.3915 -> 1.2802. USD invoices realise exactly zero, correctly — USD is the numéraire, and
+      local cost bases are XB3b's.
+    - **Both legs, same pass (rule 14).** A settled pair moves by the same USD amount and nets to
+      zero. Of every invoice outstanding, ZERO have neither party exposed: a cross-border trade
+      always leaves at least one side off its own currency, and where a third currency wins the
+      deal, both. An invoice whose counterparty has defaulted is written off rather than
+      half-settled — paying a seller out of a buyer that no longer exists mints the money.
+    - **`companyUpdates.cashChange` was dead and had been for as long as the S5 ledger has
+      existed.** Stage 05 wrote it in three places; stage 08 rebuilds cash from `salesUSD` and
+      `purchasesUSD` through `post()` and has never read it. Found by §7.58's own instruction —
+      grep for the readers before trusting a field — while looking for somewhere to put the
+      deferred export cash. Deleted.
+    - **The cold start seeds by running the market.** Opening every region at zero trade made
+      week 1 read the structural balance as a collapse in output; a formula estimating what the
+      world book would clear is the second representation this slice deletes. So the seed runs
+      the real world book once on a structural copy and restores the RNG position — §7.4's
+      strictest form, and the same trick is available to anything else that needs an opening
+      position the engine alone can compute.
+    - **Cost, measured before and after as the user asked.** Stage 05 **265.1 -> 361.3 ms/week**;
+      whole step **1,577 -> 1,755 ms**; trade-settlement 3.0 ms. 28 world books on top of 112
+      local ones are cheap because the participant plans were already being built — only the
+      clearing walk is duplicated at a different partition. **The plan's recorded 604 ms/week
+      baseline was stale by 2.6x**, and stage 05 is no longer the expensive stage: the credit
+      books are 50.6% of the step against its 20.5%. §1.10 updated.
