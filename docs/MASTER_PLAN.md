@@ -205,7 +205,10 @@ against 2,004 named firms, a top-down income anchor instead of an income stateme
 itemized to nobody, and 740B of institutional liabilities that are households' assets with no
 holder (HH, §7.48); **the public sector** — the government books no interest on its own debt and
 the central bank is a scalar (PUB); the industry taxonomy (BP1); the dual dealer system (G3);
-derivatives, commodity futures and hedging incl. implied vol (DER); default resolution and
+**every non-financial corporate's operating model**, which is one model with four sector
+coefficients on it — storable output for everyone including software, one COGS decomposition, and
+revenue only on settled unit sales, so no subscription, backlog or royalty business exists (IND,
+§7.50); derivatives, commodity futures and hedging incl. implied vol (DER); default resolution and
 recovery (G5); and FX (WS9).
 
 **Real but structurally undersupplied** — a category worth naming separately, because these are
@@ -233,13 +236,13 @@ metrics to watch rather than work.
 | — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
 | 1 | foundation | **HH — The household sector, to corporate depth** (absorbs G6) | none |
-| 2 | foundation | **PUB — The public sector: treasury + central bank** | HH (household taxes) |
-| 3 | foundation | **BP1 — One industry registry** | none |
-| 4 | markets | **G3 — One dealer system** | none (S9 done) |
-| 5 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
-| 6 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
-| 7 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| 8 | depth | **IND — Industry depth** (profiles, electricity, share-vs-margin, antitrust) | BP1 |
+| 2 | foundation | **BP1 — One industry registry** | none |
+| 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
+| 4 | foundation | **PUB — The public sector: treasury + central bank** | HH (household taxes) |
+| 5 | markets | **G3 — One dealer system** | none (S9 done) |
+| 6 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
+| 7 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
+| 8 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
 | 9 | depth | **CAL — Payment calendars** | none |
 | 10 | depth | **ETF2 — A real price for ETF shares** | G3 |
 | 11 | depth | **HC3b — The product-market handover** | BP1 |
@@ -269,6 +272,19 @@ book itemized to nobody. G2 gave corporate borrowers real lenders and left house
 aggregate — the same project, half built. And the government **books no interest on its own debt
 at all**. Every market above these two prices correctly against a demand side that is, in those
 places, made up.
+
+**And every non-financial corporate is the same firm.** Four coefficients vary by sector —
+pricing power, PP&E intensity and life, wage sensitivity — plus input recipes by category. Those
+are coefficients on ONE operating model, not different models. Every company produces storable
+units into stage 05's auction, holds output inventory decaying at a hardcoded 2%, books revenue
+only on settled unit sales, and runs one COGS decomposition. **Measured: enterprise software sits
+in physical inventory — 159 units worth 5.9M, spoiling like steel** (§7.50). There is no
+subscription, backlog, deferred or royalty revenue anywhere in the model; a firm with 90% gross
+margins and no warehouse is not expressible. The one sector done properly is financials, where
+`financialStatementProfile` gives banks, insurers and asset managers genuinely different P&L
+paths — so the model already knows operating models differ and applies that knowledge to exactly
+one sector. That is **IND**, widened from financial policy to operating models and moved to the
+foundation behind its registry.
 
 **Why G6 was absorbed rather than kept.** "Institutional liabilities" and "households become real"
 are ONE project seen from two ends: the claim linking a household to a pension fund is
@@ -424,7 +440,95 @@ issuer; unemployment, wage growth and the vacancy rate move together in a Beveri
 big employer's failure raises regional unemployment and cuts real stage-05 consumption — the
 recession transmission the simulation exists to have.
 
-### PUB — The public sector: treasury and central bank  *(Tier 1, item 2)*
+### BP1 — One industry registry  *(Tier 1, item 2)*
+
+A single `domain/industry-registry.ts` typed table: category → sub-units, buyer mix, input
+recipes, capex weights, commodity links, labor intensity by occupation — and, for **IND**, each
+sub-unit's **storability** (can its output be held at all?), its **carrying cost** if so, its
+**revenue mechanism** and its **cost shape**. Those four are properties of what is being made, not
+of the firm making it, which is why they belong here rather than on the Company. `INDUSTRY_SUBUNITS`,
+`CATEGORY_INPUT_REQUIREMENTS` and `COMMODITY_CATEGORY_LINKAGE` become views of it and then die as
+separate definitions. Adding an industry becomes one entry.
+
+Foundational because three things wait on it: every industry specialization in **IND**, the
+**HC3b** product-market handover, and the listed universe's breadth — which is what makes
+broad-market indexing meaningful (§6 watchlist).
+
+---
+
+### IND — Industry operating models  *(Tier 1, item 3; needs BP1)*
+
+**The problem, stated plainly: every non-financial corporate in this model is the same firm.**
+
+What varies by sector today is four coefficients — `SECTOR_PRICING_POWER`, `SECTOR_PPE_INTENSITY`,
+`SECTOR_PPE_USEFUL_LIFE_YEARS`, `SECTOR_WAGE_SENSITIVITY` — plus input recipes by category. Those
+are coefficients on ONE operating model. Underneath them, all 2,004 companies:
+
+- produce **storable units** into stage 05's auction, whatever they make;
+- hold output inventory decaying at `inventoryCarryingCostRate ?? 0.02`, hardcoded identical for
+  every firm in the world — **measured: enterprise software sits in physical inventory, 159 units
+  worth 5.9M, spoiling like steel** (§7.50);
+- book revenue only on **settled unit sales** — there is no subscription, backlog, deferred or
+  royalty revenue anywhere in the model;
+- run one COGS decomposition (base cost, wage pressure, input prices, capacity decay, crowding).
+
+A firm with 90% gross margins and no warehouse is not expressible. Neither is one that sells a
+contract in Q1 and delivers it over three years.
+
+**The model already knows this is wrong and fixes it for exactly one sector.**
+`financialStatementProfile` gives banks, insurers and asset managers genuinely different P&L
+paths. The rest of the economy shares one.
+
+**IND1 — Storability, in BP1's registry.** Whether a sub-unit's output can be held is a property
+of the sub-unit, not of the firm: software, services and most digital goods have no inventory to
+carry, so they should hold none rather than hold some at a shared rate. Carrying cost becomes a
+registry property too — a warehouse of steel and a warehouse of fresh produce do not decay alike.
+
+**IND2 — Revenue mechanism.** How a sale becomes revenue, from the registry: a **unit sale** (what
+everything does today), a **subscription** that recurs until it churns, a **project** booked to
+backlog and recognised as delivered, a **royalty** on someone else's volume. This is the largest
+number in the model and it currently has one shape. Stage 05 keeps clearing the transaction; what
+changes is how the transaction becomes revenue on the seller's books.
+
+**IND3 — Cost structure.** The fixed/variable split and the COGS-versus-opex balance by industry:
+a software firm's marginal cost is near zero and its costs are people; a smelter's are inputs and
+energy. Both are currently the same decomposition with different coefficients. Operating leverage —
+which is what makes a downturn hurt some industries far more than others — is not expressible
+until this is.
+
+**IND4 — Financial profile** (the original #51): per-sector `{capexIntensity, cyclicalityBeta,
+financingPreference (bond/loan/equity mix), payoutPolicy, hedgingPolicy}`, consumed by stage 08,
+`corporate-financing.ts` — which market an issuer taps stops being uniform — and DER's hedging
+slice. **Also where several stated primitives become outcomes:** the ETF expense ratios, the
+underwriting fee schedule, and the research-capacity constant behind who indexes.
+
+**IND5 — Electricity** (#54): a real commodity plus a registry recipe line in every industry at
+those intensities; utilities already exist as producers.
+
+**IND6 — Share-versus-margin strategy** (#55): a per-company posture expressed ONLY through its
+real stage-05 offer price relative to cost — underpricing within contribution-margin bounds buys
+real share because the auction fills cheaper offers first. No synthetic share variable.
+
+**IND7 — Antitrust** (#45): real `categoryMarketShare` above a threshold for N sustained weeks
+forces a divestiture — split the company into two real companies through the existing generation
+machinery, dividing product lines, debt and holders — plus an M&A freeze flag stage 10 respects.
+
+**IND8 — Rating generation.** Week-0 USA is AAA 16% / AA 39% / A 45%, **zero BBB and zero HY**,
+with 55% of debt AA or better, inverted against reality. Dynamics are fine (BBB 39% / HY 16% by
+week 40) and HC's sponsor-owned firms supplied the missing HY universe, so what is left is the
+generator's own distribution. Re-measure first, then fix at source.
+
+**IND9 — The segment debt primitive.** `debtUSD = annualRevenueUSD * 2` implies ~15x debt/EBITDA
+on the private sector in aggregate, which no real balance sheet services. G2 itemized the bank
+book, so segment debt can be recalibrated to what real SME leverage on segment EBITDA and real
+bank capital can carry. Re-measure §7.18's want/have afterwards.
+
+**Verify:** a software firm holds no inventory and carries no inventory cost; a subscription
+business's revenue survives a quarter with no new sales while a unit seller's does not; operating
+leverage differs measurably across industries in the same downturn; gross margins disperse by
+industry the way real ones do.
+
+### PUB — The public sector: treasury and central bank  *(Tier 1, item 4)*
 
 Merges the old BP5 (government as fiscal counterparty), S4r (debt service) and G9 (central bank).
 They are one balance sheet seen from two sides, and remittances are the loop that closes between
@@ -475,20 +579,7 @@ exactly the sum.
 
 ---
 
-### BP1 — One industry registry  *(Tier 1, item 3)*
-
-A single `domain/industry-registry.ts` typed table: category → sub-units, buyer mix, input
-recipes, capex weights, commodity links, labor intensity by occupation. `INDUSTRY_SUBUNITS`,
-`CATEGORY_INPUT_REQUIREMENTS` and `COMMODITY_CATEGORY_LINKAGE` become views of it and then die as
-separate definitions. Adding an industry becomes one entry.
-
-Foundational because three things wait on it: every industry specialization in **IND**, the
-**HC3b** product-market handover, and the listed universe's breadth — which is what makes
-broad-market indexing meaningful (§6 watchlist).
-
----
-
-### G3 — One dealer system  *(Tier 2, item 4)*
+### G3 — One dealer system  *(Tier 2, item 5)*
 
 The dealer becomes what it is in reality: a desk inside a named bank. `DealerDesk {bankTicker,
 inventoryByInstrumentId, capitalAllocatedUSD}`; migrate the current region-level inventories to
@@ -514,7 +605,7 @@ quotes visibly wider — the real liquidity-cycle channel.
 
 ---
 
-### DER — Derivatives, and the people who hedge with them  *(Tier 2, item 5)*
+### DER — Derivatives, and the people who hedge with them  *(Tier 2, item 6)*
 
 Merges the old G4 (derivative markets), G7 (commodity futures) and WS11 (corporate and bank
 hedging). Futures and hedging were never separate markets — they are the users of this one, and
@@ -555,7 +646,7 @@ shocks they hedged, which is the whole point of items 4 and 5.
 
 ---
 
-### G5 — Default resolution: recovery as an outcome  *(Tier 2, item 6)*
+### G5 — Default resolution: recovery as an outcome  *(Tier 2, item 7)*
 
 On default an `Estate {companyId, assets, claims[]}` opens instead of a constant recovery. Real
 assets (cash, receivables, inventory at real lot values, PP&E at a haircut) are sold over ~26–78
@@ -581,7 +672,7 @@ private tier's.
 
 ---
 
-### WS9 — Real trade & FX  *(Tier 2, item 7)*
+### WS9 — Real trade & FX  *(Tier 2, item 8)*
 
 **Confirm the currency-zone premise with the user first** (standing caveat). If confirmed:
 
@@ -601,34 +692,6 @@ there is no cross-border equity allocation for a global fund to draw on.
 
 **Verify:** a rate-differential shock moves the pair in the carry direction; trade deficits
 depreciate slowly against sticky flows; no drift term anywhere; the global funds fill.
-
----
-
-### IND — Industry depth  *(Tier 3, item 8)*
-
-Everything Blueprint had beyond the registry. All of it needs BP1 first.
-
-1. **Industry profiles** (#51): per-sector `{capexIntensity, cyclicalityBeta, financingPreference
-   (bond/loan/equity mix), payoutPolicy, hedgingPolicy}`, consumed by stage 08,
-   `corporate-financing.ts` — which market an issuer taps stops being uniform — and DER's hedging
-   slice. **Also where several stated primitives become outcomes:** the ETF expense ratios, the
-   underwriting fee schedule, and the research-capacity constant behind who indexes.
-2. **Electricity** (#54): a real commodity plus a registry recipe line in every industry at those
-   intensities; utilities already exist as producers.
-3. **Share-versus-margin strategy** (#55): a per-company posture expressed ONLY through its real
-   stage-05 offer price relative to cost — underpricing within contribution-margin bounds buys real
-   share because the auction fills cheaper offers first. No synthetic share variable.
-4. **Antitrust** (#45): real `categoryMarketShare` above a threshold for N sustained weeks forces a
-   divestiture — split the company into two real companies through the existing generation
-   machinery, dividing product lines, debt and holders — plus an M&A freeze flag stage 10 respects.
-5. **Rating generation** — week-0 USA is AAA 16% / AA 39% / A 45%, **zero BBB and zero HY**, with
-   55% of debt AA or better, which is inverted against reality. Dynamics are fine (BBB 39% / HY 16%
-   by week 40) and HC's sponsor-owned firms supplied the missing HY universe at the top of the
-   run, so what is left is the generator's own distribution. Re-measure first, then fix at source.
-6. **The segment debt primitive** — `debtUSD = annualRevenueUSD * 2` implies ~15x debt/EBITDA on
-   the private sector in aggregate, which no real balance sheet services. G2 itemized the bank book,
-   so segment debt can now be recalibrated to what real SME leverage on segment EBITDA and real
-   bank capital can carry. Re-measure §7.18's want/have afterwards.
 
 ---
 
@@ -2054,7 +2117,31 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       a 241.4B book). Recorded in §6 and scoped as HH1b. It also means L4's decision to clear
       institutions in 07e is currently pricing them on the shell — right in principle, and not yet
       right in fact.
-50. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+50. **Every non-financial corporate is the same firm, and the topic that was supposed to cover it
+    was scoped to financial policy.** The user's observation: revenue is not generated the same way
+    by each type of company, costs are not the same, and not everything has inventory.
+    - **Measured:** four coefficients vary by sector — pricing power, PP&E intensity and life, wage
+      sensitivity — plus input recipes by category. Underneath them every one of the 2,004
+      companies produces storable units, holds output inventory decaying at a hardcoded 2%, books
+      revenue only on settled unit sales, and runs one COGS decomposition. **Enterprise software
+      sits in physical inventory: 159 units worth 5.9M, spoiling like steel.** There is no
+      subscription, backlog, deferred or royalty revenue anywhere; a firm with 90% gross margins
+      and no warehouse cannot be expressed.
+    - **The model already knows operating models differ and applies it to exactly one sector.**
+      `financialStatementProfile` gives banks, insurers and asset managers genuinely different P&L
+      paths. The rest of the economy shares one. That asymmetry is the tell, and it sat in plain
+      sight through every project that touched stage 08.
+    - **The existing topic did not cover it.** IND (ex-BP2, #51) read `{capexIntensity,
+      cyclicalityBeta, financingPreference, payoutPolicy, hedgingPolicy}` — every item on that list
+      is balance-sheet policy. Nothing about how revenue is generated, what costs look like, or
+      whether inventory exists. **A topic can exist, be correctly named, and still not contain the
+      thing you filed under it**; "we have an item for that" is not the same as having scoped it.
+    - Widened to operating models — storability and carrying cost as BP1 registry properties of the
+      SUB-UNIT rather than the firm, revenue mechanism, cost structure — and moved from Tier 3
+      depth to the foundation behind its registry. Note what this is NOT: no conservation
+      violation, nothing unattributed, which is exactly why the harness is green and could never
+      have caught it. Realism gaps do not trip invariants.
+51. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
