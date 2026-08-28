@@ -990,7 +990,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Sovereign price elasticity to a size-only bidder** | **Found in PUB2b (§7.66).** A 34B difference in the central bank's book moved the USA 2Y by ~490bp at w30 — a very high elasticity for a market that size. Consistent with the damper watch above (1,964 instruments persistently bound: the books ARE thin, so an inelastic buyer has to move the level a long way to find sellers), and with §7.18's want/have. **Do not soften it in the clearing engine** — prices are cleared, and tuning the auction to produce a gentler response would be fitting the mechanism to a desired number. It should fall as **SCALE** and **G3** grow the universe and the dealer's capacity; re-measure then. |
 | **The goods market cannot fill a quarter of what is bid** | **Found in PUB1e (§7.67).** ~25% of the government's procurement budget goes unfilled at any price: aggregate bids exceed aggregate supply and every in-money bidder is rationed pro-rata, so households are short by the same ratio. Long-standing and not PUB's — it only became visible because the government is the first buyer whose unfilled demand costs something. **Do not close it by shrinking the bids**: the demand is real and the supply side is what is missing. Expect it to fall as **SCALE** grows the firm universe and **BP1**'s taxonomy lets more sub-units be supplied; re-measure the fill ratio then. **§7.69 (PUB3a) then closed most of it**: with the government's payroll carved out of the primary budget, the procurement budget is one the market can supply — unspent 22.7B/wk → **1.3B/wk**, fill range 7.7–87.5% → **46.3–100%**. The row was measuring an oversized budget as much as a short market. What remains is the genuine shortage; re-measure as **SCALE** and **BP1** grow the supply side. |
-| **The whole fiscal block is indexed to a lagged nominal aggregate** | **Found by the PUB battery (§7.68), and its first write-up was overstated — corrected here.** Over w52→w120 trailing-annual revenue grows **x8.7** and outlays **x6.5** while nominal GDP grows **x12.4**: BOTH sides lag the escaping price level, and revenue lags less, so the treasury runs a real 20–36% surplus and the TGA reaches **1,188B**. The original claim of x306.6 against x12.2 was a measurement artifact (4-week sums of quarterly receipts compared at endpoints) — the divergence is **1.3x, not 25x**. The real defect is upstream of both: `governmentSpendingUSD` is `lastWeekNominalGdpUSD x (taxRate + deficitPct)`, so the entire fiscal block is a share of a LAGGED nominal aggregate rather than real quantities at real prices. **PUB3** owns it: government payroll from real headcount and real wages, transfers from real beneficiaries, procurement from real prices — with the deficit as an OUTCOME rather than an input. Entangled with the §6 inflation escape, which is what makes any lag visible at all. |
+| **The fiscal block's two sides are indexed to different bases** | **Restated by §7.70, which attempted the fix and reverted it.** Trailing-annual revenue grows x8.7 against outlays x6.5 (GDP x12.4): both lag the price level, revenue lags less, so the treasury runs a 20–36% surplus and the TGA reaches ~1.1T. The obvious fix — make the budget a sum of real obligations, deficit as an outcome — was built and **broke a hard invariant at week 120** (TGA to −497.5B, revenue/outlays 0.50x), because obligations index to WAGES while collections index to tax bases that do not track wages. **PUB3b is blocked on a precondition, not on effort**: real tax bases that move with wages, and/or cash-management issuance so the account can be bridged. Do not retry it without both. |
 | **`unbackedBankCashUSD` explodes past the harness window** | **Found by the PUB battery (§7.68).** 97B (w13) → 107B (w52) → **2,183B (w120)**. PUB2b shrank it at w52 (304B → 100B) by giving the central bank a live book, and that fix holds — but reserves grow from deposits and lending far faster than any central-bank purchase backs them once the escape takes hold. **The 60-week harness cannot see this.** Owners: the §6 inflation escape first, then whatever gives bank reserves a single representation. Watch it, do not force the identity closed. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
@@ -1855,3 +1855,29 @@ that proved it, the lesson.
     - **What it does NOT fix:** the budget TOTAL is still `lastWeekNominalGdpUSD x (taxRate +
       deficitPct)`. Revenue/outlays is 1.18x (was 1.20x) and the TGA still reaches 1,141B. That is
       PUB3b.
+70. **PUB3b ATTEMPTED AND REVERTED: a negative result worth more than the code.** The plan said
+    make the budget TOTAL a sum of real obligations — interest + payroll + benefits + procurement
+    — with the deficit as an outcome, deleting `spending = lastWeekNominalGdpUSD x (taxRate +
+    deficitPct)`. It was built, it compiled, the 60-week harness passed, and **at 120 weeks it
+    broke a hard invariant: the TGA went negative in 53 region-weeks, to −497.5B**, with
+    revenue/outlays at **0.50x** — a government spending twice its income.
+    - **The bases were not the problem.** They calibrated beautifully: the implied benefit landed
+      at **51–53% of the average wage across all four independently-sized regions**, inside the
+      real OECD replacement band, and procurement/payroll at a consistent 1.06–1.08x. Four
+      regions agreeing is the same sanity check §7.9 applies to the household tax rate.
+    - **The problem is an INDEXATION MISMATCH, and it is real rather than a bug.** Obligations are
+      indexed to WAGES (payroll by headcount x wage; benefits by beneficiaries x wage). Collections
+      come from tax bases that do not grow with wages at the same rate. Re-basing one side alone
+      makes the government structurally unfinanced — which is a true statement about a real
+      economy and an invariant violation in this one.
+    - **What it did improve, measured before the revert:** crowding-out −0.767 → **−0.924**
+      (procurement share) and −0.533 → **−0.892** (realized spend); `unbackedBankCashUSD` at w13
+      91.6B → 11.2B. So the direction is right.
+    - **The precondition PUB3b needs**, and the reason it is not merely "finish it": either the
+      tax system's real bases must move with wages the way benefits do, or the treasury needs the
+      cash-management issuance PUB2a's own comment already promised ("a real treasury either holds
+      a bigger balance or issues cash-management bills to bridge") so the account can be bridged
+      rather than going negative. Probably both. **A 60-week harness passing is not evidence**:
+      this one did, and the failure lives at week 90+.
+    - The attempt is stashed, not deleted. **Shipping it green-at-60 would have been exactly the
+      thing this project exists to stop.**
