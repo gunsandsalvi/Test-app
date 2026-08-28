@@ -245,7 +245,7 @@ metrics to watch rather than work.
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
 | 2 | foundation | **BP1 — One industry registry** | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
-| 4 | foundation | **PUB — The public sector: treasury + central bank** — all seven slices done (§7.61–67); **awaiting its close-out battery** before it is marked closed, on HH's precedent | HH (household taxes) |
+| ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
 | 5 | foundation | **DEM — Demographic variability** (small; rides beside HH4–HH5) | none |
 | 6 | markets | **G3 — One dealer system** | none (S9 done) |
 | 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
@@ -989,7 +989,9 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **TGA level over a quarter-scale horizon** | Watch, do not chase (rule 10). **Re-measured after PUB1d** as that row asked: the account no longer drifts monotonically — it now sawtooths, filling on the quarterly remittance dates and drawing down between them (39 → 33 → 66 → 59 → 51 → 44 → 86B over 26 weeks), which is the shape a treasury balance actually has. What remains is the LEVEL at each quarter's peak creeping up, because receipts are larger than the old formula assumed and spending catches up a week later. Re-measure once PUB1e puts procurement through real bids. |
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Sovereign price elasticity to a size-only bidder** | **Found in PUB2b (§7.66).** A 34B difference in the central bank's book moved the USA 2Y by ~490bp at w30 — a very high elasticity for a market that size. Consistent with the damper watch above (1,964 instruments persistently bound: the books ARE thin, so an inelastic buyer has to move the level a long way to find sellers), and with §7.18's want/have. **Do not soften it in the clearing engine** — prices are cleared, and tuning the auction to produce a gentler response would be fitting the mechanism to a desired number. It should fall as **SCALE** and **G3** grow the universe and the dealer's capacity; re-measure then. |
-| **The goods market cannot fill a quarter of what is bid** | **Found in PUB1e (§7.67).** ~25% of the government's procurement budget goes unfilled at any price: aggregate bids exceed aggregate supply and every in-money bidder is rationed pro-rata, so households are short by the same ratio. Long-standing and not PUB's — it only became visible because the government is the first buyer whose unfilled demand costs something. **Do not close it by shrinking the bids**: the demand is real and the supply side is what is missing. Expect it to fall as **SCALE** grows the firm universe and **BP1**'s taxonomy lets more sub-units be supplied; re-measure the fill ratio then. |
+| **The goods market cannot fill a quarter of what is bid** | **Found in PUB1e (§7.67).** ~25% of the government's procurement budget goes unfilled at any price: aggregate bids exceed aggregate supply and every in-money bidder is rationed pro-rata, so households are short by the same ratio. Long-standing and not PUB's — it only became visible because the government is the first buyer whose unfilled demand costs something. **Do not close it by shrinking the bids**: the demand is real and the supply side is what is missing. Expect it to fall as **SCALE** grows the firm universe and **BP1**'s taxonomy lets more sub-units be supplied; re-measure the fill ratio then. **The PUB battery (§7.68) measured it at horizon: mean fill 67.9% over 120 weeks but a range of 7.7%–87.5%, so it gets much worse as the price level escapes.** |
+| **Revenue is bottom-up; spending is still a formula** | **Found by the PUB battery (§7.68); PUB's own follow-up, and the biggest open item it leaves.** Over 120 weeks revenue grows **306.6x** while outlays grow **12.2x** — PUB1b/1c made receipts a real function of real bases (wages, profits, consumption), so they inherit the price level, while `governmentSpendingUSD` still evolves on its own top-down path. The TGA runs to **1,188B** (EUR 2,578B) on that asymmetry alone, and the measured "surplus" is an artifact of the mismatch rather than a fiscal result. **Do not fix it by damping revenue** — revenue is the real half. The fix is a spending path tied to a real base (programs sized by beneficiaries and prices, procurement by what it actually costs), which is a PUB3-shaped piece of work. Partly entangled with the §6 inflation escape: re-measure after that, since a stable price level shrinks the divergence without closing it. |
+| **`unbackedBankCashUSD` explodes past the harness window** | **Found by the PUB battery (§7.68).** 97B (w13) → 107B (w52) → **2,183B (w120)**. PUB2b shrank it at w52 (304B → 100B) by giving the central bank a live book, and that fix holds — but reserves grow from deposits and lending far faster than any central-bank purchase backs them once the escape takes hold. **The 60-week harness cannot see this.** Owners: the §6 inflation escape first, then whatever gives bank reserves a single representation. Watch it, do not force the identity closed. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1712,7 +1714,7 @@ that proved it, the lesson.
     prices the enlarged bucket next week, and the dealer holds what finds no buyer — **which is
     what an undersubscribed auction IS.**
     - **Measured A/B:** bank reserves at w40 **−29.0B → +84.7B**; the 2Y at w26 **0.98% → 2.62%**,
-      with no negative yield anywhere; dealer residual 123B (w40) and 197B (w52) — a real primary
+      with no negative yield anywhere at w60 (§7.68 corrects this at w120); dealer residual 123B (w40) and 197B (w52) — a real primary
       dealer's inventory, which is the honest place for unsold paper.
     - **The lesson is §7.51's, in the other direction.** A refusal outlives its reason; so does a
       workaround. Both need a date and a condition, and neither gets re-checked unless the code
@@ -1792,3 +1794,33 @@ that proved it, the lesson.
       `unspentProcurementBudgetUSD` rather than assumed spent.
     - **`decomposeGovernmentSpending` was dead code from PUB1a** — exported, documented, never
       called. Wiring it here is what made one owner possible.
+68. **PUB CLOSED — the close-out battery.** `scripts/pub-battery.ts` runs every §5-PUB verify
+    criterion as a measurement. At 120 weeks, **every criterion passes**:
+    - **Every coupon reaches a holder and the government pays it.** 67.6% of the USA's 4.1B/wk
+      bill lands on a named book (banks 0.6B + institutions 1.9B + **central bank 0.3B**, the
+      share PUB2b made real), up from 52% at PUB1a. The remaining 1.6B is foreign and stays
+      named in `governmentInterestToUnmodeledHoldersUSD` for **XB**.
+    - **Debt service crowds out real purchases.** corr(interest share of budget, REALIZED
+      procurement spend) = **−0.833** over 120 weeks. And the limit case works: quadrupling the
+      coupon on the whole stack takes interest 0.5B → 2.4B/wk, real procurement **−43% to −58%**,
+      transfers 2.2B → 0.9B, and debt/GDP 152% → **211%**. A debt spiral, with both crowded-out
+      lines landing somewhere real.
+    - **Remittances fall when policy exceeds the portfolio yield.** corr(policy rate, remittance)
+      = −0.762 in levels, **−0.547 in changes**; negative in 63 of 120 weeks. Measured in changes
+      because PUB2b's growing book lifts both series in levels — **a response is a correlation of
+      changes, not of levels.**
+    - **The balance sheet is a live quantity.** Book 100.5B → 136.3B, **49 of 120 weeks in QT**
+      (reinvestment 0.752–1.000). The TGA is never negative in 480 region-weeks, and
+      `unmodeledTaxRevenueUSD` sits at 0.0B.
+    - **A correction to PUB1d's write-up:** "no negative yields anywhere" was measured at w60 and
+      does not survive to w120 — 26 region-weeks print one, driven by the QE regime. Negative
+      nominal sovereign yields are real, so this is a scope correction rather than a defect.
+    - **What it found that nothing else could see** (all §6, none of them PUB's to fix):
+      **revenue outgrows spending 306.6x against 12.2x**, because PUB1b/1c made revenue bottom-up
+      while the spending PATH is still a top-down formula — the TGA runs to 1,188B on that
+      asymmetry alone. `unbackedBankCashUSD` is flat to w52 (97 → 107B) and then explodes to
+      **2,183B by w120**. Procurement fill falls to **7.7%** at horizon. And all four regions
+      print the 2Y at 39.84–39.86% — four independent economies agreeing to two decimals is the
+      §6 damper binding continuously, not a market.
+    - **The 60-week harness sees none of the three.** Same lesson as §7.60: **a close-out battery
+      is not a longer harness run, it is the only place a project's own criteria get measured.**

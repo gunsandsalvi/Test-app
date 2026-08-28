@@ -455,7 +455,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // §7.21: budgets now bind what a holder buys, and `solveClearingStat` clears at the
     // saturation point instead of its search bound. A refusal outlives its reason (§7.51); so
     // does a workaround. Measured A/B: bank reserves at w40 −29.0B → +84.7B, 2Y at w26
-    // 0.98% → 2.62%, no negative yields, dealer residual 123B at w40.
+    // 0.98% → 2.62%, no negative yields at w60, dealer residual 123B at w40.
 
     // PUB2: the financing legs the TGA needs — proceeds in, redemptions out.
     reg.lastIssuanceProceedsUSD = Number(newTranches.reduce((a, t) => a + t.principalUSD, 0).toFixed(0));
