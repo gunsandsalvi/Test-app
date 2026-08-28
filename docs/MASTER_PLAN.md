@@ -1956,3 +1956,29 @@ that proved it, the lesson.
     - **Two shock tests were stale, one instructively.** One shocked an ownership share that no
       longer drives demand. The other starved only DOMESTIC buyers to under-subscribe an auction —
       which foreign demand now absorbs. That failure is the mechanism working.
+73. **XB2b: a derivative has a supplier, and the cross-currency basis is what that supplier
+    charges.** XB2 let any hedger strike a forward at pure CIP, in unlimited size, against a
+    dealer that absorbed it for nothing. That is an infinite supply of derivatives — the same
+    shape as every formula this project deletes, except the thing assumed away is a balance sheet.
+    - **Three real costs, all quantities.** The notional consumes leverage capacity through a PFE
+      add-on; the desk internalizes offsetting client flow and only the RESIDUAL has to be carried
+      and delta-hedged; and the client posts initial margin, which is real cash held by the desk
+      as somebody else's money (cash AND a liability — counting it as earnings would be a bank
+      inventing profit from collateral).
+    - **The price of all that is the cross-currency basis, and getting it for free is the point.**
+      Post-2008 CIP stopped holding precisely because dealer balance sheets became expensive. A
+      basis that widens with desk utilization — and faster with the un-internalized share, because
+      one-way flow is what actually has to be carried — reproduces that instead of assuming it.
+    - **Measured, calm against a dealer-equity shock of −65%:** capacity used **3.2% → 100%**,
+      basis **4.9bp → 150bp**, and the share of the cross-border book that stays hedged falls
+      **74% → 57%**. Hedgers walk when the hedge costs more than the mismatch is worth to them,
+      which is what makes the DEMAND curve slope: a liability-driven insurer pays up to 220bp
+      because its regulator prices the mismatch; a hedge fund quits at 45bp.
+    - **A sign error worth recording.** Pricing the basis into the contracted rate the wrong way
+      hands the hedger an instant gain at inception and the dealer an instant loss on every
+      ticket — bank NIM went to **−2.2%** before it was caught. The dealer charges for its balance
+      sheet; the client gets the worse rate. **A cost modelled with the wrong sign is a subsidy,
+      and it looks like a working feature until someone reads the P&L.**
+    - **It also does not bind in calm conditions (3.2% used), and that is correct** — the basis is
+      near zero in normal times and blows out in stress. A constraint tuned to bind always would
+      be modelling a permanent crisis.

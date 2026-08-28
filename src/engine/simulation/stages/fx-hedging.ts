@@ -19,6 +19,11 @@ import {
   FxForward, HEDGE_RATIO_FIXED_INCOME, HEDGE_RATIO_EQUITY, FX_FORWARD_TENOR_WEEKS,
   forwardMarkToMarketUSD,
 } from '../../../domain/fx-hedging';
+import {
+  FxDealerBook, emptyFxDealerBook, fxDeskCapacityUSD, crossCurrencyBasisBps,
+  FX_INITIAL_MARGIN_RATE,
+} from '../../../domain/dealer-derivatives';
+import { leverageHeadroomUSD } from '../../macro/banking';
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
 function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
@@ -35,9 +40,58 @@ function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
   return out;
 }
 
+/**
+ * How wide a basis a hedger will pay before it gives up and carries the currency risk instead.
+ * A liability-driven book has almost no choice — its regulator prices the mismatch — while a
+ * hedge fund treats the hedge as a trade and walks when it is expensive. This is what makes the
+ * DEMAND curve slope: at a wide enough basis, some hedgers stop hedging.
+ */
+function entityHedgeToleranceBps(entity: any): number {
+  switch (entity.entityType) {
+    case 'INSURER': return 220;
+    case 'PENSION_FUND': return 180;
+    case 'ASSET_MANAGER': return 90;
+    case 'HEDGE_FUND': return 45;
+    default: return 90;
+  }
+}
+
+interface DeskState { book: FxDealerBook; headroomUSD: number; marginReceivedUSD: number }
+
 export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
   const week = ctx.nextWeek;
   const bankMarkByTicker = new Map<string, number>();
+
+  // Every dealer's desk, opened at what it carried into the week. Contracts that matured release
+  // their notional and their margin first, which is what frees capacity for this week's flow.
+  const desks = new Map<string, DeskState>();
+  ctx.updatedCompanies.forEach((c: any) => {
+    if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
+    const sheet = ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet;
+    desks.set(c.ticker, {
+      book: sheet.fxDealerBook ? { ...sheet.fxDealerBook, netNotionalByRegion: { ...sheet.fxDealerBook.netNotionalByRegion } } : emptyFxDealerBook(),
+      headroomUSD: leverageHeadroomUSD(sheet),
+      marginReceivedUSD: 0,
+    });
+  });
+  // Roll off what matured: a desk's capacity is what its LIVE book leaves, not its lifetime one.
+  const liveNotionalByTicker = new Map<string, { gross: number; net: Record<string, number>; margin: number }>();
+  ctx.updatedInstitutionalEntities.forEach((e: any) => {
+    (e.fxForwards || []).forEach((f: FxForward) => {
+      if (f.maturityWeek <= week) return;
+      const cur = liveNotionalByTicker.get(f.counterpartyTicker) ?? { gross: 0, net: {}, margin: 0 };
+      cur.gross += f.notionalUSD;
+      cur.net[f.foreignRegion] = (cur.net[f.foreignRegion] ?? 0) - f.notionalUSD;
+      cur.margin += f.notionalUSD * FX_INITIAL_MARGIN_RATE;
+      liveNotionalByTicker.set(f.counterpartyTicker, cur);
+    });
+  });
+  desks.forEach((d, ticker) => {
+    const live = liveNotionalByTicker.get(ticker);
+    d.book.grossNotionalUSD = live?.gross ?? 0;
+    d.book.netNotionalByRegion = live?.net ?? {};
+    d.book.initialMarginHeldUSD = live?.margin ?? 0;
+  });
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity: any) => {
     const live: FxForward[] = (entity.fxForwards || []).filter((f: FxForward) => f.maturityWeek > week);
@@ -53,57 +107,109 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       bankMarkByTicker.set(f.counterpartyTicker, (bankMarkByTicker.get(f.counterpartyTicker) ?? 0) - m);
     });
 
-    // Re-hedge to the book that actually exists: top up where exposure has grown beyond what is
-    // already covered, and let the rest roll off naturally at maturity.
+    // Re-hedge to the book that actually exists — but only as far as a dealer will write it, and
+    // at the price the dealer's own balance sheet implies.
     const coveredByRegion = new Map<RegionId, number>();
     live.forEach((f) => coveredByRegion.set(f.foreignRegion, (coveredByRegion.get(f.foreignRegion) ?? 0) + f.notionalUSD));
     const newForwards: FxForward[] = [];
+    let marginPostedUSD = 0;
     exposure.forEach((wantUSD, issuer) => {
       const gapUSD = wantUSD - (coveredByRegion.get(issuer) ?? 0);
       if (gapUSD <= 1e6) return;
-      const bank = pickDealerBank(ctx, entity.region);
-      if (!bank) return;
+      const dealer = pickDealerBank(ctx, entity.region, desks);
+      if (!dealer) return;
+      const desk = desks.get(dealer.ticker)!;
+
+      // Supply: what this desk can still write. A full desk quotes nothing, which is why a hedge
+      // can be unavailable at any price — the thing an infinite-supply derivative cannot express.
+      const writableUSD = Math.min(gapUSD, fxDeskCapacityUSD(dealer.headroomUSD, desk.book));
+      if (writableUSD <= 1e6) return;
+
+      // Price: the cross-currency basis this desk's utilization implies. Internalized two-way
+      // flow is nearly free; a one-way book has to be carried and delta-hedged, and costs.
+      const basisBps = crossCurrencyBasisBps({
+        grossNotionalUSD: desk.book.grossNotionalUSD,
+        netNotionalUSD: desk.book.netNotionalByRegion[issuer] ?? 0,
+        capacityUSD: fxDeskCapacityUSD(dealer.headroomUSD, desk.book),
+      });
+
+      // Demand: the hedger walks if the basis costs more than the mismatch is worth to it.
+      if (basisBps > entityHedgeToleranceBps(entity)) return;
+
+      // Initial margin is real cash leaving the client and sitting with the desk.
+      const marginUSD = writableUSD * FX_INITIAL_MARGIN_RATE;
+      if (marginUSD > Math.max(0, entity.cashUSD ?? 0) + markUSD) return;
+      marginPostedUSD += marginUSD;
+
+      desk.book.grossNotionalUSD += writableUSD;
+      desk.book.netNotionalByRegion[issuer] = (desk.book.netNotionalByRegion[issuer] ?? 0) - writableUSD;
+      desk.book.initialMarginHeldUSD += marginUSD;
+      desk.marginReceivedUSD += marginUSD;
+
       newForwards.push({
         id: `${entity.id}-FX-${issuer}-${week}`,
         holderId: entity.id,
-        counterpartyTicker: bank,
+        counterpartyTicker: dealer.ticker,
         foreignRegion: issuer,
-        notionalUSD: gapUSD,
-        contractedRate: ctx.getFxToUsd(issuer),
+        // The traded rate, not the theoretical one: CIP moved AGAINST the client by the desk's
+        // basis, because the desk is charging for its balance sheet. Signing this the other way
+        // hands the hedger an instant gain at inception and the dealer an instant loss on every
+        // ticket — measured as bank NIM going to -2.2% before the sign was fixed.
+        contractedRate: ctx.getFxToUsd(issuer) * (1 - basisBps / 10000),
+        notionalUSD: writableUSD,
         maturityWeek: week + FX_FORWARD_TENOR_WEEKS,
       });
     });
 
     return {
       ...entity,
-      cashUSD: (entity.cashUSD ?? 0) + markUSD,
+      cashUSD: (entity.cashUSD ?? 0) + markUSD - marginPostedUSD,
       fxForwards: [...live, ...newForwards],
     };
   });
 
-  // The banks' side of every contract. A dealer's book is the mirror of its clients'.
-  if (bankMarkByTicker.size === 0) return;
-  bankMarkByTicker.forEach((markUSD, ticker) => {
-    const bank = ctx.updatedCompanies.find((c: any) => c.ticker === ticker);
-    if (!bank || !bank.bankBalanceSheet) return;
+  // The banks' side: the mirror of every client mark, the margin that arrived, and the desk book
+  // the week left behind. Margin is the client's money held by the desk, so it is cash AND a
+  // liability — it must never be counted as the desk's own earnings.
+  ctx.updatedCompanies = ctx.updatedCompanies.map((bank: any) => {
+    const ticker = bank.ticker;
+    const desk = desks.get(ticker);
+    if (!desk || !bank.bankBalanceSheet) return bank;
+    const markUSD = bankMarkByTicker.get(ticker) ?? 0;
+    if (markUSD === 0 && desk.marginReceivedUSD === 0 && desk.book.grossNotionalUSD === 0) return bank;
     const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
     if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
-    ctx.companyUpdates[ticker].bankBalanceSheet = {
+    const nextSheet = {
       ...sheet,
-      cashReservesUSD: sheet.cashReservesUSD + markUSD,
+      cashReservesUSD: sheet.cashReservesUSD + markUSD + desk.marginReceivedUSD,
+      // Only the MARK is earnings. The margin is somebody else's money.
       bankEquityUSD: sheet.bankEquityUSD + markUSD,
+      wholesaleFundingUSD: (sheet.wholesaleFundingUSD ?? 0) + desk.marginReceivedUSD,
+      fxDealerBook: desk.book,
     };
+    ctx.companyUpdates[ticker].bankBalanceSheet = nextSheet;
+    // Also on the company itself: a later stage that rebuilds a sheet from `c.bankBalanceSheet`
+    // rather than from companyUpdates would otherwise drop the desk's whole book.
+    return { ...bank, bankBalanceSheet: nextSheet };
   });
 }
 
-/** The dealer an entity faces: the largest bank in its own region, which is who it banks with. */
-function pickDealerBank(ctx: WeeklyStepContext, region: RegionId): string | null {
-  let best: string | null = null;
-  let bestShare = -1;
+/**
+ * The dealer an entity faces. Not simply the biggest bank: the one with the most capacity LEFT,
+ * because a desk that is full stops quoting and the flow goes elsewhere. That is how one desk
+ * filling up widens the price for everyone rather than silently absorbing infinite size.
+ */
+function pickDealerBank(
+  ctx: WeeklyStepContext, region: RegionId, desks: Map<string, DeskState>
+): { ticker: string; headroomUSD: number } | null {
+  let best: { ticker: string; headroomUSD: number } | null = null;
+  let bestCapacity = 0;
   ctx.updatedCompanies.forEach((c: any) => {
     if (c.region !== region || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-    const share = c.bankMarketShare ?? 0;
-    if (share > bestShare) { bestShare = share; best = c.ticker; }
+    const desk = desks.get(c.ticker);
+    if (!desk) return;
+    const capacity = fxDeskCapacityUSD(desk.headroomUSD, desk.book);
+    if (capacity > bestCapacity) { bestCapacity = capacity; best = { ticker: c.ticker, headroomUSD: desk.headroomUSD }; }
   });
   return best;
 }

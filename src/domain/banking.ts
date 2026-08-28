@@ -7,6 +7,7 @@
  */
 
 import { RegionId } from './geography';
+import { FxDealerBook } from './dealer-derivatives';
 
 export interface ItemizedHolding {
   instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN: the DebtTranche.id; for GOV_BOND: the GovDebtTranche.id; for ETF_SHARE: the fund entity's id
@@ -92,6 +93,8 @@ export interface BankingSector {
    * exclude it from further borrowing capacity.
    */
   repoEncumberedCollateralUSD: number;
+  /** XB2b: the FX forward desk's live book — inventory, margin held, and notional written. */
+  fxDealerBook?: FxDealerBook;
   /**
    * G2 slice 1 — the ITEMIZED business loan book: every dollar of `businessLoanBookUSD` is one
    * of these, with a named borrower. Two real borrower classes today: the SME segment pools
