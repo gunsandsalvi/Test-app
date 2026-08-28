@@ -44,6 +44,7 @@ import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
+import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 
 const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
@@ -271,7 +272,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             });
         const structuralSizeUSD = liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal);
         demandByInstrumentId.set(c.id, {
-          reservationStat: reservationBps,
+          // XB2: a cross-border loan is hedged like a bond — the CIP cost is in the requirement.
+          reservationStat: reservationBps
+            + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
+                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate)),
           maxHoldingUSD:
             structuralSizeUSD *
             (entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE),

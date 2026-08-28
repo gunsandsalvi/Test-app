@@ -60,6 +60,7 @@ import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
+import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
@@ -294,7 +295,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         const overweightMultiple =
           entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
         demandByInstrumentId.set(c.id, {
-          reservationStat: reservationBps,
+          // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
+          reservationStat: reservationBps
+            + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
+                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate)),
           maxHoldingUSD: structuralSizeUSD * overweightMultiple,
           fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
           maxNetPurchaseUSD:

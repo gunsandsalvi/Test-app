@@ -29,6 +29,7 @@ import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
 import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign-debt';
 import { runBillAccretionStage } from './stages/bill-accretion';
+import { runFxHedgingStage } from './stages/fx-hedging';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 import { distributeMoneyFundIncome } from './stages/money-market-fund';
@@ -150,6 +151,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
   // the face its holder has accreted to rather than at last week's value.
   // A stable-NAV fund pays its yield as new shares and its fee leaves to the manager.
+  // XB2: hedge the cross-border book that the clearing stages actually left behind.
+  run('fx-hedging', () => runFxHedgingStage(state, ctx));
   run('money-fund-income', () => distributeMoneyFundIncome(ctx));
   run('bill-accretion', () => runBillAccretionStage(state, ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));

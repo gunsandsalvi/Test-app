@@ -7,6 +7,7 @@
  */
 
 import { RegionId } from './geography';
+import { FxForward } from './fx-hedging';
 import { ItemizedHolding } from './banking';
 import { FinancialStatementProfile } from './company';
 
@@ -104,6 +105,11 @@ export interface InstitutionalEntity {
    * securities with money it had already lent.
    */
   repoLentUSD?: number;
+  /**
+   * XB2 — the FX forwards hedging this entity's cross-border book. Real contracts with a named
+   * bank on the other side, marked every week, not a discount applied to a yield.
+   */
+  fxForwards?: FxForward[];
   /**
    * MONEY_MARKET_FUND only (WS7): the fund's share liabilities at its fixed $1 NAV — every
    * dollar of shares is a dollar some real holder (a corporate treasury's `mmfSharesUSD`, the

@@ -1922,3 +1922,37 @@ that proved it, the lesson.
       `governmentBillDiscountAccrualUSD`, a statistic and never a debit: charging it as expense
       too is the same double count. **A number that halves after a refactor is a claim to check,
       not a result to report.**
+72. **XB1/XB2: ownership stops being a parameter, and the hedge decides who buys what.**
+    - **`foreignShare` deleted.** It assigned each region a share of every other region's markets
+      (sovereign 8% per foreign region, equity 5%, corporate 4%), re-imposed weekly by
+      02-region-macro and subtracted from the tradable float in all five clearing books — while
+      owning nothing. **442B of claims with no holder**, against 883B of institutional assets in
+      the whole world. In its place: a MANDATE (home bias by entity type, the foreign remainder
+      spread by market size so no per-pair constant is invented) and entity targets that are each
+      entity's own book rather than a renormalization to an imposed aggregate.
+    - **Measured foreign ownership of USA markets, now an output:** equity **16.8%** (imposed had
+      been 15%), corporate **20.0%** (12%), sovereign **16.2%** (24%). Near the old number in one
+      market, above it in another, far below in the third — which is what happens when a guess is
+      replaced by a mechanism. The sovereign gap is the 442B-vs-883B arithmetic coming true: the
+      four regions could never have held 24%.
+    - **XB2 — the hedge, and the counter-intuitive consequence.** Cross-border fixed income is
+      hedged as an institutional rule. Under covered interest parity the hedge pays
+      `r_home − r_foreign`, so a hedged foreign bond returns `foreign_yield + r_home − r_foreign`
+      and the comparison against a home bond reduces to term spreads: **cross-border flow chases
+      the spread over the LOCAL short rate, never the headline yield.** A 15% bond in a 14%
+      policy-rate country is worse than a 4% bond in a 1% one, and nobody had to be given that
+      preference. Real contracts, not a discount on a yield: 774 forwards, 221.8B notional, with
+      a named bank taking the mirror of every mark so the pair nets to zero.
+    - **Coverage falls 93% → 80% as equity grows in the cross-border book** — bonds hedged in
+      full, equity at 35%, which is the mandate showing up in an aggregate nobody set.
+    - **Two defects it took building this to find.** A money fund's shares only moved on
+      subscriptions while its assets grew by everything it earned, so book and shares diverged
+      **without bound** (0.54% → 1.06% → 1.72% over 60 weeks); a stable-NAV fund pays its yield by
+      ISSUING shares and its fee leaves to the manager. And 07b/07d swept every corporate holding
+      into whichever region's auction was running — harmless while books were domestic, but the
+      moment foreign holders existed it would have rewritten a JPN insurer's JPN bonds from USA
+      fills. **A constraint that only holds because something else is binding is not a
+      constraint** — the same lesson as the money fund, twice in one slice.
+    - **Two shock tests were stale, one instructively.** One shocked an ownership share that no
+      longer drives demand. The other starved only DOMESTIC buyers to under-subscribe an auction —
+      which foreign demand now absorbs. That failure is the mechanism working.

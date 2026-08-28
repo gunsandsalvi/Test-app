@@ -46,6 +46,7 @@
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { distributeRealTargetByWeight, SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
+import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
@@ -294,7 +295,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
         demandByInstrumentId.set(id, {
-          reservationStat: computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS),
+          // XB2: a foreign holder hedges this bond, so what it needs from it is its home
+          // requirement plus the hedge's cost. Under CIP that is exactly the policy-rate
+          // difference — which makes cross-border demand chase the spread over the LOCAL short
+          // rate rather than the headline yield.
+          reservationStat: computeSovereignReservationYieldBps(reg, b.years, INSTITUTIONAL_PREFERRED_TENOR_YEARS)
+            + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
+                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate)),
           maxHoldingUSD: entityTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
           fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
           maxNetPurchaseUSD: classBudgetUSD * bucketShareOfMarket,
