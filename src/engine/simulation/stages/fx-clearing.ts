@@ -19,9 +19,13 @@
 import { RegionId, GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
 import {
-  FxDemandSchedule, clearCurrencyMovePct, FX_MAX_WEEKLY_MOVE_PCT,
-  SPECULATOR_SLOPE_PER_CAPITAL, SPECULATOR_FX_RISK_BUDGET, CENTRAL_BANK_FX_SLOPE_PER_RESERVE,
+  SPECULATOR_RESERVATION_MOVE_PCT, SPECULATOR_FULL_SIZE_RANGE_PCT, SPECULATOR_FX_RISK_BUDGET,
+  CENTRAL_BANK_RESERVATION_MOVE_PCT, CENTRAL_BANK_FULL_SIZE_RANGE_PCT,
+  CENTRAL_BANK_FX_INTERVENTION_SHARE, MAX_WEEKLY_FX_MOVE_PCT,
 } from '../../../domain/fx-market';
+import {
+  clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
+} from './financial-clearing-engine';
 import { centralBankAssetsUSD } from '../../../domain/central-bank';
 
 const REGIONS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -59,66 +63,109 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   });
 
   REGIONS.filter((r) => r !== 'USA').forEach((region) => {
-    const schedules: FxDemandSchedule[] = [];
+    const reg: any = ctx.updatedRegions[region];
+    if (!reg) return;
+    const currentRate = ctx.getFxToUsd(region);
+    if (!(currentRate > 0) || !isFinite(currentRate)) return;
 
-    // ---- INELASTIC 1: the dealers' delta hedge. Long the currency from writing client forwards,
-    // they sell it — the order XB2c executed against nothing. ----
+    // ---- The FLOAT: the week's inelastic flow, which must find a buyer at some price. Dealers
+    // flattening the inventory their client forwards left them, cross-border settlement (both
+    // legs), and trade receipts. None of these is choosing a price — they need the currency. ----
     let dealerNetUSD = 0;
     ctx.updatedCompanies.forEach((c: any) => {
       const book = c.bankBalanceSheet?.fxDealerBook;
-      if (!book) return;
-      dealerNetUSD += Number(book.netNotionalByRegion?.[region]) || 0;
+      if (book) dealerNetUSD += Number(book.netNotionalByRegion?.[region]) || 0;
     });
-    if (Math.abs(dealerNetUSD) > 1e6) {
-      // Long -> wants to SELL, so its demand is negative. Inelastic: a desk flattening risk is
-      // not choosing a price, it is getting out.
-      schedules.push({ participantId: 'DEALERS', netDemandAtCurrentUSD: -dealerNetUSD, slopeUSDPerPct: 0 });
-    }
-
-    // ---- INELASTIC 2: cross-border securities settlement, BOTH legs (see above). ----
     const portfolioUSD = settlementFlowByRegion.get(region) ?? 0;
-    if (Math.abs(portfolioUSD) > 1e6) {
-      schedules.push({ participantId: 'PORTFOLIO', netDemandAtCurrentUSD: portfolioUSD, slopeUSDPerPct: 0 });
-    }
+    const tradeUSD = ((reg.exportsUSD ?? 0) - (reg.importsUSD ?? 0)) / 52;
+    // Net SELLING pressure is what needs absorbing: dealers long the currency sell it, while a
+    // net buyer of the currency reduces what the market has to place.
+    const netSupplyUSD = dealerNetUSD - portfolioUSD - tradeUSD;
 
-    // ---- INELASTIC 3: trade. An exporter is paid in the buyer's money and converts it home; a
-    // net exporter is therefore a net buyer of its own currency. ----
-    const reg: any = ctx.updatedRegions[region];
-    const tradeUSD = ((reg?.exportsUSD ?? 0) - (reg?.importsUSD ?? 0)) / 52;
-    if (Math.abs(tradeUSD) > 1e6) {
-      schedules.push({ participantId: 'TRADE', netDemandAtCurrentUSD: tradeUSD, slopeUSDPerPct: 0 });
-    }
+    const instrument: ClearingInstrument = {
+      id: `FX-${region}`,
+      outstandingUSD: Math.abs(netSupplyUSD),
+      tradableFloatUSD: Math.abs(netSupplyUSD),
+      currentStat: currentRate,
+      statKind: 'PRICE_LIKE',
+      durationYears: 0,
+    };
 
-    // ---- ELASTIC 1: speculators. They have no need for the currency at all — they take the
-    // other side because the move pays them, and how much capital is willing to do that IS the
-    // depth of the market. ----
-    const specCapitalUSD = ctx.updatedInstitutionalEntities
-      .filter((e: any) => e.entityType === 'HEDGE_FUND' && !e.isDefaulted)
-      .reduce((a: number, e: any) => a + Math.max(0, e.totalAssetsUSD) * SPECULATOR_FX_RISK_BUDGET, 0);
-    if (specCapitalUSD > 0) {
-      schedules.push({
-        participantId: 'SPECULATORS',
-        netDemandAtCurrentUSD: 0,
-        // Negative: an appreciating currency is one they sell into.
-        slopeUSDPerPct: -specCapitalUSD * SPECULATOR_SLOPE_PER_CAPITAL,
+    // ---- The ELASTIC side, posting the same schedule shape every other book uses: a level it is
+    // indifferent at, a range over which it scales in, a position CAP from its own capital, and a
+    // cash budget. No slope coefficient anywhere. ----
+    const sign = netSupplyUSD >= 0 ? 1 : -1;
+    const participants: ClearingParticipant[] = [];
+
+    ctx.updatedInstitutionalEntities.forEach((e: any) => {
+      if (e.entityType !== 'HEDGE_FUND' || e.isDefaulted) return;
+      const capUSD = Math.max(0, e.totalAssetsUSD) * SPECULATOR_FX_RISK_BUDGET;
+      if (capUSD <= 0) return;
+      const demand = new Map<string, ParticipantDemand>();
+      demand.set(instrument.id, {
+        reservationStat: currentRate * (1 - sign * SPECULATOR_RESERVATION_MOVE_PCT / 100),
+        maxHoldingUSD: capUSD,
+        fullSizeStatRange: currentRate * (SPECULATOR_FULL_SIZE_RANGE_PCT / 100),
+        maxNetPurchaseUSD: Math.max(0, e.cashUSD ?? 0),
       });
-    }
+      participants.push({ id: e.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
+    });
 
-    // ---- ELASTIC 2: the central bank, leaning against a disorderly move with real reserves. ----
-    const cb = reg?.centralBankSheet;
+    const cb = reg.centralBankSheet;
     const reservesUSD = cb ? centralBankAssetsUSD(cb) : 0;
     if (reservesUSD > 0) {
-      schedules.push({
-        participantId: 'CENTRAL_BANK',
-        netDemandAtCurrentUSD: 0,
-        slopeUSDPerPct: -reservesUSD * CENTRAL_BANK_FX_SLOPE_PER_RESERVE,
+      const demand = new Map<string, ParticipantDemand>();
+      demand.set(instrument.id, {
+        reservationStat: currentRate * (1 - sign * CENTRAL_BANK_RESERVATION_MOVE_PCT / 100),
+        maxHoldingUSD: reservesUSD * CENTRAL_BANK_FX_INTERVENTION_SHARE,
+        fullSizeStatRange: currentRate * (CENTRAL_BANK_FULL_SIZE_RANGE_PCT / 100),
+        maxNetPurchaseUSD: reservesUSD * CENTRAL_BANK_FX_INTERVENTION_SHARE,
       });
+      participants.push({ id: `CB-${region}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
     }
 
-    const { movePct, residualUSD, grossDemandUSD } = clearCurrencyMovePct(schedules, FX_MAX_WEEKLY_MOVE_PCT);
-    moveByRegion.set(region, movePct);
-    residualByRegion.set(region, residualUSD);
-    grossByRegion.set(region, grossDemandUSD);
+    if (instrument.tradableFloatUSD <= 0 || participants.length === 0) {
+      moveByRegion.set(region, 0);
+      residualByRegion.set(region, netSupplyUSD);
+      grossByRegion.set(region, Math.abs(netSupplyUSD));
+      return;
+    }
+
+    const result = clearFinancialAsset([instrument], participants, new Map(), {
+      dealerSpreadBps: 0,
+      maxWeeklyStatMovePct: MAX_WEEKLY_FX_MOVE_PCT / 100,
+    });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+
+    const clearedRate = result.newStatById.get(instrument.id) ?? currentRate;
+    moveByRegion.set(region, ((clearedRate - currentRate) / currentRate) * 100);
+    // What no buyer took at the cleared level is the dealers' to carry — the same residual every
+    // other book leaves with its dealer, rather than a number a clamp invented.
+    residualByRegion.set(region, result.newDealerInventoryById.get(instrument.id) ?? 0);
+    grossByRegion.set(region, Math.abs(netSupplyUSD));
+
+    // Settle: the desks offered their whole position; the market took the float less whatever the
+    // dealer residual is. Reduce each desk's inventory by its share of what was absorbed, and it
+    // carries the rest — which is what a dealer of last resort actually does.
+    const residual = Math.abs(result.newDealerInventoryById.get(instrument.id) ?? 0);
+    const absorbedUSD = Math.max(0, Math.abs(netSupplyUSD) - residual);
+    if (absorbedUSD > 0 && Math.abs(dealerNetUSD) > 0) {
+      const shareAbsorbed = Math.min(1, absorbedUSD / Math.abs(dealerNetUSD));
+      ctx.updatedCompanies = ctx.updatedCompanies.map((c: any) => {
+        const book = c.bankBalanceSheet?.fxDealerBook;
+        const pos = Number(book?.netNotionalByRegion?.[region]) || 0;
+        if (!book || pos === 0) return c;
+        const nextBook = {
+          ...book,
+          netNotionalByRegion: { ...book.netNotionalByRegion, [region]: pos * (1 - shareAbsorbed) },
+        };
+        const sheet = ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet;
+        const nextSheet = { ...sheet, fxDealerBook: nextBook };
+        if (!ctx.companyUpdates[c.ticker]) ctx.companyUpdates[c.ticker] = {};
+        ctx.companyUpdates[c.ticker].bankBalanceSheet = nextSheet;
+        return { ...c, bankBalanceSheet: nextSheet };
+      });
+    }
   });
 
   // Apply: each currency's value against the USD moves by what cleared, and every PAIR is derived

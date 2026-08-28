@@ -21,7 +21,7 @@ import {
 } from '../../../domain/fx-hedging';
 import {
   FxDealerBook, emptyFxDealerBook, fxDeskCapacityUSD, crossCurrencyBasisBps,
-  FX_INITIAL_MARGIN_RATE, FX_DELTA_HEDGE_EXECUTION_RATE,
+  FX_INITIAL_MARGIN_RATE,
 } from '../../../domain/dealer-derivatives';
 import { leverageHeadroomUSD } from '../../macro/banking';
 
@@ -171,28 +171,10 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     };
   });
 
-  // ---- XB2c: the delta hedge. A market maker wants the spread, not the currency, so having
-  // bought foreign currency forward from its hedgers it SELLS that currency spot to flatten. The
-  // flow is real and it is large: this is how a hedged foreign bond portfolio weighs on the
-  // currency it is invested in, a channel that did not exist while desks merely marked their
-  // exposure. What cannot be worked without moving the price stays on the book. ----
-  const spotFlowByRegion = new Map<RegionId, number>();
-  desks.forEach((desk) => {
-    Object.entries(desk.book.netNotionalByRegion).forEach(([region, net]) => {
-      const netUSD = Number(net) || 0;
-      if (Math.abs(netUSD) < 1e6) return;
-      const executedUSD = netUSD * FX_DELTA_HEDGE_EXECUTION_RATE;
-      // Long the currency -> sells it -> negative flow (selling pressure) on that currency.
-      spotFlowByRegion.set(region as RegionId, (spotFlowByRegion.get(region as RegionId) ?? 0) - executedUSD);
-      desk.book.netNotionalByRegion[region] = netUSD - executedUSD;
-    });
-  });
-  spotFlowByRegion.forEach((flowUSD, region) => {
-    const reg: any = ctx.updatedRegions[region];
-    if (!reg) return;
-    reg.fxHedgeSpotFlowUSD = Number(flowUSD.toFixed(0));
-  });
-
+  // XB2f: the desk offers its WHOLE net position to the FX market — it does not decide how much
+  // it can work. What the market absorbs at the cleared rate is settled in stages/fx-clearing.ts,
+  // and what nobody takes stays here as inventory. The execution-rate constant this replaces was
+  // a liquidity claim with no liquidity behind it.
   // The banks' side: the mirror of every client mark, the margin that arrived, and the desk book
   // the week left behind. Margin is the client's money held by the desk, so it is cash AND a
   // liability — it must never be counted as the desk's own earnings.
