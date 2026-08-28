@@ -30,6 +30,13 @@ export interface LifeCycleStageData {
   consumptionMultiplier: number;
 }
 
+/**
+ * People per household. A demographic primitive with one owner, used to turn a population into a
+ * count of dwellings; it becomes an outcome in HH4, where cohorts are real and a household is
+ * something that forms rather than a divisor.
+ */
+export const AVERAGE_HOUSEHOLD_SIZE = 2.5;
+
 export interface HousingMarket {
   regionId: RegionId;
   medianHomePriceUSD: number;
@@ -98,6 +105,25 @@ export interface HouseholdState {
    * cleared multiple the sponsors mark at. The single largest real component, and it was invisible.
    */
   privateBusinessEquityUSD: number;
+  /**
+   * HH2 — the housing stock households own, at this week's median price. Households carried
+   * 1,061B of mortgage debt and owned no house: a balance sheet with the liability and not the
+   * asset, which biases net worth down by the largest thing most households own.
+   *
+   * Built from physical units — owning households times the median price — rather than backed out
+   * of the debt, so a move in home prices moves household wealth, which is the transmission the
+   * omission was suppressing.
+   */
+  housingStockUSD: number;
+  /** The owners' share of it, after the mortgages secured on it. A derived view, carried for the UI. */
+  homeEquityUSD: number;
+  /**
+   * Last week's fully-marked net worth, carried so the wealth effect can be driven by the CHANGE
+   * in wealth rather than by its level. See the note in `evolution.ts`: a level in a growth rate
+   * is a units error, and it was invisible until HH2 put the house on the balance sheet and moved
+   * the ratio from 1.5x to 4.6x.
+   */
+  priorNetWorthUSD: number;
   /**
    * HH1 — claims on institutions: insurance reserves, pension entitlements and fund shares, held
    * per institution so a claim can be marked against the balance sheet that owes it. When an

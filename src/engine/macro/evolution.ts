@@ -12,6 +12,14 @@ import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
 
+/**
+ * Cents of extra consumption per dollar of extra wealth — the marginal propensity to consume out
+ * of wealth, which every empirical study puts at three to five cents. A structural primitive with
+ * one owner; it becomes an outcome in HH4, where cohorts differ in how much of a windfall they
+ * spend (a low-income cohort spends nearly all of it, a wealthy one almost none).
+ */
+const WEALTH_MARGINAL_PROPENSITY_TO_CONSUME = 0.04;
+
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
@@ -109,6 +117,9 @@ export function evolveRegionMacro(
     depositsUSD: region.estimatedHouseholdIncomeUSD * 0.6,
     equityHoldingsUSD: region.estimatedHouseholdIncomeUSD * 1.5,
     directEquityUSD: 0,
+    housingStockUSD: 0,
+    priorNetWorthUSD: 0,
+    homeEquityUSD: 0,
     institutionalClaims: [],
     institutionalClaimsUSD: 0,
     etfShares: [],
@@ -413,8 +424,20 @@ export function evolveRegionMacro(
     ? newNetWorthUSD / region.estimatedHouseholdIncomeUSD
     : 1.0;
 
-  // 4. Wealth-effect correction in CCI & consumption:
-  const balanceSheetWealthEffect = ((netWorthToIncomeRatio - 1.0) * 0.006);
+  // 4. Wealth-effect correction in CCI & consumption.
+  //
+  // Driven by the CHANGE in wealth, not its level. The old form was
+  // `(netWorthToIncomeRatio - 1.0) * 0.006` — a LEVEL feeding a GROWTH rate, which is a units
+  // error (rule 9) that stayed invisible while the ratio sat near 1.5 and the term was worth
+  // 0.3%. HH2 put the house on the balance sheet, the ratio went to 4.6x, and the same expression
+  // started adding ~1.9 percentage points to real consumption growth every week forever.
+  //
+  // A wealth effect is a marginal propensity to consume out of a CHANGE in wealth: a dollar more
+  // wealth buys a few cents more consumption, once. Expressed against income it is a rate, which
+  // is what this line needs to be.
+  const wealthChangeUSD = (prevHS.netWorthUSD ?? 0) - (prevHS.priorNetWorthUSD ?? prevHS.netWorthUSD ?? 0);
+  const balanceSheetWealthEffect =
+    (WEALTH_MARGINAL_PROPENSITY_TO_CONSUME * wealthChangeUSD) / Math.max(1, region.estimatedHouseholdIncomeUSD);
   const creditFundedSpendingUSD = (weeklyNewCCDebtUSD + weeklyNewOtherLoansUSD) * 0.8; // credit directly buying goods
   const weeklyIncomeUSD = region.estimatedHouseholdIncomeUSD / 52;
   const creditSpendingBoostPct = weeklyIncomeUSD > 0 ? (creditFundedSpendingUSD / weeklyIncomeUSD) * 0.05 : 0;
@@ -860,6 +883,10 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       equityHoldingsUSD: newEquityHoldingsUSD,
       // Carried forward untouched; `stages/etf-flows.ts` marks them against this week's clears.
       directEquityUSD: prevHS.directEquityUSD ?? 0,
+      // Marked in `stages/household-balance-sheet.ts` against this week's home price.
+      housingStockUSD: prevHS.housingStockUSD ?? 0,
+      priorNetWorthUSD: prevHS.priorNetWorthUSD ?? 0,
+      homeEquityUSD: prevHS.homeEquityUSD ?? 0,
       institutionalClaims: prevHS.institutionalClaims ?? [],
       institutionalClaimsUSD: prevHS.institutionalClaimsUSD ?? 0,
       etfShares: prevHS.etfShares ?? [],

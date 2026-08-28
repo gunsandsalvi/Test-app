@@ -405,8 +405,10 @@ loss lands on one firm and the pool absorbs it. A claim against a real loss even
 model; **G5**'s estates and the existing weather anomalies are the natural hooks. Until then this
 moves real money on a real schedule without yet transferring real risk.
 
-**HH2 — The house joins the balance sheet.** Households carry **1,061B of mortgage debt and own no
-house**: a balance sheet with the liability and not the asset. The model already has median home
+**HH2 — DONE (§7.53).** The house is on the balance sheet, computed from physical units, and net
+worth went 1,543B → 4,730B (1.5x → 4.61x income). It also exposed a units error in the wealth
+effect that had been hiding behind a small ratio. Original scope, for the record: households carry
+**1,061B of mortgage debt and own no house**: a balance sheet with the liability and not the asset. The model already has median home
 prices, a baseline, a price index and a 62% ownership rate — the housing stock is computable
 today. Home equity then responds to real prices, and the wealth effect finally has its largest
 real component. (Housing is the biggest asset most households own; leaving it out while carrying
@@ -804,9 +806,10 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
 | **#67 — USA bank capital → 0** | Arrives by **week ~70** on current HEAD; the harness has PRINTED the collapse since the flow ledger (§7.36), where the deleted recapitalization-from-nowhere used to prop the ratio. A/B confirms the S1/S2/G1 work does not cause it. G2 was its owner and has landed, and call protection halved the related NIM cluster — **re-measure before assigning further work**; if it survives, the bleed is in the loss-rate and yield formulas on the loan books. |
 | ~~**#18 — companies at the revenue floor**~~ | **CLOSED (§7.49), and the diagnosis was wrong for a year.** The four names were the four regional HEDGE FUNDS, whose "revenue" is a fee on their book — the harness was applying an operating company's growth ceiling to a fund. And they had not grown: their book SHRANK 76.8B → 62.4B while the reported revenue rose 29x, because the generator seeded `aumUSD` as a multiple of an operating company's revenue while the entity carried the real marked book. A §7.4 cold start, not a runaway. Seeding the shell at the size it actually manages took it to 1.1x. |
+| **Real growth prints escape at horizon** | **Found in HH2, pre-existing, unowned.** Consumption growth −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree: −119.87% / −209.30%, GDP identical to four significant figures — so this is not HH2's, and HH2 slightly damps it. **Nothing in §6 recorded it and the harness does not check it**, which is the first thing to fix: a growth rate that can print −200% is a band the harness should assert. Likely the same family as G1b (the price level escaping takes the real deflator with it), but a different symptom and worth confirming separately before assuming so — if real growth is being deflated by an escaping index, the defect is G1b's; if the nominal path itself collapses, it is not. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
-| **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closes that 740B on both sides at once; HH2 adds the house households already carry a mortgage against. Watch this line fall toward zero as each slice lands. |
+| **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
 
 ### 6.2 Watchlist — measure, do not fix
 
@@ -2211,7 +2214,38 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       now that deriving things is the habit.
     - Harness green, determinism verified. Damper-bound instruments 1,956 → 1,920 as the hurdles
       fell.
-53. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+53. **HH2: the house joins the balance sheet, and a units error that had been hiding behind a
+    small number.** Households carried 1,061B of mortgage debt and owned no house. The stock is now
+    computed from PHYSICAL units — population / average household size x ownership rate x the
+    cleared median home price — so a home price move is a household wealth move, and there is one
+    representation of the housing stock rather than a dollar figure beside the prices that are
+    supposed to generate it (rule 3).
+    - Measured: housing stock **3,188B**, home equity **2,127B** against the mortgage already on
+      the liability side, and net worth **1,543B → 4,730B**. Net-worth-to-income **1.5x → 4.61x**
+      against a real-world US ratio of roughly 7–8x — still low, which is the right direction and
+      the remaining gap is what HH3–HH6 and `unmodeledFinancialAssetsUSD` are for.
+    - **What housing exposed is the more useful finding.** The wealth effect read
+      `balanceSheetWealthEffect = (netWorthToIncomeRatio - 1.0) * 0.006` — a LEVEL feeding a GROWTH
+      rate. That is rule 9 (periodicity is part of the number) violated in the plainest way, and it
+      was invisible for as long as it was wrong-and-small: at a 1.5x ratio the term contributed
+      0.3%. Putting the house on the balance sheet moved the ratio to 4.61x and the same expression
+      began adding **~1.9 percentage points to real consumption growth every week, forever** — a
+      permanent boom manufactured out of a stock being read as a flow. Replaced with what a wealth
+      effect actually is: a marginal propensity to consume out of the CHANGE in wealth,
+      `MPC x ΔnetWorth / income`, with MPC = 0.04 (the empirical three-to-five cents), which
+      required `priorNetWorthUSD` on the household state so the change is a real difference rather
+      than an inferred one.
+    - **The lesson, which is not about housing.** A dimensionally wrong expression scaled by a
+      small input looks like a tuned constant and passes every check. It only announces itself when
+      something upstream gets bigger — so every place a level multiplies into a rate is a latent
+      version of this bug waiting for its own HH2. Worth a sweep when the remaining stocks
+      (HH3's real debt, HH4's cohort wealth) land.
+    - **An instability this work did NOT cause, now recorded in §6.** Consumption growth prints
+      −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree gives −119.87% and
+      −209.30% (GDP identical to four significant figures), so HH2 slightly IMPROVES it and did not
+      introduce it. Not chased here, per rule 10.
+    - Harness green (60 weeks, zero violations), determinism verified identical after 40 weeks.
+54. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

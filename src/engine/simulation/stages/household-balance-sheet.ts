@@ -29,6 +29,7 @@
 import { GameState, RegionId, InstitutionalEntity } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
+import { AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import {
   householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD,
 } from '../../macro/household-portfolio';
@@ -104,12 +105,29 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       Math.max(0, (hs.equityHoldingsUSD ?? 0) - realClaimsUSD)
     ));
 
+    // ---- 6. HH2: the house. Households carried the mortgage and not the asset it secures. ----
+    // Built from physical units — owning households at this week's median price — rather than
+    // backed out of the debt, so a move in home prices moves household wealth. Backing it out of
+    // the mortgage would have pinned the stock to the borrowing and left prices with no channel,
+    // which is the transmission the omission was suppressing in the first place.
+    const housingMarket = reg.housingMarket;
+    const owningHouseholds = housingMarket
+      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, housingMarket.ownershipRatePct)
+      : 0;
+    const housingStockUSD = owningHouseholds * Math.max(0, housingMarket?.medianHomePriceUSD ?? 0);
+    const mortgageUSD = hs.mortgageDebtUSD ?? 0;
+    const homeEquityUSD = housingStockUSD - mortgageUSD;
+
     // Cash left the household balance sheet to buy the fund shares.
     const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
     const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
 
     reg.householdState = {
       ...hs,
+      // Last week's marked net worth, so next week's wealth effect can read a CHANGE.
+      priorNetWorthUSD: hs.netWorthUSD ?? 0,
+      housingStockUSD,
+      homeEquityUSD,
       depositsUSD,
       etfShares,
       etfHoldingsUSD,
@@ -119,8 +137,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       institutionalClaimsUSD,
       unmodeledFinancialAssetsUSD,
       equityHoldingsUSD,
-      netWorthUSD: depositsUSD + equityHoldingsUSD
-        - ((hs.mortgageDebtUSD ?? 0) + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
+      // The house is an ASSET at full value and the mortgage a liability, as in any set of
+      // national accounts. Omitting the asset while carrying the debt understated net worth by
+      // the entire housing stock.
+      netWorthUSD: depositsUSD + equityHoldingsUSD + housingStockUSD
+        - (mortgageUSD + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
     };
   });
 }
