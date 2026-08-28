@@ -172,7 +172,9 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     }
     const sumSavings = cohorts.reduce((a, c) => a + c.savingsUSD, 0);
     const targetSavings = Math.max(0, hs.savingsRate) * agg;
-    if (agg > 0 && Math.abs(sumSavings - targetSavings) / agg > 5e-3) {
+    // 1% band: cohorts squeezed by debt service dissave below the λ target — real behavior,
+    // bounded; a wider gap means the normalization itself broke.
+    if (agg > 0 && Math.abs(sumSavings - targetSavings) / agg > 1e-2) {
       violations.push({
         week,
         message: `${region}: cohort savings ${(sumSavings / 1e9).toFixed(2)}B vs aggregate rate x income ${(targetSavings / 1e9).toFixed(2)}B — the λ-normalization is off`,
@@ -181,6 +183,20 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
     const shares = hs.stapleSpendShare + hs.standardSpendShare + hs.luxurySpendShare;
     if (Math.abs(shares - 1) > 1e-3) {
       violations.push({ week, message: `${region}: spend shares sum to ${shares.toFixed(4)} — not a partition` });
+    }
+    // HH4b: the budget identity — consumption budgets are disposable less savings less real
+    // debt service plus the recycle, summed (loose band: the per-cohort zero floor can bind).
+    const sumBudgets = cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0);
+    // Expected against the debt service the cohorts actually PAY (their recorded burden) —
+    // the allocated-but-unpayable slice is arrears, priced bank-side as delinquency.
+    const sumEffectiveDs = cohorts.reduce((a, c) => a + c.debtServiceUSD, 0);
+    const expectedBudgets = sumDisposable - sumSavings
+      - sumEffectiveDs + (hs.capitalReceiptsAnnualUSD ?? 0);
+    if (agg > 0 && Math.abs(sumBudgets - expectedBudgets) / agg > 5e-3) {
+      violations.push({
+        week,
+        message: `${region}: cohort budgets sum to ${(sumBudgets / 1e9).toFixed(2)}B against the identity's ${(expectedBudgets / 1e9).toFixed(2)}B — the debit/recycle wiring is off`,
+      });
     }
   });
 }

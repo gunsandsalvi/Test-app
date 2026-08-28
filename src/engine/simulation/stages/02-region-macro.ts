@@ -71,6 +71,15 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     // premium. The real version of that comparison is the auction itself, in 07c, where real
     // demand meets real supply.)
 
+    // HH4b: what the region's listed equity actually pays — market-cap-weighted, real state.
+    const regionListed = state.companies.filter(
+      (c) => c.region === regionId && !c.isDefaulted && (c.marketCap ?? 0) > 0
+    );
+    const regionMcap = regionListed.reduce((a, c) => a + c.marketCap, 0);
+    const regionAvgDividendYield = regionMcap > 0
+      ? regionListed.reduce((a, c) => a + (c.dividendYield ?? 0) * c.marketCap, 0) / regionMcap
+      : 0;
+
     const { updatedRegion, rateDeltaBps, isMeeting, diagnosticString } = evolveRegionMacro(
       state.regions[regionId],
       { gdpShock: globalGdpShock, inflationShock: globalInflationShock },
@@ -82,6 +91,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         publicCompanyEmployment: ctx.regionPublicCompanyEmployment[regionId],
         occupationDemand: regionOccDemand,
         monetizedAmountUSD, marginCompression: 0, creditContagionBps: 0,
+        avgListedDividendYieldAnnual: regionAvgDividendYield,
       },
       ctx.nextWeek,
       equityRet,

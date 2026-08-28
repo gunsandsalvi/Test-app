@@ -6,6 +6,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { categoryPriceTier, HouseholdPriceTier } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
@@ -28,8 +29,16 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       }, 0) / firmsInCat.length;
     });
 
-    // Compute active GDP components for bottom-up demand targets
-    const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+    // Compute active GDP components for bottom-up demand targets.
+    // HH4b: C is the SUM OF THE COHORT BUDGETS — disposable income less savings, less the real
+    // debt service the households actually owe (HH3's books), plus the capital receipts that
+    // recycle it (deposit interest, dividends, the named seed residual). At seed the debit and
+    // the credit net out by construction; from week 1 a rate hike raises the middle's debt
+    // service ahead of the top's receipts, and household demand genuinely tightens.
+    const cohorts = hs.cohorts ?? [];
+    const C = cohorts.length > 0
+      ? cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0)
+      : reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
     // Government purchases only — the transfer share of outlays reaches demand through C, not
     // here. Shares the one procurement constant with the GDP identity in stage 11 so the two
     // cannot disagree about what the government actually buys.
@@ -41,9 +50,18 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     reg.laggedCorporateDemandBase = newLaggedCorporateDemandBase;
     const I = newLaggedCorporateDemandBase;
 
-    let totalHhWeight = 0;
     let totalGovWeight = 0;
     let totalCorpWeight = 0;
+    // HH4b: the household pool allocates BY PRICE TIER — each tier of categories draws on the
+    // slice of C the cohorts' real spend mixes assign it (the derived staple/standard/luxury
+    // shares), normalized within the tier's own buyerMix weights. The mixes are calibrated so
+    // this opens exactly where the flat allocation stood (§7.4); it moves when the cohort mix
+    // does — a boom that lifts top-tier budgets pulls demand toward luxury categories because
+    // that is where the marginal dollar goes.
+    const hhWeightByTier: Record<HouseholdPriceTier, number> = { STAPLE: 0, STANDARD: 0, LUXURY: 0 };
+    const spendShareByTier: Record<HouseholdPriceTier, number> = {
+      STAPLE: hs.stapleSpendShare, STANDARD: hs.standardSpendShare, LUXURY: hs.luxurySpendShare,
+    };
 
     // Capital-goods categories (heavy_equipment, industrial_automation, commercial_construction,
     // enterprise_software, commercial_fleet) are excluded from the abstract CORPORATE pool here —
@@ -55,7 +73,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) return;
-        totalHhWeight += su.buyerMix.HOUSEHOLD;
+        hhWeightByTier[categoryPriceTier(su.unitId)] += su.buyerMix.HOUSEHOLD;
         totalGovWeight += su.buyerMix.GOVERNMENT;
         totalCorpWeight += su.buyerMix.CORPORATE;
       });
@@ -80,7 +98,10 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           smoothingByCategory[su.unitId] = 0.08;
           return;
         }
-        const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
+        const tier = categoryPriceTier(su.unitId);
+        const suHhDemand = hhWeightByTier[tier] > 0
+          ? (su.buyerMix.HOUSEHOLD / hhWeightByTier[tier]) * C * spendShareByTier[tier]
+          : 0;
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
         const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
         allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;

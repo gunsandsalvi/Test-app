@@ -61,6 +61,12 @@ const TIER_TRANSFER_WEIGHT: Record<WealthTier, number> = {
   BOTTOM_50: 1.6, NEXT_40: 0.9, TOP_9: 0.2, TOP_1: 0.05,
 };
 
+/** Where the residual recycle lands: institutional-claim incidence — the pension and
+ * insurance middle, with the top's share modest because its wealth is direct, not pooled. */
+const TIER_RESIDUAL_RECEIPT_WEIGHT: Record<WealthTier, number> = {
+  BOTTOM_50: 0.10, NEXT_40: 0.45, TOP_9: 0.30, TOP_1: 0.15,
+};
+
 /**
  * How the real HH3 debt-service burden distributes across tiers — a blended mortgage/card
  * reality (mortgages sit with the homeowning middle, revolving debt with the bottom half).
@@ -72,15 +78,17 @@ const TIER_DEBT_SERVICE_WEIGHT: Record<WealthTier, number> = {
 
 /**
  * What each tier's consumption buys, by price tier. The budget-weighted sums of these mixes ARE
- * the region's spend shares now — replacing the `wealthSignal` drift formula that used to walk
- * `luxurySpendShare` around with no reader. Chosen so the seed-weight blend reproduces the old
- * seeded {staple 0.35, standard 0.50, luxury 0.15} to within a point.
+ * the region's spend shares, and since HH4b they are LOAD-BEARING: stage 03 allocates the
+ * household consumption pool across categories by them. Calibrated so the seed-weight blend
+ * reproduces the tier weights the category buyerMixes already imply ({staple ~0.31,
+ * standard ~0.59, luxury ~0.09}) — §7.4: the allocation opens where the old one stood, and
+ * moves only when the cohort mix does.
  */
 const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: number; luxury: number }> = {
-  BOTTOM_50: { staple: 0.55, standard: 0.42, luxury: 0.03 },
-  NEXT_40: { staple: 0.38, standard: 0.54, luxury: 0.08 },
-  TOP_9: { staple: 0.22, standard: 0.55, luxury: 0.23 },
-  TOP_1: { staple: 0.10, standard: 0.40, luxury: 0.50 },
+  BOTTOM_50: { staple: 0.48, standard: 0.50, luxury: 0.02 },
+  NEXT_40: { staple: 0.30, standard: 0.64, luxury: 0.06 },
+  TOP_9: { staple: 0.14, standard: 0.71, luxury: 0.15 },
+  TOP_1: { staple: 0.06, standard: 0.62, luxury: 0.32 },
 };
 
 export interface CohortBuildInputs {
@@ -94,6 +102,22 @@ export interface CohortBuildInputs {
   aggregateSavingsRate: number;
   /** HH3's real weekly debt service (interest + required principal), annualized inside. */
   weeklyDebtServiceUSD: number;
+  /**
+   * HH4b — the capital receipts that recycle debt service back into the budget, ANNUAL USD,
+   * in three components because their INCIDENCE differs and the incidence is the point:
+   * deposit interest lands roughly where wealth is (every tier holds deposits), dividends land
+   * where the equity exposure is (the top), and the residual — the recycle the model cannot yet
+   * attribute (bank retained earnings, institutional dividend passthrough; derived once at seed
+   * so the seed budget nets to exactly the pre-HH4b one, §6-recorded to decay) — lands where
+   * institutional CLAIMS sit, which is the pension-and-insurance middle, not the direct-equity
+   * top. Allocating it all by equity exposure was measured to hand 46% of it to the top 1% and
+   * inflate luxury demand a quarter above its seed weight.
+   */
+  annualCapitalReceiptsUSD: {
+    depositInterestUSD: number;
+    dividendsUSD: number;
+    residualUSD: number;
+  };
   /** Prior wealth distribution, for the capital-income allocation weights (one-week lag, like
    * every mark this stage reads). */
   wealthDistribution: Record<WealthTier, WealthTierData>;
@@ -101,6 +125,8 @@ export interface CohortBuildInputs {
 
 export interface CohortBuildResult {
   cohorts: HouseholdCohort[];
+  /** Σ consumption budgets — stage 03's household demand pool C, annual USD. */
+  totalConsumptionBudgetUSD: number;
   /** Σ disposable — must equal the aggregate national-accounts derivation to the dollar. */
   totalDisposableIncomeUSD: number;
   /** Σ disposable by tier — what wealthDistribution.shareOfIncomeUSD is derived from now. */
@@ -238,13 +264,42 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const tierSavingsUSD = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => { tierDisposableUSD[t] = 0; tierSavingsUSD[t] = 0; });
 
+  const exposureNorm = WEALTH_TIERS.reduce(
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
+    0
+  ) || 1;
+  const netWorthNorm = WEALTH_TIERS.reduce(
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0), 0
+  ) || 1;
+  const residualNorm = WEALTH_TIERS.reduce((a, t) => a + TIER_RESIDUAL_RECEIPT_WEIGHT[t], 0) || 1;
+  const tierReceiptsUSD = {} as Record<WealthTier, number>;
+  WEALTH_TIERS.forEach((t) => {
+    const nw = Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0);
+    const exp = wealthDistribution[t]?.equityExposureShare ?? 0.25;
+    tierReceiptsUSD[t] =
+      Math.max(0, inputs.annualCapitalReceiptsUSD.depositInterestUSD) * (nw / netWorthNorm)
+      + Math.max(0, inputs.annualCapitalReceiptsUSD.dividendsUSD) * ((nw * exp) / exposureNorm)
+      + Math.max(0, inputs.annualCapitalReceiptsUSD.residualUSD) * (TIER_RESIDUAL_RECEIPT_WEIGHT[t] / residualNorm);
+  });
   const cohorts: HouseholdCohort[] = preliminary.map(({ c, grossUSD, taxUSD, dispUSD }, i) => {
     const tierEarners = earnersByTier[c.tier] || 1;
     const share = (c.employed + c.unemployed) / tierEarners;
-    const savingsUSD = cohortSavingsUSD[i];
+    const plannedSavingsUSD = cohortSavingsUSD[i];
     const debtServiceUSD = annualDebtServiceUSD * (TIER_DEBT_SERVICE_WEIGHT[c.tier] / dsNorm) * share;
+    const capitalReceiptsUSD = tierReceiptsUSD[c.tier] * share;
+    const budgetBeforeFloorUSD = dispUSD - plannedSavingsUSD - debtServiceUSD + capitalReceiptsUSD;
+    const squeezedSavingsUSD = budgetBeforeFloorUSD < 0
+      ? Math.max(0, plannedSavingsUSD + budgetBeforeFloorUSD)
+      : plannedSavingsUSD;
+    // A cohort cannot pay more debt service than it has: the effective payment is capped at
+    // what remains after (already-squeezed) savings, and the unpayable slice is ARREARS — the
+    // delinquency the banks' consumer loss rates already price on the other side of the same
+    // loans. The cohort's recorded burden is what it actually pays.
+    const effectiveDebtServiceUSD = Math.min(
+      debtServiceUSD, Math.max(0, dispUSD - squeezedSavingsUSD + capitalReceiptsUSD)
+    );
     tierDisposableUSD[c.tier] += dispUSD;
-    tierSavingsUSD[c.tier] += savingsUSD;
+    tierSavingsUSD[c.tier] += squeezedSavingsUSD;
     return {
       occupation: c.occ,
       tier: c.tier,
@@ -257,11 +312,16 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
       grossIncomeUSD: Number(grossUSD.toFixed(0)),
       taxUSD: Number(taxUSD.toFixed(0)),
       disposableIncomeUSD: Number(dispUSD.toFixed(0)),
-      debtServiceUSD: Number(debtServiceUSD.toFixed(0)),
-      savingsUSD: Number(savingsUSD.toFixed(0)),
-      // Debt service stays INSIDE the budget until the recycle is real (HH4b) — subtracting it
-      // without the bank-profit dividend channel back to households is a one-sided demand leak.
-      consumptionBudgetUSD: Number((dispUSD - savingsUSD).toFixed(0)),
+      debtServiceUSD: Number(effectiveDebtServiceUSD.toFixed(0)),
+      // HH4b: debt service DEBITS the budget and the capital receipts CREDIT it — both sides of
+      // the loop together (one alone is the HH1c leak). At seed the two net to zero by the
+      // residual's construction; from week 1 they diverge with rates, which is the household
+      // rate channel: a hike raises the middle's debt service now while receipts follow banks'
+      // payouts later and land mostly at the top. A cohort whose obligations exceed its budget
+      // STOPS SAVING before it stops eating (squeezedSavingsUSD below) — the real order of a
+      // distressed household's cuts.
+      savingsUSD: Number(squeezedSavingsUSD.toFixed(0)),
+      consumptionBudgetUSD: Number(Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD).toFixed(0)),
     };
   });
 
@@ -278,5 +338,6 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     ? { staple: staple / budget, standard: standard / budget, luxury: luxury / budget }
     : { staple: 0.35, standard: 0.50, luxury: 0.15 };
 
-  return { cohorts, totalDisposableIncomeUSD, tierDisposableUSD, tierSavingsUSD, spendShares };
+  const totalConsumptionBudgetUSD = cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0);
+  return { cohorts, totalConsumptionBudgetUSD, totalDisposableIncomeUSD, tierDisposableUSD, tierSavingsUSD, spendShares };
 }

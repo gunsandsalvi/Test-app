@@ -78,6 +78,9 @@ export function evolveRegionMacro(
     publicCompanyEmployment: number;
     occupationDemand?: Record<OccupationType, number>;
     monetizedAmountUSD?: number;
+    /** HH4b: market-cap-weighted average dividend yield of this region's listed companies —
+     * what the households' direct equity actually pays. Computed in stage 02 from real state. */
+    avgListedDividendYieldAnnual?: number;
   },
   week: number,
   equityReturn: number = 0,
@@ -488,6 +491,16 @@ export function evolveRegionMacro(
   (Object.keys(newOccupationPools) as OccupationType[]).forEach((occ) => {
     laborForceByOccupation[occ] = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ] ?? 0);
   });
+  // HH4b — the capital receipts that recycle debt service back into the consumption budget:
+  // real deposit interest, real dividends on the households' direct equity, and the named seed
+  // residual (see the builder's input doc). At seed the sum equals debt service by the
+  // residual's construction; from week 1 the two move apart with rates and payouts, and that
+  // differential is the household rate channel.
+  const annualCapitalReceiptsUSD = {
+    depositInterestUSD: (prevHS.depositsUSD ?? 0) * (region.policyRate * 0.6),
+    dividendsUSD: (prevHS.directEquityUSD ?? 0) * (microFeedback.avgListedDividendYieldAnnual ?? 0),
+    residualUSD: (prevHS.unmodeledCapitalReceiptShareOfIncome ?? 0) * region.estimatedHouseholdIncomeUSD,
+  };
   const cohortResult = buildHouseholdCohorts({
     occupationPools: newOccupationPools,
     baseAnnualWageUSD,
@@ -495,6 +508,7 @@ export function evolveRegionMacro(
     governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
     aggregateSavingsRate: newSavingsRate,
     weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
+    annualCapitalReceiptsUSD,
     wealthDistribution: region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD),
   });
 
@@ -894,6 +908,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       unmodeledFinancialAssetsUSD: prevHS.unmodeledFinancialAssetsUSD ?? newEquityHoldingsUSD,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
       cohorts: cohortResult.cohorts,
+      capitalReceiptsAnnualUSD: Number((annualCapitalReceiptsUSD.depositInterestUSD + annualCapitalReceiptsUSD.dividendsUSD + annualCapitalReceiptsUSD.residualUSD).toFixed(0)),
+      unmodeledCapitalReceiptShareOfIncome: prevHS.unmodeledCapitalReceiptShareOfIncome,
       // HH3: derived sums of the banks' itemized pools, carried through and overwritten by the
       // bank-diversification stage after its lending passes run.
       mortgageDebtUSD: newMortgageDebtUSD,

@@ -8,6 +8,7 @@
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
+import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY_TIER } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
@@ -507,7 +508,12 @@ function executeSubUnitBiddingMarket(
     }
 
     if (hhDemandUnits > 0.001) {
-      const priceElasticityPremium = Math.tanh(0.05) * 0.15;
+      // HH4b: the willingness-to-pay premium is a PRICE-TIER property, not one frozen number —
+      // households pay up for staples when supply tightens (the bottom cohorts' inelastic
+      // food-and-energy demand) and walk away from luxury at the same price move (the top
+      // cohorts' discretionary swing).
+      const priceElasticityPremium = HOUSEHOLD_BID_BASE_PREMIUM
+        * HOUSEHOLD_BID_PREMIUM_BY_TIER[categoryPriceTier(subUnitId)];
       const hhMaxPriceUSD = currentUnitPrice * (1.0 + priceElasticityPremium);
 
       bids.push({

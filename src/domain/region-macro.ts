@@ -190,6 +190,14 @@ export interface HouseholdState {
   /** HH4 — the ~20 occupation x wealth-tier cohorts this aggregate decomposes into. Built by
    * `macro/household-cohorts.ts` each week; their sums ARE the aggregates (asserted). */
   cohorts?: HouseholdCohort[];
+  /** HH4b — this week's annual capital receipts recycling into the consumption budget:
+   * deposit interest + direct-equity dividends + the named residual share x income. */
+  capitalReceiptsAnnualUSD?: number;
+  /** HH4b — the seed-derived share of income covering receipts the model cannot yet attribute
+   * (bank retained earnings and institutional dividend passthrough reaching households through
+   * unbuilt channels). Derived ONCE at the HH3 seed migration as (debt service − real
+   * receipts) / income, so the seed budget nets to zero; §6 owns watching it decay. */
+  unmodeledCapitalReceiptShareOfIncome?: number;
   /** Last week's mortgage book, so demand signals can read a real change (set with the sums). */
   priorMortgageDebtUSD?: number;
   /** HH3 — last week's real flows off the itemized books, written by the lending pass:

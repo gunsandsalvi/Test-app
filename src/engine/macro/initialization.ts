@@ -302,6 +302,9 @@ function buildRegion(regionId: RegionId): Region {
     governmentSpendingWeeklyUSD: governmentSpendingUSD,
     aggregateSavingsRate: HOUSEHOLD_SAVINGS_RATE,
     weeklyDebtServiceUSD: 0,
+    // Zero here to match the zero debt service: both sides of the budget loop arrive together
+    // at the HH3 seed migration, which re-derives the cohorts with the real books.
+    annualCapitalReceiptsUSD: { depositInterestUSD: 0, dividendsUSD: 0, residualUSD: 0 },
     wealthDistribution: seedWealthDistribution,
   });
   // The tier income lines open as the DERIVED sums they will be every week from here on —

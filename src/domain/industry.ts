@@ -17,6 +17,38 @@ export type ProductCategory = Industry;
 
 export type BuyerType = 'HOUSEHOLD' | 'GOVERNMENT' | 'CORPORATE';
 
+/**
+ * HH4b — which price tier a household-facing category sells into. The tier decides two real
+ * things: which slice of the household budget funds it (stage 03 allocates C by the cohort-
+ * derived spend shares) and how price-sensitive the household bid is (stage 05's premium):
+ * staples are the inelastic food-and-energy demand the bottom cohorts carry, luxury the
+ * discretionary swing of the top ones. Categories with no household buyer never read this.
+ */
+export type HouseholdPriceTier = 'STAPLE' | 'STANDARD' | 'LUXURY';
+export const CATEGORY_PRICE_TIER: Record<string, HouseholdPriceTier> = {
+  refined_products: 'STAPLE',
+  household_chemicals: 'STAPLE',
+  food_beverage: 'STAPLE',
+  household_essentials: 'STAPLE',
+  pharmaceuticals: 'STAPLE',
+  agricultural_commodities: 'STAPLE',
+  luxury_goods: 'LUXURY',
+  // everything else household-facing is STANDARD via the lookup default
+};
+export const categoryPriceTier = (unitId: string): HouseholdPriceTier =>
+  CATEGORY_PRICE_TIER[unitId] ?? 'STANDARD';
+
+/**
+ * The household bid's willingness-to-pay premium over the current price, per tier — the real
+ * shape of demand elasticity: a household pays up for fuel and food when supply tightens and
+ * walks away from luxury at the same price move. The base is the old frozen
+ * `tanh(0.05) x 0.15` premium, now named; the multipliers make it a tier property.
+ */
+export const HOUSEHOLD_BID_BASE_PREMIUM = Math.tanh(0.05) * 0.15;
+export const HOUSEHOLD_BID_PREMIUM_BY_TIER: Record<HouseholdPriceTier, number> = {
+  STAPLE: 2.5, STANDARD: 1.0, LUXURY: 0.35,
+};
+
 export interface IndustrySubUnit {
   unitId: string;
   label: string;
