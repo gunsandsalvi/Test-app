@@ -387,7 +387,8 @@ branch of stage 08 explicitly refuses to read the entity, on a comment that pred
 and says so. Pension funds and hedge funds fall through to the generic consumer-revenue path.
 - Insurer float, premiums, claims and reserves come from the entity's real book, and
   `technicalReservesUSD` becomes the beneficiary liability rather than a second version of it.
-- Pension funds and hedge funds get their own P&L off their own books instead of a consumer beta.
+- (Pension and hedge funds already read their entity's book via the `ASSET_MANAGER` profile —
+  an earlier draft of this section wrongly said they did not.)
 - **Then the constants become derivable**, which is why they wait: an entity's required return is
   its real liability cost, and there is no liability cost until the flows above are real.
   `REQUIRED_RETURN_ON_CAPITAL` and `INSTITUTIONAL_REAL_RETURN_BPS` retire here.
@@ -790,7 +791,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | Defect | State and next action |
 |---|---|
 | **G1b — the inflation escape** | The measured band is SEED-SENSITIVE: one world holds −10..0%, others escape upward by week 40 (the default-stream world reaches 50%+ by week 52 with the 10Y following to 17%). **The measurement is not at fault** — the goods market's prices really do move that much. G2 measurably damped it and did not cure it (0.66% of demand against a goods cycle orders of magnitude larger), exactly as predicted. Remaining owners: **MS** (the household rate response, the missing stabiliser) and **PUB** (the fiscal loop). Two diagnostics still unrun and worth doing first: trace one sub-unit's price, supply and demand over 120 weeks for a long-wavelength cobweb; and consider whether stage 05's real bid and offer prices should carry an expectations term — a genuine behavioural channel, since anchored expectations damp actual price setting. **Do not** smooth the index, widen the basket, or clamp inflation: the index is the measurement, and if it is volatile the economy is. |
-| **The institutional Company and the InstitutionalEntity are two firms** | Found in HH1 (§7.49) and the largest thing left in this sector. `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. PENSION_FUND and HEDGE_FUND fall through to the generic CONSUMER-revenue path. **This is HH1b's remaining scope**, and until it lands, L4's decision to clear institutions in 07e prices them on the shell rather than the balance sheet. |
+| ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
 | **#67 — USA bank capital → 0** | Arrives by **week ~70** on current HEAD; the harness has PRINTED the collapse since the flow ledger (§7.36), where the deleted recapitalization-from-nowhere used to prop the ratio. A/B confirms the S1/S2/G1 work does not cause it. G2 was its owner and has landed, and call protection halved the related NIM cluster — **re-measure before assigning further work**; if it survives, the bleed is in the loss-rate and yield formulas on the loan books. |
 | ~~**#18 — companies at the revenue floor**~~ | **CLOSED (§7.49), and the diagnosis was wrong for a year.** The four names were the four regional HEDGE FUNDS, whose "revenue" is a fee on their book — the harness was applying an operating company's growth ceiling to a fund. And they had not grown: their book SHRANK 76.8B → 62.4B while the reported revenue rose 29x, because the generator seeded `aumUSD` as a multiple of an operating company's revenue while the entity carried the real marked book. A §7.4 cold start, not a runaway. Seeding the shell at the size it actually manages took it to 1.1x. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
@@ -2141,7 +2142,36 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       depth to the foundation behind its registry. Note what this is NOT: no conservation
       violation, nothing unattributed, which is exactly why the harness is green and could never
       have caught it. Realism gaps do not trip invariants.
-51. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+51. **HH1b: one insurer instead of two, and the same cold start twice in one session.**
+    - The insurer branch of stage 08 refused to read the entity behind it, on a comment reasoning
+      that `totalAssetsUSD` was "a macro-level slice, not a per-firm P&L input". **That was true
+      when it was written and stopped being true at S11**, which made it a real per-firm book — the
+      asset-manager branch directly below it reads it and says so. The refusal outlived its reason
+      by several projects, and what it produced was a second insurer: a shell reporting 0.05B of
+      revenue and 0.10B of market cap beside an entity holding 241.4B, with `technicalReservesUSD`
+      printing 0.2B against a 221.9B beneficiary liability.
+    - **Now one firm.** Reserves ARE the beneficiary liability HH1a records (223.0B, one number).
+      Premiums come off real capital at the **premium-to-surplus ratio**, the constraint every
+      insurance regulator actually supervises — replacing a premium that grew from its own prior
+      value at GDP plus a random draw, anchored to nothing. Investment income is what the entity's
+      own portfolio earned, recorded once by `accrueInstitutionalIncome` and reported by the P&L
+      rather than recomputed as a second yield on a different asset base. Claims stay stochastic,
+      because claims are. Result: revenue 0.05B → 23.4B, net income a 1.5% ROA on the real book,
+      market cap 0.10B → **51.0B against 19.5B of equity**.
+    - **Then the harness failed again with the identical shape**, this time 480x on the four
+      insurers — because the seed still opened them as operating companies. The same §7.4 cold
+      start I had just fixed for the asset managers, one layer down, found within an hour of the
+      first. The primitive now lives in `domain/institutions.ts` so the SEED and the ENGINE read
+      one number; when they disagree, the harness reports the disagreement as a runaway.
+      **Harness green again.**
+    - **A stale comment is a liability with no maturity date.** This one was correct, was written
+      down, was load-bearing, and became wrong when a different project changed the thing it
+      described — and nothing in the process catches that. It is worth asking, when a project
+      changes what a field MEANS, which comments elsewhere were reasoning about the old meaning.
+    - Correction to §7.49's write-up: it said pension and hedge funds fall through to a
+      consumer-revenue path. They do not — they carry the `ASSET_MANAGER` profile and already read
+      their entity's book. Only the insurer was disconnected.
+52. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

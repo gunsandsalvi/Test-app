@@ -20,6 +20,18 @@ export interface InstitutionalSector {
   itemizedHoldings: ItemizedHolding[];
 }
 
+/**
+ * How much premium an insurer writes per dollar of its own capital — the premium-to-surplus ratio
+ * every insurance regulator supervises, and the real limit on how fast an insurer can grow. Lives
+ * here because the SEED and the weekly engine must read the same number: when they disagreed, the
+ * bootstrap opened an insurer as an operating company and week 1 replaced its revenue with the
+ * real premium base, which the harness reported as a 480x revenue runaway (§7.4's cold start,
+ * §7.51). A structural primitive with one owner; it becomes an outcome in IND.
+ */
+export const PREMIUM_TO_SURPLUS_RATIO = 1.2;
+/** The share of premium that goes on running the business rather than paying claims. */
+export const INSURER_EXPENSE_RATIO = 0.20;
+
 export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND' | 'ETF';
 
 export interface AssetAllocationTarget {
@@ -59,6 +71,12 @@ export interface InstitutionalEntity {
    * shareholders), ETFs (MS1's), and private equity (HC4's LP commitments).
    */
   beneficiaryLiabilityUSD?: number;
+  /**
+   * HH1b — what this entity's real book earned this week (`accrueInstitutionalIncome`). Recorded
+   * so the listed shell's income statement can REPORT the income its own portfolio produced,
+   * rather than computing a second, formula version of it from a different asset base.
+   */
+  lastWeeklyInvestmentIncomeUSD?: number;
   sharesOutstanding: number;
   stockPrice: number;
   itemizedHoldings: ItemizedHolding[];

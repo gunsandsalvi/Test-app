@@ -2,6 +2,7 @@
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
+import { PREMIUM_TO_SURPLUS_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed } from './stages/bank-lending';
 import { chooseLeadBank } from '../../domain/primary-market';
@@ -495,12 +496,23 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // 76.8B → 62.4B, and those four were the last four violations in the invariants harness,
     // logged for a year as "#18 revenue runaway". It was never a runaway; it was a cold start.
     regionalInstCompanies.forEach(comp => {
-      if (comp.financialStatementProfile !== 'ASSET_MANAGER') return;
+      const isManager = comp.financialStatementProfile === 'ASSET_MANAGER';
+      const isInsurer = comp.financialStatementProfile === 'INSURER';
+      if (!isManager && !isInsurer) return;
       const entity = institutionalEntities.find(e => e.id === comp.id);
-      if (!entity || !(comp.managementFeeRate > 0)) return;
-      comp.aumUSD = entity.totalAssetsUSD;
-      const revenueUSD = Math.max(10, comp.aumUSD * comp.managementFeeRate);
-      const ebitdaUSD = revenueUSD * 0.35;
+      if (!entity) return;
+      if (isManager && !(comp.managementFeeRate > 0)) return;
+      // A manager's revenue is a fee on the book it runs; an insurer's is the premium its own
+      // capital lets it write. Both read the entity, because both ARE the entity.
+      if (isManager) comp.aumUSD = entity.totalAssetsUSD;
+      const revenueUSD = isManager
+        ? Math.max(10, comp.aumUSD! * comp.managementFeeRate!)
+        : Math.max(10, Math.max(0, entity.equityCapitalUSD) * PREMIUM_TO_SURPLUS_RATIO);
+      if (isInsurer) {
+        comp.insurancePremiumsWrittenUSD = revenueUSD;
+        comp.technicalReservesUSD = Math.max(0, entity.totalAssetsUSD - entity.equityCapitalUSD);
+      }
+      const ebitdaUSD = revenueUSD * (isManager ? 0.35 : 0.15);
       comp.annualRevenue = revenueUSD;
       comp.baselineAnnualRevenue = revenueUSD;
       comp.revenueHistory = [revenueUSD];

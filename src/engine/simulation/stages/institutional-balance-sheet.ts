@@ -137,7 +137,14 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       if (reg) weeklyIncomeUSD += (billUSD * computeSovereignBookAnnualYield(billByTenor, reg.zeroRates)) / 52;
     }
     if (weeklyIncomeUSD <= 0) return entity;
-    return { ...entity, cashUSD: (entity.cashUSD ?? 0) + weeklyIncomeUSD };
+    // Recorded as well as credited: the entity's income statement and its cash are the same
+    // event, and stage 08 reports it on the listed shell rather than inventing a portfolio yield
+    // of its own (HH1b — one institution, not two).
+    return {
+      ...entity,
+      cashUSD: (entity.cashUSD ?? 0) + weeklyIncomeUSD,
+      lastWeeklyInvestmentIncomeUSD: weeklyIncomeUSD,
+    };
   });
 }
 

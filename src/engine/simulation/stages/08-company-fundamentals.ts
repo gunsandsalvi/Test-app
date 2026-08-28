@@ -24,6 +24,7 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
+import { PREMIUM_TO_SURPLUS_RATIO, INSURER_EXPENSE_RATIO } from '../../../domain/institutions';
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, payHoldersCash, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
@@ -233,24 +234,37 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEps = perShare(newNetIncome);
       comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
     } else if (comp.financialStatementProfile === 'INSURER') {
-      // Float scales with this insurer's own premium base, not the region's aggregate
-      // institutional-sector balance sheet — instEnt.totalAssetsUSD is a macro-level slice
-      // (potentially trillions) meant for portfolio-composition bookkeeping, not a per-firm
-      // P&L input; using it here inflated investment income, and hence EBITDA, by orders of
-      // magnitude relative to this company's actual revenue.
-      const floatAssets = comp.annualRevenue * 5;
-      comp.technicalReservesUSD = floatAssets * 0.85;
+      // HH1b — ONE INSURER, NOT TWO. This branch used to refuse the entity behind it, on the
+      // reasoning that `instEnt.totalAssetsUSD` was "a macro-level slice meant for
+      // portfolio-composition bookkeeping, not a per-firm P&L input". That was true when it was
+      // written and stopped being true at S11, which made `totalAssetsUSD` a real per-firm book
+      // recomputed weekly from real cash and real holdings — the ASSET_MANAGER branch below reads
+      // it and says so. The refusal outlived its reason, and what it produced was a second insurer:
+      // a shell reporting 0.05B of revenue and 0.10B of market cap beside an entity holding 241.4B,
+      // with `technicalReservesUSD` printing 0.2B against a 221.9B beneficiary liability — the
+      // same obligations represented twice, three orders of magnitude apart (§7.49).
+      const instEnt = entityById.get(comp.id);
+      const floatAssets = instEnt ? instEnt.totalAssetsUSD : comp.annualRevenue * 5;
+      // The reserves ARE the beneficiary liability HH1a records on the entity. One number.
+      comp.technicalReservesUSD = instEnt?.beneficiaryLiabilityUSD ?? floatAssets * 0.85;
 
-      const premiumGrowth = reg.gdpGrowth / 52 + (random() - 0.5) * 0.02;
-      const prevPremiums = (comp.insurancePremiumsWrittenUSD || comp.annualRevenue) / 52;
-      const weeklyPremiums = Math.max(10, prevPremiums * (1 + premiumGrowth));
+      // What an insurer writes is limited by its CAPITAL, not by what it wrote last week: the
+      // premium-to-surplus ratio is the real constraint every regulator supervises, and reading
+      // it off real equity replaces a self-referential premium that grew from its own prior value
+      // at GDP plus a random draw, anchored to nothing.
+      const surplusUSD = instEnt ? Math.max(0, instEnt.equityCapitalUSD) : comp.annualRevenue;
+      const weeklyPremiums = Math.max(10, (surplusUSD * PREMIUM_TO_SURPLUS_RATIO) / 52);
       comp.insurancePremiumsWrittenUSD = weeklyPremiums * 52;
 
+      // Claims stay stochastic because claims ARE stochastic — that is the business.
       const lossRatio = 0.70 + (random() - 0.5) * 0.20;
       comp.insuranceClaimsPaidUSD = weeklyPremiums * lossRatio * 52;
 
-      const underwritingIncome = weeklyPremiums * (1 - lossRatio - 0.20);
-      const investmentIncome = floatAssets * 0.04 / 52;
+      const underwritingIncome = weeklyPremiums * (1 - lossRatio - INSURER_EXPENSE_RATIO);
+      // The income its OWN portfolio actually earned this week, recorded by
+      // `accrueInstitutionalIncome` when it credited the cash — not a second yield assumption
+      // applied to a different asset base.
+      const investmentIncome = instEnt?.lastWeeklyInvestmentIncomeUSD ?? floatAssets * 0.04 / 52;
 
       newRevenue = comp.insurancePremiumsWrittenUSD;
       comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
