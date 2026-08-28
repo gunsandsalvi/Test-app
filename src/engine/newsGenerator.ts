@@ -13,7 +13,8 @@ export interface EarningsReportEvent {
 }
 
 /**
- * G8 (absorbed into S10): `sectorSentimentShocks` and `NewsItem.sentimentDelta` are deleted.
+ * The sentiment plumbing is gone entirely: `sectorSentimentShocks` and `NewsItem.sentimentDelta`
+ * went in S10, and `Company.sentiment` itself in L5 — three writers, no readers.
  * WS4 retired sentiment as a price input, which left both as dead plumbing — every producer
  * filled them in and nothing consumed them. News now reaches prices only through the real
  * flows it reports: an earnings surprise through the earnings themselves, a downgrade through

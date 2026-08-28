@@ -1100,7 +1100,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const opportunisticCooldownOver = nextWeek - (comp.lastOpportunisticOfferingWeek ?? -999) >= 13
       // Launch in the issuer's own post-earnings window — real deals price off fresh numbers,
       // and the stagger stops the whole cohort announcing in one synchronized quarterly burst.
-      && (nextWeek % 13) === ((comp.earningsWeekModulo + 1) % 13);
+      // An issuer with no reporting calendar (a private firm) has no post-earnings window to
+      // launch into, so its cooldown is the only gate.
+      && (comp.earningsWeekModulo === undefined
+        || (nextWeek % 13) === ((comp.earningsWeekModulo + 1) % 13));
     let newLastOpportunisticOfferingWeek = comp.lastOpportunisticOfferingWeek;
     if (financing.reason === 'ISSUE_CHEAP_DEBT' && financing.netDebtChangeUSD > 1000 && !pendingOfferingIssuerIds.has(comp.id) && opportunisticCooldownOver) {
       // WS8: the CFO ANNOUNCES a deal instead of conjuring a tranche at the current stat. Real
@@ -1166,10 +1169,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
 
     // Asynchronous Quarterly Earnings cycle
-    const isReportingThisWeek = !isDefaulted && comp.earningsWeekModulo === currentWeekMod13;
+    // Reporting is something a LISTED company does. Gating on the modulo alone kept a company
+    // that had been taken private reporting quarterly to a market it had left.
+    const isReportingThisWeek = !isDefaulted && isPubliclyListed(comp)
+      && comp.earningsWeekModulo !== undefined && comp.earningsWeekModulo === currentWeekMod13;
     let lastEarningsSurprisePct = comp.lastEarningsSurprisePct;
     let lastManagementCommentary = comp.lastManagementCommentary;
-    let sentimentDelta = 0;
 
     let updatedConsensus = comp.dealerConsensus;
 
@@ -1189,15 +1194,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (lastEarningsSurprisePct > 0.05) {
         guidanceSnippet = 'Management raises FY CapEx and operating margin guidance on strong forward demand.';
         lastManagementCommentary = `CEO affirmed record operational throughput and upgraded full-year EPS guidance (+${(lastEarningsSurprisePct * 100).toFixed(1)}% surprise).`;
-        sentimentDelta = Math.min(0.35, lastEarningsSurprisePct * 2.0);
       } else if (lastEarningsSurprisePct < -0.05) {
         guidanceSnippet = 'Management moderates full-year revenue outlook and tightens working capital due to input cost pressures.';
         lastManagementCommentary = `Management cited sector supply headwinds and moderated CapEx plans (${(lastEarningsSurprisePct * 100).toFixed(1)}% miss).`;
-        sentimentDelta = Math.max(-0.40, lastEarningsSurprisePct * 2.5);
       } else {
         guidanceSnippet = 'Management reaffirms FY baseline guidance with stable unit economics and operating backlog.';
         lastManagementCommentary = `In-line quarterly results with steady gross margins and stable backlog demand.`;
-        sentimentDelta = (random() - 0.5) * 0.05;
       }
 
       ctx.earningsReportedThisTurn.push({
@@ -1239,9 +1241,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // WS4: the share price is CLEARED, in 07e-equity-clearing.ts, before this stage runs — read
     // it, never recompute it, exactly as this stage reads the cleared OAS. The old line moved
     // price by a holder-class rebalancing flow plus `comp.sentiment x 0.35`: a free parameter
-    // that existed only because nothing real was setting the price. Sentiment survives as a
-    // narrative/news signal; it no longer moves a market.
-    const newSentiment = (comp.sentiment * 0.85 + sentimentDelta);
+    // that existed only because nothing real was setting the price.
+    //
+    // `sentiment` itself is now GONE. WS4 said it "survives as a narrative signal", but nothing
+    // ever read it again: three sites wrote it and no site consumed it, which is a field being
+    // maintained rather than used. An earnings surprise already moves the price through the
+    // earnings it reports, and a downgrade through the cleared spread — the narrative is an
+    // output of real mechanisms, not an input beside them.
     let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number(comp.stockPrice.toFixed(2)));
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
     // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
@@ -1478,7 +1484,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       oasSpreadBps: newOasBps,
       cdsSpreadBps: newCdsSpreadBps,
       seniorBondYield: newSeniorBondYield,
-      sentiment: newSentiment,
       reportedThisWeek: isReportingThisWeek,
       lastEarningsReportWeek: isReportingThisWeek ? nextWeek : comp.lastEarningsReportWeek,
       dealerConsensus: updatedConsensus,

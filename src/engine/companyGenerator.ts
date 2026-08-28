@@ -660,7 +660,6 @@ export function generateInitialCompanies(
         seniorBondYield: 0.05 + oasSpreadBps / 10000,
         oasSpreadBps,
         cdsSpreadBps,
-        sentiment: 0.0,
         inputSupplyConstraintFactor: 1.0,
         outputInventoryBySubUnit: {},
         inputInventoryBySubUnit: {},
@@ -962,19 +961,12 @@ export function generatePrivateCompanies(
       productLines: [],
       leverage: debtBase / Math.max(1, ebitda),
       interestCoverage: coverage,
-      earningsWeekModulo: idx % 13,
-      lastEarningsReportWeek: 0,
-      reportedThisWeek: false,
+      // No quarterly reporting apparatus: a private firm does not report, is not covered, and
+      // issues no guidance. The architecture said this from the start and the generator handed it
+      // over anyway. An absent `earningsWeekModulo` is what turns stage 08's reporting path off.
       historicalFundamentals: [],
-      dealerConsensus: {
-        alpha: { eps: 0, revenue: revBase }, beta: { eps: 0, revenue: revBase },
-        gamma: { eps: 0, revenue: revBase }, consensusEps: 0, consensusRevenue: revBase,
-      },
-      lastEarningsSurprisePct: 0,
-      lastManagementCommentary: 'Privately held; no public disclosures.',
       leveragedLoan: undefined, // 07d opens a real quote when its floating debt enters the market (HC2)
       institutionalRole: null,
-      sentiment: 0,
       inputSupplyConstraintFactor: 1.0,
       outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
       inventoryCarryingCostRate: 0.02,

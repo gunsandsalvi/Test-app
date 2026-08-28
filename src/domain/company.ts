@@ -262,12 +262,20 @@ export interface Company {
   occupationMixDrift: Partial<Record<string, number>>;
 
   // Quarterly Earnings
-  earningsWeekModulo: number;
-  lastEarningsReportWeek: number;
-  reportedThisWeek: boolean;
-  dealerConsensus: ConsensusForecast;
-  lastEarningsSurprisePct: number;
-  lastManagementCommentary: string;
+  /**
+   * The quarterly reporting apparatus — OPTIONAL, because it belongs to a listed company and a
+   * private one has none of it. Private firms do not report quarterly, are not covered by dealers
+   * and issue no guidance; §5-HC said so in the architecture and the generator handed them the
+   * whole set anyway, which is §7.17's failure mode exactly: a field attached to everything that
+   * applies to a subset, frozen at its seed and reading as live downstream. `earningsWeekModulo`
+   * being absent is also what switches the reporting path off, so the gate is the data.
+   */
+  earningsWeekModulo?: number;
+  lastEarningsReportWeek?: number;
+  reportedThisWeek?: boolean;
+  dealerConsensus?: ConsensusForecast;
+  lastEarningsSurprisePct?: number;
+  lastManagementCommentary?: string;
 
   /**
    * S5: last week's cash walk as an explicit ledger — every real dollar in or out of `cash`,
@@ -389,8 +397,7 @@ export interface Company {
   // See 07b-corporate-bond-clearing.ts's attractiveness scoring.
   oasSpreadBpsHistory?: number[];
 
-  // Sentiment & Production
-  sentiment: number;
+  // Production
   inputSupplyConstraintFactor: number;
   // Output (finished-goods) inventory, keyed by sub-unit — a company producing multiple
   // product lines (e.g. semiconductors + consumer_devices + enterprise_software at once) holds
