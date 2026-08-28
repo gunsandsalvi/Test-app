@@ -37,6 +37,9 @@ export interface GameState {
    *  doubles the same tonne is worth twice as much rather than weighing half as much. This is
    *  what freight is charged on. */
   unitMassTonnes: Record<string, number>;
+  /** XB3a-4 — consignments bought and still on their way. A buyer's capital is in them and its
+   *  production cannot use them yet, which is the real cost of a long lead time. */
+  goodsInTransit: import('../engine/simulation/stages/goods-arrival').InTransitShipment[];
   /** XB3a-2 — last cleared freight per tonne by directed lane key ("USA>EUR"), each in that
    *  lane's OWN money (its origin's), which is where the carrier's fuel and crew are paid. What a
    *  buyer forms its next sourcing intent against, converting into its own money to compare. */

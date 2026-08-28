@@ -32,6 +32,7 @@ import { runBillAccretionStage } from './stages/bill-accretion';
 import { runFxHedgingStage } from './stages/fx-hedging';
 import { runFxClearingStage, recordForeignHoldingsSnapshot } from './stages/fx-clearing';
 import { runSourcingIntentStage } from './stages/sourcing-intent';
+import { runGoodsArrivalStage } from './stages/goods-arrival';
 import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
@@ -100,6 +101,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // XB3a: the week's first two passes. A buyer forms its sourcing plan against observed prices
   // and books the freight it implies; the rate clears against real carrier capacity; the goods
   // auction then prices every origin at the landed cost that rate produces. No lag, no iteration.
+  // XB3a-4: what was ordered weeks ago lands before this week's ordering is decided.
+  run('goods-arrival', () => runGoodsArrivalStage(state, ctx));
   run('sourcing-intent', () => runSourcingIntentStage(state, ctx));
   run('freight-clearing', () => runFreightClearingStage(state, ctx));
   run('05-unit-bidding', () => runUnitBiddingStage(state, ctx));

@@ -122,6 +122,10 @@ export interface WeeklyStepContext {
    *  shipments. Read by stage 08 to build the carriers' P&L. */
   carrierFreightRevenue: Record<string, number>;
   carrierTonneNm: Record<string, number>;
+  /** XB3a-4 — units that completed transit this week. */
+  goodsArrivedUnits: number;
+  /** XB3a-4 — consignments dispatched this week, appended to what is already in transit. */
+  shipmentsDispatched: import('./goods-arrival').InTransitShipment[];
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
   freightClearing?: import('./freight-clearing').FreightClearing;
 
@@ -209,6 +213,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     laneBookings: [],
     carrierFreightRevenue: {},
     carrierTonneNm: {},
+    goodsArrivedUnits: 0,
+    shipmentsDispatched: [],
 
     weeklyInterestIncomeUSD: 0,
     weeklyFinancingCostUSD: 0,

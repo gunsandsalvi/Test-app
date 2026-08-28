@@ -21,7 +21,10 @@ import { unitMassTonnes } from '../../domain/goods-physical';
 import { generateCarriers, seedFreightDemand, specMarginalRatesByLane } from '../bootstrap/carriers';
 import { runFreightClearing } from './stages/freight-clearing';
 import { getFxToUsd } from './stages/06-fx-and-trade';
-import { localToUsd } from '../../domain/currency';
+import { convertLocal, localToUsd } from '../../domain/currency';
+import { laneTransitWeeks } from '../../domain/carrier';
+import { laneDistanceNm } from '../../domain/geography';
+import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { refreshRegionalHoldingsView } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
@@ -755,6 +758,37 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     return { ...specMarginalRatesByLane(regions, seededUnitMassTonnes), ...clearing.ratePerTonneLaneMoneyByLane };
   })();
 
+  // The consignments already at sea on the day the simulation opens.
+  const seededPipeline: InTransitShipment[] = [];
+  {
+    const { bookings } = seedFreightDemand(regions, seededUnitMassTonnes, seedFxToUsd);
+    const buyersByRegion = {} as Record<RegionId, typeof companies>;
+    (Object.keys(regions) as RegionId[]).forEach(r => {
+      buyersByRegion[r] = companies.filter(c => c.region === r && (c.productLines || []).length > 0);
+    });
+    bookings.forEach(b => {
+      const transit = Math.round(laneTransitWeeks(b.from, b.to, laneDistanceNm(b.from, b.to)));
+      if (transit <= 0) return;
+      const pool = buyersByRegion[b.to];
+      if (!pool || pool.length === 0) return;
+      const exWorks = Number((regions[b.from].categoryDemand[b.subUnitId] as any)?.unitPriceUSD) || 0;
+      const perUnit = convertLocal(exWorks, b.from, b.to, seedFxToUsd);
+      // One week's worth arriving in each of the next `transit` weeks: what a lane in steady
+      // state is carrying.
+      for (let wk = 1; wk <= transit; wk++) {
+        const buyer = pool[(wk + b.subUnitId.length) % pool.length];
+        seededPipeline.push({
+          buyerTicker: buyer.ticker,
+          sellerKey: `${b.from}_SEED_SUPPLIER`,
+          subUnitId: b.subUnitId,
+          units: b.units / transit,
+          landedCostPerUnit: perUnit,
+          arrivalWeek: wk,
+        });
+      }
+    });
+  }
+
   const commodities = getInitialCommodities();
   const allGeneratedCompanies = companies;
   // Calibrate the working linkage from the FROZEN base shares (§6: the old in-place mutation
@@ -1015,6 +1049,13 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     primaryOfferings: [],
     unitMassTonnes: seededUnitMassTonnes,
     freightRatePerTonneLaneMoneyByLane: seededFreightRates,
+    // The pipeline opens FULL, because a running economy's is. Every lane that takes weeks to
+    // cross has weeks of cargo on it at any moment, and opening at zero means the first arrivals
+    // land a month in — measured, that starved importers of inputs, collapsed the trade the
+    // carriers live on, and defaulted the entire fleet by week twelve. A §7.4 cold start, not an
+    // economic result. Seeded from the engine's own opening sourcing decision, spread over the
+    // weeks each voyage actually takes.
+    goodsInTransit: seededPipeline,
     // Born EMPTY: the first weekly pass strikes every index's membership from the market that
     // actually exists, at base 100. Seeding a constituent list here would be a second, stated
     // version of a rule the engine already runs (§7.4's seed-shape rule).

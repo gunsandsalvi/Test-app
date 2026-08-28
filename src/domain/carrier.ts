@@ -173,3 +173,15 @@ export function parseLaneKey(key: string): { from: RegionId; to: RegionId } {
   const [from, to] = key.split('>') as [RegionId, RegionId];
   return { from, to };
 }
+
+/**
+ * How long a consignment is on the water (or the road) on a lane, in weeks — distance over the
+ * service speed of whatever technology serves it. This is the LEAD TIME a buyer waits, and it is
+ * the reason a cheaper distant supplier is not automatically the better one: everything ordered
+ * from it is capital tied up in transit, and everything it fails to deliver is production the
+ * buyer cannot run.
+ */
+export function laneTransitWeeks(from: RegionId, to: RegionId, distanceNm: number): number {
+  const spec = FREIGHT_ASSET_SPEC[freightModeForLane(from, to)];
+  return transitWeeks(distanceNm, spec.speedKnots);
+}

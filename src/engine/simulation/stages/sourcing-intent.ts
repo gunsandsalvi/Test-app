@@ -23,13 +23,28 @@ import { GameState, Region, RegionId } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { laneDistanceNm } from '../../../domain/geography';
 import { deliveryModeOf } from '../../../domain/goods-physical';
-import { laneKey } from '../../../domain/carrier';
+import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
 import { WeeklyStepContext } from './context';
 import { getFxToUsd } from './06-fx-and-trade';
 import { collectCarriers, marginalRatesForAllLanes } from './freight-clearing';
 import { convertLocal, FxToUsd } from '../../../domain/currency';
 
 export const SOURCING_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+
+/**
+ * What a week of goods sitting in a pipeline costs its owner: the COST OF CAPITAL, because that
+ * is what is tied up. The region's own policy rate is the model's real risk-free funding rate, so
+ * the buyer's carry is that rate over a week — no constant, and it moves with policy, which is
+ * one of the real channels by which tight money shortens supply chains.
+ *
+ * It is NOT the inventory carrying rate the goods market charges on output stock: that is 2% a
+ * WEEK, a physical decay-and-storage figure, and using it here charged a five-week voyage nearly
+ * ten percent of cargo value. That killed cross-border trade outright, took the carriers'
+ * revenue with it, and defaulted the entire fleet by week twelve.
+ */
+export function pipelineCarryCostRatePerWeek(annualPolicyRate: number): number {
+  return Math.max(0, annualPolicyRate) / 52;
+}
 
 /** One region's intended purchase of one good from one origin, and the freight it needs. */
 export interface LaneBooking {
@@ -93,12 +108,15 @@ export function computeSourcingIntent(args: {
   /** What one tonne costs a carrier to move on a lane — the floor the rate falls to when the
    *  market is slack, used as the expectation before any rate has ever cleared. */
   marginalRatePerTonneLaneMoneyByLane: Record<string, number>;
+  /** XB3a-4 — the buyer's own weekly cost of capital, per region: what a week of goods sitting in
+   *  a pipeline costs whoever has paid for it. */
+  carryCostRatePerWeekByRegion: Record<string, number>;
   /** XB3b — USD per unit of each region's money, so a foreign quote can be compared with a
    *  domestic one. Without it the lowest-price-level region undercuts every other on every good
    *  and supplies the whole world, which is a missing conversion rather than competitiveness. */
   fxToUsd: FxToUsd;
 }): SourcingIntent {
-  const { regions, subUnitIds, unitMassTonnes, freightRatePerTonneLaneMoneyByLane, marginalRatePerTonneLaneMoneyByLane, fxToUsd } = args;
+  const { regions, subUnitIds, unitMassTonnes, freightRatePerTonneLaneMoneyByLane, marginalRatePerTonneLaneMoneyByLane, fxToUsd, carryCostRatePerWeekByRegion } = args;
   const bookings: LaneBooking[] = [];
   const splitByRegionSubUnit = new Map<string, SourcingSplit>();
 
@@ -141,9 +159,16 @@ export function computeSourcingIntent(args: {
         const exWorksInBuyerMoney = convertLocal(exWorks, origin, buyer, fxToUsd);
         const freightOriginMoney = freightPerUnitUSD(subUnitId, origin, buyer, massTonnes, expectedRate(origin, buyer));
         const freightInBuyerMoney = convertLocal(freightOriginMoney, origin, buyer, fxToUsd);
+        // XB3a-4: a distant source is dearer than its price and freight, because everything
+        // ordered from it sits in a pipeline the buyer has paid for and cannot yet use. Five
+        // weeks at sea is five weeks of carrying cost on every unit, and that is what makes a
+        // nearer, dearer supplier worth having — the real reason procurement dual-sources rather
+        // than simply buying the cheapest quote in the world.
+        const transit = laneTransitWeeks(origin, buyer, laneDistanceNm(origin, buyer));
+        const pipelineCost = exWorksInBuyerMoney * (carryCostRatePerWeekByRegion[buyer] ?? 0) * transit;
         pairs.push({
           buyer, origin, exWorks, exWorksInBuyerMoney,
-          landed: exWorksInBuyerMoney + freightInBuyerMoney,
+          landed: exWorksInBuyerMoney + freightInBuyerMoney + pipelineCost,
         });
       });
     });
@@ -223,6 +248,15 @@ export function laneDistance(from: RegionId, to: RegionId): number {
  * implies. Runs before the freight market, which clears against these bookings, and before the
  * goods auction, which sources at the rate that clears.
  */
+/** Each region's weekly cost of capital, from its own real policy rate. */
+export function carryRatesByRegion(regions: Record<RegionId, Region>): Record<string, number> {
+  const rates: Record<string, number> = {};
+  SOURCING_REGION_IDS.forEach(r => {
+    rates[r] = pipelineCarryCostRatePerWeek(regions[r]?.policyRate ?? 0.045);
+  });
+  return rates;
+}
+
 export function runSourcingIntentStage(state: GameState, ctx: WeeklyStepContext): void {
   const fxToUsd = (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId);
   const marginal = marginalRatesForAllLanes(collectCarriers(state), ctx.updatedRegions, state.unitMassTonnes, fxToUsd);
@@ -233,6 +267,7 @@ export function runSourcingIntentStage(state: GameState, ctx: WeeklyStepContext)
     freightRatePerTonneLaneMoneyByLane: state.freightRatePerTonneLaneMoneyByLane ?? {},
     marginalRatePerTonneLaneMoneyByLane: marginal,
     fxToUsd,
+    carryCostRatePerWeekByRegion: carryRatesByRegion(ctx.updatedRegions),
   });
   ctx.sourcingSplitByRegionSubUnit = intent.splitByRegionSubUnit;
   ctx.laneBookings = intent.bookings;

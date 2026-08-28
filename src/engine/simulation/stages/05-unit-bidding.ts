@@ -29,7 +29,7 @@ import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
 import { convertLocal, localToUsd, FxToUsd } from '../../../domain/currency';
-import { laneKey } from '../../../domain/carrier';
+import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
 import { laneDistanceNm } from '../../../domain/geography';
 import { SourcingSplit } from './sourcing-intent';
 import { getFxToUsd } from './06-fx-and-trade';
@@ -931,9 +931,22 @@ function runSubUnitMarkets(
       const perUnit = exWorksBuyerMoney + freightPerUnitBuyerMoney(origin, plan.regionId);
       units += buy.quantity;
       landedCost += buy.quantity * perUnit;
+      // XB3a-4: what was bought is not yet what has arrived. A consignment is in transit for as
+      // long as the lane physically takes, and only lands on the buyer's input inventory when it
+      // gets there. Domestic hauls that complete inside the week land immediately, which is what
+      // a same-week road delivery is.
+      const transit = laneTransitWeeks(origin, plan.regionId, laneDistanceNm(origin, plan.regionId));
+      const arrivalWeek = nextWeek + Math.round(transit);
       (book.lotsByBuyer.get(plan.key!) ?? []).forEach(l => {
         if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
-        addInputInventory(companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
+        if (arrivalWeek <= nextWeek) {
+          addInputInventory(companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
+        } else {
+          ctx.shipmentsDispatched.push({
+            buyerTicker: comp.ticker, sellerKey: l.sellerKey, subUnitId,
+            units: l.units, landedCostPerUnit: perUnit, arrivalWeek,
+          });
+        }
       });
     });
     if (units <= 0.0001) return;
@@ -1085,6 +1098,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   ctx.shippedTonnesByLane = {};
   ctx.carrierFreightRevenue = {};
   ctx.carrierTonneNm = {};
+  ctx.shipmentsDispatched = [];
 
   const sourcing: SourcingContext = {
     splitByRegionSubUnit: ctx.sourcingSplitByRegionSubUnit,
@@ -1143,6 +1157,9 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       });
     });
   }
+
+  // Everything dispatched this week joins what is already on the water.
+  state.goodsInTransit = [...(state.goodsInTransit ?? []), ...ctx.shipmentsDispatched];
 
   const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);
   const baselineVol = 0.16;

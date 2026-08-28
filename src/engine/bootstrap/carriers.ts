@@ -24,7 +24,7 @@ import {
   CarrierFleet, FreightAsset, FREIGHT_ASSET_SPEC, freightModeForLane, laneKey, parseLaneKey,
   weeklyCapacityTonnes,
 } from '../../domain/carrier';
-import { computeSourcingIntent, LaneBooking, SOURCING_REGION_IDS } from '../simulation/stages/sourcing-intent';
+import { carryRatesByRegion, computeSourcingIntent, LaneBooking, SOURCING_REGION_IDS } from '../simulation/stages/sourcing-intent';
 import { FxToUsd } from '../../domain/currency';
 import { crewAnnualWageUSD, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
 import { RATING_OAS_SPREADS } from '../pricing';
@@ -100,6 +100,7 @@ export function seedFreightDemand(
     freightRatePerTonneLaneMoneyByLane: {},
     marginalRatePerTonneLaneMoneyByLane: marginal,
     fxToUsd,
+    carryCostRatePerWeekByRegion: carryRatesByRegion(regions),
   });
   const tonnesByLane: Record<string, number> = {};
   bookings.forEach(b => {
