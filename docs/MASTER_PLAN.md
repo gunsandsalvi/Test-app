@@ -132,10 +132,11 @@ npm run build                      # build — safe at any time
 bash scripts/check-hygiene.sh      # no root-level scratch files
 npm run verify                     # hygiene + 60-week invariants harness (~1 min)
                                    # END OF PROJECT ONLY — see rule 12
-npm run profile                    # per-stage runtime. Baseline after the §7.78 optimization
-                                   # pass: 1,311 ms/week — stage 05 at 25.4% (331 ms), 07b 16.3%,
-                                   # 08 15.2%, 07d 12.3%, 07e 8.2%. Every earlier figure
-                                   # (604 ms, 1,755 ms, "stage 05 is 72.6%") is stale.
+npm run profile                    # per-stage runtime. Baseline after §7.79: ~1,000 ms/week
+                                   # (±30 run variance) — 05 at ~25%, 08 ~18%, 07b ~11%,
+                                   # 07d ~10%, 07e ~8%. Every earlier figure is stale. NOTE:
+                                   # §7.79's exact solve relabeled the world (gently — hashes
+                                   # identical through week 10, divergent by 25).
 npx tsx scripts/hh-battery.ts 120  # household close-out battery (~2 min)
 npx tsx scripts/pub-battery.ts 120 # public-sector close-out battery (~2 min)
 WEEKS=260 npm run verify           # ASK THE USER FIRST — long run, section close only
@@ -1178,6 +1179,12 @@ FRONTIER (names vs seconds/week), not a feeling.
   truncating books, skipping small names — those change the market, not the speed).
 - **Then push the count** through the front doors that exist: generator counts for public names,
   HC births for private ones. Measure the frontier and pick the operating point with the user.
+- **Worker-parallel clearing books** (moved here from the §7.79 optimization push, user-authorized):
+  07b/07c/07d/07e/07f draw no RNG, so they can clear in worker threads without touching the
+  stream — the engineering is the state boundary (the adapters read companies, entities and
+  region state; a naive per-week structured clone could eat the win). Reordering of result
+  merges must stay deterministic. Expected worth ~200–300 ms/week of the ~1,000 baseline;
+  combined with stage 05/08 restructures it is the only credible path under 300 ms/week.
 - **Report measured numbers** at every step: before/after per-stage timings, the frontier curve,
   and the harness green at each size.
 
@@ -2469,3 +2476,35 @@ that proved it, the lesson.
       pairs clear. And the harness's CB identity read only the sovereign book while XB5 added FX
       reserves to the engine's asset side — 231 of 273 close-out violations were this harness
       omission, not the engine.
+
+79. **Optimization passes 2–4: 1,793 → ~1,000 ms/week, and the solve became exact.**
+    - **Bit-exact passes (hash-identical):** function-level CPU profiling, not the stage table.
+      The engine's bisection read flat Float64Array columns reused across instruments; the
+      credit adapters' per-(entity × name) recomputation hoisted to one pass per company per
+      region-week; stage 05's per-lot conversions became per-pass tables (FX snapshot, 4×4
+      freight matrix, memoised sourcing shares); input lots copy-once-then-append instead of
+      whole-array rebuilds per lot; demand crosses to the engine by INDEX (dense array aligned
+      with the instruments) instead of ~120k string-keyed Map round-trips a week; stage 08
+      stopped photocopying every company's entire lot inventory weekly (aliased — nothing
+      mutates it in place). Each step verified against the 25-week full-state hash.
+    - **The solve is EXACT now.** Total demand is piecewise linear, so the clearing level is
+      computed by one segment walk instead of approached by 60 bisections. Property-tested on
+      20,000 random schedules against the bisection it replaced: zero disagreements beyond the
+      bisection's own resolution, worst relative difference 4.1e-13. **A world relabel of the
+      gentlest kind** (rule 10): the differences are almost always swallowed by the 4-decimal
+      print rounding — hashes identical through week 10 — but by week 25 one rounding flip has
+      compounded. Baselines are nominally relabeled from that commit.
+    - **Two profiler lessons.** tsx flattens every function to line 1, so V8 profiles cannot
+      attribute inside a stage — temporary section timers can, and did (stage 05's settlement
+      and book-building were the real costs, not the auction walk; stage 08's revenue branches,
+      not its object rebuild). And the profiler ATTRIBUTES INLINED CALLEES to their caller:
+      solveClearingStat's 105 ms/week of "self time" bought only ~25 when replaced, because most
+      of it belonged to the schedule walks around it.
+    - **The frontier, measured honestly against the sub-300 ms target:** ~1,000 is near the
+      bit-exact floor. What remains is structural — stage 05 (~250) and stage 08 (~180) are real
+      work in long loops, the credit books (~290) are the economics of every holder pricing
+      every name, and the GC (~110) shrinks only with allocation redesign. Sub-300 needs
+      worker-thread parallelism for the RNG-free clearing books plus stage restructures that
+      reorder floating-point accumulation — both world relabels, both SCALE's (§5-SCALE now
+      carries the item with this measurement). User authorized the full push; the parallel leg
+      is scoped there rather than rushed here.
