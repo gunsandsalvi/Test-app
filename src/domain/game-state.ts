@@ -41,6 +41,9 @@ export interface GameState {
    *  doubles the same tonne is worth twice as much rather than weighing half as much. This is
    *  what freight is charged on. */
   unitMassTonnes: Record<string, number>;
+  /** XB3a-2 — last cleared freight, USD per tonne, by directed lane key ("USA>EUR"). What a
+   *  buyer forms its next sourcing intent against. */
+  freightRateUsdPerTonneByLane: Record<string, number>;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;

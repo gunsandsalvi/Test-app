@@ -11,7 +11,7 @@ import { RegionId } from './geography';
 import { Industry } from './industry';
 import { ItemizedHolding, BankingSector } from './banking';
 
-export type FinancialStatementProfile = 'STANDARD_OPERATING' | 'INSURER' | 'ASSET_MANAGER' | 'BANK' | 'REIT';
+export type FinancialStatementProfile = 'STANDARD_OPERATING' | 'INSURER' | 'ASSET_MANAGER' | 'BANK' | 'REIT' | 'CARRIER';
 
 export type Sector = 'Tech' | 'Energy' | 'Financials' | 'Industrials' | 'Consumer' | 'Banks';
 
@@ -215,6 +215,10 @@ export interface LeveragedLoanInfo {
 export interface Company {
   concentrationRiskFlags?: string[];
   financialStatementProfile?: FinancialStatementProfile;
+  /** XB3a-2 — CARRIER only: the ships and trucks this firm owns, the lanes they are committed to,
+   *  and what they carried last week. Its revenue is freight earned in the per-lane market, not
+   *  units sold in the goods auction. See domain/carrier.ts. */
+  carrierFleet?: import('./carrier').CarrierFleet;
   segmentFinancials?: SegmentFinancial[];
   revenueVolatility?: number;
   technicalReservesUSD?: number;

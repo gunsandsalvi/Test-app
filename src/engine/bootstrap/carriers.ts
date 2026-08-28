@@ -1,0 +1,310 @@
+/**
+ * The logistics sector, which this economy did not have (XB3a-2).
+ *
+ * Goods teleported: a purchase settled the week it cleared, from any seller, over no distance, at
+ * no cost. So there was no freight bill on any buyer's books and no revenue on anybody's — an
+ * entire sector, several percent of real output, simply absent. Carriers are not carved out of an
+ * existing aggregate the way HC's private firms were (§7.33), because there was no aggregate
+ * carrying them: this adds a real sector that was missing, and the cost it puts on buyers is the
+ * mirror of the revenue it puts on carriers.
+ *
+ * **The fleet is seeded at what the seed economy actually has to move**, by running the sourcing
+ * intent once against the bootstrap prices and sizing capacity to the tonnage it books. That is
+ * §7.4's rule in its strict form — seed by calling the engine's own code — and it means the
+ * freight market opens clearing somewhere a week of this simulation would actually produce,
+ * rather than on a rate spike or collapse that is an artifact of a guessed fleet. It is a
+ * starting condition and not a target: from week 1 capacity is an outcome of real ordering and
+ * scrapping.
+ */
+
+import { Company, CreditRating, Region, RegionId } from '../../types';
+import { INDUSTRY_SUBUNITS } from '../../domain/industry';
+import { laneDistanceNm } from '../../domain/geography';
+import {
+  CarrierFleet, FreightAsset, FREIGHT_ASSET_SPEC, freightModeForLane, laneKey, parseLaneKey,
+  weeklyCapacityTonnes,
+} from '../../domain/carrier';
+import { computeSourcingIntent, LaneBooking, SOURCING_REGION_IDS } from '../simulation/stages/sourcing-intent';
+import { crewAnnualWageUSD, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
+import { RATING_OAS_SPREADS } from '../pricing';
+import { generateUniqueTicker, generateUniqueName } from './firms';
+
+/**
+ * How many carrier firms each region gets. Shipping is a concentrated industry everywhere — a
+ * handful of operators per country run most of the tonnage — and the number matters only because
+ * it decides how granular a failure is: one carrier going under should hurt a lane, not end it.
+ */
+const CARRIERS_PER_REGION = 3;
+
+/** What one tonne costs to move on a lane using the standard equipment for it, before any
+ *  carrier exists. The floor the intent is formed against on a lane that has never cleared. */
+export function specMarginalRateUsdPerTonne(
+  from: RegionId,
+  to: RegionId,
+  regions: Record<RegionId, Region>,
+  unitMassTonnes: Record<string, number>
+): number {
+  const distanceNm = laneDistanceNm(from, to);
+  if (!(distanceNm > 0)) return 0;
+  const mode = freightModeForLane(from, to);
+  const spec = FREIGHT_ASSET_SPEC[mode];
+  const fuelUsdPerTonne = fuelPriceUsdPerTonne(regions[from], unitMassTonnes);
+  const wage = crewAnnualWageUSD(regions[from], from);
+
+  const fuelPerTonneNm = (spec.fuelTonnesPerNm * fuelUsdPerTonne) / spec.capacityTonnes;
+  const roundTripWeeks = (2 * distanceNm) / (spec.speedKnots * 24 * 7);
+  const weeklyTonnes = roundTripWeeks > 0 ? spec.capacityTonnes / roundTripWeeks : spec.capacityTonnes;
+  const weeklyTonneNm = weeklyTonnes * distanceNm;
+  const crewPerTonneNm = weeklyTonneNm > 0 ? ((spec.crewCount * wage) / 52) / weeklyTonneNm : 0;
+  return (fuelPerTonneNm + crewPerTonneNm) * distanceNm;
+}
+
+export function specMarginalRatesByLane(
+  regions: Record<RegionId, Region>,
+  unitMassTonnes: Record<string, number>
+): Record<string, number> {
+  const rates: Record<string, number> = {};
+  SOURCING_REGION_IDS.forEach(from => {
+    SOURCING_REGION_IDS.forEach(to => {
+      rates[laneKey(from, to)] = specMarginalRateUsdPerTonne(from, to, regions, unitMassTonnes);
+    });
+  });
+  return rates;
+}
+
+/**
+ * The tonnage the seed economy needs carried on each lane, from the same intent pass the weekly
+ * step runs. Freight is priced at what it costs a carrier to sail, because no rate has cleared
+ * yet and that is the honest expectation before one has.
+ */
+export function seedFreightDemand(
+  regions: Record<RegionId, Region>,
+  unitMassTonnes: Record<string, number>
+): { tonnesByLane: Record<string, number>; bookings: LaneBooking[] } {
+  const marginal = specMarginalRatesByLane(regions, unitMassTonnes);
+  const { bookings } = computeSourcingIntent({
+    regions,
+    subUnitIds: Object.values(INDUSTRY_SUBUNITS).flat().map(su => su.unitId),
+    unitMassTonnes,
+    freightRateUsdPerTonneByLane: {},
+    marginalRateUsdPerTonneByLane: marginal,
+  });
+  const tonnesByLane: Record<string, number> = {};
+  bookings.forEach(b => {
+    const key = laneKey(b.from, b.to);
+    tonnesByLane[key] = (tonnesByLane[key] ?? 0) + b.tonnes;
+  });
+  return { tonnesByLane, bookings };
+}
+
+/** The equipment each lane needs to carry that tonnage, as whole hulls. */
+function buildFleetForLanes(tonnesByLane: Record<string, number>, week: number): FreightAsset[] {
+  const assets: FreightAsset[] = [];
+  let serial = 0;
+  Object.keys(tonnesByLane).forEach(key => {
+    const tonnes = tonnesByLane[key];
+    if (!(tonnes > 0)) return;
+    const { from, to } = parseLaneKey(key);
+    const distanceNm = laneDistanceNm(from, to);
+    const mode = freightModeForLane(from, to);
+    const spec = FREIGHT_ASSET_SPEC[mode];
+    const prototype: FreightAsset = {
+      id: 'proto', mode, capacityTonnes: spec.capacityTonnes, speedKnots: spec.speedKnots,
+      fuelTonnesPerNm: spec.fuelTonnesPerNm, crewCount: spec.crewCount,
+      laneFrom: from, laneTo: to, builtWeek: week,
+    };
+    const perAsset = weeklyCapacityTonnes(prototype, distanceNm);
+    if (!(perAsset > 0)) return;
+    // Whole hulls, rounded UP: you cannot charter two thirds of a ship, and the rounding is why
+    // a thin lane runs structurally slack while a dense one runs tight.
+    const count = Math.ceil(tonnes / perAsset);
+    for (let i = 0; i < count; i++) {
+      assets.push({ ...prototype, id: `${key}_${serial++}` });
+    }
+  });
+  return assets;
+}
+
+/**
+ * The carriers, with the fleet split among them.
+ *
+ * Domestic haulage is served by firms domiciled in that region — there is no foreign trucking
+ * fleet on another country's roads. Ocean lanes are served by everyone, which is what shipping
+ * actually looks like.
+ */
+export function generateCarriers(
+  regions: Record<RegionId, Region>,
+  unitMassTonnes: Record<string, number>,
+  existingTickers: Set<string>,
+  existingNames: Set<string>
+): Company[] {
+  const { tonnesByLane, bookings } = seedFreightDemand(regions, unitMassTonnes);
+  const allAssets = buildFleetForLanes(tonnesByLane, 0);
+
+  const carriers: { region: RegionId; assets: FreightAsset[] }[] = [];
+  SOURCING_REGION_IDS.forEach(region => {
+    for (let i = 0; i < CARRIERS_PER_REGION; i++) carriers.push({ region, assets: [] });
+  });
+
+  // Deal the hulls out. A domestic asset can only go to a carrier of that region; an ocean asset
+  // to anyone, round-robin so no operator is handed a monopoly on a route by construction.
+  let oceanCursor = 0;
+  const domesticCursor: Record<string, number> = {};
+  allAssets.forEach(asset => {
+    if (asset.laneFrom === asset.laneTo) {
+      const pool = carriers.filter(c => c.region === asset.laneFrom);
+      if (pool.length === 0) return;
+      const idx = (domesticCursor[asset.laneFrom] ?? 0) % pool.length;
+      domesticCursor[asset.laneFrom] = idx + 1;
+      pool[idx].assets.push(asset);
+    } else {
+      carriers[oceanCursor % carriers.length].assets.push(asset);
+      oceanCursor++;
+    }
+  });
+
+  const staffed = carriers.filter(c => c.assets.length > 0);
+
+  // What the fleet actually EARNS has to come from the market, not from an assumption. Priced at
+  // marginal cost a carrier books exactly zero EBITDA by construction — it would be seeded
+  // insolvent, and every one of them would default in the first weeks for a reason that is pure
+  // arithmetic. So the seed runs the real freight auction once against the same bookings the
+  // fleet was sized from, and the carriers' books are built on the rate that clears (§7.4).
+  const provisional = staffed.map((c, i) => ({
+    ticker: `SEED_CARRIER_${i}`,
+    region: c.region,
+    carrierFleet: { assets: c.assets, fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueUSD: 0 },
+  })) as unknown as Company[];
+  const clearing = runFreightClearing({ carriers: provisional, regions, unitMassTonnes, bookings });
+
+  return staffed.map((c, idx) => buildCarrierCompany(
+    c.region, c.assets, idx, regions, unitMassTonnes,
+    clearing.carrierRevenueUSD.get(`SEED_CARRIER_${idx}`) ?? 0,
+    existingTickers, existingNames
+  ));
+}
+
+/**
+ * One carrier's books, derived from the fleet it owns rather than asserted.
+ *
+ * Revenue is what its capacity earns at the rate a carrier will accept — its own marginal cost —
+ * which is the conservative end of what the market will actually clear at, so a carrier is never
+ * seeded on an optimistic rate it has not yet won. Costs are the real fuel and crew that revenue
+ * required. PP&E is what the hulls actually cost. Debt follows from the cash flow, at the same
+ * coverage-and-leverage logic every other firm in this model is rated on: shipping is a
+ * capital-intensive, cyclically-levered business, and here that is an arithmetic consequence of
+ * owning thirty-five-million-dollar assets that earn by the week.
+ */
+function buildCarrierCompany(
+  region: RegionId,
+  assets: FreightAsset[],
+  idx: number,
+  regions: Record<RegionId, Region>,
+  unitMassTonnes: Record<string, number>,
+  clearedWeeklyRevenueUSD: number,
+  existingTickers: Set<string>,
+  existingNames: Set<string>
+): Company {
+  const ticker = generateUniqueTicker(existingTickers);
+  const name = generateUniqueName(`${region} Logistics`, 'Industrials', existingNames);
+
+  const fuelUsdPerTonne = fuelPriceUsdPerTonne(regions[region], unitMassTonnes);
+  const wage = crewAnnualWageUSD(regions[region], region);
+
+  const annualRevenue = clearedWeeklyRevenueUSD * 52;
+  let annualFuelCost = 0;
+  let grossPPEUSD = 0;
+  let crewCount = 0;
+  assets.forEach(asset => {
+    const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
+    const weeklyTonnes = weeklyCapacityTonnes(asset, distanceNm);
+    const spec = FREIGHT_ASSET_SPEC[asset.mode];
+    grossPPEUSD += spec.capitalCostUSD;
+    crewCount += asset.crewCount;
+    // Voyages a week, and what each burns.
+    const voyagesPerWeek = asset.capacityTonnes > 0 ? weeklyTonnes / asset.capacityTonnes : 0;
+    const weeklyFuelTonnes = voyagesPerWeek * asset.fuelTonnesPerNm * distanceNm;
+    annualFuelCost += weeklyFuelTonnes * fuelUsdPerTonne * 52;
+  });
+  const annualCrewCost = crewCount * wage;
+  const employeeCount = Math.max(1, crewCount);
+
+  const ebitda = annualRevenue - annualFuelCost - annualCrewCost;
+  const usefulLife = assets.length > 0 ? FREIGHT_ASSET_SPEC[assets[0].mode].usefulLifeYears : 20;
+  const depreciation = grossPPEUSD / usefulLife;
+  const ebit = ebitda - depreciation;
+
+  const policyRate = regions[region].policyRate ?? 0.045;
+  // A ship is collateral, so the fleet is financed the way real tonnage is: against the asset.
+  const debtBase = Math.round(grossPPEUSD * 0.55);
+  const annualInterest = debtBase * (policyRate + 0.02);
+  const coverage = annualInterest > 0 ? ebit / annualInterest : 99;
+  const leverage = ebitda > 0 ? debtBase / ebitda : 99;
+  const rating: CreditRating = coverage < 1.5 || leverage > 6 ? 'B'
+    : leverage > 4 ? 'BB' : leverage > 2.5 ? 'BBB' : 'A';
+
+  const fleet: CarrierFleet = {
+    assets,
+    fuelInventoryTonnes: 0,
+    lastWeekTonneNm: 0,
+    lastWeekFreightRevenueUSD: 0,
+  };
+
+  return {
+    id: `${region}_CAR_${ticker}`,
+    ticker,
+    name,
+    region,
+    sector: 'Industrials',
+    financialStatementProfile: 'CARRIER',
+    carrierFleet: fleet,
+    listingStatus: 'PRIVATE',
+    ownership: { founderPct: 1.0 },
+    baselineAnnualRevenue: annualRevenue, annualRevenue,
+    previousEmployeeCount: employeeCount, employeeCount, baselineEmployeeCount: employeeCount,
+    ebitda,
+    baselineEbitdaMargin: annualRevenue > 0 ? ebitda / annualRevenue : 0,
+    ebit,
+    netIncome: Math.round((ebit - annualInterest) * 0.78),
+    eps: 0,
+    sharesOutstanding: 0, stockPrice: 0, marketCap: 0,
+    historicalPrices: [], forwardPE: 0,
+    cash: Math.round(Math.max(0, ebitda) * 0.6),
+    totalDebt: debtBase,
+    currentLiabilities: Math.round(debtBase * 0.2),
+    debtTranches: [],
+    capex: Math.round(depreciation),
+    maintenanceCapex: Math.round(depreciation),
+    growthCapex: 0,
+    baselineGrowthCapexToRevenueRatio: 0,
+    maintenanceShortfallStreak: 0,
+    grossPPEUSD,
+    accumulatedDepreciationUSD: Math.round(grossPPEUSD * 0.35),
+    executionQuality: 1.0,
+    occupationMixDrift: {},
+    creditRating: rating, ratingHistory: [rating],
+    isDefaulted: false,
+    oasSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
+    cdsSpreadBps: RATING_OAS_SPREADS[rating].baseBps,
+    seniorBondYield: 0,
+    dividendYield: 0, baselineDividendYield: 0,
+    beta: 1.0,
+    recoveryRate: 0.40, baselineRecoveryRate: 0.40,
+    // A carrier sells freight, not units into the goods auction. Its purchases — fuel and new
+    // hulls — are real bids there; its output is not.
+    productLines: [],
+    leverage,
+    interestCoverage: coverage,
+    historicalFundamentals: [],
+    leveragedLoan: undefined,
+    institutionalRole: null,
+    inputSupplyConstraintFactor: 1.0,
+    outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
+    inventoryCarryingCostRate: 0.02,
+    recentFulfillmentEMA: 1.0,
+    treasuryHoldings: [],
+    demandShockLagBuffer: [],
+    revenueHistory: [annualRevenue],
+    _carrierIndex: idx,
+  } as unknown as Company;
+}

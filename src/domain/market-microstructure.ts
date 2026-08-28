@@ -103,6 +103,11 @@ export function createSeedCategoryDemandState(
     // the opening week that reads as an economic event.
     localUnitPriceUSD: unitPriceUSD,
     smoothedUnitPriceUSD: unitPriceUSD,
+    // XB3a-3: the week's real quantities, which the sourcing intent reads to decide where to buy
+    // and how much freight to book. Seeded at the bootstrap demand a week represents, so the
+    // opening week forms an intent against the same observables every later week does (§7.4).
+    totalUnitsDemandedThisWeek: unitPriceUSD > 0 ? (demandLevelUSD / 52) / unitPriceUSD : 0,
+    totalUnitsSuppliedThisWeek: unitPriceUSD > 0 ? (demandLevelUSD / 52) / unitPriceUSD : 0,
   } as any;
 }
 
