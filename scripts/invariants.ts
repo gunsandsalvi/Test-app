@@ -182,6 +182,20 @@ function checkCentralBankIdentity(state: GameState, week: number) {
         message: `${region} treasury account is negative (${(cb.treasuryAccountUSD / 1e9).toFixed(2)}B) — the government spent money it had not financed`,
       });
     }
+    // PUB2b: the book may only move by redemption and by fills against an order it actually
+    // placed. A week whose fill exceeds the order is the auction handing the central bank paper
+    // it never bid for — the forced-placement failure mode, in the other direction.
+    const orderedUSD = cb.lastOrderPlacedUSD ?? 0;
+    const filledUSD = cb.lastOpenMarketPurchasesUSD ?? 0;
+    if (filledUSD > 0 && orderedUSD > 0 && filledUSD > orderedUSD * 1.01 + 1e6) {
+      violations.push({
+        week,
+        message: `${region} central bank filled ${(filledUSD / 1e9).toFixed(2)}B against an order of ${(orderedUSD / 1e9).toFixed(2)}B`,
+      });
+    }
+    if (Object.values(cb.sovereignHoldingsByTenor || {}).some((v) => (Number(v) || 0) < -1)) {
+      violations.push({ week, message: `${region} central bank holds a negative position` });
+    }
   });
 }
 

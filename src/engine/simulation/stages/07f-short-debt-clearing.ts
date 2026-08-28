@@ -37,6 +37,7 @@ import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD } from '../../macro/banking';
+import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 
 const DEALER_SPREAD_BPS = 2; // the tightest market there is
 const MAX_WEEKLY_YIELD_MOVE_PCT = 0.25; // short paper reprices to policy fast; damping is looser here
@@ -82,7 +83,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
     const activeBuckets = SOV_BILL_BUCKETS.filter((b) => (outstandingByBucket.get(b.key) ?? 0) > 0);
     if (activeBuckets.length > 0) {
-      const tradableShare = reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare;
+      // PUB2b: the central bank trades its bill book too, so its share is part of the float.
+      const tradableShare = reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare
+        + (reg.centralBankSheet ? reg.sovBondOwnership.centralBankShare : 0);
       const instruments: ClearingInstrument[] = activeBuckets.map((b) => ({
         id: billInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
@@ -167,10 +170,31 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         if (p.tenorKey.startsWith('b')) priorDealerInventory.set(billInstrumentId(regionId, p.tenorKey), p.inventoryUSD);
       });
 
+      // PUB2b: a maturing bill rolls back into bills, so the CB's book keeps its shape rather
+      // than drifting up the curve. Same size-with-no-reservation order as in 07c.
+      const billBucketKeys = activeBuckets.map((b) => b.key);
+      const cbOrder = reg.centralBankSheet
+        ? centralBankParticipant(reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k))
+        : null;
+      if (cbOrder) participants.push(cbOrder.participant);
+      if (reg.centralBankSheet) {
+        reg.centralBankSheet.lastOrderPlacedUSD =
+          (reg.centralBankSheet.lastOrderPlacedUSD ?? 0) + (cbOrder?.orderedUSD ?? 0);
+      }
+
       const result = clearFinancialAsset(instruments, participants, priorDealerInventory, {
         dealerSpreadBps: DEALER_SPREAD_BPS,
         maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
       });
+      if (cbOrder && reg.centralBankSheet) {
+        // Asset side only — the reserves that paid for it were created. See central-bank-demand.
+        const filled = applyCentralBankFills(
+          reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k),
+          result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>()
+        );
+        reg.centralBankSheet.lastOpenMarketPurchasesUSD =
+          Number(((reg.centralBankSheet.lastOpenMarketPurchasesUSD ?? 0) + filled).toFixed(0));
+      }
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
       // Refit the curve through BOTH the cleared bills and 07c's cleared bonds, so the sub-2Y

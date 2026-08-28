@@ -12,6 +12,7 @@ import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
+import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
@@ -79,7 +80,6 @@ export function evolveRegionMacro(
     trackedHealthSignal: number;
     publicCompanyEmployment: number;
     occupationDemand?: Record<OccupationType, number>;
-    monetizedAmountUSD?: number;
     /** HH4b: market-cap-weighted average dividend yield of this region's listed companies —
      * what the households' direct equity actually pays. Computed in stage 02 from real state. */
     avgListedDividendYieldAnnual?: number;
@@ -582,15 +582,10 @@ export function evolveRegionMacro(
     debtBalanceUSD: (newCreditCardDebtUSD + newOtherLoanDebtUSD) * (t.shareOfHouseholds / totalShare)
   }));
 
-  // Central bank stance and banking sector evolution
-  const targetBalanceSheetStance = (
-    (Math.max(0, 0.07 - newUnemployment) * -8) +
-    (Math.max(0, newUnemployment - 0.07) * 10) +
-    (Math.max(0, newInflation - 0.04) * -6)
-  );
-  const newBalanceSheetStance = (region.balanceSheetStance ?? 0) * 0.95 + targetBalanceSheetStance * 0.05;
-  // PUB2: the CB's balance sheet is its real sovereign book, written by stages/central-bank.ts.
-  // The GDP-ratio scalar that used to drift on the policy stance here is gone.
+  // PUB2b: the balance-sheet STANCE scalar is gone. It was a formula on unemployment and
+  // inflation that fed a "monetization share" printing deposits straight into households —
+  // which is not what a central bank does. The balance sheet is now the real sovereign book
+  // written by stages/central-bank.ts, and it moves by bidding in 07c/07f.
   const newCbBalance = region.centralBankBalanceSheet;
   const cbChangePct = 0;
 
@@ -607,10 +602,7 @@ export function evolveRegionMacro(
     // The aggregate book's real yield at the real cleared curve — the per-bank truth is
     // recomputed in 02b, which overwrites this aggregate with the sum of named banks.
     computeSovereignBookAnnualYield(region.bankingSector.sovereignBondHoldingsByTenor, region.zeroRates),
-    newBalanceSheetStance,
-    newGdpGrowth,
-    region.creditConditionsSpilloverAdjustment ?? 0,
-    microFeedback.monetizedAmountUSD ?? 0
+    region.creditConditionsSpilloverAdjustment ?? 0
   );
 
   // The wage-push and monetary-pressure terms that used to be added to CPI here are gone. Both
@@ -633,7 +625,7 @@ export function evolveRegionMacro(
   const output_gap = Math.max(-0.10, Math.min(0.10, newGdpGrowth - potentialGdp));
   const inflation_gap = Math.max(-0.10, Math.min(0.10, newExpectedInflation - piStar));
   const taylorTarget = rStar + newExpectedInflation + 0.5 * inflation_gap + 0.5 * output_gap;
-  const clampedTaylorTarget = Math.max(-0.01, Math.min(0.20, taylorTarget));
+  const clampedTaylorTarget = Math.max(EFFECTIVE_LOWER_BOUND, Math.min(0.20, taylorTarget));
 
   let rateChanged = false;
   let rateDeltaBps = 0;
@@ -814,7 +806,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     inversionWeeksCount: newInversionCount,
     recessionShockQueue: remainingShocks,
     centralBankBalanceSheet: newCbBalance,
-    balanceSheetStance: newBalanceSheetStance,
+    taylorTargetRate: taylorTarget,
     structuralDeficitPctGdp: newStructuralDeficitPctGdp,
     cyclicalDeficitComponent,
     govEmploymentGrowthRate,

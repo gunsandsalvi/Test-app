@@ -153,10 +153,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         reg.unemploymentRate * (0.6 + riskFactor * 0.4),
         // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
         computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByTenor, reg.zeroRates),
-        reg.balanceSheetStance,
-        reg.gdpGrowth,
         reg.creditConditionsSpilloverAdjustment ?? 0,
-        0,
         // WS6: last week's overnight repo book matures inside as explicit flows.
         prevSheet.repoBorrowedUSD ?? 0,
         prevSheet.repoLentUSD ?? 0,

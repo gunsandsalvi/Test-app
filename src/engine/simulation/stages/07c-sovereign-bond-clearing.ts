@@ -50,6 +50,7 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
+import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD } from '../../macro/banking';
 
@@ -207,7 +208,11 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       return {
         id: bucketInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        tradableFloatUSD: (outstandingByBucket.get(b.key) ?? 0) * (reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare),
+        // PUB2b: the central bank's share joins the float, because the CB is a participant now
+        // rather than a passive block held outside the market.
+        tradableFloatUSD: (outstandingByBucket.get(b.key) ?? 0) *
+          (reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare
+            + (reg.centralBankSheet ? reg.sovBondOwnership.centralBankShare : 0)),
         currentStat: currentYieldDecimal * 10000, // bps
         statKind: 'YIELD_LIKE',
         durationYears: b.years,
@@ -341,10 +346,19 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const priorDealerInventoryById = new Map<string, number>();
     (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(bucketInstrumentId(regionId, p.tenorKey), p.inventoryUSD));
 
-    const result = clearFinancialAsset(instruments, [...entityParticipants, ...bankParticipants], priorDealerInventoryById, {
-      dealerSpreadBps: DEALER_SPREAD_BPS,
-      maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
-    });
+    // PUB2b: the central bank's open-market order, placed by stage 11 last week. It is a size
+    // with no reservation level — policy is a quantity this auction prices, not a premium.
+    const bondBucketKeys = activeBuckets.map((b) => b.key);
+    const cbOrder = reg.centralBankSheet
+      ? centralBankParticipant(reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k))
+      : null;
+
+    const result = clearFinancialAsset(
+      instruments,
+      [...entityParticipants, ...bankParticipants, ...(cbOrder ? [cbOrder.participant] : [])],
+      priorDealerInventoryById,
+      { dealerSpreadBps: DEALER_SPREAD_BPS, maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT }
+    );
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
     // Apply: real cleared yields -> refit the Nelson-Siegel curve so every other consumer rides
@@ -414,6 +428,22 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         bankEquityUSD: existingSheet!.bankEquityUSD - feeUSD,
       };
     });
+
+    // Apply: the central bank's fills. No cash is debited — it paid with reserves it created,
+    // which is what makes a central-bank purchase grow the monetary base instead of moving
+    // money between holders. The sellers' cash legs are already credited above.
+    // Reset every week even with no order, or the line reports a stale fill forever.
+    if (reg.centralBankSheet) {
+      reg.centralBankSheet.lastOpenMarketPurchasesUSD = 0;
+      reg.centralBankSheet.lastOrderPlacedUSD = cbOrder?.orderedUSD ?? 0;
+    }
+    if (cbOrder && reg.centralBankSheet) {
+      const filled = applyCentralBankFills(
+        reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k),
+        result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>()
+      );
+      reg.centralBankSheet.lastOpenMarketPurchasesUSD = Number(filled.toFixed(0));
+    }
 
     // Apply: real dealer inventory + trading revenue, credited to each named bank by market
     // share — same pattern as the corporate-bond dealer desk.

@@ -15,6 +15,7 @@ import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
 import { weeklyInterestExpenseUSD, sovereignCouponByBucket } from '../../../domain/government';
+import { centralBankAssetsUSD, openMarketPolicy } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView } from './holdings-view';
 
@@ -158,6 +159,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // their balance sheet whole. Institutional entities have no itemized cash line to credit yet,
     // so their redemption currently reduces holdings only — the matching cash leg lands with the
     // rest of clearing settlement (see the work order's cash-settlement item).
+    /** PUB2b: what the central bank's own book was repaid this week, by bucket — the size of
+     * next week's reinvestment order. */
+    const cbRedeemedByBucket = new Map<string, number>();
     if (maturedPrincipalUSD > 0) {
       // sovBucketKey covers bills and bonds alike (WS5): a maturing 13-week bill redeems out of
       // its holders' b13 positions, never out of the two-year bucket a nearest-of-[2,5,10,30]
@@ -189,6 +193,13 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           newByTenor[key] = heldUSD * (1 - fraction);
         });
         if (redeemedUSD <= 0) return c;
+        // Collateral that matured is collateral that no longer exists, so the repo it secured
+        // must release it — in reality the position is unwound or substituted out of the
+        // redemption proceeds. Without this the pledge outlived the bond and every bank in a
+        // region ended up pledging more than it held (measured at week 51, once PUB2b's central
+        // bank started competing for the same paper and books ran closer to their encumbrance).
+        const preBookUSD = Object.values(byTenor).reduce((sum, v) => sum + (Number(v) || 0), 0);
+        const survivingShare = preBookUSD > 0 ? Math.max(0, 1 - redeemedUSD / preBookUSD) : 1;
         return {
           ...c,
           bankBalanceSheet: {
@@ -196,9 +207,29 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             sovereignBondHoldingsByTenor: newByTenor,
             sovereignBondHoldingsUSD: Number(Object.values(newByTenor).reduce((sum, v) => sum + v, 0).toFixed(0)),
             cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + redeemedUSD,
+            repoEncumberedCollateralUSD: Number(
+              ((c.bankBalanceSheet.repoEncumberedCollateralUSD ?? 0) * survivingShare).toFixed(0)
+            ),
           },
         };
       });
+
+      // PUB2b: the central bank is a holder too, and used to be the one holder that never got
+      // repaid — its book sat frozen at its seeded level while the tranches behind it matured,
+      // so it held a claim on debt that no longer existed and its share of the stock drifted
+      // 15.0% -> 11.4% over a year. There is no reserve leg: the treasury pays out of the TGA,
+      // which is the CB's own liability, so a CB asset and a CB liability fall together.
+      const cbSheet = reg.centralBankSheet;
+      if (cbSheet) {
+        const remaining: Record<string, number> = {};
+        Object.entries(cbSheet.sovereignHoldingsByTenor || {}).forEach(([key, held]) => {
+          const heldUSD = Number(held) || 0;
+          const redeemedUSD = heldUSD * (redeemedFractionByBucket.get(key) ?? 0);
+          if (redeemedUSD > 0) cbRedeemedByBucket.set(key, redeemedUSD);
+          remaining[key] = heldUSD - redeemedUSD;
+        });
+        cbSheet.sovereignHoldingsByTenor = remaining;
+      }
 
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
         if (entity.region !== regionId) return entity;
@@ -302,8 +333,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     }
 
     const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedBondPrincipalUSD;
-    const monetizationShare = (reg.balanceSheetStance * 0.5);
-    const monetizedAmountUSD = weeklyDeficitUSD * monetizationShare;
 
     // The treasury's bill rule: hold the bill share of the stock near target, leaning toward
     // bills when the front end is genuinely cheaper than the belly (positive carve of the real
@@ -319,8 +348,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // Steer the share toward target with the new-money flow: fund more of the deficit with bills
     // when under target, less when over.
     const billShareOfNewMoney = Math.max(0, Math.min(0.5, billShareTarget + (billShareTarget - billShareOfStock) * 2));
-    const billFundedDeficitUSD = (weeklyDeficitUSD - monetizedAmountUSD) * billShareOfNewMoney;
-    const marketFundedDeficitUSD = weeklyDeficitUSD - monetizedAmountUSD - billFundedDeficitUSD;
+    const billFundedDeficitUSD = weeklyDeficitUSD * billShareOfNewMoney;
+    const marketFundedDeficitUSD = weeklyDeficitUSD - billFundedDeficitUSD;
 
     // Weekly bill issuance: the roll plus the bill share of new money, split across the three
     // programs, priced off the real cleared bill curve (07f ran before this stage).
@@ -412,6 +441,35 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     reg.lastRedemptionPaidUSD = Number(maturedPrincipalUSD.toFixed(0));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
+
+    // ---- PUB2b: the week's open-market order. What matured is put back to work (or not, in
+    // QT), plus any QE flow the blocked easing calls for. It is placed as a real BID in 07c and
+    // 07f next week — the central bank's policy is a quantity the auction prices against
+    // everyone else's demand, never a premium bolted onto the curve. ----
+    if (reg.centralBankSheet) {
+      const cb = reg.centralBankSheet;
+      const bookUSD = centralBankAssetsUSD(cb);
+      const { reinvestmentShare, netPurchaseUSD } = openMarketPolicy({
+        policyRate: reg.policyRate,
+        taylorTargetRate: reg.taylorTargetRate,
+        bookUSD,
+        sovereignStockUSD: totalGovDebtUSD,
+      });
+      // Reinvestment goes back into the bucket that matured — a maturing bill is rolled into
+      // bills — so the book keeps its shape instead of drifting up the curve. New QE money is
+      // spread across the book's existing shape for the same reason.
+      const orders: Record<string, number> = {};
+      cbRedeemedByBucket.forEach((redeemedUSD, key) => {
+        orders[key] = redeemedUSD * reinvestmentShare;
+      });
+      if (netPurchaseUSD > 0 && bookUSD > 0) {
+        Object.entries(cb.sovereignHoldingsByTenor).forEach(([key, held]) => {
+          orders[key] = (orders[key] ?? 0) + netPurchaseUSD * ((Number(held) || 0) / bookUSD);
+        });
+      }
+      cb.plannedPurchasesByTenor = orders;
+      cb.reinvestmentShare = Number(reinvestmentShare.toFixed(4));
+    }
     const debtToGdpPctBottomUp = newDerivedNominalGdpUSD > 0 ? totalGovDebtUSD / newDerivedNominalGdpUSD : (reg.debtToGdpPctBottomUp || 0);
 
     updatedRegions[regionId] = {

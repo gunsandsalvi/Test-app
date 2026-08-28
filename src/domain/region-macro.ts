@@ -463,6 +463,12 @@ export interface Region {
    */
   repoRateAnnual: number;
   neutralRate: number;
+  /**
+   * PUB2b: what the Taylor rule wanted BEFORE the floor clamped it. The gap between this and the
+   * effective lower bound is the easing the rate tool cannot deliver — which is the central
+   * bank's own trigger for reaching for the balance sheet instead.
+   */
+  taylorTargetRate: number;
   inflation: number;
   coreInflation: number;
   /**
@@ -477,7 +483,6 @@ export interface Region {
   cpiBasket: import('../engine/simulation/stages/price-index').CpiBasket;
   expectedInflation: number;
   centralBankBalanceSheet: number;
-  balanceSheetStance: number;
   creditConditionsSpilloverAdjustment?: number;
   targetInflation: number;
   gdpGrowth: number;

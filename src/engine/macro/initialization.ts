@@ -424,7 +424,8 @@ function buildRegion(regionId: RegionId): Region {
     sovBondOwnership: { bankShare: OWNERSHIP_SHARES.sovBond.bankShare, institutionalShare: OWNERSHIP_SHARES.sovBond.institutionalShare, foreignShare: buildForeignShare(regionId, OWNERSHIP_SHARES.sovBond.foreignShareEach), centralBankShare: OWNERSHIP_SHARES.sovBond.centralBankShare },
     institutionalSector,
     centralBankBalanceSheet: estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankBalanceSheetToGdp,
-    balanceSheetStance: 0,
+    // PUB2b: at birth the rule sits at neutral, so the floor blocks nothing.
+    taylorTargetRate: neutralRate,
     policyRate,
     // WS6: a cleared market print from week 1. The cold start opens at the corridor floor —
     // where an overnight market with no funding need prints, and exactly what the first
@@ -498,6 +499,11 @@ function buildRegion(regionId: RegionId): Region {
       currencyInCirculationUSD: 0,
       unbackedBankCashUSD: 0,
       lastRemittanceUSD: 0,
+      // PUB2b: no order outstanding at birth — the first week's redemptions set the first one.
+      plannedPurchasesByTenor: {},
+      reinvestmentShare: 1,
+      lastOpenMarketPurchasesUSD: 0,
+      lastOrderPlacedUSD: 0,
       lastReserveDrainUSD: 0,
     },
     govDebtTranches,

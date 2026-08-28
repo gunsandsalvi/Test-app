@@ -28,6 +28,19 @@ export interface CentralBank {
   /** Last week's net reserve movement caused by TGA flows (negative = drained from banks). */
   lastReserveDrainUSD: number;
   /**
+   * PUB2b: next week's open-market order, by tenor bucket. The CB is a real bidder in 07c and
+   * 07f, so its policy is a QUANTITY the auction must price against everyone else's demand —
+   * not a premium added to a curve.
+   */
+  plannedPurchasesByTenor: Record<string, number>;
+  /** Share of last week's redemptions put back to work. Below 1 is QT; the runoff is real supply. */
+  reinvestmentShare: number;
+  /** What the auctions actually filled last week — the order is an intention, the fill is the fact. */
+  lastOpenMarketPurchasesUSD: number;
+  /** The order those fills were struck against, kept so the two can be compared after stage 11
+   * has already written next week's. */
+  lastOrderPlacedUSD: number;
+  /**
    * Bank cash the central bank's assets do not back. In reality reserves EXIST because the CB
    * bought something; here a bank's `cashReservesUSD` also grows from deposits and lending, so
    * the two are not the same quantity and the identity does not close on its own. Named rather
@@ -79,4 +92,83 @@ export function remittanceUSD(
   policyRate: number
 ): number {
   return couponIncomeWeeklyUSD - (bankReservesUSD * policyRate) / 52;
+}
+
+/**
+ * The floor the policy rate cannot go below. Must match the clamp on the Taylor rule in
+ * macro/evolution.ts: when the rule wants a rate below this, the rate tool is out of room and
+ * the balance sheet is the only instrument left. That is what QE is FOR.
+ */
+export const EFFECTIVE_LOWER_BOUND = -0.01;
+
+/**
+ * How much balance sheet substitutes for a rate cut the floor blocks: buying this share of the
+ * sovereign stock over a year stands in for one percentage point of easing.
+ */
+export const QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL = 0.10;
+
+/**
+ * The largest run rate a purchase program is announced at, as a share of the sovereign stock per
+ * year. A central bank commits to a pace and holds it; it does not scale purchases without limit
+ * with the depth of the rule's gap. The referent is generous — the Fed's peak Treasury purchases
+ * ran near 5% of that market a year, so this is roughly double the largest real program.
+ *
+ * It exists because the rule below is otherwise unbounded in the blocked cut: a deflation deep
+ * enough to want a -5% policy rate ordered 40% of the stock a year, and the measured result was
+ * the 2Y clearing at -2.6%.
+ */
+export const QE_MAX_PACE_ANNUAL_SHARE_OF_STOCK = 0.10;
+
+/** Room above the floor at which the rate tool is working again, so the book can normalize. */
+export const RATE_TOOL_HEADROOM = 0.02;
+
+/**
+ * The most of its own sovereign market a central bank will own. The referent is the extreme real
+ * case — the Bank of Japan, holding roughly half of all JGBs after two decades of easing — and
+ * the reason it is a bound at all is that a central bank owning the whole float has destroyed the
+ * market whose price it is trying to influence.
+ *
+ * Without it the rule is unbounded in the blocked cut: a deflation deep enough to want a -5%
+ * policy rate orders 40% of the stock a year, and the measured result was the central bank
+ * taking 31% of the market in 30 weeks and clearing the 2Y at -2.6%.
+ */
+export const CENTRAL_BANK_MAX_STOCK_SHARE = 0.50;
+
+/**
+ * The week's open-market decision: how much of what matured goes back to work, and how much new
+ * paper to buy on top. Three regimes, and the default is the boring one.
+ *
+ *  - **QE** — the rule wants a rate the floor forbids. Reinvest everything and buy a flow scaled
+ *    to the easing that cannot be delivered.
+ *  - **QT** — the rate tool has room again AND the book sits above the share it was built at.
+ *    Reinvest only part of what matures; the rest is real supply 07c has to find a buyer for,
+ *    which is what makes QT a market event rather than an announcement.
+ *  - **Neither** — reinvest in full. The book holds its LEVEL and lets its share of a growing
+ *    stock drift, which is what a central bank not using the balance sheet actually does.
+ */
+export function openMarketPolicy(args: {
+  policyRate: number;
+  /** The Taylor rule's UNCLAMPED target — the rate the rule wanted before the floor bound it. */
+  taylorTargetRate: number;
+  bookUSD: number;
+  sovereignStockUSD: number;
+}): { reinvestmentShare: number; netPurchaseUSD: number } {
+  const bookShare = args.sovereignStockUSD > 0 ? args.bookUSD / args.sovereignStockUSD : 0;
+  const blockedCutPoints = Math.max(0, EFFECTIVE_LOWER_BOUND - args.taylorTargetRate) * 100;
+  if (blockedCutPoints > 0) {
+    const headroomUSD = Math.max(
+      0, args.sovereignStockUSD * CENTRAL_BANK_MAX_STOCK_SHARE - args.bookUSD
+    );
+    const wantedUSD = (args.sovereignStockUSD *
+      Math.min(QE_STOCK_SHARE_PER_RATE_POINT_ANNUAL * blockedCutPoints, QE_MAX_PACE_ANNUAL_SHARE_OF_STOCK)) / 52;
+    return { reinvestmentShare: 1, netPurchaseUSD: Math.min(wantedUSD, headroomUSD) };
+  }
+  const canNormalize = args.policyRate > EFFECTIVE_LOWER_BOUND + RATE_TOOL_HEADROOM;
+  if (canNormalize && bookShare > CENTRAL_BANK_SOVEREIGN_SHARE) {
+    // Runoff is capped by what actually matures — a central bank cannot shrink faster than its
+    // paper comes due without selling, which is a different and rarer operation.
+    const excess = (bookShare - CENTRAL_BANK_SOVEREIGN_SHARE) / CENTRAL_BANK_SOVEREIGN_SHARE;
+    return { reinvestmentShare: Math.max(0, 1 - excess), netPurchaseUSD: 0 };
+  }
+  return { reinvestmentShare: 1, netPurchaseUSD: 0 };
 }

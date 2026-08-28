@@ -652,20 +652,18 @@ NEGATIVE when policy exceeds the portfolio yield, which is the real post-hiking-
 reproduced rather than modelled. Retires the phantom 1e12 `centralBankReservesUSD` and the
 balance-sheet drift. Identity asserted weekly; TGA asserted non-negative.
 
-**PUB2b — The central bank as a real counterparty (remaining).** Seed the CB book from `centralBankShare` of
-the sovereign stock; roll maturities as real inelastic at-market bids in 07c sized to redemptions.
-Policy then gets a real quantity lever: QT is redemptions not reinvested (real supply 07c must
-price), QE a real purchase flow at the effective lower bound. **Retires the ~1e12
-`centralBankReservesUSD` scalar and the QE/QT drift** sitting beside real per-bank cash.
-Remittances — coupon income minus interest paid on reserves — flow to the government's real
-account, closing the loop with PUB1. The CB has no capital constraint and never defaults: the one
-balance sheet allowed to be special.
+**PUB2b — DONE (§7.66).** The balance sheet is a real quantity operation. The CB is redeemed like
+every other holder, and places an open-market ORDER that 07c and 07f price against everyone
+else's demand — reinvest what matured, buy a flow when the floor blocks the easing the Taylor
+rule wants, reinvest only part of it when the rate tool has room and the book sits above the
+share it was built at. Retires `balanceSheetStance` and the "monetization share" that printed
+deposits into households. Measured: the book stops being frozen (100B flat, 15.0% -> 11.4% of a
+growing stock) and lives (100B -> 137B, 15.0% -> 16.9%), `unbackedBankCashUSD` at w52 **304B ->
+100B**, and all three regimes fire in one 60-week run.
 
-**Verify:** announcing QT steepens the cleared curve through real absorption, not a term-premium
-formula; remittances fall mechanically when policy rates exceed portfolio yield (a real, famous
-phenomenon the sim should reproduce for free); rising rates visibly crowd out procurement; every
-holder of a government bond receives its coupon and the government's account is debited by
-exactly the sum.
+**Still open after this slice** (the criteria it did not close): rising rates crowding out
+procurement is PUB1a's channel and wants PUB1e's real bids to be visible on the spending side.
+The §6 watch it adds is the sovereign book's price elasticity to a size-only bidder.
 
 ---
 
@@ -986,6 +984,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | ~~**`unmodeledTaxRevenueUSD`**~~ | **CLOSED (§7.64).** PUB1c added the two missing instruments — employer payroll tax and consumption tax — and real collections went ~50% → 99–100% of revenue. The line stays in the code as the honest residual if a future change outruns the bases again; it currently reads 0.00B. |
 | **TGA level over a quarter-scale horizon** | Watch, do not chase (rule 10). **Re-measured after PUB1d** as that row asked: the account no longer drifts monotonically — it now sawtooths, filling on the quarterly remittance dates and drawing down between them (39 → 33 → 66 → 59 → 51 → 44 → 86B over 26 weeks), which is the shape a treasury balance actually has. What remains is the LEVEL at each quarter's peak creeping up, because receipts are larger than the old formula assumed and spending catches up a week later. Re-measure once PUB1e puts procurement through real bids. |
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
+| **Sovereign price elasticity to a size-only bidder** | **Found in PUB2b (§7.66).** A 34B difference in the central bank's book moved the USA 2Y by ~490bp at w30 — a very high elasticity for a market that size. Consistent with the damper watch above (1,964 instruments persistently bound: the books ARE thin, so an inelastic buyer has to move the level a long way to find sellers), and with §7.18's want/have. **Do not soften it in the clearing engine** — prices are cleared, and tuning the auction to produce a gentler response would be fitting the mechanism to a desired number. It should fall as **SCALE** and **G3** grow the universe and the dealer's capacity; re-measure then. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1718,3 +1717,42 @@ that proved it, the lesson.
       is unchanged either way (−45.9B vs −47.9B at w26). Tracing it found an ETF running negative
       NET ASSETS, present in both worlds; recorded in §6 with ETF2 as owner rather than fixed
       inside a fiscal slice. **Two defects that move together are not one defect.**
+66. **PUB2b: the balance sheet becomes a quantity, and a pledge that outlived its bond.** The
+    central bank was the one holder that never got repaid — its book sat frozen at the 100B it was
+    seeded with while the tranches behind it matured, so it held a claim on debt that no longer
+    existed and its share of a growing stock drifted **15.0% → 11.4%** over a year. Now it is
+    redeemed pro-rata like everyone else (no reserve leg: the treasury pays out of the TGA, which
+    is the CB's own liability, so a CB asset and a CB liability fall together), and it places an
+    **open-market order** that 07c and 07f price against real demand.
+    - **The order is a size with no reservation level** — the same demand shape an index fund
+      posts, because neither is pricing. What makes the CB unique is the CASH leg: it pays with
+      reserves it creates, so its fills post to the asset side with no debit anywhere. That is not
+      a shortcut; reserve creation is what a central-bank purchase IS.
+    - **Three regimes, all of which fired in one 60-week run.** Reinvest fully when passive; buy a
+      flow when the floor blocks the easing the Taylor rule wants (which needed the rule's
+      UNCLAMPED target stored — the gap between it and the floor is the trigger); reinvest only
+      part when the rate tool has room and the book is above the share it was built at.
+      Measured: book **100B → 137B**, share **15.0% → 16.9%**, reinvestment 1.00 → 0.88 as the
+      economy normalized, remittances negative when policy exceeded the portfolio yield.
+    - **`unbackedBankCashUSD` at w52: 304B → 100B.** The named gap PUB2a opened was growing
+      without bound purely because the asset side was frozen. It is smaller, not gone — reserves
+      still grow from deposits and lending, which no central-bank purchase backs.
+    - **Retired:** `balanceSheetStance`, a formula on unemployment and inflation, and the
+      "monetization share" it drove — which took a fraction of the deficit and printed it straight
+      into household deposits. A central bank buying bonds pays the SELLER; it does not credit
+      households. The cross-border spillover now keys off the real reinvestment share instead.
+    - **A pledge that outlived its bond.** Every bank in a region failed the collateral invariant
+      at week 51 ("pledged 8.09B against 6.38B held"). Maturing paper that was pledged in repo
+      never released its encumbrance — a pre-existing gap that only bit once the CB started
+      competing for the same paper and books ran close to their pledges. **A new participant is a
+      good way to find out what the old ones were getting away with.**
+    - **Sized by a cap, not by a fit.** The first rule was unbounded in the blocked cut: a
+      deflation deep enough to want a −5% policy rate ordered 40% of the stock a year, and the CB
+      took 31% of its market in 30 weeks and cleared the 2Y at **−2.6%**. Capped at a real
+      announced run rate (10%/yr of the stock, about double the Fed's peak) and at half the market
+      (the BoJ's extreme), the same A/B gives a 2Y of 0.84% under QE against 2.28% under forced
+      QT. **The cap is a fact about central banks, not a knob turned until the output looked
+      right** — which is the only kind of constant allowed to fix a number.
+    - **The verify criterion, answered by measurement.** Forced-QT A/B at w40: the book runs off
+      136B → 86B and the 10s2s slope goes **210bp → 79bp**, through real absorption in the
+      auction. No term-premium formula anywhere.

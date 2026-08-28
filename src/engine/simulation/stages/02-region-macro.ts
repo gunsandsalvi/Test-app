@@ -59,12 +59,6 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       state.regions[regionId].governmentEmployment
     );
 
-    const maturedTranchesPrev = (state.regions[regionId].govDebtTranches || []).filter(t => t.maturityWeek <= ctx.nextWeek);
-    const maturedPrincipalUSDPrev = maturedTranchesPrev.reduce((s, t) => s + t.principalUSD, 0);
-    const weeklyDeficitUSDPrev = Math.max(0, state.regions[regionId].governmentSpendingUSD - state.regions[regionId].governmentRevenueUSD) + maturedPrincipalUSDPrev;
-    const monetizationSharePrev = ((state.regions[regionId].balanceSheetStance ?? 0) * 0.5);
-    const monetizedAmountUSD = weeklyDeficitUSDPrev * monetizationSharePrev;
-
     // (The sovereign "auction premium" that used to be computed here is gone along with the
     // curve write it fed. It compared an ownership SHARE times sector EQUITY against total
     // principal outstanding — quantities that are not commensurable — to synthesise a yield
@@ -90,7 +84,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
         trackedHealthSignal: ctx.regionTrackedHealthSignal[regionId],
         publicCompanyEmployment: ctx.regionPublicCompanyEmployment[regionId],
         occupationDemand: regionOccDemand,
-        monetizedAmountUSD, marginCompression: 0, creditContagionBps: 0,
+        marginCompression: 0, creditContagionBps: 0,
         avgListedDividendYieldAnnual: regionAvgDividendYield,
       },
       ctx.nextWeek,
@@ -152,11 +146,14 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     });
   });
 
-  // V7: Cross-border reserve / balance-sheet stance spillover effect
+  // Cross-border spillover, PUB2b: keyed off REAL balance-sheet policy instead of the retired
+  // stance scalar. A central bank easing harder than the rest of the world loosens credit
+  // conditions abroad; the observable is its reinvestment share, which is 1 when passive and
+  // below 1 in QT.
   const allRegionIds = Object.keys(ctx.updatedRegions) as RegionId[];
-  const globalStanceAvg = allRegionIds.reduce((s, r) => s + (ctx.updatedRegions[r].balanceSheetStance ?? 0), 0) / Math.max(1, allRegionIds.length);
+  const stanceOf = (r: RegionId) => (ctx.updatedRegions[r].centralBankSheet?.reinvestmentShare ?? 1) - 1;
+  const globalStanceAvg = allRegionIds.reduce((s, r) => s + stanceOf(r), 0) / Math.max(1, allRegionIds.length);
   allRegionIds.forEach(r => {
-    const spilloverEffect = (globalStanceAvg - (ctx.updatedRegions[r].balanceSheetStance ?? 0)) * 0.05; // pulled gently toward the global average
-    ctx.updatedRegions[r].creditConditionsSpilloverAdjustment = spilloverEffect;
+    ctx.updatedRegions[r].creditConditionsSpilloverAdjustment = (globalStanceAvg - stanceOf(r)) * 0.05;
   });
 }

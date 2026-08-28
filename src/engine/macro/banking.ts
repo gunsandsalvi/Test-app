@@ -120,10 +120,7 @@ export function evolveBankingSector(
   /** The book-weighted annual yield of THIS bank's real tenor book at the real cleared curve
    * (computeSovereignBookAnnualYield). Rule 9: annualised decimal. */
   sovereignBookAnnualYield: number,
-  balanceSheetStance: number,
-  _gdpGrowth: number,
   spilloverAdjustment: number = 0,
-  monetizedAmountUSD: number = 0,
   /** WS6: last week's overnight repo book and the rate it was struck at (annualised decimal).
    * The positions mature here as explicit flows — principal and interest both. Zero until the
    * repo market exists or when the bank had no position. */
@@ -185,14 +182,15 @@ export function evolveBankingSector(
   equityUSD += repoLendInterestUSD;
 
   // ---- 2. Household deposit flow — HH4d: REAL flows only, no target. The full savings
-  // inflow arrives (less what the money fund's yield gate diverted), last week's household ETF
-  // purchases settle out (T+1 — the balance-sheet stage recorded them), and monetized amounts
-  // land. The 0.999-decay target that used to size this is gone, and with it the drift between
+  // inflow arrives (less what the money fund's yield gate diverted) and last week's household ETF
+  // purchases settle out (T+1 — the balance-sheet stage recorded them). PUB2b removed the
+  // "monetized amount" that also landed here: a central bank buying bonds pays the SELLER, it
+  // does not print deposits into household accounts. The 0.999-decay target that used to size this is gone, and with it the drift between
   // the bank's deposit line and the household stock it claims to be: they are ONE number now,
   // reconciled by the bank-diversification stage every week.
   const weeklySavingsInflowUSD = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
   const householdDepositFlowUSD = weeklySavingsInflowUSD - householdMmfDiversionUSD
-    - priorHouseholdEtfPurchasesUSD + (monetizedAmountUSD ?? 0);
+    - priorHouseholdEtfPurchasesUSD;
   depositsUSD += householdDepositFlowUSD;
   cashUSD += householdDepositFlowUSD;
 
