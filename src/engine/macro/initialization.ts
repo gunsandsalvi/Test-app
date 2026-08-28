@@ -2,6 +2,7 @@ import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroR
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, PrivateSectorSegment, PrivateSegmentType, GovDebtTranche } from '../../types';
 import { buildHouseholdCohorts } from './household-cohorts';
+import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
@@ -278,12 +279,26 @@ function buildRegion(regionId: RegionId): Region {
     const unemployedInPool = totalLaborForce * occupationLaborForceShare[occ] - occupationPools[occ].employed;
     return sum + baseAnnualWageUSD[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
   }, 0);
+  const totalGovDebtUSD = estimatedNominalGdpUSD * DEBT_TO_GDP_PCT;
+  const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
+    id: `${regionId}-GOV-${tenorYears}Y-INIT`,
+    principalUSD: Number((totalGovDebtUSD * weight).toFixed(0)),
+    couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
+    originationWeek: -Math.round(tenorWeeks / 2),
+    maturityWeek: Math.round(tenorWeeks / 2),
+    tenorAtIssuanceYears: tenorYears,
+  }));
+
+  // PUB1 (§7.4): the debt stack exists at week 0, so its interest is in the decomposition from
+  // week 0 too — otherwise the seed opens on a transfer base the engine immediately shrinks.
+  const seedInterestWeeklyUSD = weeklyInterestExpenseUSD(govDebtTranches);
   const estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
     wageIncomeUSD: totalWageIncomeUSD,
     governmentSpendingWeeklyUSD: governmentSpendingUSD,
+    interestWeeklyUSD: seedInterestWeeklyUSD,
     unemploymentBenefitsUSD: initialUnemploymentBenefitsUSD,
   }).toFixed(0));
-  assertHouseholdIncomeIdentity(regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, governmentSpendingUSD);
+  assertHouseholdIncomeIdentity(regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, governmentSpendingUSD, seedInterestWeeklyUSD);
   const lastWeekNominalGdpUSD = estimatedNominalGdpUSD;
 
   // HH4 — §7.4: the cohorts are seeded by the same builder the weekly evolution runs, off the
@@ -356,15 +371,6 @@ function buildRegion(regionId: RegionId): Region {
     itemizedHoldings: [],
   };
 
-  const totalGovDebtUSD = estimatedNominalGdpUSD * DEBT_TO_GDP_PCT;
-  const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
-    id: `${regionId}-GOV-${tenorYears}Y-INIT`,
-    principalUSD: Number((totalGovDebtUSD * weight).toFixed(0)),
-    couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
-    originationWeek: -Math.round(tenorWeeks / 2),
-    maturityWeek: Math.round(tenorWeeks / 2),
-    tenorAtIssuanceYears: tenorYears,
-  }));
 
   const creditCardDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome).toFixed(0));
   const otherConsumerLoanDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome).toFixed(0));
@@ -471,6 +477,8 @@ function buildRegion(regionId: RegionId): Region {
     effectiveTaxRate: EFFECTIVE_TAX_RATE,
     governmentRevenueUSD,
     governmentSpendingUSD,
+    governmentInterestWeeklyUSD: Number(seedInterestWeeklyUSD.toFixed(0)),
+    governmentAccountUSD: 0,
     govDebtTranches,
     debtToGdpPctBottomUp: 0,
     householdState: {

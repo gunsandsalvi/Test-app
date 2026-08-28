@@ -122,7 +122,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const reg = regions[regionId];
     const hs = reg.householdState;
     const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    const G = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD) * (1 + reg.fiscalStanceScore * 0.25);
+    const G = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0) * (1 + reg.fiscalStanceScore * 0.25);
     const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
     reg.laggedCorporateDemandBase = corpBase;
     const I = corpBase;

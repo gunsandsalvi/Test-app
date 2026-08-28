@@ -14,6 +14,7 @@ import { generateWeeklyNews } from '../../newsGenerator';
 import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
+import { weeklyInterestExpenseUSD, sovereignCouponByBucket } from '../../../domain/government';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView } from './holdings-view';
 
@@ -89,7 +90,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // it is household income, and it reaches GDP through C once households spend it. Counting
     // 100% of outlays here (while the demand side in 03-category-demand.ts routed only the
     // procurement share into real category bids) double-counted every transfer dollar.
-    const governmentComponentUSD = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD);
+    const governmentComponentUSD = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0);
 
     // NX — net exports, already established in Phase 3 (already annualized-scale)
     const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
@@ -229,6 +230,29 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       .filter(t => sovBucketKey(t.tenorAtIssuanceYears).startsWith('b'))
       .reduce((s2, t) => s2 + t.principalUSD, 0);
     const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
+
+    // PUB1: the treasury's account. Revenue in, the whole spending programme out (interest to
+    // bondholders, procurement and transfers to the economy), and issuance funds the gap. The
+    // interest leg is the one that used to exist on the holders' side only.
+    const interestWeeklyUSD = weeklyInterestExpenseUSD(reg.govDebtTranches);
+    reg.governmentInterestWeeklyUSD = Number(interestWeeklyUSD.toFixed(0));
+    // What the bill pays to holders that exist. The rest is the named boundary above.
+    {
+      const cb = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
+      const held = ctx.updatedCompanies
+        .filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet)
+        .reduce((a, c) => a + Object.entries(c.bankBalanceSheet!.sovereignBondHoldingsByTenor || {})
+          .reduce((x, [k, v]) => x + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0), 0)
+        + ctx.updatedInstitutionalEntities
+          .filter(e => !e.isDefaulted)
+          .reduce((a, e) => a + e.itemizedHoldings
+            .filter(h => h.instrumentType === 'GOV_BOND' && h.issuerRegion === regionId)
+            .reduce((x, h) => x + ((h.quantityOrNotionalUSD ?? 0) * (cb[h.instrumentId.replace(`${regionId}-GOV-`, '')] ?? 0)) / 52, 0), 0);
+      reg.governmentInterestToUnmodeledHoldersUSD = Number(Math.max(0, interestWeeklyUSD - held).toFixed(0));
+    }
+    reg.governmentAccountUSD = Number((
+      (reg.governmentAccountUSD ?? 0) + reg.governmentRevenueUSD - reg.governmentSpendingUSD
+    ).toFixed(0));
 
     const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedBondPrincipalUSD;
     const monetizationShare = (reg.balanceSheetStance * 0.5);

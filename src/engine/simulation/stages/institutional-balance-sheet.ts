@@ -33,7 +33,8 @@
 import { Company, InstitutionalEntity, InstitutionalEntityType } from '../../../types';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
-import { computeSovereignBookAnnualYield } from '../../macro/banking';
+import { sovereignCouponByBucket } from '../../../domain/government';
+import { sovBucketKey } from './shared-helpers';
 
 /**
  * Balance-sheet leverage each type genuinely runs, as a fraction of total assets. A hedge fund
@@ -119,23 +120,19 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
         const regionPolicyRate = ctx.updatedRegions[entity.region]?.policyRate ?? 0.03;
         weeklyIncomeUSD += (notional * (regionPolicyRate + avgMarginBps / 10000)) / 52;
       }
-      // Sovereign BOND coupons: none, on purpose — see the module comment (BP5 pays them).
     });
-    // WS7: BILL carry IS credited — the money-market instruments need their real yield for the
-    // deposit-vs-fund competition to exist at all, and banks already earn the same carry on the
-    // same paper (the §6 boundary-flow row: the government's unpaid side closes in BP5, which
-    // then replaces both carries with real coupon payments).
-    const billByTenor: Record<string, number> = {};
+    // PUB1: sovereign coupons are REAL now — paid at each bucket's weighted-average coupon off
+    // the issuing region's own debt stack, and debited from that government's account in stage
+    // 11. This replaces the WS7-era bill carry, which credited holders while the government paid
+    // nothing (the §6 asymmetric-boundary row).
     entity.itemizedHoldings.forEach((h) => {
       if (h.instrumentType !== 'GOV_BOND') return;
-      const key = h.instrumentId.replace(`${h.issuerRegion}-GOV-`, '');
-      if (key.startsWith('b')) billByTenor[key] = (billByTenor[key] ?? 0) + h.quantityOrNotionalUSD;
+      const issuerReg = ctx.updatedRegions[h.issuerRegion];
+      if (!issuerReg) return;
+      const bucket = h.instrumentId.replace(`${h.issuerRegion}-GOV-`, '');
+      const coupon = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey)[bucket] ?? 0;
+      weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * coupon) / 52;
     });
-    const billUSD = Object.values(billByTenor).reduce((a, v) => a + v, 0);
-    if (billUSD > 0) {
-      const reg = ctx.updatedRegions[entity.region];
-      if (reg) weeklyIncomeUSD += (billUSD * computeSovereignBookAnnualYield(billByTenor, reg.zeroRates)) / 52;
-    }
     if (weeklyIncomeUSD <= 0) return entity;
     // Recorded as well as credited: the entity's income statement and its cash are the same
     // event, and stage 08 reports it on the listed shell rather than inventing a portfolio yield

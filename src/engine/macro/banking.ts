@@ -142,6 +142,8 @@ export function evolveBankingSector(
    * consumer book itself passes through untouched: it is a sum of real pools owned by the
    * household lending pass. */
   householdLoanInterestWeeklyUSD: number = 0,
+  /** PUB1: real coupons on this bank's own sovereign book, paid by the government. */
+  sovereignCouponWeeklyUSD: number = 0,
   /** WS7: the slice of THIS bank's household savings inflow that went to the money market fund
    * instead — the deposit-competition channel. The fund's credit happens in 02b; here the
    * deposits simply never arrive. */
@@ -229,10 +231,11 @@ export function evolveBankingSector(
   // Reserves earn the policy rate — the floor-system IOR. The 0.85 "tiering" haircut and the
   // bank-side ON RRP parking it justified are gone: a bank whose reserves earn IOR never goes
   // to the RRP window, which is exactly the real system.
-  const weeklyInterestIncomeUSD = (
-    sovereignUSD * sovereignBookAnnualYield +
-    Math.max(0, cashUSD) * policyRate
-  ) / 52 + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD;
+  // PUB1: the sovereign book earns its real COUPONS (passed in, paid by the government in
+  // stage 11), not a carry-at-market-yield the issuer never funded. `sovereignBookAnnualYield`
+  // is still the curve read used elsewhere; it no longer credits income here.
+  const weeklyInterestIncomeUSD = (Math.max(0, cashUSD) * policyRate) / 52
+    + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD + sovereignCouponWeeklyUSD;
   cashUSD += weeklyInterestIncomeUSD;
   equityUSD += weeklyInterestIncomeUSD;
   const weeklyDepositInterestUSD = (depositsUSD * depositRate) / 52;

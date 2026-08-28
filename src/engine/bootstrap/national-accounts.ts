@@ -77,14 +77,24 @@ export const HOUSEHOLD_EFFECTIVE_TAX_RATE = 0.1322;
  */
 export const UNEMPLOYMENT_REPLACEMENT_RATE = 0.35;
 
-/** Government transfer payments to households implied by a weekly government spending figure. */
-export function computeGovernmentTransfersUSD(governmentSpendingWeeklyUSD: number): number {
-  return governmentSpendingWeeklyUSD * 52 * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
+/**
+ * Government transfers to households, annualised. PUB1: interest is a contractual claim that
+ * comes off the top, so only the PRIMARY budget splits between transfers and procurement —
+ * which is how a rising debt service crowds them out.
+ */
+export function computeGovernmentTransfersUSD(
+  governmentSpendingWeeklyUSD: number,
+  interestWeeklyUSD: number = 0
+): number {
+  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD) * 52 * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
 }
 
-/** Government purchases of goods and services implied by a weekly government spending figure. */
-export function computeGovernmentPurchasesUSD(governmentSpendingWeeklyUSD: number): number {
-  return governmentSpendingWeeklyUSD * 52 * GOV_PROCUREMENT_SHARE_OF_SPENDING;
+/** Government purchases of goods and services, annualised. Primary budget only — see above. */
+export function computeGovernmentPurchasesUSD(
+  governmentSpendingWeeklyUSD: number,
+  interestWeeklyUSD: number = 0
+): number {
+  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD) * 52 * GOV_PROCUREMENT_SHARE_OF_SPENDING;
 }
 
 /**
@@ -103,10 +113,12 @@ export function computeHouseholdDisposableIncomeUSD(parts: {
   wageIncomeUSD: number;
   governmentSpendingWeeklyUSD: number;
   unemploymentBenefitsUSD: number;
+  /** PUB1: debt service leaves the transfer base — it is paid to bondholders. */
+  interestWeeklyUSD?: number;
 }): number {
   const capitalIncomeUSD = parts.wageIncomeUSD * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
   const transfersUSD = Math.max(
-    computeGovernmentTransfersUSD(parts.governmentSpendingWeeklyUSD),
+    computeGovernmentTransfersUSD(parts.governmentSpendingWeeklyUSD, parts.interestWeeklyUSD ?? 0),
     parts.unemploymentBenefitsUSD
   );
   const grossIncomeUSD = parts.wageIncomeUSD + capitalIncomeUSD + transfersUSD;
@@ -128,9 +140,11 @@ export function assertHouseholdIncomeIdentity(
   regionId: string,
   householdIncomeUSD: number,
   outputUSD: number,
-  governmentSpendingWeeklyUSD: number
+  governmentSpendingWeeklyUSD: number,
+  // PUB1: interest is paid to bondholders, not to households, so it leaves the transfer base.
+  interestWeeklyUSD: number = 0
 ): void {
-  const govSpendShareOfOutput = (governmentSpendingWeeklyUSD * 52) / outputUSD;
+  const govSpendShareOfOutput = (Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD) * 52) / outputUSD;
   const transferShare = govSpendShareOfOutput * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
   const expectedShare =
     (LABOR_SHARE_OF_OUTPUT + HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT + transferShare) *

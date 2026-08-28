@@ -11,6 +11,7 @@ import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking'
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
+import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
 /**
@@ -184,6 +185,8 @@ export function evolveRegionMacro(
 
   const newGovernmentRevenueUSD = Math.max(1e8, newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52); // weekly flow
   const newGovernmentSpendingUSD = Math.max(1e8, newGovernmentRevenueUSD + (newEstimatedNominalGdpUSD * newFiscalDeficitPctGdp) / 52); // spending = revenue + deficit, by definition
+  // PUB1: what the debt stack actually costs. Not added to spending — carved out of it.
+  const govInterestWeeklyUSD = weeklyInterestExpenseUSD(region.govDebtTranches);
 
   let newCycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery' = 'Slowdown';
   if (newGdpGrowth < 0) newCycleRegime = 'Recession';
@@ -473,6 +476,7 @@ export function evolveRegionMacro(
   const newEstimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
     wageIncomeUSD: totalWageIncomeUSD,
     governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
+    interestWeeklyUSD: region.governmentInterestWeeklyUSD ?? 0,
     unemploymentBenefitsUSD,
   }).toFixed(0));
 
@@ -498,7 +502,7 @@ export function evolveRegionMacro(
     occupationPools: newOccupationPools,
     baseAnnualWageUSD,
     laborForceByOccupation,
-    governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
+    governmentSpendingWeeklyUSD: Math.max(0, region.governmentSpendingUSD - (region.governmentInterestWeeklyUSD ?? 0)),
     aggregateSavingsRate: newSavingsRate,
     weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
     annualCapitalReceiptsUSD,
@@ -852,6 +856,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     effectiveTaxRate: newEffectiveTaxRate,
     governmentRevenueUSD: newGovernmentRevenueUSD,
     governmentSpendingUSD: newGovernmentSpendingUSD,
+    governmentInterestWeeklyUSD: Number(govInterestWeeklyUSD.toFixed(0)),
     householdState: {
       consumerConfidence: newCCI,
       creditTierBooks: normalizedTiers,

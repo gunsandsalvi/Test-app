@@ -22,6 +22,8 @@
 
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
+import { sovereignCouponByBucket } from '../../../domain/government';
+import { sovBucketKey } from './shared-helpers';
 import {
   evolveBankingSector, computeSovereignBookAnnualYield,
 } from '../../macro/banking';
@@ -112,6 +114,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       consumerCreditOriginationUSD: number;
     }>();
 
+    const sovCouponByBucket = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
+
     const newSheets: { bank: Company; sheet: BankingSector }[] = banks.map((bank) => {
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
@@ -159,6 +163,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         reg.repoRateAnnual ?? reg.policyRate,
         priorLoanInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
+        // PUB1: real coupons on this bank's own sovereign book.
+        Object.entries(prevSheet.sovereignBondHoldingsByTenor || {}).reduce(
+          (a, [k, v]) => a + ((Number(v) || 0) * (sovCouponByBucket[k] ?? 0)) / 52, 0
+        ),
         regionDivertedUSD * share,
         // HH4d: last week's post-bank-pass household flows settle on this bank's book (T+1) —
         // ETF purchases out, insurance premiums/benefits and PE calls/distributions net. The

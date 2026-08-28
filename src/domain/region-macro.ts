@@ -532,6 +532,18 @@ export interface Region {
   effectiveTaxRate: number;
   governmentRevenueUSD: number;
   governmentSpendingUSD: number;
+  /** PUB1 — real weekly interest on the debt stack, paid to holders. Comes off the top of
+   * spending, so procurement and transfers get the primary budget only. */
+  governmentInterestWeeklyUSD?: number;
+  /** PUB1 — the treasury's cash balance. Revenue in, spending out, issuance funds the gap. */
+  governmentAccountUSD?: number;
+  /**
+   * PUB1 — the slice of the interest bill paid to holders that do not exist yet: the central
+   * bank (15% of the stock, and in reality remitted straight back — PUB2) and foreign holders
+   * (24%, which really does leave — XB). The government debits the full bill because the burden
+   * is real; this line is what has no recipient. Watch it fall as PUB2 and XB land.
+   */
+  governmentInterestToUnmodeledHoldersUSD?: number;
   govDebtTranches: GovDebtTranche[];
   pendingUnfundedDeficitUSD?: number;
   debtToGdpPctBottomUp: number;
