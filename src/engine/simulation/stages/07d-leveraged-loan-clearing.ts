@@ -43,6 +43,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
+import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
 const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
@@ -120,7 +121,9 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     );
     if (regionCompanies.length === 0) return;
 
-    const tradableShare = reg.corpBondOwnership.institutionalShare;
+    // XB1: everything a bank is not holding in its banking book — the deleted `foreignShare`
+    // was an owner that did not exist.
+    const tradableShare = 1 - reg.corpBondOwnership.bankShare;
     // WS8: primary loan offerings priced alongside the outstanding stock (HC6's LBO/recap
     // financings arrive through this same gate).
     const offeringsByIssuerId = new Map<string, import('../../../types').PrimaryOffering>();
@@ -166,14 +169,22 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // Index funds are ordinary holders with an extraordinary schedule — they buy their benchmark
     // weight at whatever the market asks — so they are excluded from the allocator population here
     // and given their own demand below.
+    // XB1: cross-border loan buyers, bounded by mandate rather than by an assigned share.
+    const loanStockByRegion: Record<string, number> = {};
+    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+      loanStockByRegion[r] = ctx.prevActiveFirms
+        .filter((c) => c.region === r).reduce((a, c) => a + floatingDebtUSD(c), 0);
+    });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.region === regionId && e.entityType !== 'ETF'
+      (e) => e.entityType !== 'ETF'
+        && mandateWeightForIssuer(e.entityType, e.region, regionId, loanStockByRegion) > 0
     );
     const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === regionId && e.entityType === 'ETF' && e.etf
         && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'LEVERAGED_LOAN')
     );
     const bookEntities = [...regionEntities, ...regionIndexFunds];
+    const issuerIdsThisRegion = new Set(regionCompanies.map((c) => c.id));
     const otherHoldingsByEntity = new Map<string, ItemizedHolding[]>();
     const currentHoldingByCompanyByEntity = new Map<string, Map<string, number>>();
 
@@ -181,7 +192,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const currentHoldingByCompany = new Map<string, number>();
       const otherHoldings: ItemizedHolding[] = [];
       entity.itemizedHoldings.forEach((h) => {
-        if (h.instrumentType === 'LEVERAGED_LOAN') {
+        // XB1 / §7.34: only THIS region's paper belongs to this auction. Now that foreign
+        // holders bid here, an unfiltered sweep would pull a JPN insurer's JPN bonds into the
+        // USA book and rewrite them from USA fills — deleting positions with no cash leg.
+        if (h.instrumentType === 'LEVERAGED_LOAN' && issuerIdsThisRegion.has(h.instrumentId)) {
           currentHoldingByCompany.set(h.instrumentId, (currentHoldingByCompany.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
         } else {
           otherHoldings.push(h);
@@ -191,14 +205,13 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
     });
 
-    // Real, bottom-up aggregate: no dedicated region-level loan ownership share is tracked, so
-    // this reuses corpBondOwnership.institutionalShare (the same institutional-vs-market share
-    // that governs the sibling corporate-bond market) as a real, defensible proxy — never an
-    // independently-summed entity-level number.
-    const totalRealInstitutionalTargetUSD = reg.corpBondOwnership.institutionalShare * totalOutstandingUSD;
-    const rawEntityTargets = distributeRealTargetByWeight(
-      regionEntities.map((e) => ({ id: e.id, sizeWeight: e.totalAssetsUSD, targetPct: e.assetAllocationTarget.loanPct })),
-      totalRealInstitutionalTargetUSD
+    // XB1: each entity's own book decides its target — assets x loan allocation x mandate.
+    const rawEntityTargets = new Map<string, number>(
+      regionEntities.map((e) => [
+        e.id,
+        e.totalAssetsUSD * e.assetAllocationTarget.loanPct
+          * mandateWeightForIssuer(e.entityType, e.region, regionId, loanStockByRegion),
+      ])
     );
 
     // Same per-region memoization as 07b — see the optimization note in the plan's §6.
@@ -208,7 +221,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
-      const sectorTotal = totalRealInstitutionalTargetUSD || 1;
+      const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
       // The entity's real money for this auction (S11), directed at the names where paper is
       // actually changing hands: a live offering, or the gap between what this holder targets and
       // what it already owns. A name it is already at target in, with nothing on offer, needs

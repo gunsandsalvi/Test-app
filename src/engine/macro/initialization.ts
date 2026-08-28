@@ -178,17 +178,11 @@ const BANK_CAPITAL_RATIO = 0.13;
 const LOAN_LOSS_PROVISION_RATE = 0.008;
 
 const OWNERSHIP_SHARES = {
-  equity: { bankShare: 0.03, institutionalShare: 0.42, foreignShareEach: 0.05, centralBankShare: 0 },
-  corpBond: { bankShare: 0.28, institutionalShare: 0.45, foreignShareEach: 0.04, centralBankShare: 0 },
-  sovBond: { bankShare: 0.22, institutionalShare: 0.30, foreignShareEach: 0.08, centralBankShare: 0.15 },
+  equity: { bankShare: 0.03, institutionalShare: 0.42, centralBankShare: 0 },
+  corpBond: { bankShare: 0.28, institutionalShare: 0.45, centralBankShare: 0 },
+  sovBond: { bankShare: 0.22, institutionalShare: 0.30, centralBankShare: 0.15 },
 };
 
-function buildForeignShare(regionId: RegionId, each: number): Record<RegionId, number> {
-  const all: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
-  const result = {} as Record<RegionId, number>;
-  all.forEach((r) => { result[r] = r === regionId ? 0 : each; });
-  return result;
-}
 
 const INSTITUTIONAL_SECTOR_RATIOS = { cashToGdp: 0.010, sectorEquityToGdp: 0.012, investmentIncomeMargin: 0.028 };
 
@@ -443,9 +437,9 @@ function buildRegion(regionId: RegionId): Region {
     recessionShockQueue: [],
     estimatedHouseholdIncomeUSD,
     bankingSector,
-    equityOwnership: { bankShare: OWNERSHIP_SHARES.equity.bankShare, institutionalShare: OWNERSHIP_SHARES.equity.institutionalShare, foreignShare: buildForeignShare(regionId, OWNERSHIP_SHARES.equity.foreignShareEach), centralBankShare: OWNERSHIP_SHARES.equity.centralBankShare },
-    corpBondOwnership: { bankShare: OWNERSHIP_SHARES.corpBond.bankShare, institutionalShare: OWNERSHIP_SHARES.corpBond.institutionalShare, foreignShare: buildForeignShare(regionId, OWNERSHIP_SHARES.corpBond.foreignShareEach), centralBankShare: OWNERSHIP_SHARES.corpBond.centralBankShare },
-    sovBondOwnership: { bankShare: OWNERSHIP_SHARES.sovBond.bankShare, institutionalShare: OWNERSHIP_SHARES.sovBond.institutionalShare, foreignShare: buildForeignShare(regionId, OWNERSHIP_SHARES.sovBond.foreignShareEach), centralBankShare: OWNERSHIP_SHARES.sovBond.centralBankShare },
+    equityOwnership: { bankShare: OWNERSHIP_SHARES.equity.bankShare, institutionalShare: OWNERSHIP_SHARES.equity.institutionalShare, centralBankShare: OWNERSHIP_SHARES.equity.centralBankShare },
+    corpBondOwnership: { bankShare: OWNERSHIP_SHARES.corpBond.bankShare, institutionalShare: OWNERSHIP_SHARES.corpBond.institutionalShare, centralBankShare: OWNERSHIP_SHARES.corpBond.centralBankShare },
+    sovBondOwnership: { bankShare: OWNERSHIP_SHARES.sovBond.bankShare, institutionalShare: OWNERSHIP_SHARES.sovBond.institutionalShare, centralBankShare: OWNERSHIP_SHARES.sovBond.centralBankShare },
     institutionalSector,
     centralBankBalanceSheet: estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankBalanceSheetToGdp,
     // PUB2b: at birth the rule sits at neutral, so the floor blocks nothing.

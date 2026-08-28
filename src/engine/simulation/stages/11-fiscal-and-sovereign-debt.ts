@@ -20,7 +20,7 @@ import {
 } from '../../../domain/government';
 import { centralBankAssetsUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
-import { refreshRegionalHoldingsView } from './holdings-view';
+import { refreshRegionalHoldingsView, measuredForeignOwnership } from './holdings-view';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -35,11 +35,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
   // Runs here because stage 11 is the statistics stage and every clearing stage (07b/07c/07d)
   // and S11's mark have already written their books by this point in the week.
   (Object.keys(updatedRegions) as RegionId[]).forEach(regionId => {
-    refreshRegionalHoldingsView(
-      { ...state, institutionalEntities: ctx.updatedInstitutionalEntities, companies: updatedCompanies },
-      regionId,
-      updatedRegions[regionId]
-    );
+    const bookState = { ...state, institutionalEntities: ctx.updatedInstitutionalEntities, companies: updatedCompanies };
+    refreshRegionalHoldingsView(bookState, regionId, updatedRegions[regionId]);
+    // XB1: what foreigners actually own, measured off those same books.
+    updatedRegions[regionId].measuredForeignOwnership = measuredForeignOwnership(bookState, regionId);
   });
 
   // Measure this week's real consumer price level from the prices stage 05's auction actually

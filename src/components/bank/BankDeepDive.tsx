@@ -22,10 +22,9 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
   const corpOwnership = region.corpBondOwnership;
   const sovOwnership = region.sovBondOwnership;
 
-  const getHouseholdShare = (shares: typeof eqOwnership) => {
-    const foreignSum = (Object.values(shares.foreignShare) as number[]).reduce((a, b) => a + b, 0);
-    return Math.max(0, 1 - shares.bankShare - shares.institutionalShare - foreignSum - shares.centralBankShare);
-  };
+  // XB1: foreign ownership is measured from real holdings, not an assigned share.
+  const getHouseholdShare = (shares: typeof eqOwnership, foreignSum = 0) =>
+    Math.max(0, 1 - shares.bankShare - shares.institutionalShare - foreignSum - shares.centralBankShare);
 
   return (
     <div className="p-4 space-y-4 pb-20 max-w-5xl mx-auto">
@@ -226,20 +225,20 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Equities</div>
                 <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(eqOwnership.bankShare, 1)}</span></div>
                 <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(eqOwnership.institutionalShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(eqOwnership), 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(eqOwnership, region.measuredForeignOwnership?.equity ?? 0), 1)}</span></div>
               </div>
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Corporate Bonds</div>
                 <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(corpOwnership.bankShare, 1)}</span></div>
                 <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(corpOwnership.institutionalShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(corpOwnership), 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(corpOwnership, region.measuredForeignOwnership?.corpBond ?? 0), 1)}</span></div>
               </div>
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Sovereign Bonds</div>
                 <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(sovOwnership.bankShare, 1)}</span></div>
                 <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(sovOwnership.institutionalShare, 1)}</span></div>
                 <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Central Bank:</span> <span className="font-bold">{formatPercent(sovOwnership.centralBankShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(sovOwnership), 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(sovOwnership, region.measuredForeignOwnership?.sovBond ?? 0), 1)}</span></div>
               </div>
             </div>
           </div>

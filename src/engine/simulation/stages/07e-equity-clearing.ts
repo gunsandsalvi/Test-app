@@ -36,6 +36,7 @@ import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
+import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
 const DEALER_SPREAD_BPS = 8;
 /** Equity gaps more than credit; this is discrete-time damping, not a bound. */
@@ -83,12 +84,21 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
 
     // Index funds are handled separately below (their schedule is a size, not a price), so they
     // are excluded from the ordinary allocator population here.
+    // XB1: every region's institutions bid for this register, bounded by mandate.
+    const mcapByRegion: Record<string, number> = {};
+    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+      mcapByRegion[r] = ctx.prevActiveFirms
+        .filter((c) => c.region === r).reduce((a, c) => a + Math.max(0, c.marketCap ?? 0), 0);
+    });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.region === regionId && e.entityType !== 'ETF'
+      (e) => e.entityType !== 'ETF'
+        && mandateWeightForIssuer(e.entityType, e.region, regionId, mcapByRegion) > 0
     );
     if (regionEntities.length === 0) return;
 
-    const tradableShare = reg.equityOwnership.institutionalShare;
+    // XB1: the float is the register less what banks hold — the deleted `foreignShare` was an
+    // owner that did not exist, and households reach equity through funds, which bid here.
+    const tradableShare = 1 - reg.equityOwnership.bankShare;
     const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
 
     /** The book's reference: a listed name's last cleared print, a debut's own price talk. */
@@ -205,7 +215,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // puts on equities. Unlike credit, there is no leverage allowance here — nobody in this
       // model runs a levered equity book.
       const budgetUSD = entity.assetAllocationTarget.equityPct * Math.max(0, entity.cashUSD ?? 0);
-      const entityPoolUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.equityPct;
+      const entityPoolUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.equityPct
+        * mandateWeightForIssuer(entity.entityType, entity.region, regionId, mcapByRegion);
       // Same discipline as the credit books: this week's money goes where shares are actually
       // changing hands — a live offering, or the gap between the target holding and the current
       // one. A name the holder is already at weight in, with nothing on offer, needs none of it.

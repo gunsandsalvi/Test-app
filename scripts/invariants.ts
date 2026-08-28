@@ -389,8 +389,9 @@ function checkOwnershipConservation(state: GameState, week: number) {
     (['equityOwnership', 'corpBondOwnership', 'sovBondOwnership'] as const).forEach(key => {
       const o = reg[key];
       if (!o) return;
-      const foreignSum = Object.values(o.foreignShare || {}).reduce((s: number, v: number) => s + v, 0);
-      const totalShareAccounted = o.bankShare + o.institutionalShare + foreignSum + o.centralBankShare;
+      // XB1: foreign ownership is no longer a share in this object — it is measured from real
+      // holdings (measuredForeignOwnership), so it is not part of this conservation sum.
+      const totalShareAccounted = o.bankShare + o.institutionalShare + o.centralBankShare;
       const impliedHousehold = 1 - totalShareAccounted;
       if (totalShareAccounted < -0.001 || totalShareAccounted > 1.001 || impliedHousehold < -0.001 || impliedHousehold > 1.001) {
         violations.push({
@@ -471,7 +472,15 @@ function checkSustainedEquityDemandMovesPriceBeyondEps(): Violation | null {
     let state = createInitialGameState(SEED);
     // Force a large institutional under-allocation so the holder-class rebalancing flow produces
     // a sustained multi-week inflow into USA equities.
-    if (shocked) state.regions.USA.equityOwnership.institutionalShare = 0.05;
+    // XB1: the driver moved. Equity demand is each entity's OWN book (assets x equityPct x
+    // mandate), not a region-level ownership share, so shocking `institutionalShare` is inert.
+    // Shock what actually sizes the bid.
+    if (shocked) {
+      state.institutionalEntities.forEach((e) => {
+        if (e.region !== 'USA' || e.entityType === 'ETF') return;
+        e.assetAllocationTarget = { ...e.assetAllocationTarget, equityPct: Math.min(0.95, e.assetAllocationTarget.equityPct * 3) };
+      });
+    }
     for (let w = 0; w < 20; w++) state = advanceWeeklyStep(state);
     return state.companies.find(c => c.ticker === ticker);
   };
@@ -519,9 +528,10 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
       c.bankBalanceSheet.repoEncumberedCollateralUSD = sovUSD;
     }
   });
-  shocked.institutionalEntities.forEach(e => {
-    if (e.region === 'USA') e.cashUSD = 0;
-  });
+  // XB1: foreign institutions bid in this auction too, so starving only the DOMESTIC ones no
+  // longer under-subscribes it — foreign demand absorbs the paper, which is the mechanism
+  // working. A genuinely under-subscribed auction now means every eligible bidder is out of money.
+  shocked.institutionalEntities.forEach(e => { e.cashUSD = 0; });
 
   const baselineNext = advanceWeeklyStep(baseline);
   const shockedNext = advanceWeeklyStep(shocked);

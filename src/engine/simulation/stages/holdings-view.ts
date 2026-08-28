@@ -99,6 +99,36 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
  * real books instead of a week-0 snapshot. This is a projection, not a second ledger: nothing
  * here is ever read back to decide a holding.
  */
+/**
+ * XB1: the share of a region's markets held by FOREIGN institutions — measured from the real
+ * books, never assigned. This replaces `AssetOwnershipShares.foreignShare`, which was an input
+ * imposed on every market and owned by nobody.
+ */
+export function measuredForeignOwnership(state: GameState, regionId: RegionId): {
+  equity: number; corpBond: number; sovBond: number;
+} {
+  const held = { equity: 0, corpBond: 0, sovBond: 0 };
+  const foreign = { equity: 0, corpBond: 0, sovBond: 0 };
+  state.institutionalEntities.forEach((e) => {
+    if (e.isDefaulted) return;
+    e.itemizedHoldings.forEach((h) => {
+      if (h.issuerRegion !== regionId) return;
+      const v = h.quantityOrNotionalUSD ?? 0;
+      const key = h.instrumentType === 'EQUITY' ? 'equity'
+        : h.instrumentType === 'GOV_BOND' ? 'sovBond'
+        : (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN') ? 'corpBond' : null;
+      if (!key) return;
+      held[key] += v;
+      if (e.region !== regionId) foreign[key] += v;
+    });
+  });
+  return {
+    equity: held.equity > 0 ? foreign.equity / held.equity : 0,
+    corpBond: held.corpBond > 0 ? foreign.corpBond / held.corpBond : 0,
+    sovBond: held.sovBond > 0 ? foreign.sovBond / held.sovBond : 0,
+  };
+}
+
 export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId, reg: {
   institutionalSector: {
     itemizedHoldings: ItemizedHolding[]; corpBondHoldingsUSD: number; sovBondHoldingsUSD: number;

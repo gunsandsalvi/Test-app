@@ -45,6 +45,7 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { distributeRealTargetByWeight, SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
+import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
@@ -208,11 +209,11 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       return {
         id: bucketInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        // PUB2b: the central bank's share joins the float, because the CB is a participant now
-        // rather than a passive block held outside the market.
-        tradableFloatUSD: (outstandingByBucket.get(b.key) ?? 0) *
-          (reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare
-            + (reg.centralBankSheet ? reg.sovBondOwnership.centralBankShare : 0)),
+        // XB1: the WHOLE stock is tradable. Every holder is real now — banks, institutions at
+        // home and abroad, and the central bank since PUB2b — so there is no block sitting
+        // outside the market. The share this used to subtract was `foreignShare`, an owner that
+        // did not exist.
+        tradableFloatUSD: outstandingByBucket.get(b.key) ?? 0,
         currentStat: currentYieldDecimal * 10000, // bps
         statKind: 'YIELD_LIKE',
         durationYears: b.years,
@@ -226,16 +227,32 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
 
-    const rawInstitutionalTargetUSD = reg.sovBondOwnership.institutionalShare * totalOutstandingUSD;
-    const rawEntityTargets = distributeRealTargetByWeight(
-      regionEntities.map((e) => ({ id: e.id, sizeWeight: e.totalAssetsUSD, targetPct: e.assetAllocationTarget.govBondPct })),
-      rawInstitutionalTargetUSD
+    // XB1: every region's institutions bid here, not just this one's, and each one's target is
+    // ITS OWN book — assets x its government-bond allocation x what its mandate allows in this
+    // issuer's market. The imposed `institutionalShare x outstanding`, renormalized across a
+    // fixed holder set, is gone: it decided the answer the auction is supposed to produce.
+    const sovStockByRegion: Record<string, number> = {};
+    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+      sovStockByRegion[r] = (ctx.updatedRegions[r]?.govDebtTranches || [])
+        .filter((t) => t.tenorAtIssuanceYears >= SOV_BILL_MAX_TENOR_YEARS)
+        .reduce((a, t) => a + t.principalUSD, 0);
+    });
+    const biddingEntities = ctx.updatedInstitutionalEntities.filter(
+      (e) => mandateAllowsDuration(e.entityType)
+        && mandateWeightForIssuer(e.entityType, e.region, regionId, sovStockByRegion) > 0
     );
-    // Same real, bottom-up derivation for banks: reg.sovBondOwnership.bankShare * the real
-    // outstanding stock is the actual, already-bounded aggregate bank claim — never each named
-    // bank independently computing depositsUSD * a ratio, which has no structural relationship
-    // to how much sovereign debt actually exists and can (and did, before this fix) imply the
-    // banking sector wanting several times the entire market.
+    const rawEntityTargets = new Map<string, number>(
+      biddingEntities.map((e) => [
+        e.id,
+        e.totalAssetsUSD * e.assetAllocationTarget.govBondPct
+          * mandateWeightForIssuer(e.entityType, e.region, regionId, sovStockByRegion),
+      ])
+    );
+    // Banks stay DOMESTIC, and that is a mandate rather than an assigned share: a bank holds its
+    // own sovereign as the liquidity buffer its regulator recognises, which is why it does not
+    // reach for foreign paper to meet it. The aggregate is still bounded here rather than let
+    // each bank compute deposits x a ratio, which implied the banking sector wanting several
+    // times the entire market. (XB records this as the ownership share that remains imposed.)
     const rawBankTargetUSD = reg.sovBondOwnership.bankShare * totalOutstandingUSD;
     const rawBankTargets = distributeRealTargetByWeight(
       regionBanks.map((b) => ({ id: b.ticker, sizeWeight: b.bankBalanceSheet!.depositsUSD, targetPct: 1 })),
@@ -246,7 +263,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const ownBucketInstrumentIds = new Set(activeBuckets.map((b) => bucketInstrumentId(regionId, b.key)));
 
     const otherEntityHoldings = new Map<string, ItemizedHolding[]>();
-    const entityParticipants: ClearingParticipant[] = regionEntities.map((entity) => {
+    const entityParticipants: ClearingParticipant[] = biddingEntities.map((entity) => {
       const currentByBucket = new Map<string, number>();
       const other: ItemizedHolding[] = [];
       // Only the four BOND buckets this auction actually prices are its own. Bills are
@@ -377,10 +394,11 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     reg.yieldCurveParams = fittedParams;
     reg.zeroRates = newZeroRates;
 
-    // Apply: each entity's real new holdings.
-    if (regionEntities.length > 0) {
+    // Apply: each entity's real new holdings — foreign holders included, which is what makes
+    // the foreign share a measured outcome rather than a parameter.
+    if (biddingEntities.length > 0) {
       const updated = new Map<string, InstitutionalEntity>();
-      regionEntities.forEach((entity) => {
+      biddingEntities.forEach((entity) => {
         const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
         const newGovHoldings: ItemizedHolding[] = [];
         newHoldings.forEach((usd, instrumentId) => {

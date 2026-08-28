@@ -38,6 +38,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
+import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
 const DEALER_SPREAD_BPS = 2; // the tightest market there is
 const MAX_WEEKLY_YIELD_MOVE_PCT = 0.25; // short paper reprices to policy fast; damping is looser here
@@ -83,9 +84,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
     const activeBuckets = SOV_BILL_BUCKETS.filter((b) => (outstandingByBucket.get(b.key) ?? 0) > 0);
     if (activeBuckets.length > 0) {
-      // PUB2b: the central bank trades its bill book too, so its share is part of the float.
-      const tradableShare = reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare
-        + (reg.centralBankSheet ? reg.sovBondOwnership.centralBankShare : 0);
+      // XB1: the whole bill stock is tradable — every holder is real (banks, institutions at
+      // home and abroad, the central bank since PUB2b). The share this used to subtract was
+      // `foreignShare`, an owner that did not exist.
+      const tradableShare = 1;
       const instruments: ClearingInstrument[] = activeBuckets.map((b) => ({
         id: billInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
@@ -96,7 +98,17 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       }));
 
       const regionBanks = ctx.updatedCompanies.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet && isActiveCompany(c));
-      const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
+      // XB1: bills are the one book a money fund belongs in, and foreign cash sleeves reach for
+      // them too — a mandate bound, not an assigned share.
+      const billStockByRegion: Record<string, number> = {};
+      (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+        billStockByRegion[r] = (ctx.updatedRegions[r]?.govDebtTranches || [])
+          .filter((t) => sovBucketKey(t.tenorAtIssuanceYears).startsWith('b'))
+          .reduce((a, t) => a + t.principalUSD, 0);
+      });
+      const regionEntities = ctx.updatedInstitutionalEntities.filter(
+        (e) => mandateWeightForIssuer(e.entityType, e.region, regionId, billStockByRegion) > 0
+      );
       const totalBillStockUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
       const totalBankDepositsUSD = regionBanks.reduce((s, c) => s + (c.bankBalanceSheet?.depositsUSD ?? 0), 0) || 1;
 

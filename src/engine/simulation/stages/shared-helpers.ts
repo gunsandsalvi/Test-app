@@ -188,13 +188,18 @@ export function formSupplyRelationships(regionId: RegionId, companies: Company[]
   return relationships;
 }
 
-export function computeTargetOwnershipShares(assetClass: string, regionId: RegionId, region: Region, allRegions: Record<RegionId, Region>): { bankShare: number; institutionalShare: number; foreignShare: Record<string, number>; centralBankShare: number } {
+/**
+ * XB1: `foreignShare` is gone. It was an ownership share imposed on every market and drifted
+ * weekly on a growth differential, owning nothing — no entity held it and no coupon reached it.
+ * Foreign holdings are now whatever foreign institutions actually buy in the clearing books.
+ */
+export function computeTargetOwnershipShares(assetClass: string, regionId: RegionId, region: Region, allRegions: Record<RegionId, Region>): { bankShare: number; institutionalShare: number; centralBankShare: number } {
+  void regionId; void allRegions;
   if (assetClass !== 'equity') {
     const current = (region as any)[`${assetClass}Ownership`] ?? region.equityOwnership;
     return {
       bankShare: current.bankShare,
       institutionalShare: current.institutionalShare,
-      foreignShare: current.foreignShare,
       centralBankShare: current.centralBankShare,
     };
   }
@@ -204,16 +209,7 @@ export function computeTargetOwnershipShares(assetClass: string, regionId: Regio
   const institutionalShare = Math.max(0.10, Math.min(0.65, current.institutionalShare + equityAttractiveness * EQUITY_ATTRACTIVENESS_SENSITIVITY));
   const bankShare = Math.max(0.01, Math.min(0.10, current.bankShare + equityAttractiveness * EQUITY_BANK_SENSITIVITY));
 
-  const foreignShare: Record<string, number> = {};
-  Object.keys(current.foreignShare).forEach((r) => {
-    if (r === regionId) { foreignShare[r] = 0; return; }
-    const otherRegion = allRegions[r];
-    const growthDifferential = otherRegion ? (otherRegion.gdpGrowth - region.gdpGrowth) : 0;
-    const base = (current.foreignShare as any)[r] ?? 0.05;
-    foreignShare[r] = Math.max(0, base * (1 + growthDifferential * FOREIGN_GROWTH_SENSITIVITY));
-  });
-
-  return { bankShare, institutionalShare, foreignShare, centralBankShare: current.centralBankShare };
+  return { bankShare, institutionalShare, centralBankShare: current.centralBankShare };
 }
 
 export function distributeRealTargetByWeight(

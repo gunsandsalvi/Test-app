@@ -59,6 +59,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
+import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
@@ -127,7 +128,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // The float genuinely in play is what the bidders below can hold between them. The rest of
     // each issue sits with holders who do not bid in this auction, and was never for sale.
-    const tradableShare = reg.corpBondOwnership.institutionalShare;
+    // XB1: the float is everything a bank is not holding in its banking book. The share this
+    // used to subtract included `foreignShare`, an owner that did not exist.
+    const tradableShare = 1 - reg.corpBondOwnership.bankShare;
     // WS8: this week's primary offerings in THIS book — new fixed-rate paper priced alongside
     // the outstanding stock. The issuer's walk-away rides on the instrument; the engine
     // re-solves without the offering when it is pulled.
@@ -170,14 +173,23 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Index funds are ordinary holders with an extraordinary schedule — they buy their benchmark
     // weight at whatever the market asks — so they are excluded from the allocator population here
     // and given their own demand below.
+    // XB1: every region's institutions bid, bounded by their own mandate rather than by an
+    // ownership share assigned to their region.
+    const corpStockByRegion: Record<string, number> = {};
+    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+      corpStockByRegion[r] = ctx.prevActiveFirms
+        .filter((c) => c.region === r).reduce((a, c) => a + fixedDebtUSD(c), 0);
+    });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.region === regionId && e.entityType !== 'ETF'
+      (e) => e.entityType !== 'ETF'
+        && mandateWeightForIssuer(e.entityType, e.region, regionId, corpStockByRegion) > 0
     );
     const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === regionId && e.entityType === 'ETF' && e.etf
         && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'CORP_BOND')
     );
     const bookEntities = [...regionEntities, ...regionIndexFunds];
+    const issuerIdsThisRegion = new Set(regionCompanies.map((c) => c.id));
     const otherHoldingsByEntity = new Map<string, ItemizedHolding[]>();
     const currentHoldingByCompanyByEntity = new Map<string, Map<string, number>>();
 
@@ -185,7 +197,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const currentHoldingByCompany = new Map<string, number>();
       const otherHoldings: ItemizedHolding[] = [];
       entity.itemizedHoldings.forEach((h) => {
-        if (h.instrumentType === 'CORP_BOND') {
+        // XB1 / §7.34: only THIS region's paper belongs to this auction. Now that foreign
+        // holders bid here, an unfiltered sweep would pull a JPN insurer's JPN bonds into the
+        // USA book and rewrite them from USA fills — deleting positions with no cash leg.
+        if (h.instrumentType === 'CORP_BOND' && issuerIdsThisRegion.has(h.instrumentId)) {
           currentHoldingByCompany.set(h.instrumentId, (currentHoldingByCompany.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
         } else {
           otherHoldings.push(h);
@@ -195,14 +210,15 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
     });
 
-    // Real, bottom-up aggregate: the institutional sector's actual share of the real corporate
-    // debt market (reg.corpBondOwnership.institutionalShare, already a stable, real calibration
-    // used elsewhere in this codebase), never an independently-summed entity-level number that
-    // could come out larger than the market and need a cap.
-    const totalRealInstitutionalTargetUSD = reg.corpBondOwnership.institutionalShare * totalOutstandingUSD;
-    const rawEntityTargets = distributeRealTargetByWeight(
-      regionEntities.map((e) => ({ id: e.id, sizeWeight: e.totalAssetsUSD, targetPct: e.assetAllocationTarget.corpBondPct })),
-      totalRealInstitutionalTargetUSD
+    // XB1: each entity's target is ITS OWN book — assets x its corporate-credit allocation x
+    // what its mandate allows in this issuer's market. The imposed institutional share,
+    // renormalized across a fixed holder set, decided the answer the auction should produce.
+    const rawEntityTargets = new Map<string, number>(
+      regionEntities.map((e) => [
+        e.id,
+        e.totalAssetsUSD * e.assetAllocationTarget.corpBondPct
+          * mandateWeightForIssuer(e.entityType, e.region, regionId, corpStockByRegion),
+      ])
     );
 
     // Per-company quantities memoized ONCE per region-week, never inside the participants loop
@@ -214,7 +230,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
-      const sectorTotal = totalRealInstitutionalTargetUSD || 1;
+      // XB1: the sector total is now the SUM of what the real bidders want, not an imposed
+      // aggregate — so a name's structural size is its share of genuine demand.
+      const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
       // The entity's real budget for this auction (S11): available cash plus its type's genuine
       // leverage capacity, sliced to this asset class by its own targets, then directed at the
       // names where paper is actually changing hands — a live offering, or the gap between what

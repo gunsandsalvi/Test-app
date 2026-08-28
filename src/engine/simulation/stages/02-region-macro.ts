@@ -107,11 +107,10 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       const updatedShares = {
         bankShare: current.bankShare + (target.bankShare - current.bankShare) * 0.05,
         institutionalShare: current.institutionalShare + (target.institutionalShare - current.institutionalShare) * 0.05,
-        foreignShare: Object.fromEntries((['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => [r, current.foreignShare[r] + ((target.foreignShare[r] ?? 0) - current.foreignShare[r]) * 0.05])) as Record<RegionId, number>,
         centralBankShare: current.centralBankShare + (target.centralBankShare - current.centralBankShare) * 0.05,
       };
 
-      // Bank/institutional/foreign/central-bank shares are meant to leave a real residual for
+      // Bank/institutional/central-bank shares are meant to leave a real residual for
       // household ownership (every other ownership display in the app computes household as
       // 1 - these four) — only rescale them down when they'd otherwise exceed a cap that
       // guarantees household keeps a minimum floor, rather than always normalizing to exactly
@@ -119,14 +118,11 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       // share exactly 0 by construction on every run, and inflated institutional/bank/foreign
       // shares well above their calibrated starting values (e.g. equity institutionalShare
       // divided by a pre-normalization sum of ~0.6 jumps to ~0.42/0.6 ≈ 0.70 immediately).
-      const totalSharesSum = updatedShares.bankShare + updatedShares.institutionalShare + Object.values(updatedShares.foreignShare).reduce((a, b) => a + b, 0) + updatedShares.centralBankShare;
+      const totalSharesSum = updatedShares.bankShare + updatedShares.institutionalShare + updatedShares.centralBankShare;
       if (totalSharesSum > MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE) {
         const scale = MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE / totalSharesSum;
         updatedShares.bankShare *= scale;
         updatedShares.institutionalShare *= scale;
-        Object.keys(updatedShares.foreignShare).forEach(r => {
-          updatedShares.foreignShare[r as RegionId] *= scale;
-        });
         updatedShares.centralBankShare *= scale;
       }
       updatedRegion[fieldName] = updatedShares;

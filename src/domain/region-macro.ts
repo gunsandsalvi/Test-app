@@ -457,6 +457,8 @@ export interface Region {
   equityOwnership: AssetOwnershipShares;
   corpBondOwnership: AssetOwnershipShares;
   sovBondOwnership: AssetOwnershipShares;
+  /** XB1: foreign ownership MEASURED from real holdings each week — an outcome, not an input. */
+  measuredForeignOwnership?: { equity: number; corpBond: number; sovBond: number };
   institutionalSector: InstitutionalSector;
   laggedCorporateDemandBase: number;
   estimatedHouseholdIncomeUSD: number;

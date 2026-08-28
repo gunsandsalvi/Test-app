@@ -31,6 +31,7 @@ import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign
 import { runBillAccretionStage } from './stages/bill-accretion';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
+import { distributeMoneyFundIncome } from './stages/money-market-fund';
 
 export { computeOccupationDemand } from './stages/shared-helpers';
 
@@ -148,6 +149,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('10-mergers', () => runMergersStage(state, ctx));
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
   // the face its holder has accreted to rather than at last week's value.
+  // A stable-NAV fund pays its yield as new shares and its fee leaves to the manager.
+  run('money-fund-income', () => distributeMoneyFundIncome(ctx));
   run('bill-accretion', () => runBillAccretionStage(state, ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));
   // HH5: employment's one representation, re-read after defaults (08), mergers (10) and births

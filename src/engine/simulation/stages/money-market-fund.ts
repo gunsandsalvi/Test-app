@@ -178,3 +178,51 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
     };
   });
 }
+
+/**
+ * A stable-NAV fund's week: it pays its yield by ISSUING SHARES, and its fee LEAVES.
+ *
+ * The defect this closes: shares only ever moved on subscriptions and redemptions, while the
+ * fund's assets grew every week by everything its book earned. So assets and shares diverged
+ * without bound — measured 0.54% → 1.06% → 1.72% over 60 weeks, and it was not a slow drift but
+ * an uncapped one. It only stayed inside the harness band because yields were low; XB1's larger
+ * float raised them and the same defect crossed the band in four regions at once.
+ *
+ * A money fund holds its NAV at $1 by distributing income as new shares — a shareholder's dollar
+ * becomes 1.0004 dollars of shares, never a share worth $1.0004. And the fee is the manager's
+ * revenue, so it has to go somewhere real: it is paid to the region's asset managers, who are the
+ * firms that actually run these funds.
+ */
+export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
+  const feeByRegion = new Map<RegionId, number>();
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
+    if (e.entityType !== 'MONEY_MARKET_FUND') return e;
+    const holdingsUSD = (e.itemizedHoldings || []).reduce((a, h) => a + h.quantityOrNotionalUSD, 0);
+    const bookUSD = (e.cashUSD ?? 0) + holdingsUSD + (e.repoLentUSD ?? 0);
+    if (bookUSD <= 0) return e;
+    const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
+    const paidToHoldersUSD = (bookUSD * (e.mmfNetYieldAnnual ?? 0)) / 52;
+    feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeUSD);
+    return {
+      ...e,
+      cashUSD: (e.cashUSD ?? 0) - feeUSD,
+      mmfSharesOutstandingUSD: Math.max(0, (e.mmfSharesOutstandingUSD ?? 0) + paidToHoldersUSD),
+    };
+  });
+
+  if (feeByRegion.size === 0) return;
+  const managersByRegion = new Map<RegionId, { total: number }>();
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    if (e.entityType !== 'ASSET_MANAGER') return;
+    const cur = managersByRegion.get(e.region) ?? { total: 0 };
+    cur.total += Math.max(0, e.totalAssetsUSD);
+    managersByRegion.set(e.region, cur);
+  });
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
+    if (e.entityType !== 'ASSET_MANAGER') return e;
+    const feeUSD = feeByRegion.get(e.region) ?? 0;
+    const pool = managersByRegion.get(e.region)?.total ?? 0;
+    if (feeUSD <= 0 || pool <= 0) return e;
+    return { ...e, cashUSD: (e.cashUSD ?? 0) + feeUSD * (Math.max(0, e.totalAssetsUSD) / pool) };
+  });
+}

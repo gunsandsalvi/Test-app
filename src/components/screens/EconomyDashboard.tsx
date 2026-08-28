@@ -22,8 +22,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
     'RealEstateConstruction'
   ];
 
-  const calcShares = (ao: any) => {
-    const foreignSum = (Object.values(ao.foreignShare) as number[]).reduce((a, b) => a + b, 0);
+  const calcShares = (ao: any, foreignSum = 0) => {
     const cbShare = ao.centralBankShare || 0;
     const hhShare = Math.max(0, 1 - ao.bankShare - ao.institutionalShare - cbShare - foreignSum);
     return {
@@ -145,7 +144,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
             <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / CB / HH / Foreign</span>
           </div>
           {(() => {
-            const sh = calcShares(reg.corpBondOwnership);
+            const sh = calcShares(reg.corpBondOwnership, reg.measuredForeignOwnership?.corpBond ?? 0);
             return (
               <div className="h-3 rounded overflow-hidden flex bg-black/30">
                 <div style={{ width: `${sh.bank}%` }} className="bg-blue-500" title="Bank" />
@@ -165,7 +164,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
             <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / CB / HH / Foreign</span>
           </div>
           {(() => {
-            const sh = calcShares(reg.sovBondOwnership);
+            const sh = calcShares(reg.sovBondOwnership, reg.measuredForeignOwnership?.sovBond ?? 0);
             return (
               <div className="h-3 rounded overflow-hidden flex bg-black/30">
                 <div style={{ width: `${sh.bank}%` }} className="bg-blue-500" title="Bank" />
@@ -185,7 +184,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
             <span className="text-[var(--text-tertiary)] font-mono text-[10px]">Bank / Inst / CB / HH / Foreign</span>
           </div>
           {(() => {
-            const sh = calcShares(reg.equityOwnership);
+            const sh = calcShares(reg.equityOwnership, reg.measuredForeignOwnership?.equity ?? 0);
             return (
               <div className="h-3 rounded overflow-hidden flex bg-black/30">
                 <div style={{ width: `${sh.bank}%` }} className="bg-blue-500" title="Bank" />

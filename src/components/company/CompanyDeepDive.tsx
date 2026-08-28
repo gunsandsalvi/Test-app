@@ -834,7 +834,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Ownership Breakdown</div>
               {(() => {
                 const cb = reg.corpBondOwnership;
-                const foreignSum = (Object.values(cb.foreignShare) as number[]).reduce((a, b) => a + b, 0);
+                const foreignSum = reg.measuredForeignOwnership?.corpBond ?? 0;
                 const hhShare = Math.max(0, 1 - cb.bankShare - cb.institutionalShare - foreignSum);
                 const bankPct = formatPercent(cb.bankShare, 0);
                 const instPct = formatPercent(cb.institutionalShare, 0);

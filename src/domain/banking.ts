@@ -22,10 +22,15 @@ export interface ItemizedHolding {
   quantityShares?: number;
 }
 
+/**
+ * XB1: `foreignShare` was removed. It assigned each region a share of every other region's
+ * markets, re-imposed weekly, owned by nobody — 442B of claims with no holder. Foreign ownership
+ * is now the residual of what foreign institutions actually bought in the clearing books, which
+ * is what ownership is.
+ */
 export interface AssetOwnershipShares {
   bankShare: number;
   institutionalShare: number; // insurers + asset managers
-  foreignShare: Record<RegionId, number>; // this region's assets held by each of the other three
   centralBankShare: number; // meaningful only for sovereign bonds — 0 elsewhere
 }
 
