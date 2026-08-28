@@ -333,6 +333,14 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             originationWeek: ctx.nextWeek,
             maturityWeek: ctx.nextWeek + 52,
             seniority: 'SENIOR',
+            // G2: a committed bank line is BANK debt, exactly like the revolver stage 08 draws
+            // for a withdrawn refinancing. Unmarked, the identical instrument sat in the
+            // syndicated loan market's float on one path and on the house bank's itemized book
+            // on the other — one real thing represented two ways (rule 3), and the same
+            // double-count class G2 slice 1 was built to close. It also picked up a six-month
+            // soft call from the call-protection rules, which a revolver must never carry.
+            isBankFacility: true,
+            facilityBankTicker: comp.homeBankTicker,
           });
           ctx.newsItems.push({
             id: `cp-fail-${comp.ticker}-${ctx.nextWeek}`,

@@ -59,9 +59,15 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       if (o.region === regionId && o.instrumentType === 'EQUITY') offeringsByIssuerId.set(o.issuerId, o);
     });
 
+    // Banks and institutions are listed companies and clear here like any other. They used to be
+    // excluded and priced by a book-value x cycle-P/B formula in stage 08 — the last formula
+    // price setter for a whole listed cohort, and a rule-1 violation hiding in plain sight. G2
+    // made bank earnings a real P&L and the flow ledger made bank equity real, so the reason for
+    // the carve-out is gone: they have the two inputs the valuation needs, and their book equity
+    // now reads their own balance sheet rather than an operating company's PP&E arithmetic.
     const listedCompanies = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && isActiveCompany(c) && isPubliclyListed(c)
-        && !c.isBankEntity && !c.isInstitutionalEntity && c.sharesOutstanding > 0 && c.stockPrice > 0
+        && c.sharesOutstanding > 0 && c.stockPrice > 0
     );
     // HC7: a LISTING issuer is in this book precisely because it is not listed yet — no float and
     // no prior print, so it enters on its own price talk and its whole book is the offering.

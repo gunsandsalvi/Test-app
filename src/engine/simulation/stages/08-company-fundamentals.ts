@@ -90,6 +90,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   };
 
   ctx.updatedCompanies = state.companies.map((comp) => {
+    /**
+     * Earnings PER SHARE, for a company that has shares. A private firm's register is empty until
+     * it lists (HC7's `postIssueSharesOutstanding` creates it), so there is nothing to divide by
+     * and the honest answer is zero — not a figure produced by dividing into a fabricated share
+     * count that the generator used to hand every private firm.
+     */
+    const perShare = (amountUSD: number): number =>
+      comp.sharesOutstanding > 0 ? Number((amountUSD / comp.sharesOutstanding).toFixed(2)) : 0;
+
     if (!isActiveCompany(comp)) {
       return { ...comp, previousEmployeeCount: 0, employeeCount: 0 };
     }
@@ -221,7 +230,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEbitda = newRevenue * newEbitdaMargin - (loanLosses * 52);
       newEbit = Math.max(1, newEbitda);
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-      newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
+      newEps = perShare(newNetIncome);
       comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
     } else if (comp.financialStatementProfile === 'INSURER') {
       // Float scales with this insurer's own premium base, not the region's aggregate
@@ -249,7 +258,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEbitda = (underwritingIncome + investmentIncome) * 52;
       newEbit = Math.max(1, newEbitda);
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-      newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
+      newEps = perShare(newNetIncome);
     } else if (comp.financialStatementProfile === 'ASSET_MANAGER') {
       const instEnt = entityById.get(comp.id);
       // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
@@ -271,7 +280,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEbitda = newRevenue * newEbitdaMargin;
       newEbit = Math.max(1, newEbitda);
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-      newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
+      newEps = perShare(newNetIncome);
     } else {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
@@ -506,7 +515,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEbit = Math.max(1, newEbitda - da);
 
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-      newEps = Number((newNetIncome / comp.sharesOutstanding).toFixed(2));
+      newEps = perShare(newNetIncome);
 
       // Quarterly dollar impact of the same cost drivers that moved targetMargin above —
       // this is what backs the COGS breakdown shown in the deep financials drill-down, so it
@@ -1235,38 +1244,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const newSentiment = (comp.sentiment * 0.85 + sentimentDelta);
     let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number(comp.stockPrice.toFixed(2)));
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
-    if (comp.isBankEntity) {
-      // Wall Street Phase 1: this bank's own real equity (computed this week in
-      // 02b-bank-diversification.ts, before this stage runs) — no longer a proportional slice
-      // of the regional aggregate, which is now itself just the sum of banks like this one.
-      const realBankEquityUSD = companyUpdates[comp.ticker]?.bankBalanceSheet?.bankEquityUSD ?? comp.bankBalanceSheet?.bankEquityUSD;
-      const bankBookValue = Math.max(10, realBankEquityUSD ?? (reg.bankingSector.bankEquityUSD * (comp.bankMarketShare ?? 0.25)));
-      // The regime ladder covers the ACTUAL cycleRegime union — the dead 'Boom' branch (only
-      // reachable through an `as string` cast, since no such regime exists) is gone, and
-      // 'Recovery' has its own rung instead of falling through to the Expansion default.
-      const cycle = reg.cycleRegime;
-      let pbMultiple = 1.0;
-      if (cycle === 'Expansion') pbMultiple = 1.0;
-      else if (cycle === 'Recovery') pbMultiple = 0.9;
-      else if (cycle === 'Slowdown') pbMultiple = 0.8;
-      else if (cycle === 'Recession') pbMultiple = 0.6;
-
-      const bankMarketCap = bankBookValue * pbMultiple;
-      const safeShares = Math.max(1, comp.sharesOutstanding || 1);
-      newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((bankMarketCap / safeShares).toFixed(2)));
-    } else if (comp.isInstitutionalEntity) {
-      const instBookValue = Math.max(10, reg.institutionalSector.sectorEquityUSD * (comp.institutionalMarketShare ?? 0.33));
-      const cycle = reg.cycleRegime;
-      let pbMultiple = 1.0;
-      if (cycle === 'Expansion') pbMultiple = 1.05;
-      else if (cycle === 'Recovery') pbMultiple = 0.95;
-      else if (cycle === 'Slowdown') pbMultiple = 0.85;
-      else if (cycle === 'Recession') pbMultiple = 0.65;
-
-      const instMarketCap = instBookValue * pbMultiple;
-      const safeShares = Math.max(1, comp.sharesOutstanding || 1);
-      newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number((instMarketCap / safeShares).toFixed(2)));
-    }
+    // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
+    // It was the last formula price setter for a listed cohort: a multiple looked up from the
+    // cycle regime, applied to a book value, dividing into a share count — everything WS4 removed
+    // from every other name. They clear in 07e now, on their own real earnings and their own real
+    // balance-sheet equity, so this stage reads their price exactly as it reads everyone else's.
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
 
     // Company Treasury Holdings (Part MF) - Fixed Cash Leak & Liquidations

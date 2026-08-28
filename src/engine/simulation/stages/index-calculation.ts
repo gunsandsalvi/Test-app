@@ -71,10 +71,6 @@ function indexValueUSD(def: IndexDefinition, comp: Company, curveOf: (r: RegionI
   if (def.region && comp.region !== def.region) return 0;
 
   if (def.assetClass === 'EQUITY') {
-    // Banks and institutions price off book value rather than in 07e's cleared book (§6), so an
-    // index of cleared equity prices cannot include them without publishing a level partly made
-    // of formula prices.
-    if (comp.isBankEntity || comp.isInstitutionalEntity) return 0;
     if (!isPubliclyListed(comp) || !(comp.sharesOutstanding > 0) || !(comp.stockPrice > 0)) return 0;
     return comp.marketCap;
   }

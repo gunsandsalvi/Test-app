@@ -98,6 +98,12 @@ export function companyNetInvestmentRate(comp: Company): number {
 
 /** Real book equity: the balance sheet's own shareholders' equity where a filing exists. */
 export function companyBookEquityUSD(comp: Company): number {
+  // A BANK's book equity is the equity line of its own balance sheet, not a PP&E-and-cash
+  // reckoning built for an operating company. Its assets are loans, securities and reserves and
+  // its liabilities are deposits and borrowings; the generic formula below sees almost none of
+  // that and would value a bank on its premises. The flow ledger keeps `bankEquityUSD` honest
+  // (§7.36), so it is the real number and the one to read.
+  if (comp.bankBalanceSheet) return comp.bankBalanceSheet.bankEquityUSD;
   const latest = comp.historicalFundamentals?.[comp.historicalFundamentals.length - 1];
   const filed = latest?.balanceSheet?.shareholdersEquity;
   if (filed !== undefined && isFinite(filed)) return filed;

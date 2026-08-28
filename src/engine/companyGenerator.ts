@@ -929,7 +929,12 @@ export function generatePrivateCompanies(
       // No traded equity: private shares exist (founders hold them) but carry no market price.
       // Zero here is "unquoted", not "worthless" — every consumer of stockPrice/marketCap must
       // gate on isPubliclyListed, and the engine's gates run through ctx.prevActiveFirms.
-      sharesOutstanding: 1_000_000, stockPrice: 0, marketCap: 0,
+      // A private company has NO traded share register: no share count, no price, no market cap,
+      // and therefore no earnings PER SHARE. The fabricated 1,000,000 was a made-up number sitting
+      // where a real one belongs — and a per-share figure that did not divide by it (`eps: 0`).
+      // A real listing creates the registry for the first time (`postIssueSharesOutstanding`,
+      // HC7), which is the only moment a share count should come into existence.
+      sharesOutstanding: 0, stockPrice: 0, marketCap: 0,
       historicalPrices: [], forwardPE: 0,
       cash: Math.round(ebitda * 0.6),
       totalDebt: debtBase,
