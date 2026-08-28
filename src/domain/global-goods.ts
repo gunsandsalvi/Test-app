@@ -58,6 +58,9 @@ export interface GlobalGoodsMarketState {
   clearedUnitsThisWeek: number;
   /** Value of this week's fills whose buyer and seller sat in different regions — the trade. */
   crossBorderValueUSD: number;
+  /** XB3a — whose currency this market invoices in, contested weekly by three real forces and
+   *  never assigned. Undefined until the book first clears something across a border. */
+  invoiceRegion?: import('./geography').RegionId;
 }
 
 export function createSeedGlobalGoodsMarket(subUnitId: string, unitPriceUSD: number): GlobalGoodsMarketState {

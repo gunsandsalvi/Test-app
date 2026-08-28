@@ -108,6 +108,14 @@ export interface WeeklyStepContext {
    * `Region.exportsUSD` it feeds — rule 9.
    */
   bilateralTradeWeeklyUSD: Record<RegionId, Record<RegionId, number>>;
+  /** XB3a — cross-border invoices struck by stage 05 this week, appended to the state's ledger
+   *  and settled a week later by `trade-settlement.ts`. */
+  tradeInvoicesBooked: import('../../../domain/trade-invoice').TradeInvoice[];
+  /** XB3a — this week's realised transaction FX gain/loss on settled cross-border invoices, and
+   *  the face value of invoices killed by a defaulted counterparty. Both are diagnostics: the
+   *  money itself moves through the two companies' own cash ledgers. */
+  tradeInvoiceFxGainUSD: number;
+  tradeInvoiceWriteOffUSD: number;
 
   // Stage 11 output, read by stage 13
   weeklyInterestIncomeUSD: number;
@@ -187,6 +195,9 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
       UK: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
       JPN: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     },
+    tradeInvoicesBooked: [],
+    tradeInvoiceFxGainUSD: 0,
+    tradeInvoiceWriteOffUSD: 0,
 
     weeklyInterestIncomeUSD: 0,
     weeklyFinancingCostUSD: 0,
