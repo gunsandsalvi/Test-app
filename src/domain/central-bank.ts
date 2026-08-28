@@ -23,6 +23,8 @@ export interface CentralBank {
   treasuryAccountUSD: number;
   /** Liability: notes in circulation — the slow, non-operational part of the balance sheet. */
   currencyInCirculationUSD: number;
+  /** PUB3d: last week's accretion on the bill book — a discount bill's income, which pays no coupon. */
+  lastBillAccretionUSD?: number;
   /** Last week's remittance to the treasury: coupon income less interest paid on reserves. */
   lastRemittanceUSD: number;
   /** Last week's net reserve movement caused by TGA flows (negative = drained from banks). */
@@ -174,24 +176,22 @@ export function openMarketPolicy(args: {
 }
 
 /**
- * PUB3c — cash-management bills: what a treasury issues to bridge its own account.
+ * PUB3c — the bill program responds to the treasury's cash position.
  *
  * The gap this closes: the government spends every week but raises bond financing on a QUARTERLY
  * calendar (stage 11 accumulates `pendingUnfundedDeficitUSD` for 13 weeks), so between auctions
  * the TGA absorbs the entire shortfall. That works while the buffer is large enough and fails the
  * moment obligations grow — measured, the account ran to −497.5B once PUB3b indexed spending to
- * real wages.
+ * real wages. A negative treasury account is not a fiscal outcome, it is a MISSING INSTRUMENT.
  *
- * A negative treasury account is not a fiscal outcome, it is a MISSING INSTRUMENT: a real
- * treasury facing a cash shortfall issues cash-management bills, days to weeks, sized to the gap.
- * It is allowed to run a large deficit; it is not allowed to have less than nothing in the bank.
- *
- * Returns the EXTRA bill issuance this week: what it takes to restore the operating balance,
- * raised over a few weeks rather than in one block so the front end is not handed a cliff.
- * Negative gaps return zero — a treasury above target simply issues less, which the bill-share
- * rule already does.
+ * **Not a cash-management bill, despite what this was first called.** A real CMB is a distinct
+ * instrument because a real bill calendar is FIXED — announced sizes on announced dates — so an
+ * unexpected gap cannot be met by enlarging Thursday's auction, and the treasury goes off-calendar
+ * at an odd maturity and a small yield concession. This model has no fixed calendar: bills already
+ * issue every week at a freely varying size. So the extra size is simply a bigger regular auction,
+ * and naming it a CMB claimed a distinction the code does not make.
  */
-export function cashManagementBillIssuanceUSD(args: {
+export function cashPositionBillIssuanceUSD(args: {
   treasuryAccountUSD: number;
   /** Weekly outlays, which set the size of the operating balance the treasury wants. */
   weeklyOutlaysUSD: number;
@@ -199,7 +199,7 @@ export function cashManagementBillIssuanceUSD(args: {
   const targetUSD = Math.max(0, args.weeklyOutlaysUSD) * TGA_TARGET_WEEKS_OF_SPENDING;
   const shortfallUSD = targetUSD - args.treasuryAccountUSD;
   if (shortfallUSD <= 0) return 0;
-  return shortfallUSD * CMB_GAP_CLOSE_RATE_WEEKLY;
+  return shortfallUSD * CASH_BRIDGE_CLOSE_RATE_WEEKLY;
 }
 
 /**
@@ -207,4 +207,4 @@ export function cashManagementBillIssuanceUSD(args: {
  * operating balance in one auction — it rebuilds over several, which is also what keeps the
  * bill program's size a smooth supply the market can absorb rather than a cliff.
  */
-export const CMB_GAP_CLOSE_RATE_WEEKLY = 0.34;
+export const CASH_BRIDGE_CLOSE_RATE_WEEKLY = 0.34;

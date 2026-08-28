@@ -19,6 +19,8 @@ export function sovereignCouponByBucket(
   const principal: Record<string, number> = {};
   const weighted: Record<string, number> = {};
   (tranches ?? []).forEach((t) => {
+    // PUB3d: bills pay no coupon — their holders earn accretion instead (see accreteDiscountBills).
+    if (isDiscountBill(t.tenorAtIssuanceYears)) return;
     const k = bucketKey(t.tenorAtIssuanceYears);
     principal[k] = (principal[k] ?? 0) + t.principalUSD;
     weighted[k] = (weighted[k] ?? 0) + t.principalUSD * (t.couponRate ?? 0);
@@ -30,9 +32,61 @@ export function sovereignCouponByBucket(
   return out;
 }
 
-/** What the whole stack costs this week — the government's real interest expense. */
+/**
+ * What the whole stack costs this week — the government's real interest expense.
+ *
+ * PUB3d: BILLS ARE EXCLUDED. A treasury bill is a DISCOUNT security: sold below par, no periodic
+ * payment, and the whole return is the accretion to par paid at redemption. Its cost lands in the
+ * redemption leg (face repaid against discounted proceeds received), not here.
+ */
 export function weeklyInterestExpenseUSD(tranches: GovDebtTranche[] | undefined): number {
-  return (tranches ?? []).reduce((a, t) => a + (t.principalUSD * (t.couponRate ?? 0)) / 52, 0);
+  return (tranches ?? [])
+    .filter((t) => !isDiscountBill(t.tenorAtIssuanceYears))
+    .reduce((a, t) => a + (t.principalUSD * (t.couponRate ?? 0)) / 52, 0);
+}
+
+/**
+ * PUB3d — a tranche below this tenor is issued at a discount rather than with a coupon. Mirrors
+ * `SOV_BILL_MAX_TENOR_YEARS` in the clearing helpers; kept here so the domain can answer "does
+ * this pay a coupon" without importing an engine module.
+ */
+export const DISCOUNT_BILL_MAX_TENOR_YEARS = 1.5;
+
+export function isDiscountBill(tenorAtIssuanceYears: number): boolean {
+  return tenorAtIssuanceYears < DISCOUNT_BILL_MAX_TENOR_YEARS;
+}
+
+/**
+ * What a treasury actually RECEIVES for a discount bill: face discounted at the issue yield over
+ * its life. The difference between this and face is the entire cost of the bill, realized when it
+ * redeems at par.
+ *
+ * Getting this wrong in either direction is a real trap. The model used to issue bills at PAR and
+ * also pay them a coupon: net cost came out right (receive F, pay r·t·F, repay F), so nothing was
+ * visibly broken, but the treasury held the discount as cash for the bill's whole life and holders
+ * were paid a coupon that does not exist. Discounting the proceeds while KEEPING the coupon would
+ * have been worse than either — it doubles the cost.
+ */
+export function discountBillProceedsUSD(faceUSD: number, annualYield: number, tenorYears: number): number {
+  return faceUSD / (1 + Math.max(-0.99, annualYield) * tenorYears);
+}
+
+/**
+ * The discount accruing on the bill stack this week — a STATISTIC, never a debit.
+ *
+ * `weeklyInterestExpenseUSD` is now cash-basis: it is the coupon the government actually pays,
+ * and bills pay none. Their cost is real but lands at redemption, so the reported interest line
+ * understates the economic burden by exactly this much (measured: bills are ~21% of the stack, and
+ * excluding them roughly halved the reported line). Government accounts on an ACCRUAL basis would
+ * add this back.
+ *
+ * It is deliberately not added to the expense: the cost is already in the redemption leg, and
+ * charging it here as well is the double count `discountBillProceedsUSD` warns about.
+ */
+export function weeklyBillDiscountAccrualUSD(tranches: GovDebtTranche[] | undefined): number {
+  return (tranches ?? [])
+    .filter((t) => isDiscountBill(t.tenorAtIssuanceYears))
+    .reduce((a, t) => a + (t.principalUSD * (t.couponRate ?? 0)) / 52, 0);
 }
 
 /**

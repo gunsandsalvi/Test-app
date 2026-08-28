@@ -552,7 +552,11 @@ export interface Region {
   governmentSpendingUSD: number;
   /** PUB1 — real weekly interest on the debt stack, paid to holders. Comes off the top of
    * spending, so procurement and transfers get the primary budget only. */
+  /** Cash-basis coupon expense: BONDS only, since bills pay no coupon (PUB3d). */
   governmentInterestWeeklyUSD?: number;
+  /** PUB3d: the discount accruing on the bill stack — the accrual-basis half of the interest
+   * burden, reported so the cash-basis line above cannot silently understate it. */
+  governmentBillDiscountAccrualUSD?: number;
   /**
    * PUB3: what the government owes its own staff this week — real headcount at the pools' real
    * wages. Computed once and read by everything, so the budget line and the jobs that produce it
@@ -572,8 +576,8 @@ export interface Region {
   unspentProcurementBudgetUSD?: number;
   /** What actually left the account: interest + payroll + transfers + realized procurement. */
   governmentOutlaysUSD?: number;
-  /** PUB3c: bills issued this week purely to bridge the treasury's cash position. */
-  cashManagementBillIssuanceUSD?: number;
+  /** PUB3c: extra bill issuance this week purely to bridge the treasury's cash position. */
+  cashBridgeBillIssuanceUSD?: number;
   /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
    * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
   centralBankSheet?: CentralBank;

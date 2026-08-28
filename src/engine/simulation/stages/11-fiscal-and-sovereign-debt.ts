@@ -14,8 +14,11 @@ import { generateWeeklyNews } from '../../newsGenerator';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
-import { weeklyInterestExpenseUSD, sovereignCouponByBucket, decomposeGovernmentSpending, governmentOutlaysUSD } from '../../../domain/government';
-import { centralBankAssetsUSD, openMarketPolicy, cashManagementBillIssuanceUSD } from '../../../domain/central-bank';
+import {
+  weeklyInterestExpenseUSD, sovereignCouponByBucket, decomposeGovernmentSpending, governmentOutlaysUSD,
+  isDiscountBill, discountBillProceedsUSD, weeklyBillDiscountAccrualUSD,
+} from '../../../domain/government';
+import { centralBankAssetsUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView } from './holdings-view';
 
@@ -320,6 +323,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // of the central bank — see stages/central-bank.ts, which moves it and the reserves with it.
     const interestWeeklyUSD = weeklyInterestExpenseUSD(reg.govDebtTranches);
     reg.governmentInterestWeeklyUSD = Number(interestWeeklyUSD.toFixed(0));
+    // Reported, never debited — the bill's cost is already in the redemption leg (PUB3d).
+    reg.governmentBillDiscountAccrualUSD = Number(weeklyBillDiscountAccrualUSD(reg.govDebtTranches).toFixed(0));
     // What the bill pays to holders that exist. The rest is the named boundary above.
     {
       const cb = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
@@ -374,21 +379,19 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const billFundedDeficitUSD = weeklyDeficitUSD * billShareOfNewMoney;
     const marketFundedDeficitUSD = weeklyDeficitUSD - billFundedDeficitUSD;
 
-    // PUB3c: cash-management bills. Bond financing is quarterly (see the calendar below) but the
-    // government spends every week, so between auctions the TGA is the only thing absorbing the
-    // gap. When it falls below its operating balance the treasury issues bills to bridge —
-    // which is what a real treasury does, and what stops a negative account being mistaken for
-    // a fiscal result. Sized off REALIZED outlays, so it responds to what actually went out.
-    const cmbIssuanceUSD = cashManagementBillIssuanceUSD({
+    // PUB3c: bond financing is quarterly but the government spends weekly, so between auctions
+    // the TGA is the only thing absorbing the gap. When it falls below its operating balance the
+    // bill program issues more. Sized off REALIZED outlays, so it responds to what went out.
+    const cashBridgeIssuanceUSD = cashPositionBillIssuanceUSD({
       treasuryAccountUSD: reg.centralBankSheet?.treasuryAccountUSD ?? 0,
       weeklyOutlaysUSD: reg.governmentOutlaysUSD ?? reg.governmentSpendingUSD,
     });
-    reg.cashManagementBillIssuanceUSD = Number(cmbIssuanceUSD.toFixed(0));
+    reg.cashBridgeBillIssuanceUSD = Number(cashBridgeIssuanceUSD.toFixed(0));
 
     // Weekly bill issuance: the roll plus the bill share of new money, split across the three
     // programs, priced off the real cleared bill curve (07f ran before this stage).
     const newTranches: GovDebtTranche[] = [];
-    const weeklyBillIssuanceUSD = maturedBillPrincipalUSD + billFundedDeficitUSD + cmbIssuanceUSD;
+    const weeklyBillIssuanceUSD = maturedBillPrincipalUSD + billFundedDeficitUSD + cashBridgeIssuanceUSD;
     if (weeklyBillIssuanceUSD > 1000) {
       ([[13, 0.25, 0.4], [26, 0.5, 0.35], [52, 1, 0.25]] as const).forEach(([weeks, tenorYears, weight]) => {
         const principal = weeklyBillIssuanceUSD * weight;
@@ -471,7 +474,16 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // 0.98% → 2.62%, no negative yields at w60, dealer residual 123B at w40.
 
     // PUB2: the financing legs the TGA needs — proceeds in, redemptions out.
-    reg.lastIssuanceProceedsUSD = Number(newTranches.reduce((a, t) => a + t.principalUSD, 0).toFixed(0));
+    // PUB3d: a BILL is sold at a discount, so the treasury receives less than face and repays face
+    // at maturity — that difference IS the bill's cost, and it is why bills carry no coupon. A
+    // bond is sold at par and pays its coupon weekly. Discounting proceeds while ALSO paying a
+    // coupon would charge the government twice for the same borrowing.
+    reg.lastIssuanceProceedsUSD = Number(newTranches.reduce(
+      (a, t) => a + (isDiscountBill(t.tenorAtIssuanceYears)
+        ? discountBillProceedsUSD(t.principalUSD, t.couponRate ?? 0, t.tenorAtIssuanceYears)
+        : t.principalUSD),
+      0
+    ).toFixed(0));
     reg.lastRedemptionPaidUSD = Number(maturedPrincipalUSD.toFixed(0));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);

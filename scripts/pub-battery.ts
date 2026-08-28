@@ -81,7 +81,7 @@ for (let w = 1; w <= WEEKS; w++) {
   series.unmodeledTax.push(reg.unmodeledTaxRevenueUSD ?? 0);
   series.revenue.push(reg.governmentRevenueUSD);
   series.outlays.push(reg.governmentOutlaysUSD ?? 0);
-  series.cmb.push(reg.cashManagementBillIssuanceUSD ?? 0);
+  series.cmb.push(reg.cashBridgeBillIssuanceUSD ?? 0);
   series.debtGdp.push(reg.debtToGdpPctBottomUp ?? 0);
   series.y2.push(reg.zeroRates.tenor2Y);
   series.y10.push(reg.zeroRates.tenor10Y);
@@ -126,6 +126,9 @@ console.log('\n--- 3. CROWDING OUT: does debt service squeeze real purchases? --
   console.log(`  corr(interest share of budget, procurement share) = ${corr(series.interestShare, series.procShare).toFixed(3)}` +
     (stanceFlat ? '  [ARITHMETIC, not evidence: with a flat stance the budget share IS 0.35 x (1 - interest share)]' : '  [stance moves, so this is the net of two channels]'));
   console.log(`  corr(interest share, REALIZED procurement spend)  = ${corr(series.interestShare, series.procSpent).toFixed(3)}`);
+  const disc = (s.regions.USA as any).governmentBillDiscountAccrualUSD ?? 0;
+  const cash = (s.regions.USA as any).governmentInterestWeeklyUSD ?? 0;
+  console.log(`  PUB3d: reported interest is CASH-basis (bonds only) ${B(cash)}/wk; the bill discount accruing beside it is ${B(disc)}/wk — accrual burden ${B(cash + disc)}/wk`);
   console.log(`  interest share range ${pct(Math.min(...series.interestShare))}-${pct(Math.max(...series.interestShare))}, ` +
     `debt/GDP ${pct(Math.min(...series.debtGdp))}-${pct(Math.max(...series.debtGdp))}, ` +
     `fiscal stance ${Math.min(...series.stance).toFixed(2)}..${Math.max(...series.stance).toFixed(2)} (confounds the raw correlation upward)`);
@@ -170,7 +173,7 @@ console.log('\n--- 5. THE TREASURY ACCOUNT ---');
       : 'outlays outgrow revenue, so the deficit is structural and must be financed';
     console.log(`  growth w${half} -> w${WEEKS}: revenue x${rg.toFixed(1)}, outlays x${og.toFixed(1)} — ${lead}`);
     const cmb = series.cmb.reduce((a, v) => a + v, 0);
-    console.log(`  cash-management bills issued to bridge the account: ${B(cmb)} total, ${series.cmb.filter(v => v > 0).length}/${WEEKS} weeks (PUB3c)`);
+    console.log(`  extra bill issuance to bridge the account: ${B(cmb)} total, ${series.cmb.filter(v => v > 0).length}/${WEEKS} weeks (PUB3c)`);
   } else {
     console.log(`  (revenue/outlays growth needs >=104 weeks: a trailing-annual window on quarterly receipts)`);
   }

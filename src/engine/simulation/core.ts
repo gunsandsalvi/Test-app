@@ -28,6 +28,7 @@ import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
 import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign-debt';
+import { runBillAccretionStage } from './stages/bill-accretion';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 
@@ -145,6 +146,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
 
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   run('10-mergers', () => runMergersStage(state, ctx));
+  // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
+  // the face its holder has accreted to rather than at last week's value.
+  run('bill-accretion', () => runBillAccretionStage(state, ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));
   // HH5: employment's one representation, re-read after defaults (08), mergers (10) and births
   // have landed — a bankrupt firm's staff are unemployed the week the firm goes, not the next.

@@ -1893,3 +1893,32 @@ that proved it, the lesson.
       cut pensions that quarter. Crowding out still shows over the long run (corr −0.836 on the
       procurement share, −0.715 on realized spend) through the debt path and the fiscal stance.
       **An impressive number can be an artifact of the constraint you imposed.**
+71. **PUB3d: bills become real discount instruments, and a rename that admits the code.**
+    - **The CMB that wasn't.** PUB3c's bridge was called a cash-management bill; the code added it
+      into `weeklyBillIssuanceUSD` and split it across the SAME b13/b26/b52 programs at the SAME
+      weights and prices. Not distinct in tenor, timing, or yield. A real CMB exists because a real
+      bill calendar is FIXED — announced sizes on announced dates — so a gap cannot be met by
+      enlarging Thursday's auction. This model has no fixed calendar: bills already issue weekly at
+      a freely varying size. Renamed to `cashPositionBillIssuanceUSD`. **A name that claims a
+      distinction the code does not make is a lie the next reader believes.**
+    - **Bills paid coupons.** A treasury bill is a DISCOUNT security: sold below par, no periodic
+      payment, whole return accreting to par. The model issued them at PAR *and* paid a coupon.
+    - **The trap, and why this is all-or-nothing.** That treatment was economically correct in NET
+      — receive F, pay r·t·F, repay F, cost ≈ the discount — so nothing looked broken. Discounting
+      the proceeds while KEEPING the coupon would have **doubled** the cost. Four legs had to move
+      together: proceeds discounted, coupon removed from the government, coupon removed from
+      holders, and accretion added to holders' positions (`bill-accretion.ts` — the asset grows and
+      equity grows with it, no cash until maturity, which is exactly why a bill's cash profile
+      differs from a bond's). Conservation holds because the government's face-over-proceeds cost
+      equals the accretion its holders accumulated.
+    - **What was actually wrong before was timing and representation, not economics** — the
+      treasury held the discount as cash for the bill's whole life, and holders were paid a coupon
+      that does not exist.
+    - **The catch this exposed, and the reason it is reported rather than fixed silently.**
+      `weeklyInterestExpenseUSD` is now cash-basis and bills contribute zero, so the reported
+      interest line HALVED (USA 14.7B → 7.3B/wk at w120). That is not a saving — the cost moved to
+      the redemption leg. Measured, the bill discount accruing beside it is **8.1B/wk, larger than
+      the entire bond coupon**, so the accrual burden is 15.4B/wk. Published as
+      `governmentBillDiscountAccrualUSD`, a statistic and never a debit: charging it as expense
+      too is the same double count. **A number that halves after a refactor is a claim to check,
+      not a result to report.**
