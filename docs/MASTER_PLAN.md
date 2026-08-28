@@ -251,7 +251,7 @@ metrics to watch rather than work.
 | 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
 | 8 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
 | 9 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| 10 | markets | **XB — Cross-border portfolios** (foreign shares & bonds, hedged) | WS9, DER |
+| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f done (§7.72–75), XB3a/3b/XB4 remain. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
 | 11 | depth | **CAL — Payment calendars** | none |
 | 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
 | 13 | depth | **HC3b — The product-market handover** | BP1 |
@@ -820,36 +820,88 @@ depreciate slowly against sticky flows; no drift term anywhere; the global funds
 
 ---
 
-### XB — Cross-border portfolios  *(Tier 2, item 10; needs WS9 + DER)*
+### XB — Cross-border portfolios and trade  *(Tier 2, item 10; IN PROGRESS)*
 
-Investors buy foreign shares and bonds under the constraints real mandates impose. Today every
-institutional book is domestic (`foreignShare` in `AssetOwnershipShares` is a static scalar that
-owns nothing), the three GLOBAL index funds sit empty for exactly that reason, and a
-rate-differential between regions moves no money.
+**Status: XB1, XB2, XB2b–XB2f DONE (§7.72–75). XB3a, XB3b, XB4 REMAIN.**
+**The 60-week harness is deliberately RED while this runs — see §6 and rule 1 of `CLAUDE.md`.**
 
-- **Fixed income cross-border is FX-HEDGED** — the institutional rule, not an option: an insurer
-  or pension buying a foreign bond or loan hedges the currency, and the hedge cost is the
-  covered-interest short-rate differential. So the demand signal is **hedged yield pickup**
-  (foreign yield − hedge cost − home yield), which is the real reason cross-border bond flow
-  chases spread, not headline yield. The hedge itself is a REAL forward position in DER's book
-  with a dealer on the other side — not a formula discount — which is why this project needs DER.
-- **Equities: hedging optional and partial** (real practice runs 0–50%): unhedged foreign equity
-  carries the FX exposure into the holder's book, and the FX P&L shows up in its weekly marks.
-- **Home bias and mandate limits as named primitives**: a home-bias weight per entity type
-  (measured reality: pensions ~60–80% domestic) and an FX-exposure cap for regulated books
-  (insurers), both stated constants until something real can derive them.
-- **Mechanics**: foreign holders join the existing clearing engines as ordinary participants —
-  the engines already price every name against every holder; what is new is only that a JPN
-  insurer's demand for a USA bond settles in USD through the WS9 FX market (a real currency
-  purchase, which is the portfolio-flow leg WS9's design already reserves a seat for), and its
-  weekly mark converts at the cleared rate.
-- **Also closes:** the three GLOBAL index funds fill (moved here from WS9's note — XB is the
-  mechanism); S7's foreign-share parameter becomes real holdings.
+**XB1 — DONE (§7.72).** `foreignShare` deleted: it assigned each region a share of every other
+region's markets, re-imposed weekly, owning nothing (442B of claims with no holder against 883B
+of institutional assets). Replaced by MANDATES — home bias by entity type, the foreign remainder
+spread by market size — with entity targets from each entity's own book rather than a
+renormalization to an imposed aggregate. Foreign ownership is now MEASURED
+(`measuredForeignOwnership`, published weekly from real holdings): USA equity **16.8%** (imposed
+had been 15%), corporate **20.0%** (12%), sovereign **16.2%** (24%).
+
+**XB2/2b/2c — DONE (§7.72–74).** Cross-border fixed income is hedged as an institutional rule, so
+demand chases the spread over the LOCAL short rate rather than the headline yield (CIP: a hedged
+foreign bond returns `foreign_yield + r_home − r_foreign`). Hedges are real forwards with a named
+bank counterparty. Dealers have a derivative book with three real costs — a PFE leverage add-on,
+internalization of two-way flow so only the residual is carried, and client initial margin held
+as somebody else's money — and the price of all that is the **cross-currency basis**, which
+widens with desk utilization. Measured under a 65% dealer-equity impairment: capacity used
+3.2% → 100%, basis 4.9bp → 150bp, share of the cross-border book hedged 74% → 57%.
+
+**XB2d/2e/2f — DONE (§7.75).** FX clears in `financial-clearing-engine.ts` like every other asset
+class. Currency = instrument; the week's inelastic flow (dealer inventory, cross-border
+settlement BOTH legs, trade receipts) = float; hedge funds and central banks post real schedules.
+Deletes `evolveFxPair`'s whole drift and five invented constants.
+
+---
+
+**XB3a — Global goods books (NEXT).** Trade is still `exportShareCapture = clamp(0.05, 0.80,
+0.25 + competitiveness×0.2 + fx×0.2)` in `06-fx-and-trade.ts`, applied to the importer's aggregate
+demand and credited to firms in `08-company-fundamentals.ts` — so **a firm's sales come from two
+independent mechanisms** (that auction and stage 05's), which is the Rule 3 violation to delete.
+
+Design decided with the user, **option (b) of three**:
+- **Split each sub-unit by `CATEGORY_TRADABILITY`** (already exists, `domain/region-macro.ts`,
+  0.02 RealEstateConstruction to 0.85 SoftwareDigitalServices). The tradable SHARE of every
+  region's supply and demand goes into ONE global book per sub-unit; the remainder stays in the
+  region's local book. No new threshold constant — the existing continuous parameter does the work.
+- Rejected (a) "threshold: tradable categories clear globally" — halves auction count but invents
+  a cut on a continuous property. Rejected (c) "one global book with a per-buyer trade wedge" —
+  fastest, but the clearing engine prices ONE stat per instrument and a per-buyer wedge means
+  there is no single price.
+- **Cost:** today stage 05 runs 4 regions × 30 sub-units = **120 auctions/week** and is **31.0% of
+  the weekly step** (183.9ms of 604ms; stage 08 is 21.2%). The code comment claiming 72.6% is
+  stale. (b) adds ~30 global books on top of the 120, so **measure the real auction cost before
+  and after** — the user asked for this explicitly.
+- **Trade flows become ACCOUNTING**: exports and imports are who bought from whom in the global
+  book. Delete `exportShareCapture`, `getFxCompetitivenessAdjustment`, and stage 08's separate
+  export crediting.
+- **Invoice currency is EMERGENT, never assigned.** Do NOT hardcode USD invoicing: dollar
+  dominance is a RESULT of a history this simulation does not have, and assuming it means the
+  model can never say anything about currency dominance. It is contested by three forces the model
+  can already measure: (1) **relative market power in that specific market** — `suppliersBySubUnit`
+  gives supply concentration by region, recipe buyers plus household/government demand give the
+  buyer side, and the more concentrated side invoices in its own currency; (2) **coalescing** —
+  firms price in the same currency as their competitors so relative prices do not swing on FX,
+  which is the network effect that CREATES a vehicle currency and needs a state variable tracking
+  the share of markets already invoicing in each; (3) **stability and depth** — inflation
+  volatility and money-market depth (bill stock, repo, MMF size), all real and present. A vehicle
+  currency may emerge, and if it is EUR or JPY on a given seed that is a result, not a bug.
+- **Transaction FX exposure** falls out: whoever is not invoicing in its own currency carries a
+  real gain or loss on the receivable/payable. This does NOT require re-denomination.
+
+**XB3b — Pass-through (AFTER XB3a).** The model has NO FX pass-through: every price, wage and
+revenue is USD (`unitPriceUSD`, `getBaseAnnualWageUSD`, `annualRevenue`), and there are zero FX
+references in unit bidding, company fundamentals, the labor market or macro evolution. Denominate
+each region's COST BASE locally (wages, domestic inputs) so it converts at the cleared rate: a
+weaker currency then makes that region's firms cheaper in USD and they win share in the global
+book — the competitiveness channel, mechanical rather than a formula. This is the invasive slice;
+it touches wages, household income and the labor market. Deferred deliberately: trade credit
+(30–90 day payables) and hedging those payables belong with the forward book, not faked here.
+
+**XB4 — Close-out battery.** `scripts/xb-battery.ts`, on the pattern of `hh-battery.ts` and
+`pub-battery.ts`. Every criterion below, measured once, at the END. Include: do the three empty
+`GLOBAL_EQ_*` index funds fill? Which currency became the vehicle, and what drove it?
 
 **Verify:** hedged-yield-pickup, not raw yield, predicts bond flows; a home rate cut pushes
-portfolio flow abroad and the FX pair moves in the carry direction; the global funds fill; FX
-forward open interest in DER's book matches the hedged cross-border bond stock; every foreign
-security position has a cash leg in the right currency.
+portfolio flow abroad and the pair moves in the carry direction; the global funds fill; FX forward
+open interest matches the hedged cross-border bond stock; every foreign position has a cash leg in
+the right currency; the emergent foreign ownership share is stable and explicable; trade flows
+reconcile to who bought from whom.
 
 ---
 
@@ -971,6 +1023,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 
 | Defect | State and next action |
 |---|---|
+| **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3a/3b, then run the harness and `scripts/xb-battery.ts` ONCE and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
 | **G1b — the inflation escape** | The measured band is SEED-SENSITIVE: one world holds −10..0%, others escape upward by week 40 (the default-stream world reaches 50%+ by week 52 with the 10Y following to 17%). **The measurement is not at fault** — the goods market's prices really do move that much. G2 measurably damped it and did not cure it (0.66% of demand against a goods cycle orders of magnitude larger), exactly as predicted. Remaining owners: **MS** (the household rate response, the missing stabiliser) and **PUB** (the fiscal loop). Two diagnostics still unrun and worth doing first: trace one sub-unit's price, supply and demand over 120 weeks for a long-wavelength cobweb; and consider whether stage 05's real bid and offer prices should carry an expectations term — a genuine behavioural channel, since anchored expectations damp actual price setting. **Do not** smooth the index, widen the basket, or clamp inflation: the index is the measurement, and if it is volatile the economy is. |
 | ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
 | ~~**#67 — USA bank capital → 0**~~ | **CLOSED (§7.55) — re-measured after HH3 and the collapse is gone.** Capital ratio runs 11.6% → 14.7% through week 80 (was: → 0 by week ~70), NIM in band throughout. The bleed was the fictional consumer book: a formula target earning a formula yield and losing a formula loss rate, none of which the bank's capital could price or gate. With the book real — real margins quoted off measured tier losses, real amortization, origination capital-gated at the 8% floor — the banking system carries its full household book and earns its keep. |
@@ -979,6 +1032,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **Equity prices run away past ~week 80** | **Found by the HH close-out battery (§7.60); NOT HH's.** Median USA share price runs 7.9 (w80) → 184 (w100) → 5,048 (w120) while median EPS moves 0.39 → 0.57 — an implied ~8,850x earnings. Institutional claims stay flat at ~530B, housing/deposits/debt are all sane, so it is the equity market alone; household net worth only shows it because HH2/HH4c correctly mark households to it (568x income at w120). Consistent with the §6 damper-bound watchlist plus §7.18's want/have: a growing pool of money chasing a fixed float, printing at the damper limit week after week, which compounds. **The 60-week harness cannot see this** — prices are still sane at w60 — so the first action is a longer harness window, then the real fix is asset supply (**SCALE**'s bigger universe, **HC** births, **G3**/ETF2's dealer capacity), not a cap on the price. |
 | **Real growth prints escape at horizon** | **Found in HH2, pre-existing, unowned.** Consumption growth −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree: −119.87% / −209.30%, GDP identical to four significant figures — so this is not HH2's, and HH2 slightly damps it. **Nothing in §6 recorded it and the harness does not check it**, which is the first thing to fix: a growth rate that can print −200% is a band the harness should assert. Likely the same family as G1b (the price level escaping takes the real deflator with it), but a different symptom and worth confirming separately before assuming so — if real growth is being deflated by an escaping index, the defect is G1b's; if the nominal path itself collapses, it is not. |
 | **An ETF pays out net assets it does not have** | **Found in PUB1d (§7.65); owner ETF2, not PUB.** `USA_IG_ETF` runs cash 0.04B (w13) → **−47.9B** (w26) against a 14.5B holdings book — **net assets −33.4B**, a fund that owes more than it owns. The signature is a steady ~3.5B/week outflow while holdings barely move and shares outstanding fall 2.3e8 → 1.7e7: redemptions keep paying cash out after `navPerShare` has already gone to 0.0000 because `navUSD` is non-positive. The per-book purchase budgets are sound (`etf-demand.ts` and 07b both cap at `max(0, cashUSD)`), so the leak is on the **redemption** side of `etf-flows.ts`, not the buy side. Present identically before and after PUB1d — do not re-attribute it to sovereign placement. The invariants harness does not assert non-negative fund net assets; adding that assert is the first action. |
+| **Does the treasury optimise issuance on the curve? — A DECISION, not a defect** | **Needs a user answer; do not change it unilaterally.** The model's treasury leans opportunistically in two places: the bill share via `costLean = clamp(±0.05, (2Y − 3M) × 2)`, and the bond tenor mix via `steepnessAdjustment = (30Y − 2Y) × 3` in `11-fiscal-and-sovereign-debt.ts` — so a 1pp steepening shifts ~1.5pp of issuance into the 2Y. Real debt-management offices run "regular and predictable" and explicitly do NOT time the curve, because surprising the market lifts the term premium by more than the tactical saving. So this model's issuer exploits a curve the model itself produces. Options: keep it, damp the coefficients, or replace with a published-calendar rule. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
@@ -2000,3 +2054,41 @@ that proved it, the lesson.
       2.704** without it over the same 30 weeks. The formula drift terms (`tradeTerm`,
       `capitalFlowTerm`) were running the pair away; real hedging flow holds it. **A market with
       a real flow in it is more stable than one with only a drift, not less.**
+75. **XB2d/2e/2f: FX becomes a market, in three corrections, each found by one question.**
+    The arc is worth reading as a sequence because each step looked finished until someone asked
+    what was on the other side of the trade.
+    - **"Who is the desk buying currency from?" — nobody.** XB2c had desks selling their hedge
+      inventory into a price-impact coefficient. The position shrank, the rate moved, and no
+      counterparty existed. **XB2d** built the market: the inelastic side is dealer inventory,
+      cross-border settlement and trade receipts; the elastic side is hedge funds and central
+      banks, who are the answer to the question.
+    - **"How can someone sell JPY to buy EUR if it clears only against USD?" — they could not.**
+      The settlement schedule was built one currency at a time (for each region, what foreigners
+      bought of ITS paper), so a JPN insurer buying EUR bonds registered euro demand and **no yen
+      supply**. **XB2e** registers both legs in one pass over the entities. With a USD numéraire a
+      JPY→EUR trade is "sell JPY for USD, buy EUR with USD" and the dollar legs net — which is how
+      the real market routes most non-dollar pairs. **Building a two-sided flow one side at a time
+      is how a leg goes missing.**
+    - **"Is this actually a clearing-price auction like the other asset classes?" — it was not.**
+      It was `move = −netDemand / totalSlope` clamped at 8%/week: no reservation levels, no
+      position caps, no budgets, and when it could not clear it **parked the rate on the clamp**.
+      That is the "a bound is not a price" error §7.21 already recorded — re-committed in a new
+      market. **XB2f** routes FX through `clearFinancialAsset`: the currency is the instrument,
+      the week's inelastic flow is the float, and hedge funds and central banks post the same
+      schedule shape as any other holder (reservation, scale-in range, position cap from real
+      capital, cash budget), with saturation clearing and a dealer residual.
+    - **Five invented constants deleted across the three:** `SPECULATOR_SLOPE_PER_CAPITAL`,
+      `CENTRAL_BANK_FX_SLOPE_PER_RESERVE`, `FX_SPOT_PRICE_IMPACT_PER_GDP`, the ±8% clamp as a
+      price, and `FX_DELTA_HEDGE_EXECUTION_RATE` (a claim that a desk could work only 60% of its
+      position — a liquidity assertion with no liquidity behind it). A desk now offers its whole
+      position and carries what nobody takes.
+    - **A pre-existing bug this exposed, and it is large.** `getFxToUsd` looked pairs up by the
+      labels `'EUR/USD'`, `'GBP/USD'`, `'USD/JPY'` — **none of which this model builds**, since
+      pairs were named `${base}/${quote}` over RegionIds. Every lookup missed and every caller
+      silently took a hardcoded fallback, so **the one function converting to USD had never
+      returned a real rate**. Matching on base/quote fixed it; currencies are now named properly
+      (`CURRENCY_BY_REGION`: USA→USD, EUR→EUR, UK→GBP, JPN→JPY) and nothing matches on the label,
+      which is what let the mismatch hide.
+    - **Triangular consistency by construction.** What clears is each currency's VALUE against the
+      USD; every pair is derived from two of those. Four independently drifting pairs could
+      violate triangular arbitrage; three cleared values cannot.
