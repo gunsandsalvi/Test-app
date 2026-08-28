@@ -9,8 +9,8 @@
 import { RegionId } from './geography';
 
 export interface ItemizedHolding {
-  instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN: the DebtTranche.id; for GOV_BOND: the GovDebtTranche.id
-  instrumentType: 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'PE_FUND_INTEREST';
+  instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN: the DebtTranche.id; for GOV_BOND: the GovDebtTranche.id; for ETF_SHARE: the fund entity's id
+  instrumentType: 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'PE_FUND_INTEREST' | 'ETF_SHARE';
   issuerRegion: RegionId;
   quantityOrNotionalUSD: number; // dollar-denominated market value at cost
   /**

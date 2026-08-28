@@ -94,6 +94,10 @@ export const REQUIRED_RETURN_ON_CAPITAL: Record<InstitutionalEntityType, number>
   PRIVATE_EQUITY: 0.20,
   // A money fund runs no credit book — never exercised; present so the type map stays total.
   MONEY_MARKET_FUND: 0.0,
+  // An index fund has NO required return: it does not decide what a security is worth, it holds
+  // its benchmark weight at whatever the market is asking. Its price-insensitivity is the whole
+  // point of it, and it is expressed as a size in the clearing books, never as a reservation.
+  ETF: 0.0,
 };
 
 

@@ -197,9 +197,21 @@ export function generateFirmSeeds(
     institutionalRole: 'INSURER',
     institutionalMarketShare: 0.42,
   }));
+  // THREE asset managers, not one. A single manager per region could not sponsor a fund complex
+  // without being a monoline, and real index sponsorship is a handful of competing houses each
+  // running a MIX across equity and credit. The 0.33 sector slice is split between them by size,
+  // so the region's institutional pool is unchanged — this is a split, not an addition.
   seeds.push(buildTemplate(region, 'Financials', 1.5, existingTickers, existingNames, {
     institutionalRole: 'ASSET_MANAGER',
-    institutionalMarketShare: 0.33,
+    institutionalMarketShare: 0.17,
+  }));
+  seeds.push(buildTemplate(region, 'Financials', 4.5, existingTickers, existingNames, {
+    institutionalRole: 'ASSET_MANAGER',
+    institutionalMarketShare: 0.10,
+  }));
+  seeds.push(buildTemplate(region, 'Financials', 5.5, existingTickers, existingNames, {
+    institutionalRole: 'ASSET_MANAGER',
+    institutionalMarketShare: 0.06,
   }));
   seeds.push(buildTemplate(region, 'Financials', 2.5, existingTickers, existingNames, {
     institutionalRole: 'PENSION_FUND',

@@ -19,6 +19,7 @@ import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
 import { applyPendingCorporateActionSettlements } from './stages/shared-helpers';
 import { runIndexCalculationStage } from './stages/index-calculation';
+import { runEtfFlowsStage } from './stages/etf-flows';
 import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
@@ -119,6 +120,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // Indexes after the lifecycle: this week's listings, delistings and cleared prices are all in,
   // so a rebalance sees the market as it finally stands rather than as it opened.
   run('index-calculation', () => runIndexCalculationStage(state, ctx));
+
+  // ETF flows after the indexes are struck: this week's memberships are final, and the creations
+  // set up NEXT week's fund demand into the clearing books — the same announce-then-price rhythm
+  // WS8 uses, because a fund that decides and executes in one instant is not intermediation.
+  run('etf-flows', () => runEtfFlowsStage(state, ctx));
 
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   run('10-mergers', () => runMergersStage(state, ctx));

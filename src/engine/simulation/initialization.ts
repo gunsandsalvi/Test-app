@@ -1,6 +1,8 @@
 
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
+import { INDEX_DEFINITIONS } from '../../domain/indexes';
+import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed } from './stages/bank-lending';
 import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
@@ -101,6 +103,10 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // machinery every entity's sleeve already uses (07f's bill share, WS6's repo/RRP split).
     // Zero term weights keep it out of the bond/loan/equity auctions entirely.
     MONEY_MARKET_FUND: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
+    // An index fund's allocation IS its index; it holds one asset class and no cash sleeve
+    // beyond what settlement needs. The weights here are never read for an ETF — its target is
+    // the benchmark's own membership — and exist so the type map stays total.
+    ETF: { govBondPct: 0, corpBondPct: 0, loanPct: 0, equityPct: 0, cashPct: 1.0 },
     // A PE fund holds companies and dry powder, not securities: zero weights keep it out of the
     // bond/loan/sovereign auctions entirely (no demand schedule, no budget). Its real assets are
     // its portfolio stakes, marked in peFund below.
@@ -683,6 +689,53 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       mmfSharesOutstandingUSD: 0,
       mmfNetYieldAnnual: 0,
     });
+
+    // ---- ETF: one index fund per index, sponsored by the region's asset managers ----
+    // Born EMPTY, same doctrine as the money fund above: a fund's shares are created by real
+    // demand through a real authorised participant, so seeding a share stock would be inventing
+    // the flow the mechanism exists to produce.
+    //
+    // Sponsorship interleaves the region's index list across its managers, so each house runs a
+    // MIX of equity and credit rather than one becoming the equity shop and another the bond
+    // shop. That is what real fund complexes look like, and it is what "no monolines" means.
+    const regionManagers = institutionalEntities.filter(
+      (e) => e.region === regionId && e.entityType === 'ASSET_MANAGER'
+    );
+    if (regionManagers.length > 0) {
+      const regionIndexes = INDEX_DEFINITIONS.filter((d) => d.region === regionId);
+      // Global funds are sponsored out of the largest house in each of the first regions, so the
+      // global complex is not concentrated in one manager either.
+      const globalIndexes = regionId === 'USA'
+        ? INDEX_DEFINITIONS.filter((d) => !d.region)
+        : [];
+      [...regionIndexes, ...globalIndexes].forEach((def, i) => {
+        const sponsor = regionManagers[i % regionManagers.length];
+        const expenseClass = def.assetClass;
+        institutionalEntities.push({
+          id: `${def.id}_ETF`,
+          name: `${def.name} Index Fund`,
+          ticker: `${def.id.replace(/_/g, '').slice(0, 5)}X`,
+          region: regionId,
+          entityType: 'ETF',
+          totalAssetsUSD: 0,
+          equityCapitalUSD: 0,
+          sharesOutstanding: 0,
+          stockPrice: 0,
+          itemizedHoldings: [],
+          cashUSD: 0,
+          assetAllocationTarget: allocationTargets.ETF,
+          isDefaulted: false,
+          historicalPrices: [],
+          etf: {
+            indexId: def.id,
+            sponsorEntityId: sponsor.id,
+            sharesOutstanding: 0,
+            expenseRatioAnnual: ETF_EXPENSE_RATIO_ANNUAL[expenseClass],
+            unmetFlowShare: 0,
+          },
+        });
+      });
+    }
 
     for (let fundIdx = 0; fundIdx < 2; fundIdx++) {
       const portfolio = sponsorable.filter((_, i) => i % 2 === fundIdx);

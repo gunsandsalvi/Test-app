@@ -56,6 +56,8 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { settlePricedOfferings } from './primary-settlement';
+import { INDEX_DEFINITIONS } from '../../../domain/indexes';
+import { indexFundDemand, indexFundsForBook } from './etf-demand';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
@@ -164,11 +166,21 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // bound says.
     }));
 
-    const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
+    // Index funds are ordinary holders with an extraordinary schedule — they buy their benchmark
+    // weight at whatever the market asks — so they are excluded from the allocator population here
+    // and given their own demand below.
+    const regionEntities = ctx.updatedInstitutionalEntities.filter(
+      (e) => e.region === regionId && e.entityType !== 'ETF'
+    );
+    const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
+      (e) => e.region === regionId && e.entityType === 'ETF' && e.etf
+        && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'CORP_BOND')
+    );
+    const bookEntities = [...regionEntities, ...regionIndexFunds];
     const otherHoldingsByEntity = new Map<string, ItemizedHolding[]>();
     const currentHoldingByCompanyByEntity = new Map<string, Map<string, number>>();
 
-    regionEntities.forEach((entity) => {
+    bookEntities.forEach((entity) => {
       const currentHoldingByCompany = new Map<string, number>();
       const otherHoldings: ItemizedHolding[] = [];
       entity.itemizedHoldings.forEach((h) => {
@@ -279,7 +291,38 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const priorDealerInventoryById = new Map<string, number>();
     (reg.bankingSector.corpBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(p.companyId, p.inventoryUSD));
 
-    const result = clearFinancialAsset(instruments, participants, priorDealerInventoryById, {
+    // ETF: the index funds tracking this book's benchmarks. A fund posts a SIZE with no
+    // reservation level — its benchmark weight at whatever the market is asking — which is the
+    // one demand shape the engine could not previously express and a large real force in credit.
+    const bookIndexIds = INDEX_DEFINITIONS
+      .filter((d) => d.assetClass === 'CORP_BOND' && d.region === regionId)
+      .map((d) => d.id);
+    const indexFundParticipants: ClearingParticipant[] = indexFundsForBook(
+      regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds
+    ).map(({ fund, index, investableUSD }) => {
+      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      // A CREDIT index fund is a real buyer in the primary, unlike its equity counterpart. A bond
+      // index admits a new issue at the next rebalance, and a fund that waits has to chase it in
+      // the aftermarket — so it takes its proportional share at issue. (Equity index funds do the
+      // opposite and buy at INCLUSION, which is why they are famously absent from IPOs; that
+      // behaviour falls out of the quarterly rebalance without any special case.)
+      const fundShareOfIndex = index.totalValueUSD > 0 ? investableUSD / index.totalValueUSD : 0;
+      index.constituents.forEach((c) => {
+        const offeringUSD = offeringsByIssuerId.get(c.instrumentId)?.sizeUSD ?? 0;
+        const targetUSD = investableUSD * c.weight + offeringUSD * fundShareOfIndex;
+        demandByInstrumentId.set(
+          c.instrumentId,
+          indexFundDemand(targetUSD, Math.max(0, fund.cashUSD ?? 0) * c.weight, 'YIELD_LIKE')
+        );
+      });
+      return {
+        id: fund.id,
+        currentHoldingsByInstrumentId: currentHoldingByCompanyByEntity.get(fund.id) ?? new Map<string, number>(),
+        demandByInstrumentId,
+      };
+    });
+
+    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants], priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
@@ -302,9 +345,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: each entity's real new CORP_BOND holdings. Loans are a genuinely different real
     // market (different investor base, different technicals) and get their own real clearing
     // (07d-leveraged-loan-clearing.ts), not a byproduct split of this fill.
-    if (regionEntities.length > 0) {
+    if (bookEntities.length > 0) {
       const updatedEntitiesById = new Map<string, InstitutionalEntity>();
-      regionEntities.forEach((entity) => {
+      bookEntities.forEach((entity) => {
         const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
         const newCorpHoldings: ItemizedHolding[] = [];
         newHoldings.forEach((newHoldingUSD, companyId) => {

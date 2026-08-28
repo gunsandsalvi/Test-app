@@ -20,7 +20,7 @@ export interface InstitutionalSector {
   itemizedHoldings: ItemizedHolding[];
 }
 
-export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND';
+export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND' | 'ETF';
 
 export interface AssetAllocationTarget {
   equityPct: number;
@@ -86,6 +86,13 @@ export interface InstitutionalEntity {
     portfolioCompanyIds: string[];
     lpCommitments: { lpEntityId: string; committedUSD: number; drawnUSD: number }[];
   };
+  /**
+   * ETF only: the fund's index, its sponsor, its share count and the residual the authorised
+   * participants could not arbitrage away this week. An ETF holds its basket for real in
+   * `itemizedHoldings`, so it is an ordinary holder in every clearing book — not a wrapper
+   * around one.
+   */
+  etf?: import('./etf').EtfFund;
   isDefaulted: boolean;
   historicalPrices: number[];
   revenueHistory?: number[];

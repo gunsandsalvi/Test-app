@@ -112,6 +112,8 @@ every cross-stage dependency is visible) and runs the stages in order:
 | 07d | `07d-leveraged-loan-clearing.ts` | Leveraged loan clearing (FLOATING tranches), CLO/loan-fund base via `loanPct` |
 | 08 | `08-company-fundamentals.ts` | Per-company weekly update: revenue (anchored to stage 05 real sales), costs, capex/debt, rating, earnings, equity price. Largest stage; reads cleared credit stats, never sets them. **Rebuilds each company from an explicit field list** — anything not named there is dropped every week (§7.41) |
 | 08b | `stages/pe-lifecycle.ts` (`hc-lifecycle`) | The corporate lifecycle (HC Wave 2): settles the deals whose financing priced in this week's books, then decides next week's. LBOs and dividend recaps financed as real WS8 offerings, listings as real 07e offerings, firm births carved from the SME pools, sponsor equity wiped on a portfolio default. Owns `publicComparableEvMultiple` — the ONE multiple a private company is bought, marked and exited at, read off cleared listed prices |
+| 08c | `stages/index-calculation.ts` | The published indexes: membership re-struck quarterly from the market that exists, level chained weekly off the constituents' own cleared prices. Credit marks at market, never par |
+| 08d | `stages/etf-flows.ts` | Who indexes what (research capacity against the names to cover), creations and redemptions through the dealers as authorised participants, the sponsor's fee, and the unmet-flow residual. Sets NEXT week's fund demand, which 07b/07d/07e read through `stages/etf-demand.ts` — a SIZE with no reservation level, the price-insensitive buyer |
 | 09 | `09-concentration-risk.ts` | >40% supplier/customer concentration flags |
 | 10 | `10-mergers.ts` | Quarterly M&A |
 | 11 | `11-fiscal-and-sovereign-debt.ts` | The statistics stage: measures bottom-up GDP **and the consumer price index** (`stages/price-index.ts` — the only place inflation is set); deficit → real gov tranche issuance, placed with and redeemed from real holders; refreshes the derived holdings view (`stages/holdings-view.ts`, §7.26), news generation |
@@ -165,7 +167,9 @@ inventories), `company.ts` (incl. `InputLot` provenance, per-sub-unit inventorie
 `region-macro.ts`, `geography.ts`, `game-state.ts`, `portfolio.ts`, `markets.ts`, `events.ts`,
 `primary-market.ts` (WS8 offerings, underwriting fees, relationship lead banks),
 `call-protection.ts` (what it costs to retire paper early — soft call, non-call schedules and
-make-whole, and the ONE dealer spread both 07b and the make-whole read).
+make-whole, and the ONE dealer spread both 07b and the make-whole read), `indexes.ts` (index
+definitions as RULES — membership, weighting, rebalance calendar), `etf.ts` (fund shape, fee
+schedule, AP capacity, the research-capacity primitive behind who indexes).
 
 ### 2.4 UI (`src/components/`) and invariants
 
@@ -222,19 +226,18 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 1 | **ETFs: real indexes, index funds, and dealers as authorised participants** | ETF | WS4, WS8, S11 |
-| 2 | Unify the two dealer systems | G3 | S9 |
-| 3 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 4 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 5 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 6 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 7 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 8 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 9 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 10 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 11 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 12 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 13 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | Unify the two dealer systems | G3 | S9 |
+| 2 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 3 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 4 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 5 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 6 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 7 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 8 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 9 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 10 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 11 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 12 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
@@ -583,70 +586,19 @@ SME pool, so the economy's totals never change because a firm was created.
 
 ---
 
-### ETF — Index funds, the indexes they track, and the dealers who arbitrage them
+### ETF — Index funds, indexes, and authorised participants  *(CLOSED — §7.44)*
 
-**What this is.** Today every institution expresses every view as a direct line: it owns names,
-one position at a time, and the only thing standing between a dollar of appetite and a company's
-float is a demand schedule. That is not how the money actually reaches the market. A large share
-of it is intermediated by index products — the buyer chooses an exposure, a fund holds the
-basket, and a dealer stands between the fund's shares and its underlying. Building it makes three
-things real that are missing: an index that means something (so inclusion is an event), a flow
-that reaches every constituent at once (which is what makes a market move together), and a
-premium/discount that only exists because the arbitrage can be constrained.
+**Status: built.** Twenty-seven funds over twenty-seven indexes; membership and weights are rules
+run over cleared prices, funds hold their baskets for real, dealers create and redeem, and the
+research-capacity rule decides who indexes and who buys names. The record, the measured numbers
+and the three derivations that had to be corrected are in §7.44; the open ends (a price for ETF
+shares, the empty global funds, a listed universe too small to need broad-market indexing) are
+in §6.
 
-**The funds.** Per region (USA/EUR/UK/JPN): ALL_CAP, LARGE_CAP and SMALL_CAP equity; IG, HY and
-LEVERAGED_LOAN credit. Plus GLOBAL ALL_CAP / LARGE_CAP / SMALL_CAP equity spanning all four.
-Twenty-seven funds.
-
-**The indexes come first, and they are computed, not stated.**
-- Membership is a RULE over cleared prices, not a list: LARGE_CAP is the names making up the top
-  share of aggregate market cap and SMALL_CAP is the remainder, so the boundary moves when prices
-  do and a company can be promoted or relegated by its own performance. Credit membership is the
-  issuer's own cleared rating (IG vs HY) and the instrument's own type (floating non-facility
-  paper is the loan index).
-- Weights are market cap for equity and outstanding principal for credit.
-- **Rebalanced quarterly**, membership frozen in between. This is what makes index inclusion a
-  real event with a real flow behind it, and it is why a new listing is bought by the funds at
-  the next rebalance rather than the week it lists.
-
-**The funds are entities, not a wrapper.** A new `InstitutionalEntityType: 'ETF'` holding REAL
-itemized positions in its constituents, with shares outstanding, a NAV struck from the same
-cleared prices everything else marks at, and an expense ratio that accrues to its sponsor. An ETF
-that owns its basket is a real holder in 07b/07d/07e — its demand is not a parallel system.
-
-**Dealers are the authorised participants, and that is the whole price mechanism.** An ETF's
-shares are not cleared in a book of their own. Investor flow arrives, and the AP closes the gap:
-net creation demand means the dealer buys the basket in the constituent books and delivers shares
-to the fund; redemption means the reverse. The PREMIUM OR DISCOUNT is the residual — what the
-arbitrage could not absorb this week, given the dealer's real capacity. When APs are unconstrained
-it goes to zero, which is the ordinary case; when they are not, it persists, which is the
-interesting case and the one credit ETFs actually exhibit in stress.
-
-**Who buys ETFs and who buys direct lines — derived, not assigned.** Running direct positions
-takes research capacity, and capacity scales with size against the number of names that must be
-covered. A large insurer can hold two hundred credits itself; a small one cannot, and buys the
-index. So the ETF share of an entity's appetite falls out of its own assets against the universe
-it would otherwise have to cover, rather than a per-type constant. Hedge funds are the exception
-in the other direction and stay direct: a fund expressing a view on a specific name does not buy
-the index that dilutes it.
-
-**Sponsors: variety, no monolines.** One asset manager per region cannot run twenty-seven funds
-and would be a monoline anyway. Add asset managers so each region has several, and spread
-sponsorship so every manager runs a MIX across equity and credit — which is what real fund
-complexes look like.
-
-**Ties, so nothing is built twice:** WS8 (ETFs take their index weight of new issues and
-listings — an index fund is a forced buyer in the primary, which is a real part of why deals
-place), G3 (the AP desk is the same dealer balance sheet G3 unifies; until then the basket trade
-rides the existing dealer inventory), S11 (ETF budgets are the same real-money constraint every
-entity has), G4 (an ETF is the natural underlying for the options G4 will price), HC (index
-inclusion is what a newly listed company gets, and a take-private is a deletion).
-
-**Verify:** index level moves with its constituents and only with them; NAV equals the sum of
-real holdings at cleared prices; creations and redemptions conserve cash and securities exactly
-(the AP's basket leg and the fund's share leg net to zero); an ETF's demand reaches constituents
-in proportion to index weight; premium goes to zero when the arbitrage is unconstrained; no
-invariant regressions.
+**The one architectural note worth keeping here**, because later projects tie into it: an index
+fund posts a SIZE with no reservation level — `stages/etf-demand.ts` — and that price-insensitive
+schedule is now available to any adapter. G4's options will want an ETF as an underlying, G3's
+dealer unification owns the AP desk, and WS9 is what finally gives the global funds an allocator.
 
 ### AU — Aurora (complete UI rebuild) — LAST
 
@@ -685,6 +637,9 @@ the complete simulation.
 | `companyGenerator.ts` private firms: `sharesOutstanding: 1_000_000` | Every generated private firm carries a fabricated share register and `eps: 0` — a share count for a company with no traded shares, and a per-share figure that does not divide by it. Harmless today because 07e excludes private names and a real listing now OVERWRITES the register with `postIssueSharesOutstanding`, but it is a made-up number sitting where a real one belongs, and it is what made the harness's newly-listed EPS check fire on all 12 HC8 births (the check is now correctly scoped to listed names). Set it to zero when something makes stage 08's private path stop dividing by it |
 | `07f-short-debt-clearing.ts` CP-failure revolver | The revolver drawn when a CP roll fails is NOT marked `isBankFacility`, while the identical revolver stage 08 draws for a failed refinancing is. So one of them lives on the house bank's itemized book and the other sits in the syndicated loan market's float — the same real instrument represented two ways (rule 3), and the §6 double-count class G2 slice 1 was meant to close. Found while stamping call protection (an unmarked revolver also picks up a six-month soft call, which a revolver should never carry). Not fixed in that batch because it moves the loan float and would have made the call-protection measurements unattributable |
 | bond and loan REDEMPTION has no cash leg | When a tranche is retired, `settleCorporateActionOnHolders` scales the holders' notionals down and they receive nothing — the principal simply leaves their books. The call PREMIUM now settles as real cash (§7.42) but the principal it rides on still does not, so a redemption is a transfer from lenders to nobody. Left alone deliberately in the call-protection batch: mixing it in would have made any harness movement unattributable between the two. The machinery to fix it now exists (`payHoldersCash`) — it needs its own change and its own A/B |
+| listed universe too small for broad-market indexing (ETF, §7.44) | 15 of 27 index funds have no possible buyer: a region carries only ~25 large-cap names and 8-65 high-yield issuers, and every institution in this world can research that many directly, so nothing indexes the broad market. The coverage rule is right and the universe is small — this is §7.18's want/have problem in another form, and it closes as the listed universe grows (HC births and real IPOs add names; BP1's registry adds categories). Do NOT fix it by tuning the research-capacity primitive until the funds fill; that would be fitting a constant to a desired outcome |
+| the three GLOBAL index funds have no allocator | Every institutional book in this model is domestic — `attributeEquityHoldingsProportionally` fills each entity from its own region — so there is no cross-border equity allocation for a global fund to draw on, and the machinery sits ready with zero shares. Closes with **WS9** (real trade and FX), where a currency-zone premise and a foreign allocation become real |
+| ETF shares have no price of their own | A fund's shares are carried at NAV and the arbitrage residual is reported as `unmetFlowShare` — the fraction of the week's flow the APs could not absorb — deliberately NOT as a premium, because a premium is a price. Pricing ETF shares means clearing them in a book of their own against the float the APs are willing to create, which is a real adapter over the existing engine and the natural next ETF slice. Until it exists, the model can say the arbitrage was constrained but not what that cost |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1799,7 +1754,66 @@ the complete simulation.
       high, −0.0001 at week 59), which is new and recorded to watch. The equity-flow check also
       needed a second guard — a name pinned at the 0.01 price floor in both worlds has no price
       for flow to move and is not evidence about the mechanism.
-44. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+44. **ETFs landed: real indexes, real index funds, dealers as authorised participants.**
+    Three slices. The indexes are recorded in the slice-1 commit; what follows is the funds.
+    - **27 funds, born EMPTY** (the money fund's precedent read the same way): a fund's shares are
+      created by real demand through a real authorised participant, so seeding a share stock would
+      invent the flow the mechanism exists to produce. Each holds its basket for REAL — measured,
+      248 to 325 positions against benchmarks of that size — so an ETF is an ordinary holder in
+      07b/07d/07e, not a wrapper beside them.
+    - **The one demand shape this engine could not express.** An index fund does not decide what a
+      security is worth; it buys its benchmark weight at whatever the market asks, and stops when
+      the money runs out. Its schedule is a SIZE with no reservation level. That is a large real
+      force, and getting it wrong is instructive: a PRICE_LIKE reservation is a MAXIMUM price, so
+      "no reservation" is an unreachably HIGH one. Set to zero, the equity funds bought nothing at
+      any positive price — two positions against a 157-name benchmark.
+    - **Three asset managers per region, not one**, splitting the same institutional slice rather
+      than adding to it. Sponsorship interleaves each region's index list across its houses, so
+      every manager runs a mix of equity and credit. No monolines, which is what real fund
+      complexes look like.
+    - **The AP constraint had the wrong basis first.** Sized as a small fraction of dealer equity,
+      the arbitrage became the dominant fact: 95-98% of flow unabsorbed every week, forever, and
+      the funds never reached target size. An AP does not WAREHOUSE a creation basket — it buys and
+      delivers inside the settlement cycle — so what its capital limits is turnover, not inventory.
+      Rebased as a multiple of equity it now binds at launch and is unconstrained afterwards, which
+      is what a real AP constraint does. A region's dealers also share ONE balance sheet, so the
+      week's baskets compete for it; allocating the whole regional capacity to each fund
+      independently let ten funds spend the same dollar.
+    - **The residual is NOT called a premium**, because it is not a price. `unmetFlowShare` is the
+      fraction of the week's creation/redemption demand the APs could not carry, bounded in
+      [-1, 1]. A real premium means clearing ETF shares in a book of their own against the float
+      the APs will create — the next slice. An early version divided unabsorbed flow by the fund's
+      own NAV and printed a **173% "premium"** on a fund whose NAV was smaller than one week of
+      inflow, which is what naming a pressure like a price looks like.
+    - **Who indexes what is derived, and the derivation had a real error worth keeping.** Running a
+      direct book takes research capacity, so an entity indexes the part of the market it cannot
+      cover, tier by tier. The first version made capacity LINEAR in assets (twelve names per
+      billion) — which says a firm with a hundred times the assets has a hundred times the
+      analysts, something no fund complex has ever managed. Every institution could then research
+      every name that existed and almost nothing was indexed. Capacity scales sublinearly and
+      steeply so: a billion-dollar boutique with three analysts reaches forty-five names, the
+      largest managers run four orders of magnitude more money and cover perhaps twenty times as
+      many, which puts the exponent at about a third. **Measured: fund AUM 13.6B → 53.5B and all
+      four small-cap funds came alive.**
+    - **Credit funds bid in the PRIMARY; equity funds do not.** A bond index admits a new issue at
+      the next rebalance and a fund that waits has to chase it, so it takes its proportional share
+      at issue. Equity index funds buy at INCLUSION, which is why they are famously absent from
+      IPOs — and that falls out of the quarterly rebalance with no special case.
+    - **Claims are marked at the fund's current NAV per share.** Marking only the holdings that
+      moved left investor claims drifting from the assets backing them (13.49B of fund assets
+      against 13.38B of claims after thirty weeks). They now match exactly.
+    - **HARNESS: 13 → 5 violations, and the whole bank NIM family disappeared.** Only the four #18
+      revenue-runaway names and a single week-60 NIM print remain. Persistently damper-bound
+      instruments 1,989 → 1,961. Determinism verified across two identical 40-week runs.
+    - **15 of 27 funds stay empty, and the reason is honest.** The large-cap and total-market funds
+      have no buyer because a region has only ~25 large caps — a number every institution here can
+      research directly — and the same goes for high yield at 8-65 names. That is a truthful
+      consequence of a listed universe of ~180 names per region where a real market has thousands;
+      it is the §7.18 want/have problem wearing a different hat, and it is recorded in §6 rather
+      than papered over by tuning the coverage rule until the funds fill. The three GLOBAL funds
+      are empty for a different and equally honest reason: every book in this model is domestic,
+      so there is no cross-border allocation to draw on until WS9.
+45. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

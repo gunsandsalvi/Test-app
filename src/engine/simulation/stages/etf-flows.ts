@@ -1,0 +1,333 @@
+/**
+ * ETF FLOWS — who buys the index, how the shares come into existence, and what the dealers do
+ * about the gap.
+ *
+ * Runs after the indexes are struck, so this week's memberships and weights are final, and it
+ * sets up NEXT week's fund demand — the same announce-then-price rhythm WS8 uses, because an ETF
+ * that decides and executes in the same instant is not intermediation, it is teleportation.
+ *
+ * Three real steps:
+ *
+ *   1. **Who indexes what.** Running a direct book takes research capacity, and capacity scales
+ *      with the money you run against the number of names you would have to cover. So an entity
+ *      indexes the part of the market it cannot cover, TIER BY TIER: a large insurer researches
+ *      the two dozen large caps itself and buys the small-cap index, because those are a hundred
+ *      and fifty names it will never staff. That is the real pattern, and it falls out of one
+ *      coverage rule rather than a preference assigned per entity type. Hedge funds are the
+ *      exception in the other direction and never index — a fund expressing a view on a name does
+ *      not buy the basket that dilutes it.
+ *   2. **Creations and redemptions.** The fund does not sell its own shares. An authorised
+ *      participant — a dealer — delivers the basket and takes shares, or the reverse, and its
+ *      capacity is real balance sheet: the basket sits on its book between buying and delivering.
+ *   3. **The premium.** What the APs could not absorb, as a fraction of NAV. Zero when the
+ *      arbitrage is unconstrained, which is most weeks; positive when a week's flow is larger
+ *      than the dealers can carry, which is the case worth being able to see.
+ */
+
+import { GameState, InstitutionalEntity, RegionId } from '../../../types';
+import { WeeklyStepContext } from './context';
+import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
+import { AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
+import { ItemizedHolding } from '../../../domain/banking';
+
+/** An entity's money for one asset class, from its own mandate weights. */
+function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
+  const t = entity.assetAllocationTarget;
+  const pct = def.assetClass === 'EQUITY' ? t.equityPct
+    : def.assetClass === 'CORP_BOND' ? t.corpBondPct
+    : t.loanPct;
+  return Math.max(0, entity.totalAssetsUSD) * pct;
+}
+
+/**
+ * The share of an exposure this entity has to buy through an index, because it cannot cover the
+ * names itself. Coverage is its own assets against the number of names in the tier; below full
+ * coverage the shortfall is indexed.
+ */
+function indexedShare(entity: InstitutionalEntity, nameCount: number): number {
+  if (nameCount <= 0) return 0;
+  // A fund that picks names does not buy the basket that averages them away.
+  if (entity.entityType === 'HEDGE_FUND') return 0;
+  const aumBillions = Math.max(0, entity.totalAssetsUSD) / 1e9;
+  const namesCovered = NAMES_COVERED_AT_ONE_BILLION_AUM * Math.pow(aumBillions, RESEARCH_COVERAGE_SCALING_EXPONENT);
+  return Math.max(0, 1 - Math.min(1, namesCovered / nameCount));
+}
+
+/** NAV of a fund: its real basket at this week's cleared marks, plus cash it has not deployed. */
+function fundNavUSD(fund: InstitutionalEntity): number {
+  const holdingsUSD = fund.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalUSD ?? 0), 0);
+  return holdingsUSD + Math.max(0, fund.cashUSD ?? 0);
+}
+
+export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void {
+  const indexById = new Map(ctx.updatedMarketIndexes.map((i) => [i.id, i]));
+  const defById = new Map(INDEX_DEFINITIONS.map((d) => [d.id, d]));
+  const funds = ctx.updatedInstitutionalEntities.filter((e) => e.entityType === 'ETF' && e.etf);
+  if (funds.length === 0) return;
+
+  // ---- 1. The sponsor's fee, out of the fund's assets. A real flow between two named books. ----
+  const feeBySponsor = new Map<string, number>();
+  const navByFundId = new Map<string, number>();
+  funds.forEach((fund) => {
+    const navUSD = fundNavUSD(fund);
+    const feeUSD = (navUSD * fund.etf!.expenseRatioAnnual) / 52;
+    if (feeUSD > 0) feeBySponsor.set(fund.etf!.sponsorEntityId, (feeBySponsor.get(fund.etf!.sponsorEntityId) ?? 0) + feeUSD);
+    navByFundId.set(fund.id, Math.max(0, navUSD - feeUSD));
+  });
+
+  // ---- 2. What every investor wants to hold in each fund next week. ----
+  const investors = ctx.updatedInstitutionalEntities.filter(
+    (e) => e.entityType !== 'ETF' && e.entityType !== 'PRIVATE_EQUITY' && e.entityType !== 'MONEY_MARKET_FUND' && !e.isDefaulted
+  );
+  /** fundId -> investorId -> desired dollars */
+  const desiredByFund = new Map<string, Map<string, number>>();
+  funds.forEach((f) => desiredByFund.set(f.id, new Map()));
+
+  investors.forEach((investor) => {
+    // The tiers this investor could index, in its OWN region: an entity's book is domestic today,
+    // so a global or foreign fund has no allocation to draw on (see the plan's note — cross-border
+    // allocation arrives with WS9).
+    const candidates = funds.filter((f) => {
+      const def = defById.get(f.etf!.indexId);
+      return !!def && def.region === investor.region;
+    });
+    if (candidates.length === 0) return;
+
+    // Equity splits between the size tiers by coverage, so the tier an investor cannot staff is
+    // the tier it indexes. ALL_CAP is what an investor buys when it cannot cover EITHER tier —
+    // it is not picking a size, it is buying the market.
+    const equityFunds = candidates.filter((f) => defById.get(f.etf!.indexId)!.assetClass === 'EQUITY');
+    const tierFunds = equityFunds.filter((f) => {
+      const tier = defById.get(f.etf!.indexId)!.tier;
+      return tier === 'LARGE_CAP' || tier === 'SMALL_CAP';
+    });
+    const allCapFund = equityFunds.find((f) => defById.get(f.etf!.indexId)!.tier === 'ALL_CAP');
+    const tierIndexedShares = tierFunds.map((f) => ({
+      fund: f,
+      share: indexedShare(investor, indexById.get(f.etf!.indexId)?.constituents.length ?? 0),
+    }));
+
+    // An investor indexes the WHOLE MARKET to the extent it indexes every tier, and tops up the
+    // one tier it cannot cover. So the common part of its indexed appetite goes to the total-market
+    // fund and only the DIFFERENCE between tiers goes to a size fund — which is what a core and a
+    // tilt actually are. Routing purely by tier left the all-cap funds with no possible buyer, and
+    // routing purely to all-cap would have lost the real fact that a house able to research two
+    // dozen large caps still cannot staff a hundred and fifty small ones.
+    const equityAppetiteUSD = allCapFund
+      ? classAppetiteUSD(investor, defById.get(allCapFund.etf!.indexId)!)
+      : 0;
+    const coreShare = tierIndexedShares.length > 0
+      ? Math.min(...tierIndexedShares.map((x) => x.share))
+      : 0;
+    if (allCapFund && coreShare > 0 && equityAppetiteUSD > 0) {
+      desiredByFund.get(allCapFund.id)!.set(investor.id, equityAppetiteUSD * coreShare);
+    }
+    const allCapValueUSD = indexById.get(allCapFund?.etf?.indexId ?? '')?.totalValueUSD ?? 0;
+    tierIndexedShares.forEach(({ fund, share }) => {
+      const tiltShare = share - coreShare;
+      if (!(tiltShare > 0)) return;
+      const def = defById.get(fund.etf!.indexId)!;
+      const tierValueUSD = indexById.get(def.id)?.totalValueUSD ?? 0;
+      const tierShareOfMarket = allCapValueUSD > 0 ? tierValueUSD / allCapValueUSD : 0;
+      const wantUSD = classAppetiteUSD(investor, def) * tierShareOfMarket * tiltShare;
+      if (wantUSD > 0) desiredByFund.get(fund.id)!.set(investor.id, wantUSD);
+    });
+
+    // Credit: one book per index, indexed by the same coverage rule.
+    candidates
+      .filter((f) => defById.get(f.etf!.indexId)!.assetClass !== 'EQUITY')
+      .forEach((fund) => {
+        const def = defById.get(fund.etf!.indexId)!;
+        const share = indexedShare(investor, indexById.get(def.id)?.constituents.length ?? 0);
+        const wantUSD = classAppetiteUSD(investor, def) * share;
+        if (wantUSD > 0) desiredByFund.get(fund.id)!.set(investor.id, wantUSD);
+      });
+  });
+
+  // ---- 3. The authorised participants' capacity: real dealer balance sheet, per region. ----
+  const apCapacityByRegion = new Map<RegionId, number>();
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => {
+    const banks = ctx.updatedCompanies.filter((c) => c.region === r && c.bankBalanceSheet);
+    const equityUSD = banks.reduce((s, c) => s + (c.bankBalanceSheet?.bankEquityUSD ?? 0), 0);
+    apCapacityByRegion.set(r, Math.max(0, equityUSD) * AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY);
+  });
+
+  // ---- 4. Creations and redemptions, and the residual the arbitrage could not absorb. ----
+  // A region's dealers have ONE balance sheet between them, so the week's baskets compete for it.
+  // Allocating the whole regional capacity to every fund independently would let ten funds each
+  // spend the same dollar of dealer equity.
+  const netFlowByFund = new Map<string, number>();
+  const cashDeltaByEntity = new Map<string, number>();
+  const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
+  const addCash = (id: string, usd: number) => cashDeltaByEntity.set(id, (cashDeltaByEntity.get(id) ?? 0) + usd);
+
+  /** What each investor wants to move in each fund, and the fund's net — computed before any
+   *  execution, because the AP capacity split depends on the whole week's demand at once. */
+  const flowPlanByFund = new Map<string, {
+    navPerShare: number; wantDelta: Map<string, number>; grossCreateUSD: number; grossRedeemUSD: number;
+  }>();
+  funds.forEach((fund) => {
+    const desired = desiredByFund.get(fund.id)!;
+    const navUSD = navByFundId.get(fund.id) ?? 0;
+    const sharesOutstanding = fund.etf!.sharesOutstanding;
+    const navPerShare = sharesOutstanding > 0 && navUSD > 0
+      ? navUSD / sharesOutstanding
+      : ETF_INCEPTION_NAV_PER_SHARE;
+
+    // What each investor holds today, in dollars at the current NAV.
+    const heldByInvestor = new Map<string, number>();
+    investors.forEach((inv) => {
+      const h = inv.itemizedHoldings.find((x) => x.instrumentType === 'ETF_SHARE' && x.instrumentId === fund.id);
+      if (h) heldByInvestor.set(inv.id, (h.quantityShares ?? 0) * navPerShare);
+    });
+
+    // Gross flow both ways, netted — an AP only has to carry the net basket.
+    let grossCreateUSD = 0;
+    let grossRedeemUSD = 0;
+    const wantDeltaByInvestor = new Map<string, number>();
+    const ids = new Set([...desired.keys(), ...heldByInvestor.keys()]);
+    ids.forEach((id) => {
+      const investor = investors.find((i) => i.id === id);
+      if (!investor) return;
+      const wantUSD = desired.get(id) ?? 0;
+      const haveUSD = heldByInvestor.get(id) ?? 0;
+      // A buyer can only pay with money it has; a seller is unconstrained.
+      const deltaUSD = wantUSD > haveUSD
+        ? Math.min(wantUSD - haveUSD, Math.max(0, investor.cashUSD ?? 0))
+        : wantUSD - haveUSD;
+      if (Math.abs(deltaUSD) < 1) return;
+      wantDeltaByInvestor.set(id, deltaUSD);
+      if (deltaUSD > 0) grossCreateUSD += deltaUSD; else grossRedeemUSD += -deltaUSD;
+    });
+
+    flowPlanByFund.set(fund.id, { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD });
+    netFlowByFund.set(fund.id, grossCreateUSD - grossRedeemUSD);
+  });
+
+  // Split each region's dealer capacity across the funds competing for it, by the size of the net
+  // basket each one needs carried.
+  const capacityByFund = new Map<string, number>();
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+    const regionFunds = funds.filter((f) => f.region === region);
+    const demandUSD = regionFunds.reduce((a, f) => a + Math.abs(netFlowByFund.get(f.id) ?? 0), 0);
+    const capacityUSD = apCapacityByRegion.get(region) ?? 0;
+    regionFunds.forEach((f) => {
+      const share = demandUSD > 0 ? Math.abs(netFlowByFund.get(f.id) ?? 0) / demandUSD : 0;
+      capacityByFund.set(f.id, capacityUSD * share);
+    });
+  });
+
+  funds.forEach((fund) => {
+    const plan = flowPlanByFund.get(fund.id);
+    if (!plan) return;
+    const { navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD } = plan;
+    const sharesOutstanding = fund.etf!.sharesOutstanding;
+    const netUSD = grossCreateUSD - grossRedeemUSD;
+    const capacityUSD = capacityByFund.get(fund.id) ?? 0;
+    const absorbedUSD = Math.min(Math.abs(netUSD), capacityUSD);
+    const fillRatio = Math.abs(netUSD) > 0 ? absorbedUSD / Math.abs(netUSD) : 1;
+
+    // Everyone's order is filled in the same proportion — the AP cannot choose whose basket to
+    // carry. Redemptions net against creations first, so only the residual consumes capacity.
+    const executedByInvestor = new Map<string, number>();
+    wantDeltaByInvestor.forEach((deltaUSD, id) => {
+      // The netted part always clears; only the imbalance is rationed.
+      const nettedShare = Math.abs(netUSD) > 0
+        ? (deltaUSD > 0 ? Math.min(grossCreateUSD, grossRedeemUSD) / Math.max(1, grossCreateUSD)
+                        : Math.min(grossCreateUSD, grossRedeemUSD) / Math.max(1, grossRedeemUSD))
+        : 1;
+      const imbalanceShare = 1 - nettedShare;
+      const executedUSD = deltaUSD * (nettedShare + imbalanceShare * fillRatio);
+      if (Math.abs(executedUSD) >= 1) executedByInvestor.set(id, executedUSD);
+    });
+
+    let fundCashDeltaUSD = 0;
+    executedByInvestor.forEach((executedUSD, id) => {
+      addCash(id, -executedUSD);
+      fundCashDeltaUSD += executedUSD;
+      const shares = executedUSD / navPerShare;
+      const byFund = holdingsDeltaByInvestor.get(id) ?? new Map<string, number>();
+      byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + shares);
+      holdingsDeltaByInvestor.set(id, byFund);
+    });
+    addCash(fund.id, fundCashDeltaUSD);
+
+    const createdShares = fundCashDeltaUSD / navPerShare;
+    const unabsorbedUSD = Math.abs(netUSD) - absorbedUSD;
+    fund.etf = {
+      ...fund.etf!,
+      sharesOutstanding: Math.max(0, sharesOutstanding + createdShares),
+      // The share of THIS WEEK'S FLOW the arbitrage could not carry — bounded in [-1, 1] because
+      // it is a fraction of the flow, not of the fund.
+      unmetFlowShare: Math.abs(netUSD) > 0 ? (Math.sign(netUSD) * unabsorbedUSD) / Math.abs(netUSD) : 0,
+    };
+  });
+
+  // ---- 5. Apply every cash and share movement in one pass, then re-mark every ETF claim. ----
+  // A holder's shares are a claim on the fund's assets, so they have to be carried at the fund's
+  // CURRENT net asset value per share — not at whatever NAV happened to prevail when the holder
+  // last traded. Marking only the holdings that moved left the claims drifting away from the
+  // assets backing them (measured: 13.49B of fund assets against 13.38B of claims after thirty
+  // weeks), which is the same class of error as any stale mark.
+  const finalNavPerShareByFund = new Map<string, number>();
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
+    const feeUSD = feeBySponsor.get(entity.id) ?? 0;
+    const cashUSD = cashDeltaByEntity.get(entity.id) ?? 0;
+    const shareDeltas = holdingsDeltaByInvestor.get(entity.id);
+    // A fund pays its own fee out of the same cash the investors put in.
+    const fundFeeUSD = entity.entityType === 'ETF' && entity.etf
+      ? (fundNavUSD(entity) * entity.etf.expenseRatioAnnual) / 52
+      : 0;
+    if (!feeUSD && !cashUSD && !shareDeltas && !fundFeeUSD) return entity;
+
+    let holdings = entity.itemizedHoldings;
+    if (shareDeltas) {
+      const next = [...holdings];
+      shareDeltas.forEach((shares, fundId) => {
+        const idx = next.findIndex((h) => h.instrumentType === 'ETF_SHARE' && h.instrumentId === fundId);
+        const fund = funds.find((f) => f.id === fundId)!;
+        const navPerShare = (navByFundId.get(fundId) ?? 0) > 0 && fund.etf!.sharesOutstanding > 0
+          ? (navByFundId.get(fundId) ?? 0) / fund.etf!.sharesOutstanding
+          : ETF_INCEPTION_NAV_PER_SHARE;
+        if (idx >= 0) {
+          const held = (next[idx].quantityShares ?? 0) + shares;
+          if (held <= 1e-6) next.splice(idx, 1);
+          else next[idx] = { ...next[idx], quantityShares: held, quantityOrNotionalUSD: held * navPerShare };
+        } else if (shares > 1e-6) {
+          next.push({
+            instrumentId: fundId,
+            instrumentType: 'ETF_SHARE',
+            issuerRegion: fund.region,
+            quantityShares: shares,
+            quantityOrNotionalUSD: shares * navPerShare,
+          } as ItemizedHolding);
+        }
+      });
+      holdings = next;
+    }
+    return {
+      ...entity,
+      cashUSD: (entity.cashUSD ?? 0) + cashUSD + feeUSD - fundFeeUSD,
+      itemizedHoldings: holdings,
+    };
+  });
+
+  // Every fund's final NAV per share, after this week's creations, fees and cash movements.
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    if (e.entityType !== 'ETF' || !e.etf) return;
+    const shares = e.etf.sharesOutstanding;
+    finalNavPerShareByFund.set(e.id, shares > 0 ? fundNavUSD(e) / shares : ETF_INCEPTION_NAV_PER_SHARE);
+  });
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
+    if (!entity.itemizedHoldings.some((h) => h.instrumentType === 'ETF_SHARE')) return entity;
+    return {
+      ...entity,
+      itemizedHoldings: entity.itemizedHoldings.map((h) => {
+        if (h.instrumentType !== 'ETF_SHARE') return h;
+        const navPerShare = finalNavPerShareByFund.get(h.instrumentId);
+        if (navPerShare === undefined) return h;
+        return { ...h, quantityOrNotionalUSD: (h.quantityShares ?? 0) * navPerShare };
+      }),
+    };
+  });
+}

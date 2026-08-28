@@ -48,6 +48,9 @@ const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
   HEDGE_FUND: 0.5,
   // The fund itself does not lever; the leverage lives on the portfolio companies' own ladders.
   PRIVATE_EQUITY: 0,
+  // An index fund holds exactly what it was given money for. It cannot borrow to buy more of its
+  // benchmark — that would be a leveraged product, which is a different fund.
+  ETF: 0,
   // A $1-NAV fund is unlevered by construction.
   MONEY_MARKET_FUND: 0,
 };

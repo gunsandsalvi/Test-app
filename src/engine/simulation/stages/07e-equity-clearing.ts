@@ -33,6 +33,8 @@ import { WeeklyStepContext } from './context';
 import { REQUIRED_RETURN_ON_CAPITAL, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { settlePricedOfferings } from './primary-settlement';
+import { INDEX_DEFINITIONS } from '../../../domain/indexes';
+import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 
 const DEALER_SPREAD_BPS = 8;
@@ -73,7 +75,11 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const regionCompanies = [...listedCompanies, ...debutIssuers];
     if (regionCompanies.length === 0) return;
 
-    const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
+    // Index funds are handled separately below (their schedule is a size, not a price), so they
+    // are excluded from the ordinary allocator population here.
+    const regionEntities = ctx.updatedInstitutionalEntities.filter(
+      (e) => e.region === regionId && e.entityType !== 'ETF'
+    );
     if (regionEntities.length === 0) return;
 
     const tradableShare = reg.equityOwnership.institutionalShare;
@@ -136,9 +142,17 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const bookEquityById = new Map(regionCompanies.map((c) => [c.id, companyBookEquityUSD(c)]));
     const netInvestmentRateById = new Map(regionCompanies.map((c) => [c.id, companyNetInvestmentRate(c)]));
 
+    // Index funds hold real equity and settle real cash, so they go through exactly the same
+    // bookkeeping and apply passes as every other holder; only their SCHEDULE differs.
+    const regionIndexFunds = ctx.updatedInstitutionalEntities.filter(
+      (e) => e.entityType === 'ETF' && e.etf
+        && INDEX_DEFINITIONS.some((d) => d.id === e.etf!.indexId && d.assetClass === 'EQUITY'
+          && (d.region === regionId || !d.region))
+    );
+    const bookEntities = [...regionEntities, ...regionIndexFunds];
     const otherHoldingsByEntity = new Map<string, ItemizedHolding[]>();
     const currentSharesByEntity = new Map<string, Map<string, number>>();
-    regionEntities.forEach((entity) => {
+    bookEntities.forEach((entity) => {
       const bySharesForCompany = new Map<string, number>();
       const other: ItemizedHolding[] = [];
       entity.itemizedHoldings.forEach((h) => {
@@ -153,6 +167,31 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       });
       otherHoldingsByEntity.set(entity.id, other);
       currentSharesByEntity.set(entity.id, bySharesForCompany);
+    });
+
+    // ETF: the index funds tracking any equity index this book prices. They are ordinary holders
+    // — real positions, real cash — but their schedule has no reservation level: a fund buys its
+    // benchmark weight at whatever the market is asking. That is the one demand shape this engine
+    // could not previously express, and it is a large real force.
+    const equityIndexIds = INDEX_DEFINITIONS
+      .filter((d) => d.assetClass === 'EQUITY' && (d.region === regionId || !d.region))
+      .map((d) => d.id);
+    const indexFunds = indexFundsForBook(regionIndexFunds, ctx.updatedMarketIndexes, equityIndexIds);
+    const indexFundParticipants: ClearingParticipant[] = indexFunds.map(({ fund, index, investableUSD }) => {
+      const currentShares = currentSharesByEntity.get(fund.id) ?? new Map<string, number>();
+      const demandByInstrumentId = new Map<string, ParticipantDemand>();
+      index.constituents.forEach((c) => {
+        if (!companyById.has(c.instrumentId)) return;
+        const refPrice = refPriceById.get(c.instrumentId) ?? 0;
+        if (!(refPrice > 0)) return;
+        // Target in SHARES, because this book clears in shares.
+        const targetShares = (investableUSD * c.weight) / refPrice;
+        demandByInstrumentId.set(
+          c.instrumentId,
+          indexFundDemand(targetShares, Math.max(0, fund.cashUSD ?? 0) * c.weight / Math.max(1e-9, refPrice), 'PRICE_LIKE')
+        );
+      });
+      return { id: fund.id, currentHoldingsByInstrumentId: currentShares, demandByInstrumentId };
     });
 
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
@@ -211,7 +250,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       };
     });
 
-    const result = clearFinancialAsset(instruments, participants, new Map(), {
+    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants], new Map(), {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
     });
@@ -231,8 +270,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     });
 
     // Apply each entity's real new share register, with its cash leg.
-    const updatedById = new Map(regionEntities.map((e) => [e.id, e]));
-    regionEntities.forEach((entity) => {
+    const updatedById = new Map(bookEntities.map((e) => [e.id, e]));
+    bookEntities.forEach((entity) => {
       const newShares = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const equityHoldings: ItemizedHolding[] = [];
       newShares.forEach((shares, companyId) => {
