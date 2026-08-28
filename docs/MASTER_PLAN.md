@@ -65,7 +65,7 @@ These are standing user directives. They are not suggestions.
 
 10. **The simulation is a partial world until the remaining projects land — do not chase every
     moved number.** (User directive, 2026-08-27.) Whole systems are still missing (G2's
-    transmission, MS's households, PUB's fiscal loop), so harness counts shift for
+    transmission, HH's households, PUB's fiscal loop), so harness counts shift for
     non-economic reasons — an RNG-stream change relabels the world, a deleted prop reveals a
     documented disease, a different seed escapes a band another seed holds. Attribute a moved
     baseline BRIEFLY (one cheap A/B at most), record it with its owner, and move on. Deep
@@ -199,12 +199,14 @@ paper into those same books (WS8), itemized bank lending and endogenous money (G
 private sector's lifecycle: sponsors calling real LP capital, buying at the multiple the public
 market clears and marking at that same multiple (§7.41).
 
-**Still formula-driven** (each is a §4 work item, in that order): **the household sector** —
-equity wealth is a formula stock owned in no register, and it is 2.1x the real market (MS); **the
-public sector** — the government books no interest on its own debt and the central bank is a
-scalar (PUB); the industry taxonomy (BP1); the dual dealer system (G3); derivatives, commodity
-futures and hedging incl. implied vol (DER); default resolution and recovery (G5); the
-institutional liability side (G6); and FX (WS9).
+**Still formula-driven** (each is a §4 work item, in that order): **the household sector**, which
+is modelled an order of magnitude more thinly than the corporate one — 4 regional aggregates
+against 2,004 named firms, a top-down income anchor instead of an income statement, consumer debt
+itemized to nobody, and 740B of institutional liabilities that are households' assets with no
+holder (HH, §7.48); **the public sector** — the government books no interest on its own debt and
+the central bank is a scalar (PUB); the industry taxonomy (BP1); the dual dealer system (G3);
+derivatives, commodity futures and hedging incl. implied vol (DER); default resolution and
+recovery (G5); and FX (WS9).
 
 **Real but structurally undersupplied** — a category worth naming separately, because these are
 not formulas and they still produce wrong prices. The clearing markets are honest mechanisms
@@ -212,7 +214,7 @@ running on an asset universe that does not match the money pointed at it: instit
 corporate-credit appetite ran **~6x the corporate credit that existed** (§7.18). HC Wave 1 took
 that to 3.8x by making the hidden sector's debt real and ownable (§7.33), and S11 gave entities
 the budget constraint they never had (§7.21); the residual closes through the §6 segment-debt
-primitive, G2's bank book and G6's liability inflows. The lesson stands on its own: a correct
+primitive, G2's bank book and HH1's liability inflows. The lesson stands on its own: a correct
 auction over a short float still gives a wrong price, and no work inside the auction fixes it.
 
 ---
@@ -230,22 +232,22 @@ metrics to watch rather than work.
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
-| 1 | foundation | **MS2-MS4 — Main Street: cohorts, labor market, wage policy** *(MS1 closed §7.47)* | none |
-| 2 | foundation | **PUB — The public sector: treasury + central bank** | MS (household taxes) |
+| 1 | foundation | **HH — The household sector, to corporate depth** (absorbs G6) | none |
+| 2 | foundation | **PUB — The public sector: treasury + central bank** | HH (household taxes) |
 | 3 | foundation | **BP1 — One industry registry** | none |
 | 4 | markets | **G3 — One dealer system** | none (S9 done) |
 | 5 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
 | 6 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
-| 7 | markets | **G6 — Institutional liabilities** | MS (contributions), PUB |
-| 8 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| 9 | depth | **IND — Industry depth** (profiles, electricity, share-vs-margin, antitrust) | BP1 |
-| 10 | depth | **CAL — Payment calendars** | none |
-| 11 | depth | **ETF2 — A real price for ETF shares** | G3 |
-| 12 | depth | **HC3b — The product-market handover** | BP1 |
-| 13 | last | **S-final — Validation gate** | everything above |
-| 14 | last | **AU — Aurora, the UI rebuild** | everything above |
+| 7 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
+| 8 | depth | **IND — Industry depth** (profiles, electricity, share-vs-margin, antitrust) | BP1 |
+| 9 | depth | **CAL — Payment calendars** | none |
+| 10 | depth | **ETF2 — A real price for ETF shares** | G3 |
+| 11 | depth | **HC3b — The product-market handover** | BP1 |
+| 12 | last | **S-final — Validation gate** | everything above |
+| 13 | last | **AU — Aurora, the UI rebuild** | everything above |
 
-**What changed in this reordering.** Six projects merged into three: commodity futures (ex-G7)
+**What changed in the 2026-08-28 reordering** (superseded in part by HH's merge above). Six
+projects merged into three: commodity futures (ex-G7)
 and corporate/bank hedging (ex-WS11) are slices of derivatives (ex-G4), because both are its
 users and neither is a market of its own; the central bank (ex-G9), government fiscal (ex-BP5)
 and government debt service (ex-S4r) are one balance sheet each way and became **PUB**, since
@@ -256,12 +258,24 @@ sentiment remainder (ex-G8) was an hour of dead-code deletion, not a project, an
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16) and so are the markets
 that price real instruments (WS4–WS8, G2, HC, ETF). What is left at the base is not a missing
-market — it is that two of the three sectors any economy has are still partly fictional.
-Households hold **2.1x the entire market's capitalisation in equity that exists in no register**
-(measured §7.45), and the government **books no interest on its own debt at all**. Every market
-above them prices correctly against a demand side that is, in those two places, made up. That is
-why MS and PUB lead, and why the derivative markets — which are genuinely well-specified and
-would be satisfying to build — deliberately do not.
+market — it is that two of the three sectors any economy has are still fictional in ways the
+markets above them cannot see.
+
+**The household sector is modelled an order of magnitude more thinly than the corporate one**, and
+the asymmetry is measurable (§7.48): 2,004 named companies against 4 regional aggregates; a real
+income statement anchored to settled sales against a top-down income anchor; the S5 cash ledger
+against formula deltas; 82 itemized corporate loans on named banks' books against a 140B consumer
+book itemized to nobody. G2 gave corporate borrowers real lenders and left household borrowers an
+aggregate — the same project, half built. And the government **books no interest on its own debt
+at all**. Every market above these two prices correctly against a demand side that is, in those
+places, made up.
+
+**Why G6 was absorbed rather than kept.** "Institutional liabilities" and "households become real"
+are ONE project seen from two ends: the claim linking a household to a pension fund is
+simultaneously the fund's liability and the household's asset. Keeping them as separate items
+guaranteed that building either alone would leave a gap to be named — which is exactly what
+happened in MS1, and the 740B it left unattributed (§7.48) is the measure of the mistake. They are
+now one item, **HH**, at the front.
 
 **Hidden Corporates and ETFs are closed** (§7.33, §7.41, §7.44). Do not reorder without asking.
 
@@ -300,77 +314,101 @@ CP-failure revolver, the phantom private share register, the book-value P/B pric
 institutions, the dead sentiment field, and the earnings desk private firms were given at
 generation. The seventh did not reproduce and produced PUB1b instead. Harness 5 → 4 violations.
 
-### MS — Main Street: households become real  *(Tier 1, item 2)*
+### HH — The household sector, to corporate depth  *(Tier 1, item 1; absorbs the old MS and G6)*
 
-**Why this leads.** The household sector is the largest fiction left in the model, and it is not
-close. Measured at week 40 (§7.45): households hold **2,224B of equity against a total real
-market capitalisation of 1,052B and institutional holdings of 130B** — 2.1x the whole market, in
-an account that exists in no share register, clears in no book, and never moves cash.
-`householdState.equityHoldingsUSD` is seeded as `income x 1.5` and multiplied weekly by a formula
-return. It feeds net worth, the wealth effect and consumption, so it is driving real macro today
-off a number nothing validates. This is simultaneously a rule-1 violation (a formula price) and a
-rule-3 violation (household equity wealth represented twice, once as this stock and once as the
-registers it never appears in).
+*Naming note: §7 records written before 2026-08-28 call the institutional-liability half **G6**
+and the household half **MS**. Those entries are history and are left as written; both now live
+here.*
 
-It is also the missing demand side for two other things already built: the broad-market index
-funds have no buyer because **households are the truest source of ETF demand** and they were not
-in the model, and G1b's missing stabiliser is the household rate response.
+**The case for this being first, in one table.** The two sectors are not modelled at the same
+depth, and nothing above them can be more honest than the demand side it prices against.
 
-**MS1 — DONE (§7.47).** The household balance sheet is real claims plus one named gap; households
-buy index funds out of saving through the real AP mechanism, and the rate response that decides
-how much comes from cleared prices. What follows is the original scope, kept for MS2-MS4's sake.
+| | Corporates | Households |
+|---|---|---|
+| Named entities | 2,004 | 4 regional aggregates |
+| Income statement | real, anchored to settled stage-05 sales | `estimatedHouseholdIncomeUSD`, a top-down anchor |
+| Cash | S5 ledger, every flow labelled | formula deltas |
+| Debt | 82 itemized loans on named banks + tranches with maturities, coupons, call protection | a 140B consumer book itemized to NOBODY; paydown-rate constants |
+| Cleared markets | 4 | 0 |
+| Default | real, on cash exhaustion | none |
 
-**MS1 — The household balance sheet becomes real.** *(shipped)*
-Households hold real instruments: deposits (G2's real bank liabilities), MMF shares (WS7), ETF
-shares (the ETF machinery — a household has no research capacity, so the coverage rule already
-in `etf-flows.ts` makes it a 100% indexer by construction, which is exactly the buyer the
-all-cap, large-cap and global funds lack), and direct equity in the WS4 registry. Saving flows in,
-returns come from cleared prices, and the phantom stock is reconciled — **not** by injecting
-2.2T of demand into a 1T market, but by carving a realistic share of household financial assets
-into real holdings and letting the rest build from real saving, with the seed discrepancy
-recorded as a measured number rather than papered over. Retires S7's structural household-share
-parameters and gives WS4 its passive base.
+G2 gave corporate borrowers real lenders and left household borrowers an aggregate. Same project,
+half built.
 
-**Two banking boundary flows close here too**, both flagged in the 2026-08-27 audit as
-formula-sized with a real counterparty missing: the **deposit drift and beta** that size
-`banking.ts`'s household deposit line, and the **consumer-loan target**. Once households hold real
-deposits and borrow real money, both become sums of what real cohorts did rather than a drift
-against an aggregate.
+**MS1 is done** (§7.47): household equity is real claims — index-fund shares through the AP
+mechanism, the listed float institutions do not hold, founder stakes in the private tier — plus
+one named gap. What follows is the rest, and the FIRST slice is the one MS1's gap exposed.
 
-**MS2 — Households as cohorts.** ~20 per region (occupation x income quintile), not 300M
+**HH1 — The claims that link households to institutions.** *(absorbs G6; do this first)*
+Measured (§7.48): insurers hold 495B of assets against 40B of their own equity, pension funds 146B
+against 17B, asset managers 188B against 31B. **740B is a liability to somebody and nobody holds
+the claim.** Those are policyholder reserves, pension entitlements and fund shares, and in reality
+every dollar of them is a household asset. The asset exists in this model and the claim does not —
+a rule-3 violation at 740B, and 46% of the gap MS1 had to name.
+
+Both sides close together, because they are one thing:
+- **Insurers:** premiums as a real expense line on companies and households; stochastic claims
+  scaled by real events; technical reserves = expected claims, held AS a household asset; the
+  liability duration is the reserve duration.
+- **Pensions:** contributions as a real slice of wages, benefits from a cohort table, entitlements
+  on the household balance sheet; the funded ratio is real and drives risk appetite the way it
+  actually does — underfunded funds reach for return, fully-funded funds derisk into bonds.
+- **Asset managers:** fund shares held by the households whose money it is.
+- **Then derive and retire the constants:** each entity's required return becomes its real
+  liability cost and its duration need its real liability duration, so
+  `REQUIRED_RETURN_ON_CAPITAL` and `INSTITUTIONAL_REAL_RETURN_BPS` become measured properties.
+  Demand curves stop being parallel because balance sheets genuinely differ.
+- **Also here: PE fundraising.** A sponsor calls its commitments, deploys them and stops forever —
+  undrawn capital runs 13.6B → 0.25B by week 90 and deal flow ends (§7.41). Real LPs size a new
+  vintage from their own allocation, which is a real decision only once their liabilities are.
+
+**HH2 — The house joins the balance sheet.** Households carry **1,061B of mortgage debt and own no
+house**: a balance sheet with the liability and not the asset. The model already has median home
+prices, a baseline, a price index and a 62% ownership rate — the housing stock is computable
+today. Home equity then responds to real prices, and the wealth effect finally has its largest
+real component. (Housing is the biggest asset most households own; leaving it out while carrying
+its mortgage biases net worth in one direction by construction.)
+
+**HH3 — Household debt itemized, the other half of G2.** Mortgages and consumer loans become real
+loans on named banks' books, against real borrowers, the way business loans already are. The
+paydown-rate constants (0.0004/wk mortgage, 0.04/wk revolving) and the `bankedConsumerDebtShare`
+that sizes the book die with it. **This also closes two banking boundary flows** flagged in the
+2026-08-27 audit: the deposit drift and beta, and the consumer-loan target, both of which become
+sums of what real households did.
+
+**HH4 — Households as cohorts.** ~20 per region (occupation x income quintile), not 300M
 individuals. Each earns real payroll from a named employer set plus transfers, pays real taxes
 (PUB's collection), saves through MS1's channels, and consumes: stage 05's household bids become
 the sum of cohort budgets, each with its own price sensitivity — low-income cohorts are the
 inelastic food-and-energy demand, high-income the discretionary swing. Household income becomes a
 derived sum, so S1's identity holds by construction and its assert-era scaffolding is deleted.
 
-**MS3 — A real labor market.** A new stage between 02b and 03: companies post openings from real
+**HH5 — A real labor market.** A new stage between 02b and 03: companies post openings from real
 capacity need (production plans vs headcount, data stage 05 already implies); cohorts move toward
-better wages with real friction; quits and layoffs move real payroll. **This closes the root
-labor disagreement** the model has carried from the start: the bootstrap's firms demand ~11–14%
-fewer workers than the population primitives supply, so the occupation pools imply 11–14%
-unemployment while `reg.unemploymentRate` reports ~4.5% — two representations of one real thing.
-Writing the pool-implied rate into the field was tried in S1 and deliberately reverted; the real
-fix is making both sides real, which is this. It also closes the consequence: bottom-up GDP
-starts 6–9% below the supply-side anchor and reads as a permanent output gap.
+better wages with real friction; quits and layoffs move real payroll. **This closes the root labor
+disagreement** the model has carried from the start: the bootstrap's firms demand ~11–14% fewer
+workers than the population primitives supply, so the occupation pools imply 11–14% unemployment
+while `reg.unemploymentRate` reports ~4.5% — two representations of one real thing. Writing the
+pool-implied rate into the field was tried in S1 and deliberately reverted; the real fix is making
+both sides real. It also closes the consequence: bottom-up GDP starts 6–9% below the supply-side
+anchor and reads as a permanent output gap.
 
-**MS4 — Corporate wage and management policy** (absorbs #52, runs parallel with MS3): per-company
-wage setting from vacancy-fill experience and margin headroom, hiring and firing from real
-capacity economics, `executionQuality` feeding retention. **Wage drift dies here** — a company
-that cannot fill openings raises its offered wage, and that is wage-push. Also closes the
-`macro/evolution.ts` wage/tightness defect: nominal wage growth goes negative (−2.5% by week 40)
-while inflation runs at 10%, a 12% real-wage collapse a year, because the tightness→wage formula
-has no bargaining mechanism in it.
+**HH6 — Corporate wage and management policy** (absorbs #52, runs parallel with HH5): per-company
+wage setting from vacancy-fill experience and margin headroom, hiring and firing from real capacity
+economics, `executionQuality` feeding retention. **Wage drift dies here** — a company that cannot
+fill openings raises its offered wage, and that is wage-push. Also closes the `macro/evolution.ts`
+wage/tightness defect: nominal wage growth goes negative (−2.5% by week 40) while inflation runs at
+10%, a 12% real-wage collapse a year, because the tightness→wage formula has no bargaining
+mechanism in it.
 
-**Verify:** household financial assets reconcile to real registers and real cash flows;
-unemployment, wage growth and the vacancy rate move together in a Beveridge-ish relation; a big
-employer's failure raises regional unemployment and cuts real stage-05 consumption — the
-recession transmission the simulation exists to have; the broad-market index funds fill from
-household flow rather than from a tuned constant.
+**Verify (whole project):** household financial assets reconcile to real claims on real
+counterparties, and `unmodeledFinancialAssetsUSD` falls toward zero as each slice lands — it is the
+project's own scoreboard; every institutional liability has a holder and every household asset an
+issuer; unemployment, wage growth and the vacancy rate move together in a Beveridge-ish relation; a
+big employer's failure raises regional unemployment and cuts real stage-05 consumption — the
+recession transmission the simulation exists to have.
 
----
-
-### PUB — The public sector: treasury and central bank  *(Tier 1, item 3)*
+### PUB — The public sector: treasury and central bank  *(Tier 1, item 2)*
 
 Merges the old BP5 (government as fiscal counterparty), S4r (debt service) and G9 (central bank).
 They are one balance sheet seen from two sides, and remittances are the loop that closes between
@@ -421,7 +459,7 @@ exactly the sum.
 
 ---
 
-### BP1 — One industry registry  *(Tier 1, item 4)*
+### BP1 — One industry registry  *(Tier 1, item 3)*
 
 A single `domain/industry-registry.ts` typed table: category → sub-units, buyer mix, input
 recipes, capex weights, commodity links, labor intensity by occupation. `INDUSTRY_SUBUNITS`,
@@ -434,7 +472,7 @@ broad-market indexing meaningful (§6 watchlist).
 
 ---
 
-### G3 — One dealer system  *(Tier 2, item 5)*
+### G3 — One dealer system  *(Tier 2, item 4)*
 
 The dealer becomes what it is in reality: a desk inside a named bank. `DealerDesk {bankTicker,
 inventoryByInstrumentId, capitalAllocatedUSD}`; migrate the current region-level inventories to
@@ -460,7 +498,7 @@ quotes visibly wider — the real liquidity-cycle channel.
 
 ---
 
-### DER — Derivatives, and the people who hedge with them  *(Tier 2, item 6)*
+### DER — Derivatives, and the people who hedge with them  *(Tier 2, item 5)*
 
 Merges the old G4 (derivative markets), G7 (commodity futures) and WS11 (corporate and bank
 hedging). Futures and hedging were never separate markets — they are the users of this one, and
@@ -471,7 +509,7 @@ remain MTM converters. **Build IRS first** — its natural two-sided demand alre
 
 1. **IRS.** Par rates at 2/5/10Y per region, YIELD_LIKE. Payers of fixed: banks hedging G2 loan
    books, corporates with floating debt. Receivers: insurers and pensions extending to liability
-   duration (from G6; before it, from the duration gap 07b's fit already computes). The cleared
+   duration (from HH1; before it, from the duration gap 07b's fit already computes). The cleared
    par rate minus the 07c bootstrap is a real swap spread — the first cross-market basis the sim
    produces, and a powerful diagnostic.
 2. **CDS.** One IG and one HY index per region, single names later. Buyers: banks (G2 books),
@@ -501,7 +539,7 @@ shocks they hedged, which is the whole point of items 4 and 5.
 
 ---
 
-### G5 — Default resolution: recovery as an outcome  *(Tier 2, item 7)*
+### G5 — Default resolution: recovery as an outcome  *(Tier 2, item 6)*
 
 On default an `Estate {companyId, assets, claims[]}` opens instead of a constant recovery. Real
 assets (cash, receivables, inventory at real lot values, PP&E at a haircut) are sold over ~26–78
@@ -527,34 +565,7 @@ private tier's.
 
 ---
 
-### G6 — Institutional liabilities  *(Tier 2, item 8)*
-
-The item that makes institutional demand heterogeneous for real (§7.19 item 4). Insurers:
-premiums as a real expense line on companies and households, stochastic claims scaled by real
-events; technical reserves are expected claims and the liability duration is the reserve duration.
-Pensions: contributions as a real slice of wages (real once MS lands), benefits from a cohort
-table; the funded ratio is real and drives risk appetite the way it actually does — underfunded
-funds reach for return, fully-funded funds derisk into bonds.
-
-**Then derive and retire the constants:** each entity's required return becomes its real liability
-cost and its duration need its real liability duration, so `REQUIRED_RETURN_ON_CAPITAL` and
-`INSTITUTIONAL_REAL_RETURN_BPS` become measured properties. Demand curves stop being parallel
-because balance sheets genuinely differ.
-
-**Also owned here: PE fundraising.** A sponsor calls its LP commitments, deploys them and then
-stops forever — measured, undrawn commitments run 13.6B → 0.25B by week 90 and deal flow ends
-(§7.41). Real sponsors raise a new vintage and real LPs size that commitment from their own target
-allocation to the asset class. `AssetAllocationTarget` has no private-equity bucket, and adding one
-touches every entity type's initialization — which is exactly this project's work, once an LP's
-allocation is a real decision rather than a seeded constant.
-
-**Verify:** an insurer with a bad claims year visibly derisks; pension demand for long duration
-rises as its funded ratio improves; dispersion of reservation spreads across entities widens; PE
-dry powder replenishes through real fundraising rather than running to zero.
-
----
-
-### WS9 — Real trade & FX  *(Tier 2, item 9)*
+### WS9 — Real trade & FX  *(Tier 2, item 7)*
 
 **Confirm the currency-zone premise with the user first** (standing caveat). If confirmed:
 
@@ -577,7 +588,7 @@ depreciate slowly against sticky flows; no drift term anywhere; the global funds
 
 ---
 
-### IND — Industry depth  *(Tier 3, item 10)*
+### IND — Industry depth  *(Tier 3, item 8)*
 
 Everything Blueprint had beyond the registry. All of it needs BP1 first.
 
@@ -605,7 +616,7 @@ Everything Blueprint had beyond the registry. All of it needs BP1 first.
 
 ---
 
-### CAL — Payment calendars  *(Tier 3, item 11)*
+### CAL — Payment calendars  *(Tier 3, item 9)*
 
 Coupons, loan interest and dividends accrue as smooth weekly 1/52 flows on both sides — stage 08's
 expense and `institutional-balance-sheet.ts`'s income. Real instruments pay on their own calendar:
@@ -620,7 +631,7 @@ lumpiness immediately.
 
 ---
 
-### ETF2 — A real price for ETF shares  *(Tier 3, item 12)*
+### ETF2 — A real price for ETF shares  *(Tier 3, item 10)*
 
 Today a fund's shares are carried at NAV and the arbitrage residual is reported as
 `unmetFlowShare` — the fraction of a week's creation and redemption demand the authorised
@@ -633,7 +644,7 @@ sheet rather than a regional pool.
 
 ---
 
-### HC3b — The product-market handover  *(Tier 3, item 13)*
+### HC3b — The product-market handover  *(Tier 3, item 11)*
 
 The last piece owed from Hidden Corporates Wave 1, deferred with a reason and still waiting on
 BP1. The auctioned sub-unit categories' demand is calibrated against public supply, while the
@@ -648,14 +659,14 @@ switches on.
 
 ---
 
-### S-final — Validation gate  *(Tier 4, item 14)*
+### S-final — Validation gate  *(Tier 4, item 12)*
 
 Full `npm run verify` green, closing #2/#14/#41, plus whatever residuals of #67 and #18 survive
 their owners above. Nothing else ships after this until it passes.
 
 ---
 
-### AU — Aurora, the UI rebuild  *(Tier 4, item 15)*
+### AU — Aurora, the UI rebuild  *(Tier 4, item 13)*
 
 Explicit mandate: delete every current UI element and rebuild from scratch — sleek, smart,
 interactive, real-world-inspired. **Required process, fixed in advance:** (1) a LONG series of
@@ -704,7 +715,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **#18 — companies at the revenue floor** | Four names in the 60-week harness, and the only violations left in it. Live and visible; owner is the goods-market cash-margin path. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
-| **`unmodeledFinancialAssetsUSD`** | 1,312B of household financial wealth the asset universe cannot back (§7.47), down from 1,759B and falling as real claims are found. Not a defect to fix directly — it is the measured size of §7.18's want/have gap on the household side, and the honest number to watch as HC births, real IPOs, BP1's registry and G6's pension claims give households more real things to own. It earns nothing and moves with nothing by design. |
+| **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closes that 740B on both sides at once; HH2 adds the house households already carry a mortgage against. Watch this line fall toward zero as each slice lands. |
 
 ### 6.2 Watchlist — measure, do not fix
 
@@ -1968,10 +1979,43 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       construction — the buyer was specified before it existed. The empty broad-market funds were
       never a universe-size problem after all; they were a missing sector.
     - Harness holds at 4 (the #18 names), determinism verified, build green.
-48. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+48. **The household sector is modelled an order of magnitude more thinly than the corporate one,
+    and naming a gap is not the same as closing it.** The user pushed back on MS1's
+    `unmodeledFinancialAssetsUSD` — a massive part of the household balance sheet does not exist,
+    and households were not getting the depth corporates get. Both were right, and the measurement
+    is worse than the intuition.
+    - **46% of the "unmodeled" 1,605B is not missing from the world — it is UNATTRIBUTED in it.**
+      Insurers hold 495B of assets against 40B of their own equity; pension funds 146B against
+      17B; asset managers 188B against 31B. **740B is a liability to somebody and nobody holds the
+      claim.** Policyholder reserves, pension entitlements, fund shares — every dollar a household
+      asset in reality. The asset exists here and the claim does not: rule 3, at 740B.
+    - **Households carry 1,061B of mortgage debt and own no house.** The model has median home
+      prices, a baseline, a price index and a 62% ownership rate. A balance sheet with the
+      liability and not the asset, biasing net worth in one direction by construction.
+    - **The asymmetry, measured:** 2,004 named companies against 4 regional aggregates; a real
+      income statement anchored to settled sales against a top-down income anchor; the S5 cash
+      ledger against formula deltas; **82 itemized corporate loans on named banks' books against a
+      140B consumer book itemized to nobody**; four cleared markets against none; real default
+      against none. G2 gave corporate borrowers real lenders and left household borrowers an
+      aggregate — the same project, half built, and it was never flagged.
+    - **Why I got it wrong, and the structural reason.** I wrote "the assets the universe cannot
+      yet back" and filed the empty broad-market funds under §7.18's want/have. That diagnosis was
+      wrong twice over: MS1 itself disproved half of it (the funds were missing a SECTOR, not a
+      universe), and this measurement disproved the rest. Naming the gap made MS1 *attributable*;
+      it did not make the model *right*, and I treated those as the same thing — then recommended
+      a market-completion item next while 46% of household wealth had no owner.
+      **The structural cause is worth more than the mistake:** "institutional liabilities" (G6)
+      and "households become real" (MS) were separate items in the work order, when the claim
+      linking a household to a pension fund is simultaneously the fund's liability and the
+      household's asset. Splitting one real thing across two projects GUARANTEES that building
+      either alone leaves a gap to name. They are now one item, HH, at the front of the order.
+    - **The lesson generalises past this sector.** When a number has to be labelled "unmodeled",
+      check first whether the model already contains it somewhere it is not attributed. A missing
+      counterparty looks exactly like a missing asset from one side of the ledger.
+49. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
     (hedge funds are a real institutional type bidding in 07b/07d). **#48 is now §5-HC, a master project** and has
     grown from a detail item into a §4 top-three one — retitle it to match. #47 (deeper
-    institutional sector) is substantially §5-S11 plus G6.
+    institutional sector) is substantially §5-S11 plus HH1.
