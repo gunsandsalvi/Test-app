@@ -128,6 +128,19 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     arbitrageCapacityUSD += fxDeskCapacityUSD(leverageHeadroomUSD(sheet), sheet.fxDealerBook);
   });
 
+  // A central bank has ONE reserve pot, not one per pair. XB6 put it in every pair it is a side
+  // of — three instead of one — and a per-pair intervention allowance let it spend the same
+  // reserves three times in a week. Measured: reserves went from 3.5-8.5 months of import cover
+  // to 0.0-0.3 in sixty weeks, and once the asset side no longer covered the liabilities the
+  // balance-sheet identity broke in 231 of 273 harness violations. The budget is a weekly one,
+  // drawn down as the pairs clear.
+  const reserveBudgetRemaining = new Map<RegionId, number>();
+  REGIONS.forEach(r => {
+    const cb = ctx.updatedRegions[r]?.centralBankSheet;
+    const reservesUSD = cb ? centralBankFxReservesUSD(cb) : 0;
+    reserveBudgetRemaining.set(r, Math.max(0, reservesUSD) * CENTRAL_BANK_FX_INTERVENTION_SHARE);
+  });
+
   const clearedRateByPair = new Map<string, number>();
   const residualByPair = new Map<string, number>();
   const grossByPair = new Map<string, number>();
@@ -177,14 +190,15 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // real reserves allow (XB5).
     ([fx.base, fx.quote] as RegionId[]).forEach(side => {
       const cb = ctx.updatedRegions[side]?.centralBankSheet;
-      const reservesUSD = cb ? centralBankFxReservesUSD(cb) : 0;
-      if (!(reservesUSD > 0)) return;
+      if (!cb) return;
+      const budgetUSD = reserveBudgetRemaining.get(side) ?? 0;
+      if (!(budgetUSD > 0)) return; // a bank out of reserves stops bidding, and the rate moves
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
         reservationStat: currentRate * (1 - sign * CENTRAL_BANK_RESERVATION_MOVE_PCT / 100),
-        maxHoldingUSD: reservesUSD * CENTRAL_BANK_FX_INTERVENTION_SHARE,
+        maxHoldingUSD: budgetUSD,
         fullSizeStatRange: currentRate * (CENTRAL_BANK_FULL_SIZE_RANGE_PCT / 100),
-        maxNetPurchaseUSD: reservesUSD * CENTRAL_BANK_FX_INTERVENTION_SHARE,
+        maxNetPurchaseUSD: budgetUSD,
       });
       participants.push({ id: `CB-${side}-${key}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
     });
@@ -232,6 +246,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       if (!cb) return;
       const filled = -(result.netCashDeltaByParticipantId.get(`CB-${side}-${key}`) ?? 0);
       if (!(Math.abs(filled) > 0)) return;
+      // What it spent here is no longer available in the next pair this week.
+      reserveBudgetRemaining.set(side, Math.max(0, (reserveBudgetRemaining.get(side) ?? 0) - Math.abs(filled)));
       const book = { ...(cb.fxReservesByRegion ?? {}) };
       const held = Object.keys(book).reduce((a, k) => a + Math.max(0, Number(book[k]) || 0), 0);
       if (!(held > 0)) return;
