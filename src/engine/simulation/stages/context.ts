@@ -45,6 +45,10 @@ export interface WeeklyStepContext {
    * survivors back to state. */
   primaryOfferingsWorking: import('../../../domain/primary-market').PrimaryOffering[];
   /** WS8 — per-offering pricing outcomes for stage 08 to settle onto the issuers. */
+  /** G2: credit demand the banks DECLINED this week for want of capital — a real credit
+   * crunch, measurable rather than an index. Read by the diagnostics and (post-MS) by the
+   * demand side that lost the funding. */
+  g2DeclinedOriginationUSD: Record<import('../../../types').RegionId, number>;
   primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; proceedsUSD: number }>;
 
   // Main working state, threaded and reassigned stage to stage
@@ -119,6 +123,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     earningsReportedThisTurn: [],
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
+    g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
     primarySettlements: new Map(),
 

@@ -556,6 +556,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         originationWeek: nextWeek,
         maturityWeek: newTrancheMaturityWeek,
         seniority: 'SENIOR',
+        // G2: a bridge is BANK debt — it lives on the house bank's itemized book and its
+        // interest is paid to that bank, not to the loan market (the §6 double-count).
+        isBankFacility: true,
+        facilityBankTicker: comp.homeBankTicker,
       }];
     }
 
@@ -756,7 +760,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const primaryFixedAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FIXED' ? settlement.marketTakeUSD : 0;
     const primaryFloatingAdjUSD = settlement && !settlement.withdrawn && settlement.offering.rateType === 'FLOATING' ? settlement.marketTakeUSD : 0;
     const preActionFixedUSD = companyTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0) + primaryFixedAdjUSD;
-    const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0) + primaryFloatingAdjUSD;
+    const preActionFloatingUSD = companyTranches.filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0) + primaryFloatingAdjUSD;
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
     const calledRefinanceTranches: DebtTranche[] = [];
@@ -883,6 +887,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         originationWeek: nextWeek,
         maturityWeek: nextWeek + 52,
         seniority: 'SENIOR',
+        // G2: the revolver is a committed BANK line — the house bank funds it and books it.
+        isBankFacility: true,
+        facilityBankTicker: comp.homeBankTicker,
       };
       updatedTranches = [...updatedTranches, revolverTranche];
       debtIssuanceThisWeek += revolverTranche.principalUSD;
@@ -1235,7 +1242,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // position moves with it. Holdings that do not track the real stock are the difference
     // between a market and a random walk — see settleCorporateActionOnHolders.
     const postActionFixedUSD = updatedTranches.filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0);
-    const postActionFloatingUSD = updatedTranches.filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
+    const postActionFloatingUSD = updatedTranches.filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0);
     settleCorporateActionOnHolders(ctx, comp.id, 'CORP_BOND', preActionFixedUSD, postActionFixedUSD);
     settleCorporateActionOnHolders(ctx, comp.id, 'LEVERAGED_LOAN', preActionFloatingUSD, postActionFloatingUSD);
 

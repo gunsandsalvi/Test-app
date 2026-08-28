@@ -27,6 +27,7 @@ import {
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes } from './money-market-fund';
+import { runBankWeeklyLending } from './bank-lending';
 import { WeeklyStepContext } from './context';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -55,6 +56,8 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     repoLentUSD: bs.repoLentUSD * share,
     repoBorrowedUSD: bs.repoBorrowedUSD * share,
     repoEncumberedCollateralUSD: bs.repoEncumberedCollateralUSD * share,
+    businessLoans: [],
+    corporateDepositsUSD: bs.corporateDepositsUSD * share,
   };
 }
 
@@ -76,10 +79,40 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const regionSavingsDepositInflowUSD = (reg.householdState.savingsRate * reg.estimatedHouseholdIncomeUSD) / 52 * 0.3;
     const regionDivertedUSD = divertHouseholdSavingsToMmf(regionId, reg, regionSavingsDepositInflowUSD, ctx);
 
+    // G2: the corporate bank facilities each named bank holds, read off the borrowers' REAL
+    // ladders — the bank's loan records mirror them 1:1 rather than being a second stock.
+    const facilityTranchesByBank = new Map<string, { companyId: string; trancheId: string; principalUSD: number; marginBps: number; originationWeek: number; maturityWeek: number }[]>();
+    ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
+      if (c.region !== regionId || c.isDefaulted) return;
+      (c.debtTranches || []).forEach((t) => {
+        if (!t.isBankFacility || !t.facilityBankTicker) return;
+        (facilityTranchesByBank.get(t.facilityBankTicker) ?? facilityTranchesByBank.set(t.facilityBankTicker, []).get(t.facilityBankTicker)!)
+          .push({
+            companyId: c.id, trancheId: t.id, principalUSD: t.principalUSD,
+            marginBps: t.floatingMarginBps ?? 350,
+            originationWeek: t.originationWeek, maturityWeek: t.maturityWeek,
+          });
+      });
+    });
+    // G2 slice 4: corporate deposits ARE the home companies' S5 cash — one representation,
+    // derived weekly from the real ledger rather than stored twice.
+    const corporateDepositsByBank = new Map<string, number>();
+    ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
+      if (c.region !== regionId || c.isDefaulted || c.isBankEntity) return;
+      if (!c.homeBankTicker) return;
+      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
+    });
+
     const newSheets: { bank: Company; sheet: BankingSector }[] = banks.map((bank) => {
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
       const riskFactor = bank.bankRiskFactor ?? 1.0;
+
+      // G2: last week's itemized book earns its real interest — computed here so the margin
+      // reads the same loans the book actually holds.
+      const priorLoanInterestWeeklyUSD = (prevSheet.businessLoans || [])
+        .filter((l) => l.status === 'PERFORMING')
+        .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
 
       const sheet = evolveBankingSector(
         prevSheet,
@@ -109,9 +142,24 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         prevSheet.repoBorrowedUSD ?? 0,
         prevSheet.repoLentUSD ?? 0,
         reg.repoRateAnnual ?? reg.policyRate,
+        priorLoanInterestWeeklyUSD,
         regionDivertedUSD * share
       );
-      return { bank, sheet };
+
+      // G2: the itemized book's own week — facility reconciliation, real interest accrual
+      // basis, real SME write-offs, and priced origination under the real capital constraint.
+      const lending = runBankWeeklyLending(bank, sheet, reg, regionId, facilityTranchesByBank, ctx.nextWeek);
+      const lentSheet = lending.sheet;
+      // Slice 4: the corporate-deposit line is the derived view of the borrowers' real cash.
+      const withDeposits: BankingSector = {
+        ...lentSheet,
+        corporateDepositsUSD: Number((corporateDepositsByBank.get(bank.ticker) ?? 0).toFixed(0)),
+        loanLossProvisionRateAnnualPct: Number(
+          (lentSheet.businessLoanBookUSD > 0 ? (lending.loanLossWeeklyUSD * 52) / lentSheet.businessLoanBookUSD : 0).toFixed(4)
+        ),
+      };
+      ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
+      return { bank, sheet: withDeposits };
     });
 
     // WS6: the weekly money-market session. Every real flow has posted; banks short of their
@@ -186,6 +234,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       repoLentUSD: sumField((s) => s.repoLentUSD ?? 0),
       repoBorrowedUSD: sumField((s) => s.repoBorrowedUSD ?? 0),
       repoEncumberedCollateralUSD: sumField((s) => s.repoEncumberedCollateralUSD ?? 0),
+      // G2: itemized loans live per bank; the aggregate carries no copy (a flattened region
+      // view would be a second ledger). Corporate deposits sum like everything else.
+      businessLoans: [],
+      corporateDepositsUSD: sumField((s) => s.corporateDepositsUSD ?? 0),
     };
   });
 }

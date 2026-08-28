@@ -50,7 +50,13 @@ const SENIOR_LIEN_DISCOUNT = 0.85;
 const DEALER_SPREAD_BPS = 20; // loan secondary markets trade a bit wider than investment-grade bonds
 
 function floatingDebtUSD(comp: Company): number {
-  return (comp.debtTranches || []).filter((t) => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
+  // G2: bank FACILITIES (revolvers, maintenance bridges) are excluded — they are loans on a
+  // named bank's itemized book, not syndicated paper this market can hold. Counting them here
+  // was the §6 double-count: the same principal on the bank book AND in institutional
+  // holdings, expensed once by the issuer and received twice.
+  return (comp.debtTranches || [])
+    .filter((t) => t.rateType === 'FLOATING' && !t.isBankFacility)
+    .reduce((s, t) => s + t.principalUSD, 0);
 }
 
 function loanCreditDurationYears(comp: Company): number {

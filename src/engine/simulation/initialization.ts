@@ -1,5 +1,7 @@
 
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
+import { migrateSmeDebtAtSeed } from './stages/bank-lending';
+import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
@@ -325,6 +327,32 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       reg.bankingSector.bankEquityUSD = sumBank(bs => bs.bankEquityUSD);
       reg.bankingSector.businessLoanBookUSD = sumBank(bs => bs.businessLoanBookUSD);
       reg.bankingSector.consumerLoanBookUSD = sumBank(bs => bs.consumerLoanBookUSD);
+    }
+
+    // G2 slice 1: itemize the business book onto real borrowers, and recalibrate the SME
+    // seed scalar (`debtUSD = 2 x revenue`, ~17.8x EBITDA — §6's unpriced primitive) down to
+    // what the pools can service AND the banks' capital can carry.
+    const regionBanksForLending = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
+    if (regionBanksForLending.length > 0) {
+      migrateSmeDebtAtSeed(regionId, reg, regionBanksForLending);
+      reg.bankingSector.businessLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0);
+      reg.bankingSector.depositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
+
+      // Every company banks somewhere: its cash IS a deposit at its house bank (the same
+      // relationship lead WS8 mandates for its offerings, so one firm has one bank).
+      regionCompanies.forEach(c => {
+        if (c.isBankEntity) return;
+        c.homeBankTicker = chooseLeadBank(c.id, regionBanksForLending.map(b => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare })));
+      });
+      const corpDepositsByBank = new Map<string, number>();
+      regionCompanies.forEach(c => {
+        if (c.isBankEntity || !c.homeBankTicker) return;
+        corpDepositsByBank.set(c.homeBankTicker, (corpDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
+      });
+      regionBanksForLending.forEach(b => {
+        b.bankBalanceSheet!.corporateDepositsUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
+      });
+      reg.bankingSector.corporateDepositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0);
     }
 
     reg.institutionalSector.itemizedHoldings = [

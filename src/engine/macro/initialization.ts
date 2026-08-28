@@ -312,6 +312,8 @@ function buildRegion(regionId: RegionId): Region {
     repoLentUSD: 0,
     repoBorrowedUSD: 0,
     repoEncumberedCollateralUSD: 0,
+    businessLoans: [],
+    corporateDepositsUSD: 0,
   };
 
   const institutionalSector = {

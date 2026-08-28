@@ -87,4 +87,34 @@ export interface BankingSector {
    * exclude it from further borrowing capacity.
    */
   repoEncumberedCollateralUSD: number;
+  /**
+   * G2 slice 1 — the ITEMIZED business loan book: every dollar of `businessLoanBookUSD` is one
+   * of these, with a named borrower. Two real borrower classes today: the SME segment pools
+   * (borrowerId = "<region>_SEG_<type>" — the ~15x-levered seed scalar recalibrated down to
+   * what segment EBITDA can service and bank capital can carry), and corporate bank facilities
+   * (borrowerId = company.id, mirroring tranches flagged isBankFacility). Households arrive
+   * with MS. `businessLoanBookUSD` is the derived sum.
+   */
+  businessLoans: BankLoan[];
+  /**
+   * G2 slice 4 — corporate deposits: the sum of home-companies' S5 cash, derived weekly (a
+   * VIEW of the one cash ledger, never a second store). Kept beside the household deposit
+   * stock that `depositsUSD` carries; total funding = depositsUSD + corporateDepositsUSD.
+   */
+  corporateDepositsUSD: number;
+}
+
+/** G2: one real loan to one named borrower on one named bank's book. */
+export interface BankLoan {
+  id: string;
+  /** A company.id, or an SME pool id "<region>_SEG_<segmentType>". */
+  borrowerId: string;
+  borrowerKind: 'COMPANY_FACILITY' | 'SME_POOL';
+  principalUSD: number;
+  /** Spread over policyRate, annual bps — quoted by the bank's own credit arithmetic at
+   * origination (slice 3), the same expected-loss + capital-cost pricing the bond market uses. */
+  marginBps: number;
+  originationWeek: number;
+  termWeeks: number;
+  status: 'PERFORMING' | 'DEFAULTED';
 }

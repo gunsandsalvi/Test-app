@@ -248,11 +248,13 @@ export function evolveRegionMacro(
   const rateSavingsIncentive = (realRateGap * 0.4);
   const newSavingsRate = (savingsBaseline + rateSavingsIncentive);
 
-  // Net new lending from banking sector expands deposits
-  const estBusinessLoanBook = microFeedback.businessLoanBookInputUSD;
+  // G2: household deposits grow with the CONSUMER book's real expansion only. The business
+  // half used to be `regionFloatingPrincipal − current book` — the §6 double-count with 07d's
+  // loan market — and business originations now credit the borrower's own deposit in
+  // bank-lending.ts, not the household aggregate.
   const bankedConsumerDebtShare = 0.1167;
   const estConsumerLoanBook = prevHS.householdDebtToIncomeRatio * region.estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
-  const netNewLending = Math.max(0, estBusinessLoanBook - region.bankingSector.businessLoanBookUSD) + Math.max(0, estConsumerLoanBook - region.bankingSector.consumerLoanBookUSD);
+  const netNewLending = Math.max(0, estConsumerLoanBook - region.bankingSector.consumerLoanBookUSD);
 
   // 1. Asset side
   // Savings flow into deposits + portion of new lending (loan disbursements, payroll funded by credit)
@@ -521,7 +523,9 @@ export function evolveRegionMacro(
 
   const newBankingSector = evolveBankingSector(
     region.bankingSector,
-    microFeedback.businessLoanBookInputUSD,
+    // G2: the aggregate's business book is the sum of real loans (02b overwrites this
+    // aggregate with the named banks' sum anyway) — no formula target.
+    region.bankingSector.businessLoanBookUSD,
     prevHS.householdDebtToIncomeRatio,
     newEstimatedHouseholdIncomeUSD,
     newSavingsRate,

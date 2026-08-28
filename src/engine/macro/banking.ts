@@ -132,6 +132,11 @@ export function evolveBankingSector(
   priorRepoBorrowedUSD: number = 0,
   priorRepoLentUSD: number = 0,
   priorRepoRateAnnual: number = 0,
+  /** G2: real interest earned this week on the bank's ITEMIZED loan book (each loan at its own
+   * terms, computed by bank-lending.ts from the prior week's book) — replaces the
+   * business-loan yield formula. The business book itself is carried untouched here: it is a
+   * sum of real loans owned by the G2 stage. */
+  itemizedLoanInterestWeeklyUSD: number = 0,
   /** WS7: the slice of THIS bank's household savings inflow that went to the money market fund
    * instead — the deposit-competition channel. The fund's credit happens in 02b; here the
    * deposits simply never arrive. */
@@ -141,7 +146,8 @@ export function evolveBankingSector(
   let cashUSD = prevBanking.cashReservesUSD;
   let equityUSD = prevBanking.bankEquityUSD;
   let depositsUSD = prevBanking.depositsUSD;
-  let businessLoanUSD = prevBanking.businessLoanBookUSD;
+  // G2: the business book is ITEMIZED — a sum of real loans that only bank-lending.ts moves.
+  const businessLoanUSD = prevBanking.businessLoanBookUSD;
   let consumerLoanUSD = prevBanking.consumerLoanBookUSD;
   // The securities book is owned by the clearing stages (07c/07f/11) and passes through here
   // untouched — a stage may only rewrite the instruments it cleared.
@@ -180,37 +186,24 @@ export function evolveBankingSector(
   consumerLoanUSD += consumerFlowUSD;
   depositsUSD += consumerFlowUSD;
 
-  // Capital and deposit-funding headroom bound expansion. (The old third constraint — a 10%
-  // reserve requirement against the ~1e12 `centralBankReservesUSD` macro scalar — is deleted:
-  // it read a phantom second representation of reserves and could never bind.)
-  const minCapitalRatio = 0.08;
-  const currentLoanBookUSD = businessLoanUSD + consumerLoanUSD;
-  const capitalHeadroomUSD = prevBanking.bankCapitalRatio > minCapitalRatio
-    ? Math.max(0, equityUSD / minCapitalRatio - currentLoanBookUSD)
-    : 0;
-  const depositHeadroomUSD = Math.max(0, depositsUSD * 0.85 - currentLoanBookUSD);
-  const headroomUSD = Math.max(0, Math.min(capitalHeadroomUSD, depositHeadroomUSD));
-  const businessTargetUSD = Math.min(businessLoanBookInputUSD, businessLoanUSD + headroomUSD);
-  const businessFlowUSD = businessTargetUSD - businessLoanUSD;
-  businessLoanUSD += businessFlowUSD;
-  depositsUSD += businessFlowUSD;
+  // G2: business lending flows are the itemized stage's (priced origination under the real
+  // capital constraint, in bank-lending.ts); the formula target that used to grow the book
+  // toward `regionFloatingPrincipal` — the §6 double-count with 07d's loan market — is gone.
 
   // ---- 4. Interest flows. Income arrives as cash from the payers (loan interest and sovereign
   // carry cross the model boundary until G2/BP5 name the payers' debits — recorded in the
   // plan); deposit interest is credited to the depositors' accounts, so deposits grow and cash
   // does not move. ----
   const depositBeta = 0.45;
-  const businessLoanYield = policyRate + 0.025;
   const consumerLoanYield = policyRate + 0.035;
   // Reserves earn the policy rate — the floor-system IOR. The 0.85 "tiering" haircut and the
   // bank-side ON RRP parking it justified are gone: a bank whose reserves earn IOR never goes
   // to the RRP window, which is exactly the real system.
   const weeklyInterestIncomeUSD = (
-    businessLoanUSD * businessLoanYield +
     consumerLoanUSD * consumerLoanYield +
     sovereignUSD * sovereignBookAnnualYield +
     Math.max(0, cashUSD) * policyRate
-  ) / 52;
+  ) / 52 + itemizedLoanInterestWeeklyUSD;
   cashUSD += weeklyInterestIncomeUSD;
   equityUSD += weeklyInterestIncomeUSD;
   const weeklyDepositInterestUSD = (depositsUSD * policyRate * depositBeta) / 52;
@@ -220,7 +213,8 @@ export function evolveBankingSector(
   // ---- 5. Loan losses: a write-down, not a cash event — the asset shrinks and equity absorbs
   // it. (The re-lending the targets do next week is the re-origination of written-off credit
   // demand.) Loss rates stay formula until G2's real borrower defaults / MS. ----
-  const businessLossRateAnnual = Math.min(0.12, (creditContagionBps / 10000) * 1.8);
+  // G2: business losses are REAL write-offs in bank-lending.ts (the pools' measured default
+  // experience); the contagion formula now prices nothing on the itemized book.
   let consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
   if (creditTierBooks && creditTierBooks.length > 0) {
     const superPrimeShare = creditTierBooks.find(t => t.tier === 'SUPER_PRIME')?.shareOfHouseholds ?? 0.25;
@@ -231,11 +225,9 @@ export function evolveBankingSector(
     const weightedMultiplier = (superPrimeShare * 0.2) + (primeShare * 1.0) + (nearPrimeShare * 3.0) + (subprimeShare * 10.0);
     consumerLossRateAnnual = baselineConsumerLossRate * weightedMultiplier;
   }
-  const weeklyBusinessLossUSD = (businessLoanUSD * businessLossRateAnnual) / 52;
   const weeklyConsumerLossUSD = (consumerLoanUSD * consumerLossRateAnnual) / 52;
-  businessLoanUSD -= weeklyBusinessLossUSD;
   consumerLoanUSD -= weeklyConsumerLossUSD;
-  equityUSD -= weeklyBusinessLossUSD + weeklyConsumerLossUSD;
+  equityUSD -= weeklyConsumerLossUSD;
 
   // ---- 6. Distributions: dividends actually LEAVE — cash and equity together, bounded by the
   // cash the treasury genuinely holds above its own operating buffer. This replaces two
@@ -244,7 +236,7 @@ export function evolveBankingSector(
   // real equity raise exists, WS8/G2), and a hard rescale `equity = RWA × 0.140` that deleted
   // equity with nothing on the other side (a rule-2 rescale; now a real special dividend paid
   // at the pace real cash allows). ----
-  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD - weeklyBusinessLossUSD - weeklyConsumerLossUSD;
+  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD - weeklyConsumerLossUSD;
   const riskWeightedAssetsUSD = businessLoanUSD * 1.0 + consumerLoanUSD * 0.75 + sovereignUSD * 0.0;
   const priorCapitalRatio = prevBanking.bankCapitalRatio;
   const targetPayoutRatio = priorCapitalRatio > 0.14 ? 0.90 : priorCapitalRatio < 0.11 ? 0.05 : 0.40;
@@ -286,7 +278,8 @@ export function evolveBankingSector(
     bankEquityUSD: Number(equityUSD.toFixed(0)),
     bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
-    loanLossProvisionRateAnnualPct: Number(businessLossRateAnnual.toFixed(4)),
+    // G2: reported from the REAL book by bank-lending.ts after its write-offs; carried here.
+    loanLossProvisionRateAnnualPct: prevBanking.loanLossProvisionRateAnnualPct,
     creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
     centralBankReservesUSD: Number(newCentralBankReservesUSD.toFixed(0)),
     moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
@@ -299,6 +292,10 @@ export function evolveBankingSector(
     repoLentUSD: 0,
     repoBorrowedUSD: 0,
     repoEncumberedCollateralUSD: 0,
+    // G2: the itemized book and the corporate-deposit view are owned by the G2 stages
+    // (bank-lending.ts / 02b); carried through evolution untouched.
+    businessLoans: prevBanking.businessLoans || [],
+    corporateDepositsUSD: prevBanking.corporateDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],

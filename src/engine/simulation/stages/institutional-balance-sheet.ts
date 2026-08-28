@@ -106,7 +106,9 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
         const avgCoupon = fixed.reduce((a, t) => a + t.principalUSD * (t.couponRate ?? 0.05), 0) / principal;
         weeklyIncomeUSD += (notional * avgCoupon) / 52;
       } else if (h.instrumentType === 'LEVERAGED_LOAN') {
-        const floating = (issuer.debtTranches || []).filter((t) => t.rateType === 'FLOATING');
+        // G2: bank facilities pay their interest to the lending BANK, not to loan-market
+        // holders — excluded here exactly as they are from 07d's float.
+        const floating = (issuer.debtTranches || []).filter((t) => t.rateType === 'FLOATING' && !t.isBankFacility);
         const principal = floating.reduce((a, t) => a + t.principalUSD, 0);
         if (principal <= 0) return;
         const avgMarginBps = floating.reduce((a, t) => a + t.principalUSD * (t.floatingMarginBps ?? 200), 0) / principal;

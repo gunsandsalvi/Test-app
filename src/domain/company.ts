@@ -81,6 +81,18 @@ export interface DebtTranche {
    * real debt.
    */
   isCommercialPaper?: boolean;
+  /**
+   * G2: a BANK FACILITY — a revolver draw or a maintenance bridge. This is bank debt, not a
+   * capital-markets instrument: it lives as a real loan on a named bank's book
+   * (bankBalanceSheet.businessLoans), its interest is paid TO that bank through the S5 ledger,
+   * and the securities markets must skip it — 07d's loan float, S11's holder income and 07b's
+   * bond machinery all treat it the way they treat CP: someone else's market. Before this flag
+   * the same floating principal sat on the banks' aggregate book AND in the institutions' 07d
+   * holdings, expensed once and received twice (§6's double-count row).
+   */
+  isBankFacility?: boolean;
+  /** G2: the named bank holding this facility (the issuer's house bank at origination). */
+  facilityBankTicker?: string;
   _refinanceInitiated?: boolean;
 }
 
@@ -266,6 +278,9 @@ export interface Company {
   /** WS8: week of this issuer's last OPPORTUNISTIC primary announcement. A quarterly-sized deal
    * covers a quarter's deployment, so the CFO does not return to the market for one. */
   lastOpportunisticOfferingWeek?: number;
+  /** G2: the bank where this company's operating cash IS a deposit — one representation: the
+   * company's S5 cash and the bank's corporate-deposit line are two views of the same money. */
+  homeBankTicker?: string;
 
   // Capital Structure
   /**
