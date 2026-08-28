@@ -256,6 +256,9 @@ export interface PrivateSectorSegment {
   defaultRateAnnualPct: number;
   capexUSD: number;
   employment: number;
+  /** HH5 — the segment pool's recent annual-revenue prints, so its hiring can read its own
+   * real output growth the way a named firm reads its revenue history. */
+  revenueHistoryUSD?: number[];
   annualRevenueUSD: number;
   marginPct: number;
   producedCommodityIds?: string[];
@@ -286,7 +289,73 @@ export interface OccupationPool {
   employed: number;
   wageIndex: number;
   wageGrowthAnnual: number;
+  /** HH5 — open positions employers are actually trying to fill in this occupation, carried
+   * week to week: an unfilled vacancy stays open, which is what makes hiring take TIME. */
+  vacancies?: number;
+  /** HH5 — hires and separations this week, the real gross flows behind the net change. */
+  hiresThisWeek?: number;
+  separationsThisWeek?: number;
 }
+
+/** Trend labor-productivity growth: the same real force that lets output per worker rise over
+ * time. A structural primitive; IND/BP make it firm-specific once industries differ. */
+export const LABOR_PRODUCTIVITY_GROWTH_ANNUAL = 0.012;
+
+/**
+ * HH5 — the matching function: `M = A x V^a x U^(1-a)`, Cobb-Douglas with a = 0.5, the standard
+ * symmetric elasticity.
+ *
+ * A is DERIVED, not chosen, from two observable labor-market facts (JOLTS-shaped): total
+ * separations run ~3.4% of employment a month, and the stock of open positions sits at ~4.5% of
+ * employment with roughly one vacancy per seeker. At that rest point matching must exactly
+ * replace separations, which pins A — and pins the average time to fill a vacancy at about six
+ * weeks, which is the real number.
+ *
+ * Picking A directly is how this went wrong the first time: 0.62 was a guess, it implied a
+ * resting vacancy stock of 12.8k against a realistic 520k, and every opening filled inside a
+ * single week. A labor market with no search friction is not a labor market.
+ */
+export const SEPARATION_RATE_MONTHLY = 0.034;
+export const BASELINE_QUIT_RATE_WEEKLY = SEPARATION_RATE_MONTHLY / (52 / 12);
+/**
+ * The share of an unfilled vacancy stock that is WITHDRAWN each week. Firms give up on
+ * postings they cannot fill — they redesign the role, automate it, or do without — and without
+ * that the stock of a hard-to-fill occupation grows forever: measured at week 40, SKILLED_TRADES
+ * carried 186k open positions against ONE job seeker, a "tightness" of 186,000 that pinned wage
+ * growth at its cap and is not a market at all, just an unbounded accumulator.
+ */
+export const VACANCY_WITHDRAWAL_RATE_WEEKLY = 0.10;
+/** Open positions as a share of employment at a neutral market (the JOLTS openings rate). */
+export const NEUTRAL_VACANCY_SHARE_OF_EMPLOYMENT = 0.045;
+/** Vacancies per seeker at that same neutral market — the tightness wages are indexed to. */
+export const NEUTRAL_LABOR_TIGHTNESS = 0.95;
+export const MATCHING_ELASTICITY = 0.5;
+/** Derived from the rest point above: `A x V^0.5 x U^0.5 = E x q` at `V = 0.045 E`, `U = V/0.95`. */
+export const MATCHING_EFFICIENCY = BASELINE_QUIT_RATE_WEEKLY
+  / Math.sqrt(NEUTRAL_VACANCY_SHARE_OF_EMPLOYMENT * (NEUTRAL_VACANCY_SHARE_OF_EMPLOYMENT / NEUTRAL_LABOR_TIGHTNESS));
+
+/**
+ * The vacancy stock at which matching replaces this week's separations exactly — the market's
+ * rest point, inverted out of the same matching function. The SEED opens here (§7.4): opening
+ * at zero vacancies made the stock climb from nothing for forty weeks while unemployment rose
+ * too, so the two moved TOGETHER and the Beveridge relation printed +0.94 — a cold-start
+ * artifact that looked exactly like a broken labor market.
+ */
+export function restingVacancies(employed: number, seekers: number): number {
+  if (!(employed > 0) || !(seekers > 0)) return 0;
+  const hires = employed * BASELINE_QUIT_RATE_WEEKLY;
+  return Math.pow(hires / (MATCHING_EFFICIENCY * Math.sqrt(seekers)), 2);
+}
+/**
+ * How much of the desired weekly headcount change a firm actually acts on. Hiring runs ahead of
+ * the need (you post before you are short); firing lags it, because severance, notice periods
+ * and the reluctance to destroy trained capacity are real frictions. That asymmetry is why
+ * employment falls slowly into a downturn and climbs slowly out of one.
+ */
+export const HIRING_ADJUSTMENT_SPEED_MULTIPLE = 1.1;
+export const LAYOFF_SPEED_MULTIPLE = 0.6;
+/** A firm in real cash distress sheds staff regardless of the friction above. */
+export const DISTRESS_LAYOFF_SPEED = 0.10;
 
 export const SECTOR_OCCUPATION_MIX: Record<string, Partial<Record<OccupationType, number>>> = {
   Tech: { TECHNICAL_ENGINEERING: 0.55, MANAGERIAL_FINANCIAL: 0.15, GENERAL: 0.30 },
@@ -392,7 +461,11 @@ export interface Region {
   supplyRelationships?: SupplyRelationship[];
   occupationPools: Record<OccupationType, OccupationPool>;
   occupationLaborForceShare: Record<OccupationType, number>;
-  unemploymentRateBottomUp: number;
+  /** HH5 — real vacancies over real seekers, the market's tightness. Drives the quit rate and
+   * the wage response; the raw material of a Beveridge curve. */
+  laborMarketTightness?: number;
+  /** HH5 — open vacancies as a share of the labor force. */
+  vacancyRate?: number;
 
   // Government & Nominal GDP
   estimatedNominalGdpUSD: number;

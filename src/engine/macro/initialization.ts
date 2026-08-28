@@ -460,7 +460,6 @@ function buildRegion(regionId: RegionId): Region {
     privateSectorSegments,
     occupationPools,
     occupationLaborForceShare,
-    unemploymentRateBottomUp: UNEMPLOYMENT_RATE,
     estimatedNominalGdpUSD,
     derivedNominalGdpUSD: estimatedNominalGdpUSD,
     gdpGrowthBottomUp: 0,

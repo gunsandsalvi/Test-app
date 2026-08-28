@@ -5,6 +5,9 @@ import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed } from './stages/bank-lending';
+import { isActiveCompany } from '../../domain/company';
+import { restingVacancies } from '../../domain/region-macro';
+import { reconcileEmploymentView } from './stages/labor-market';
 import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
@@ -155,6 +158,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
 
     // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
     const regionCompanies = companies.filter(c => c.region === regionId);
+
     const totalMarketCap = regionCompanies.reduce((s, c) => s + c.marketCap, 0);
     const totalCorpDebt = regionCompanies.reduce((s, c) => s + c.totalDebt, 0);
     const totalSovDebt = reg.debtToGdpPct * reg.derivedNominalGdpUSD;
@@ -545,57 +549,69 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       comp.eps = comp.sharesOutstanding > 0 ? Number((comp.netIncome / comp.sharesOutstanding).toFixed(2)) : 0;
     });
 
-    // Calibrate initial occupationLaborForceShare from actual week-1 demand across companies & private segments
-    // with realistic occupational tightness differentials
+    // ---- HH5: ONE employment identity at week 0 (§7.4). ----
+    // This block used to end in a NOTE that said, in short, "these pools imply 11-14%
+    // unemployment while the region reports 4.5%; reconciling them is the labor market's own
+    // rebuild, not this item." This IS that rebuild, so the reconciliation happens here.
+    //
+    // Three primitives were seeded independently and never made to agree: the generator's own
+    // firm headcounts, government employment as a share of population, and the private SEGMENTS
+    // as a share of total employment. The segments are the right residual — they ARE the
+    // "everything that is not a named firm or the government" tier — so their employment is
+    // what the reported rate requires once the other two are counted.
+    const totalLaborForce = reg.totalPopulation * (1 - reg.nonEmployablePct) * reg.laborForceParticipation;
+    {
+      const targetEmployed = totalLaborForce * (1 - reg.unemploymentRate);
+      const firmEmployment = regionCompanies
+        .filter(c => isActiveCompany(c))
+        .reduce((a, c) => a + Math.max(0, c.employeeCount), 0);
+      const residual = targetEmployed - firmEmployment - reg.governmentEmployment;
+      const segs = reg.privateSectorSegments || [];
+      const segTotal = segs.reduce((a, sg) => a + Math.max(0, sg.employment), 0);
+      if (segs.length > 0 && segTotal > 0 && residual > 0) {
+        segs.forEach((sg) => {
+          sg.employment = Math.max(1, Math.round(residual * (Math.max(0, sg.employment) / segTotal)));
+        });
+      }
+    }
+
+    // The labor-force MIX opens at the mix employers actually demand. It used to be that mix
+    // times a table of per-occupation "slack multipliers" (1.04 to 1.12), and that arbitrary
+    // differential was not harmless: it left TECHNICAL_ENGINEERING with literally zero job
+    // seekers against 169k unfilled vacancies and wage growth pinned at its +13% cap, while
+    // GENERAL carried 678k unemployed and falling wages — a structural mismatch the world was
+    // BORN with, indistinguishable at a glance from one it had produced. Uniform slack means
+    // any mismatch after week 0 is one the economy really generated, which is what the
+    // retraining flow exists to work on.
     const week1OccDemand = computeOccupationDemand(regionCompanies, reg.privateSectorSegments, regionId, reg.governmentEmployment) as Record<OccupationType, number>;
     const week1DemandTotal = Object.values(week1OccDemand).reduce((s, v) => s + v, 0);
-    const slackMultipliers: Record<OccupationType, number> = {
-      GENERAL: 1.12,
-      SKILLED_TRADES: 1.08,
-      TECHNICAL_ENGINEERING: 1.04,
-      SPECIALIZED_PROFESSIONAL: 1.05,
-      MANAGERIAL_FINANCIAL: 1.07,
-    };
-    const calibratedShares = (Object.keys(week1OccDemand) as OccupationType[]).reduce((acc, occ) => {
-      const mult = slackMultipliers[occ] ?? 1.08;
-      acc[occ] = week1DemandTotal > 0 ? Math.max(0.03, (week1OccDemand[occ] / week1DemandTotal) * mult) : 0.2;
-      return acc;
-    }, {} as Record<OccupationType, number>);
-    const shareSum = Object.values(calibratedShares).reduce((s, v) => s + v, 0);
-    if (shareSum > 0) {
-      (Object.keys(calibratedShares) as OccupationType[]).forEach(occ => {
-        calibratedShares[occ] = Number((calibratedShares[occ] / shareSum).toFixed(4));
-      });
-    }
-    reg.occupationLaborForceShare = calibratedShares;
-
-    // Seed employment from the SAME real labor demand the weekly step clears against, rather
-    // than a top-down headcount. buildRegion has to size the pools before any company exists,
-    // so it assumes every worker implied by the population/participation/unemployment
-    // primitives is employed; the real economy assembled just above demands ~4% fewer of them.
-    // Leaving both figures in place is the "two representations of one real thing" pattern: the
-    // wage bill, and therefore household income and consumption, stepped down the moment week 1
-    // recomputed employment on the real basis. The real basis is the one that survives.
-    const totalLaborForce = reg.totalPopulation * (1 - reg.nonEmployablePct) * reg.laborForceParticipation;
-    (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
-      const availableSupply = totalLaborForce * (calibratedShares[occ] ?? 0);
-      reg.occupationPools[occ].employed = Math.round(Math.min(availableSupply, week1OccDemand[occ] ?? 0));
+    (Object.keys(reg.occupationLaborForceShare) as OccupationType[]).forEach((occ) => {
+      reg.occupationLaborForceShare[occ] = week1DemandTotal > 0
+        ? (week1OccDemand[occ] ?? 0) / week1DemandTotal
+        : 0.2;
     });
-    // NOTE, deliberately not "fixed" here: these pools imply an unemployment rate around 11-14%
-    // (the firms this bootstrap generates demand that much less labor than the population and
-    // participation primitives supply), while `reg.unemploymentRate` and the weekly evolution
-    // report ~4.5%. Two representations of one real thing again — but reconciling them means
-    // making firm generation and labor supply agree, which is the labor market's own rebuild
-    // (Main Street), not this item. Writing the pool-implied rate into the field here was tried
-    // and reverted: it moves reported unemployment from 4.5% to 12.7% without making the two
-    // sides agree, trading a hidden inconsistency for a visible one.
+
+    // The pools then open through the SAME reconciler the engine runs every week — §7.4 in its
+    // strictest form: not "the same shape" but the same code — and the vacancy stock opens at
+    // the market's rest point rather than at zero (see restingVacancies).
+    reconcileEmploymentView(reg, regionCompanies.filter(c => isActiveCompany(c)));
+    (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
+      const supply = totalLaborForce * (reg.occupationLaborForceShare[occ] ?? 0.2);
+      const employedInOcc = reg.occupationPools[occ].employed;
+      reg.occupationPools[occ].vacancies = Math.round(
+        restingVacancies(employedInOcc, Math.max(1, supply - employedInOcc))
+      );
+    });
+    // Once the vacancy stock exists, read the market's statistics off it (the first call above
+    // saw zero vacancies and would otherwise leave tightness reading 0.00 at week 0).
+    reconcileEmploymentView(reg, regionCompanies.filter(c => isActiveCompany(c)));
 
     const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
     const realWageIncomeUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce(
       (sum, occ) => sum + baseAnnualWageUSD[occ] * reg.occupationPools[occ].wageIndex * reg.occupationPools[occ].employed, 0
     );
     const realUnemploymentBenefitsUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce((sum, occ) => {
-      const unemployedInPool = totalLaborForce * (calibratedShares[occ] ?? 0) - reg.occupationPools[occ].employed;
+      const unemployedInPool = totalLaborForce * (reg.occupationLaborForceShare[occ] ?? 0) - reg.occupationPools[occ].employed;
       return sum + baseAnnualWageUSD[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
     }, 0);
     reg.estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({

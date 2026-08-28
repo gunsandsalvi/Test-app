@@ -700,8 +700,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + payoutPressure * 2.5);
     const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
 
-    const headcountPressure = newCash < 0 ? -0.015 : (newEbitdaMargin < baseEbitdaMargin - 0.01 ? -0.002 : (reg.cycleRegime === 'Expansion' ? 0.001 : (reg.cycleRegime === 'Recession' ? -0.002 : 0)));
-    const newEmployeeCount = Math.max(10, Math.round(comp.employeeCount * (1 + headcountPressure)));
+    // HH5: headcount is the LABOR MARKET's, not this stage's. The drift multiplier that used
+    // to sit here (cash < 0 ? -1.5% : margin/regime nudges) ran every week and silently
+    // overwrote the hires and layoffs the matching stage had just settled — two representations
+    // of one firm's payroll, and the newer one lost. Measured before the fix: the occupation
+    // pools ran 3.9% above the employers' own books by week 43 and drifted further every week.
+    // A firm's headcount now changes in exactly one place, and the real cash-distress layoffs
+    // that formula was reaching for live there too.
+    const newEmployeeCount = Math.max(10, Math.round(
+      companyUpdates[comp.ticker]?.employeeCount ?? comp.employeeCount
+    ));
 
     // (S5: the prepayment rule moved below, where the real tranche ladder exists to retire —
     // the old version here debited cash and decremented a scalar the ladder recomputation then

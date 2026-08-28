@@ -11,6 +11,7 @@ import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking'
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
+import { NEUTRAL_LABOR_TIGHTNESS } from '../../domain/region-macro';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
 /**
@@ -228,11 +229,14 @@ export function evolveRegionMacro(
     : region.nairu;
   const newNairu = Number((baseNairu + hysteresisDelta).toFixed(4));
 
-  const baseUnempChange = ((potentialGdp - newGdpGrowth) * 0.35) / 52 + microFeedback.bottomUpUnemploymentDelta + (microFeedback.marginCompression > 0 ? 0.0001 : 0) - laggedDemandShock * 0.1;
-  const nairuPull = (newNairu - region.unemploymentRate) * 0.001;
-  const participationEffect = -(newParticipation - region.laborForceParticipation) * 0.5;
-  const newUnemployment = Math.max(0.015, Math.min(0.25, Number((region.unemploymentRate + baseUnempChange + nairuPull + participationEffect).toFixed(4))));
-  const unempDelta = newUnemployment - region.unemploymentRate;
+  // HH5: unemployment is no longer a formula here. It is the MEASURED outcome of the labor
+  // market stage — real vacancies matched against real seekers — which runs after this one, so
+  // this week's reading is the one that stage produced last week. The GDP-gap/NAIRU-pull/
+  // participation drift that used to sit here is deleted along with `unemploymentRateBottomUp`,
+  // a third representation that was written weekly, read by NOTHING, and wrong anyway (it
+  // omitted the entire private tier and printed 37% against a full-employment economy).
+  const newUnemployment = region.unemploymentRate;
+  const unempDelta = 0;
 
   // Consumer & Household Sector Simulation
   const nairu = newNairu; 
@@ -315,19 +319,25 @@ export function evolveRegionMacro(
     MANAGERIAL_FINANCIAL: 0,
   };
 
+  // HH5: EMPLOYMENT is the labor market stage's — matched, with friction, from real vacancies
+  // and real seekers. What remains here is the WAGE response, and it now reads real vacancy
+  // tightness (open positions per seeker) instead of a ratio of two stocks that were never
+  // allowed to disagree. A tight market bids wages up; a slack one does not.
   const newOccupationPools = (Object.keys(currentOccupationPools) as OccupationType[]).reduce((acc, occ) => {
     const pool = currentOccupationPools[occ];
     const availableSupply = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
-    const demandForThisOccupation = occDemandInput[occ] ?? 0;
-    const rawTightness = availableSupply > 0 ? demandForThisOccupation / availableSupply : 1.0;
-    const tightness = Math.max(0.2, Math.min(2.5, rawTightness));
+    const seekers = Math.max(1, availableSupply - pool.employed);
+    const tightness = Math.max(0.05, Math.min(3.0, (pool.vacancies ?? 0) / seekers));
 
-    const targetWageGrowth = ((tightness - 0.92) * 0.4);
+    // Wage growth tracks tightness around the market's OWN neutral point — the same
+    // vacancies-per-seeker the matching function is calibrated at, so the wage rule and the
+    // matching rule cannot disagree about what "normal" means.
+    const targetWageGrowth = 0.02 + (tightness - NEUTRAL_LABOR_TIGHTNESS) * 0.06;
     const rawWageGrowthAnnual = pool.wageGrowthAnnual * 0.9 + targetWageGrowth * 0.1;
     const newWageGrowthAnnual = Math.max(-0.05, Math.min(0.15, rawWageGrowthAnnual));
     const newWageIndex = Math.max(0.1, Math.min(10.0, pool.wageIndex * (1 + newWageGrowthAnnual / 52)));
     acc[occ] = {
-      employed: Math.min(availableSupply, demandForThisOccupation),
+      ...pool,
       wageIndex: Number(newWageIndex.toFixed(4)),
       wageGrowthAnnual: Number(newWageGrowthAnnual.toFixed(4)),
     };
@@ -399,12 +409,12 @@ export function evolveRegionMacro(
       // transmission chain (a hike cuts origination, which cuts the capex it funded, which
       // stage 03 reads into real category demand).
       capexUSD: newAnnualRevenueUSD * 0.05,
+      // HH5: the segment's own revenue history, so the labor market can read its real output
+      // growth the same way it reads a named firm's.
+      revenueHistoryUSD: [...(seg.revenueHistoryUSD ?? [seg.annualRevenueUSD]).slice(-12), newAnnualRevenueUSD],
     };
   });
 
-  const totalPrivateSegmentEmployment = newPrivateSectorSegments.reduce((s, seg) => s + seg.employment, 0);
-  const totalEmployed = microFeedback.publicCompanyEmployment + newGovernmentEmployment + totalPrivateSegmentEmployment;
-  const newUnemploymentRateBottomUp = totalLaborForce > 0 ? Math.max(0, Math.min(1, (totalLaborForce - totalEmployed) / totalLaborForce)) : region.unemploymentRateBottomUp;
 
   const totalHouseholdDebtUSD = newMortgageDebtUSD + newCreditCardDebtUSD + newOtherLoanDebtUSD;
   const newHouseholdDebtToIncomeRatio = region.estimatedHouseholdIncomeUSD > 0
@@ -857,7 +867,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     privateSectorSegments: newPrivateSectorSegments as any,
     occupationPools: newOccupationPools,
     occupationLaborForceShare: newLaborForceShares,
-    unemploymentRateBottomUp: Number(newUnemploymentRateBottomUp.toFixed(4)),
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
     derivedNominalGdpUSD: region.derivedNominalGdpUSD ?? newEstimatedNominalGdpUSD,
     gdpGrowthBottomUp: region.gdpGrowthBottomUp ?? 0,

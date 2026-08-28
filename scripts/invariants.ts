@@ -13,7 +13,7 @@ const WEEKS = Number(process.env.WEEKS ?? 60);
 import { advanceWeeklyStep } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
-import { isPubliclyListed } from '../src/domain/company';
+import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
 
 interface Violation {
   week: number;
@@ -153,6 +153,48 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
  * savings must sit on the aggregate behavioural rate (loose band — the per-cohort 90% cap can
  * bind in stressed worlds), and the derived spend shares must be a partition.
  */
+/**
+ * HH5: employment has ONE representation — the sum of what real employers carry on their books.
+ * The occupation pools are a view of that sum and must agree with it, and the unemployment rate
+ * must be the reading of the same stock. Before HH5 there were three disagreeing numbers (a
+ * GDP-gap formula at 4.5%, a dead bottom-up field at 37%, and pool-implied 8-17%).
+ */
+function checkLaborMarketIdentity(state: GameState, week: number) {
+  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+    const reg = state.regions[region];
+    if (!reg?.occupationPools) return;
+    const employerHeadcount = state.companies
+      .filter((c) => c.region === region && isActiveCompany(c))
+      .reduce((a, c) => a + Math.max(0, c.employeeCount), 0)
+      + (reg.privateSectorSegments || []).reduce((a, s) => a + Math.max(0, s.employment), 0)
+      + reg.governmentEmployment;
+    const poolEmployed = Object.values(reg.occupationPools).reduce((a: number, p: any) => a + (p.employed ?? 0), 0);
+    // Tight band (0.2%): the pools are DERIVED from this exact sum by the end-of-week
+    // reconciliation, so only integer rounding across five occupations should separate them.
+    // Anything wider means they have started evolving as a second stock again.
+    if (employerHeadcount > 0 && Math.abs(poolEmployed - employerHeadcount) / employerHeadcount > 0.002) {
+      violations.push({
+        week,
+        message: `${region}: occupation pools hold ${(poolEmployed / 1e6).toFixed(2)}M against employers' ${(employerHeadcount / 1e6).toFixed(2)}M — employment is being kept in two places`,
+      });
+    }
+    const laborForce = reg.totalPopulation * (1 - (reg.nonEmployablePct ?? 0.35)) * reg.laborForceParticipation;
+    const impliedU = laborForce > 0 ? (laborForce - poolEmployed) / laborForce : 0;
+    if (Math.abs(impliedU - reg.unemploymentRate) > 0.005) {
+      violations.push({
+        week,
+        message: `${region}: reported unemployment ${(reg.unemploymentRate * 100).toFixed(2)}% is not the reading of its own employment stock (${(impliedU * 100).toFixed(2)}%)`,
+      });
+    }
+    if (reg.unemploymentRate < 0.005 || reg.unemploymentRate > 0.30) {
+      violations.push({
+        week,
+        message: `${region}: unemployment ${(reg.unemploymentRate * 100).toFixed(2)}% out of band [0.5%, 30%] — the matching function or the seed reconciliation is broken`,
+      });
+    }
+  });
+}
+
 function checkHouseholdCohortIdentity(state: GameState, week: number) {
   (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
     const reg = state.regions[region];
@@ -611,6 +653,7 @@ function runInvariantsHarness() {
     checkNavIdentity(state, w);
     if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
     checkHouseholdCohortIdentity(state, w);
+    checkLaborMarketIdentity(state, w);
     violations.push(...checkHoldingsLedgerConservation(state, w));
     checkBeneficiaryClaimsHaveHolders(state, w);
     prevStateForBookCheck = state;

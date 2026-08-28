@@ -5,6 +5,7 @@ import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
 import { runBankDiversificationStage } from './stages/02b-bank-diversification';
 import { runCategoryDemandStage } from './stages/03-category-demand';
+import { runLaborMarketStage, runLaborReconciliationStage } from './stages/labor-market';
 import { runInputOutputStage } from './stages/04-input-output';
 import { runUnitBiddingStage } from './stages/05-unit-bidding';
 import { runFxAndTradeStage } from './stages/06-fx-and-trade';
@@ -84,6 +85,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('01-macro-feedback', () => runMacroFeedbackStage(state, ctx));
   run('02-region-macro', () => runRegionMacroStage(state, ctx));
   run('02b-bank-diversification', () => runBankDiversificationStage(state, ctx));
+  // HH5: the labor market clears between credit (02b) and goods demand (03) — employment is
+  // determined before the income it generates is spent.
+  run('labor-market', () => runLaborMarketStage(state, ctx));
   run('03-category-demand', () => runCategoryDemandStage(state, ctx));
   run('04-input-output', () => runInputOutputStage(state, ctx));
   run('05-unit-bidding', () => runUnitBiddingStage(state, ctx));
@@ -141,6 +145,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   run('10-mergers', () => runMergersStage(state, ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));
+  // HH5: employment's one representation, re-read after defaults (08), mergers (10) and births
+  // have landed — a bankrupt firm's staff are unemployed the week the firm goes, not the next.
+  run('labor-reconciliation', () => runLaborReconciliationStage(state, ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
