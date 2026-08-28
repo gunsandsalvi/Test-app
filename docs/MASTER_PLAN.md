@@ -110,12 +110,13 @@ every cross-stage dependency is visible) and runs the stages in order:
 | 07b | `07b-corporate-bond-clearing.ts` | Corp bond clearing (FIXED tranches) — adapter over the generic engine |
 | 07c | `07c-sovereign-bond-clearing.ts` | Sovereign tenor-bucket clearing (2/5/10/30Y) + Nelson-Siegel refit to cleared yields. **The curve's only owner**; macro reaches it through banks' reserve arbitrage and every holder's real yield |
 | 07d | `07d-leveraged-loan-clearing.ts` | Leveraged loan clearing (FLOATING tranches), CLO/loan-fund base via `loanPct` |
-| 08 | `08-company-fundamentals.ts` | Per-company weekly update: revenue (anchored to stage 05 real sales), costs, capex/debt, rating, earnings, equity price. Largest stage; reads cleared credit stats, never sets them |
+| 08 | `08-company-fundamentals.ts` | Per-company weekly update: revenue (anchored to stage 05 real sales), costs, capex/debt, rating, earnings, equity price. Largest stage; reads cleared credit stats, never sets them. **Rebuilds each company from an explicit field list** — anything not named there is dropped every week (§7.41) |
+| 08b | `stages/pe-lifecycle.ts` (`hc-lifecycle`) | The corporate lifecycle (HC Wave 2): settles the deals whose financing priced in this week's books, then decides next week's. LBOs and dividend recaps financed as real WS8 offerings, listings as real 07e offerings, firm births carved from the SME pools, sponsor equity wiped on a portfolio default. Owns `publicComparableEvMultiple` — the ONE multiple a private company is bought, marked and exited at, read off cleared listed prices |
 | 09 | `09-concentration-risk.ts` | >40% supplier/customer concentration flags |
 | 10 | `10-mergers.ts` | Quarterly M&A |
 | 11 | `11-fiscal-and-sovereign-debt.ts` | The statistics stage: measures bottom-up GDP **and the consumer price index** (`stages/price-index.ts` — the only place inflation is set); deficit → real gov tranche issuance, placed with and redeemed from real holders; refreshes the derived holdings view (`stages/holdings-view.ts`, §7.26), news generation |
 | 12 | `12-portfolio-and-positions.ts` | Index recomputation + player portfolio mark-to-market |
-| 13 | `13-news-and-turn-summary.ts` | IPO checks, cash/NAV settlement, turn summary |
+| 13 | `13-news-and-turn-summary.ts` | Cash/NAV settlement, turn summary |
 
 `stages/financial-clearing-engine.ts` — the generic, cap-free **double auction**
 `clearFinancialAsset(instruments, participants, priorDealerInventory, params)`. Each
@@ -136,7 +137,9 @@ target*, and the reasons that failed are recorded there.
 `stages/shared-helpers.ts` — credit math, occupation demand, `distributeRealTargetByWeight`,
 holdings attribution. `initialization.ts` — `createInitialGameState` (must seed holdings with
 the SAME shape the weekly engine produces — see lesson §7.4). `credit.ts` ratings;
-`ipo.ts`; `merger.ts`; `trade.ts` (player trade execution); `constants.ts`.
+`merger.ts`; `trade.ts` (player trade execution); `constants.ts`. (`ipo.ts` is an empty
+placeholder: HC Wave 2 deleted `generateIPOCompany` and the synthetic listing path with it —
+a company reaches the public market only by a sponsor choosing to list it.)
 `equity-valuation.ts` (src/engine/) — the ONE answer to what a share is worth: 07e's holders,
 the bootstrap that opens the market, and a board sizing a buyback all read it.
 
@@ -183,11 +186,14 @@ stage 05's real auctions with named counterparties, per-lot input provenance, re
 sales anchoring revenue, capex as real bids, private sector as a real participant *in the goods
 market*, commodities linked to real producer companies, per-bank balance sheets + real CB
 facilities, real gov tranche issuance, the measured CPI, the national-accounts identity, the
-single-owner sovereign curve, and the 07b/07c/07d clearing markets — which since §7.16 price
-from real demand schedules rather than quantity targets.
+single-owner sovereign curve, the 07b/07c/07d clearing markets — which since §7.16 price
+from real demand schedules rather than quantity targets — the primary market that brings new
+paper into those same books (WS8), itemized bank lending and endogenous money (G2), and the
+private sector's lifecycle: sponsors calling real LP capital, buying at the multiple the public
+market clears and marking at that same multiple (§7.41).
 
-**Still formula-driven** (each is a §4 work item): bank lending/borrowers + endogenous money
-(G2), the dual dealer system (G3), FX (WS9), derivatives markets incl.
+**Still formula-driven** (each is a §4 work item): the dual dealer system (G3), FX (WS9),
+derivatives markets incl.
 implied vol (G4), default resolution/recovery (G5), institutional liability side (G6),
 commodity futures/speculators (G7), the CB balance sheet (G9), plus the aggregate
 household/labor blob (Main Street) and the government fiscal loop (Blueprint).
@@ -213,19 +219,18 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 1 | **Hidden Corporates Wave 2: PE deal flow, real IPOs, births, estates** | HC | WS4, WS8, G2 |
-| 2 | Unify the two dealer systems | G3 | S9 |
-| 3 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 4 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 5 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 6 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 7 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 8 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 9 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 10 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 11 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 12 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 13 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | Unify the two dealer systems | G3 | S9 |
+| 2 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 3 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 4 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 5 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 6 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 7 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 8 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 9 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 10 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 11 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 12 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
@@ -233,15 +238,12 @@ priced a quantity target instead of a demand curve. Real growth reads positive i
 at week 26, inflation is a measured statistic, and corporate spreads now track credit
 (Spearman 0.78–0.93) instead of ownership.
 
-**Ordering resolved with the user (2026-08-27): G2 runs BEFORE HC Wave 2.** The table had
-carried Wave 2 ahead of a prereq it lists — now consistent: WS8 → G2 → Wave 2, so deal-flow
-loans originate against G2's real bank book from day one and HC9 lands whole.
-
-**Hidden Corporates Wave 1 is closed** (§7.33). It led the queue because the asset universe was
-6x short of the money pointed at it; the named private tier took want/have to 3.8x and the
-remaining gap has a known closure path (the §6 segment-debt primitive, G2's bank book, G6's
-liability inflows). **Wave 2 stays where it is** — after WS4, WS8 and G2 exist to receive the
-lifecycle. **Do not reorder further without asking.**
+**Hidden Corporates is closed** — Wave 1 in §7.33, Wave 2 in §7.41. The project led the queue
+because the asset universe was 6x short of the money pointed at it; the named private tier took
+want/have to 3.8x and the remaining gap has a known closure path (the §6 segment-debt primitive,
+G2's bank book, G6's liability inflows). The private sector now has a lifecycle: sponsors call
+real LP capital, buy firms at the multiple the public market clears, and mark at that same
+multiple. **Do not reorder the remaining table without asking.**
 
 Otherwise the shape holds: restore the money and holdings identities (S5–S9), then the
 remaining markets, then Main Street before Blueprint's fiscal loop (taxes need households).
@@ -534,10 +536,11 @@ go public**. Decisions settled with the user (2026-08-27): ~300 named private fi
 private equity sponsors as a real institutional type, in this project; two waves; the synthetic
 IPO generator is replaced entirely.
 
-**Status.** Wave 1 is closed — the named private tier, its real debt in the markets, real
-employment and capex, the sponsor universe, and the calibration gate. The record, the measured
-numbers and the lessons are in §7.33. What follows is the architecture Wave 2 still builds on,
-then Wave 2 itself.
+**Status: CLOSED.** Wave 1 (the named private tier, its real debt in the markets, real
+employment and capex, the sponsor universe, the calibration gate) is recorded in §7.33; Wave 2
+(the lifecycle — LBOs on called LP capital, dividend recaps, listings, births, estates, and the
+cleared private mark) in §7.41. What follows is the architecture both waves stand on, kept
+because later projects tie into it.
 
 **Architecture: two tiers, one firm model, listing as a state.**
 
@@ -561,7 +564,8 @@ then Wave 2 itself.
 **Conservation is the build discipline.** Tier 1 firms are **carved out of** the existing segment
 aggregates, never added on top: Σ(named firms) + (SME residual) must equal the prior segment
 totals for revenue, debt and employment exactly, and a same-week A/B must show GDP, employment
-and total debt unchanged. Wave 2's births and exits carry the same rule.
+and total debt unchanged. Wave 2's births carry the same rule: a new firm is carved from its
+SME pool, so the economy's totals never change because a firm was created.
 
 **Still owed from Wave 1, deferred with a reason:**
 - **HC3b — the real product-market handover — waits for BP1.** The auctioned sub-unit categories'
@@ -574,38 +578,6 @@ and total debt unchanged. Wave 2's births and exits carry the same rule.
   revenue path (already written, gated on market presence) switches on.
 
 ---
-
-**Wave 2 — the lifecycle** *(§4; prereqs: WS4, WS8, G2)*
-
-- **HC6 PE deal flow.** LBOs: sponsor buys a private firm (or takes a public one private —
-  delisting is just the listing flag, the same one-firm-model payoff) at a real EV/EBITDA price,
-  funded ~50–60% by a new leveraged loan priced as a real WS8 primary offering in 07d, equity
-  from dry powder. Dividend recaps when spreads are tight (real opportunistic supply). Exits:
-  sale to another sponsor/strategic (stage 10) or IPO.
-- **HC7 Real IPOs — the synthetic generator dies.** `generateIPOCompany` is deleted. An IPO is
-  an existing private firm choosing to list: motive = WS4-arithmetic public valuation exceeding
-  private hold value, plus owner intent (sponsor exit window, founder liquidity); mechanics =
-  a WS8 primary offering into the 07e equity book (primary shares fund growth/deleveraging,
-  secondary shares are the sponsor selling down), lead bank earns the real fee. The IPO price is
-  what the book clears — a weak book prices low or pulls the deal, which is real.
-- **HC8 Births.** A registry category whose SME pool grows past a real threshold spawns a new
-  named private firm carved from the pool (conservation again). Firm creation now has exactly
-  one path: born small → named private → public. Deaths in the mass stay statistical and feed
-  bank loan losses (G2).
-- **HC9 Defaults into estates.** Private-firm defaults open G5 estates like any other; sponsor
-  equity is wiped first (real). The SME mass's default rate stops being a formula input and
-  becomes the banks' measured loss experience on the real pool.
-
-**Ties, so nothing is built twice:** BP1 (firms and pools key to the registry), G2 (bank half of
-HC2 becomes itemized loans; mass losses are its loss experience), MS2 (private firms are the
-missing labor demand; cohorts later work at them by name), WS4/WS8 (IPO and LBO paper price in
-the real books), G5 (estates), S7 (private loan/bond holdings live in the one ledger), RVr
-(recap supply and issuer births are the counterweight to issuer-count decay), §7.20 (distressed
-private loans price off recovery like everything else).
-
-**Verify (whole project):** conservation A/B at every carve; want/have ~1.0x; labor gap
-narrowed; one firm-creation path; rating histogram matches a real universe shape (BBB largest IG
-bucket, ~20% HY) at week 0 AND week 80; no invariant regressions.
 
 ### AU — Aurora (complete UI rebuild) — LAST
 
@@ -640,6 +612,8 @@ the complete simulation.
 | `macro/initialization.ts` segment `debtUSD = annualRevenueUSD * 2` | Unpriced bootstrap primitive, exposed by HC1: it implies ~15x debt/EBITDA on the private sector in aggregate, which no real balance sheet services. HC1 carves only serviceable debt into the named tier, so the residual (~474B USA) sits on the segments as implied SME bank debt at an impossible aggregate leverage. Recalibrate the primitive when G2 itemizes the bank book — segment debt should be what real SME leverage on segment EBITDA plus real bank capital can carry — and re-measure §7.18's want/have after |
 | payment calendars (user note, 2026-08-27) | Coupons, loan interest and dividends are currently accrued as smooth weekly 1/52 flows (both sides: stage 08's expense and institutional-balance-sheet.ts's income). Real instruments pay on their own calendar — bonds semi-annual/quarterly, loans monthly or quarterly off the reset schedule, dividends quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow lumpiness (quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP/MMF money markets breathe on a calendar). Give each DebtTranche/loan a real payment schedule and pay on it; the S5 cash ledger is the natural place to land the corporate side, WS5/WS7 will want the lumpiness. WS5/WS7 now exist and would feel the lumpiness — the next instrument-touching item should land the calendars |
 | late-horizon NIM band (seed 7: 21 breaches, NIM to 7.4%) | The G2-owned formula sizes — loan yields `policy+250/350bp`, deposit beta 0.45 — produce an unreal margin when the late inflation regime steepens the curve. Not the repo market's doing (measured: breaches occur with repo/SRF at zero). Dies with G2 slice 2 (real per-loan yields, competitive deposit pricing) |
+| PE fundraising does not exist (HC Wave 2, §7.41) | A fund calls its LP commitments, deploys them and then stops forever: measured, undrawn commitments run 13.6B → 0.25B by week 90 and deal flow ends. Real sponsors raise a new vintage, and real LPs size that commitment from their own target allocation to the asset class. `AssetAllocationTarget` has no private-equity bucket, which is why this was not built here — adding one touches every entity type's initialization. The honest fix belongs with **G6** (institutional liabilities), where an LP's allocation becomes a real decision rather than a seeded constant. The other half of the recycling loop is an **exit by sale** (sponsor-to-sponsor or strategic), which returns capital where a listing will not; **G5**'s estate work is the natural place, or stage 10's merger path |
+| `companyGenerator.ts` private firms: `sharesOutstanding: 1_000_000` | Every generated private firm carries a fabricated share register and `eps: 0` — a share count for a company with no traded shares, and a per-share figure that does not divide by it. Harmless today because 07e excludes private names and a real listing now OVERWRITES the register with `postIssueSharesOutstanding`, but it is a made-up number sitting where a real one belongs, and it is what made the harness's newly-listed EPS check fire on all 12 HC8 births (the check is now correctly scoped to listed names). Set it to zero when something makes stage 08's private path stop dividing by it |
 | `07d-leveraged-loan-clearing.ts` | Now that the loan universe is real, it is **small (23–32 names/region)**. Spearman(leverage, DM) is noisy across weeks (0.26–0.76) where the bond book holds 0.78–0.93 — consistent with sampling noise at that n, but re-measure once WS5/G2 add loan issuance; if it persists at larger n it is a real defect |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1625,7 +1599,68 @@ the complete simulation.
       G2's channel measurably damps the escape but does not cure it: 0.66% of demand against a
       goods-market cycle orders of magnitude larger. Recorded per §1.10, not chased — the
       remaining stabilisers are MS's household rate response and BP5's fiscal loop.
-41. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+41. **HC Wave 2 landed: the private sector has a lifecycle, and the private mark is cleared.**
+    The five defects that stood between "the code is written" and "deals happen", each found by
+    measurement, each a different way of building a market that could not transact:
+    - **Deal intent died every week.** The LBO/recap/listing decision was marked with `pending*`
+      fields on the Company; stage 08 rebuilds every company from an explicit field list, so
+      anything not named there is dropped. 767 offering-weeks of financings that could never
+      settle. The intent now rides on the OFFERING (`PrimaryOffering.peDeal`), which persists in
+      GameState with its own financing. **Lesson: state that must survive a week has to live on
+      an object something owns, not on one that is rebuilt.**
+    - **A debut could not be priced.** The clearing engine returned early on any instrument with
+      zero outstanding float — which is exactly a first-time borrower or a listing, whose whole
+      book IS the offering. It never got a primary outcome, so it was never settled *or* pulled.
+      The gate is now `tradableFloat + offering > 0`: a market with something to sell is a market.
+      07e needed the same fix from the other side (an IPO issuer is PRIVATE, so it was not even
+      in the book — debut issuers now enter on their own price talk, `indicativeStat`).
+    - **The demand side was sized off the PRE-issue float**, so no offering could ever be
+      absorbed at any price: every schedule's ceiling was a multiple of the stock that existed
+      before the deal. Allocators now size to the instrument that will exist once it prices. A
+      real benchmark reweights when a new issue enters it.
+    - **The weekly cash budget was split across the whole STOCK**, giving a new issue a slice the
+      size of its issuer's index weight rather than of the deal. Measured on one LBO financing:
+      the book could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only
+      FUND 14.0M, so the solve ran to ~1365bps against a sponsor who walks at 900. Money now goes
+      where paper is actually changing hands — a live offering, or the gap between what a holder
+      targets and what it owns. A name already at target with nothing on offer needs no cash.
+    - **The offering was being sized at the institutional SHARE on the demand side while the
+      engine asked the book to absorb ALL of it.** `tradableShare` describes passive holders of
+      the OUTSTANDING stock; a new issue has none. Fixed consistently in 07b/07d/07e.
+    Then the two that were economics rather than plumbing:
+    - **Dry powder was read as the sponsor's `cashUSD`** — 0.01B across every fund in the world,
+      which makes an LBO structurally impossible. A fund does not hold its investors' money, it
+      CALLS it. Dry powder is committed-but-undrawn LP capital capped by what those LPs can
+      actually pay; `callCapitalUSD` moves real money off the named LPs' balance sheets and
+      `distributeToLps` returns it on a recap. HC4 built `lpCommitments` for exactly this.
+    - **The private mark was a bare `8 *`** in three places (the seed's `stakeValue`, the weekly
+      NAV mark, and the deal arithmetic) — a formula standing in for a price, and rule 3's two
+      representations of one company. It is now `publicComparableEvMultiple`: the median EV/EBITDA
+      the region's LISTED comps clear at in 07e. One number, cleared, in one place, read by the
+      purchase price, the exit test and the mark.
+    - **MEASURED, 120 weeks, default seed:** sponsors' portfolios 524 → 761 companies (295 LBOs
+      closed, 317 pulled at the sponsor's own walk-away — a real acceptance rate, not a
+      conveyor); 7 dividend recaps placed of 8 launched; undrawn commitments 13.6B → 0.25B (the
+      funds deploy their vintages and stop, because **nothing raises a new fund yet** — see §6);
+      36 firm births, each carved from its SME pool; **peNAV 25.0B → 8.0B as public comps
+      de-rate 8.0x → 3.5x**, which is the transmission the fixed mark could not carry.
+    - **ZERO IPOs, and the reason is honest, not a bug.** A sponsor lists when the market pays
+      more than it paid: entry basis 7.2x against comps that fall to 3.5x. Nobody lists into a
+      market that has de-rated by half. The machinery is complete and fires on the test — this
+      seed's world simply never rewards it. The de-rating itself is the recorded G1b escape
+      (nominal EBITDA inflating past equity prices), so this is a symptom to re-measure after
+      G1b, not an exit path to force.
+    - **Harness, 60 weeks:** 15 violations against a 14-violation baseline on the same seed —
+      11 NIM prints and 4 #18 names, both recorded families, one extra NIM week (wk50, 0.0831
+      against a 0.08 band) in the same G1b cluster. **Zero identity breaks, zero conservation
+      failures, zero corridor or encumbrance breaches** across the new capital-call, distribution
+      and seller-proceeds legs. The damper metric moved the wrong way — **1,373 → 1,962
+      persistently bound** — which is the loan book getting bigger (debut issuers and LBO'd names
+      now carry floating paper); recorded to watch, not chased.
+    - `generateIPOCompany` is DELETED and `simulation/ipo.ts` is gutted. Firm creation now has
+      exactly one path: born small in a pool, carved into a named private firm, public only by
+      choosing to list.
+42. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81

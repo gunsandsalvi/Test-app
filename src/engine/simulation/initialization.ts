@@ -1,5 +1,6 @@
 
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
+import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { migrateSmeDebtAtSeed } from './stages/bank-lending';
 import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
@@ -652,7 +653,12 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const lps = institutionalEntities.filter(e => e.region === regionId &&
       (e.entityType === 'INSURER' || e.entityType === 'PENSION_FUND' || e.entityType === 'ASSET_MANAGER'));
     const lpWeightSum = lps.reduce((a, e) => a + e.totalAssetsUSD, 0) || 1;
-    const stakeValue = (f: Company) => Math.max(0, 8 * f.ebitda - f.totalDebt) * 0.75;
+    // The seed marks the sponsored stakes at the same multiple the running mark uses — what the
+    // region's LISTED comps are worth per dollar of EBITDA — so week 0's NAV is not a different
+    // valuation from week 1's. A bare `8 *` here and in the weekly mark was one company valued
+    // two ways, and it made every seeded holding's entry basis a number nothing had cleared.
+    const seedEvMultiple = publicComparableEvMultiple(regionId, companies);
+    const stakeValue = (f: Company) => Math.max(0, seedEvMultiple * f.ebitda - f.totalDebt) * 0.75;
 
     // WS7: one money market fund per region. Born EMPTY — no fabricated share stock (§7.4's
     // seed-shape rule read the other way: the honest seed for a market the flows create is
@@ -686,7 +692,12 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       // Real funds keep ~a third of commitments undrawn — the dry powder HC6 calls.
       const committedUSD = Math.round(investedUSD / 0.65);
       portfolio.forEach(f => {
-        f.ownership = { founderPct: 0.25, peSponsorId: fundId, peSponsorPct: 0.75 };
+        // The entry basis is recorded, not defaulted: these stakes were bought at the market the
+        // world opens with, and HC6's exit test asks whether the market later pays MORE than that.
+        f.ownership = {
+          founderPct: 0.25, peSponsorId: fundId, peSponsorPct: 0.75,
+          acquiredWeek: 0, entryEvMultiple: seedEvMultiple,
+        };
       });
       institutionalEntities.push({
         id: fundId,

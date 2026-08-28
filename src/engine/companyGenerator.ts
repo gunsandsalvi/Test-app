@@ -853,145 +853,19 @@ export function generateInitialCompanies(
 
 
 
-export function generateIPOCompany(regionId: RegionId, category: string, categoryDemandUSD: number, week: number, policyRate: number = 0.045, existingCompanies: Company[] = []): Company {
-  const revBase = categoryDemandUSD * (0.02 + random() * 0.03);
-  const ebitdaMargin = 0.15 + random() * 0.15;
-  const shares = Math.floor(revBase * 10);
-
-  let industry: Industry = 'SoftwareDigitalServices';
-  for (const [ind, subUnits] of Object.entries(INDUSTRY_SUBUNITS)) {
-    if (subUnits.some(su => su.unitId === category)) {
-      industry = ind as Industry;
-      break;
-    }
-  }
-
-  const sectorMap: Record<Industry, Sector> = {
-    Energy: 'Energy',
-    MaterialsChemicals: 'Industrials',
-    IndustrialsMachinery: 'Industrials',
-    AerospaceDefense: 'Industrials',
-    AutomotiveTransport: 'Industrials',
-    TechHardwareSemis: 'Tech',
-    SoftwareDigitalServices: 'Tech',
-    Telecommunications: 'Tech',
-    HealthcarePharma: 'Consumer',
-    ConsumerStaples: 'Consumer',
-    ConsumerDiscretionaryRetail: 'Consumer',
-    LuxuryGoods: 'Consumer',
-    MediaEntertainment: 'Consumer',
-    RealEstateConstruction: 'Industrials',
-  };
-
-  const sector = sectorMap[industry] ?? 'Tech';
-  // Same name/ticker generator used for initial company generation (bootstrap/firms.ts),
-  // seeded from the live company roster so a fresh IPO can never collide with an existing
-  // ticker/name — previously IPOs used a separate generator with its own module-level
-  // tracking Set, disconnected from the rest of the roster.
-  const existingTickers = new Set(existingCompanies.map(c => c.ticker));
-  const existingNames = new Set(existingCompanies.map(c => c.name));
-  const ticker = generateUniqueTicker(existingTickers);
-  const name = generateUniqueName(`${regionId} ${sector}`, sector, existingNames);
-  const initialRating: CreditRating = random() > 0.5 ? 'BB' : 'B';
-  const debtBase = revBase * 1.5;
-  
-  const ebitda = revBase * ebitdaMargin;
-  const da = revBase * 0.05;
-  const ebit = Math.max(10, ebitda - da);
-  const employeeCount = Math.max(100, Math.round(revBase / 500_000));
-  const debtTranches = generateDebtTranches(ticker, debtBase, initialRating, policyRate, 6); // newly-public IPO companies start with a simple, single-tranche capital structure
-  const capex = Math.round(revBase * 0.06);
-  const maintenanceCapex = Math.round(capex * 0.3); // newly-public growth-stage company spends more on expansion than upkeep
-  const growthCapex = capex - maintenanceCapex;
-  // Newly-public growth-stage company: freshly-bought equipment, not a mature asset base —
-  // scaled off its own production (revenue), not off its debt.
-  const ipoAccumDeprFraction = 0.15;
-  const initialGrossPPEUSD = revBase * (SECTOR_PPE_INTENSITY[sector] ?? DEFAULT_PPE_INTENSITY) / (1 - ipoAccumDeprFraction);
-  const initialAccumulatedDepreciationUSD = initialGrossPPEUSD * ipoAccumDeprFraction;
-  
-  const eps = Number(((ebitda * 0.5) / Math.max(1, shares)).toFixed(4));
-  const IPO_POP = 0.08;
-  // Priced into the same book it will trade in from its first week — 07e's arithmetic, plus the
-  // real pop an offering is deliberately underwritten to leave on the table.
-  const ipoNetPPEUSD = initialGrossPPEUSD * (1 - ipoAccumDeprFraction);
-  const stockPrice = Math.max(0.5, Number((fairValuePerShare({
-    annualEarningsUSD: ebitda * 0.5,
-    sharesOutstanding: shares,
-    bookEquityUSD: revBase * 0.5 + revBase * 0.08 * 0.6 + ipoNetPPEUSD - (revBase * 0.08 * 0.4 + debtBase),
-    netInvestmentRate: (growthCapex - initialGrossPPEUSD / (SECTOR_PPE_USEFUL_LIFE_YEARS[sector] ?? 12)) / Math.max(1, ipoNetPPEUSD),
-    riskFreeRate: policyRate,
-    beta: 1.2,
-    holderRequiredReturn: REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
-  }) * (1 + IPO_POP)).toFixed(2)));
-  const marketCap = shares * stockPrice;
-  const forwardPE = eps > 0 ? Number((stockPrice / eps).toFixed(2)) : SECTOR_BENCHMARKS[sector].basePE;
-
-  return {
-    id: `comp_${ticker}_${Date.now()}_${week}`,
-    ticker, name, region: regionId, sector,
-    baselineAnnualRevenue: revBase, annualRevenue: revBase,
-    previousEmployeeCount: employeeCount, employeeCount,
-    ebitda, baselineEbitdaMargin: ebitda / Math.max(1, revBase), ebit, netIncome: ebitda * 0.5, eps,
-    sharesOutstanding: shares, currentLiabilities: Math.round(debtBase * 0.25 + revBase * 0.08),
-    totalDebt: debtBase, cash: revBase * 0.5,
-    capex,
-    grossPPEUSD: initialGrossPPEUSD,
-    accumulatedDepreciationUSD: initialAccumulatedDepreciationUSD,
-    maintenanceCapex,
-    growthCapex,
-    baselineGrowthCapexToRevenueRatio: growthCapex / Math.max(1, revBase),
-    maintenanceShortfallStreak: 0,
-    executionQuality: 1.0,
-    occupationMixDrift: {},
-    creditRating: initialRating, isDefaulted: false, oasSpreadBps: 300, cdsSpreadBps: 300,
-    seniorBondYield: 0.08, stockPrice, historicalPrices: Array(52).fill(stockPrice), forwardPE,
-    marketCap, dividendYield: 0, baselineDividendYield: 0, beta: 1.2, recoveryRate: 0.40,
-    baselineRecoveryRate: 0.40, debtTranches,
-    productLines: [{ industry, subUnitId: category, revenueShare: 1.0, competitiveness: 0.3, previousCategoryMarketShare: 0.02, categoryMarketShare: 0.02 }],
-    leverage: debtBase / Math.max(1, ebitda),
-    interestCoverage: ebit / Math.max(0.5, debtBase * 0.06),
-    earningsWeekModulo: week % 13,
-    lastEarningsReportWeek: week,
-    reportedThisWeek: false,
-    historicalFundamentals: [],
-    baselineEmployeeCount: employeeCount,
-    dealerConsensus: {
-      alpha: { eps, revenue: revBase },
-      beta: { eps, revenue: revBase },
-      gamma: { eps, revenue: revBase },
-      consensusEps: eps,
-      consensusRevenue: revBase,
-    },
-    lastEarningsSurprisePct: 0,
-    lastManagementCommentary: 'Newly public company; management outlined initial growth strategy at IPO.',
-    leveragedLoan: debtTranches.some((t) => t.rateType === 'FLOATING')
-      ? {
-          quotedMarginBps: 300,
-          referenceBenchmark: 'SOFR',
-          pricePar: 99.0,
-          discountMarginBps: 300,
-          tenorYears: 5,
-          seniority: 'Senior Secured First Lien',
-          recoveryRate: 0.40,
-        }
-      : undefined,
-    ratingHistory: [initialRating],
-    institutionalRole: null,
-    sentiment: 0.0,
-    inputSupplyConstraintFactor: 1.0,
-    outputInventoryBySubUnit: {},
-    inputInventoryBySubUnit: {},
-    inventoryCarryingCostRate: 0.02,
-    recentFulfillmentEMA: 1.0,
-    treasuryHoldings: [],
-  };
-}
-
+// HC7: `generateIPOCompany` is DELETED. It conjured a company out of a category's demand
+// growth — a firm that had never existed, with fabricated fundamentals, appearing already
+// public. An IPO is now what it is in reality: an existing private firm choosing to list,
+// priced as a real WS8 equity offering in 07e's book (stages/pe-lifecycle.ts). Firm creation
+// has exactly one path — born small in an SME pool (HC8), carved into a named private firm,
+// public only by listing.
 
 // ---------------------------------------------------------------------------------------------
 // HC Wave 1 (HC1): named private firms — see bootstrap/private-firms.ts for the carve logic.
 // One firm model: these are full Company objects with listingStatus 'PRIVATE'; the only fields
 // that differ are the genuinely public-only ones (no traded equity, no consensus theater).
+// HC8 reuses this same generator for BIRTHS — a firm born out of an SME pool is generated
+// exactly like a Wave 1 carve, because it is one.
 // ---------------------------------------------------------------------------------------------
 
 const SEGMENT_SECTOR: Record<string, Sector> = {
@@ -1036,6 +910,9 @@ export function generatePrivateCompanies(
       id: `${region}_PRV_${ticker}`,
       ticker, name, region, sector,
       listingStatus: 'PRIVATE',
+      // HC8: the pool this firm was carved from — births read it to find the right pool,
+      // and a carve must always know which aggregate it came out of.
+      privateSegmentType: seed.segmentType,
       // Founder/family owned until HC4 assigns real PE sponsors to the sponsorStyle cohort —
       // the leverage is already theirs, the owner arrives with the PE entities.
       ownership: { founderPct: 1.0 },

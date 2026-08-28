@@ -11,41 +11,16 @@
  */
 
 import { GameState, RegionId, Portfolio } from '../../../types';
-import { checkForIPO } from '../ipo';
 import { WeeklyStepContext } from './context';
 
 export function runNewsAndTurnSummaryStage(state: GameState, ctx: WeeklyStepContext): GameState {
   const { nextWeek, currentWeekMod13, updatedRegions, updatedCompanies, updatedPositions } = ctx;
 
-  // 6. Generate Weekly Breaking News & Sentiment Shifts
-  (Object.keys(updatedRegions) as RegionId[]).forEach((regionId) => {
-    const reg = updatedRegions[regionId];
-    const ipo = checkForIPO(regionId, reg, state.companies, nextWeek);
-    if (ipo) {
-      const underwritingFeePct = 0.02;
-      const proceedsUSDReal = ipo.sharesOutstanding * ipo.stockPrice;
-      const underwritingFeeUSD = proceedsUSDReal * underwritingFeePct;
-      reg.bankingSector.bankEquityUSD += underwritingFeeUSD;
-      if (!reg.bankingSector.itemizedHoldings) reg.bankingSector.itemizedHoldings = [];
-      reg.bankingSector.itemizedHoldings.push({
-        instrumentId: ipo.id,
-        instrumentType: 'EQUITY',
-        issuerRegion: regionId,
-        quantityOrNotionalUSD: proceedsUSDReal * 0.05
-      });
-      updatedCompanies.push(ipo);
-      ctx.recentIPOs.push({ ticker: ipo.ticker, name: ipo.name, category: ipo.productLines?.[0]?.industry || 'Unknown', week: nextWeek });
-      if (ctx.recentIPOs.length > 20) ctx.recentIPOs.shift();
-      ctx.diagnosticLogs.push({
-        week: nextWeek,
-        timestamp: new Date().toISOString(),
-        category: 'MACRO',
-        message: `New IPO: ${ipo.name} enters ${ipo.productLines?.[0]?.industry} amid strong demand growth`,
-        deltaText: '',
-        data: { regionId }
-      });
-    }
-  });
+  // HC7: the synthetic IPO block that used to sit here is gone with `generateIPOCompany`. A
+  // listing is a sponsor's decision about a real company it already owns, priced as a real WS8
+  // equity offering in 07e (stages/pe-lifecycle.ts) — including the underwriting fee, which
+  // now reaches a NAMED lead bank's balance sheet instead of the region aggregate that 02b
+  // overwrites the following week (§7.30's "a write to a derived view is a write to nothing").
 
   const cashAfterWeek = state.portfolio.cashUSD + ctx.weeklyInterestIncomeUSD + ctx.weeklyRealizedPnL + ctx.weeklyRealizedCashUSD - ctx.weeklyFinancingCostUSD;
   const navUSD = cashAfterWeek + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);

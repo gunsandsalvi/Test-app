@@ -1,26 +1,10 @@
-import { isActiveCompany } from '../../domain/company';
-import { Company, RegionId, Region } from '../../types';
-import { generateIPOCompany } from '../companyGenerator';
-import { random } from '../rng';
-
-export function checkForIPO(regionId: RegionId, reg: Region, companies: Company[], week: number): Company | null {
-  if (week % 26 !== 0) return null;
-  const categories = Object.keys(reg.categoryDemand) as string[];
-  for (const cat of categories) {
-    const demand = reg.categoryDemand[cat];
-    if (!demand) continue;
-    const incumbents = companies.filter(c => c.region === regionId && isActiveCompany(c) && (c.productLines || []).some(l => l.subUnitId === cat));
-    const incumbentGrowthProxy = incumbents.length ? incumbents.reduce((s, c) => s + (c.annualRevenue - c.baselineAnnualRevenue) / Math.max(1, c.baselineAnnualRevenue), 0) / incumbents.length : 0;
-    const supplyGap = demand.demandGrowthAnnual - incumbentGrowthProxy;
-    const demandTrigger = demand.demandGrowthAnnual >= 0.04 && supplyGap > 0.03;
-
-    const maxShareInCategory = Math.max(0, ...incumbents.map(c => c.productLines?.find(l => l.subUnitId === cat)?.categoryMarketShare ?? 0));
-    const concentrationTrigger = maxShareInCategory > 0.40;
-
-    if ((demandTrigger || concentrationTrigger) && random() < (concentrationTrigger ? 0.5 : 0.35)) {
-      return generateIPOCompany(regionId, cat, demand.demandLevelUSD, week, reg.policyRate, companies);
-    }
-  }
-  return null;
-}
-
+/**
+ * HC7: the synthetic IPO trigger is gone with the generator it called. A listing is now a
+ * SPONSOR'S DECISION about a real company it already owns (stages/pe-lifecycle.ts): it lists
+ * when the public market would value the firm above its private hold value, and the deal
+ * prices — or is pulled — as a real WS8 equity offering in 07e's book.
+ *
+ * This module is kept as the marker of where that logic used to live; stage 13 no longer
+ * calls it.
+ */
+export {};

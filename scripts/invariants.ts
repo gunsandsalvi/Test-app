@@ -13,6 +13,7 @@ const WEEKS = Number(process.env.WEEKS ?? 60);
 import { advanceWeeklyStep } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
+import { isPubliclyListed } from '../src/domain/company';
 
 interface Violation {
   week: number;
@@ -558,17 +559,22 @@ function runInvariantsHarness() {
       });
     }
 
-    // 7. IPO EPS accuracy
+    // 7. EPS accuracy on a company that enters the world LISTED.
+    // Scoped to listed names because EPS is a per-SHARE quantity and a private firm has no
+    // traded share register. HC Wave 2 made births real — a new firm is carved out of an SME
+    // pool and is private — and this check, written when `generateIPOCompany` conjured listed
+    // companies out of demand growth, flagged all twelve of them for an EPS its shares were
+    // never meant to divide.
     state.companies.forEach(c => {
       if (!knownTickers.has(c.ticker)) {
         knownTickers.add(c.ticker);
-        if (c.sharesOutstanding && c.sharesOutstanding > 0) {
+        if (isPubliclyListed(c) && c.sharesOutstanding && c.sharesOutstanding > 0) {
           const calcEps = c.netIncome / c.sharesOutstanding;
           const diffPct = Math.abs(calcEps - c.eps) / Math.max(0.001, Math.abs(c.eps));
           if (diffPct > 0.15) {
             violations.push({
               week: w,
-              message: `New IPO company ${c.ticker} EPS mismatch: stored=${c.eps}, calc=${calcEps.toFixed(4)} (diff=${(diffPct*100).toFixed(1)}%)`
+              message: `Newly listed company ${c.ticker} EPS mismatch: stored=${c.eps}, calc=${calcEps.toFixed(4)} (diff=${(diffPct*100).toFixed(1)}%)`
             });
           }
         }

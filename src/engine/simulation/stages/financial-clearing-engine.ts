@@ -260,7 +260,13 @@ export function clearFinancialAsset(
   let totalDealerRevenueUSD = 0;
 
   instruments.forEach((inst) => {
-    if (!(inst.tradableFloatUSD > 0)) {
+    const offeringUSD = Math.max(0, inst.primaryOfferingUSD ?? 0);
+    // A DEBUT issuer — an LBO financing, a first term loan, an IPO — has NO outstanding stock:
+    // its entire book is the offering itself. Gating on the outstanding float alone dropped it
+    // before the solve, so it never got a primary outcome, was never settled or pulled, and the
+    // offering sat queued forever (measured: 767 offering-weeks of LBO financings, zero deals
+    // done in 120 weeks). A market with something to sell is a market.
+    if (!(inst.tradableFloatUSD + offeringUSD > 0)) {
       newStatById.set(inst.id, inst.currentStat);
       return;
     }
@@ -277,7 +283,6 @@ export function clearFinancialAsset(
     const bracketLow = isYieldLike ? -2000 : Math.max(1e-6, inst.currentStat * 0.01);
     const bracketHigh = isYieldLike ? 100000 : inst.currentStat * 100;
 
-    const offeringUSD = Math.max(0, inst.primaryOfferingUSD ?? 0);
     let liveFloatUSD = inst.tradableFloatUSD + offeringUSD;
     let solvedStat = solveClearingStat({ ...inst, tradableFloatUSD: liveFloatUSD }, participants, bracketLow, bracketHigh);
     let offeringWithdrawn = false;

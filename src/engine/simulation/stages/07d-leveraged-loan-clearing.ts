@@ -75,9 +75,19 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // quote outlived the loan, and since the clearing below (rightly) skips a company with no
     // floating debt, those orphaned quotes froze at whatever level generation gave them and then
     // reported themselves as live prices for the rest of the run.
+    // WS8/HC6: an issuer bringing its FIRST loan (an LBO financing, a term-out) is a
+    // loan-market name the week it launches — it has no float yet, and a book that only knows
+    // existing borrowers can never price a debut. Without this the offering sat in the queue
+    // forever: the instrument was never in the book, so it was never priced, settled or pulled
+    // (measured: 767 offering-weeks of LBO financings stuck, zero deals done).
+    const debutIssuerIds = new Set(
+      ctx.primaryOfferingsWorking
+        .filter((o) => o.region === regionId && o.instrumentType === 'LEVERAGED_LOAN')
+        .map((o) => o.issuerId)
+    );
     [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].forEach((c) => {
       if (c.region !== regionId || !isActiveCompany(c)) return;
-      const hasLoan = floatingDebtUSD(c) > 0;
+      const hasLoan = floatingDebtUSD(c) > 0 || debutIssuerIds.has(c.id);
       if (!hasLoan) {
         if (c.leveragedLoan) c.leveragedLoan = undefined;
         return;
@@ -102,11 +112,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // HC2: private issuers' loans trade here too — and in reality the leveraged-loan market is
     // MOSTLY private, sponsor-owned issuers; the public-only version was the anomaly.
     const regionCompanies = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
-      (c) => c.region === regionId && isActiveCompany(c) && floatingDebtUSD(c) > 0 && !!c.leveragedLoan
+      (c) => c.region === regionId && isActiveCompany(c) && !!c.leveragedLoan
+        && (floatingDebtUSD(c) > 0 || debutIssuerIds.has(c.id))
     );
     if (regionCompanies.length === 0) return;
-
-    const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + floatingDebtUSD(c), 0) || 1;
 
     const tradableShare = reg.corpBondOwnership.institutionalShare;
     // WS8: primary loan offerings priced alongside the outstanding stock (HC6's LBO/recap
@@ -115,6 +124,28 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     ctx.primaryOfferingsWorking.forEach((o) => {
       if (o.region === regionId && o.instrumentType === 'LEVERAGED_LOAN') offeringsByIssuerId.set(o.issuerId, o);
     });
+
+    // The size an allocator targets is the size of the instrument that will EXIST once the deal
+    // prices: outstanding stock PLUS the paper on offer. Sizing the schedules off the outstanding
+    // stock alone made the demand side mechanically incapable of absorbing new supply — every
+    // ceiling was a multiple of the PRE-issue float, so any offering material next to it drove
+    // the solve past the issuer's walk-away and the deal was pulled. Measured: every LBO
+    // financing withdrawn (500 offering-weeks, zero deals in 120 weeks), and the recap book
+    // placing only where the deal happened to be small against the stock. A real benchmark
+    // reweights when a new issue enters it. What the book still cannot do is pay with money it
+    // does not have: `maxNetPurchaseUSD` is untouched, so a deal the market cannot fund is still
+    // pulled — which is the honest reason for a deal to fail.
+    // The offering enters at FULL size, not at the institutional share. `tradableShare` exists
+    // because part of the OUTSTANDING stock sits with passive holders who never bid; a new issue
+    // has no such holders — every dollar of it is for sale to the bidders in this book, and the
+    // engine adds all of it to the float it must clear. Sizing the demand side at only a fraction
+    // of what the engine asks it to absorb left a gap that only the distressed fund's reservation
+    // could close, so the solve printed ~1365bps on deals whose issuers walk at 900.
+    const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
+    const liveTradableFloatUSD = (c: Company) => floatingDebtUSD(c) * tradableShare + offeringSizeUSD(c);
+
+    const totalOutstandingUSD =
+      regionCompanies.reduce((s, c) => s + floatingDebtUSD(c) + offeringSizeUSD(c), 0) || 1;
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
@@ -165,11 +196,23 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       const sectorTotal = totalRealInstitutionalTargetUSD || 1;
-      // The entity's real money for this auction (S11), split across names by structural size.
+      // The entity's real money for this auction (S11), directed at the names where paper is
+      // actually changing hands: a live offering, or the gap between what this holder targets and
+      // what it already owns. A name it is already at target in, with nothing on offer, needs
+      // none of this week's cash — and splitting the class budget across the entire STOCK
+      // instead starved the primary market by construction, because a new issue's slice was its
+      // issuer's index weight rather than its own size. Measured on an LBO financing: the book
+      // could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only FUND
+      // 14.0M, so the solve ran past the sponsor's walk-away and every deal was pulled.
       const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN');
-      let totalStructuralSizeUSD = 0;
+      const cashDemandWeightByCompany = new Map<string, number>();
+      let totalCashDemandWeightUSD = 0;
       regionCompanies.forEach((c) => {
-        totalStructuralSizeUSD += floatingDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal);
+        const structuralUSD = liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal);
+        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(c.id) ?? 0));
+        const weightUSD = offeringSizeUSD(c) + gapToTargetUSD;
+        cashDemandWeightByCompany.set(c.id, weightUSD);
+        totalCashDemandWeightUSD += weightUSD;
       });
 
       // Same terms as the bond book, at the loan's own economics: a first-lien loan's collateral
@@ -199,7 +242,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
               capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, loanCreditDurationYears(c)) * SENIOR_LIEN_DISCOUNT,
               creditConditionsIndex: reg.bankingSector.creditConditionsIndex ?? 0,
             });
-        const structuralSizeUSD = floatingDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal);
+        const structuralSizeUSD = liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal);
         demandByInstrumentId.set(c.id, {
           reservationStat: reservationBps,
           maxHoldingUSD:
@@ -207,7 +250,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             (entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE),
           fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
           maxNetPurchaseUSD:
-            classBudgetUSD * (totalStructuralSizeUSD > 0 ? structuralSizeUSD / totalStructuralSizeUSD : 0),
+            classBudgetUSD *
+            (totalCashDemandWeightUSD > 0
+              ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
+              : 0),
         });
       });
 

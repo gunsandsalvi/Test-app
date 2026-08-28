@@ -281,6 +281,21 @@ export interface Company {
   /** G2: the bank where this company's operating cash IS a deposit — one representation: the
    * company's S5 cash and the bank's corporate-deposit line are two views of the same money. */
   homeBankTicker?: string;
+  // ---- HC Wave 2 lifecycle state. Each `pending*` field marks a deal whose FINANCING is in
+  // the WS8 queue this week; settlement (or withdrawal) clears it — a deal whose market says
+  // no simply does not happen. ----
+  pendingLboSponsorId?: string;
+  pendingLboEquityUSD?: number;
+  pendingRecapSponsorId?: string;
+  pendingIpoSponsorId?: string;
+  pendingIpoShares?: number;
+  /** Week of the last dividend recap — sponsors do not re-lever a company every quarter. */
+  lastRecapWeek?: number;
+  /** HC1/HC8: the SME pool this private firm was carved from — conservation needs to know
+   * which aggregate a firm came out of (and, at HC8, which one a birth reduces). */
+  privateSegmentType?: import('./region-macro').PrivateSegmentType;
+  /** HC8: week this firm was born out of its pool (absent for the Wave 1 cohort). */
+  bornWeek?: number;
 
   // Capital Structure
   /**
@@ -342,7 +357,11 @@ export interface Company {
    * companies the real register is the share-ownership model (WS4) — this block is only
    * meaningful while listingStatus is PRIVATE.
    */
-  ownership?: { founderPct: number; peSponsorId?: string; peSponsorPct?: number };
+  ownership?: { founderPct: number; peSponsorId?: string; peSponsorPct?: number;
+    /** HC6: week the sponsor acquired it — the hold period an exit decision reads. */
+    acquiredWeek?: number;
+    /** HC7: the EV/EBITDA the sponsor PAID — the basis an exit is measured against. */
+    entryEvMultiple?: number };
   // Mirrors InstitutionalEntityType in domain/institutions.ts; inlined because that module
   // already imports from this one and a type import here would close the cycle.
   /** Week this company first defaulted — lets credit contagion decay out of a rolling window

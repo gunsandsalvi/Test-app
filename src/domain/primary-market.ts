@@ -39,6 +39,18 @@ export interface PrimaryOffering {
   /** Face value offered (for EQUITY: the number of new SHARES — the equity book clears in shares). */
   sizeUSD: number;
   /**
+   * The issuer's own price talk, in the book's statistic — used only by a DEBUT, which has no
+   * prior print for the book to reference. A listed name's last cleared price and an existing
+   * borrower's standing quote already serve this purpose, so they leave it unset.
+   */
+  indicativeStat?: number;
+  /**
+   * EQUITY only: the issuer's full share registry once the deal prices. The allocators size to
+   * the company that will exist, and per-share fundamentals divide by this count — a debut's
+   * `sharesOutstanding` is still zero until settlement, so the book cannot read it from there.
+   */
+  postIssueSharesOutstanding?: number;
+  /**
    * The issuer's walk-away, in the book's own statistic (bps for credit, price for equity).
    * From the issuer's own economics: an opportunistic issuer walks where the after-tax cost
    * stops beating its use of proceeds; a refinancer walks where the market is worse than its
@@ -51,6 +63,19 @@ export interface PrimaryOffering {
   refinancesTrancheIds?: string[];
   leadBankTicker: string;
   announcedWeek: number;
+  /**
+   * HC Wave 2 — the DEAL this financing is for, carried on the offering itself. An earlier
+   * version marked the intent with `pending*` fields on the Company and lost it every week:
+   * stage 08 rebuilds each company from an explicit field list, so anything not named there is
+   * dropped (measured: 767 offering-weeks of LBO financings that could never settle). The
+   * offering persists in GameState, so the deal rides with its own financing.
+   */
+  peDeal?: {
+    kind: 'LBO' | 'RECAP' | 'IPO';
+    sponsorId: string;
+    /** LBO: the sponsor's equity cheque, paid from dry powder at settlement. */
+    equityUSD?: number;
+  };
 }
 
 /**

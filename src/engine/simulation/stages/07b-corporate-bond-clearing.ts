@@ -120,7 +120,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     );
     if (regionCompanies.length === 0) return;
 
-    const totalOutstandingUSD = regionCompanies.reduce((s, c) => s + fixedDebtUSD(c), 0) || 1;
     const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
 
     // The float genuinely in play is what the bidders below can hold between them. The rest of
@@ -133,6 +132,20 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     ctx.primaryOfferingsWorking.forEach((o) => {
       if (o.region === regionId && o.instrumentType === 'CORP_BOND') offeringsByIssuerId.set(o.issuerId, o);
     });
+
+    // An allocator sizes to the instrument that will EXIST once the deal prices — the
+    // outstanding stock plus the paper on offer — because that is what its benchmark will hold.
+    // Sizing off the outstanding stock alone left the demand side mechanically unable to absorb
+    // new supply at any spread (see the same fix in 07d, where it withdrew every LBO financing).
+    // The cash constraint is untouched: `maxNetPurchaseUSD` still decides whether the market can
+    // actually pay for the deal, which is the honest reason for one to fail.
+    // The offering enters at FULL size: `tradableShare` describes passive holders of the
+    // OUTSTANDING stock, and a new issue has none — all of it is for sale to the bidders here,
+    // which is exactly what the engine adds to the float it must clear (see 07d).
+    const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
+    const liveTradableFloatUSD = (c: Company) => fixedDebtUSD(c) * tradableShare + offeringSizeUSD(c);
+    const totalOutstandingUSD =
+      regionCompanies.reduce((s, c) => s + fixedDebtUSD(c) + offeringSizeUSD(c), 0) || 1;
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
@@ -190,13 +203,22 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
       const sectorTotal = totalRealInstitutionalTargetUSD || 1;
       // The entity's real budget for this auction (S11): available cash plus its type's genuine
-      // leverage capacity, sliced to this asset class by its own targets, then apportioned
-      // across names by structural size below. A bid is a claim on money; this is the money.
+      // leverage capacity, sliced to this asset class by its own targets, then directed at the
+      // names where paper is actually changing hands — a live offering, or the gap between what
+      // this holder targets and what it already owns. A bid is a claim on money; this is the
+      // money. Apportioning it across the whole STOCK instead gave a new issue a slice the size
+      // of its issuer's index weight rather than of the deal, which starved the primary market by
+      // construction (see the same fix and its measurement in 07d).
       const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND');
-      let totalStructuralSizeUSD = 0;
+      const cashDemandWeightByCompany = new Map<string, number>();
+      let totalCashDemandWeightUSD = 0;
       regionCompanies.forEach((c) => {
         const f = !isInvestmentGrade(c.creditRating) ? subInvestmentGradeSizeFactor(entity.entityType) : 1;
-        totalStructuralSizeUSD += fixedDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal) * f;
+        const structuralUSD = liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal) * f;
+        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(c.id) ?? 0));
+        const weightUSD = offeringSizeUSD(c) + gapToTargetUSD;
+        cashDemandWeightByCompany.set(c.id, weightUSD);
+        totalCashDemandWeightUSD += weightUSD;
       });
 
       // This entity's terms, per issuer. The reservation spread is the RV economics used as what
@@ -236,7 +258,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         // to hold it, and the dealer absorbs any genuine residual.
         const sizeFactor = subIG ? subInvestmentGradeSizeFactor(entity.entityType) : 1;
         const structuralSizeUSD =
-          fixedDebtUSD(c) * tradableShare * (entityShareOfSector / sectorTotal) * sizeFactor;
+          liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal) * sizeFactor;
         const overweightMultiple =
           entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
         demandByInstrumentId.set(c.id, {
@@ -244,7 +266,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
           maxHoldingUSD: structuralSizeUSD * overweightMultiple,
           fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
           maxNetPurchaseUSD:
-            classBudgetUSD * (totalStructuralSizeUSD > 0 ? structuralSizeUSD / totalStructuralSizeUSD : 0),
+            classBudgetUSD *
+            (totalCashDemandWeightUSD > 0
+              ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
+              : 0),
         });
       });
 

@@ -1,4 +1,4 @@
-import { GameState } from '../../types';
+import { GameState, RegionId } from '../../types';
 import { createInitialContext } from './stages/context';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
@@ -16,6 +16,8 @@ import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clear
 import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
 import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
+import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
+import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
 import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign-debt';
@@ -92,6 +94,20 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
   run('institutional-marking', () => markInstitutionalBooks(ctx));
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));
+  // HC Wave 2: the corporate lifecycle. Settles the deals whose financing priced in this
+  // week's clearing books, then decides next week's — so a deal is always announced, priced,
+  // and settled through the real markets rather than executed on announcement.
+  run('hc-lifecycle', () => {
+    settlePeLifecycleDeals(ctx, ctx.nextWeek);
+    (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((regionId) => {
+      const reg = ctx.updatedRegions[regionId];
+      if (!reg) return;
+      runPeLifecycleForRegion(regionId, reg, ctx, ctx.nextWeek);
+      const born = runFirmBirthsForRegion(regionId, reg, ctx, ctx.nextWeek, generatePrivateCompanies);
+      if (born.length > 0) ctx.updatedCompanies.push(...born);
+    });
+  });
+
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   run('10-mergers', () => runMergersStage(state, ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));

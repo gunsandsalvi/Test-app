@@ -31,6 +31,7 @@
  */
 
 import { Company, InstitutionalEntity, InstitutionalEntityType } from '../../../types';
+import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
 import { computeSovereignBookAnnualYield } from '../../macro/banking';
 
@@ -151,11 +152,16 @@ export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
     // numbers the credit market prices, so a portfolio company's deterioration hits its
     // sponsor's NAV the week it happens.
     if (entity.entityType === 'PRIVATE_EQUITY' && entity.peFund) {
+      // The multiple is the one the PUBLIC market cleared this week for comparable listed
+      // earnings, not a constant: a bare `8 *` sat here and in the deal arithmetic, so a
+      // sponsor's NAV could not fall when equities did and a portfolio was bought on one
+      // valuation and marked on another. One number, cleared, in one place.
+      const evMultiple = publicComparableEvMultiple(entity.region, ctx.prevActiveFirms);
       const portfolioUSD = entity.peFund.portfolioCompanyIds.reduce((a, id) => {
         const c = privateById.get(id);
         if (!c || c.isDefaulted) return a;
         const stakePct = c.ownership?.peSponsorPct ?? 0;
-        return a + Math.max(0, 8 * c.ebitda - c.totalDebt) * stakePct;
+        return a + Math.max(0, evMultiple * c.ebitda - c.totalDebt) * stakePct;
       }, 0);
       return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0) + (entity.repoLentUSD ?? 0) + portfolioUSD) };
     }

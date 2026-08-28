@@ -32,6 +32,7 @@ import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { REQUIRED_RETURN_ON_CAPITAL, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { settlePricedOfferings } from './primary-settlement';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 
 const DEALER_SPREAD_BPS = 8;
@@ -48,10 +49,28 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // Only listed companies have a traded price; a private firm's equity is not for sale (HC).
     // Banks and institutions keep their own book-value pricing in stage 08 for now — their equity
     // is a claim on a balance sheet this engine does not yet model as shares.
-    const regionCompanies = ctx.prevActiveFirms.filter(
+    // Instruments carry SHARE counts as their quantity — see the module comment.
+    // WS8/HC7: equity primaries — an IPO's new SHARES join this week's book, priced with the
+    // outstanding float (the book clears in shares, so the offering size is a share count).
+    const offeringsByIssuerId = new Map<string, import('../../../types').PrimaryOffering>();
+    ctx.primaryOfferingsWorking.forEach((o) => {
+      if (o.region === regionId && o.instrumentType === 'EQUITY') offeringsByIssuerId.set(o.issuerId, o);
+    });
+
+    const listedCompanies = ctx.prevActiveFirms.filter(
       (c) => c.region === regionId && isActiveCompany(c) && isPubliclyListed(c)
         && !c.isBankEntity && !c.isInstitutionalEntity && c.sharesOutstanding > 0 && c.stockPrice > 0
     );
+    // HC7: a LISTING issuer is in this book precisely because it is not listed yet — no float and
+    // no prior print, so it enters on its own price talk and its whole book is the offering.
+    // Without this the deal could never be priced, settled or pulled: it simply sat in the queue,
+    // the same debut gap the loan book had for LBO financings.
+    const debutIssuers = ctx.prevActivePrivateFirms.filter(
+      (c) => c.region === regionId && isActiveCompany(c) && !isPubliclyListed(c)
+        && (offeringsByIssuerId.get(c.id)?.indicativeStat ?? 0) > 0
+        && (offeringsByIssuerId.get(c.id)?.postIssueSharesOutstanding ?? 0) > 0
+    );
+    const regionCompanies = [...listedCompanies, ...debutIssuers];
     if (regionCompanies.length === 0) return;
 
     const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId);
@@ -60,19 +79,57 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const tradableShare = reg.equityOwnership.institutionalShare;
     const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
 
-    // Instruments carry SHARE counts as their quantity — see the module comment.
+    /** The book's reference: a listed name's last cleared print, a debut's own price talk. */
+    const refPriceOf = (c: Company) =>
+      c.stockPrice > 0 ? c.stockPrice : (offeringsByIssuerId.get(c.id)?.indicativeStat ?? 0);
+    /**
+     * The registry the allocators size to, and that per-share fundamentals divide by: the shares
+     * that will EXIST once the deal prices. Sizing off the outstanding count alone left the book
+     * mechanically unable to absorb a new issue at any price — every schedule's ceiling was a
+     * multiple of the PRE-issue float — which is the same flaw fixed in 07b and 07d. The cash
+     * constraint below is untouched, so a deal the market cannot fund is still pulled.
+     */
+    const liveSharesOf = (c: Company) => {
+      const o = offeringsByIssuerId.get(c.id);
+      if (o?.postIssueSharesOutstanding) return o.postIssueSharesOutstanding;
+      return c.sharesOutstanding + (o?.sizeUSD ?? 0);
+    };
+    /**
+     * The shares this book must actually find owners for: the institutional slice of the existing
+     * register plus ALL of the offering. `tradableShare` describes passive holders of shares
+     * already issued; a listing has none — every share of it is for sale here, which is what the
+     * engine adds to the float it clears (see 07d for what the mismatch did to loan financings).
+     */
+    const liveTradableSharesOf = (c: Company) => {
+      const o = offeringsByIssuerId.get(c.id);
+      const offeredShares = o?.sizeUSD ?? 0;
+      return Math.max(0, liveSharesOf(c) - offeredShares) * tradableShare + offeredShares;
+    };
+
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: c.sharesOutstanding,
       tradableFloatUSD: c.sharesOutstanding * tradableShare,
-      currentStat: c.stockPrice,
+      currentStat: refPriceOf(c),
       statKind: 'PRICE_LIKE',
       durationYears: 0,
+      primaryOfferingUSD: offeringsByIssuerId.get(c.id)?.sizeUSD,
+      primaryWithdrawStat: offeringsByIssuerId.get(c.id)?.walkAwayStat,
     }));
 
     // Per-company values memoized once per region-week, never inside the participants loop.
     const companyById = new Map(regionCompanies.map((c) => [c.id, c]));
-    const totalFloatValueUSD = regionCompanies.reduce((s, c) => s + c.sharesOutstanding * tradableShare * c.stockPrice, 0) || 1;
+    const refPriceById = new Map(regionCompanies.map((c) => [c.id, refPriceOf(c)]));
+    const floatValueById = new Map(
+      regionCompanies.map((c) => [c.id, liveTradableSharesOf(c) * refPriceOf(c)])
+    );
+    const offeredValueById = new Map(
+      regionCompanies.map((c) => [
+        c.id,
+        (offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0) * refPriceOf(c),
+      ])
+    );
+    const totalFloatValueUSD = regionCompanies.reduce((s, c) => s + (floatValueById.get(c.id) ?? 0), 0) || 1;
 
     // Per-company real primitives, computed once per region-week — never inside the participants
     // loop, which would recompute them once per entity per name.
@@ -103,11 +160,27 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // puts on equities. Unlike credit, there is no leverage allowance here — nobody in this
       // model runs a levered equity book.
       const budgetUSD = entity.assetAllocationTarget.equityPct * Math.max(0, entity.cashUSD ?? 0);
+      const entityPoolUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.equityPct;
+      // Same discipline as the credit books: this week's money goes where shares are actually
+      // changing hands — a live offering, or the gap between the target holding and the current
+      // one. A name the holder is already at weight in, with nothing on offer, needs none of it.
+      // Splitting the budget across the whole float instead gave a listing a slice the size of
+      // its issuer's index weight rather than of the deal (see 07d for the measurement).
+      const currentShares = currentSharesByEntity.get(entity.id)!;
+      const cashDemandWeightByCompany = new Map<string, number>();
+      let totalCashDemandWeightUSD = 0;
+      regionCompanies.forEach((c) => {
+        const structuralUSD = entityPoolUSD * ((floatValueById.get(c.id) ?? 0) / totalFloatValueUSD);
+        const heldUSD = (currentShares.get(c.id) ?? 0) * (refPriceById.get(c.id) ?? 0);
+        const weightUSD = (offeredValueById.get(c.id) ?? 0) + Math.max(0, structuralUSD - heldUSD);
+        cashDemandWeightByCompany.set(c.id, weightUSD);
+        totalCashDemandWeightUSD += weightUSD;
+      });
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       regionCompanies.forEach((c) => {
         const fair = c.isDefaulted ? 0 : fairValuePerShare({
           annualEarningsUSD: c.netIncome,
-          sharesOutstanding: c.sharesOutstanding,
+          sharesOutstanding: liveSharesOf(c),
           bookEquityUSD: bookEquityById.get(c.id) ?? 0,
           netInvestmentRate: netInvestmentRateById.get(c.id) ?? 0,
           riskFreeRate,
@@ -117,15 +190,18 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         // Structural size: this entity's share of the region's equity pool, allocated to this
         // name by its share of the float's value — the same real-pool discipline the credit
         // adapters use, expressed in shares.
-        const nameFloatValueUSD = c.sharesOutstanding * tradableShare * c.stockPrice;
-        const entityPoolUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.equityPct;
-        const structuralShares = (entityPoolUSD * (nameFloatValueUSD / totalFloatValueUSD)) / Math.max(0.01, c.stockPrice);
+        const refPrice = refPriceById.get(c.id) ?? 0;
+        const nameFloatValueUSD = floatValueById.get(c.id) ?? 0;
+        const structuralShares = (entityPoolUSD * (nameFloatValueUSD / totalFloatValueUSD)) / Math.max(0.01, refPrice);
+        const cashShare = totalCashDemandWeightUSD > 0
+          ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
+          : 0;
         demandByInstrumentId.set(c.id, {
           reservationStat: fair,
           maxHoldingUSD: structuralShares * MAX_OVERWEIGHT_MULTIPLE,
           fullSizeStatRange: Math.max(0.01, fair * FULL_SIZE_PRICE_DISCOUNT),
           // Budget in SHARES at the current price — a holder cannot buy what it cannot fund.
-          maxNetPurchaseUSD: (budgetUSD * (nameFloatValueUSD / totalFloatValueUSD)) / Math.max(0.01, c.stockPrice),
+          maxNetPurchaseUSD: (budgetUSD * cashShare) / Math.max(0.01, refPrice),
         });
       });
       return {
@@ -140,6 +216,10 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    // Equity proceeds are shares x the CLEARED price — the one place the conversion differs
+    // from credit (where the stat is a spread and the paper prices at par).
+    settlePricedOfferings(regionId, 'EQUITY', offeringsByIssuerId, result, ctx,
+      (o, clearedStat) => o.sizeUSD * clearedStat);
 
     // Apply the cleared price. Stage 08 runs after this and reads it as already-real, exactly as
     // it reads the cleared OAS — it no longer computes a price of its own.
