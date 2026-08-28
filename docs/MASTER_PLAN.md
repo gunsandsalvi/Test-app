@@ -439,14 +439,29 @@ cohort budgets. Three drift formulas died (tier income drift, the wealthSignal s
 the dead per-tier consumption sum), the decomposition identity is asserted weekly in the
 harness, and the 40-week aggregate paths are BIT-IDENTICAL to the pre-cohort world — the
 cross-section landed without moving a single aggregate flow, which was the design rule.
-**HH4b — the dynamic wiring:** stage 05's household bids become sums of cohort budgets with
-per-cohort price sensitivity (low-income cohorts are the inelastic food-and-energy demand,
-high-income the discretionary swing); real dividend/interest receipts replace the flat
-capital-income constant, which is what lets debt service finally DEBIT the budgets (one-sided
-today = the HH1c leak; both sides together = a re-derived S1 seed identity); household deposits
-unify onto the banks' line (§6's two-representations row). **HH4c:** per-cohort balance sheets —
-the wealth tiers' net-worth drift formulas become sums of cohort holdings, and the per-tier MPC
-replaces HH2's single wealth-effect constant.
+**HH4b — DONE (§7.57).** Stage 03's C is the sum of the cohort budgets: disposable less savings
+less HH3's real debt service plus the capital receipts that recycle it (real deposit interest,
+real dividends off the marked direct-equity book, and a named seed residual for the unbuilt
+channels — three components with three DIFFERENT incidences, because the incidence is the
+point). The household pool allocates across categories by price tier off the cohort spend
+shares, and stage 05's bid premium is a tier property (staples inelastic, luxury the swing).
+Measured: the debt-service/receipts differential reaches −24B at the week-60 policy squeeze,
+the spend mix flees to essentials, and the pre-existing G1b escape ends ~11pp of inflation
+LOWER — the household rate channel is a real stabiliser now.
+**HH4c — DONE (§7.57).** Tier net worth is a derived split of the same marked balance-sheet
+components (SCF-shaped incidence weights), summing to the aggregate to the dollar; the
+equity-gain/savings-gain/retired-drawdown drift died; the wealth effect is tier-weighted MPCs
+(a housing move hits consumption ~2x an equal equity move, as the literature finds).
+**HH4d — DONE (§7.57).** One household deposit stock: the banks' `depositsUSD` line IS it,
+split from a new `wholesaleFundingUSD` at seed, moved by named flows only, with T+1
+settlement (`pendingBankSettlementUSD`) for every household flow that runs after the bank
+pass, and the identity asserted weekly. The unification invariant immediately caught a real
+pre-existing hole: bank M&A stranded the target's entire balance sheet — stage 10 now merges
+it into the acquirer.
+**Still owed from HH4, recorded:** tax COLLECTION routes to the treasury when PUB builds it
+(rates are real and progressive now); real dividend receipts still ride the constant-share
+capital income inside the income measure (the recycle's real components live budget-side);
+the residual recycle share is a §6 watch line that decays as receipt channels become real.
 
 **HH5 — A real labor market.** A new stage between 02b and 03: companies post openings from real
 capacity need (production plans vs headcount, data stage 05 already implies); cohorts move toward
@@ -909,7 +924,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
 | ~~**#67 — USA bank capital → 0**~~ | **CLOSED (§7.55) — re-measured after HH3 and the collapse is gone.** Capital ratio runs 11.6% → 14.7% through week 80 (was: → 0 by week ~70), NIM in band throughout. The bleed was the fictional consumer book: a formula target earning a formula yield and losing a formula loss rate, none of which the bank's capital could price or gate. With the book real — real margins quoted off measured tier losses, real amortization, origination capital-gated at the 8% floor — the banking system carries its full household book and earns its keep. |
 | ~~**#18 — companies at the revenue floor**~~ | **CLOSED (§7.49), and the diagnosis was wrong for a year.** The four names were the four regional HEDGE FUNDS, whose "revenue" is a fee on their book — the harness was applying an operating company's growth ceiling to a fund. And they had not grown: their book SHRANK 76.8B → 62.4B while the reported revenue rose 29x, because the generator seeded `aumUSD` as a multiple of an operating company's revenue while the entity carried the real marked book. A §7.4 cold start, not a runaway. Seeding the shell at the size it actually manages took it to 1.1x. |
-| **Household deposits: two representations** | Sharpened by HH3's seed reconciliation, owned by **HH4**. The banks' `depositsUSD` household-funding line re-derives as the balancing item of the (now much larger) real asset side — 790B USA at seed — while the household state's own `depositsUSD` says 372B. The 418B difference is really unmodeled wholesale/term funding wearing a deposit label, and the two lines evolve by different formulas (the 0.999-decay target vs the savings/interest/net-mortgage-credit build). HH4's cohort budgets make household deposits a real stock the debt service and savings actually flow through; until then, do NOT read bank `depositsUSD` as household money. |
+| ~~**Household deposits: two representations**~~ | **CLOSED (§7.57, HH4d).** The banks' `depositsUSD` IS the household stock now, split from `wholesaleFundingUSD` at seed (418B USA — the funding that was wearing the deposit label), moved by named flows only, reconciled to the household state weekly with the identity asserted (0.1% band, 60 weeks green). The closing invariant also caught bank M&A stranding the target's whole balance sheet — fixed in stage 10. |
 | **Real growth prints escape at horizon** | **Found in HH2, pre-existing, unowned.** Consumption growth −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree: −119.87% / −209.30%, GDP identical to four significant figures — so this is not HH2's, and HH2 slightly damps it. **Nothing in §6 recorded it and the harness does not check it**, which is the first thing to fix: a growth rate that can print −200% is a band the harness should assert. Likely the same family as G1b (the price level escaping takes the real deflator with it), but a different symptom and worth confirming separately before assuming so — if real growth is being deflated by an escaping index, the defect is G1b's; if the nominal path itself collapses, it is not. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
@@ -921,6 +936,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 |---|---|
 | **Damper-bound instruments** | 1,961 persistently bound (3+ consecutive weeks) on the 60-week harness. The number to watch DOWN as the wides get a real buyer base; it rose when the loan book grew, which is expected. Not a defect on its own — a print held away from its solve is only wrong if it stays there. |
 | **Index funds without a buyer** | Was 15 of 27; **MS1 took it to 10** by adding households, who index everything and fill all four broad-market funds (§7.47). The diagnosis in this row was partly wrong and worth correcting: the empty all-cap funds were not a universe-size problem, they were a missing SECTOR. What remains — the large-cap and high-yield funds — is the genuine version: ~25 large-cap names and 8–65 HY issuers are few enough for any institution here to research directly, and households buy the broad market rather than a size tier. That closes as HC births, real IPOs and BP1's registry grow the universe. **Still do NOT tune the research-capacity primitive until the funds fill** — that would be fitting a constant to a desired outcome. |
+| **`unmodeledCapitalReceiptShareOfIncome`** | HH4b's named residual: the slice of the debt-service recycle whose return path to household income is unbuilt (bank retained earnings, institutional dividend passthrough). Derived once at seed (≈ debt service less deposit interest, per region), it decays only when a receipt channel becomes real — real institutional dividend income to claims (CAL/PUB territory), real bank payout routing. Watch it DOWN like the unmodeled-assets line; never re-derive it to a bigger value. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ## 7. Record & lessons (do not re-learn)
@@ -2430,4 +2446,45 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       in the homeowning middle, as it should) awaits HH4b's dividend recycle before it can
       debit budgets; capital income is still the constant share, allocated by tier equity
       exposure until receipts are real.
+57. **HH4 complete: the household sector has a cross-section that DOES things, one deposit
+    stock, and a rate channel that measurably stabilises.** Three slices in one session, each
+    verified separately.
+    - **HH4b — the budgets bite.** C = Σ cohort budgets, with HH3's debt service debiting and
+      capital receipts crediting — both sides at once, the HH1c lesson applied in advance. The
+      receipts run in three components because incidence is the economics: deposit interest
+      lands where wealth is, dividends where equity exposure is, and the seed residual where
+      institutional claims sit (the middle). The FIRST draft allocated everything by equity
+      exposure and measurably handed 46% of the recycle to the top 1%, inflating luxury demand
+      a quarter over its seed weight — caught by measuring the derived spend shares against
+      their calibration, not by the harness. A squeezed cohort stops saving before it stops
+      eating, and can only pay the debt service it has (the unpayable slice is arrears — the
+      same delinquency the banks' loss rates already price, now visible from both sides).
+      Category demand allocates by price tier off the derived spend shares; stage 05's
+      household bid premium became a tier property and the frozen `tanh(0.05)x0.15` got a name.
+      **Measured stabiliser:** at the week-60 policy squeeze the DS/receipts differential is
+      −24B (USA), luxury falls 0.095→0.068, staples rise to 0.350, and the G1b escape's
+      terminal inflation is ~11pp LOWER than baseline with GDP higher. The missing household
+      rate response §6-G1b kept asking for now exists and pushes the right way.
+    - **HH4c — wealth with an owner and an MPC.** Tier net worth = a split of the marked
+      aggregate components by stated SCF-shaped incidence weights, summing to the aggregate
+      exactly (asserted); the drift block died. The wealth effect is tier-weighted (0.10 down
+      to 0.015), opening at the old constant's blend (~0.035) but making a housing move worth
+      ~2x an equal equity rally in consumption — the empirically right asymmetry a single
+      constant cannot express. This model's tier split runs 7/43/33/17 — middle-heavy against
+      US wealth shares because its household wealth is housing-heavy, which is the honest read
+      of its own balance sheet, not a calibration miss.
+    - **HH4d — one deposit stock, and the invariant that earned its keep.** `depositsUSD` on a
+      bank is now really household money: the wholesale funding it was silently carrying (418B
+      USA) is its own named line paying policy+40bps; deposits move by named flows with T+1
+      settlement for post-bank-pass household flows (ETF purchases, insurance nets, PE calls —
+      one signed `pendingBankSettlementUSD`, and any future stage that touches household
+      deposits after 02b must post there). The reconciliation invariant found TWO real
+      pre-existing defects on its first runs: bank M&A stranded the acquired bank's entire
+      balance sheet (54B of UK deposits vanished in one week; stage 10 now merges the full
+      sheet), and the revenue-growth ceiling was reading growth-by-acquisition as organic (the
+      acquirer's baseline now steps up by its targets'). **A conservation invariant pays for
+      itself the week it lands** — the same lesson as the flow ledger, the claims check, and
+      the seed identities before it.
+    - Deterministic throughout; harness green after each slice; M2 stopped counting wholesale
+      money as household deposits.
 
