@@ -132,11 +132,10 @@ npm run build                      # build — safe at any time
 bash scripts/check-hygiene.sh      # no root-level scratch files
 npm run verify                     # hygiene + 60-week invariants harness (~1 min)
                                    # END OF PROJECT ONLY — see rule 12
-npm run profile                    # per-stage runtime. Baseline after XB3a (§7.76): 1,755
-                                   # ms/week; the CREDIT books dominate — 07b 21.2% + 07d 17.4%
-                                   # + 07e 12.0% = 50.6% — with stage 05 at 20.5% (361.3 ms) and
-                                   # stage 08 at 11.6%. The 604 ms/604-era figures and the code
-                                   # comment claiming stage 05 is 72.6% are both stale.
+npm run profile                    # per-stage runtime. Baseline after the §7.78 optimization
+                                   # pass: 1,311 ms/week — stage 05 at 25.4% (331 ms), 07b 16.3%,
+                                   # 08 15.2%, 07d 12.3%, 07e 8.2%. Every earlier figure
+                                   # (604 ms, 1,755 ms, "stage 05 is 72.6%") is stale.
 npx tsx scripts/hh-battery.ts 120  # household close-out battery (~2 min)
 npx tsx scripts/pub-battery.ts 120 # public-sector close-out battery (~2 min)
 WEEKS=260 npm run verify           # ASK THE USER FIRST — long run, section close only
@@ -2445,3 +2444,28 @@ that proved it, the lesson.
       because while the USD is the FX numéraire the cheapest vehicle currency is decided by the
       model's plumbing rather than by anything economic — so the question invoice currency exists
       to answer is not yet askable.
+
+78. **The optimization pass, and the determinism it found broken.** 1,793 → 1,311 ms/week
+    (−27%), byte-identical world — same-seed 25-week hash equal to the baseline's to the last
+    byte. All three wins were §7.32's recorded anti-pattern again, work recomputed per item that
+    should be computed once: the clearing engine re-derived every participant's stat-independent
+    schedule on all ~62 bisection evaluations per instrument (07b −42%, 07d −46%, 07e −49%);
+    goods-arrival ran a `.find` over ~2,000 firms per in-transit consignment (99 → 9.3 ms); and
+    stage 05 recomputed the buyer's structural PD and the invoice-currency choice per LOT for the
+    same ~2k buyers (~14k evaluations, now memoised per week).
+    - **The pass's real find: same-seed runs no longer hashed alike, and it was not the RNG.**
+      Three sites wrote wall-clock `new Date().toISOString()` INTO GameState (diagnostics at
+      init, stage 02, stage 10), so every run differed at week 0 by the operator's clock. §7.32
+      built determinism and this had silently eroded it — the first A/B "showed" the
+      optimization changing the world when it was measuring clock noise, and a wrong bisection
+      nearly followed. Diagnostics now stamp the sim calendar's date; the FULL state, no fields
+      excluded, hashes identically across independent runs.
+    - **Lesson: a determinism guarantee is only as good as the check that would catch its decay.**
+      Nothing asserted run-to-run identity after §7.32, so wall-clock state accumulated unseen
+      for months of work. The A/B hash is the check; it now exists as a scratchpad pattern, and
+      any future optimization claim without it is a claim, not a result.
+    - **Also fixed on the way:** the CB had one intervention budget PER PAIR under XB6 — three
+      books, the same reserves committed three times a week; now one weekly budget drawn down as
+      pairs clear. And the harness's CB identity read only the sovereign book while XB5 added FX
+      reserves to the engine's asset side — 231 of 273 close-out violations were this harness
+      omission, not the engine.
