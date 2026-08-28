@@ -180,6 +180,21 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
         message: `${region}: cohort savings ${(sumSavings / 1e9).toFixed(2)}B vs aggregate rate x income ${(targetSavings / 1e9).toFixed(2)}B — the λ-normalization is off`,
       });
     }
+    // HH4d: ONE household deposit stock. The household state's line plus the in-flight ETF
+    // settlement must equal the named banks' summed household-deposit lines — the 418B drift
+    // between two formula-fed representations is the defect this check keeps dead.
+    const bankDepositsUSD = state.companies
+      .filter((c) => c.region === region && c.isBankEntity && !c.isDefaulted && !c.mergerAcquired && c.bankBalanceSheet)
+      .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
+    if (bankDepositsUSD > 0) {
+      const hsView = (hs.depositsUSD ?? 0) - (hs.pendingBankSettlementUSD ?? 0);
+      if (Math.abs(hsView - bankDepositsUSD) / bankDepositsUSD > 1e-3) {
+        violations.push({
+          week,
+          message: `${region}: household deposits ${(hsView / 1e9).toFixed(1)}B (incl. in-flight) vs banks' household-deposit lines ${(bankDepositsUSD / 1e9).toFixed(1)}B — the two representations are drifting again`,
+        });
+      }
+    }
     // HH4c: tier net worths are splits of the same marked components — they must sum to the
     // aggregate exactly (loose band only for rounding).
     const wd = reg.wealthDistribution;
@@ -617,7 +632,8 @@ function runInvariantsHarness() {
         // residual came out exactly equal to the line). It becomes a real liability when MS
         // makes company cash settle through banks; until then a facility draw is funded from
         // the bank's own reserves, which is the leg bank-lending.ts applies.
-        bs.depositsUSD + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
+        // HH4d: wholesale funding is a real liability line split out of the deposit label.
+        bs.depositsUSD + (bs.wholesaleFundingUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
         - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
         - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0);
       if (Math.abs(residualUSD) > 5e6) {
@@ -714,9 +730,22 @@ function runInvariantsHarness() {
     });
   }
 
-  // 2. Revenue > 20x baseline check
+  // 2. Revenue > 20x baseline check. Growth BY ACQUISITION is not organic growth: an acquirer
+  // absorbs the target's revenue and (for banks) its whole balance sheet in one week, so its
+  // baseline steps up by the targets' own baselines rather than the acquirer being flagged for
+  // running a bigger real book (the JLXP case: a small bank legitimately doubled at a merger).
+  const acquiredBaselineByAcquirer = new Map<string, number>();
   state.companies.forEach(c => {
-    const initRev = initialRevenueByTicker.get(c.ticker);
+    if (c.mergerAcquired && c.acquiredByTicker) {
+      const targetInit = initialRevenueByTicker.get(c.ticker) ?? 0;
+      acquiredBaselineByAcquirer.set(
+        c.acquiredByTicker,
+        (acquiredBaselineByAcquirer.get(c.acquiredByTicker) ?? 0) + targetInit
+      );
+    }
+  });
+  state.companies.forEach(c => {
+    const initRev = (initialRevenueByTicker.get(c.ticker) ?? 0) + (acquiredBaselineByAcquirer.get(c.ticker) ?? 0);
     if (initRev && c.annualRevenue > initRev * 20) {
       violations.push({
         week: WEEKS,

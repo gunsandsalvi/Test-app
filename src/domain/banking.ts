@@ -107,6 +107,14 @@ export interface BankingSector {
    * stock that `depositsUSD` carries; total funding = depositsUSD + corporateDepositsUSD.
    */
   corporateDepositsUSD: number;
+  /**
+   * HH4d — the funding that is NOT household deposits: bonds, interbank and other wholesale
+   * money, split out at seed so `depositsUSD` can be the real household stock (it used to be
+   * the balancing item of the whole asset side, 790B against households' actual 372B — the §6
+   * two-representations row). A stock that pays a spread over policy and stays at its seed
+   * level until a bank-liability project makes issuance real.
+   */
+  wholesaleFundingUSD: number;
 }
 
 /**
@@ -138,6 +146,9 @@ export interface HouseholdLoanPool {
    */
   wamWeeks?: number;
 }
+
+/** What wholesale money costs over policy — senior bank funding trades tight. */
+export const WHOLESALE_FUNDING_SPREAD_BPS = 40;
 
 /** Basel-style risk weights: a secured mortgage consumes less capital than unsecured credit. */
 export const MORTGAGE_RISK_WEIGHT = 0.5;

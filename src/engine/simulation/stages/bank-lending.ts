@@ -430,9 +430,15 @@ export function migrateHouseholdDebtAtSeed(
     // constant, and the opening capital ratio is preserved by construction.
     sheet.bankEquityUSD = Number((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio).toFixed(0));
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    sheet.depositsUSD = Number((
+    const fundingNeedUSD = Number((
       sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
     ).toFixed(0));
+    // HH4d: the funding splits into what households actually hold (this bank's share of the
+    // REAL household deposit stock) and wholesale money for the rest — the balancing item
+    // stops wearing a deposit label it never earned.
+    const householdDepositsUSD = Math.round((hs.depositsUSD ?? 0) * share);
+    sheet.depositsUSD = Math.min(fundingNeedUSD, householdDepositsUSD);
+    sheet.wholesaleFundingUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
     sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
   });
 

@@ -58,6 +58,7 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     repoEncumberedCollateralUSD: bs.repoEncumberedCollateralUSD * share,
     businessLoans: [],
     householdLoans: (bs.householdLoans || []).map((pl) => ({ ...pl, principalUSD: pl.principalUSD * share })),
+    wholesaleFundingUSD: (bs.wholesaleFundingUSD ?? 0) * share,
     corporateDepositsUSD: bs.corporateDepositsUSD * share,
   };
 }
@@ -159,6 +160,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         priorLoanInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
         regionDivertedUSD * share,
+        // HH4d: last week's post-bank-pass household flows settle on this bank's book (T+1) —
+        // ETF purchases out, insurance premiums/benefits and PE calls/distributions net. The
+        // parameter is an OUTFLOW, so the signed pending flips sign.
+        -(reg.householdState.pendingBankSettlementUSD ?? 0) * share,
         // Slice 5: the rate this bank's deposits must compete with.
         findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0
       );
@@ -272,6 +277,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // view would be a second ledger). Corporate deposits sum like everything else.
       businessLoans: [],
       householdLoans: [],
+      wholesaleFundingUSD: sumField((s) => s.wholesaleFundingUSD ?? 0),
       corporateDepositsUSD: sumField((s) => s.corporateDepositsUSD ?? 0),
     };
 
@@ -298,8 +304,17 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       mortgageDischargeUSD += f.mortgageDischargeUSD;
       consumerCreditUSD += f.consumerCreditOriginationUSD;
     });
+    // HH4d: the household deposit stock IS the banks' summed household-deposit line — one
+    // number, reconciled here every week (the balance-sheet stage debits this week's ETF
+    // purchases from the view and records them for next week's bank settlement). The diverted
+    // savings become a real money-fund share stock on the household book instead of money that
+    // vanished from the household view at the yield gate.
+    const bankHouseholdDepositsUSD = newSheets.reduce((a, { sheet }) => a + sheet.depositsUSD, 0);
     reg.householdState = {
       ...hs,
+      depositsUSD: Number(bankHouseholdDepositsUSD.toFixed(0)),
+      mmfSharesUSD: Number(((hs.mmfSharesUSD ?? 0) + regionDivertedUSD).toFixed(0)),
+      pendingBankSettlementUSD: 0,
       mortgageDebtUSD,
       creditCardDebtUSD,
       otherConsumerLoanDebtUSD,

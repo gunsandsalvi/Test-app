@@ -192,6 +192,16 @@ export interface HouseholdState {
   /** HH4 — the ~20 occupation x wealth-tier cohorts this aggregate decomposes into. Built by
    * `macro/household-cohorts.ts` each week; their sums ARE the aggregates (asserted). */
   cohorts?: HouseholdCohort[];
+  /** HH4d — the households' money-fund share stock: the savings the WS7 gate diverted from
+   * deposits, now a real asset line instead of money that vanished from the household view. */
+  mmfSharesUSD?: number;
+  /** HH4d — the SIGNED net household deposit flow that later-in-the-week stages have already
+   * applied to this state but the banks have not yet posted (T+1 settlement): ETF purchases
+   * (negative), insurance premiums net of benefits, PE capital calls and distributions. Any
+   * stage that moves `depositsUSD` after the bank pass MUST add its flow here; the bank pass
+   * posts the total next week and clears it. The invariant `hs − pending == Σ bank lines`
+   * keeps the discipline honest. */
+  pendingBankSettlementUSD?: number;
   /** HH4b — this week's annual capital receipts recycling into the consumption budget:
    * deposit interest + direct-equity dividends + the named residual share x income. */
   capitalReceiptsAnnualUSD?: number;

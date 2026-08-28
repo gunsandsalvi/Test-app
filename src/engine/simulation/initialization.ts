@@ -367,6 +367,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       reg.bankingSector.consumerLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.consumerLoanBookUSD, 0);
       reg.bankingSector.bankEquityUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0);
       reg.bankingSector.depositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
+      reg.bankingSector.wholesaleFundingUSD = regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
       // relationship lead WS8 mandates for its offerings, so one firm has one bank).

@@ -133,6 +133,52 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   target.debtTranches = [];
   target.totalDebt = 0;
 
+  // HH4d (a hole the deposit-unification invariant exposed): an acquired BANK brings its whole
+  // balance sheet — deposits, wholesale funding, the itemized business and household books, the
+  // sovereign tenor book, cash and equity. Before this, the target bank's sheet was simply
+  // stranded on the absorbed shell: 54B of deposits vanished from every derived sum in one week
+  // while the households still held the money, and the borrowers' loans lost their lender.
+  if (target.bankBalanceSheet && acquirer.bankBalanceSheet) {
+    const tb = target.bankBalanceSheet;
+    const ab = acquirer.bankBalanceSheet;
+    ab.depositsUSD += tb.depositsUSD;
+    ab.wholesaleFundingUSD = (ab.wholesaleFundingUSD ?? 0) + (tb.wholesaleFundingUSD ?? 0);
+    ab.cashReservesUSD += tb.cashReservesUSD;
+    ab.bankEquityUSD += tb.bankEquityUSD;
+    ab.businessLoanBookUSD += tb.businessLoanBookUSD;
+    ab.businessLoans = [...(ab.businessLoans || []), ...(tb.businessLoans || [])];
+    // Household pools merge by kind, principals summed and terms blended by size.
+    (tb.householdLoans || []).forEach((pl) => {
+      const mine = (ab.householdLoans || []).find((x) => x.kind === pl.kind);
+      if (!mine) { ab.householdLoans = [...(ab.householdLoans || []), { ...pl }]; return; }
+      const total = mine.principalUSD + pl.principalUSD;
+      if (total > 0) {
+        if (mine.wacAnnual !== undefined || pl.wacAnnual !== undefined) {
+          mine.wacAnnual = Number((((mine.wacAnnual ?? pl.wacAnnual ?? 0) * mine.principalUSD + (pl.wacAnnual ?? mine.wacAnnual ?? 0) * pl.principalUSD) / total).toFixed(4));
+        }
+        if (mine.marginBps !== undefined || pl.marginBps !== undefined) {
+          mine.marginBps = Math.round(((mine.marginBps ?? pl.marginBps ?? 0) * mine.principalUSD + (pl.marginBps ?? mine.marginBps ?? 0) * pl.principalUSD) / total);
+        }
+        if (mine.wamWeeks !== undefined || pl.wamWeeks !== undefined) {
+          mine.wamWeeks = Math.round(((mine.wamWeeks ?? pl.wamWeeks ?? 0) * mine.principalUSD + (pl.wamWeeks ?? mine.wamWeeks ?? 0) * pl.principalUSD) / total);
+        }
+      }
+      mine.principalUSD = total;
+    });
+    ab.consumerLoanBookUSD = (ab.householdLoans || []).reduce((a, pl) => a + pl.principalUSD, 0);
+    Object.entries(tb.sovereignBondHoldingsByTenor || {}).forEach(([k, v]) => {
+      ab.sovereignBondHoldingsByTenor[k] = (ab.sovereignBondHoldingsByTenor[k] ?? 0) + (Number(v) || 0);
+    });
+    ab.sovereignBondHoldingsUSD += tb.sovereignBondHoldingsUSD;
+    ab.srfBorrowingUSD = (ab.srfBorrowingUSD ?? 0) + (tb.srfBorrowingUSD ?? 0);
+    ab.repoLentUSD = (ab.repoLentUSD ?? 0) + (tb.repoLentUSD ?? 0);
+    ab.repoBorrowedUSD = (ab.repoBorrowedUSD ?? 0) + (tb.repoBorrowedUSD ?? 0);
+    ab.repoEncumberedCollateralUSD = (ab.repoEncumberedCollateralUSD ?? 0) + (tb.repoEncumberedCollateralUSD ?? 0);
+    ab.corporateDepositsUSD = (ab.corporateDepositsUSD ?? 0) + (tb.corporateDepositsUSD ?? 0);
+    acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
+    target.bankBalanceSheet = undefined;
+  }
+
   // Target is absorbed and exits active operations
   target.mergerAcquired = true;
   target.acquiredByTicker = acquirer.ticker;

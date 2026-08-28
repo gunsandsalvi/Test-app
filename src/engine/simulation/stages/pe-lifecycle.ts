@@ -455,6 +455,9 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       const sellerRegion = ctx.updatedRegions[comp.region];
       if (sellerRegion?.householdState) {
         sellerRegion.householdState.depositsUSD += calledUSD;
+        // HH4d: the banks post this deposit flow next week (T+1).
+        sellerRegion.householdState.pendingBankSettlementUSD =
+          (sellerRegion.householdState.pendingBankSettlementUSD ?? 0) + calledUSD;
         sellerRegion.householdState.netWorthUSD += calledUSD;
       }
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {

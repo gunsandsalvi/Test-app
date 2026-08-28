@@ -119,8 +119,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const mortgageUSD = hs.mortgageDebtUSD ?? 0;
     const homeEquityUSD = housingStockUSD - mortgageUSD;
 
-    // Cash left the household balance sheet to buy the fund shares.
+    // Cash left the household balance sheet to buy the fund shares. HH4d: the banks have not
+    // seen that money move yet — it settles against their deposit books next week (T+1), so
+    // the in-flight amount is recorded for the bank pass and the household view nets it now.
     const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
+    const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
     const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
 
     // ---- 7. HH4c: the tier balance sheets are DERIVED SPLITS of the same marked components —
@@ -133,7 +136,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       const consumerDebtUSD = (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0);
       WEALTH_TIERS.forEach((t: WealthTier) => {
         const tierAssetsUSD =
-          depositsUSD * W.deposits[t]
+          (depositsUSD + mmfSharesUSD) * W.deposits[t]
           + (etfHoldingsUSD + directEquityUSD) * W.equityLike[t]
           + privateBusinessEquityUSD * W.privateBusiness[t]
           + institutionalClaimsUSD * W.institutionalClaims[t]
@@ -157,6 +160,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       housingStockUSD,
       homeEquityUSD,
       depositsUSD,
+      mmfSharesUSD,
+      pendingBankSettlementUSD: Number(((hs.pendingBankSettlementUSD ?? 0) - boughtUSD).toFixed(0)),
       etfShares,
       etfHoldingsUSD,
       directEquityUSD,
@@ -168,7 +173,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // The house is an ASSET at full value and the mortgage a liability, as in any set of
       // national accounts. Omitting the asset while carrying the debt understated net worth by
       // the entire housing stock.
-      netWorthUSD: depositsUSD + equityHoldingsUSD + housingStockUSD
+      netWorthUSD: depositsUSD + mmfSharesUSD + equityHoldingsUSD + housingStockUSD
         - (mortgageUSD + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
     };
   });

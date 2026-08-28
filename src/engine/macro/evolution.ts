@@ -270,17 +270,13 @@ export function evolveRegionMacro(
   const rateSavingsIncentive = (realRateGap * 0.4);
   const newSavingsRate = (savingsBaseline + rateSavingsIncentive);
 
-  // HH3: the deposits new household borrowing creates are the REAL mortgage originations the
-  // named banks wrote last week (the buyer's new debt is the seller's new deposit — recorded
-  // by the bank-diversification stage from the itemized books). The `bankedConsumerDebtShare`
-  // target that used to size a phantom flow here is gone with the scalar book it fed.
-  const mortgageOriginationDepositUSD = prevHS.weeklyMortgageOriginationUSD ?? 0;
 
-  // 1. Asset side
-  // Savings flow into deposits + portion of new lending (loan disbursements, payroll funded by credit)
-  const weeklySavingsUSD = (region.estimatedHouseholdIncomeUSD * newSavingsRate) / 52;
-  const depositInterestUSD = (prevHS.depositsUSD || 0) * (region.policyRate * 0.6) / 52;
-  const newDepositsUSD = Math.max(0, (prevHS.depositsUSD || 0) + weeklySavingsUSD + depositInterestUSD + mortgageOriginationDepositUSD);
+  // 1. Asset side — HH4d: the household deposit stock is OWNED by the banking pass now (one
+  // representation: the banks' household-deposit lines, summed back onto this state by the
+  // bank-diversification stage, with real flows — savings in, money-fund diversion out, the
+  // banks' own competitive deposit interest, mortgage credit, lagged ETF settlements). This
+  // stage carries the stock forward untouched.
+  const newDepositsUSD = Math.max(0, prevHS.depositsUSD || 0);
 
   // MS1: household equity is no longer a stock that appreciates by a formula return. It is the
   // sum of real claims — index-fund shares, listed float, founder stakes in the private tier —

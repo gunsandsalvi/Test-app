@@ -1,4 +1,4 @@
-import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT } from '../../types';
+import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
 
 /**
  * The banking sector's weekly evolution — a FLOW LEDGER, not a formula sheet.
@@ -146,6 +146,8 @@ export function evolveBankingSector(
    * instead — the deposit-competition channel. The fund's credit happens in 02b; here the
    * deposits simply never arrive. */
   householdMmfDiversionUSD: number = 0,
+  /** HH4d: last week's household ETF purchases, settling out of deposits this week (T+1). */
+  priorHouseholdEtfPurchasesUSD: number = 0,
   /** G2 slice 5: the money fund's net yield this region — what this bank's deposits COMPETE
    * with. A bank losing funding to the fund raises its own rate toward it; funding cost stops
    * being a fixed beta on policy. */
@@ -180,13 +182,24 @@ export function evolveBankingSector(
   cashUSD += priorRepoLentUSD + repoLendInterestUSD;
   equityUSD += repoLendInterestUSD;
 
-  // ---- 2. Household deposit flow (formula-sized boundary flow; G2/MS make the counterparty
-  // real). A depositor bringing money brings the cash with it; one leaving takes it. ----
+  // ---- 2. Household deposit flow — HH4d: REAL flows only, no target. The full savings
+  // inflow arrives (less what the money fund's yield gate diverted), last week's household ETF
+  // purchases settle out (T+1 — the balance-sheet stage recorded them), and monetized amounts
+  // land. The 0.999-decay target that used to size this is gone, and with it the drift between
+  // the bank's deposit line and the household stock it claims to be: they are ONE number now,
+  // reconciled by the bank-diversification stage every week.
   const weeklySavingsInflowUSD = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
-  const targetDepositsUSD = depositsUSD * 0.999 + Math.max(0, weeklySavingsInflowUSD * 0.3 - householdMmfDiversionUSD) + (monetizedAmountUSD ?? 0);
-  const householdDepositFlowUSD = targetDepositsUSD - depositsUSD;
+  const householdDepositFlowUSD = weeklySavingsInflowUSD - householdMmfDiversionUSD
+    - priorHouseholdEtfPurchasesUSD + (monetizedAmountUSD ?? 0);
   depositsUSD += householdDepositFlowUSD;
   cashUSD += householdDepositFlowUSD;
+
+  // HH4d: wholesale funding pays its way — a real spread over policy on a stock split out at
+  // seed (issuance/retirement awaits a bank-liability project).
+  const wholesaleUSD = prevBanking.wholesaleFundingUSD ?? 0;
+  const wholesaleInterestUSD = (wholesaleUSD * (policyRate + WHOLESALE_FUNDING_SPREAD_BPS / 10000)) / 52;
+  cashUSD -= wholesaleInterestUSD;
+  equityUSD -= wholesaleInterestUSD;
 
   // ---- 3. Lending: loans create deposits, repayment destroys them — the actual mechanism
   // (both sides of the sheet move together; reserves do not move at origination). Sizes are
@@ -242,7 +255,7 @@ export function evolveBankingSector(
   // real equity raise exists, WS8/G2), and a hard rescale `equity = RWA × 0.140` that deleted
   // equity with nothing on the other side (a rule-2 rescale; now a real special dividend paid
   // at the pace real cash allows). ----
-  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD;
+  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD;
   const consumerRwaUSD = (prevBanking.householdLoans && prevBanking.householdLoans.length > 0)
     ? householdBookRwaUSD(prevBanking.householdLoans)
     : consumerLoanUSD * CONSUMER_CREDIT_RISK_WEIGHT;
@@ -265,7 +278,7 @@ export function evolveBankingSector(
   // rule 2): if the margin is wrong, its inputs are wrong, and those are G2's to make real. ----
   const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + priorRepoLentUSD;
   const netInterestMarginPct = totalAssetsUSD > 0
-    ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD) * 52) / totalAssetsUSD
+    ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD) * 52) / totalAssetsUSD
     : 0.025;
   const newBankCapitalRatio = riskWeightedAssetsUSD > 0 ? equityUSD / riskWeightedAssetsUSD : 0.13;
   const capitalGap = 0.12 - newBankCapitalRatio;
@@ -312,6 +325,8 @@ export function evolveBankingSector(
     businessLoans: prevBanking.businessLoans || [],
     // HH3: the household pools are owned by the household lending pass; carried untouched.
     householdLoans: prevBanking.householdLoans || [],
+    // HH4d: a seed-split stock until bank liability issuance is real.
+    wholesaleFundingUSD: Number(wholesaleUSD.toFixed(0)),
     corporateDepositsUSD: prevBanking.corporateDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
