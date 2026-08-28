@@ -58,13 +58,21 @@ export function getCommodityBaseSpotPrice(def: GeneratedCommodityDef): number {
   return Number((PRODUCTION_COST_UNIT * CATEGORY_COST_FACTOR[def.category] * def.scarcityIndex).toFixed(2));
 }
 
-// Structural region ordering used to assign each of the four FX pairs a (base, quote) leg,
-// mirroring the original pair count without hand-picking specific quoted rates.
+/**
+ * EVERY pair of currencies, because XB6 clears each one directly.
+ *
+ * Four of these existed before and two did not, which was fine only while every rate was derived
+ * from a currency's value against the USD: a pair with no book still had a number, because the
+ * number came from triangulation rather than from anybody trading it. Once pairs clear on their
+ * own flow, a missing book is a bilateral flow with nowhere to go — so all six exist.
+ */
 export const GENERATED_FX_PAIR_LEGS: { base: RegionId; quote: RegionId }[] = [
   { base: 'EUR', quote: 'USA' },
   { base: 'UK', quote: 'USA' },
   { base: 'USA', quote: 'JPN' },
   { base: 'EUR', quote: 'UK' },
+  { base: 'EUR', quote: 'JPN' },
+  { base: 'UK', quote: 'JPN' },
 ];
 
 /**
