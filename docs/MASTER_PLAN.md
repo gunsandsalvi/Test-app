@@ -246,6 +246,8 @@ metrics to watch rather than work.
 | 2 | foundation | **BP1 — One industry registry** | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
+| ~ | markets | **XB5 — Central-bank FX reserves** (small; blocks XB's close — see §6) | XB |
+| ~ | markets | **HF — Hedge fund strategies + prime brokerage** (typed funds; leverage gets a lender that can pull it) | none |
 | 5 | foundation | **DEM — Demographic variability** (small; rides beside HH4–HH5) | none |
 | 6 | markets | **G3 — One dealer system** | none (S9 done) |
 | 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
@@ -678,6 +680,69 @@ The §6 watch it adds is the sovereign book's price elasticity to a size-only bi
 
 ---
 
+### XB5 — Central-bank FX reserves  *(blocks XB close; small)*
+
+A central bank's FX participation is currently sized off its domestic bond book (§6), and reserves
+are the missing asset. Real reserve management is also one of the largest single participants in
+any FX market, so this is not cosmetic.
+
+- **`CentralBank.fxReservesByRegion: Record<RegionId, number>`** — real holdings of each foreign
+  currency, seeded at a share of the region's own external position rather than an invented level.
+- **Intervention MOVES them.** Buying your own currency sells reserves; selling it accumulates
+  them. A central bank that runs out of reserves cannot defend its currency — which is what makes
+  a defence fail, and is the mechanism a formula cannot express.
+- **The PUB2a identity absorbs them:** `assets = sovereign book + FX reserves`, still equal to
+  `reserves + TGA + currency`, with `centralBankAssetsUSD` updated and the invariant extended.
+- **Reserves earn.** They are held in the foreign sovereign's paper, so they belong in that
+  region's 07c/07f float as a real holder (the CB is already a participant there — this is the
+  same mechanism pointed abroad).
+- **Verify:** a defended currency depletes reserves; a CB at zero reserves stops bidding and the
+  rate moves; reserve income appears in the remittance loop.
+
+**Known FX simplifications to leave named rather than fixed here:** the USD is the numéraire so
+its own excess demand is never checked (a three-currency solve implies the fourth); the model has
+outright forwards but not FX SWAPS, which are the instrument the cross-currency basis actually
+lives in; and there is no sovereign wealth fund as a distinct reserve manager.
+
+---
+
+### HF — Hedge fund strategies and prime brokerage  *(Tier 2; sized like G2)*
+
+Two defects, and the second is the same shape as every infinite-supply problem already deleted.
+
+**1. One `HEDGE_FUND` type does every strategy.** Real strategies are not variations of one fund;
+they are different businesses with different books, different counterparties and different failure
+modes. At minimum:
+- **Global macro** — directional rates and FX. This is the elastic side of the FX market XB2f
+  built, and today ALL hedge funds play that role, which is wrong: an equity long-short fund has
+  no view on the yen.
+- **Long-short equity** — paired longs and shorts, so it needs a real SHORT: borrowed stock, a
+  locate, a borrow fee, and a squeeze when the borrow is recalled. None of that exists yet.
+- **Long-short credit** — the same in bonds and loans, and the natural buyer of the basis trades
+  the dealer desks cannot carry.
+- **Distressed** — already referenced in 07b as the marginal buyer at the wides with a 0.22
+  hurdle; it should be a type rather than a coefficient on the generic fund.
+
+Each type gets its own mandate, hurdle and market participation, replacing the single
+`LEVERAGE_ALLOWANCE.HEDGE_FUND` and `liabilityDrivenCoreShare` special cases.
+
+**2. Leverage has no lender.** `LEVERAGE_ALLOWANCE.HEDGE_FUND = 0.22` is a static constant: a fund
+is simply *allowed* 22% leverage by nobody, funded by no one, at no price. The real thing is
+**prime brokerage** — a named bank lends against posted collateral, at a haircut, for a fee, and
+**can pull it**.
+- Leverage becomes a real liability of the fund and a real asset of the prime broker, consuming
+  the broker's own balance-sheet capacity exactly as the FX desk's PFE does (XB2b).
+- The haircut is the price, and it widens with the fund's concentration and the collateral's
+  volatility.
+- **Withdrawal is the point.** A broker cutting lines forces the fund to sell into a falling
+  market, which moves the price, which triggers the next margin call. That cascade is a real and
+  central mechanism this model cannot currently produce, because leverage is a constant.
+- **Verify:** a shock to a prime broker's capital measurably deleverages its funds; forced selling
+  shows up in the clearing books as real supply; a fund can fail from a margin call rather than
+  only from marks.
+
+---
+
 ### DEM — Demographic variability  *(Tier 1, item 5; small, rides beside HH4–HH5)*
 
 The four regions currently share near-identical population dynamics: birth ~1.0%, death ~0.9%,
@@ -1032,6 +1097,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **Equity prices run away past ~week 80** | **Found by the HH close-out battery (§7.60); NOT HH's.** Median USA share price runs 7.9 (w80) → 184 (w100) → 5,048 (w120) while median EPS moves 0.39 → 0.57 — an implied ~8,850x earnings. Institutional claims stay flat at ~530B, housing/deposits/debt are all sane, so it is the equity market alone; household net worth only shows it because HH2/HH4c correctly mark households to it (568x income at w120). Consistent with the §6 damper-bound watchlist plus §7.18's want/have: a growing pool of money chasing a fixed float, printing at the damper limit week after week, which compounds. **The 60-week harness cannot see this** — prices are still sane at w60 — so the first action is a longer harness window, then the real fix is asset supply (**SCALE**'s bigger universe, **HC** births, **G3**/ETF2's dealer capacity), not a cap on the price. |
 | **Real growth prints escape at horizon** | **Found in HH2, pre-existing, unowned.** Consumption growth −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree: −119.87% / −209.30%, GDP identical to four significant figures — so this is not HH2's, and HH2 slightly damps it. **Nothing in §6 recorded it and the harness does not check it**, which is the first thing to fix: a growth rate that can print −200% is a band the harness should assert. Likely the same family as G1b (the price level escaping takes the real deflator with it), but a different symptom and worth confirming separately before assuming so — if real growth is being deflated by an escaping index, the defect is G1b's; if the nominal path itself collapses, it is not. |
 | **An ETF pays out net assets it does not have** | **Found in PUB1d (§7.65); owner ETF2, not PUB.** `USA_IG_ETF` runs cash 0.04B (w13) → **−47.9B** (w26) against a 14.5B holdings book — **net assets −33.4B**, a fund that owes more than it owns. The signature is a steady ~3.5B/week outflow while holdings barely move and shares outstanding fall 2.3e8 → 1.7e7: redemptions keep paying cash out after `navPerShare` has already gone to 0.0000 because `navUSD` is non-positive. The per-book purchase budgets are sound (`etf-demand.ts` and 07b both cap at `max(0, cashUSD)`), so the leak is on the **redemption** side of `etf-flows.ts`, not the buy side. Present identically before and after PUB1d — do not re-attribute it to sovereign placement. The invariants harness does not assert non-negative fund net assets; adding that assert is the first action. |
+| **The central bank intervenes in FX with its BOND book — a live bug** | **Introduced in XB2d, shipped, must be fixed before XB closes.** `fx-clearing.ts` sizes the central bank's FX participation off `centralBankAssetsUSD(cb)`, which returns its DOMESTIC SOVEREIGN book (100–140B). A central bank does not intervene with its own government bonds; it intervenes with **FX reserves**, which do not exist in this model. Three consequences: the CB bids with the wrong (and large) balance sheet, intervention never changes reserves — buying your own currency should DEPLETE them — and the PUB2a identity `assets = reserves + TGA + currency` has no FX line, so a reserve stock would not close it. See **XB5** in §5. |
 | **Does the treasury optimise issuance on the curve? — A DECISION, not a defect** | **Needs a user answer; do not change it unilaterally.** The model's treasury leans opportunistically in two places: the bill share via `costLean = clamp(±0.05, (2Y − 3M) × 2)`, and the bond tenor mix via `steepnessAdjustment = (30Y − 2Y) × 3` in `11-fiscal-and-sovereign-debt.ts` — so a 1pp steepening shifts ~1.5pp of issuance into the 2Y. Real debt-management offices run "regular and predictable" and explicitly do NOT time the curve, because surprising the market lifts the term premium by more than the tactical saving. So this model's issuer exploits a curve the model itself produces. Options: keep it, damp the coefficients, or replace with a published-calendar rule. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 

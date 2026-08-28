@@ -91,7 +91,13 @@ recorded twice (§7.21, §7.75); do not make it a third time.
   mechanism, the measured number, the reason a thing is NOT done the obvious way. Clean up stale
   comments in any file you touch. This applies to `MASTER_PLAN.md` too.
 
-## 8. Git and delivery
+## 8. Known live bugs to fix before closing XB
+
+- **The central bank intervenes in FX with its BOND book** (`fx-clearing.ts` sizes it off
+  `centralBankAssetsUSD`, which returns the domestic sovereign portfolio). FX reserves do not
+  exist yet — see **XB5** in §5 and the row in §6. This is shipped code, not a gap.
+
+## 9. Git and delivery
 
 - Work on `main` (this session's established practice) unless told otherwise. Commit and push each
   coherent slice.
@@ -100,7 +106,7 @@ recorded twice (§7.21, §7.75); do not make it a third time.
   the lesson. Both are for a reader who was not here.
 - Do not open a PR unless asked.
 
-## 9. Verification commands
+## 10. Verification commands
 
 ```
 npx tsc --noEmit        # typecheck — safe any time
