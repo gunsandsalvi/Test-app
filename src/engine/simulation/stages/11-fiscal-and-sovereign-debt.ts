@@ -18,7 +18,7 @@ import {
   weeklyInterestExpenseUSD, sovereignCouponByBucket, decomposeGovernmentSpending, governmentOutlaysUSD,
   isDiscountBill, discountBillProceedsUSD, weeklyBillDiscountAccrualUSD,
 } from '../../../domain/government';
-import { centralBankAssetsUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
+import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnership } from './holdings-view';
 
@@ -493,7 +493,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // everyone else's demand, never a premium bolted onto the curve. ----
     if (reg.centralBankSheet) {
       const cb = reg.centralBankSheet;
-      const bookUSD = centralBankAssetsUSD(cb);
+      // XB5: the open-market operation is about the SOVEREIGN book. FX reserves are also assets
+      // but they are not what a bond purchase adds to.
+      const bookUSD = centralBankSovereignBookUSD(cb);
       const { reinvestmentShare, netPurchaseUSD } = openMarketPolicy({
         policyRate: reg.policyRate,
         taylorTargetRate: reg.taylorTargetRate,

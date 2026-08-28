@@ -789,6 +789,31 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     });
   }
 
+  // XB5: the central banks' FX reserves, seeded at a real reserve-adequacy standard — three
+  // months of import cover, which is the metric reserve managers actually hold to — and split
+  // across the currencies each region actually buys from. A level, not a target: from week 1
+  // intervention spends and accumulates them, and a bank at zero stops being able to bid.
+  (Object.keys(regions) as RegionId[]).forEach(regionId => {
+    const cb = regions[regionId].centralBankSheet;
+    if (!cb) return;
+    const quarterlyImportsUSD = (regions[regionId].importsUSD ?? 0) / 4;
+    if (!(quarterlyImportsUSD > 0)) { cb.fxReservesByRegion = {}; return; }
+    const sourcesUSD: Record<string, number> = {};
+    let totalSourced = 0;
+    (Object.keys(regions) as RegionId[]).forEach(origin => {
+      if (origin === regionId) return;
+      const x = regions[origin].exportsUSD ?? 0;
+      sourcesUSD[origin] = x;
+      totalSourced += x;
+    });
+    const book: Record<string, number> = {};
+    (Object.keys(sourcesUSD) as RegionId[]).forEach(origin => {
+      const share = totalSourced > 0 ? sourcesUSD[origin] / totalSourced : 1 / 3;
+      book[origin] = Number((quarterlyImportsUSD * share).toFixed(0));
+    });
+    cb.fxReservesByRegion = book;
+  });
+
   const commodities = getInitialCommodities();
   const allGeneratedCompanies = companies;
   // Calibrate the working linkage from the FROZEN base shares (§6: the old in-place mutation

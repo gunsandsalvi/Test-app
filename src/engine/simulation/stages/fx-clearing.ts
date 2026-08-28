@@ -26,7 +26,7 @@ import {
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
 } from './financial-clearing-engine';
-import { centralBankAssetsUSD } from '../../../domain/central-bank';
+import { centralBankFxReservesUSD } from '../../../domain/central-bank';
 
 const REGIONS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
@@ -112,7 +112,10 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     });
 
     const cb = reg.centralBankSheet;
-    const reservesUSD = cb ? centralBankAssetsUSD(cb) : 0;
+    // XB5: a central bank intervenes with its FX RESERVES, not with its domestic bond book. It
+    // used to bid the size of the latter, which is both the wrong balance sheet and a large one —
+    // and it meant intervention never depleted anything, so a defence could never fail.
+    const reservesUSD = cb ? centralBankFxReservesUSD(cb) : 0;
     if (reservesUSD > 0) {
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
@@ -139,6 +142,30 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
 
     const clearedRate = result.newStatById.get(instrument.id) ?? currentRate;
     moveByRegion.set(region, ((clearedRate - currentRate) / currentRate) * 100);
+
+    // XB5: what the central bank actually took MOVES its reserves. Defending your own currency
+    // means buying it with foreign money, which spends reserves; leaning against strength
+    // accumulates them. A bank that runs out simply stops being able to bid, and the rate goes
+    // where the market takes it — which is what makes a defence fail, and what no intervention
+    // sized off a bond book could ever express.
+    if (cb && reservesUSD > 0) {
+      // The engine reports what each participant paid or received; for the central bank that IS
+      // the intervention, because it settles in foreign money.
+      const filled = -(result.netCashDeltaByParticipantId.get(`CB-${region}`) ?? 0);
+      if (Math.abs(filled) > 0) {
+        const book = { ...(cb.fxReservesByRegion ?? {}) };
+        // Buying the home currency (a positive fill) is paid for out of reserves of every other
+        // currency, pro rata to what is held; selling it accumulates them the same way.
+        const held = Object.keys(book).reduce((a, k) => a + Math.max(0, Number(book[k]) || 0), 0);
+        if (held > 0) {
+          Object.keys(book).forEach(k => {
+            const share = Math.max(0, Number(book[k]) || 0) / held;
+            book[k] = Math.max(0, (Number(book[k]) || 0) - filled * share);
+          });
+          cb.fxReservesByRegion = book;
+        }
+      }
+    }
     // What no buyer took at the cleared level is the dealers' to carry — the same residual every
     // other book leaves with its dealer, rather than a number a clamp invented.
     residualByRegion.set(region, result.newDealerInventoryById.get(instrument.id) ?? 0);

@@ -16,6 +16,10 @@
 import { RegionId } from './geography';
 
 export interface CentralBank {
+  /** XB5 — real holdings of each foreign currency, in USD. Buying your own currency SPENDS these;
+   *  selling it accumulates them. A central bank at zero cannot defend its currency, which is
+   *  what makes a defence fail. */
+  fxReservesByRegion?: Record<string, number>;
   region: RegionId;
   /** Assets: the real sovereign book, by tenor bucket. Clears in 07c like any other holder. */
   sovereignHoldingsByTenor: Record<string, number>;
@@ -63,8 +67,26 @@ export const CENTRAL_BANK_SOVEREIGN_SHARE = 0.15;
 export const TGA_TARGET_WEEKS_OF_SPENDING = 10;
 
 /** Total CB assets: the sovereign book. */
-export function centralBankAssetsUSD(cb: CentralBank): number {
+export function centralBankSovereignBookUSD(cb: CentralBank): number {
   return Object.values(cb.sovereignHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+}
+
+/** XB5 — foreign currency this central bank actually holds, in USD. */
+export function centralBankFxReservesUSD(cb: CentralBank): number {
+  return Object.values(cb.fxReservesByRegion || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+}
+
+/**
+ * The whole asset side: the domestic sovereign book PLUS the FX reserves.
+ *
+ * XB5 split these because XB2d had the central bank intervening in the currency market with the
+ * size of its DOMESTIC BOND BOOK. A central bank does not sell its own government's paper to
+ * defend its currency — it sells reserves, and when the reserves are gone the defence ends. That
+ * is the mechanism a balance-sheet scalar cannot express, and it is the whole reason a currency
+ * peg ever breaks.
+ */
+export function centralBankAssetsUSD(cb: CentralBank): number {
+  return centralBankSovereignBookUSD(cb) + centralBankFxReservesUSD(cb);
 }
 
 /**
