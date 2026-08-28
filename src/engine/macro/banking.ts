@@ -140,7 +140,11 @@ export function evolveBankingSector(
   /** WS7: the slice of THIS bank's household savings inflow that went to the money market fund
    * instead — the deposit-competition channel. The fund's credit happens in 02b; here the
    * deposits simply never arrive. */
-  householdMmfDiversionUSD: number = 0
+  householdMmfDiversionUSD: number = 0,
+  /** G2 slice 5: the money fund's net yield this region — what this bank's deposits COMPETE
+   * with. A bank losing funding to the fund raises its own rate toward it; funding cost stops
+   * being a fixed beta on policy. */
+  competingMmfYieldAnnual: number = 0
 ): BankingSector {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
   let cashUSD = prevBanking.cashReservesUSD;
@@ -194,7 +198,16 @@ export function evolveBankingSector(
   // carry cross the model boundary until G2/BP5 name the payers' debits — recorded in the
   // plan); deposit interest is credited to the depositors' accounts, so deposits grow and cash
   // does not move. ----
-  const depositBeta = 0.45;
+  // G2 slice 5: the deposit rate is COMPETITIVE, not a fixed beta. Its floor is the bank's own
+  // policy-linked beta; it rises toward the money fund's net yield in proportion to how much
+  // funding the fund is actually taking (the WS7 diversion, as a share of this bank's own
+  // savings inflow). A bank that ignores a better-paying fund loses its deposits — the real
+  // discipline WS7's liability side exists to impose.
+  const betaFloorRate = policyRate * 0.45;
+  const fundingPressure = weeklySavingsInflowUSD > 0
+    ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * 0.3)))
+    : 0;
+  const depositRate = Math.max(betaFloorRate, betaFloorRate + (competingMmfYieldAnnual - betaFloorRate) * fundingPressure);
   const consumerLoanYield = policyRate + 0.035;
   // Reserves earn the policy rate — the floor-system IOR. The 0.85 "tiering" haircut and the
   // bank-side ON RRP parking it justified are gone: a bank whose reserves earn IOR never goes
@@ -206,7 +219,7 @@ export function evolveBankingSector(
   ) / 52 + itemizedLoanInterestWeeklyUSD;
   cashUSD += weeklyInterestIncomeUSD;
   equityUSD += weeklyInterestIncomeUSD;
-  const weeklyDepositInterestUSD = (depositsUSD * policyRate * depositBeta) / 52;
+  const weeklyDepositInterestUSD = (depositsUSD * depositRate) / 52;
   depositsUSD += weeklyDepositInterestUSD;
   equityUSD -= weeklyDepositInterestUSD;
 
@@ -262,12 +275,18 @@ export function evolveBankingSector(
   const capitalGap = 0.12 - newBankCapitalRatio;
   const newCreditConditionsIndex = (capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment);
 
-  // The central-bank reserve scalar and the M2 formula are carried unchanged — both are
-  // macro-level second representations recorded in the plan (G9 makes the CB a real
-  // counterparty; G2 slice 5 derives M2 as a real sum). Nothing here reads them to move money.
+  // The central-bank reserve scalar is carried unchanged — a macro-level second representation
+  // recorded in the plan (G9 makes the CB a real counterparty). Nothing here reads it to move
+  // money.
   const reserveInjectionRate = balanceSheetStance * 0.002;
   const newCentralBankReservesUSD = Math.max(0, (prevBanking.centralBankReservesUSD ?? 1e12) * (1 + reserveInjectionRate) + (monetizedAmountUSD ?? 0));
-  const newMoneySupplyM2USD = depositsUSD + newCentralBankReservesUSD * 0.1;
+  // G2 slice 5: M2 is a DERIVED SUM of the real money that exists — this bank's household and
+  // corporate deposits, plus the money-fund shares its region's holders own (02b adds those
+  // once per region). The `deposits + centralBankReserves x 0.1` formula is deleted: it added
+  // a tenth of a phantom 1e12 scalar to a real number and called the total a money stock, so
+  // M2 moved when nothing in the economy did. Money-stock changes now decompose exactly into
+  // real deposit flows and net origination, which is the check G2 asked for.
+  const newMoneySupplyM2USD = depositsUSD + (prevBanking.corporateDepositsUSD ?? 0);
 
   return {
     businessLoanBookUSD: Number(businessLoanUSD.toFixed(0)),

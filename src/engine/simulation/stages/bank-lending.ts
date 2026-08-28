@@ -281,6 +281,12 @@ export function runBankWeeklyLending(
     // deposit sits in the bank's household/SME funding line (segments are not yet cash-ledger
     // actors — MS's item); no reserves move, which is the point.
     seg.debtUSD += grantedUSD;
+    // And the pool SPENDS it. This is the last link in the transmission chain: borrowed money
+    // funds real capex, which stage 05 turns into real bids in the capital-goods markets, so a
+    // policy hike reaches the goods market through the credit it suppresses rather than
+    // stopping at a debt number nobody spends. (Annualised: capexUSD is an annual figure and
+    // grantedUSD is one week's origination — rule 9.)
+    seg.capexUSD += grantedUSD * 52;
   });
 
   const businessLoanBookUSD = Number(loans.reduce((a, l) => a + l.principalUSD, 0).toFixed(0));

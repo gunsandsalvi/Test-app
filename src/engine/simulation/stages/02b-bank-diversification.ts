@@ -26,7 +26,7 @@ import {
   evolveBankingSector, computeSovereignBookAnnualYield,
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
-import { divertHouseholdSavingsToMmf, refreshMmfQuotes } from './money-market-fund';
+import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
 import { runBankWeeklyLending } from './bank-lending';
 import { WeeklyStepContext } from './context';
 
@@ -143,7 +143,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         prevSheet.repoLentUSD ?? 0,
         reg.repoRateAnnual ?? reg.policyRate,
         priorLoanInterestWeeklyUSD,
-        regionDivertedUSD * share
+        regionDivertedUSD * share,
+        // Slice 5: the rate this bank's deposits must compete with.
+        findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0
       );
 
       // G2: the itemized book's own week — facility reconciliation, real interest accrual
@@ -204,7 +206,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       loanLossProvisionRateAnnualPct: Number(weightedAvg((s) => s.loanLossProvisionRateAnnualPct).toFixed(4)),
       creditConditionsIndex: Number(weightedAvg((s) => s.creditConditionsIndex).toFixed(3)),
       centralBankReservesUSD: sumField((s) => s.centralBankReservesUSD),
-      moneySupplyM2USD: sumField((s) => s.moneySupplyM2USD),
+      // G2 slice 5: M2 = the real deposits at the named banks + the region's money-fund
+      // shares (WS7's real liabilities — money held outside a bank is still money).
+      moneySupplyM2USD: sumField((s) => s.moneySupplyM2USD)
+        + ctx.updatedInstitutionalEntities
+            .filter((e) => e.region === regionId && e.entityType === 'MONEY_MARKET_FUND')
+            .reduce((a, e) => a + (e.mmfSharesOutstandingUSD ?? 0), 0),
       itemizedHoldings: priorAggregate.itemizedHoldings || [],
       srfBorrowingUSD: sumField((s) => s.srfBorrowingUSD),
       onRrpLendingUSD: sumField((s) => s.onRrpLendingUSD),

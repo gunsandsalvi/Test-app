@@ -363,7 +363,7 @@ export function evolveRegionMacro(
     const marginReversion = (seedMarginByType[seg.segmentType] - seg.marginPct) * 0.02; // pulls back toward each segment's realistic baseline
     const marginDrift = (demandSignal * 0.01) + marginReversion - wageDrag * 0.02;
     const newMarginPct = (seg.marginPct + marginDrift); // ceiling lowered from 0.30 to 0.22
-    const segmentDebtServiceCoverage = newAnnualRevenueUSD * newMarginPct / Math.max(1, ((seg as any).debtUSD ?? (newAnnualRevenueUSD * 2)) * 0.08);
+    const segmentDebtServiceCoverage = newAnnualRevenueUSD * newMarginPct / Math.max(1, ((seg as any).debtUSD ?? 0) * 0.08);
     const newDefaultRateAnnualPct = Math.max(0.005, Math.min(0.15, 0.02 + (1 / Math.max(0.5, segmentDebtServiceCoverage)) * 0.03 + region.bankingSector.creditConditionsIndex * 0.02));
     const formationRate = Math.max(-0.002, Math.min(0.002, (demandSignal - newDefaultRateAnnualPct) * 0.1));
     const finalEmployment = Math.max(1, Math.round(newEmployment * (1 + formationRate)));
@@ -373,8 +373,15 @@ export function evolveRegionMacro(
       employment: finalEmployment,
       annualRevenueUSD: Number(newAnnualRevenueUSD.toFixed(0)),
       marginPct: Number(newMarginPct.toFixed(4)),
-      debtUSD: (seg as any).debtUSD ?? (newAnnualRevenueUSD * 2),
+      // G2: the pool's debt is the sum of the REAL loans banks hold against it (bank-lending.ts
+      // owns it). The `revenue x 2` fallback is the deleted seed primitive — an unpriced,
+      // unlent 17.8x-EBITDA scalar; a pool with no loans has no debt.
+      debtUSD: (seg as any).debtUSD ?? 0,
       defaultRateAnnualPct: newDefaultRateAnnualPct,
+      // G2: the SELF-FUNDED half of a pool's capex. The debt-funded half is added by
+      // bank-lending.ts at the moment the loan is originated — that is the last link in the
+      // transmission chain (a hike cuts origination, which cuts the capex it funded, which
+      // stage 03 reads into real category demand).
       capexUSD: newAnnualRevenueUSD * 0.05,
     };
   });
