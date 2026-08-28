@@ -457,6 +457,9 @@ export interface Region {
   equityOwnership: AssetOwnershipShares;
   corpBondOwnership: AssetOwnershipShares;
   sovBondOwnership: AssetOwnershipShares;
+  /** XB2c: net spot FX the dealers had to execute this week delta-hedging their forward book.
+   * Negative = selling pressure on this region's currency. */
+  fxHedgeSpotFlowUSD?: number;
   /** XB1: foreign ownership MEASURED from real holdings each week — an outcome, not an input. */
   measuredForeignOwnership?: { equity: number; corpBond: number; sovBond: number };
   institutionalSector: InstitutionalSector;

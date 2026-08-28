@@ -17,6 +17,7 @@ import {
   GOV_HIRING_RESPONSE_TO_STANCE,
 } from '../../domain/government';
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
+import { FX_SPOT_PRICE_IMPACT_PER_GDP } from '../../domain/dealer-derivatives';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
@@ -979,7 +980,16 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
   // toward the HIGHER-yielding currency — a higher quote rate (rateDiff > 0) attracts flow
   // into the quote currency and the pair falls. The old positive term appreciated the LOWER
   // yielder's counterpart, backwards. WS9 deletes this whole drift for real FX clearing.
-  const drift = -rateDiff * dt * 0.3 + sigmaFx * eps + tradeTerm + capitalFlowTerm;
+  // XB2c: the dealers' delta hedge is REAL FLOW, not an attractiveness signal. Having bought a
+  // currency forward from hedgers, the desks sell it spot — so a large hedged foreign bond
+  // portfolio weighs on the currency it is invested in. Scaled by each region's own output so a
+  // given flow matters more to a small economy, which is exactly how it works.
+  const hedgeFlow = (r: Region) =>
+    (r.fxHedgeSpotFlowUSD ?? 0) / Math.max(1, r.estimatedNominalGdpUSD);
+  const hedgeFlowTerm =
+    (hedgeFlow(baseRegion) - hedgeFlow(quoteRegion)) * FX_SPOT_PRICE_IMPACT_PER_GDP;
+
+  const drift = -rateDiff * dt * 0.3 + sigmaFx * eps + tradeTerm + capitalFlowTerm + hedgeFlowTerm;
   const newRate = Number((fx.rate * Math.exp(drift)).toFixed(4));
   const change1W = Number((newRate - fx.rate).toFixed(4));
 

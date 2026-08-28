@@ -94,3 +94,22 @@ export function emptyFxDealerBook(): FxDealerBook {
 }
 
 export type { RegionId };
+
+/**
+ * Share of its net FX position a desk flattens in spot each week.
+ *
+ * A market maker does not want the currency risk — it wants the spread. Having bought foreign
+ * currency forward from a hedger, it sells that currency SPOT to flatten, and carries only what
+ * it cannot execute without moving the price against itself. Below 1 because a desk works a large
+ * position over time rather than dumping it.
+ */
+export const FX_DELTA_HEDGE_EXECUTION_RATE = 0.6;
+
+/**
+ * How much a week of net spot flow moves a currency, per unit of flow relative to the market's
+ * own size. FX is deep, so the coefficient is small — but hedging flow is a large share of real
+ * FX volume, and this is the channel by which a hedged foreign bond portfolio weighs on the
+ * currency it is invested in. That is a real and well-documented effect with no representation
+ * in this model before XB2c: the desks accumulated exposure and only marked it.
+ */
+export const FX_SPOT_PRICE_IMPACT_PER_GDP = 0.35;

@@ -1982,3 +1982,21 @@ that proved it, the lesson.
     - **It also does not bind in calm conditions (3.2% used), and that is correct** — the basis is
       near zero in normal times and blows out in stress. A constraint tuned to bind always would
       be modelling a permanent crisis.
+74. **XB2c: the desks actually trade, and real flow anchors the currency.** XB2b gave dealers a
+    balance sheet and a price but left the position naked: a desk accumulated net FX exposure from
+    its client forwards and only MARKED it. A market maker wants the spread, not the currency.
+    - **The sign was backwards, and it only survived because nothing read the direction.** A
+      client SELLS foreign currency forward to hedge a long foreign asset, so the desk BUYS it —
+      the desk is long. The book decremented instead. It went unnoticed because
+      `crossCurrencyBasisBps` reads `|net|`; it became load-bearing the instant a desk had to
+      delta-hedge a direction. **A sign nothing consumes is not verified, it is merely unused.**
+    - **The delta hedge is real flow.** Having bought the currency forward, the desks sell it
+      spot — measured at **−26B USA, −28B EUR, −21B UK, −19B JPN per week**, with ~63B of
+      position still carried because a desk works a large position rather than dumping it. This is
+      the channel by which a hedged foreign bond portfolio weighs on the currency it is invested
+      in, and it did not exist while desks merely marked their books.
+    - **It anchors the exchange rate, which was the surprise.** A/B on the price-impact
+      coefficient: EUR/USA runs **1.499 → 1.485 → 1.475** with the flow and **1.720 → 2.238 →
+      2.704** without it over the same 30 weeks. The formula drift terms (`tradeTerm`,
+      `capitalFlowTerm`) were running the pair away; real hedging flow holds it. **A market with
+      a real flow in it is more stable than one with only a drift, not less.**

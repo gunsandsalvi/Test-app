@@ -21,7 +21,7 @@ import {
 } from '../../../domain/fx-hedging';
 import {
   FxDealerBook, emptyFxDealerBook, fxDeskCapacityUSD, crossCurrencyBasisBps,
-  FX_INITIAL_MARGIN_RATE,
+  FX_INITIAL_MARGIN_RATE, FX_DELTA_HEDGE_EXECUTION_RATE,
 } from '../../../domain/dealer-derivatives';
 import { leverageHeadroomUSD } from '../../macro/banking';
 
@@ -81,7 +81,7 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       if (f.maturityWeek <= week) return;
       const cur = liveNotionalByTicker.get(f.counterpartyTicker) ?? { gross: 0, net: {}, margin: 0 };
       cur.gross += f.notionalUSD;
-      cur.net[f.foreignRegion] = (cur.net[f.foreignRegion] ?? 0) - f.notionalUSD;
+      cur.net[f.foreignRegion] = (cur.net[f.foreignRegion] ?? 0) + f.notionalUSD;
       cur.margin += f.notionalUSD * FX_INITIAL_MARGIN_RATE;
       liveNotionalByTicker.set(f.counterpartyTicker, cur);
     });
@@ -142,7 +142,10 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       marginPostedUSD += marginUSD;
 
       desk.book.grossNotionalUSD += writableUSD;
-      desk.book.netNotionalByRegion[issuer] = (desk.book.netNotionalByRegion[issuer] ?? 0) - writableUSD;
+      // The client SELLS the foreign currency forward to hedge a long foreign asset, so the desk
+      // BUYS it: the desk is long. Signing this the other way survives only while the basis reads
+      // |net| — it becomes load-bearing the moment the desk has to delta-hedge a direction.
+      desk.book.netNotionalByRegion[issuer] = (desk.book.netNotionalByRegion[issuer] ?? 0) + writableUSD;
       desk.book.initialMarginHeldUSD += marginUSD;
       desk.marginReceivedUSD += marginUSD;
 
@@ -166,6 +169,28 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       cashUSD: (entity.cashUSD ?? 0) + markUSD - marginPostedUSD,
       fxForwards: [...live, ...newForwards],
     };
+  });
+
+  // ---- XB2c: the delta hedge. A market maker wants the spread, not the currency, so having
+  // bought foreign currency forward from its hedgers it SELLS that currency spot to flatten. The
+  // flow is real and it is large: this is how a hedged foreign bond portfolio weighs on the
+  // currency it is invested in, a channel that did not exist while desks merely marked their
+  // exposure. What cannot be worked without moving the price stays on the book. ----
+  const spotFlowByRegion = new Map<RegionId, number>();
+  desks.forEach((desk) => {
+    Object.entries(desk.book.netNotionalByRegion).forEach(([region, net]) => {
+      const netUSD = Number(net) || 0;
+      if (Math.abs(netUSD) < 1e6) return;
+      const executedUSD = netUSD * FX_DELTA_HEDGE_EXECUTION_RATE;
+      // Long the currency -> sells it -> negative flow (selling pressure) on that currency.
+      spotFlowByRegion.set(region as RegionId, (spotFlowByRegion.get(region as RegionId) ?? 0) - executedUSD);
+      desk.book.netNotionalByRegion[region] = netUSD - executedUSD;
+    });
+  });
+  spotFlowByRegion.forEach((flowUSD, region) => {
+    const reg: any = ctx.updatedRegions[region];
+    if (!reg) return;
+    reg.fxHedgeSpotFlowUSD = Number(flowUSD.toFixed(0));
   });
 
   // The banks' side: the mirror of every client mark, the margin that arrived, and the desk book
