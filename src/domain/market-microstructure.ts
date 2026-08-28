@@ -5,16 +5,24 @@
  * and inter-company supply relationships. Owned and updated by category demand, input-output, and unit bidding simulation stages.
  */
 
+import { RegionId } from './geography';
+
 export interface UnitBid {
   companyId?: string;
   isHouseholdAggregate?: boolean;
   isGovernmentAggregate?: boolean;
+  /** XB3a: which region this bid comes FROM. A global book mixes all four, and the settlement
+   *  side has to know whose household bought, whose treasury was debited, and — for the trade
+   *  accounting — which side of a border each fill crossed. */
+  regionId: RegionId;
   quantityUnits: number;
   maxPriceUSD: number;
 }
 
 export interface UnitOffer {
   companyId: string;
+  /** XB3a: which region this supply comes FROM. See UnitBid.regionId. */
+  regionId: RegionId;
   quantityUnits: number;
   minPriceUSD: number;
 }
@@ -46,8 +54,17 @@ export interface CategoryDemandState {
   // stage04's own smoothed self-reference the following week).
   upstreamScarcityIndex?: number;
   lastWeekInventoryLevelUSD: number; // explicit lag anchor — bidders always react to this, never same-week inventory
-  unitPriceUSD?: number; // Per-region sub-unit price level
-  smoothedUnitPriceUSD?: number; // Slow-moving average of unitPriceUSD suppliers use to set production (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price
+  /**
+   * What this good actually cost in this region this week: the volume-weighted average of every
+   * price its buyers paid, across the local book AND their fills in the world book (XB3a). It is
+   * the number every consumer of a regional price wants — the CPI basket, revenue, input costs —
+   * and it is a MEASUREMENT of transactions, never an input to one. The two books each price
+   * against their own anchor below.
+   */
+  unitPriceUSD?: number;
+  /** The local book's own last cleared price — its anchor next week (XB3a). */
+  localUnitPriceUSD?: number;
+  smoothedUnitPriceUSD?: number; // Slow-moving average of the LOCAL book's cleared price, which its suppliers set production against (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price
   // This category's real corporate-only demand share this week (see 03-category-demand.ts) —
   // stage05-unit-bidding.ts distributes this as real named corporate bids across every
   // potential buyer company, weighted by revenue share, instead of a hand-picked per-category
@@ -81,6 +98,11 @@ export function createSeedCategoryDemandState(
     upstreamScarcityIndex: 1.0,
     lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
     unitPriceUSD,
+    // XB3a: both books open on the bootstrap price, so week 1 is the first week either of them
+    // moves. Seeding the local book anywhere else would be a §7.4 cold start — a step change on
+    // the opening week that reads as an economic event.
+    localUnitPriceUSD: unitPriceUSD,
+    smoothedUnitPriceUSD: unitPriceUSD,
   } as any;
 }
 

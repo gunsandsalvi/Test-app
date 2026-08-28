@@ -101,7 +101,13 @@ export interface WeeklyStepContext {
   /** WS9/XB2d: each currency's cleared value in USD. Every pair is derived from two of these,
    * so no set of pair moves can violate triangular arbitrage. */
   currencyValueUSD?: Record<string, number>;
-  regionCategoryExports: Record<RegionId, Record<string, number>>;
+  /**
+   * XB3a — who bought from whom this week, in USD: `[exporter][importer]`. Set by stage 05 from
+   * the world book's own fills (a lot whose two sides sit in different regions IS an export) and
+   * published as each region's trade position by stage 06. WEEKLY, unlike the annualised
+   * `Region.exportsUSD` it feeds — rule 9.
+   */
+  bilateralTradeWeeklyUSD: Record<RegionId, Record<RegionId, number>>;
 
   // Stage 11 output, read by stage 13
   weeklyInterestIncomeUSD: number;
@@ -175,7 +181,12 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     marketVolComponent: 0,
     getFxToUsd: () => 1.0,
     currencyValueUSD: undefined,
-    regionCategoryExports: { USA: {}, EUR: {}, UK: {}, JPN: {} },
+    bilateralTradeWeeklyUSD: {
+      USA: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+      EUR: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+      UK: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+      JPN: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
+    },
 
     weeklyInterestIncomeUSD: 0,
     weeklyFinancingCostUSD: 0,

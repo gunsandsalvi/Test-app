@@ -17,7 +17,7 @@ import { generateInitialCompanies, generatePrivateCompanies } from '../companyGe
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
-import { computeBilateralTradeFlows } from './stages/06-fx-and-trade';
+import { measureOpeningTradeWeeklyUSD } from './stages/05-unit-bidding';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { refreshRegionalHoldingsView } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
@@ -693,15 +693,16 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   });
 
   // Open the regions on their real trade position rather than at zero exports and zero imports,
-  // using the same bilateral computation the weekly step runs (06-fx-and-trade.ts). Seeding this
-  // before the GDP re-anchor below matters: net exports are a real component of the identity, and
-  // starting them at zero made week 1 read the entire structural trade balance as a one-week
-  // collapse in output.
+  // by running the world book once on a throwaway copy — the same auction the weekly step runs
+  // (see measureOpeningTradeWeeklyUSD). Seeding this before the GDP re-anchor below matters: net
+  // exports are a real component of the identity, and starting them at zero made week 1 read the
+  // entire structural trade balance as a one-week collapse in output. Annualised here because
+  // that is the periodicity these three fields carry everywhere they are read (rule 9).
   {
-    const { exportsByRegion, importsByRegion } = computeBilateralTradeFlows(companies, regions, fxPairs);
+    const opening = measureOpeningTradeWeeklyUSD(companies, regions);
     (Object.keys(regions) as RegionId[]).forEach((regionId) => {
-      regions[regionId].exportsUSD = Number(exportsByRegion[regionId].toFixed(0));
-      regions[regionId].importsUSD = Number(importsByRegion[regionId].toFixed(0));
+      regions[regionId].exportsUSD = Number((opening[regionId].exportsWeeklyUSD * 52).toFixed(0));
+      regions[regionId].importsUSD = Number((opening[regionId].importsWeeklyUSD * 52).toFixed(0));
       regions[regionId].tradeBalance = regions[regionId].exportsUSD - regions[regionId].importsUSD;
     });
   }
@@ -964,6 +965,10 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     rngSeed: seed,
     rngState: getRngState(),
     primaryOfferings: [],
+    // XB3a — born EMPTY for the same reason the indexes are: each world book prices itself the
+    // first week it clears, off the regions' own bootstrapped prices. Writing a level here would
+    // be a stated version of what the auction produces.
+    globalGoodsMarkets: {},
     // Born EMPTY: the first weekly pass strikes every index's membership from the market that
     // actually exists, at base 100. Seeding a constituent list here would be a second, stated
     // version of a rule the engine already runs (§7.4's seed-shape rule).

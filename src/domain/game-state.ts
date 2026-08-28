@@ -31,6 +31,10 @@ export interface GameState {
   /** ETF — the published indexes: membership struck quarterly, level moved weekly by the
    * constituents' own cleared prices (`stages/index-calculation.ts`). */
   marketIndexes: import('./indexes').MarketIndex[];
+  /** XB3a — one world book per sub-unit, keyed by subUnitId. The tradable share of every
+   *  region's supply and demand clears here; an export is a fill whose buyer and seller sat in
+   *  different regions. See domain/global-goods.ts. */
+  globalGoodsMarkets: Record<string, import('./global-goods').GlobalGoodsMarketState>;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;

@@ -15,7 +15,7 @@ import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot } fr
 import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { CATEGORY_TRADABILITY, SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
@@ -39,7 +39,7 @@ const STANDARD_CORP_TENOR_YEARS = 5;
 const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
 
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
-  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, regionCategoryExports, systemicStressFactorGlobal } = ctx;
+  const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
   const refinanceNews: NewsItem[] = [];
 
   // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
@@ -486,18 +486,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const laggedCategoryGrowth = updatedBuffer.length > 2 ? updatedBuffer[updatedBuffer.length - 1 - 2] : updatedBuffer[0] ?? categoryDrivenGrowth;
       comp.demandShockLagBuffer = updatedBuffer;
 
-      const exportRevenueBoost = (comp.productLines || []).reduce((s, line) => {
-        const tradability = CATEGORY_TRADABILITY[line.industry] ?? 0;
-        if (tradability < 0.1) return s;
-        const regionExportsInCat = regionCategoryExports[comp.region]?.[line.industry] ?? 0;
-        const safeRev = Math.max(1, Number.isFinite(comp.annualRevenue) ? comp.annualRevenue : (comp.baselineAnnualRevenue || 1));
-        const exportShareOfRev = (regionExportsInCat * (line.categoryMarketShare || 0) * (line.revenueShare || 0)) / safeRev;
-        return s + Math.max(-0.02, Math.min(0.02, (exportShareOfRev || 0) * (reg.gdpGrowth / 52)));
-      }, 0);
+      // XB3a deleted the export revenue boost that used to sit here. A firm's foreign sales are
+      // not a growth adjustment applied to a formula — they are its real fills in stage 05's
+      // world book, already settled into salesUSD and cash by the time this stage runs. Adding a
+      // second export term on top counted the same sale twice, from two mechanisms (rule 3).
       const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
       const annualGrowthRate = laggedCategoryGrowth + noise + reg.inflation * pricingPowerBeta;
 
-      const weeklyGrowthRate = Math.max(-0.05, Math.min(0.05, (annualGrowthRate / 52) + exportRevenueBoost));
+      const weeklyGrowthRate = Math.max(-0.05, Math.min(0.05, annualGrowthRate / 52));
       const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
 
       // Smooth transition to target revenue (no exponential weekly compounding)
