@@ -109,6 +109,8 @@ export function evolveRegionMacro(
     depositsUSD: region.estimatedHouseholdIncomeUSD * 0.6,
     equityHoldingsUSD: region.estimatedHouseholdIncomeUSD * 1.5,
     directEquityUSD: 0,
+    institutionalClaims: [],
+    institutionalClaimsUSD: 0,
     etfShares: [],
     etfHoldingsUSD: 0,
     privateBusinessEquityUSD: 0,
@@ -858,6 +860,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       equityHoldingsUSD: newEquityHoldingsUSD,
       // Carried forward untouched; `stages/etf-flows.ts` marks them against this week's clears.
       directEquityUSD: prevHS.directEquityUSD ?? 0,
+      institutionalClaims: prevHS.institutionalClaims ?? [],
+      institutionalClaimsUSD: prevHS.institutionalClaimsUSD ?? 0,
       etfShares: prevHS.etfShares ?? [],
       etfHoldingsUSD: prevHS.etfHoldingsUSD ?? 0,
       privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,

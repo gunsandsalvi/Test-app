@@ -99,6 +99,15 @@ export interface HouseholdState {
    */
   privateBusinessEquityUSD: number;
   /**
+   * HH1 — claims on institutions: insurance reserves, pension entitlements and fund shares, held
+   * per institution so a claim can be marked against the balance sheet that owes it. When an
+   * insurer's bond book falls, household wealth falls with it — the transmission that could not
+   * exist while these claims were nobody's.
+   */
+  institutionalClaims: { entityId: string; valueUSD: number }[];
+  /** Marked total of the above. */
+  institutionalClaimsUSD: number;
+  /**
    * The part of household financial wealth the model's asset universe cannot yet back.
    *
    * Real households hold roughly 1.5x income in financial assets and the seed says so; the assets

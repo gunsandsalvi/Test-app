@@ -1,0 +1,126 @@
+/**
+ * HH1 — the household balance sheet, and the claims that link it to the institutions.
+ *
+ * Runs after the clearing books, the indexes and the ETF flows, because every line here is marked
+ * from a price something else cleared. It owns one question: what do households actually own, and
+ * against whom?
+ *
+ * The answer used to be a single number that appreciated by a formula return. MS1 replaced most of
+ * it with real claims; this stage adds the largest missing one and it was never missing from the
+ * world at all — it was sitting on the institutions' own balance sheets with no holder.
+ *
+ * **The claim.** An insurer's assets are 495B against 40B of its own equity capital. The other
+ * 455B is policyholder reserves. A pension fund's 146B against 17B is entitlements. An asset
+ * manager's 188B against 31B is fund shares. Measured together, **740B was a liability to somebody
+ * and nobody held the claim** (§7.48) — the same real thing represented once instead of twice, and
+ * 46% of the gap MS1 had to label unmodeled.
+ *
+ * It is DERIVED, never stated: the claim is the residual `totalAssets − equityCapital` on a real
+ * balance sheet, re-marked every week. So when an insurer's bond book falls, household wealth
+ * falls with it — the transmission that could not exist while these claims belonged to no one. And
+ * the institution's own equity capital is excluded because that half is already attributed: these
+ * are listed companies whose shares clear in 07e and sit in somebody's register.
+ *
+ * Entity types whose liabilities already have named holders are left alone — money funds (WS7's
+ * shareholders), ETFs (MS1's), and private equity (HC4's named LP commitments) — or the same
+ * dollar would be claimed twice.
+ */
+
+import { GameState, RegionId, InstitutionalEntity } from '../../../types';
+import { WeeklyStepContext } from './context';
+import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
+import {
+  householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD,
+} from '../../macro/household-portfolio';
+import { publicComparableEvMultiple } from './pe-lifecycle';
+
+/**
+ * The institution types whose beneficiaries are households. Everything else in the sector either
+ * has a named holder already or is somebody's equity rather than somebody's claim.
+ */
+const BENEFICIARY_TYPES: InstitutionalEntity['entityType'][] = [
+  'INSURER', 'PENSION_FUND', 'ASSET_MANAGER', 'HEDGE_FUND',
+];
+
+export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepContext): void {
+  // ---- 1. Each institution records what it owes its beneficiaries. ----
+  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
+    if (!BENEFICIARY_TYPES.includes(entity.entityType)) {
+      return entity.beneficiaryLiabilityUSD === undefined ? entity : { ...entity, beneficiaryLiabilityUSD: undefined };
+    }
+    const liabilityUSD = Math.max(0, entity.totalAssetsUSD - Math.max(0, entity.equityCapitalUSD));
+    return { ...entity, beneficiaryLiabilityUSD: liabilityUSD };
+  });
+
+  const fundNavPerShare = (fund: InstitutionalEntity): number => {
+    const shares = fund.etf?.sharesOutstanding ?? 0;
+    if (!(shares > 0)) return ETF_INCEPTION_NAV_PER_SHARE;
+    const navUSD = fund.itemizedHoldings.reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0)
+      + Math.max(0, fund.cashUSD ?? 0);
+    return navUSD / shares;
+  };
+
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+    const reg = ctx.updatedRegions[region];
+    const hs = reg?.householdState;
+    if (!hs) return;
+
+    // ---- 2. Index-fund shares bought this week settle onto the household register. ----
+    const etfShares = [...(hs.etfShares ?? [])];
+    let boughtUSD = 0;
+    ctx.updatedInstitutionalEntities.forEach((fund) => {
+      if (fund.entityType !== 'ETF' || fund.region !== region) return;
+      const spentUSD = ctx.householdEtfPurchasesUSD.get(fund.id) ?? 0;
+      if (!(spentUSD > 0)) return;
+      boughtUSD += spentUSD;
+      const shares = spentUSD / fundNavPerShare(fund);
+      const idx = etfShares.findIndex((x) => x.fundId === fund.id);
+      if (idx >= 0) etfShares[idx] = { ...etfShares[idx], shares: etfShares[idx].shares + shares };
+      else etfShares.push({ fundId: fund.id, shares });
+    });
+
+    // ---- 3. The claims on institutions, marked against the balance sheets that owe them. ----
+    const institutionalClaims = ctx.updatedInstitutionalEntities
+      .filter((e) => e.region === region && !e.isDefaulted && (e.beneficiaryLiabilityUSD ?? 0) > 0)
+      .map((e) => ({ entityId: e.id, valueUSD: e.beneficiaryLiabilityUSD! }));
+    const institutionalClaimsUSD = institutionalClaims.reduce((a, c) => a + c.valueUSD, 0);
+
+    // ---- 4. The rest of the real book, marked from this week's clears. ----
+    const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
+    const etfHoldingsUSD = householdEtfHoldingsUSD({ etfShares }, ctx.updatedInstitutionalEntities);
+    const directEquityUSD = householdDirectEquityUSD(
+      region, ctx.updatedCompanies, reg.equityOwnership.institutionalShare
+    );
+    const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
+
+    // ---- 5. The placeholder is paid DOWN by whatever the model has learned to see. ----
+    // Never up: households did not get richer because a claim finally acquired a holder. It is set
+    // once, at the opening gap, and thereafter only shrinks — which is how a placeholder behaves,
+    // and what makes it this project's own scoreboard.
+    const realClaimsUSD = etfHoldingsUSD + directEquityUSD + privateBusinessEquityUSD + institutionalClaimsUSD;
+    const openingUnmodeledUSD = hs.unmodeledFinancialAssetsUSD ?? hs.equityHoldingsUSD ?? 0;
+    const unmodeledFinancialAssetsUSD = Math.max(0, Math.min(
+      openingUnmodeledUSD,
+      Math.max(0, (hs.equityHoldingsUSD ?? 0) - realClaimsUSD)
+    ));
+
+    // Cash left the household balance sheet to buy the fund shares.
+    const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
+    const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
+
+    reg.householdState = {
+      ...hs,
+      depositsUSD,
+      etfShares,
+      etfHoldingsUSD,
+      directEquityUSD,
+      privateBusinessEquityUSD,
+      institutionalClaims,
+      institutionalClaimsUSD,
+      unmodeledFinancialAssetsUSD,
+      equityHoldingsUSD,
+      netWorthUSD: depositsUSD + equityHoldingsUSD
+        - ((hs.mortgageDebtUSD ?? 0) + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
+    };
+  });
+}

@@ -20,6 +20,7 @@ import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion
 import { applyPendingCorporateActionSettlements } from './stages/shared-helpers';
 import { runIndexCalculationStage } from './stages/index-calculation';
 import { runEtfFlowsStage } from './stages/etf-flows';
+import { runHouseholdBalanceSheetStage } from './stages/household-balance-sheet';
 import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
@@ -125,6 +126,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // set up NEXT week's fund demand into the clearing books — the same announce-then-price rhythm
   // WS8 uses, because a fund that decides and executes in one instant is not intermediation.
   run('etf-flows', () => runEtfFlowsStage(state, ctx));
+
+  // The household books, after every price they are marked from: the clearing stages, the
+  // indexes and the fund flows. HH1 also records what each institution owes its beneficiaries,
+  // which is the same claim seen from the other side.
+  run('household-balance-sheet', () => runHouseholdBalanceSheetStage(state, ctx));
 
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   run('10-mergers', () => runMergersStage(state, ctx));

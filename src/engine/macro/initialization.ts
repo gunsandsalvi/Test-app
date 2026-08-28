@@ -461,6 +461,8 @@ function buildRegion(regionId: RegionId): Region {
       // §7.4's seed-shape rule: seed the shape the engine produces, never a second version of it.
       equityHoldingsUSD,
       directEquityUSD: 0,
+      institutionalClaims: [],
+      institutionalClaimsUSD: 0,
       etfShares: [],
       etfHoldingsUSD: 0,
       privateBusinessEquityUSD: 0,

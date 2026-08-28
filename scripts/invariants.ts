@@ -118,6 +118,30 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
   });
 }
 
+/**
+ * HH1: every institutional liability to a beneficiary is somebody's asset, and every household
+ * claim is somebody's liability. Insurers' reserves, pension entitlements and fund shares were
+ * 740B of assets with no holder before this — the same real thing represented once instead of
+ * twice (§7.48) — so the two sides are now checked against each other every week.
+ */
+function checkBeneficiaryClaimsHaveHolders(state: GameState, week: number) {
+  const owedUSD = (state.institutionalEntities || [])
+    .reduce((sum, e) => sum + ((e as any).beneficiaryLiabilityUSD ?? 0), 0);
+  const heldUSD = (['USA', 'UK', 'JPN', 'EUR'] as RegionId[])
+    .reduce((sum, r) => sum + (state.regions[r]?.householdState?.institutionalClaimsUSD ?? 0), 0);
+  if (owedUSD <= 0 && heldUSD <= 0) return;
+  const gapUSD = Math.abs(owedUSD - heldUSD);
+  if (gapUSD / Math.max(1, owedUSD) > 0.001) {
+    violations.push({
+      week,
+      message:
+        `Beneficiary claims do not reconcile: institutions owe ${(owedUSD / 1e9).toFixed(1)}B, ` +
+        `households hold ${(heldUSD / 1e9).toFixed(1)}B (gap ${(gapUSD / 1e9).toFixed(1)}B). ` +
+        `A reserve or entitlement is an asset on one book and a liability on another, never one alone.`,
+    });
+  }
+}
+
 function checkNaNAndPurity(state: GameState, week: number) {
   state.companies.forEach(c => {
     if (isNaN(c.annualRevenue) || !isFinite(c.annualRevenue) ||
@@ -483,6 +507,7 @@ function runInvariantsHarness() {
     checkNavIdentity(state, w);
     if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
     violations.push(...checkHoldingsLedgerConservation(state, w));
+    checkBeneficiaryClaimsHaveHolders(state, w);
     prevStateForBookCheck = state;
 
     // 5b. The bank balance-sheet identity, per named bank, every week. Cash moves only by

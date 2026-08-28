@@ -44,6 +44,21 @@ export interface InstitutionalEntity {
   entityType: InstitutionalEntityType;
   totalAssetsUSD: number;
   equityCapitalUSD: number;
+  /**
+   * HH1 — what this institution owes its ultimate BENEFICIARIES: policyholder reserves, pension
+   * entitlements, fund shares. A derived residual, `totalAssetsUSD - equityCapitalUSD`, carried
+   * here so both sides of the claim are visible on the books that hold them.
+   *
+   * It was implicit and therefore owned by nobody. Measured at 740B across insurers, pension
+   * funds and asset managers (§7.48): the asset existed on this sheet and the matching claim
+   * existed nowhere, which is the same real thing represented once instead of twice. The holder
+   * is the household sector (`householdState.institutionalClaims`), because in reality every
+   * dollar of a reserve or an entitlement belongs to a person.
+   *
+   * Absent on the entity types whose liabilities already have named holders: money funds (WS7's
+   * shareholders), ETFs (MS1's), and private equity (HC4's LP commitments).
+   */
+  beneficiaryLiabilityUSD?: number;
   sharesOutstanding: number;
   stockPrice: number;
   itemizedHoldings: ItemizedHolding[];

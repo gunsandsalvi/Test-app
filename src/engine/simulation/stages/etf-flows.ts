@@ -395,63 +395,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     };
   });
 
-  // ---- 6. MS1: the household balance sheet, marked from this week's cleared prices. ----
-  // The last place in the model where a sector's wealth was a formula. `equityHoldingsUSD` is now
-  // the SUM of what households really hold, and the part the asset universe cannot yet back is a
-  // named line rather than an unexplained excess — see `unmodeledFinancialAssetsUSD`.
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
-    const reg = ctx.updatedRegions[region];
-    const hs = reg?.householdState;
-    if (!hs) return;
-
-    // Shares bought this week settle onto the household register at the fund's own NAV.
-    const boughtUSD = funds.reduce((sum, f) => sum + (householdExecutedByFund.get(f.id) ?? 0) * (f.region === region ? 1 : 0), 0);
-    let etfShares = [...(hs.etfShares ?? [])];
-    if (boughtUSD > 0) {
-      funds.forEach((f) => {
-        if (f.region !== region) return;
-        const spentUSD = householdExecutedByFund.get(f.id) ?? 0;
-        if (!(spentUSD > 0)) return;
-        const navPerShare = finalNavPerShareByFund.get(f.id) ?? ETF_INCEPTION_NAV_PER_SHARE;
-        const shares = spentUSD / navPerShare;
-        const idx = etfShares.findIndex((x) => x.fundId === f.id);
-        if (idx >= 0) etfShares[idx] = { ...etfShares[idx], shares: etfShares[idx].shares + shares };
-        else etfShares.push({ fundId: f.id, shares });
-      });
-    }
-
-    const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
-    const etfHoldingsUSD = householdEtfHoldingsUSD({ etfShares }, ctx.updatedInstitutionalEntities);
-    const directEquityUSD = householdDirectEquityUSD(
-      region, ctx.updatedCompanies, reg.equityOwnership.institutionalShare
-    );
-    const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
-
-    // The unmodeled line is paid DOWN as real claims are found, never up: households did not get
-    // richer because the model learned to see what they already owned. It is set once, at the
-    // opening gap, and thereafter only shrinks — which is exactly how a placeholder should behave.
-    const realClaimsUSD = etfHoldingsUSD + directEquityUSD + privateBusinessEquityUSD;
-    const openingUnmodeledUSD = hs.unmodeledFinancialAssetsUSD ?? hs.equityHoldingsUSD ?? 0;
-    const unmodeledFinancialAssetsUSD = Math.max(0, Math.min(
-      openingUnmodeledUSD,
-      Math.max(0, (hs.equityHoldingsUSD ?? 0) - realClaimsUSD)
-    ));
-
-    // Cash left the household balance sheet to buy the shares — the deposits stage 02 credited.
-    const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
-    const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
-
-    reg.householdState = {
-      ...hs,
-      depositsUSD,
-      etfShares,
-      etfHoldingsUSD,
-      directEquityUSD,
-      privateBusinessEquityUSD,
-      unmodeledFinancialAssetsUSD,
-      equityHoldingsUSD,
-      netWorthUSD: depositsUSD + equityHoldingsUSD
-        - ((hs.mortgageDebtUSD ?? 0) + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0)),
-    };
-  });
+  // The household creation leg is handed to `household-balance-sheet.ts`, which owns the
+  // household books. This stage owns the FLOW — who wanted what, and what the dealers could carry.
+  ctx.householdEtfPurchasesUSD = householdExecutedByFund;
 }

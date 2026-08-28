@@ -69,6 +69,11 @@ export interface WeeklyStepContext {
    * out arrives on somebody's book instead of vanishing.
    */
   pendingHolderCashUSD: Map<string, number>;
+  /**
+   * HH1 — index-fund shares households bought this week, by fund, handed from `etf-flows.ts` (the
+   * flow) to `household-balance-sheet.ts` (the books).
+   */
+  householdEtfPurchasesUSD: Map<string, number>;
   /** ETF slice 1 — this week's published indexes (`stages/index-calculation.ts`). */
   updatedMarketIndexes: import('../../../domain/indexes').MarketIndex[];
   updatedCommodities: Commodity[];
@@ -142,6 +147,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     updatedInstitutionalEntities: [...state.institutionalEntities],
     pendingHolderSettlements: new Map<string, number>(),
     pendingHolderCashUSD: new Map<string, number>(),
+    householdEtfPurchasesUSD: new Map<string, number>(),
     updatedMarketIndexes: [...(state.marketIndexes ?? [])],
     updatedCommodities: [...state.commodities],
     updatedCompositeIndices: { ...state.compositeIndices },
