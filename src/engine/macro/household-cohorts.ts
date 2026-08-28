@@ -91,6 +91,39 @@ const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: number; lux
   TOP_1: { staple: 0.06, standard: 0.62, luxury: 0.32 },
 };
 
+/**
+ * HH4c — where each component of the REAL household balance sheet sits across the wealth
+ * tiers. Stated primitives (US SCF-shaped) until ownership itemizes further; what they
+ * allocate is already real — every line is marked from cleared prices by the balance-sheet
+ * stage, and tier net worth is the SUM of these splits, replacing the equity-gain/savings-gain/
+ * retired-drawdown drift that used to walk `shareOfNetWorthUSD` beside the real books.
+ */
+export const TIER_BALANCE_SHEET_WEIGHTS: Record<
+  'deposits' | 'equityLike' | 'privateBusiness' | 'institutionalClaims' | 'unmodeled' | 'housing' | 'mortgage' | 'consumerDebt',
+  Record<WealthTier, number>
+> = {
+  deposits: { BOTTOM_50: 0.08, NEXT_40: 0.32, TOP_9: 0.35, TOP_1: 0.25 },
+  equityLike: { BOTTOM_50: 0.01, NEXT_40: 0.12, TOP_9: 0.37, TOP_1: 0.50 },
+  privateBusiness: { BOTTOM_50: 0.02, NEXT_40: 0.10, TOP_9: 0.35, TOP_1: 0.53 },
+  institutionalClaims: { BOTTOM_50: 0.15, NEXT_40: 0.50, TOP_9: 0.28, TOP_1: 0.07 },
+  unmodeled: { BOTTOM_50: 0.05, NEXT_40: 0.25, TOP_9: 0.35, TOP_1: 0.35 },
+  housing: { BOTTOM_50: 0.10, NEXT_40: 0.55, TOP_9: 0.30, TOP_1: 0.05 },
+  mortgage: { BOTTOM_50: 0.10, NEXT_40: 0.55, TOP_9: 0.30, TOP_1: 0.05 },
+  consumerDebt: { BOTTOM_50: 0.45, NEXT_40: 0.40, TOP_9: 0.12, TOP_1: 0.03 },
+};
+
+/**
+ * HH4c — cents of extra consumption per dollar of extra wealth, PER TIER: the bottom spends
+ * nearly a dime of a windfall dollar, the top a cent and a half. Replaces HH2's single 0.04.
+ * The tier-weighted blend at the seed wealth shares is ~0.035, so the aggregate effect opens
+ * where the constant stood — but a housing move (middle-held, high-MPC) now moves consumption
+ * roughly twice as hard as an equity rally of the same dollar size (top-held, low-MPC), which
+ * is what the empirical literature finds and a single constant cannot express.
+ */
+export const TIER_WEALTH_MPC: Record<WealthTier, number> = {
+  BOTTOM_50: 0.10, NEXT_40: 0.06, TOP_9: 0.03, TOP_1: 0.015,
+};
+
 export interface CohortBuildInputs {
   occupationPools: Record<OccupationType, OccupationPool>;
   baseAnnualWageUSD: Record<OccupationType, number>;

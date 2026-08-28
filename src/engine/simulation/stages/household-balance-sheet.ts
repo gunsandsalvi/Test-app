@@ -29,7 +29,8 @@
 import { GameState, RegionId, InstitutionalEntity } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
-import { AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
+import { AVERAGE_HOUSEHOLD_SIZE, WealthTier } from '../../../domain/region-macro';
+import { TIER_BALANCE_SHEET_WEIGHTS, WEALTH_TIERS } from '../../macro/household-cohorts';
 import {
   householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD,
 } from '../../macro/household-portfolio';
@@ -121,6 +122,33 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // Cash left the household balance sheet to buy the fund shares.
     const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
     const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
+
+    // ---- 7. HH4c: the tier balance sheets are DERIVED SPLITS of the same marked components —
+    // tier net worth is a sum over real lines, not a drifted stock. The split weights are
+    // stated primitives (SCF-shaped); what they split is real, so when home prices move it is
+    // the middle tiers' net worth that moves, and when equities rally it is the top's — the
+    // difference the tier wealth-effect MPCs exist to price.
+    if (reg.wealthDistribution) {
+      const W = TIER_BALANCE_SHEET_WEIGHTS;
+      const consumerDebtUSD = (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0);
+      WEALTH_TIERS.forEach((t: WealthTier) => {
+        const tierAssetsUSD =
+          depositsUSD * W.deposits[t]
+          + (etfHoldingsUSD + directEquityUSD) * W.equityLike[t]
+          + privateBusinessEquityUSD * W.privateBusiness[t]
+          + institutionalClaimsUSD * W.institutionalClaims[t]
+          + unmodeledFinancialAssetsUSD * W.unmodeled[t]
+          + housingStockUSD * W.housing[t];
+        const tierDebtUSD = mortgageUSD * W.mortgage[t] + consumerDebtUSD * W.consumerDebt[t];
+        const prev = reg.wealthDistribution[t];
+        reg.wealthDistribution[t] = {
+          ...prev,
+          priorNetWorthUSD: prev.shareOfNetWorthUSD,
+          shareOfNetWorthUSD: Number((tierAssetsUSD - tierDebtUSD).toFixed(0)),
+          homeEquityUSD: Number((housingStockUSD * W.housing[t] - mortgageUSD * W.mortgage[t]).toFixed(0)),
+        };
+      });
+    }
 
     reg.householdState = {
       ...hs,

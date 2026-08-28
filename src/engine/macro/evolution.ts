@@ -11,7 +11,7 @@ import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking'
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
-import { buildHouseholdCohorts, WEALTH_TIERS } from './household-cohorts';
+import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
 /**
  * Cents of extra consumption per dollar of extra wealth — the marginal propensity to consume out
@@ -432,9 +432,22 @@ export function evolveRegionMacro(
   // A wealth effect is a marginal propensity to consume out of a CHANGE in wealth: a dollar more
   // wealth buys a few cents more consumption, once. Expressed against income it is a rate, which
   // is what this line needs to be.
+  // HH4c: the wealth effect is TIER-WEIGHTED — each tier's real marked net-worth change times
+  // that tier's own propensity to consume it. A housing move (middle-held, high MPC) now moves
+  // consumption roughly twice as hard per dollar as an equity rally (top-held, low MPC), which
+  // is what the literature finds and the single constant could not express. Falls back to the
+  // aggregate constant only while the tier marks have not run yet.
+  const tierWealthEffectUSD = (Object.keys(TIER_WEALTH_MPC) as WealthTier[]).reduce((a, t) => {
+    const tier = region.wealthDistribution?.[t];
+    if (!tier || tier.priorNetWorthUSD === undefined) return a;
+    return a + TIER_WEALTH_MPC[t] * (tier.shareOfNetWorthUSD - tier.priorNetWorthUSD);
+  }, 0);
+  const anyTierMarked = (Object.keys(TIER_WEALTH_MPC) as WealthTier[])
+    .some((t) => region.wealthDistribution?.[t]?.priorNetWorthUSD !== undefined);
   const wealthChangeUSD = (prevHS.netWorthUSD ?? 0) - (prevHS.priorNetWorthUSD ?? prevHS.netWorthUSD ?? 0);
-  const balanceSheetWealthEffect =
-    (WEALTH_MARGINAL_PROPENSITY_TO_CONSUME * wealthChangeUSD) / Math.max(1, region.estimatedHouseholdIncomeUSD);
+  const balanceSheetWealthEffect = (anyTierMarked
+    ? tierWealthEffectUSD
+    : WEALTH_MARGINAL_PROPENSITY_TO_CONSUME * wealthChangeUSD) / Math.max(1, region.estimatedHouseholdIncomeUSD);
   // HH3: the real card/term origination the banks actually granted last week — the same flow
   // that left their sheets as cash to the merchants.
   const creditFundedSpendingUSD = (prevHS.weeklyNewConsumerCreditUSD ?? 0) * 0.8; // credit directly buying goods
@@ -792,36 +805,15 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // HH4: the tier→occupation membership matrix moved to macro/household-cohorts.ts — one
   // matrix, one owner. The tier income drift it fed here is gone: tier income is now the
   // DERIVED SUM of the cohorts' real disposable income.
-  const tierHomeEquityShares: Record<WealthTier, number> = {
-    TOP_1: 0.05,
-    TOP_9: 0.30,
-    NEXT_40: 0.55,
-    BOTTOM_50: 0.10,
-  };
 
+  // HH4c: tier NET WORTH is no longer evolved here. The equity-gain/savings-gain/retired-
+  // drawdown drift is gone — the household-balance-sheet stage derives each tier's net worth
+  // as a split of the same marked components the aggregate is built from, every week, after
+  // the clearing books. Only the income line (the cohorts' summed disposable) is written here.
   (Object.keys(updatedWealthDist) as WealthTier[]).forEach(t => {
-    const prevData = updatedWealthDist[t];
-    // HH4: tier income IS the cohorts' summed disposable income — the wage-growth drift that
-    // used to walk `shareOfIncomeUSD` beside the aggregate it claimed to decompose is gone,
-    // and with it the dead per-tier consumption sum nothing read.
-    const newIncomeUSD = Math.max(1000, cohortResult.tierDisposableUSD[t] ?? prevData.shareOfIncomeUSD);
-
-    const equityGain = prevData.shareOfNetWorthUSD * prevData.equityExposureShare * equityReturn;
-    // The tier's real saving flow off the cohort budgets (λ-normalized to the aggregate rate).
-    const savingsGain = (cohortResult.tierSavingsUSD[t] ?? 0) / 52;
-
-    const homeEquityUSD = Math.round(updatedHousingMarket.medianHomePriceUSD * updatedHousingMarket.ownershipRatePct * (newTotalPopulation / 2.5) * prevData.shareOfHouseholds * tierHomeEquityShares[t]);
-
-    // Retired drawdown for lower/middle tiers
-    const retiredDrawdown = (t === 'BOTTOM_50' || t === 'NEXT_40') ? (prevData.shareOfNetWorthUSD * Math.abs(updatedLifeCycle.RETIRED.savingsRate) / 52) : 0;
-
-    const newNetWorth = Math.max(100, prevData.shareOfNetWorthUSD + equityGain + savingsGain + (homeEquityUSD - (prevData.homeEquityUSD ?? homeEquityUSD)) - retiredDrawdown);
-
     updatedWealthDist[t] = {
-      ...prevData,
-      shareOfIncomeUSD: Number(newIncomeUSD.toFixed(0)),
-      shareOfNetWorthUSD: Number(newNetWorth.toFixed(0)),
-      homeEquityUSD: Number(homeEquityUSD.toFixed(0)),
+      ...updatedWealthDist[t],
+      shareOfIncomeUSD: Number(Math.max(1000, cohortResult.tierDisposableUSD[t] ?? updatedWealthDist[t].shareOfIncomeUSD).toFixed(0)),
     };
   });
 

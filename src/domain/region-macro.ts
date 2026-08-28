@@ -17,6 +17,8 @@ export interface WealthTierData {
   shareOfHouseholds: number;
   shareOfIncomeUSD: number;
   shareOfNetWorthUSD: number;
+  /** HH4c — last week's marked net worth, so the tier wealth effect reads a real CHANGE. */
+  priorNetWorthUSD?: number;
   savingsRate: number;
   equityExposureShare: number;
   homeEquityUSD?: number;

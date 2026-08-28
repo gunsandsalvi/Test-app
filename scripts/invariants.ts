@@ -180,6 +180,18 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
         message: `${region}: cohort savings ${(sumSavings / 1e9).toFixed(2)}B vs aggregate rate x income ${(targetSavings / 1e9).toFixed(2)}B — the λ-normalization is off`,
       });
     }
+    // HH4c: tier net worths are splits of the same marked components — they must sum to the
+    // aggregate exactly (loose band only for rounding).
+    const wd = reg.wealthDistribution;
+    if (wd && (hs.netWorthUSD ?? 0) !== 0) {
+      const tierSum = Object.values(wd).reduce((a: number, t: any) => a + (t.shareOfNetWorthUSD ?? 0), 0);
+      if (Math.abs(tierSum - (hs.netWorthUSD ?? 0)) / Math.max(1, Math.abs(hs.netWorthUSD ?? 1)) > 1e-3) {
+        violations.push({
+          week,
+          message: `${region}: tier net worths sum to ${(tierSum / 1e9).toFixed(1)}B against an aggregate of ${((hs.netWorthUSD ?? 0) / 1e9).toFixed(1)}B — the tier split is not a partition of the real book`,
+        });
+      }
+    }
     const shares = hs.stapleSpendShare + hs.standardSpendShare + hs.luxurySpendShare;
     if (Math.abs(shares - 1) > 1e-3) {
       violations.push({ week, message: `${region}: spend shares sum to ${shares.toFixed(4)} — not a partition` });
