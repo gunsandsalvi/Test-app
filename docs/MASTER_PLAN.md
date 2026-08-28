@@ -325,11 +325,11 @@ left out of earlier batches precisely so their effect would stay attributable.
 6. **Generation-time unconditional fields.** §7.17 found `leveragedLoan` attached to all 200
    companies when ~33 had loans. Sweep `companyGenerator.ts` for other fields attached to
    everything that apply to a subset — the same failure mode, a frozen record reading as live.
-7. **The periodic institutional-book burst.** `scripts/invariants.ts` fires "Institutional book
-   moved N%" in a burst **~130 weeks apart** (weeks 129 and 259 in every run measured), four
-   regions at once, always a 9–10% one-week DROP. Pre-existing and A/B-confirmed. The regularity
-   says a scheduled event, not market movement — find what runs on that cadence (an annual rebase,
-   a history-window roll) before assuming a cash-settlement leak.
+7. ~~The periodic institutional-book burst.~~ **CLOSED by measurement, §7.46** — it no longer
+   reproduces. Measured over 135 weeks on current HEAD, the institutional book moves **+3.10B
+   (~0.3%)** at week 129: cash −50.3B against GOV_BOND +54.4B, a placement properly paid for. The
+   investigation found a different, real defect underneath it, now owned by **PUB**: sovereign
+   placement is not budget-constrained.
 
 **Verify:** the securities ledger conserves across a redemption (holders' cash rises by exactly
 the principal retired); no instrument appears on two books; the 130-week burst is explained and
@@ -425,6 +425,17 @@ actually paid to holders out of the account; procurement through real stage-05 b
 deficit fully derived. **This also closes the asymmetric boundary** §6 has carried: bank sovereign
 carry is credited today while the government debits nothing and institutions are denied the same
 coupons.
+
+**PUB1b — Sovereign issuance goes through its own book.** Found while closing L7 (§7.46).
+`11-fiscal-and-sovereign-debt.ts` PLACES new government paper on holders by scaling their existing
+positions and debiting cash — with **no affordability check at all**. It is forced: a real-money
+entity that cannot pay still takes the paper, and ends the week with negative cash. Measured at a
+large issuance week, institutional cash falls 50.3B in one week against a `LEVERAGE_ALLOWANCE` of
+zero for every real-money type. Every clearing stage in the engine respects S11's budget
+constraint; this path predates it and does not. The file says so itself — "this is placement, not
+underwriting: no fee, no book-building, no auction price discovery" — and 07c, the sovereign
+clearing book, already exists. The fix is to route issuance through it, which is what makes an
+undersubscribed auction a real event rather than a forced take-up.
 
 **PUB2 — The central bank as a real counterparty.** Seed the CB book from `centralBankShare` of
 the sovereign stock; roll maturities as real inelastic at-market bids in 07c sized to redemptions.
@@ -1925,7 +1936,36 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       interesting they are to price, and the demand sides they price against were left as
       aggregates. Where an aggregate stands in for a sector, check its SIZE against the real
       market before trusting anything cleared against it.
-46. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
+46. **L — the ledger integrity batch, and a bug that had already fixed itself.** Seven items, six
+    of them real. What is worth keeping is the seventh.
+    - **The redemption cash leg (L1)** was the batch's reason to exist: a retired tranche scaled
+      holders' notionals down and paid them nothing, a transfer from lenders to no one sitting
+      underneath every price cleared against those books. The cash leg derives from the composed
+      action ratio, so it stays exact when two actions hit one instrument in a week. Harness 5 → 4.
+    - **L4 deleted the last formula price setter for a listed cohort** — banks and institutions on
+      a book-value x cycle-P/B multiple — and doing so immediately exposed the #18 revenue runaway
+      as a 40x P/E on a hedge-fund entity. **A formula masking a defect is the argument for
+      deleting formulas**, and it is the second time in this project that removing one made a
+      known problem visible rather than creating a new one.
+    - **L6's sweep found the earnings desk on private firms**: dealer consensus, a reporting
+      calendar, management commentary and a surprise percentage handed to all 1,204 of them at
+      generation, when §5-HC had said in writing that a private firm has none of it. Fabricated
+      analyst forecasts for companies no analyst covers.
+    - **L7 did not reproduce, and the reason I first thought it did is the lesson.** The recorded
+      defect was a 9–10% one-week DROP in the institutional book at weeks 129 and 259. My first
+      probe found a 9.8% JUMP at week 129 in all four regions — the right week, the right
+      magnitude, the wrong sign — and I nearly wrote it up as the same bug with a flipped sign.
+      It was an artifact of my own probe: I summed cash as `Math.max(0, cashUSD)`, which hides
+      exactly the entities the event was about. Unclamped, the book moves **+3.10B, 0.3%**, and
+      the placement conserves. **A measurement that clamps is a measurement that lies, and it lied
+      in the direction that made a story.** Re-derive an instrument before trusting a number that
+      confirms what you expected.
+    - **What the investigation did find** is recorded as PUB1b: sovereign placement forces paper
+      onto holders with no affordability check, so a real-money entity with a zero leverage
+      allowance can end an issuance week with negative cash (−50.3B across institutions in one
+      week). Every clearing stage respects S11's budget constraint; this path predates it and does
+      not, and 07c already exists to price the auction properly.
+47. **Task-list mapping:** S-items ↔ audit findings + #67/#18/#34; WS-items ↔ #68–#82/#74;
     MS ↔ #56/#59/#60/#52; BP ↔ #58/#45/#48/#50/#51/#54/#55/#64; AU ↔ #66. The end-of-project
     `npm run verify` gate closes #2/#14/#41.
     **Closable now** (§7.16/§7.17 landed them): #77 and #78 (slices 2–3 signed off), #72 and #81
