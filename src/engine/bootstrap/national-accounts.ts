@@ -97,17 +97,22 @@ export const UNEMPLOYMENT_REPLACEMENT_RATE = 0.35;
  */
 export function computeGovernmentTransfersUSD(
   governmentSpendingWeeklyUSD: number,
-  interestWeeklyUSD: number = 0
+  interestWeeklyUSD: number = 0,
+  /** PUB3: staff pay comes off the top with interest — see the payroll double count below. */
+  payrollWeeklyUSD: number = 0
 ): number {
-  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD) * 52 * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
+  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD - payrollWeeklyUSD)
+    * 52 * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
 }
 
 /** Government purchases of goods and services, annualised. Primary budget only — see above. */
 export function computeGovernmentPurchasesUSD(
   governmentSpendingWeeklyUSD: number,
-  interestWeeklyUSD: number = 0
+  interestWeeklyUSD: number = 0,
+  payrollWeeklyUSD: number = 0
 ): number {
-  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD) * 52 * GOV_PROCUREMENT_SHARE_OF_SPENDING;
+  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD - payrollWeeklyUSD)
+    * 52 * GOV_PROCUREMENT_SHARE_OF_SPENDING;
 }
 
 /**
@@ -139,14 +144,22 @@ export function computeHouseholdDisposableIncomeUSD(parts: {
   unemploymentBenefitsUSD: number;
   /** PUB1: debt service leaves the transfer base — it is paid to bondholders. */
   interestWeeklyUSD?: number;
+  /** PUB3: so does government payroll — see the double count below. */
+  payrollWeeklyUSD?: number;
 }): number {
   // Capital income is a share of OUTPUT, keyed off total compensation — it has nothing to do
   // with the payroll tax, and deriving it from post-tax wages shrank it by the payroll rate
   // (measured: the identity assert fired at 78.66% against a required 79.46%).
   const capitalIncomeUSD = parts.wageIncomeUSD * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
   const { grossWagesUSD } = splitWageBill(parts.wageIncomeUSD);
+  // PUB3: the government's own wage bill leaves the transfer base. Its employees are 14.3% of
+  // the pools, so their pay is ALREADY in wageIncomeUSD above — leaving it in the transfer
+  // envelope credited households the same ~8% of output twice, once as wages and once as a
+  // transfer. Removing it takes away no income anyone was really owed.
   const transfersUSD = Math.max(
-    computeGovernmentTransfersUSD(parts.governmentSpendingWeeklyUSD, parts.interestWeeklyUSD ?? 0),
+    computeGovernmentTransfersUSD(
+      parts.governmentSpendingWeeklyUSD, parts.interestWeeklyUSD ?? 0, parts.payrollWeeklyUSD ?? 0
+    ),
     parts.unemploymentBenefitsUSD
   );
   const grossIncomeUSD = grossWagesUSD + capitalIncomeUSD + transfersUSD;
@@ -170,9 +183,12 @@ export function assertHouseholdIncomeIdentity(
   outputUSD: number,
   governmentSpendingWeeklyUSD: number,
   // PUB1: interest is paid to bondholders, not to households, so it leaves the transfer base.
-  interestWeeklyUSD: number = 0
+  interestWeeklyUSD: number = 0,
+  // PUB3: so does the government's own payroll — households have it already, as wages.
+  payrollWeeklyUSD: number = 0
 ): void {
-  const govSpendShareOfOutput = (Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD) * 52) / outputUSD;
+  const govSpendShareOfOutput =
+    (Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD - payrollWeeklyUSD) * 52) / outputUSD;
   const transferShare = govSpendShareOfOutput * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
   // PUB1c: households receive the labor share NET of the employer's payroll tax.
   const expectedShare =

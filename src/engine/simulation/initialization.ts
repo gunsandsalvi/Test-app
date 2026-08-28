@@ -128,7 +128,8 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // government demand and week 1's are the same shape.
     const G = decomposeGovernmentSpending(
       reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
-      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore
+      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
+      reg.governmentPayrollWeeklyUSD ?? 0
     ).procurementBudgetUSD * 52;
     const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
     reg.laggedCorporateDemandBase = corpBase;
@@ -638,9 +639,15 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       const unemployedInPool = totalLaborForce * (reg.occupationLaborForceShare[occ] ?? 0) - reg.occupationPools[occ].employed;
       return sum + baseAnnualWageUSD[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
     }, 0);
+    // §7.4: this restatement is the SECOND computation of household income at seed (the macro
+    // bootstrap does the first), so it must carve the same lines off the transfer base or it
+    // silently overwrites the first with a different economy. It was omitting debt service
+    // (a PUB1a leftover) as well as PUB3's payroll.
     reg.estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
       wageIncomeUSD: realWageIncomeUSD,
       governmentSpendingWeeklyUSD: reg.governmentSpendingUSD,
+      interestWeeklyUSD: reg.governmentInterestWeeklyUSD ?? 0,
+      payrollWeeklyUSD: reg.governmentPayrollWeeklyUSD ?? 0,
       unemploymentBenefitsUSD: realUnemploymentBenefitsUSD,
     }).toFixed(0));
 

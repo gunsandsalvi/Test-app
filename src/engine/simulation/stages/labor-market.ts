@@ -44,8 +44,7 @@ import {
   COST_OF_LIVING_PASS_THROUGH,
   MARKET_WAGE_CATCHUP_SPEED_WEEKLY, MAX_FIRM_WAGE_CHANGE_ANNUAL, MIN_FIRM_WAGE_CHANGE_ANNUAL,
   MIN_FIRM_WAGE_INDEX, MAX_FIRM_WAGE_INDEX,
-  QUIT_ELASTICITY_TO_RELATIVE_WAGE, QUIT_ELASTICITY_TO_EXECUTION,
-} from '../../../domain/region-macro';
+  QUIT_ELASTICITY_TO_RELATIVE_WAGE, QUIT_ELASTICITY_TO_EXECUTION, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
@@ -207,8 +206,9 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       });
     });
     // Government is an employer too — its headcount is a policy quantity set in stage 02.
-    employedByOccBefore.GENERAL += reg.governmentEmployment * 0.6;
-    employedByOccBefore.MANAGERIAL_FINANCIAL += reg.governmentEmployment * 0.4;
+    Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
+      employedByOccBefore[occ as OccupationType] += reg.governmentEmployment * (share ?? 0);
+    });
 
     // ---- 3. Matching, per occupation. An open vacancy carries over; a seeker who does not
     // match stays a seeker. Hires are bounded by both stocks and by what a week of search can
@@ -403,8 +403,9 @@ export function reconcileEmploymentView(
       employedByOcc[occ] += Math.max(0, seg.employment) * (mix[occ] ?? 0);
     });
   });
-  employedByOcc.GENERAL += reg.governmentEmployment * 0.6;
-  employedByOcc.MANAGERIAL_FINANCIAL += reg.governmentEmployment * 0.4;
+  Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
+    employedByOcc[occ as OccupationType] += reg.governmentEmployment * (share ?? 0);
+  });
 
   let totalEmployed = 0;
   let totalVacancies = 0;

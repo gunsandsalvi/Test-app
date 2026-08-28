@@ -45,7 +45,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // goods market cannot bid for a stimulus the treasury never pays for.
     const govBudget = decomposeGovernmentSpending(
       reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
-      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore
+      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
+      reg.governmentPayrollWeeklyUSD ?? 0
     );
     const G = govBudget.procurementBudgetUSD * 52;
     // HC3: private firms' capex is real corporate demand like anyone else's (their segments'

@@ -8,10 +8,11 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
+import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
-import { weeklyInterestExpenseUSD } from '../../domain/government';
+import { weeklyInterestExpenseUSD, governmentPayrollWeeklyUSD } from '../../domain/government';
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
@@ -466,6 +467,17 @@ export function evolveRegionMacro(
   }, 0);
   // PUB1c: the wage bill is total compensation; the employer's payroll tax leaves it first.
   const { grossWagesUSD, employerPayrollTaxUSD } = splitWageBill(totalWageIncomeUSD);
+  // PUB3: the government's own share of that bill — the employees it really has, at the wages
+  // the pools really cleared. Computed once here and read by the budget, the outlays and the
+  // household transfer line, so the jobs and the payroll that pays for them cannot disagree.
+  const newGovernmentPayrollWeeklyUSD = governmentPayrollWeeklyUSD({
+    governmentEmployment: newGovernmentEmployment,
+    baseAnnualWageUSD,
+    wageIndexByOccupation: Object.fromEntries(
+      (Object.keys(newOccupationPools) as OccupationType[]).map(o => [o, newOccupationPools[o].wageIndex])
+    ),
+    occupationMix: GOVERNMENT_OCCUPATION_MIX,
+  });
   const unemploymentBenefitsUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
     const pool = newOccupationPools[occ];
     const availableSupplyForOcc = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
@@ -480,6 +492,9 @@ export function evolveRegionMacro(
     wageIncomeUSD: totalWageIncomeUSD,
     governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
     interestWeeklyUSD: region.governmentInterestWeeklyUSD ?? 0,
+    // PUB3: payroll leaves the transfer base. Households already receive these wages inside the
+    // labor share above — counting them again as transfers credited the same ~8% of output twice.
+    payrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
     unemploymentBenefitsUSD,
   }).toFixed(0));
 
@@ -505,7 +520,8 @@ export function evolveRegionMacro(
     occupationPools: newOccupationPools,
     baseAnnualWageUSD,
     laborForceByOccupation,
-    governmentSpendingWeeklyUSD: Math.max(0, region.governmentSpendingUSD - (region.governmentInterestWeeklyUSD ?? 0)),
+    governmentSpendingWeeklyUSD: Math.max(0,
+      region.governmentSpendingUSD - (region.governmentInterestWeeklyUSD ?? 0) - newGovernmentPayrollWeeklyUSD),
     aggregateSavingsRate: newSavingsRate,
     weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
     annualCapitalReceiptsUSD,
@@ -852,6 +868,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     effectiveTaxRate: newEffectiveTaxRate,
     governmentRevenueUSD: newGovernmentRevenueUSD,
     governmentSpendingUSD: newGovernmentSpendingUSD,
+    governmentPayrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
     governmentInterestWeeklyUSD: Number(govInterestWeeklyUSD.toFixed(0)),
     employerPayrollTaxWeeklyUSD: Number((employerPayrollTaxUSD / 52).toFixed(0)),
     householdState: {

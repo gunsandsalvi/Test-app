@@ -4,6 +4,8 @@ import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, Cr
 import { buildHouseholdCohorts } from './household-cohorts';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
+import { governmentPayrollWeeklyUSD } from '../../domain/government';
+import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
@@ -296,13 +298,27 @@ function buildRegion(regionId: RegionId): Region {
   // week 0 too — otherwise the seed opens on a transfer base the engine immediately shrinks.
   const seedInterestWeeklyUSD = weeklyInterestExpenseUSD(govDebtTranches);
   const seedWageSplit = splitWageBill(totalWageIncomeUSD);
+  // PUB3 (§7.4): the government has its staff at week 0, so it owes them at week 0 — computed by
+  // the same function the weekly step uses, off the same pools.
+  const seedPayrollWeeklyUSD = governmentPayrollWeeklyUSD({
+    governmentEmployment,
+    baseAnnualWageUSD,
+    wageIndexByOccupation: Object.fromEntries(
+      (Object.keys(occupationPools) as OccupationType[]).map(o => [o, occupationPools[o].wageIndex])
+    ),
+    occupationMix: GOVERNMENT_OCCUPATION_MIX,
+  });
   const estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
     wageIncomeUSD: totalWageIncomeUSD,
     governmentSpendingWeeklyUSD: governmentSpendingUSD,
     interestWeeklyUSD: seedInterestWeeklyUSD,
+    payrollWeeklyUSD: seedPayrollWeeklyUSD,
     unemploymentBenefitsUSD: initialUnemploymentBenefitsUSD,
   }).toFixed(0));
-  assertHouseholdIncomeIdentity(regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, governmentSpendingUSD, seedInterestWeeklyUSD);
+  assertHouseholdIncomeIdentity(
+    regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, governmentSpendingUSD,
+    seedInterestWeeklyUSD, seedPayrollWeeklyUSD
+  );
   const lastWeekNominalGdpUSD = estimatedNominalGdpUSD;
 
   // HH4 — §7.4: the cohorts are seeded by the same builder the weekly evolution runs, off the
@@ -318,7 +334,8 @@ function buildRegion(regionId: RegionId): Region {
     occupationPools,
     baseAnnualWageUSD,
     laborForceByOccupation,
-    governmentSpendingWeeklyUSD: governmentSpendingUSD,
+    governmentSpendingWeeklyUSD: Math.max(0,
+      governmentSpendingUSD - seedInterestWeeklyUSD - seedPayrollWeeklyUSD),
     aggregateSavingsRate: HOUSEHOLD_SAVINGS_RATE,
     weeklyDebtServiceUSD: 0,
     // Zero here to match the zero debt service: both sides of the budget loop arrive together
@@ -482,6 +499,7 @@ function buildRegion(regionId: RegionId): Region {
     effectiveTaxRate: EFFECTIVE_TAX_RATE,
     governmentRevenueUSD,
     governmentSpendingUSD,
+    governmentPayrollWeeklyUSD: Number(seedPayrollWeeklyUSD.toFixed(0)),
     governmentInterestWeeklyUSD: Number(seedInterestWeeklyUSD.toFixed(0)),
     employerPayrollTaxWeeklyUSD: Number((seedWageSplit.employerPayrollTaxUSD / 52).toFixed(0)),
     // PUB2 (§7.4): the CB opens holding its real share of the stock, with the TGA at its

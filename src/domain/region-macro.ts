@@ -413,6 +413,16 @@ export const LAYOFF_SPEED_MULTIPLE = 0.6;
 /** A firm in real cash distress sheds staff regardless of the friction above. */
 export const DISTRESS_LAYOFF_SPEED = 0.10;
 
+/**
+ * PUB3: what a government employs. The 60/40 split was a repeated literal in three places
+ * (the labor-market stage twice, shared-helpers once) — hoisted so the headcount that fills
+ * those jobs and the payroll that pays for them read the same mix.
+ */
+export const GOVERNMENT_OCCUPATION_MIX: Partial<Record<OccupationType, number>> = {
+  GENERAL: 0.6,
+  MANAGERIAL_FINANCIAL: 0.4,
+};
+
 export const SECTOR_OCCUPATION_MIX: Record<string, Partial<Record<OccupationType, number>>> = {
   Tech: { TECHNICAL_ENGINEERING: 0.55, MANAGERIAL_FINANCIAL: 0.15, GENERAL: 0.30 },
   Energy: { SKILLED_TRADES: 0.45, TECHNICAL_ENGINEERING: 0.25, GENERAL: 0.30 },
@@ -543,6 +553,12 @@ export interface Region {
   /** PUB1 — real weekly interest on the debt stack, paid to holders. Comes off the top of
    * spending, so procurement and transfers get the primary budget only. */
   governmentInterestWeeklyUSD?: number;
+  /**
+   * PUB3: what the government owes its own staff this week — real headcount at the pools' real
+   * wages. Computed once and read by everything, so the budget line and the jobs that produce it
+   * cannot disagree.
+   */
+  governmentPayrollWeeklyUSD?: number;
   /**
    * PUB1e: the ONE per-category procurement budget. Stage 03 derives it from the treasury's real
    * primary budget; stage 05 bids exactly it. Before this the two disagreed — the demand stage

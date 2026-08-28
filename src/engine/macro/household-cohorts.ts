@@ -129,6 +129,11 @@ export interface CohortBuildInputs {
   baseAnnualWageUSD: Record<OccupationType, number>;
   /** Labor force per occupation (employed + unemployed), the same figure the benefits sum uses. */
   laborForceByOccupation: Record<OccupationType, number>;
+  /**
+   * The PRIMARY budget available for transfers: spending less debt service (PUB1) and less the
+   * government's own payroll (PUB3). Callers net both off, because both are already paid to
+   * someone else — bondholders and the government's own staff.
+   */
   governmentSpendingWeeklyUSD: number;
   /** The region's behavioural aggregate savings rate — the anchor the tier cross-section is
    * normalized to, so the aggregate saving flow is unchanged by construction. */

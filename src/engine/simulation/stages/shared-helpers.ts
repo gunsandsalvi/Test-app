@@ -6,7 +6,7 @@
 
 import { Company, Region, PrivateSectorSegment, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 
 // Holder-class rebalancing coefficients (see computeTargetOwnershipShares below).
@@ -147,8 +147,9 @@ export function computeOccupationDemand(companies: Company[], privateSegments: P
   });
 
   if (governmentEmployment) {
-    demand.GENERAL += governmentEmployment * 0.6;
-    demand.MANAGERIAL_FINANCIAL += governmentEmployment * 0.4;
+    Object.entries(GOVERNMENT_OCCUPATION_MIX).forEach(([occ, share]) => {
+      demand[occ] += governmentEmployment * (share ?? 0);
+    });
   }
 
   return demand;

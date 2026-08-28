@@ -341,11 +341,13 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // than assumed spent. ----
     const govBudget = decomposeGovernmentSpending(
       reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
-      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore
+      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
+      reg.governmentPayrollWeeklyUSD ?? 0
     );
     const procurementSpentUSD = reg.governmentProcurementSpentUSD ?? 0;
     reg.governmentOutlaysUSD = Number(governmentOutlaysUSD({
       interestUSD: govBudget.interestUSD,
+      payrollUSD: govBudget.payrollUSD,
       transfersUSD: govBudget.transfersUSD,
       procurementSpentUSD,
     }).toFixed(0));

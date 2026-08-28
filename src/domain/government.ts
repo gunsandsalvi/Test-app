@@ -55,15 +55,55 @@ export function decomposeGovernmentSpending(
   spendingWeeklyUSD: number,
   interestWeeklyUSD: number,
   procurementShare: number,
-  fiscalStanceScore: number = 0
-): { interestUSD: number; procurementBudgetUSD: number; transfersUSD: number } {
+  fiscalStanceScore: number = 0,
+  /** PUB3: what the government owes its own staff this week — real headcount x real wages. */
+  payrollWeeklyUSD: number = 0
+): { interestUSD: number; payrollUSD: number; procurementBudgetUSD: number; transfersUSD: number } {
   const interestUSD = Math.max(0, interestWeeklyUSD);
-  const primaryUSD = Math.max(0, spendingWeeklyUSD - interestUSD);
+  const payrollUSD = Math.max(0, payrollWeeklyUSD);
+  // Payroll is contractual like interest: it comes off the top, and what is left is the
+  // discretionary budget. A government facing a rising wage bill cuts programs, not salaries.
+  const primaryUSD = Math.max(0, spendingWeeklyUSD - interestUSD - payrollUSD);
   return {
     interestUSD,
+    payrollUSD,
     procurementBudgetUSD: primaryUSD * procurementShare * (1 + fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY),
     transfersUSD: primaryUSD * (1 - procurementShare),
   };
+}
+
+/**
+ * PUB3 — what the government owes its own employees, weekly.
+ *
+ * The defect this closes: government employees occupy real jobs in the labor market (they are in
+ * the occupation pools, 14.3% of employment) and earn real wages inside the labor share — so
+ * households receive the money — but NO EMPLOYER EVER PAID IT. The budget had no compensation
+ * line at all. Measured at seed: 1.65M USA staff, 8.1% of GDP, entirely unpaid.
+ *
+ * Worse than a missing leg: because the wages were already in household income via the labor
+ * share, and the transfer envelope was sized as the whole primary budget, households were
+ * credited the same ~8% of output TWICE — once as wages and once inside transfers. Carving
+ * payroll out of the primary budget removes that double count; it does not take income away
+ * that anyone was really owed.
+ *
+ * Real national accounts split a ~36%-of-GDP state as compensation ~8% + purchases ~11% +
+ * transfers ~13% + interest ~4%. This is the compensation line.
+ */
+export function governmentPayrollWeeklyUSD(args: {
+  governmentEmployment: number;
+  /** Structural base wage per occupation (annual), before the market's own wage index. */
+  baseAnnualWageUSD: Record<string, number>;
+  /** The pools' live wage indexes — so a tight labor market raises the government's bill too. */
+  wageIndexByOccupation: Record<string, number>;
+  /** What the government employs, from GOVERNMENT_OCCUPATION_MIX. */
+  occupationMix: Partial<Record<string, number>>;
+}): number {
+  const annualPerHead = Object.entries(args.occupationMix).reduce(
+    (a, [occ, share]) =>
+      a + (args.baseAnnualWageUSD[occ] ?? 0) * (args.wageIndexByOccupation[occ] ?? 1) * (share ?? 0),
+    0
+  );
+  return (Math.max(0, args.governmentEmployment) * annualPerHead) / 52;
 }
 
 /** How far a full stimulus (stance 1.0) lifts the procurement line above its structural share. */
@@ -77,10 +117,12 @@ export const FISCAL_STANCE_PROCUREMENT_SENSITIVITY = 0.25;
  */
 export function governmentOutlaysUSD(parts: {
   interestUSD: number;
+  /** PUB3: staff are paid in full — a government does not skip payroll. */
+  payrollUSD: number;
   transfersUSD: number;
   procurementSpentUSD: number;
 }): number {
-  return parts.interestUSD + parts.transfersUSD + parts.procurementSpentUSD;
+  return parts.interestUSD + parts.payrollUSD + parts.transfersUSD + parts.procurementSpentUSD;
 }
 
 /**
