@@ -215,7 +215,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // purchases that cleared this week — consumption below draws down from that real total.
     const newInputInventoryBySubUnit: Record<string, InputLot[]> = {};
     Object.entries(comp.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
-      newInputInventoryBySubUnit[su] = [...lots];
+      // Aliased, not copied: nothing below mutates a lot array in place — the drawdown sorts a
+      // .slice() and REPLACES the entry — and next week's writers (stage 05, goods-arrival)
+      // copy-on-first-touch before appending. The defensive copy here duplicated every lot in
+      // the world every week (~55k and growing under XB3a's foreign lots), all of it garbage.
+      newInputInventoryBySubUnit[su] = lots;
     });
     Object.entries(companyUpdates[comp.ticker]?.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
       newInputInventoryBySubUnit[su] = lots as InputLot[];
