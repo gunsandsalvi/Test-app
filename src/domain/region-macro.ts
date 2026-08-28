@@ -543,6 +543,19 @@ export interface Region {
   /** PUB1 — real weekly interest on the debt stack, paid to holders. Comes off the top of
    * spending, so procurement and transfers get the primary budget only. */
   governmentInterestWeeklyUSD?: number;
+  /**
+   * PUB1e: the ONE per-category procurement budget. Stage 03 derives it from the treasury's real
+   * primary budget; stage 05 bids exactly it. Before this the two disagreed — the demand stage
+   * allocated G by buyer mix while the auction re-derived a government slice off a smoothed
+   * demand level, and the treasury's account was debited by neither.
+   */
+  governmentProcurementBudgetByCategory?: Record<string, number>;
+  /** What those bids actually filled last week, at cleared prices. The real G. */
+  governmentProcurementSpentUSD?: number;
+  /** Budget the goods market could not supply. Named, not assumed spent. */
+  unspentProcurementBudgetUSD?: number;
+  /** What actually left the account: interest + transfers + realized procurement. */
+  governmentOutlaysUSD?: number;
   /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
    * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
   centralBankSheet?: CentralBank;

@@ -51,7 +51,11 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // Financing is part of the treasury's week: a deficit is funded by issuance, and maturing
     // paper is repaid. Without these legs the TGA is debited by every deficit and credited by
     // nothing, and it simply runs down (measured: −40.3B by week 60).
-    const tgaFlowUSD = reg.governmentRevenueUSD - reg.governmentSpendingUSD + remitUSD
+    // PUB1e: debited by what actually left — interest, transfers, and the procurement the goods
+    // market really supplied — not by the spending BUDGET. Falls back to the budget only before
+    // stage 11 has run once.
+    const outlaysUSD = reg.governmentOutlaysUSD ?? reg.governmentSpendingUSD;
+    const tgaFlowUSD = reg.governmentRevenueUSD - outlaysUSD + remitUSD
       + (reg.lastIssuanceProceedsUSD ?? 0) - (reg.lastRedemptionPaidUSD ?? 0);
     cb.treasuryAccountUSD = Number((cb.treasuryAccountUSD + tgaFlowUSD).toFixed(0));
     cb.lastRemittanceUSD = Number(remitUSD.toFixed(0));

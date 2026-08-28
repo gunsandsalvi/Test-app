@@ -11,10 +11,10 @@ import { GameState, RegionId, ItemizedHolding, GovDebtTranche } from '../../../t
 import { isActiveCompany } from '../../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { generateWeeklyNews } from '../../newsGenerator';
-import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts';
+import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
-import { weeklyInterestExpenseUSD, sovereignCouponByBucket } from '../../../domain/government';
+import { weeklyInterestExpenseUSD, sovereignCouponByBucket, decomposeGovernmentSpending, governmentOutlaysUSD } from '../../../domain/government';
 import { centralBankAssetsUSD, openMarketPolicy } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView } from './holdings-view';
@@ -91,7 +91,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // it is household income, and it reaches GDP through C once households spend it. Counting
     // 100% of outlays here (while the demand side in 03-category-demand.ts routed only the
     // procurement share into real category bids) double-counted every transfer dollar.
-    const governmentComponentUSD = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0);
+    // PUB1e: G is what the government's bids actually FILLED in stage 05, annualized — the same
+    // number the treasury is debited by below. It used to be a formula here and a differently
+    // allocated formula in the demand stage.
+    const governmentComponentUSD = (reg.governmentProcurementSpentUSD ?? 0) * 52;
 
     // NX — net exports, already established in Phase 3 (already annualized-scale)
     const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
@@ -332,7 +335,25 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       reg.governmentInterestToUnmodeledHoldersUSD = Number(Math.max(0, interestWeeklyUSD - held).toFixed(0));
     }
 
-    const weeklyDeficitUSD = Math.max(0, reg.governmentSpendingUSD - reg.governmentRevenueUSD) + maturedBondPrincipalUSD;
+    // ---- PUB1e: what actually left the account. Interest and transfers are contractual and are
+    // paid in full; procurement is what the goods market really supplied. A government that
+    // cannot buy what it planned has not spent the money, and the remainder is named rather
+    // than assumed spent. ----
+    const govBudget = decomposeGovernmentSpending(
+      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore
+    );
+    const procurementSpentUSD = reg.governmentProcurementSpentUSD ?? 0;
+    reg.governmentOutlaysUSD = Number(governmentOutlaysUSD({
+      interestUSD: govBudget.interestUSD,
+      transfersUSD: govBudget.transfersUSD,
+      procurementSpentUSD,
+    }).toFixed(0));
+    reg.unspentProcurementBudgetUSD = Number(
+      Math.max(0, govBudget.procurementBudgetUSD - procurementSpentUSD).toFixed(0)
+    );
+
+    const weeklyDeficitUSD = Math.max(0, reg.governmentOutlaysUSD - reg.governmentRevenueUSD) + maturedBondPrincipalUSD;
 
     // The treasury's bill rule: hold the bill share of the stock near target, leaning toward
     // bills when the front end is genuinely cheaper than the belly (positive carve of the real

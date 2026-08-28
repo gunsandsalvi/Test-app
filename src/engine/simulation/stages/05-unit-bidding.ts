@@ -15,6 +15,7 @@ import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
+import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
 
 // 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
 // real ticker so the post-clearing crediting step can tell it apart from a real company sale.
@@ -479,15 +480,19 @@ function executeSubUnitBiddingMarket(
   const govShare = subUnitDef?.buyerMix.GOVERNMENT ?? 0;
   const hhShare = subUnitDef?.buyerMix.HOUSEHOLD ?? 0;
 
-  // Government Aggregate Bid
-  if (govShare > 0) {
-    const govWeeklyDemandUSD = (demandState.demandLevelUSD * govShare) / 52;
-    const govDemandUnits = govWeeklyDemandUSD / currentUnitPrice;
+  // Government Aggregate Bid — PUB1e: the treasury's OWN weekly budget for this category, set by
+  // stage 03 from the real primary budget net of debt service. It used to be re-derived here as
+  // a share of the smoothed demand level, which is a different number from the one stage 03
+  // allocated and from the one the treasury's account was debited by.
+  const govBudgetWeeklyUSD = targetReg.governmentProcurementBudgetByCategory?.[subUnitId]
+    ?? (demandState.demandLevelUSD * govShare) / 52;
+  if (govShare > 0 && govBudgetWeeklyUSD > 0) {
+    const govDemandUnits = govBudgetWeeklyUSD / currentUnitPrice;
     if (govDemandUnits > 0.001) {
       bids.push({
         isGovernmentAggregate: true,
         quantityUnits: govDemandUnits,
-        maxPriceUSD: currentUnitPrice * 1.10
+        maxPriceUSD: currentUnitPrice * (1 + GOVERNMENT_BID_PRICE_TOLERANCE)
       });
     }
   }
@@ -600,6 +605,13 @@ function executeSubUnitBiddingMarket(
       }
       if (bid.isHouseholdAggregate && subUnitId === 'passenger_vehicles') {
         targetReg.householdState.durableGoodsStockUnits = (targetReg.householdState.durableGoodsStockUnits ?? 0) + filledQty;
+      }
+      // PUB1e: what the government actually bought, at the price it actually paid. This is the
+      // real G, and the treasury's account is debited by it in stage 11 — before, the goods
+      // moved and no money left the government.
+      if (bid.isGovernmentAggregate) {
+        targetReg.governmentProcurementSpentUSD =
+          (targetReg.governmentProcurementSpentUSD ?? 0) + filledQty * clearedPriceUSD;
       }
     });
   }

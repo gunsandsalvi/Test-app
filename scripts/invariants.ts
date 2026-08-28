@@ -196,6 +196,23 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     if (Object.values(cb.sovereignHoldingsByTenor || {}).some((v) => (Number(v) || 0) < -1)) {
       violations.push({ week, message: `${region} central bank holds a negative position` });
     }
+    // PUB1e: the government cannot buy more than it appropriated, and what left the account is
+    // exactly interest + transfers + what it actually bought.
+    const reg = state.regions[region] as any;
+    const outlays = reg.governmentOutlaysUSD;
+    if (outlays !== undefined) {
+      const spent = reg.governmentProcurementSpentUSD ?? 0;
+      const unspent = reg.unspentProcurementBudgetUSD ?? 0;
+      if (spent > 0 && outlays > reg.governmentSpendingUSD * 1.5) {
+        violations.push({
+          week,
+          message: `${region} government outlays ${(outlays / 1e9).toFixed(2)}B exceed its budget ${(reg.governmentSpendingUSD / 1e9).toFixed(2)}B by more than the stance allows`,
+        });
+      }
+      if (spent < 0 || unspent < 0) {
+        violations.push({ week, message: `${region} government procurement is negative` });
+      }
+    }
   });
 }
 

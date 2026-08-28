@@ -24,9 +24,10 @@ import { sovBucketKey } from './stages/shared-helpers';
 import { setSimulationSeed, getRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
+import { decomposeGovernmentSpending } from '../../domain/government';
 import {
   computeExpenditureGdpUSD,
-  computeGovernmentPurchasesUSD,
+  GOV_PROCUREMENT_SHARE_OF_SPENDING,
   computeHouseholdDisposableIncomeUSD,
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
@@ -123,7 +124,12 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const reg = regions[regionId];
     const hs = reg.householdState;
     const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    const G = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0) * (1 + reg.fiscalStanceScore * 0.25);
+    // §7.4: the seed uses the SAME procurement owner the weekly stage does, so week 0's
+    // government demand and week 1's are the same shape.
+    const G = decomposeGovernmentSpending(
+      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore
+    ).procurementBudgetUSD * 52;
     const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
     reg.laggedCorporateDemandBase = corpBase;
     const I = corpBase;
@@ -141,11 +147,13 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     });
 
     const regionFirmCount = companies.filter(c => c.region === regionId).length;
+    const govBudgetByCategory: Record<string, number> = {};
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+        govBudgetByCategory[su.unitId] = suGovDemand / 52;
         const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
         const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
 
@@ -156,6 +164,10 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         );
       });
     });
+
+    // PUB1e: the budget stage 05 bids in week 1, seeded here so it is never empty.
+    reg.governmentProcurementBudgetByCategory = govBudgetByCategory;
+    reg.governmentProcurementSpentUSD = 0;
 
     // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
     const regionCompanies = companies.filter(c => c.region === regionId);

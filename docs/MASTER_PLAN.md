@@ -245,7 +245,7 @@ metrics to watch rather than work.
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
 | 2 | foundation | **BP1 — One industry registry** | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
-| 4 | foundation | **PUB — The public sector: treasury + central bank** | HH (household taxes) |
+| 4 | foundation | **PUB — The public sector: treasury + central bank** — all seven slices done (§7.61–67); **awaiting its close-out battery** before it is marked closed, on HH's precedent | HH (household taxes) |
 | 5 | foundation | **DEM — Demographic variability** (small; rides beside HH4–HH5) | none |
 | 6 | markets | **G3 — One dealer system** | none (S9 done) |
 | 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
@@ -639,10 +639,14 @@ cash on the placement path. The A/B says otherwise — worst institutional cash 
 now a §6 defect of its own. What the placement really cost was the sovereign market: removing it
 took bank reserves at w40 from **−29.0B to +84.7B** and the 2Y at w26 from **0.98% to 2.62%**.
 
-**PUB1e — Procurement through real bids (remaining).** Government purchases still enter demand as
-an aggregate rather than as stage-05 bids by a named buyer. Everything else this entry once
-listed — real tax collection, the spending decomposition, coupons paid out of the account, the
-funded deficit — landed in PUB1a–1d.
+**PUB1e — DONE (§7.67).** Procurement is one number, bid in the real goods market and paid for
+out of the treasury's account. There were FOUR representations of "what the government buys";
+now stage 03 derives the per-category budget from the primary budget, stage 05 bids exactly it,
+and stage 11 debits the account by what actually filled. Measured: fill 43% -> 75% once the
+government's willingness to pay stopped excluding it from any category that moved 10% in a week;
+~25% of the budget still goes unspent against the goods market's own excess demand, named as
+`unspentProcurementBudgetUSD`. corr(interest share, procurement share) = **-0.666** over 100
+weeks — the crowding-out, now landing in real bids rather than a line item.
 
 **PUB2a — DONE (§7.62).** The CB has a real balance sheet: its sovereign book as assets, and
 reserves + the **Treasury General Account** + currency as liabilities. The TGA is the point — a
@@ -985,6 +989,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **TGA level over a quarter-scale horizon** | Watch, do not chase (rule 10). **Re-measured after PUB1d** as that row asked: the account no longer drifts monotonically — it now sawtooths, filling on the quarterly remittance dates and drawing down between them (39 → 33 → 66 → 59 → 51 → 44 → 86B over 26 weeks), which is the shape a treasury balance actually has. What remains is the LEVEL at each quarter's peak creeping up, because receipts are larger than the old formula assumed and spending catches up a week later. Re-measure once PUB1e puts procurement through real bids. |
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Sovereign price elasticity to a size-only bidder** | **Found in PUB2b (§7.66).** A 34B difference in the central bank's book moved the USA 2Y by ~490bp at w30 — a very high elasticity for a market that size. Consistent with the damper watch above (1,964 instruments persistently bound: the books ARE thin, so an inelastic buyer has to move the level a long way to find sellers), and with §7.18's want/have. **Do not soften it in the clearing engine** — prices are cleared, and tuning the auction to produce a gentler response would be fitting the mechanism to a desired number. It should fall as **SCALE** and **G3** grow the universe and the dealer's capacity; re-measure then. |
+| **The goods market cannot fill a quarter of what is bid** | **Found in PUB1e (§7.67).** ~25% of the government's procurement budget goes unfilled at any price: aggregate bids exceed aggregate supply and every in-money bidder is rationed pro-rata, so households are short by the same ratio. Long-standing and not PUB's — it only became visible because the government is the first buyer whose unfilled demand costs something. **Do not close it by shrinking the bids**: the demand is real and the supply side is what is missing. Expect it to fall as **SCALE** grows the firm universe and **BP1**'s taxonomy lets more sub-units be supplied; re-measure the fill ratio then. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ## 7. Record & lessons (do not re-learn)
@@ -1756,3 +1761,34 @@ that proved it, the lesson.
     - **The verify criterion, answered by measurement.** Forced-QT A/B at w40: the book runs off
       136B → 86B and the 10s2s slope goes **210bp → 79bp**, through real absorption in the
       auction. No term-premium formula anywhere.
+67. **PUB1e: four answers to "what does the government buy", and a bid that lost the auction.**
+    The demand stage allocated G by buyer mix with a fiscal-stance multiplier; the auction
+    re-derived a government slice off a SMOOTHED demand level (a different number, differently
+    allocated); the GDP identity used a third formula without the stance; and the treasury's
+    account was debited by the whole spending budget, which is none of them. Rule 3 four times
+    over. Now: stage 03 owns the per-category budget, stage 05 bids exactly it, stage 11 debits
+    what actually filled, and G in the identity IS the realized spend.
+    - **The government's purchase had no cash leg.** Its bid cleared, the supplier was credited
+      revenue, and nothing left the government — the treasury was debited a formula that had no
+      relationship to what was bought. Both sides now move by the same `filledQty x clearedPrice`.
+    - **`isGovernmentAggregate` was set and never read.** A flag on the bid that no settlement
+      code consumed — the tell that the buyer side of this market was never built.
+    - **The bid was losing the auction, and the sweep proved it.** Fill ran 38–63% of budget. A
+      cap of last week's price +10% excludes the government from any category that moved more
+      than 10% in a week, which under the §6 inflation escape is many of them. Sweeping the
+      tolerance: unspent 0.81B (+10%) -> 0.54B (+25%) -> 0.36B (+50%) -> 0.21B (+100%), **flat
+      after +50%**. So half the shortfall was willingness to pay and half is the goods market
+      rationing every bidder pro-rata. Set at +50%, where the artifact is gone and only the real
+      shortage remains. **A sweep tells you which half of a gap is yours.**
+    - **The right constraint is the appropriated DOLLAR budget, not a price cap.** A government
+      procures to a contracted program requirement, so it is far less price-elastic than a
+      household (whose premium tops out near 1.9%). Fixing the budget in dollars and freeing the
+      price means inflation erodes real government purchases on its own — the mechanism the +10%
+      cap was crudely standing in for by excluding the government outright.
+    - **What the goods market admitted.** ~25% of the procurement budget cannot be filled at any
+      price, because aggregate bids exceed aggregate supply and everyone in the money is rationed
+      pro-rata. Households have always been rationed the same way; PUB1e is the first thing that
+      made it VISIBLE, because it is the first buyer whose unfilled demand has a cost. Named as
+      `unspentProcurementBudgetUSD` rather than assumed spent.
+    - **`decomposeGovernmentSpending` was dead code from PUB1a** — exported, documented, never
+      called. Wiring it here is what made one owner possible.

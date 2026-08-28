@@ -10,7 +10,8 @@ import { categoryPriceTier, HouseholdPriceTier } from '../../../domain/industry'
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
-import { computeGovernmentPurchasesUSD } from '../../bootstrap/national-accounts';
+import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
+import { decomposeGovernmentSpending } from '../../../domain/government';
 import { WeeklyStepContext } from './context';
 
 export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -40,9 +41,13 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       ? cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0)
       : reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
     // Government purchases only — the transfer share of outlays reaches demand through C, not
-    // here. Shares the one procurement constant with the GDP identity in stage 11 so the two
-    // cannot disagree about what the government actually buys.
-    const G = computeGovernmentPurchasesUSD(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0) * (1 + reg.fiscalStanceScore * 0.25);
+    // here. PUB1e: ONE owner of the procurement budget, including the fiscal stance, so the
+    // goods market cannot bid for a stimulus the treasury never pays for.
+    const govBudget = decomposeGovernmentSpending(
+      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore
+    );
+    const G = govBudget.procurementBudgetUSD * 52;
     // HC3: private firms' capex is real corporate demand like anyone else's (their segments'
     // capexUSD was reduced by exactly this at the carve).
     const rawCorporateDemandBase = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(f => f.region === regionId).reduce((s, f) => s + f.capex, 0);
@@ -80,6 +85,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     });
 
     const allTargets: Record<string, number> = {};
+    const govBudgetByCategory: Record<string, number> = {};
     const smoothingByCategory: Record<string, number> = {};
     const corporateDemandByCategory: Record<string, number> = {};
 
@@ -103,6 +109,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           ? (su.buyerMix.HOUSEHOLD / hhWeightByTier[tier]) * C * spendShareByTier[tier]
           : 0;
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+        // PUB1e: stage 05 bids exactly this, weekly (rule 9 — the period is in the name).
+        govBudgetByCategory[su.unitId] = suGovDemand / 52;
         const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
         allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;
         corporateDemandByCategory[su.unitId] = suCorpDemand;
@@ -154,6 +162,10 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         corporateDemandUSD: corporateDemandByCategory[cat] ?? 0,
       };
     });
+
+    // PUB1e: publish the budget stage 05 will bid, and reset last week's realized spend.
+    reg.governmentProcurementBudgetByCategory = govBudgetByCategory;
+    reg.governmentProcurementSpentUSD = 0;
 
     // Supply Relationships
     if (state.currentWeek % 13 === 0 || !reg.supplyRelationships || reg.supplyRelationships.length === 0) {
