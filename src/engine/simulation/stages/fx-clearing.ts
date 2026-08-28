@@ -33,6 +33,31 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   const residualByRegion = new Map<RegionId, number>();
   const grossByRegion = new Map<RegionId, number>();
 
+  // ---- Every cross-border payment has TWO legs, and building them one currency at a time is how
+  // a leg goes missing. A JPN insurer buying EUR paper BUYS euro and SELLS yen; counting only the
+  // euro side means the yen is never sold and the trade has one end. With the USD as numéraire a
+  // direct JPY->EUR trade is exactly "sell JPY for USD, buy EUR with USD" and the dollar legs
+  // net out — which is also how the real market routes most non-dollar pairs. So both legs are
+  // registered here, in one pass over the entities, and the flow conserves by construction. ----
+  const settlementFlowByRegion = new Map<RegionId, number>();
+  const addFlow = (r: RegionId, usd: number) =>
+    settlementFlowByRegion.set(r, (settlementFlowByRegion.get(r) ?? 0) + usd);
+  ctx.updatedInstitutionalEntities.forEach((e: any) => {
+    const heldNow: Record<string, number> = {};
+    (e.itemizedHoldings || []).forEach((h: any) => {
+      if (!h.issuerRegion || h.issuerRegion === e.region) return;
+      heldNow[h.issuerRegion] = (heldNow[h.issuerRegion] ?? 0) + (h.quantityOrNotionalUSD ?? 0);
+    });
+    const prior = e.priorForeignHoldingsByRegion ?? {};
+    const touched = new Set([...Object.keys(heldNow), ...Object.keys(prior)]);
+    touched.forEach((issuer) => {
+      const deltaUSD = (heldNow[issuer] ?? 0) - (prior[issuer] ?? 0);
+      if (Math.abs(deltaUSD) < 1e5) return;
+      addFlow(issuer as RegionId, deltaUSD);      // buys the issuer's money
+      addFlow(e.region as RegionId, -deltaUSD);   // and sells its own to get it
+    });
+  });
+
   REGIONS.filter((r) => r !== 'USA').forEach((region) => {
     const schedules: FxDemandSchedule[] = [];
 
@@ -50,16 +75,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       schedules.push({ participantId: 'DEALERS', netDemandAtCurrentUSD: -dealerNetUSD, slopeUSDPerPct: 0 });
     }
 
-    // ---- INELASTIC 2: cross-border securities settlement. An entity that bought this region's
-    // paper this week needed this region's currency to pay for it. ----
-    const portfolioUSD = ctx.updatedInstitutionalEntities.reduce((a: number, e: any) => {
-      if (e.region === region) return a;
-      const held = (e.itemizedHoldings || [])
-        .filter((h: any) => h.issuerRegion === region)
-        .reduce((x: number, h: any) => x + (h.quantityOrNotionalUSD ?? 0), 0);
-      const prior = (e.priorForeignHoldingsByRegion?.[region]) ?? held;
-      return a + (held - prior);
-    }, 0);
+    // ---- INELASTIC 2: cross-border securities settlement, BOTH legs (see above). ----
+    const portfolioUSD = settlementFlowByRegion.get(region) ?? 0;
     if (Math.abs(portfolioUSD) > 1e6) {
       schedules.push({ participantId: 'PORTFOLIO', netDemandAtCurrentUSD: portfolioUSD, slopeUSDPerPct: 0 });
     }

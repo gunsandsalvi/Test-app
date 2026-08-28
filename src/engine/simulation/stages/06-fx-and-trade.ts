@@ -16,11 +16,10 @@ import { WeeklyStepContext } from './context';
 /**
  * USD per one unit of a region's currency.
  *
- * It used to look pairs up by NAME — 'EUR/USD', 'GBP/USD', 'USD/JPY' — none of which this model
- * builds: pairs are named `${base}/${quote}` over RegionIds, so they are 'EUR/USA', 'UK/USA',
- * 'USA/JPN'. Every lookup missed and every caller silently got the hardcoded fallback, which is
- * why the exchange rate has never moved anything: the one function that converts to USD returned
- * a constant. Matching on base/quote instead makes it read the real cleared rate.
+ * It used to look pairs up by NAME, against labels the model did not build — every lookup missed
+ * and every caller silently got a hardcoded fallback, which is why the exchange rate had never
+ * moved anything: the one function converting to USD returned a constant. Matching on base and
+ * quote instead makes it read the real cleared rate, whatever the pair happens to be labelled.
  */
 export function getFxToUsd(updatedFxPairs: FxPair[], regionId: RegionId): number {
   if (regionId === 'USA') return 1.0;

@@ -22,6 +22,7 @@ import {
 import { deriveSubUnitUnitPrice, TARGET_FIRMS_PER_REGION } from '../bootstrap/category-demand';
 import { GENERATED_COMMODITIES, GENERATED_FX_PAIR_LEGS, getInitialFxRate, getCommodityBaseSpotPrice } from '../bootstrap/commodities-and-fx';
 import { getRegionYieldCurveParams, getRegionNeutralRate, getRegionInitialPolicyRate, getRegionProductivityGrowth, INFLATION_TARGET } from '../bootstrap/yield-curves';
+import { fxPairLabel } from '../../domain/geography';
 
 export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): Record<WealthTier, WealthTierData> {
   const inc = estimatedHouseholdIncomeUSD;
@@ -607,7 +608,7 @@ export function getInitialFxPairs(): FxPair[] {
   return GENERATED_FX_PAIR_LEGS.map(({ base, quote }) => {
     const rate = getInitialFxRate(base, quote);
     return {
-      pair: `${base}/${quote}`,
+      pair: fxPairLabel(base, quote),
       base,
       quote,
       rate,
