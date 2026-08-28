@@ -255,10 +255,26 @@ function solveClearingStat(
 ): number {
   const isYieldLike = inst.statKind === 'YIELD_LIKE';
   const n = colCount;
-  const totalDemandAt = (stat: number) => {
+
+  // Work in an ORIENTED coordinate u where demand is non-decreasing: u = stat for YIELD_LIKE,
+  // u = -stat for PRICE_LIKE. Each entry's demand in u is a clamped ramp — flat at its mandated
+  // core below the level where its schedule clears the core, rising at maxHolding/range, flat at
+  // min(maxHolding, affordable) above — so TOTAL demand is piecewise linear, and the level where
+  // it equals the float is a point this can compute EXACTLY rather than approach by bisection.
+  //
+  // This replaces sixty blind halvings per instrument with one O(n log n) segment walk, and it is
+  // not only faster but more honest: the bisection returned a 60-step approximation to the
+  // crossing, and the approximation error was part of the world. Swapping it is a WORLD RELABEL —
+  // every cleared level shifts in its last decimals, the same class of change as an RNG-stream
+  // relabel (rule 10) — recorded in the plan at the commit that introduced it.
+  const uLo = isYieldLike ? bracketLow : -bracketHigh;
+  const uHi = isYieldLike ? bracketHigh : -bracketLow;
+  const toStat = (u: number) => (isYieldLike ? u : -u);
+
+  const demandAtU = (u: number) => {
     let sum = 0;
     for (let i = 0; i < n; i++) {
-      const distanceIntoTheMoney = isYieldLike ? stat - colReservation[i] : colReservation[i] - stat;
+      const distanceIntoTheMoney = u - (isYieldLike ? colReservation[i] : -colReservation[i]);
       const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / colRange[i]));
       const wantedUSD = colMaxHolding[i] * fraction;
       sum += Math.max(colCore[i], Math.min(wantedUSD, colAffordable[i]));
@@ -266,31 +282,57 @@ function solveClearingStat(
     return sum;
   };
 
-  // Demand rises with the statistic for YIELD_LIKE and falls for PRICE_LIKE; orient the search so
-  // that `lo` is always the low-demand end.
-  const lo = inst.statKind === 'YIELD_LIKE' ? bracketLow : bracketHigh;
-  const hi = inst.statKind === 'YIELD_LIKE' ? bracketHigh : bracketLow;
-
-  // When the participants' combined capacity cannot absorb the whole float at ANY level, there
-  // is no crossing — and the honest clearing level is NOT the search bound (a bound is not a
-  // price; that mistake is recorded in the plan). It is the SATURATION point: the least
-  // aggressive level at which every willing buyer has taken its full size. Beyond it, a wider
-  // level attracts not one more dollar of demand, so no economic force pushes the price there.
-  // The dealer carries the genuine residual, which is what a dealer of last resort is — and the
-  // cost of that warehousing becoming real capital and funding is G3's item, not a reason to
-  // fake a wider print today.
-  const demandAtWideEnd = totalDemandAt(hi);
+  // Same saturation semantics as before: when the buyer base cannot absorb the float at any
+  // level, the target retreats to just under total capacity and the crossing IS the saturation
+  // point — the least aggressive level at which every willing buyer has taken full size. A bound
+  // is not a price (§7.21, §7.75).
+  const demandAtWideEnd = demandAtU(uHi);
   const targetUSD = Math.min(inst.tradableFloatUSD, demandAtWideEnd * 0.999999);
-  if (totalDemandAt(lo) > targetUSD) return lo; // oversubscribed even at the extreme
+  if (demandAtU(uLo) > targetUSD) return toStat(uLo); // oversubscribed even at the extreme
 
-  let a = lo;
-  let b = hi;
-  for (let i = 0; i < 60; i++) {
-    const mid = (a + b) / 2;
-    if (totalDemandAt(mid) < targetUSD) a = mid;
-    else b = mid;
+  // Slope-change events: where each entry's ramp rises out of its core, and where it caps.
+  const events: { u: number; dSlope: number }[] = [];
+  let slopeAtLo = 0;
+  for (let i = 0; i < n; i++) {
+    const maxH = colMaxHolding[i];
+    if (!(maxH > 0)) continue;
+    const range = colRange[i];
+    const slope = maxH / range;
+    if (!isFinite(slope) || !(slope > 0)) continue;
+    const uRes = isYieldLike ? colReservation[i] : -colReservation[i];
+    const fCore = Math.min(1, colCore[i] / maxH);
+    const fCap = Math.min(1, colAffordable[i] / maxH);
+    if (!(fCap > fCore)) continue; // core meets cap: this entry is a constant, no slope anywhere
+    const uRiseStart = uRes + range * fCore;
+    const uRiseEnd = uRes + range * fCap;
+    if (uRiseEnd <= uLo || uRiseStart >= uHi) {
+      continue; // fully outside the bracket: contributes a constant across it
+    }
+    if (uRiseStart <= uLo) slopeAtLo += slope;
+    else events.push({ u: uRiseStart, dSlope: slope });
+    if (uRiseEnd < uHi) events.push({ u: uRiseEnd, dSlope: -slope });
   }
-  return (a + b) / 2;
+  events.sort((a, b) => a.u - b.u);
+
+  // Walk the segments from the low end until the target falls inside one, then solve linearly.
+  let uCur = uLo;
+  let dCur = demandAtU(uLo);
+  let slope = slopeAtLo;
+  for (let k = 0; k <= events.length; k++) {
+    const uNext = k < events.length ? events[k].u : uHi;
+    if (uNext > uCur) {
+      const dNext = dCur + slope * (uNext - uCur);
+      if (dNext >= targetUSD && slope > 0) {
+        const u = uCur + (targetUSD - dCur) / slope;
+        return toStat(Math.max(uLo, Math.min(uHi, u)));
+      }
+      dCur = dNext;
+      uCur = uNext;
+    }
+    if (k < events.length) slope += events[k].dSlope;
+  }
+  // Numerically flat all the way (target met only at the wide end): the saturation point is there.
+  return toStat(uHi);
 }
 
 export function clearFinancialAsset(
