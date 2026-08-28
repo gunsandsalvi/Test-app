@@ -222,18 +222,19 @@ majors), **WS** (Wall Street completion), **G** (realism gaps), **MS** (Main Str
 |---|---|---|---|
 | — | **Periodicity & units audit + MoM/YoY display convention** | P1 | none; do alongside any item |
 | — | **Damp the inflation swing** (diagnose the goods-price cycle) | G1b | G2 likely part of the fix |
-| 1 | Unify the two dealer systems | G3 | S9 |
-| 2 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
-| 3 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
-| 4 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
-| 5 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
-| 6 | Corporate hedging + banks hedge their own book | WS11 | G4 |
-| 7 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
-| 8 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
-| 9 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
-| 10 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
-| 11 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
-| 12 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
+| 1 | **ETFs: real indexes, index funds, and dealers as authorised participants** | ETF | WS4, WS8, S11 |
+| 2 | Unify the two dealer systems | G3 | S9 |
+| 3 | Real derivatives markets (IRS/CDS/options/XCS participants, real vol) | G4 | WS4, G3 |
+| 4 | Default resolution: recovery as an outcome, not a constant | G5 | G2 |
+| 5 | Institutional liability side (claims, benefits) drives demand | G6 | WS7 |
+| 6 | Commodity futures as a real market (hedgers/speculators) | G7 | G4 |
+| 7 | Corporate hedging + banks hedge their own book | WS11 | G4 |
+| 8 | Real international trade & FX clearing | WS9 | G2 (confirm currency-zone premise first) |
+| 9 | Central bank as a real counterparty (portfolio, QE/QT, remittances) | G9 | G2 |
+| 10 | Main Street (households → labor market → corporate wage system) | MS | ideally G2 |
+| 11 | Blueprint remainder (taxonomy → industry profiles → electricity/share-vs-margin → fiscal loop → antitrust) | BP | MS for the fiscal loop's household taxes |
+| 12 | End-of-project validation gate: full `npm run verify` + fix #67/#18 residuals | S-final | everything above it |
+| 13 | Aurora — full UI rebuild | AU | last; requires its §5-AU process |
 
 **Why this order.** The macro root causes are done (§7.9–§7.11, §7.16): the ~110% fake GDP
 growth, the double-written yield curve, the runaway formula CPI, and a clearing engine that
@@ -581,6 +582,71 @@ SME pool, so the economy's totals never change because a firm was created.
   revenue path (already written, gated on market presence) switches on.
 
 ---
+
+### ETF — Index funds, the indexes they track, and the dealers who arbitrage them
+
+**What this is.** Today every institution expresses every view as a direct line: it owns names,
+one position at a time, and the only thing standing between a dollar of appetite and a company's
+float is a demand schedule. That is not how the money actually reaches the market. A large share
+of it is intermediated by index products — the buyer chooses an exposure, a fund holds the
+basket, and a dealer stands between the fund's shares and its underlying. Building it makes three
+things real that are missing: an index that means something (so inclusion is an event), a flow
+that reaches every constituent at once (which is what makes a market move together), and a
+premium/discount that only exists because the arbitrage can be constrained.
+
+**The funds.** Per region (USA/EUR/UK/JPN): ALL_CAP, LARGE_CAP and SMALL_CAP equity; IG, HY and
+LEVERAGED_LOAN credit. Plus GLOBAL ALL_CAP / LARGE_CAP / SMALL_CAP equity spanning all four.
+Twenty-seven funds.
+
+**The indexes come first, and they are computed, not stated.**
+- Membership is a RULE over cleared prices, not a list: LARGE_CAP is the names making up the top
+  share of aggregate market cap and SMALL_CAP is the remainder, so the boundary moves when prices
+  do and a company can be promoted or relegated by its own performance. Credit membership is the
+  issuer's own cleared rating (IG vs HY) and the instrument's own type (floating non-facility
+  paper is the loan index).
+- Weights are market cap for equity and outstanding principal for credit.
+- **Rebalanced quarterly**, membership frozen in between. This is what makes index inclusion a
+  real event with a real flow behind it, and it is why a new listing is bought by the funds at
+  the next rebalance rather than the week it lists.
+
+**The funds are entities, not a wrapper.** A new `InstitutionalEntityType: 'ETF'` holding REAL
+itemized positions in its constituents, with shares outstanding, a NAV struck from the same
+cleared prices everything else marks at, and an expense ratio that accrues to its sponsor. An ETF
+that owns its basket is a real holder in 07b/07d/07e — its demand is not a parallel system.
+
+**Dealers are the authorised participants, and that is the whole price mechanism.** An ETF's
+shares are not cleared in a book of their own. Investor flow arrives, and the AP closes the gap:
+net creation demand means the dealer buys the basket in the constituent books and delivers shares
+to the fund; redemption means the reverse. The PREMIUM OR DISCOUNT is the residual — what the
+arbitrage could not absorb this week, given the dealer's real capacity. When APs are unconstrained
+it goes to zero, which is the ordinary case; when they are not, it persists, which is the
+interesting case and the one credit ETFs actually exhibit in stress.
+
+**Who buys ETFs and who buys direct lines — derived, not assigned.** Running direct positions
+takes research capacity, and capacity scales with size against the number of names that must be
+covered. A large insurer can hold two hundred credits itself; a small one cannot, and buys the
+index. So the ETF share of an entity's appetite falls out of its own assets against the universe
+it would otherwise have to cover, rather than a per-type constant. Hedge funds are the exception
+in the other direction and stay direct: a fund expressing a view on a specific name does not buy
+the index that dilutes it.
+
+**Sponsors: variety, no monolines.** One asset manager per region cannot run twenty-seven funds
+and would be a monoline anyway. Add asset managers so each region has several, and spread
+sponsorship so every manager runs a MIX across equity and credit — which is what real fund
+complexes look like.
+
+**Ties, so nothing is built twice:** WS8 (ETFs take their index weight of new issues and
+listings — an index fund is a forced buyer in the primary, which is a real part of why deals
+place), G3 (the AP desk is the same dealer balance sheet G3 unifies; until then the basket trade
+rides the existing dealer inventory), S11 (ETF budgets are the same real-money constraint every
+entity has), G4 (an ETF is the natural underlying for the options G4 will price), HC (index
+inclusion is what a newly listed company gets, and a take-private is a deletion).
+
+**Verify:** index level moves with its constituents and only with them; NAV equals the sum of
+real holdings at cleared prices; creations and redemptions conserve cash and securities exactly
+(the AP's basket leg and the fund's share leg net to zero); an ETF's demand reaches constituents
+in proportion to index weight; premium goes to zero when the arbitrage is unconstrained; no
+invariant regressions.
 
 ### AU — Aurora (complete UI rebuild) — LAST
 

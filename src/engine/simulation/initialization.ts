@@ -789,6 +789,10 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     rngSeed: seed,
     rngState: getRngState(),
     primaryOfferings: [],
+    // Born EMPTY: the first weekly pass strikes every index's membership from the market that
+    // actually exists, at base 100. Seeding a constituent list here would be a second, stated
+    // version of a rule the engine already runs (§7.4's seed-shape rule).
+    marketIndexes: [],
     regions,
     fxPairs,
     companies,

@@ -28,6 +28,9 @@ export interface GameState {
   /** WS8 — pending primary offerings: enqueued by issuers in stage 08, priced by the relevant
    * clearing book the following week, then settled or withdrawn and removed. */
   primaryOfferings: import('./primary-market').PrimaryOffering[];
+  /** ETF — the published indexes: membership struck quarterly, level moved weekly by the
+   * constituents' own cleared prices (`stages/index-calculation.ts`). */
+  marketIndexes: import('./indexes').MarketIndex[];
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;

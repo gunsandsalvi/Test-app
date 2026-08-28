@@ -18,6 +18,7 @@ import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
 import { applyPendingCorporateActionSettlements } from './stages/shared-helpers';
+import { runIndexCalculationStage } from './stages/index-calculation';
 import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
@@ -115,11 +116,15 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     applyPendingCorporateActionSettlements(ctx);
   });
 
+  // Indexes after the lifecycle: this week's listings, delistings and cleared prices are all in,
+  // so a rebalance sees the market as it finally stands rather than as it opened.
+  run('index-calculation', () => runIndexCalculationStage(state, ctx));
+
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   run('10-mergers', () => runMergersStage(state, ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
-  return { state: { ...nextState, rngState: getRngState(), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, primaryOfferings: ctx.primaryOfferingsWorking }, timings };
+  return { state: { ...nextState, rngState: getRngState(), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes }, timings };
 }
