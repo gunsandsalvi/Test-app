@@ -22,6 +22,40 @@ export interface WealthTierData {
   homeEquityUSD?: number;
 }
 
+/**
+ * HH4 — one household cohort: an occupation x wealth-tier cell. ~20 per region. Every dollar
+ * figure is an ANNUAL flow (rule 9). The cohorts are the SOURCE for the household cross-section:
+ * tier income shares, the savings cross-section, the spend-mix shares and the per-cohort
+ * debt-service burden are all derived sums over them, replacing the drift formulas that used to
+ * evolve those numbers beside the aggregates they claimed to decompose.
+ *
+ * What they do NOT yet do (HH4b): pay debt service out of the consumption budget (needs the
+ * dividend/interest recycle to households to be real first, or it is a one-sided demand leak —
+ * the HH1c lesson), bid per-cohort in stage 05, or hold per-cohort balance sheets.
+ */
+export interface HouseholdCohort {
+  occupation: OccupationType;
+  tier: WealthTier;
+  /** Earners (employed + unemployed), not persons — one earner per labor-force member. */
+  earnerCount: number;
+  employedCount: number;
+  wageIncomeUSD: number;
+  unemploymentBenefitsUSD: number;
+  /** Means-tested government transfers beyond unemployment benefits. */
+  transferIncomeUSD: number;
+  /** Still the aggregate constant share allocated by tier equity exposure — real dividend and
+   * interest receipts are HH4b's, with the S1 seed identity re-derived when they land. */
+  capitalIncomeUSD: number;
+  grossIncomeUSD: number;
+  taxUSD: number;
+  disposableIncomeUSD: number;
+  /** This cohort's share of the real HH3 debt service — recorded burden, not yet a budget
+   * debit (see the interface comment). */
+  debtServiceUSD: number;
+  savingsUSD: number;
+  consumptionBudgetUSD: number;
+}
+
 export type LifeCycleStage = 'EARLY_CAREER' | 'PEAK_EARNING' | 'PRE_RETIREMENT' | 'RETIRED';
 
 export interface LifeCycleStageData {
@@ -153,6 +187,9 @@ export interface HouseholdState {
   mortgageDebtUSD: number;
   creditCardDebtUSD: number;
   otherConsumerLoanDebtUSD: number;
+  /** HH4 — the ~20 occupation x wealth-tier cohorts this aggregate decomposes into. Built by
+   * `macro/household-cohorts.ts` each week; their sums ARE the aggregates (asserted). */
+  cohorts?: HouseholdCohort[];
   /** Last week's mortgage book, so demand signals can read a real change (set with the sums). */
   priorMortgageDebtUSD?: number;
   /** HH3 — last week's real flows off the itemized books, written by the lending pass:

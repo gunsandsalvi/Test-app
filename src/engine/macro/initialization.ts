@@ -1,6 +1,7 @@
 import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, PrivateSectorSegment, PrivateSegmentType, GovDebtTranche } from '../../types';
+import { buildHouseholdCohorts } from './household-cohorts';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
@@ -209,7 +210,6 @@ const GOV_DEBT_TENOR_WEIGHTS: { tenorYears: number; tenorWeeks: number; weight: 
 
 const HOUSEHOLD_DEBT_RATIOS = { creditCardToIncome: 0.075, otherConsumerLoanToIncome: 0.133, mortgageToIncome: 0.90, depositsToIncome: 0.65, equityHoldingsToIncome: 1.8 };
 const HOUSEHOLD_SAVINGS_RATE = 0.065;
-const HOUSEHOLD_SPEND_SHARES = { staple: 0.35, standard: 0.50, luxury: 0.15 };
 
 /**
  * A region does not come into existence in its first week — it has been running at its trend
@@ -285,6 +285,31 @@ function buildRegion(regionId: RegionId): Region {
   }).toFixed(0));
   assertHouseholdIncomeIdentity(regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, governmentSpendingUSD);
   const lastWeekNominalGdpUSD = estimatedNominalGdpUSD;
+
+  // HH4 — §7.4: the cohorts are seeded by the same builder the weekly evolution runs, off the
+  // same pools and wages, so week 0 decomposes into exactly the cells week 1 will. Debt service
+  // is 0 here because the itemized books do not exist until the simulation-side seed migration
+  // runs; the first weekly pass fills it, and the field feeds only the recorded burden.
+  const seedWealthDistribution = createWealthDistribution(estimatedHouseholdIncomeUSD);
+  const laborForceByOccupation = {} as Record<OccupationType, number>;
+  (Object.keys(occupationLaborForceShare) as OccupationType[]).forEach((occ) => {
+    laborForceByOccupation[occ] = totalLaborForce * occupationLaborForceShare[occ];
+  });
+  const seedCohorts = buildHouseholdCohorts({
+    occupationPools,
+    baseAnnualWageUSD,
+    laborForceByOccupation,
+    governmentSpendingWeeklyUSD: governmentSpendingUSD,
+    aggregateSavingsRate: HOUSEHOLD_SAVINGS_RATE,
+    weeklyDebtServiceUSD: 0,
+    wealthDistribution: seedWealthDistribution,
+  });
+  // The tier income lines open as the DERIVED sums they will be every week from here on —
+  // the income-ranked 15/45/25/15 shape the raw seed carried was a different ranking (income
+  // deciles) misapplied to wealth tiers, and week 1 would overwrite it anyway.
+  (Object.keys(seedWealthDistribution) as WealthTier[]).forEach((t) => {
+    seedWealthDistribution[t].shareOfIncomeUSD = Number((seedCohorts.tierDisposableUSD[t] ?? 0).toFixed(0));
+  });
 
   const netInterestMarginPct = Number(Math.max(NIM_FLOOR, policyRate * NIM_TO_POLICY_RATE_RATIO + 0.005).toFixed(4));
   const bankingSector = {
@@ -452,9 +477,11 @@ function buildRegion(regionId: RegionId): Region {
       savingsRate: HOUSEHOLD_SAVINGS_RATE,
       realConsumptionGrowth: Number((gdpGrowth * 0.7).toFixed(4)),
       householdDebtToIncomeRatio,
-      stapleSpendShare: HOUSEHOLD_SPEND_SHARES.staple,
-      standardSpendShare: HOUSEHOLD_SPEND_SHARES.standard,
-      luxurySpendShare: HOUSEHOLD_SPEND_SHARES.luxury,
+      // HH4: derived from the seed cohorts' budgets, the same way every later week derives them.
+      stapleSpendShare: Number(seedCohorts.spendShares.staple.toFixed(4)),
+      standardSpendShare: Number(seedCohorts.spendShares.standard.toFixed(4)),
+      luxurySpendShare: Number(seedCohorts.spendShares.luxury.toFixed(4)),
+      cohorts: seedCohorts.cohorts,
       depositsUSD,
       // MS1: the real components are struck by the simulation's first weekly pass, which is the
       // only place that knows the cleared prices and the private tier. The seed therefore opens
@@ -488,7 +515,7 @@ function buildRegion(regionId: RegionId): Region {
     yieldCurveParams,
     zeroRates,
     historicalZeroCurves: [{ week: 1, ...zeroRates }],
-    wealthDistribution: createWealthDistribution(estimatedHouseholdIncomeUSD),
+    wealthDistribution: seedWealthDistribution,
     housingMarket: createHousingMarket(regionId, estimatedHouseholdIncomeUSD, totalPopulation),
     lifeCycleDistribution: createLifeCycleDistribution(),
   };

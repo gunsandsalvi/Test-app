@@ -11,6 +11,7 @@ import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking'
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
+import { buildHouseholdCohorts, WEALTH_TIERS } from './household-cohorts';
 
 /**
  * Cents of extra consumption per dollar of extra wealth — the marginal propensity to consume out
@@ -457,12 +458,6 @@ export function evolveRegionMacro(
     + creditSpendingBoostPct
     - debtServiceDrag;
 
-  const wealthSignal = (equityReturn * 0.3 + (newCCI - 100) / 100 * 0.01);
-  const targetLuxuryShare = (prevHS.luxurySpendShare + wealthSignal);
-  const targetStapleShare = (prevHS.stapleSpendShare - wealthSignal * 0.6);
-  const newLuxuryShare = Number((prevHS.luxurySpendShare * 0.95 + targetLuxuryShare * 0.05).toFixed(4));
-  const newStapleShare = Number((prevHS.stapleSpendShare * 0.95 + targetStapleShare * 0.05).toFixed(4));
-  const newStandardShare = Number(Math.max(0.15, 1 - newLuxuryShare - newStapleShare).toFixed(4));
 
   const baseAnnualWageUSD = getBaseAnnualWageUSD(region.id);
   const totalWageIncomeUSD = (Object.keys(newOccupationPools) as OccupationType[]).reduce((sum, occ) => {
@@ -484,6 +479,32 @@ export function evolveRegionMacro(
     governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
     unemploymentBenefitsUSD,
   }).toFixed(0));
+
+  // HH4: the same income, decomposed — ~20 occupation x wealth-tier cohorts built from the
+  // same pools, wages and transfer arithmetic, so their sums reproduce the aggregate above to
+  // the dollar (the invariants harness asserts it). The tier income shares, the savings
+  // cross-section and the spend-mix shares are all derived from these cells now.
+  const laborForceByOccupation = {} as Record<OccupationType, number>;
+  (Object.keys(newOccupationPools) as OccupationType[]).forEach((occ) => {
+    laborForceByOccupation[occ] = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ] ?? 0);
+  });
+  const cohortResult = buildHouseholdCohorts({
+    occupationPools: newOccupationPools,
+    baseAnnualWageUSD,
+    laborForceByOccupation,
+    governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
+    aggregateSavingsRate: newSavingsRate,
+    weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
+    wealthDistribution: region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD),
+  });
+
+  // HH4: the spend shares are DERIVED — each tier's consumption budget times its real spend
+  // mix, summed. The old form walked `luxurySpendShare` by a wealth-signal drift that no stage
+  // ever read; now a boom that lifts top-tier budgets genuinely tilts the mix toward luxury,
+  // because that is where the money is.
+  const newLuxuryShare = Number(cohortResult.spendShares.luxury.toFixed(4));
+  const newStapleShare = Number(cohortResult.spendShares.staple.toFixed(4));
+  const newStandardShare = Number(cohortResult.spendShares.standard.toFixed(4));
 
   const householdStressSignal = (newUnemployment - region.nairu) * 0.02; // no clamp
   
@@ -754,13 +775,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const prevWealthDist = region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD);
   const updatedWealthDist = { ...prevWealthDist };
 
-  const tierOccMixes: Record<WealthTier, Partial<Record<OccupationType, number>>> = {
-    TOP_1: { MANAGERIAL_FINANCIAL: 0.50, SPECIALIZED_PROFESSIONAL: 0.35, TECHNICAL_ENGINEERING: 0.15 },
-    TOP_9: { MANAGERIAL_FINANCIAL: 0.30, SPECIALIZED_PROFESSIONAL: 0.40, TECHNICAL_ENGINEERING: 0.20, SKILLED_TRADES: 0.10 },
-    NEXT_40: { SKILLED_TRADES: 0.35, GENERAL: 0.35, TECHNICAL_ENGINEERING: 0.15, MANAGERIAL_FINANCIAL: 0.15 },
-    BOTTOM_50: { GENERAL: 0.60, SKILLED_TRADES: 0.30, TECHNICAL_ENGINEERING: 0.10 },
-  };
-
+  // HH4: the tier→occupation membership matrix moved to macro/household-cohorts.ts — one
+  // matrix, one owner. The tier income drift it fed here is gone: tier income is now the
+  // DERIVED SUM of the cohorts' real disposable income.
   const tierHomeEquityShares: Record<WealthTier, number> = {
     TOP_1: 0.05,
     TOP_9: 0.30,
@@ -768,26 +785,19 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     BOTTOM_50: 0.10,
   };
 
-  const tierMpc: Record<WealthTier, number> = {
-    BOTTOM_50: 0.98,
-    NEXT_40: 0.92,
-    TOP_9: 0.75,
-    TOP_1: 0.45,
-  };
-
-  let totalTierWeeklyConsumptionUSD = 0;
-
   (Object.keys(updatedWealthDist) as WealthTier[]).forEach(t => {
     const prevData = updatedWealthDist[t];
-    const mix = tierOccMixes[t];
-    const tierWageGrowth = getBlendedWageGrowth(mix, newOccupationPools);
-    const newIncomeUSD = Math.max(1000, prevData.shareOfIncomeUSD * (1 + tierWageGrowth / 52));
+    // HH4: tier income IS the cohorts' summed disposable income — the wage-growth drift that
+    // used to walk `shareOfIncomeUSD` beside the aggregate it claimed to decompose is gone,
+    // and with it the dead per-tier consumption sum nothing read.
+    const newIncomeUSD = Math.max(1000, cohortResult.tierDisposableUSD[t] ?? prevData.shareOfIncomeUSD);
 
     const equityGain = prevData.shareOfNetWorthUSD * prevData.equityExposureShare * equityReturn;
-    const savingsGain = (newIncomeUSD / 52) * prevData.savingsRate;
+    // The tier's real saving flow off the cohort budgets (λ-normalized to the aggregate rate).
+    const savingsGain = (cohortResult.tierSavingsUSD[t] ?? 0) / 52;
 
     const homeEquityUSD = Math.round(updatedHousingMarket.medianHomePriceUSD * updatedHousingMarket.ownershipRatePct * (newTotalPopulation / 2.5) * prevData.shareOfHouseholds * tierHomeEquityShares[t]);
-    
+
     // Retired drawdown for lower/middle tiers
     const retiredDrawdown = (t === 'BOTTOM_50' || t === 'NEXT_40') ? (prevData.shareOfNetWorthUSD * Math.abs(updatedLifeCycle.RETIRED.savingsRate) / 52) : 0;
 
@@ -799,10 +809,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       shareOfNetWorthUSD: Number(newNetWorth.toFixed(0)),
       homeEquityUSD: Number(homeEquityUSD.toFixed(0)),
     };
-
-    const weeklyInc = newIncomeUSD / 52;
-    const weeklyDisp = weeklyInc * (1 - prevData.savingsRate);
-    totalTierWeeklyConsumptionUSD += weeklyDisp * tierMpc[t];
   });
 
   const updatedRegion: Region = {
@@ -886,6 +892,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       etfHoldingsUSD: prevHS.etfHoldingsUSD ?? 0,
       privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
       unmodeledFinancialAssetsUSD: prevHS.unmodeledFinancialAssetsUSD ?? newEquityHoldingsUSD,
+      // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
+      cohorts: cohortResult.cohorts,
       // HH3: derived sums of the banks' itemized pools, carried through and overwritten by the
       // bank-diversification stage after its lending passes run.
       mortgageDebtUSD: newMortgageDebtUSD,

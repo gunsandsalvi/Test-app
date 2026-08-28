@@ -239,15 +239,18 @@ metrics to watch rather than work.
 | 2 | foundation | **BP1 — One industry registry** | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | 4 | foundation | **PUB — The public sector: treasury + central bank** | HH (household taxes) |
-| 5 | markets | **G3 — One dealer system** | none (S9 done) |
-| 6 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
-| 7 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
-| 8 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| 9 | depth | **CAL — Payment calendars** | none |
-| 10 | depth | **ETF2 — A real price for ETF shares** | G3 |
-| 11 | depth | **HC3b — The product-market handover** | BP1 |
-| 12 | last | **S-final — Validation gate** | everything above |
-| 13 | last | **AU — Aurora, the UI rebuild** | everything above |
+| 5 | foundation | **DEM — Demographic variability** (small; rides beside HH4–HH5) | none |
+| 6 | markets | **G3 — One dealer system** | none (S9 done) |
+| 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
+| 8 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
+| 9 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
+| 10 | markets | **XB — Cross-border portfolios** (foreign shares & bonds, hedged) | WS9, DER |
+| 11 | depth | **CAL — Payment calendars** | none |
+| 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
+| 13 | depth | **HC3b — The product-market handover** | BP1 |
+| 14 | depth | **SCALE — Universe scale-up under a wall-clock budget** | profiling first (rule: measure) |
+| 15 | last | **S-final — Validation gate** | everything above |
+| 16 | last | **AU — Aurora, the UI rebuild** | everything above |
 
 **What changed in the 2026-08-28 reordering** (superseded in part by HH's merge above). Six
 projects merged into three: commodity futures (ex-G7)
@@ -425,12 +428,25 @@ state's own `depositsUSD` (372B) are still two representations, the gap being re
 wholesale funding; and debt service is still paid from unmodeled income. Both are HH4's, which
 gives households the budget the payments come out of.
 
-**HH4 — Households as cohorts.** ~20 per region (occupation x income quintile), not 300M
-individuals. Each earns real payroll from a named employer set plus transfers, pays real taxes
-(PUB's collection), saves through MS1's channels, and consumes: stage 05's household bids become
-the sum of cohort budgets, each with its own price sensitivity — low-income cohorts are the
-inelastic food-and-energy demand, high-income the discretionary swing. Household income becomes a
-derived sum, so S1's identity holds by construction and its assert-era scaffolding is deleted.
+**HH4 — Households as cohorts.** ~20 per region (occupation x wealth tier), not 300M
+individuals. **HH4a — DONE (§7.56):** the cohorts exist and are the SOURCE of the household
+cross-section — 14 real occupation x tier cells per region, wage bills split by within-occupation
+tier multipliers (occupation bills preserved exactly), progressive taxes renormalized to the flat
+aggregate rate to the dollar, means-tested transfers, capital income allocated by tier equity
+exposure, the savings cross-section λ-normalized to the behavioural aggregate rate, HH3's real
+debt service allocated as recorded per-cohort burden, and the spend-mix shares derived from
+cohort budgets. Three drift formulas died (tier income drift, the wealthSignal spend-share walk,
+the dead per-tier consumption sum), the decomposition identity is asserted weekly in the
+harness, and the 40-week aggregate paths are BIT-IDENTICAL to the pre-cohort world — the
+cross-section landed without moving a single aggregate flow, which was the design rule.
+**HH4b — the dynamic wiring:** stage 05's household bids become sums of cohort budgets with
+per-cohort price sensitivity (low-income cohorts are the inelastic food-and-energy demand,
+high-income the discretionary swing); real dividend/interest receipts replace the flat
+capital-income constant, which is what lets debt service finally DEBIT the budgets (one-sided
+today = the HH1c leak; both sides together = a re-derived S1 seed identity); household deposits
+unify onto the banks' line (§6's two-representations row). **HH4c:** per-cohort balance sheets —
+the wealth tiers' net-worth drift formulas become sums of cohort holdings, and the per-tier MPC
+replaces HH2's single wealth-effect constant.
 
 **HH5 — A real labor market.** A new stage between 02b and 03: companies post openings from real
 capacity need (production plans vs headcount, data stage 05 already implies); cohorts move toward
@@ -596,7 +612,33 @@ exactly the sum.
 
 ---
 
-### G3 — One dealer system  *(Tier 2, item 5)*
+### DEM — Demographic variability  *(Tier 1, item 5; small, rides beside HH4–HH5)*
+
+The four regions currently share near-identical population dynamics: birth ~1.0%, death ~0.9%,
+migration ~0.2%, all constants, all alike — so populations differ only by their seeded level and
+every demographic-sensitive number (labor supply, housing turnover, pension outflows) moves in
+lockstep across regions. Real regions differ in KIND: Japan shrinks and ages, the USA grows
+mostly by migration, Europe sits near zero with an aging bulge, the UK in between.
+
+- **Per-region demographic profiles**, seeded from real-world shapes: distinct birth/death/
+  migration baselines per region, plus slow stochastic variation through `rng.ts` (fertility
+  drift, migration waves) — variability BETWEEN regions and OVER time, not a re-rolled weekly
+  noise term. The existing `migrationAttractivenessSignal` (CCI-driven) stays as the endogenous
+  half; widen it to read relative regional performance so booms genuinely pull people in.
+- **Age structure that does something.** `lifeCycleDistribution` exists and drifts; make the
+  dependency ratio it implies drive labor-force participation and the pension system HH1c built
+  (benefit outflows scale with the retired share, contributions with the working share — Japan's
+  pension funding need should look worse than the USA's because its population does).
+- **Housing reads demographics**: household formation (population / household size) already
+  drives HH2's stock and HH3's mortgage demand — variability here propagates for free.
+
+**Verify:** population paths visibly diverge by region over 260 weeks; JPN dependency ratio
+worsens while USA's holds; pension funding need (the derived hurdle from §7.52) responds to the
+retired share; no demographic number re-rolls weekly.
+
+---
+
+### G3 — One dealer system  *(Tier 2, item 6)*
 
 The dealer becomes what it is in reality: a desk inside a named bank. `DealerDesk {bankTicker,
 inventoryByInstrumentId, capitalAllocatedUSD}`; migrate the current region-level inventories to
@@ -622,7 +664,7 @@ quotes visibly wider — the real liquidity-cycle channel.
 
 ---
 
-### DER — Derivatives, and the people who hedge with them  *(Tier 2, item 6)*
+### DER — Derivatives, and the people who hedge with them  *(Tier 2, item 7)*
 
 Merges the old G4 (derivative markets), G7 (commodity futures) and WS11 (corporate and bank
 hedging). Futures and hedging were never separate markets — they are the users of this one, and
@@ -663,7 +705,7 @@ shocks they hedged, which is the whole point of items 4 and 5.
 
 ---
 
-### G5 — Default resolution: recovery as an outcome  *(Tier 2, item 7)*
+### G5 — Default resolution: recovery as an outcome  *(Tier 2, item 8)*
 
 On default an `Estate {companyId, assets, claims[]}` opens instead of a constant recovery. Real
 assets (cash, receivables, inventory at real lot values, PP&E at a haircut) are sold over ~26–78
@@ -689,7 +731,7 @@ private tier's.
 
 ---
 
-### WS9 — Real trade & FX  *(Tier 2, item 8)*
+### WS9 — Real trade & FX  *(Tier 2, item 9)*
 
 **Confirm the currency-zone premise with the user first** (standing caveat). If confirmed:
 
@@ -712,7 +754,40 @@ depreciate slowly against sticky flows; no drift term anywhere; the global funds
 
 ---
 
-### CAL — Payment calendars  *(Tier 3, item 9)*
+### XB — Cross-border portfolios  *(Tier 2, item 10; needs WS9 + DER)*
+
+Investors buy foreign shares and bonds under the constraints real mandates impose. Today every
+institutional book is domestic (`foreignShare` in `AssetOwnershipShares` is a static scalar that
+owns nothing), the three GLOBAL index funds sit empty for exactly that reason, and a
+rate-differential between regions moves no money.
+
+- **Fixed income cross-border is FX-HEDGED** — the institutional rule, not an option: an insurer
+  or pension buying a foreign bond or loan hedges the currency, and the hedge cost is the
+  covered-interest short-rate differential. So the demand signal is **hedged yield pickup**
+  (foreign yield − hedge cost − home yield), which is the real reason cross-border bond flow
+  chases spread, not headline yield. The hedge itself is a REAL forward position in DER's book
+  with a dealer on the other side — not a formula discount — which is why this project needs DER.
+- **Equities: hedging optional and partial** (real practice runs 0–50%): unhedged foreign equity
+  carries the FX exposure into the holder's book, and the FX P&L shows up in its weekly marks.
+- **Home bias and mandate limits as named primitives**: a home-bias weight per entity type
+  (measured reality: pensions ~60–80% domestic) and an FX-exposure cap for regulated books
+  (insurers), both stated constants until something real can derive them.
+- **Mechanics**: foreign holders join the existing clearing engines as ordinary participants —
+  the engines already price every name against every holder; what is new is only that a JPN
+  insurer's demand for a USA bond settles in USD through the WS9 FX market (a real currency
+  purchase, which is the portfolio-flow leg WS9's design already reserves a seat for), and its
+  weekly mark converts at the cleared rate.
+- **Also closes:** the three GLOBAL index funds fill (moved here from WS9's note — XB is the
+  mechanism); S7's foreign-share parameter becomes real holdings.
+
+**Verify:** hedged-yield-pickup, not raw yield, predicts bond flows; a home rate cut pushes
+portfolio flow abroad and the FX pair moves in the carry direction; the global funds fill; FX
+forward open interest in DER's book matches the hedged cross-border bond stock; every foreign
+security position has a cash leg in the right currency.
+
+---
+
+### CAL — Payment calendars  *(Tier 3, item 11)*
 
 Coupons, loan interest and dividends accrue as smooth weekly 1/52 flows on both sides — stage 08's
 expense and `institutional-balance-sheet.ts`'s income. Real instruments pay on their own calendar:
@@ -727,7 +802,7 @@ lumpiness immediately.
 
 ---
 
-### ETF2 — A real price for ETF shares  *(Tier 3, item 10)*
+### ETF2 — A real price for ETF shares  *(Tier 3, item 12)*
 
 Today a fund's shares are carried at NAV and the arbitrage residual is reported as
 `unmetFlowShare` — the fraction of a week's creation and redemption demand the authorised
@@ -740,7 +815,7 @@ sheet rather than a regional pool.
 
 ---
 
-### HC3b — The product-market handover  *(Tier 3, item 11)*
+### HC3b — The product-market handover  *(Tier 3, item 13)*
 
 The last piece owed from Hidden Corporates Wave 1, deferred with a reason and still waiting on
 BP1. The auctioned sub-unit categories' demand is calibrated against public supply, while the
@@ -755,14 +830,38 @@ switches on.
 
 ---
 
-### S-final — Validation gate  *(Tier 4, item 12)*
+### SCALE — Universe scale-up under a wall-clock budget  *(Tier 3, item 14)*
+
+**The question, stated as a measurement:** how many public and private non-SME companies can the
+simulation carry before week-time becomes unacceptable — and what breaks first? The answer is a
+FRONTIER (names vs seconds/week), not a feeling.
+
+- **Profile first** (the standing rule): measured wall-time per stage at the current universe,
+  then at 2x/4x/8x synthetic universes, to find the real scaling exponents. The prime suspects
+  are the all-pairs shapes: the clearing engines price every name against every holder
+  (names x participants), stage 08's per-company loop, stage 05's auctions, and any O(n²)
+  rebuild that hides in a weekly `.filter`/`.find` over companies inside a per-company loop.
+- **Optimize without changing economics.** Algorithmic wins only — precomputed indexes
+  (ticker→company maps instead of repeated `.find`), incremental updates instead of weekly
+  rebuilds, hoisting invariant work out of per-name loops. Two hard constraints: determinism is
+  sacred (an optimization that reorders RNG draws changes the world — same-seed A/B must be
+  byte-identical), and no economic shortcut dressed as an optimization (sampling participants,
+  truncating books, skipping small names — those change the market, not the speed).
+- **Then push the count** through the front doors that exist: generator counts for public names,
+  HC births for private ones. Measure the frontier and pick the operating point with the user.
+- **Report measured numbers** at every step: before/after per-stage timings, the frontier curve,
+  and the harness green at each size.
+
+---
+
+### S-final — Validation gate  *(Tier 4, item 15)*
 
 Full `npm run verify` green, closing #2/#14/#41, plus whatever residuals of #67 and #18 survive
 their owners above. Nothing else ships after this until it passes.
 
 ---
 
-### AU — Aurora, the UI rebuild  *(Tier 4, item 13)*
+### AU — Aurora, the UI rebuild  *(Tier 4, item 16)*
 
 Explicit mandate: delete every current UI element and rebuild from scratch — sleek, smart,
 interactive, real-world-inspired. **Required process, fixed in advance:** (1) a LONG series of
@@ -2300,4 +2399,35 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       flows cross the other way); and the banks' "household deposits" funding line (790B USA at
       seed) vs the household state's own deposits (372B) is the two-representations gap moved,
       not closed — the difference is wholesale funding wearing a deposit label. Recorded in §6.
+56. **HH4a: the household cross-section exists, and it cost the aggregates nothing.** ~14 real
+    occupation x wealth-tier cohort cells per region (the zero-weight cells of the 5x4 grid are
+    simply absent), built fresh each week by `macro/household-cohorts.ts` from the same pools,
+    wages and transfer arithmetic the aggregate income derivation uses — so Σ cohort disposable
+    equals `estimatedHouseholdIncomeUSD` to the cent BY CONSTRUCTION, and the harness asserts
+    it weekly anyway (the assert is against future edits, not present doubt).
+    - **The normalization discipline is the design.** Every per-tier propensity is a RELATIVE
+      weight renormalized against an aggregate the sim already runs on: tier wage multipliers
+      normalized per occupation (each occupation's bill preserved exactly), progressive tax
+      multipliers renormalized weekly to the flat rate (progressivity — 6.3% bottom to 25.2%
+      top — with the S1 identity untouched), the savings cross-section λ-normalized to the
+      behavioural aggregate rate with a two-pass headroom redistribution for when the 90% cap
+      binds in high-savings escape worlds. Result, measured: the 40-week aggregate paths are
+      **bit-identical** to the pre-cohort world. A cross-section that moves no aggregate is the
+      only kind that can land safely on a running simulation; the dynamics arrive in HH4b with
+      their own re-derived seeds.
+    - **Three formulas died into derivations:** the tier income drift (`shareOfIncomeUSD`
+      walking by blended wage growth beside the aggregate it claimed to decompose), the
+      `wealthSignal` spend-share walk (dead state — no stage ever read it), and the per-tier
+      consumption sum that accumulated into a variable nothing read. Tier income is now the
+      cohorts' summed disposable; the spend shares are budget-weighted real mixes (a boom that
+      lifts top-tier budgets tilts the mix toward luxury because that is where the money is);
+      the membership matrix moved to the cohort module — one matrix, one owner.
+    - **Calibration honesty:** these are WEALTH-ranked tiers, so the income-by-tier target is
+      the wealth-ranked reality (~30/40/18/12), not the income-decile 15/45/25/15 the old seed
+      carried — measured 34/38/17/11. The seed's tier income lines now open as the derived sums
+      too (§7.4).
+    - **Recorded, not yet wired:** per-cohort debt-service burden (peaks at 24% of disposable
+      in the homeowning middle, as it should) awaits HH4b's dividend recycle before it can
+      debit budgets; capital income is still the constant share, allocated by tier equity
+      exposure until receipts are real.
 

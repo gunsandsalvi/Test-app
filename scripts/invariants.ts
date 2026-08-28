@@ -146,6 +146,45 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
  * 740B of assets with no holder before this — the same real thing represented once instead of
  * twice (§7.48) — so the two sides are now checked against each other every week.
  */
+/**
+ * HH4: the household cohorts are a DECOMPOSITION, not a second household sector. Their summed
+ * disposable income must equal the region's aggregate to floating precision (the builder
+ * constructs the identity; this catches any edit that breaks the construction), their summed
+ * savings must sit on the aggregate behavioural rate (loose band — the per-cohort 90% cap can
+ * bind in stressed worlds), and the derived spend shares must be a partition.
+ */
+function checkHouseholdCohortIdentity(state: GameState, week: number) {
+  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+    const reg = state.regions[region];
+    const hs = reg?.householdState;
+    const cohorts = hs?.cohorts;
+    if (!hs || !cohorts || cohorts.length === 0) {
+      violations.push({ week, message: `${region}: household cohorts missing — HH4's decomposition is not being built` });
+      return;
+    }
+    const sumDisposable = cohorts.reduce((a, c) => a + c.disposableIncomeUSD, 0);
+    const agg = reg.estimatedHouseholdIncomeUSD;
+    if (agg > 0 && Math.abs(sumDisposable - agg) / agg > 1e-4) {
+      violations.push({
+        week,
+        message: `${region}: cohort disposable income sums to ${(sumDisposable / 1e9).toFixed(2)}B against an aggregate of ${(agg / 1e9).toFixed(2)}B — the decomposition identity is broken`,
+      });
+    }
+    const sumSavings = cohorts.reduce((a, c) => a + c.savingsUSD, 0);
+    const targetSavings = Math.max(0, hs.savingsRate) * agg;
+    if (agg > 0 && Math.abs(sumSavings - targetSavings) / agg > 5e-3) {
+      violations.push({
+        week,
+        message: `${region}: cohort savings ${(sumSavings / 1e9).toFixed(2)}B vs aggregate rate x income ${(targetSavings / 1e9).toFixed(2)}B — the λ-normalization is off`,
+      });
+    }
+    const shares = hs.stapleSpendShare + hs.standardSpendShare + hs.luxurySpendShare;
+    if (Math.abs(shares - 1) > 1e-3) {
+      violations.push({ week, message: `${region}: spend shares sum to ${shares.toFixed(4)} — not a partition` });
+    }
+  });
+}
+
 function checkBeneficiaryClaimsHaveHolders(state: GameState, week: number) {
   const owedUSD = (state.institutionalEntities || [])
     .reduce((sum, e) => sum + ((e as any).beneficiaryLiabilityUSD ?? 0), 0);
@@ -528,6 +567,7 @@ function runInvariantsHarness() {
     // 5. NAV identity
     checkNavIdentity(state, w);
     if (prevStateForBookCheck) checkInstitutionalBookConservation(prevStateForBookCheck, state, w);
+    checkHouseholdCohortIdentity(state, w);
     violations.push(...checkHoldingsLedgerConservation(state, w));
     checkBeneficiaryClaimsHaveHolders(state, w);
     prevStateForBookCheck = state;
