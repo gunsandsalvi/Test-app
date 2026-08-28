@@ -1074,6 +1074,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     primaryOfferings: [],
     unitMassTonnes: seededUnitMassTonnes,
     freightRatePerTonneLaneMoneyByLane: seededFreightRates,
+    // Opens empty: no pair has traded yet, so none has revealed its depth.
+    fxPairIlliquidity: {},
+    tradeInvoices: [],
     // The pipeline opens FULL, because a running economy's is. Every lane that takes weeks to
     // cross has weeks of cargo on it at any moment, and opening at zero means the first arrivals
     // land a month in — measured, that starved importers of inputs, collapsed the trade the

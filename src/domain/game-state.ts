@@ -44,6 +44,13 @@ export interface GameState {
    *  lane's OWN money (its origin's), which is where the carrier's fuel and crew are paid. What a
    *  buyer forms its next sourcing intent against, converting into its own money to compare. */
   freightRatePerTonneLaneMoneyByLane: Record<string, number>;
+  /** XB6 — the share of each pair's own weekly flow its market could NOT absorb, keyed
+   *  "BASE/QUOTE". The model's one real measure of how deep a currency pair is, and what the
+   *  invoice-currency choice is priced against. */
+  fxPairIlliquidity: Record<string, number>;
+  /** XB3a-5 — cross-border sales delivered and not yet paid for, in the market's own emergent
+   *  invoice currency, due on terms derived from the buyer's own credit. */
+  tradeInvoices: import('./trade-invoice').TradeInvoice[];
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;

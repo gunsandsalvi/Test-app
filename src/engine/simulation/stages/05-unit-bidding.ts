@@ -32,6 +32,9 @@ import { convertLocal, localToUsd, FxToUsd } from '../../../domain/currency';
 import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
 import { laneDistanceNm } from '../../../domain/geography';
 import { SourcingSplit } from './sourcing-intent';
+import { chooseInvoiceRegion, invoiceCurrencyOf } from '../../../domain/invoice-currency';
+import { paymentTermWeeks } from '../../../domain/trade-invoice';
+import { computeAnnualDefaultProbability } from './shared-helpers';
 import { getFxToUsd } from './06-fx-and-trade';
 import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
 
@@ -176,6 +179,12 @@ interface SourcingContext {
   freightRateByLane: Record<string, number>;
   unitMassTonnes: Record<string, number>;
   fxToUsd: FxToUsd;
+  /** XB6 — how deep each currency pair is, which is what the invoice currency is priced on. */
+  fxPairIlliquidity: Record<string, number>;
+  quotedPairs: { base: RegionId; quote: RegionId }[];
+  /** Whether that week's book for a good left unfilled DEMAND rather than unsold supply — which
+   *  is what decides who can insist on being paid in their own money. */
+  sellerIsShort: (subUnitId: string, origin: RegionId) => boolean;
 }
 
 /**
@@ -916,6 +925,8 @@ function runSubUnitMarkets(
   });
 
   // --- 9. Settle every buyer once, in ITS money, at the landed cost it actually paid.
+  const deferredPurchaseUSD = new Map<string, number>();
+  const deferredSaleKeyed = new Map<string, number>();
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
     const comp = plan.company;
@@ -947,6 +958,42 @@ function runSubUnitMarkets(
             units: l.units, landedCostPerUnit: perUnit, arrivalWeek,
           });
         }
+        // XB3a-5: a cross-border sale between two real books is INVOICED — in whichever currency
+        // costs the pair least to carry the risk in, on terms the buyer's own credit supports —
+        // and the cash follows when it falls due. A lot whose buyer is a household or government
+        // aggregate has no cash leg here to defer, so deferring one would invent an exposure.
+        const seller = lookup.byTicker.get(l.sellerKey);
+        if (!seller || origin === plan.regionId) return;
+        const invoiceRegion = chooseInvoiceRegion({
+          sellerRegion: origin,
+          buyerRegion: plan.regionId,
+          candidates: MARKET_REGION_IDS,
+          illiquidity: sourcing.fxPairIlliquidity,
+          quotedPairs: sourcing.quotedPairs,
+          sellerIsShort: sourcing.sellerIsShort(subUnitId, origin),
+        });
+        const currency = invoiceCurrencyOf(invoiceRegion);
+        const usdPerCurrency = sourcing.fxToUsd(invoiceRegion);
+        if (!(usdPerCurrency > 0)) return;
+        const valueUSD = localToUsd(l.units * perUnit, plan.regionId, sourcing.fxToUsd);
+        const termWeeks = paymentTermWeeks({
+          buyerAnnualDefaultProbability: computeAnnualDefaultProbability(comp),
+          recoveryRate: seller.recoveryRate ?? 0.4,
+          sellerMarginShare: Math.max(0, (seller.ebitda ?? 0) / Math.max(1, seller.annualRevenue ?? 1)),
+          sellerCashUSD: seller.cash ?? 0,
+          sellerWeeklySalesUSD: (seller.annualRevenue ?? 0) / 52,
+        });
+        ctx.tradeInvoicesBooked.push({
+          sellerTicker: l.sellerKey, sellerRegion: origin,
+          buyerTicker: comp.ticker, buyerRegion: plan.regionId,
+          subUnitId, currency,
+          amountCurrency: valueUSD / usdPerCurrency,
+          bookedUsdPerCurrency: usdPerCurrency,
+          weekBooked: nextWeek,
+          weekDue: nextWeek + termWeeks,
+        });
+        deferredPurchaseUSD.set(plan.key!, (deferredPurchaseUSD.get(plan.key!) ?? 0) + l.units * perUnit);
+        deferredSaleKeyed.set(l.sellerKey, (deferredSaleKeyed.get(l.sellerKey) ?? 0) + l.units * perUnit);
       });
     });
     if (units <= 0.0001) return;
@@ -954,6 +1001,17 @@ function runSubUnitMarkets(
     const custUp = companyUpdates[comp.ticker];
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + units;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + landedCost;
+    const owed = deferredPurchaseUSD.get(plan.key!) ?? 0;
+    if (owed > 0) custUp.tradePayableBookedUSD = (custUp.tradePayableBookedUSD ?? 0) + owed;
+  });
+  // The mirror on the sellers: revenue is recognised at delivery in full; what is deferred is the
+  // CASH, which stage 08's ledger backs out until the invoice settles.
+  deferredSaleKeyed.forEach((amount, sellerKey) => {
+    const seller = lookup.byTicker.get(sellerKey);
+    if (!seller || !(amount > 0)) return;
+    if (!companyUpdates[seller.ticker]) companyUpdates[seller.ticker] = {};
+    companyUpdates[seller.ticker].tradeReceivableBookedUSD =
+      (companyUpdates[seller.ticker].tradeReceivableBookedUSD ?? 0) + amount;
   });
 
   // --- 10. Aggregate buyers: the household durable stock and the treasury's realized spend.
@@ -1099,12 +1157,19 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   ctx.carrierFreightRevenue = {};
   ctx.carrierTonneNm = {};
   ctx.shipmentsDispatched = [];
+  ctx.tradeInvoicesBooked = [];
 
   const sourcing: SourcingContext = {
     splitByRegionSubUnit: ctx.sourcingSplitByRegionSubUnit,
     freightRateByLane: ctx.freightRatePerTonneLaneMoneyByLane,
     unitMassTonnes: state.unitMassTonnes,
     fxToUsd: (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId),
+    fxPairIlliquidity: state.fxPairIlliquidity ?? {},
+    quotedPairs: state.fxPairs.map(p => ({ base: p.base, quote: p.quote })),
+    sellerIsShort: (subUnitId: string, origin: RegionId) => {
+      const d = ctx.updatedRegions[origin]?.categoryDemand[subUnitId] as any;
+      return (Number(d?.totalUnitsDemandedThisWeek) || 0) > (Number(d?.totalUnitsSuppliedThisWeek) || 0);
+    },
   };
 
   const contractsByRegionBySubUnit = {} as Record<RegionId, Map<string, SupplyContract[]>>;
@@ -1160,6 +1225,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
 
   // Everything dispatched this week joins what is already on the water.
   state.goodsInTransit = [...(state.goodsInTransit ?? []), ...ctx.shipmentsDispatched];
+  state.tradeInvoices = [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked];
 
   const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);
   const baselineVol = 0.16;

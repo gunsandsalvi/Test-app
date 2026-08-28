@@ -126,6 +126,10 @@ export interface WeeklyStepContext {
   goodsArrivedUnits: number;
   /** XB3a-4 — consignments dispatched this week, appended to what is already in transit. */
   shipmentsDispatched: import('./goods-arrival').InTransitShipment[];
+  /** XB3a-5 — invoices struck this week, and the realised exposure on those that came due. */
+  tradeInvoicesBooked: import('../../../domain/trade-invoice').TradeInvoice[];
+  tradeInvoiceFxGainUSD: number;
+  tradeInvoiceWriteOffUSD: number;
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
   freightClearing?: import('./freight-clearing').FreightClearing;
 
@@ -215,6 +219,9 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     carrierTonneNm: {},
     goodsArrivedUnits: 0,
     shipmentsDispatched: [],
+    tradeInvoicesBooked: [],
+    tradeInvoiceFxGainUSD: 0,
+    tradeInvoiceWriteOffUSD: 0,
 
     weeklyInterestIncomeUSD: 0,
     weeklyFinancingCostUSD: 0,

@@ -294,6 +294,18 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     });
   });
 
+  // XB6 publishes what each PAIR could not absorb, which is the only honest measure this model
+  // has of how deep a pair is. A pair whose whole flow clears is cheap to transact in; one where
+  // the dealers are left carrying is dear. XB3a-5's invoice currency is priced off exactly this,
+  // so a vehicle currency emerges where the direct pair is thin and the two legs through it are
+  // not — which is what a vehicle currency IS.
+  const illiquidity: Record<string, number> = {};
+  grossByPair.forEach((gross, key) => {
+    const residual = Math.abs(residualByPair.get(key) ?? 0);
+    illiquidity[key] = gross > 0 ? Math.min(1, residual / gross) : 0;
+  });
+  state.fxPairIlliquidity = illiquidity;
+
   // Record what the market did, including what it could NOT clear.
   REGIONS.filter((r) => r !== 'USA').forEach((r) => {
     const reg: any = ctx.updatedRegions[r];
