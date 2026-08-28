@@ -414,12 +414,16 @@ today. Home equity then responds to real prices, and the wealth effect finally h
 real component. (Housing is the biggest asset most households own; leaving it out while carrying
 its mortgage biases net worth in one direction by construction.)
 
-**HH3 — Household debt itemized, the other half of G2.** Mortgages and consumer loans become real
-loans on named banks' books, against real borrowers, the way business loans already are. The
-paydown-rate constants (0.0004/wk mortgage, 0.04/wk revolving) and the `bankedConsumerDebtShare`
-that sizes the book die with it. **This also closes two banking boundary flows** flagged in the
-2026-08-27 audit: the deposit drift and beta, and the consumer-loan target, both of which become
-sums of what real households did.
+**HH3 — DONE (§7.55).** Household debt is itemized mortgage / card / term pools on the named
+banks' books; the household lines are their derived sums; the paydown constants died into
+annuity arithmetic and the `bankedConsumerDebtShare` target died outright. The consumer-loan
+target boundary flow is closed; **it also resolved #67** (bank capital rises 11.6% → 14.7%
+through week 80 instead of collapsing) and gave the household sector its rate response (card and
+term books SHRINK when policy tightens). What it did NOT close: the deposit side — the banks'
+"household deposits" funding line (790B USA at seed, the balancing item) and the household
+state's own `depositsUSD` (372B) are still two representations, the gap being really unmodeled
+wholesale funding; and debt service is still paid from unmodeled income. Both are HH4's, which
+gives households the budget the payments come out of.
 
 **HH4 — Households as cohorts.** ~20 per region (occupation x income quintile), not 300M
 individuals. Each earns real payroll from a named employer set plus transfers, pays real taxes
@@ -804,8 +808,9 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 |---|---|
 | **G1b — the inflation escape** | The measured band is SEED-SENSITIVE: one world holds −10..0%, others escape upward by week 40 (the default-stream world reaches 50%+ by week 52 with the 10Y following to 17%). **The measurement is not at fault** — the goods market's prices really do move that much. G2 measurably damped it and did not cure it (0.66% of demand against a goods cycle orders of magnitude larger), exactly as predicted. Remaining owners: **MS** (the household rate response, the missing stabiliser) and **PUB** (the fiscal loop). Two diagnostics still unrun and worth doing first: trace one sub-unit's price, supply and demand over 120 weeks for a long-wavelength cobweb; and consider whether stage 05's real bid and offer prices should carry an expectations term — a genuine behavioural channel, since anchored expectations damp actual price setting. **Do not** smooth the index, widen the basket, or clamp inflation: the index is the measurement, and if it is volatile the economy is. |
 | ~~**The institutional Company and the InstitutionalEntity are two firms**~~ | **Insurer half CLOSED (§7.51).** Found in HH1 (§7.49). `UXZG` is an insurer whose Company shell reports 0.05B of revenue and 0.10B of market cap while its Entity holds **241.4B** of assets against 19.5B of its own equity — a company trading at 1/200th of its own book. Asset managers were reconciled by S11 (`aumUSD = entity.totalAssetsUSD`), and HH1b now seeds them consistently, but the INSURER branch still refuses the entity on a justification that is stale — it predates S11 making `totalAssetsUSD` a real per-firm marked book — so its float is `annualRevenue x 5` and its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability: the same insurer's obligations represented twice, three orders of magnitude apart. **Correction to the first write-up of this row:** pension and hedge funds do NOT fall through to the consumer-revenue path — they carry the `ASSET_MANAGER` profile and already read the entity's real book, which S11 wired. The insurer is the one disconnected representation. The insurer now reads its entity: reserves ARE the beneficiary liability (223.0B, one number instead of 0.2B beside 221.9B), premiums come off real capital at the regulator's premium-to-surplus ratio, and investment income is what its own portfolio actually earned. Market cap 0.10B → 51.0B against 19.5B of book. **What remains of HH1b is deriving the required-return constants**, which needs the liability FLOWS (premiums paid by real payers, claims to real claimants) that HH1c owns. |
-| **#67 — USA bank capital → 0** | Arrives by **week ~70** on current HEAD; the harness has PRINTED the collapse since the flow ledger (§7.36), where the deleted recapitalization-from-nowhere used to prop the ratio. A/B confirms the S1/S2/G1 work does not cause it. G2 was its owner and has landed, and call protection halved the related NIM cluster — **re-measure before assigning further work**; if it survives, the bleed is in the loss-rate and yield formulas on the loan books. |
+| ~~**#67 — USA bank capital → 0**~~ | **CLOSED (§7.55) — re-measured after HH3 and the collapse is gone.** Capital ratio runs 11.6% → 14.7% through week 80 (was: → 0 by week ~70), NIM in band throughout. The bleed was the fictional consumer book: a formula target earning a formula yield and losing a formula loss rate, none of which the bank's capital could price or gate. With the book real — real margins quoted off measured tier losses, real amortization, origination capital-gated at the 8% floor — the banking system carries its full household book and earns its keep. |
 | ~~**#18 — companies at the revenue floor**~~ | **CLOSED (§7.49), and the diagnosis was wrong for a year.** The four names were the four regional HEDGE FUNDS, whose "revenue" is a fee on their book — the harness was applying an operating company's growth ceiling to a fund. And they had not grown: their book SHRANK 76.8B → 62.4B while the reported revenue rose 29x, because the generator seeded `aumUSD` as a multiple of an operating company's revenue while the entity carried the real marked book. A §7.4 cold start, not a runaway. Seeding the shell at the size it actually manages took it to 1.1x. |
+| **Household deposits: two representations** | Sharpened by HH3's seed reconciliation, owned by **HH4**. The banks' `depositsUSD` household-funding line re-derives as the balancing item of the (now much larger) real asset side — 790B USA at seed — while the household state's own `depositsUSD` says 372B. The 418B difference is really unmodeled wholesale/term funding wearing a deposit label, and the two lines evolve by different formulas (the 0.999-decay target vs the savings/interest/net-mortgage-credit build). HH4's cohort budgets make household deposits a real stock the debt service and savings actually flow through; until then, do NOT read bank `depositsUSD` as household money. |
 | **Real growth prints escape at horizon** | **Found in HH2, pre-existing, unowned.** Consumption growth −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree: −119.87% / −209.30%, GDP identical to four significant figures — so this is not HH2's, and HH2 slightly damps it. **Nothing in §6 recorded it and the harness does not check it**, which is the first thing to fix: a growth rate that can print −200% is a band the harness should assert. Likely the same family as G1b (the price level escaping takes the real deflator with it), but a different symptom and worth confirming separately before assuming so — if real growth is being deflated by an escaping index, the defect is G1b's; if the nominal path itself collapses, it is not. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
@@ -2252,3 +2257,47 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
     (hedge funds are a real institutional type bidding in 07b/07d). **#48 is now §5-HC, a master project** and has
     grown from a detail item into a §4 top-three one — retitle it to match. #47 (deeper
     institutional sector) is substantially §5-S11 plus HH1.
+55. **HH3: household debt joins the banks' books, and #67 dies of realism.** The defect was rule
+    3 at its plainest: households owed 0.95x income evolved by paydown constants, banks held a
+    scalar chasing 11.67% of it, and the other 88% was owed to nobody. Now there are mortgage /
+    card / consumer-term POOLS on each named bank (G2's exact shape), the household lines are
+    their derived sums, and every flow has a posting: origination is priced (measured tier losses
+    + capital cost + operating cost — cards quote ~policy+1076bps, term ~policy+488bps, mortgages
+    10Y+170bps fixed at each vintage) and capital-gated at the 8% floor; amortization is ANNUITY
+    ARITHMETIC on each pool's own WAC and remaining term, which is what killed the 0.0004/wk
+    constant — the rate a book amortizes at is derivable from its own terms; card turnover keeps
+    one named behavioural primitive (4%/wk mixed transactor/revolver pool) until HH4 splits the
+    cohorts; mortgage loss severity reads HH2's real home equity, so a price crash walks
+    severity up as LTV approaches 1.
+    - **Seed reconciliation (§7.4, third time this project):** banks open holding the full book
+      (USA consumer line 634B where the scalar said ~130B), equity tops up at each bank's own
+      pre-migration capital ratio (43.2B USA), deposits re-derive as the balancing funding.
+    - **#67 CLOSED by re-measure.** USA bank capital was collapsing to zero by week ~70 since
+      the flow ledger stopped propping it. With the real book: 11.6% → 14.7% through week 80,
+      NIM 2.8–5.5% in band. The collapse was the fictional consumer book all along.
+    - **The household rate response exists now.** Late in the run, policy tightens and the card
+      and term books SHRINK (42.9B → 33.5B) while the measured debt-service burden climbs
+      17.8% → 26.6% of income — households delevering under tight policy, off floating margins
+      and priced origination, is the stabiliser §6-G1b has been asking MS/HH for.
+    - **A measurement refined, not loosened.** The 5%/week institutional-book band fired at week
+      2 — and the probe chain showed why: bank equity at its real size tripled the ETF
+      authorised-participant pipe (0.25x dealer equity/week: 43.2B x 0.25 = the measured
+      10.8B/week fill, exactly), so the pent-up ETF demand drains in 4 weeks instead of 30, on
+      top of the pre-existing cold-start rotation (A/B: baseline peaks at 4.2%/wk, just under
+      the band). Every dollar carries a cash leg; the moving entities were the two whose books
+      are EXTERNALLY FUNDED BY DESIGN (MMF subscriptions, ETF creations) — the band's
+      closed-book premise doesn't hold for them. They are now excluded from the band and the
+      money fund got the SHARPER identity instead: a $1-NAV book must equal its shares
+      outstanding within accruals. Along the way the diagnosis went wrong twice by comparing a
+      fund against the wrong baseline (the MMF's +13.9B week-2 inflow is byte-identical in the
+      baseline world) — the probe that settles such a question is the A/B, not the time series.
+    - **Known cold start, measured and accepted:** bank stocks re-rate 1.65 → ~3.9 over ~10
+      weeks as stage 08's 85/15 revenue blend converges on the 3x bigger real bank. Bounded,
+      ~1% of institutional books; not worth a seed-P&L reconstruction until it pollutes a
+      measurement.
+    - **Left honestly open (HH4):** interest and scheduled principal are paid from unmodeled
+      household income (the amounts are real, the payer is not yet — same boundary the wage
+      flows cross the other way); and the banks' "household deposits" funding line (790B USA at
+      seed) vs the household state's own deposits (372B) is the two-representations gap moved,
+      not closed — the difference is wholesale funding wearing a deposit label. Recorded in §6.
+

@@ -21,13 +21,13 @@
  */
 
 import { GameState, RegionId, Company } from '../../../types';
-import { BankingSector } from '../../../domain/banking';
+import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import {
   evolveBankingSector, computeSovereignBookAnnualYield,
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
-import { runBankWeeklyLending } from './bank-lending';
+import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual } from './bank-lending';
 import { WeeklyStepContext } from './context';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -57,6 +57,7 @@ function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
     repoBorrowedUSD: bs.repoBorrowedUSD * share,
     repoEncumberedCollateralUSD: bs.repoEncumberedCollateralUSD * share,
     businessLoans: [],
+    householdLoans: (bs.householdLoans || []).map((pl) => ({ ...pl, principalUSD: pl.principalUSD * share })),
     corporateDepositsUSD: bs.corporateDepositsUSD * share,
   };
 }
@@ -103,6 +104,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
     });
 
+    // HH3: the week's real household-credit flows, per bank, for the region roll-up below.
+    const householdFlowsByBank = new Map<string, {
+      interestUSD: number; debtServicePrincipalUSD: number;
+      mortgageOriginationUSD: number; mortgageDischargeUSD: number;
+      consumerCreditOriginationUSD: number;
+    }>();
+
     const newSheets: { bank: Company; sheet: BankingSector }[] = banks.map((bank) => {
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
@@ -114,10 +122,18 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         .filter((l) => l.status === 'PERFORMING')
         .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
 
+      // HH3: the household books' real accrual on the same prior-week basis — each pool at its
+      // own terms (a mortgage pool at its fixed WAC, card/term at policy plus their margins).
+      const priorHouseholdInterestWeeklyUSD = (prevSheet.householdLoans || []).reduce((a, pl) => {
+        const rate = pl.kind === 'MORTGAGE'
+          ? (pl.wacAnnual ?? currentMortgageRateAnnual(reg))
+          : reg.policyRate + (pl.marginBps ?? 500) / 10000;
+        return a + (pl.principalUSD * rate) / 52;
+      }, 0);
+
       const sheet = evolveBankingSector(
         prevSheet,
         ctx.regionFloatingPrincipal[regionId] * share,
-        reg.householdState.householdDebtToIncomeRatio,
         reg.estimatedHouseholdIncomeUSD * share,
         reg.householdState.savingsRate,
         reg.policyRate,
@@ -125,10 +141,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // its real, persistent concentration risk (see bankRiskFactor's doc comment in
         // domain/company.ts) — the actual reason two banks facing the identical regional credit
         // cycle diverge, rather than every bank sharing one identical region-wide loss rate on
-        // both books. Consumer loss rate has no direct override in evolveBankingSector, so the
-        // same riskFactor is applied to its own real driver (unemploymentRate) instead — a
-        // higher-risk bank's book is more exposed to the SAME regional unemployment print, the
-        // way a bank concentrated in subprime/regional consumer lending genuinely would be.
+        // both books. The household pass below receives the same risk-adjusted unemployment —
+        // a higher-risk bank's book is more exposed to the SAME regional unemployment print,
+        // the way a bank concentrated in subprime/regional consumer lending genuinely would be.
         ctx.creditContagionBps * riskFactor,
         reg.unemploymentRate * (0.6 + riskFactor * 0.4),
         // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
@@ -137,12 +152,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         reg.gdpGrowth,
         reg.creditConditionsSpilloverAdjustment ?? 0,
         0,
-        reg.householdState.creditTierBooks,
         // WS6: last week's overnight repo book matures inside as explicit flows.
         prevSheet.repoBorrowedUSD ?? 0,
         prevSheet.repoLentUSD ?? 0,
         reg.repoRateAnnual ?? reg.policyRate,
         priorLoanInterestWeeklyUSD,
+        priorHouseholdInterestWeeklyUSD,
         regionDivertedUSD * share,
         // Slice 5: the rate this bank's deposits must compete with.
         findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0
@@ -151,7 +166,19 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // G2: the itemized book's own week — facility reconciliation, real interest accrual
       // basis, real SME write-offs, and priced origination under the real capital constraint.
       const lending = runBankWeeklyLending(bank, sheet, reg, regionId, facilityTranchesByBank, ctx.nextWeek);
-      const lentSheet = lending.sheet;
+      // HH3: the household books' own week — derived amortization, measured losses, and
+      // priced, capital-gated origination (mortgage demand off the real housing turnover).
+      const household = runBankHouseholdLending(
+        bank, lending.sheet, reg, reg.unemploymentRate * (0.6 + riskFactor * 0.4)
+      );
+      householdFlowsByBank.set(bank.ticker, {
+        interestUSD: priorHouseholdInterestWeeklyUSD,
+        debtServicePrincipalUSD: household.debtServicePrincipalWeeklyUSD,
+        mortgageOriginationUSD: household.mortgageOriginationUSD,
+        mortgageDischargeUSD: household.mortgageDischargeUSD,
+        consumerCreditOriginationUSD: household.consumerCreditOriginationUSD,
+      });
+      const lentSheet = household.sheet;
       // Slice 4: the corporate-deposit line is the derived view of the borrowers' real cash.
       const withDeposits: BankingSector = {
         ...lentSheet,
@@ -244,7 +271,53 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // G2: itemized loans live per bank; the aggregate carries no copy (a flattened region
       // view would be a second ledger). Corporate deposits sum like everything else.
       businessLoans: [],
+      householdLoans: [],
       corporateDepositsUSD: sumField((s) => s.corporateDepositsUSD ?? 0),
     };
+
+    // ---- HH3: the household sector's debt lines become what they now are — DERIVED SUMS of
+    // the itemized pools on the named banks — and the week's real flows are recorded for the
+    // household side to read next week (deposit credit, consumption boost, debt service). ----
+    const sumPools = (kind: HouseholdLoanKind) => newSheets.reduce(
+      (a, { sheet }) => a + (sheet.householdLoans || [])
+        .filter((pl) => pl.kind === kind)
+        .reduce((x, pl) => x + pl.principalUSD, 0),
+      0
+    );
+    const hs = reg.householdState;
+    const priorMortgageDebtUSD = hs.mortgageDebtUSD ?? 0;
+    const mortgageDebtUSD = Number(sumPools('MORTGAGE').toFixed(0));
+    const creditCardDebtUSD = Number(sumPools('CREDIT_CARD').toFixed(0));
+    const otherConsumerLoanDebtUSD = Number(sumPools('CONSUMER_TERM').toFixed(0));
+    let interestUSD = 0; let servicePrincipalUSD = 0; let mortgageOriginationUSD = 0;
+    let mortgageDischargeUSD = 0; let consumerCreditUSD = 0;
+    householdFlowsByBank.forEach((f) => {
+      interestUSD += f.interestUSD;
+      servicePrincipalUSD += f.debtServicePrincipalUSD;
+      mortgageOriginationUSD += f.mortgageOriginationUSD;
+      mortgageDischargeUSD += f.mortgageDischargeUSD;
+      consumerCreditUSD += f.consumerCreditOriginationUSD;
+    });
+    reg.householdState = {
+      ...hs,
+      mortgageDebtUSD,
+      creditCardDebtUSD,
+      otherConsumerLoanDebtUSD,
+      priorMortgageDebtUSD,
+      householdDebtToIncomeRatio: reg.estimatedHouseholdIncomeUSD > 0
+        ? Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / reg.estimatedHouseholdIncomeUSD).toFixed(4))
+        : hs.householdDebtToIncomeRatio,
+      // Burden is interest plus REQUIRED principal (annuity schedules and card minimums);
+      // transactor turnover is consumption already counted, cycled through a card.
+      weeklyDebtServiceUSD: Number((interestUSD + servicePrincipalUSD).toFixed(0)),
+      // The household sector's NET deposit credit from housing: buyers' new loans minus the
+      // sellers' loans the sale proceeds retired.
+      weeklyMortgageOriginationUSD: Number((mortgageOriginationUSD - mortgageDischargeUSD).toFixed(0)),
+      weeklyNewConsumerCreditUSD: Number(consumerCreditUSD.toFixed(0)),
+    };
+    // The housing-market stat becomes the real number the banks actually wrote this week.
+    if (reg.housingMarket) {
+      reg.housingMarket.mortgageOriginationVolumeUSD = Number(mortgageOriginationUSD.toFixed(0));
+    }
   });
 }

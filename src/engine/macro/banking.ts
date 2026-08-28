@@ -1,4 +1,4 @@
-import { BankingSector, CreditTierBook } from '../../types';
+import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT } from '../../types';
 
 /**
  * The banking sector's weekly evolution — a FLOW LEDGER, not a formula sheet.
@@ -112,7 +112,6 @@ export function computeSovereignBookAnnualYield(
 export function evolveBankingSector(
   prevBanking: BankingSector,
   businessLoanBookInputUSD: number,
-  householdDebtToIncomeRatio: number,
   estimatedHouseholdIncomeUSD: number,
   savingsRate: number,
   policyRate: number,
@@ -125,7 +124,6 @@ export function evolveBankingSector(
   _gdpGrowth: number,
   spilloverAdjustment: number = 0,
   monetizedAmountUSD: number = 0,
-  creditTierBooks?: CreditTierBook[],
   /** WS6: last week's overnight repo book and the rate it was struck at (annualised decimal).
    * The positions mature here as explicit flows — principal and interest both. Zero until the
    * repo market exists or when the bank had no position. */
@@ -137,6 +135,13 @@ export function evolveBankingSector(
    * business-loan yield formula. The business book itself is carried untouched here: it is a
    * sum of real loans owned by the G2 stage. */
   itemizedLoanInterestWeeklyUSD: number = 0,
+  /** HH3: real interest accrued this week on the bank's ITEMIZED household books (each pool at
+   * its own terms, computed by the caller from the prior week's pools) — replaces the
+   * `consumerLoanUSD x (policy + 3.5%)` yield formula. The payer is household income, which
+   * enters as cash the way the savings inflow does, until HH4 names it cohort by cohort. The
+   * consumer book itself passes through untouched: it is a sum of real pools owned by the
+   * household lending pass. */
+  householdLoanInterestWeeklyUSD: number = 0,
   /** WS7: the slice of THIS bank's household savings inflow that went to the money market fund
    * instead — the deposit-competition channel. The fund's credit happens in 02b; here the
    * deposits simply never arrive. */
@@ -152,7 +157,9 @@ export function evolveBankingSector(
   let depositsUSD = prevBanking.depositsUSD;
   // G2: the business book is ITEMIZED — a sum of real loans that only bank-lending.ts moves.
   const businessLoanUSD = prevBanking.businessLoanBookUSD;
-  let consumerLoanUSD = prevBanking.consumerLoanBookUSD;
+  // HH3: the consumer book is ITEMIZED — a sum of real household pools that only the
+  // household lending pass moves.
+  const consumerLoanUSD = prevBanking.consumerLoanBookUSD;
   // The securities book is owned by the clearing stages (07c/07f/11) and passes through here
   // untouched — a stage may only rewrite the instruments it cleared.
   const sovereignUSD = prevBanking.sovereignBondHoldingsUSD;
@@ -184,11 +191,9 @@ export function evolveBankingSector(
   // ---- 3. Lending: loans create deposits, repayment destroys them — the actual mechanism
   // (both sides of the sheet move together; reserves do not move at origination). Sizes are
   // formula targets until G2 itemizes the borrowers. ----
-  const bankedConsumerDebtShare = 0.1167; // Share of total household debt held as bank consumer loans
-  const consumerTargetUSD = householdDebtToIncomeRatio * estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
-  const consumerFlowUSD = consumerTargetUSD - consumerLoanUSD;
-  consumerLoanUSD += consumerFlowUSD;
-  depositsUSD += consumerFlowUSD;
+  // HH3: the consumer-loan target formula is gone. The household books are real pools on this
+  // bank's own sheet (householdLoans); origination, amortization and losses are the lending
+  // pass's priced, capital-gated decisions, and the deposits an origination creates post there.
 
   // G2: business lending flows are the itemized stage's (priced origination under the real
   // capital constraint, in bank-lending.ts); the formula target that used to grow the book
@@ -208,15 +213,13 @@ export function evolveBankingSector(
     ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * 0.3)))
     : 0;
   const depositRate = Math.max(betaFloorRate, betaFloorRate + (competingMmfYieldAnnual - betaFloorRate) * fundingPressure);
-  const consumerLoanYield = policyRate + 0.035;
   // Reserves earn the policy rate — the floor-system IOR. The 0.85 "tiering" haircut and the
   // bank-side ON RRP parking it justified are gone: a bank whose reserves earn IOR never goes
   // to the RRP window, which is exactly the real system.
   const weeklyInterestIncomeUSD = (
-    consumerLoanUSD * consumerLoanYield +
     sovereignUSD * sovereignBookAnnualYield +
     Math.max(0, cashUSD) * policyRate
-  ) / 52 + itemizedLoanInterestWeeklyUSD;
+  ) / 52 + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD;
   cashUSD += weeklyInterestIncomeUSD;
   equityUSD += weeklyInterestIncomeUSD;
   const weeklyDepositInterestUSD = (depositsUSD * depositRate) / 52;
@@ -228,19 +231,9 @@ export function evolveBankingSector(
   // demand.) Loss rates stay formula until G2's real borrower defaults / MS. ----
   // G2: business losses are REAL write-offs in bank-lending.ts (the pools' measured default
   // experience); the contagion formula now prices nothing on the itemized book.
-  let consumerLossRateAnnual = Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
-  if (creditTierBooks && creditTierBooks.length > 0) {
-    const superPrimeShare = creditTierBooks.find(t => t.tier === 'SUPER_PRIME')?.shareOfHouseholds ?? 0.25;
-    const primeShare = creditTierBooks.find(t => t.tier === 'PRIME')?.shareOfHouseholds ?? 0.50;
-    const nearPrimeShare = creditTierBooks.find(t => t.tier === 'NEAR_PRIME')?.shareOfHouseholds ?? 0.15;
-    const subprimeShare = creditTierBooks.find(t => t.tier === 'SUBPRIME')?.shareOfHouseholds ?? 0.10;
-    const baselineConsumerLossRate = Math.max(0.005, Math.min(0.12, Math.max(0, unemploymentRate - 0.03) * 1.2));
-    const weightedMultiplier = (superPrimeShare * 0.2) + (primeShare * 1.0) + (nearPrimeShare * 3.0) + (subprimeShare * 10.0);
-    consumerLossRateAnnual = baselineConsumerLossRate * weightedMultiplier;
-  }
-  const weeklyConsumerLossUSD = (consumerLoanUSD * consumerLossRateAnnual) / 52;
-  consumerLoanUSD -= weeklyConsumerLossUSD;
-  equityUSD -= weeklyConsumerLossUSD;
+  // HH3: consumer losses are REAL write-offs in the household lending pass (the tier mix and
+  // the mortgage book's home-equity severity price them there); the formula that wrote the
+  // whole book down here is gone.
 
   // ---- 6. Distributions: dividends actually LEAVE — cash and equity together, bounded by the
   // cash the treasury genuinely holds above its own operating buffer. This replaces two
@@ -249,8 +242,11 @@ export function evolveBankingSector(
   // real equity raise exists, WS8/G2), and a hard rescale `equity = RWA × 0.140` that deleted
   // equity with nothing on the other side (a rule-2 rescale; now a real special dividend paid
   // at the pace real cash allows). ----
-  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD - weeklyConsumerLossUSD;
-  const riskWeightedAssetsUSD = businessLoanUSD * 1.0 + consumerLoanUSD * 0.75 + sovereignUSD * 0.0;
+  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD;
+  const consumerRwaUSD = (prevBanking.householdLoans && prevBanking.householdLoans.length > 0)
+    ? householdBookRwaUSD(prevBanking.householdLoans)
+    : consumerLoanUSD * CONSUMER_CREDIT_RISK_WEIGHT;
+  const riskWeightedAssetsUSD = businessLoanUSD * 1.0 + consumerRwaUSD + sovereignUSD * 0.0;
   const priorCapitalRatio = prevBanking.bankCapitalRatio;
   const targetPayoutRatio = priorCapitalRatio > 0.14 ? 0.90 : priorCapitalRatio < 0.11 ? 0.05 : 0.40;
   const distributableCashUSD = () => Math.max(0, cashUSD - depositsUSD * MIN_CASH_BUFFER_RATIO);
@@ -314,6 +310,8 @@ export function evolveBankingSector(
     // G2: the itemized book and the corporate-deposit view are owned by the G2 stages
     // (bank-lending.ts / 02b); carried through evolution untouched.
     businessLoans: prevBanking.businessLoans || [],
+    // HH3: the household pools are owned by the household lending pass; carried untouched.
+    householdLoans: prevBanking.householdLoans || [],
     corporateDepositsUSD: prevBanking.corporateDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.

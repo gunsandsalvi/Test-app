@@ -4,7 +4,7 @@ import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
-import { migrateSmeDebtAtSeed } from './stages/bank-lending';
+import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed } from './stages/bank-lending';
 import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
@@ -343,7 +343,15 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const regionBanksForLending = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
     if (regionBanksForLending.length > 0) {
       migrateSmeDebtAtSeed(regionId, reg, regionBanksForLending);
+      // HH3: the household debt the region already carries becomes real mortgage / card / term
+      // pools on the same named banks, replacing the consumer scalar (which covered 11.67% of
+      // the same debt and owed the rest to nobody). Equity tops up at each bank's own opening
+      // capital ratio and deposits re-derive as the balancing funding — §7.4's discipline: the
+      // seed opens in the exact shape the weekly lending pass maintains.
+      migrateHouseholdDebtAtSeed(regionId, reg, regionBanksForLending);
       reg.bankingSector.businessLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0);
+      reg.bankingSector.consumerLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.consumerLoanBookUSD, 0);
+      reg.bankingSector.bankEquityUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0);
       reg.bankingSector.depositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same

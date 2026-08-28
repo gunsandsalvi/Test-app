@@ -144,9 +144,25 @@ export interface HouseholdState {
    * nothing, and shrinks as a share of wealth as the universe grows. §6 owns it.
    */
   unmodeledFinancialAssetsUSD: number;
+  /**
+   * HH3 — DERIVED SUMS of the itemized household loan pools on the region's named banks
+   * (BankingSector.householdLoans), written by the bank-diversification stage each week. The
+   * banks own the books; these lines are the household sector's view of the same loans, never
+   * a second stock evolved by its own formula.
+   */
   mortgageDebtUSD: number;
   creditCardDebtUSD: number;
   otherConsumerLoanDebtUSD: number;
+  /** Last week's mortgage book, so demand signals can read a real change (set with the sums). */
+  priorMortgageDebtUSD?: number;
+  /** HH3 — last week's real flows off the itemized books, written by the lending pass:
+   * NET mortgage credit (origination minus the sellers' loans the sale proceeds retired —
+   * the household sector's deposit gain), gross card/term origination (spent into
+   * consumption), and the debt service the books require: interest plus annuity-scheduled
+   * principal plus card minimums. */
+  weeklyMortgageOriginationUSD?: number;
+  weeklyNewConsumerCreditUSD?: number;
+  weeklyDebtServiceUSD?: number;
 }
 
 export interface GovDebtTranche {

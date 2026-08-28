@@ -34,7 +34,16 @@
  */
 
 import { Company, Region, RegionId } from '../../../types';
-import { BankingSector, BankLoan } from '../../../domain/banking';
+import {
+  BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
+  MORTGAGE_RISK_WEIGHT, CONSUMER_CREDIT_RISK_WEIGHT, householdBookRwaUSD, annuityWeeklyPrincipalUSD,
+  MORTGAGE_TERM_WEEKS, MORTGAGE_SEED_WAM_WEEKS, CONSUMER_TERM_WEEKS, CONSUMER_TERM_SEED_WAM_WEEKS,
+  MORTGAGE_SPREAD_OVER_10Y_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
+  CARD_OPERATING_COST_BPS,
+  CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_RATE_ANNUAL, MORTGAGE_LTV_AT_ORIGINATION,
+  FORECLOSURE_COST_SHARE, MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, MORTGAGE_MIN_LOSS_SEVERITY,
+} from '../../../domain/banking';
+import { CreditTierBook, AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { PrivateSectorSegment } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE } from './shared-helpers';
@@ -75,7 +84,13 @@ function smePoolAnnualPd(seg: PrivateSectorSegment): number {
 }
 
 export function bankRwaUSD(sheet: BankingSector): number {
-  return sheet.businessLoanBookUSD * 1.0 + sheet.consumerLoanBookUSD * 0.75;
+  // HH3: the household book's weight is per-kind (a secured mortgage consumes less capital
+  // than a card balance); the flat 0.75 remains only as the fallback for a sheet whose pools
+  // predate itemization.
+  const householdRwa = (sheet.householdLoans && sheet.householdLoans.length > 0)
+    ? householdBookRwaUSD(sheet.householdLoans)
+    : sheet.consumerLoanBookUSD * CONSUMER_CREDIT_RISK_WEIGHT;
+  return sheet.businessLoanBookUSD * 1.0 + householdRwa;
 }
 
 /**
@@ -258,7 +273,10 @@ export function runBankWeeklyLending(
     const demandUSD = Math.max(0, (ceilingUSD - totalPoolDebtUSD) * SME_WEEKLY_DEMAND_TAKEUP * appetite * (bankShare || 0.25));
     if (demandUSD <= 0) return;
 
-    const currentRwaUSD = loans.reduce((a, l) => a + l.principalUSD, 0) + sheet.consumerLoanBookUSD * 0.75;
+    const currentRwaUSD = loans.reduce((a, l) => a + l.principalUSD, 0)
+      + ((sheet.householdLoans && sheet.householdLoans.length > 0)
+        ? householdBookRwaUSD(sheet.householdLoans)
+        : sheet.consumerLoanBookUSD * CONSUMER_CREDIT_RISK_WEIGHT);
     const headroomUSD = Math.max(0, equityUSD / BANK_MIN_CAPITAL_RATIO - currentRwaUSD);
     const grantedUSD = Math.min(demandUSD, headroomUSD);
     declinedOriginationUSD += demandUSD - grantedUSD;
@@ -310,5 +328,348 @@ export function runBankWeeklyLending(
     loanLossWeeklyUSD,
     declinedOriginationUSD,
     facilityNetOriginationUSD,
+  };
+}
+
+// ============================== HH3 — the household books ==============================
+
+/**
+ * The unsecured book's annual loss rate from the tier mix and the real unemployment print —
+ * moved here from evolveBankingSector so the loss lands on the itemized pool that bears it.
+ */
+export function consumerAnnualLossRate(
+  unemploymentRate: number,
+  creditTierBooks: CreditTierBook[] | undefined
+): number {
+  const base = Math.max(0.005, Math.min(0.12, Math.max(0, unemploymentRate - 0.03) * 1.2));
+  if (!creditTierBooks || creditTierBooks.length === 0) {
+    return Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
+  }
+  const share = (tier: string, fallback: number) =>
+    creditTierBooks.find((t) => t.tier === tier)?.shareOfHouseholds ?? fallback;
+  const weightedMultiplier =
+    share('SUPER_PRIME', 0.25) * 0.2 + share('PRIME', 0.50) * 1.0 +
+    share('NEAR_PRIME', 0.15) * 3.0 + share('SUBPRIME', 0.10) * 10.0;
+  return base * weightedMultiplier;
+}
+
+/** One margin quote for unsecured household credit: measured loss + capital + operating cost. */
+export function quoteHouseholdMarginBps(params: {
+  annualLossRate: number;
+  riskWeight: number;
+  operatingCostBps: number;
+}): number {
+  // The measured loss rate is already frequency x severity, so it IS the expected-loss term.
+  const expectedLossBps = params.annualLossRate * 10000;
+  const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO * BANK_TARGET_ROE * 10000;
+  return Math.max(50, Math.round(expectedLossBps + capitalCostBps + params.operatingCostBps));
+}
+
+/** The current primary mortgage rate: the cleared 10Y plus the real origination spread. */
+export function currentMortgageRateAnnual(reg: Region): number {
+  return Math.max(0.005, (reg.zeroRates?.tenor10Y ?? 0.04) + MORTGAGE_SPREAD_OVER_10Y_BPS / 10000);
+}
+
+/**
+ * SEED MIGRATION (§7.4 again): the household debt the region already carries becomes real
+ * pools on the named banks, split by deposit share — and the consumer scalar the banks used
+ * to carry (a 0.070-of-GDP line covering 11.67% of the same debt) is REPLACED by them, not
+ * added to. Bank equity is topped up in proportion to the risk the new books add, at each
+ * bank's own pre-migration capital ratio, and deposits re-derive as the balancing funding —
+ * the same discipline as the SME and sovereign seed reconciliations. The equity and funding
+ * appear at seed because seeds construct the opening world; from week 1 every dollar of these
+ * books moves only through the lending pass below.
+ */
+export function migrateHouseholdDebtAtSeed(
+  regionId: RegionId,
+  reg: Region,
+  banks: Company[]
+): void {
+  const hs = reg.householdState;
+  if (!hs || banks.length === 0) return;
+  const mortgageRate = currentMortgageRateAnnual(reg);
+  const lossRate = consumerAnnualLossRate(reg.unemploymentRate, hs.creditTierBooks);
+  const cardMarginBps = quoteHouseholdMarginBps({
+    annualLossRate: lossRate, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT, operatingCostBps: CARD_OPERATING_COST_BPS,
+  });
+  const termMarginBps = quoteHouseholdMarginBps({
+    annualLossRate: lossRate * 0.5, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT, operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS,
+  });
+
+  const totalDepositsUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0) || 1;
+  banks.forEach((bank) => {
+    const sheet = bank.bankBalanceSheet!;
+    const share = sheet.depositsUSD / totalDepositsUSD;
+    const pools: HouseholdLoanPool[] = ([
+      {
+        kind: 'MORTGAGE',
+        principalUSD: Math.round((hs.mortgageDebtUSD ?? 0) * share),
+        wacAnnual: Number(mortgageRate.toFixed(4)),
+        wamWeeks: MORTGAGE_SEED_WAM_WEEKS,
+      },
+      {
+        kind: 'CREDIT_CARD',
+        principalUSD: Math.round((hs.creditCardDebtUSD ?? 0) * share),
+        marginBps: cardMarginBps,
+      },
+      {
+        kind: 'CONSUMER_TERM',
+        principalUSD: Math.round((hs.otherConsumerLoanDebtUSD ?? 0) * share),
+        marginBps: termMarginBps,
+        wamWeeks: CONSUMER_TERM_SEED_WAM_WEEKS,
+      },
+    ] as HouseholdLoanPool[]).filter((pl) => pl.principalUSD > 0);
+
+    const priorRwaUSD = bankRwaUSD(sheet);
+    const priorRatio = priorRwaUSD > 0 ? sheet.bankEquityUSD / priorRwaUSD : BANK_WORKING_CAPITAL_RATIO;
+    const newHouseholdRwaUSD = householdBookRwaUSD(pools);
+    const replacedRwaUSD = sheet.consumerLoanBookUSD * CONSUMER_CREDIT_RISK_WEIGHT;
+    sheet.householdLoans = pools;
+    sheet.consumerLoanBookUSD = pools.reduce((a, pl) => a + pl.principalUSD, 0);
+    // Equity scales with the risk the books add, at the ratio this bank already ran — no new
+    // constant, and the opening capital ratio is preserved by construction.
+    sheet.bankEquityUSD = Number((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio).toFixed(0));
+    const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+    sheet.depositsUSD = Number((
+      sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
+    ).toFixed(0));
+    sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
+  });
+
+  // The household lines become the derived sums they will be every week from here on, and the
+  // seed carries the flows the books imply so week 1 opens in the engine's shape, not at zero.
+  const sumKind = (kind: HouseholdLoanKind) => banks.reduce(
+    (a, b) => a + (b.bankBalanceSheet!.householdLoans || []).filter((pl) => pl.kind === kind).reduce((x, pl) => x + pl.principalUSD, 0),
+    0
+  );
+  hs.mortgageDebtUSD = sumKind('MORTGAGE');
+  hs.creditCardDebtUSD = sumKind('CREDIT_CARD');
+  hs.otherConsumerLoanDebtUSD = sumKind('CONSUMER_TERM');
+  hs.priorMortgageDebtUSD = hs.mortgageDebtUSD;
+  const policyRate = reg.policyRate;
+  hs.weeklyDebtServiceUSD = Number((
+    (hs.mortgageDebtUSD * mortgageRate
+      + hs.creditCardDebtUSD * (policyRate + cardMarginBps / 10000)
+      + hs.otherConsumerLoanDebtUSD * (policyRate + termMarginBps / 10000)) / 52
+    + annuityWeeklyPrincipalUSD(hs.mortgageDebtUSD, mortgageRate, MORTGAGE_SEED_WAM_WEEKS)
+    + annuityWeeklyPrincipalUSD(hs.otherConsumerLoanDebtUSD, policyRate + termMarginBps / 10000, CONSUMER_TERM_SEED_WAM_WEEKS)
+    + hs.creditCardDebtUSD * CARD_MIN_PRINCIPAL_RATE_WEEKLY
+  ).toFixed(0));
+  const housingStockUSD = hs.housingStockUSD && hs.housingStockUSD > 0
+    ? hs.housingStockUSD
+    : (reg.housingMarket
+      ? (Math.max(0, reg.totalPopulation) / AVERAGE_HOUSEHOLD_SIZE) * Math.max(0, reg.housingMarket.ownershipRatePct) * Math.max(0, reg.housingMarket.medianHomePriceUSD)
+      : 0);
+  // Seeded as the engine's own shape: NET mortgage credit — buyers' new loans at the
+  // origination LTV minus sellers' remaining loans (at the book's average LTV) the sales retire.
+  const seedAvgLtv = housingStockUSD > 0 ? Math.min(2, hs.mortgageDebtUSD / housingStockUSD) : 1;
+  hs.weeklyMortgageOriginationUSD = Number((
+    (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52) * Math.max(0, MORTGAGE_LTV_AT_ORIGINATION - seedAvgLtv)
+  ).toFixed(0));
+  hs.weeklyNewConsumerCreditUSD = Number((
+    hs.creditCardDebtUSD * CARD_POOL_PAYMENT_RATE_WEEKLY
+    + annuityWeeklyPrincipalUSD(hs.otherConsumerLoanDebtUSD, policyRate + termMarginBps / 10000, CONSUMER_TERM_SEED_WAM_WEEKS)
+  ).toFixed(0));
+}
+
+export interface HouseholdLendingResult {
+  sheet: BankingSector;
+  /** Interest accrued at the pools' own terms — REPORT ONLY (the caller passes the prior-book
+   * accrual to evolveBankingSector, which posts it; posting here too would double-count). */
+  interestWeeklyUSD: number;
+  /** ALL principal retired from income this week (annuity arithmetic + revolving turnover). */
+  principalWeeklyUSD: number;
+  /** The REQUIRED slice of that principal — annuity schedules plus card minimums. Turnover a
+   * transactor cycles through a card is spending already counted in consumption, not burden. */
+  debtServicePrincipalWeeklyUSD: number;
+  /** Sellers' remaining mortgages repaid out of sale proceeds — funded by the buyers' new
+   * loans, so the household sector's net deposit gain is origination minus this. */
+  mortgageDischargeUSD: number;
+  /** Real write-offs this week (loan − and equity − applied here). */
+  lossWeeklyUSD: number;
+  mortgageOriginationUSD: number;
+  consumerCreditOriginationUSD: number;
+  declinedOriginationUSD: number;
+}
+
+/**
+ * One bank's weekly household lending: interest at each pool's own terms, scheduled principal
+ * DERIVED from those terms, losses at the measured tier/equity-severity rates, and origination
+ * as a priced, capital-gated decision — the same shape as the business pass above.
+ *
+ * The flow postings and their payers:
+ *  - Interest and scheduled principal are paid FROM HOUSEHOLD INCOME, which enters the bank as
+ *    cash the way the savings inflow does (income is not yet a cash ledger — HH4 names the
+ *    payer cohort by cohort). Interest is P&L (cash +, equity +); principal shrinks the loan
+ *    (cash +, loan −).
+ *  - A mortgage origination is endogenous money that STAYS in the household sector: the buyer's
+ *    debt is the seller's deposit (loan +, deposits +).
+ *  - Card/term origination is spent into the goods market at once: the money leaves to
+ *    merchants (loan +, cash −), and next week's consumption boost reads the same flow on the
+ *    household side.
+ *  - A write-off is a write-down (loan −, equity −), never a cash event.
+ */
+export function runBankHouseholdLending(
+  bank: Company,
+  sheet: BankingSector,
+  reg: Region,
+  adjustedUnemploymentRate: number
+): HouseholdLendingResult {
+  const policyRate = reg.policyRate;
+  const hs = reg.householdState;
+  const pools: HouseholdLoanPool[] = (sheet.householdLoans || []).map((pl) => ({ ...pl }));
+
+  let interestWeeklyUSD = 0;
+  let principalWeeklyUSD = 0;
+  let debtServicePrincipalWeeklyUSD = 0;
+  let lossWeeklyUSD = 0;
+  let mortgageOriginationUSD = 0;
+  let mortgageDischargeUSD = 0;
+  let consumerCreditOriginationUSD = 0;
+  let declinedOriginationUSD = 0;
+
+  // Borrowing appetite: confident households lever up, a policy rate above neutral cools it —
+  // the same behavioural form the household aggregate used, now the demand half of a priced,
+  // capital-gated origination decision instead of a multiplier on the book's own drift.
+  const cci = reg.householdState?.consumerConfidence ?? 100;
+  const neutralRate = reg.neutralRate ?? policyRate;
+  const appetite = Math.max(0, Math.min(2,
+    1.0 + ((cci - 100) / 100) * 0.5 - (policyRate - neutralRate) * 4
+  ));
+
+  const unsecuredLossRateAnnual = consumerAnnualLossRate(adjustedUnemploymentRate, hs?.creditTierBooks);
+  // Mortgage severity reads the sector's REAL home equity (HH2): foreclosure recovers the house
+  // less the cost of selling it, against the loan — deep equity means small severity, and a
+  // price crash walks severity up as LTV approaches 1.
+  const housingStockUSD = Math.max(0, hs?.housingStockUSD ?? 0);
+  const mortgageBookUSD = Math.max(1, hs?.mortgageDebtUSD ?? 1);
+  const avgLtv = housingStockUSD > 0 ? Math.min(2, mortgageBookUSD / housingStockUSD) : 1;
+  const mortgageRecovery = Math.min(1, (1 - FORECLOSURE_COST_SHARE) / Math.max(0.05, avgLtv));
+  const mortgageSeverity = Math.max(MORTGAGE_MIN_LOSS_SEVERITY, 1 - mortgageRecovery);
+  const mortgageLossRateAnnual = unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * mortgageSeverity;
+
+  const equityUSD = sheet.bankEquityUSD;
+  const otherRwaUSD = (sheet.businessLoans || []).reduce((a, l) => a + l.principalUSD, 0);
+  const headroomUSD = () => Math.max(0, equityUSD / 0.08 - (otherRwaUSD + householdBookRwaUSD(pools)));
+
+  // This bank's share of the region's household demand ≈ its share of the existing books.
+  const regionBookUSD = Math.max(1,
+    (hs?.mortgageDebtUSD ?? 0) + (hs?.creditCardDebtUSD ?? 0) + (hs?.otherConsumerLoanDebtUSD ?? 0));
+  const bankBookUSD = pools.reduce((a, pl) => a + pl.principalUSD, 0);
+  const bankShare = Math.min(1, bankBookUSD / regionBookUSD) || 0.25;
+
+  pools.forEach((pl) => {
+    if (pl.kind === 'MORTGAGE') {
+      const rate = pl.wacAnnual ?? currentMortgageRateAnnual(reg);
+      const interestUSD = (pl.principalUSD * rate) / 52;
+      const scheduledUSD = annuityWeeklyPrincipalUSD(pl.principalUSD, rate, pl.wamWeeks ?? MORTGAGE_SEED_WAM_WEEKS);
+      const lossUSD = (pl.principalUSD * mortgageLossRateAnnual) / 52;
+      interestWeeklyUSD += interestUSD;
+      principalWeeklyUSD += scheduledUSD;
+      debtServicePrincipalWeeklyUSD += scheduledUSD;
+      lossWeeklyUSD += lossUSD;
+      pl.principalUSD -= scheduledUSD + lossUSD;
+
+      // A sale discharges the seller's remaining loan out of the buyer's proceeds — the churn
+      // that keeps gross origination from reading as pure net money creation.
+      const salesVolumeUSD = (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52) * bankShare;
+      const dischargeUSD = Math.min(pl.principalUSD, salesVolumeUSD * avgLtv);
+      pl.principalUSD -= dischargeUSD;
+      mortgageDischargeUSD += dischargeUSD;
+
+      // Origination: this bank's share of the real housing turnover, at the current rate.
+      const newRate = currentMortgageRateAnnual(reg);
+      const demandUSD = (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52)
+        * MORTGAGE_LTV_AT_ORIGINATION * appetite * bankShare;
+      const grantedUSD = Math.min(demandUSD, headroomUSD() / Math.max(0.01, MORTGAGE_RISK_WEIGHT));
+      declinedOriginationUSD += demandUSD - grantedUSD;
+      if (grantedUSD > 0) {
+        // New vintage joins at the current rate and a full term; WAC and WAM blend.
+        const total = pl.principalUSD + grantedUSD;
+        pl.wacAnnual = Number((((pl.wacAnnual ?? newRate) * pl.principalUSD + newRate * grantedUSD) / Math.max(1, total)).toFixed(4));
+        pl.wamWeeks = Math.round((((pl.wamWeeks ?? MORTGAGE_SEED_WAM_WEEKS) - 1) * pl.principalUSD + MORTGAGE_TERM_WEEKS * grantedUSD) / Math.max(1, total));
+        pl.principalUSD = total;
+        mortgageOriginationUSD += grantedUSD;
+      } else if (pl.wamWeeks) {
+        pl.wamWeeks = Math.max(1, pl.wamWeeks - 1);
+      }
+    } else if (pl.kind === 'CREDIT_CARD') {
+      const rate = policyRate + (pl.marginBps ?? 1000) / 10000;
+      const interestUSD = (pl.principalUSD * rate) / 52;
+      const paydownUSD = pl.principalUSD * CARD_POOL_PAYMENT_RATE_WEEKLY;
+      const lossUSD = (pl.principalUSD * unsecuredLossRateAnnual) / 52;
+      interestWeeklyUSD += interestUSD;
+      principalWeeklyUSD += paydownUSD;
+      debtServicePrincipalWeeklyUSD += pl.principalUSD * CARD_MIN_PRINCIPAL_RATE_WEEKLY;
+      lossWeeklyUSD += lossUSD;
+      pl.principalUSD -= paydownUSD + lossUSD;
+
+      // The pool re-borrows what it paid down, scaled by appetite — the revolving turnover.
+      const demandUSD = paydownUSD * appetite;
+      const grantedUSD = Math.min(demandUSD, headroomUSD() / CONSUMER_CREDIT_RISK_WEIGHT);
+      declinedOriginationUSD += demandUSD - grantedUSD;
+      if (grantedUSD > 0) {
+        pl.marginBps = quoteHouseholdMarginBps({
+          annualLossRate: unsecuredLossRateAnnual, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
+          operatingCostBps: CARD_OPERATING_COST_BPS,
+        });
+        pl.principalUSD += grantedUSD;
+        consumerCreditOriginationUSD += grantedUSD;
+      }
+    } else {
+      const rate = policyRate + (pl.marginBps ?? 500) / 10000;
+      const interestUSD = (pl.principalUSD * rate) / 52;
+      const scheduledUSD = annuityWeeklyPrincipalUSD(pl.principalUSD, rate, pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS);
+      const lossUSD = (pl.principalUSD * unsecuredLossRateAnnual * 0.5) / 52;
+      interestWeeklyUSD += interestUSD;
+      principalWeeklyUSD += scheduledUSD;
+      debtServicePrincipalWeeklyUSD += scheduledUSD;
+      lossWeeklyUSD += lossUSD;
+      pl.principalUSD -= scheduledUSD + lossUSD;
+
+      const demandUSD = scheduledUSD * appetite;
+      const grantedUSD = Math.min(demandUSD, headroomUSD() / CONSUMER_CREDIT_RISK_WEIGHT);
+      declinedOriginationUSD += demandUSD - grantedUSD;
+      if (grantedUSD > 0) {
+        const total = pl.principalUSD + grantedUSD;
+        pl.marginBps = quoteHouseholdMarginBps({
+          annualLossRate: unsecuredLossRateAnnual * 0.5, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
+          operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS,
+        });
+        pl.wamWeeks = Math.round((((pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS) - 1) * pl.principalUSD + CONSUMER_TERM_WEEKS * grantedUSD) / Math.max(1, total));
+        pl.principalUSD = total;
+        consumerCreditOriginationUSD += grantedUSD;
+      } else if (pl.wamWeeks) {
+        pl.wamWeeks = Math.max(1, pl.wamWeeks - 1);
+      }
+    }
+    pl.principalUSD = Math.max(0, Number(pl.principalUSD.toFixed(0)));
+  });
+
+  const consumerLoanBookUSD = Number(pools.reduce((a, pl) => a + pl.principalUSD, 0).toFixed(0));
+  return {
+    sheet: {
+      ...sheet,
+      householdLoans: pools,
+      consumerLoanBookUSD,
+      // Interest is NOT posted here: it accrues on the PRIOR book and evolveBankingSector
+      // posts it (cash +, equity +, and the NIM statistic) exactly as the business book's —
+      // the caller passes the accrual in. Principal comes home from household income as cash
+      // (boundary in, like the savings inflow); card/term origination leaves at once to
+      // merchants.
+      cashReservesUSD: sheet.cashReservesUSD + principalWeeklyUSD - consumerCreditOriginationUSD,
+      bankEquityUSD: sheet.bankEquityUSD - lossWeeklyUSD,
+      // The buyer's new debt is the seller's new deposit, net of the seller's own loan the
+      // sale proceeds retire — deposits grow with NET mortgage credit, not gross churn.
+      depositsUSD: sheet.depositsUSD + mortgageOriginationUSD - mortgageDischargeUSD,
+    },
+    interestWeeklyUSD,
+    principalWeeklyUSD,
+    debtServicePrincipalWeeklyUSD,
+    lossWeeklyUSD,
+    mortgageOriginationUSD,
+    mortgageDischargeUSD,
+    consumerCreditOriginationUSD,
+    declinedOriginationUSD,
   };
 }

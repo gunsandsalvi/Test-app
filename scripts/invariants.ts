@@ -92,9 +92,16 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
 }
 
 function checkInstitutionalBookConservation(prev: GameState, state: GameState, week: number) {
+  // The 5% band asserts a CLOSED book: securities and cash trade against each other, so the
+  // total moves only by marks and small boundary flows. MMFs and ETFs are excluded because
+  // their books are externally funded BY DESIGN — a subscription grows assets and the share
+  // liability together (HH3 made this bind: AP capacity runs off real bank equity, so the
+  // funds fill at the real pipe's speed) — and for the money fund the sharper identity is
+  // asserted below instead: a $1-NAV book equals its shares outstanding.
   const bookOf = (s: GameState, region: RegionId) =>
     (s.institutionalEntities || [])
-      .filter((e) => e.region === region && !e.isDefaulted)
+      .filter((e) => e.region === region && !e.isDefaulted
+        && e.entityType !== 'MONEY_MARKET_FUND' && e.entityType !== 'ETF')
       .reduce(
         (sum, e) =>
           sum + (e.cashUSD ?? 0) + ((e as any).repoLentUSD ?? 0) + e.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0),
@@ -115,6 +122,21 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
           `must move together — check that every clearing stage applies netCashDeltaByParticipantId.`,
       });
     }
+    // The money fund's own conservation: everything it holds is owed to its shareholders at
+    // the stable $1 NAV, so book and shares may drift apart only by the week's accruals.
+    (state.institutionalEntities || [])
+      .filter((e) => e.region === region && !e.isDefaulted && e.entityType === 'MONEY_MARKET_FUND')
+      .forEach((mmf) => {
+        const bookUSD = (mmf.cashUSD ?? 0) + ((mmf as any).repoLentUSD ?? 0)
+          + mmf.itemizedHoldings.reduce((x, h) => x + h.quantityOrNotionalUSD, 0);
+        const sharesUSD = mmf.mmfSharesOutstandingUSD ?? 0;
+        if (sharesUSD > 1e9 && Math.abs(bookUSD - sharesUSD) / sharesUSD > 0.02) {
+          violations.push({
+            week,
+            message: `${region} money fund book ${(bookUSD / 1e9).toFixed(1)}B departs its $1-NAV share liability ${(sharesUSD / 1e9).toFixed(1)}B by more than 2% — a subscription or redemption moved only one side`,
+          });
+        }
+      });
   });
 }
 

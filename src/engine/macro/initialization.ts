@@ -313,6 +313,7 @@ function buildRegion(regionId: RegionId): Region {
     repoBorrowedUSD: 0,
     repoEncumberedCollateralUSD: 0,
     businessLoans: [],
+    householdLoans: [],
     corporateDepositsUSD: 0,
   };
 

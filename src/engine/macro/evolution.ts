@@ -266,19 +266,17 @@ export function evolveRegionMacro(
   const rateSavingsIncentive = (realRateGap * 0.4);
   const newSavingsRate = (savingsBaseline + rateSavingsIncentive);
 
-  // G2: household deposits grow with the CONSUMER book's real expansion only. The business
-  // half used to be `regionFloatingPrincipal − current book` — the §6 double-count with 07d's
-  // loan market — and business originations now credit the borrower's own deposit in
-  // bank-lending.ts, not the household aggregate.
-  const bankedConsumerDebtShare = 0.1167;
-  const estConsumerLoanBook = prevHS.householdDebtToIncomeRatio * region.estimatedHouseholdIncomeUSD * bankedConsumerDebtShare;
-  const netNewLending = Math.max(0, estConsumerLoanBook - region.bankingSector.consumerLoanBookUSD);
+  // HH3: the deposits new household borrowing creates are the REAL mortgage originations the
+  // named banks wrote last week (the buyer's new debt is the seller's new deposit — recorded
+  // by the bank-diversification stage from the itemized books). The `bankedConsumerDebtShare`
+  // target that used to size a phantom flow here is gone with the scalar book it fed.
+  const mortgageOriginationDepositUSD = prevHS.weeklyMortgageOriginationUSD ?? 0;
 
   // 1. Asset side
   // Savings flow into deposits + portion of new lending (loan disbursements, payroll funded by credit)
   const weeklySavingsUSD = (region.estimatedHouseholdIncomeUSD * newSavingsRate) / 52;
   const depositInterestUSD = (prevHS.depositsUSD || 0) * (region.policyRate * 0.6) / 52;
-  const newDepositsUSD = Math.max(0, (prevHS.depositsUSD || 0) + weeklySavingsUSD + depositInterestUSD + netNewLending * 0.15);
+  const newDepositsUSD = Math.max(0, (prevHS.depositsUSD || 0) + weeklySavingsUSD + depositInterestUSD + mortgageOriginationDepositUSD);
 
   // MS1: household equity is no longer a stock that appreciates by a formula return. It is the
   // sum of real claims — index-fund shares, listed float, founder stakes in the private tier —
@@ -288,24 +286,15 @@ export function evolveRegionMacro(
   // The one-week lag is the same one stage 08 has against the prices it reads.
   const newEquityHoldingsUSD = Math.max(0, prevHS.equityHoldingsUSD || 0);
 
-  // 2. Liability side
-  // Principal paydown rates (weekly)
-  const mortgagePaydownRate = 0.0004; // ~2% principal amortization/yr
-  const otherLoanPaydownRate = 0.003; // ~15%/yr (auto, personal loans)
-  const ccPaydownRate = 0.04;        // ~4%/wk revolving turnover
-
-  // New borrowing demand scales with CCI and policy rate:
-  const borrowingMultiplier = (
-    1.0 + (newCCI - 100) / 100 * 0.5 - (region.policyRate - newNeutralRate) * 4
-  );
-
-  const weeklyNewMortgagesUSD = (prevHS.mortgageDebtUSD || 0) * mortgagePaydownRate * borrowingMultiplier;
-  const weeklyNewCCDebtUSD = (prevHS.creditCardDebtUSD || 0) * ccPaydownRate * borrowingMultiplier;
-  const weeklyNewOtherLoansUSD = (prevHS.otherConsumerLoanDebtUSD || 0) * otherLoanPaydownRate * borrowingMultiplier;
-
-  const newMortgageDebtUSD = Math.max(0, (prevHS.mortgageDebtUSD || 0) * (1 - mortgagePaydownRate) + weeklyNewMortgagesUSD);
-  const newCreditCardDebtUSD = Math.max(0, (prevHS.creditCardDebtUSD || 0) * (1 - ccPaydownRate) + weeklyNewCCDebtUSD);
-  const newOtherLoanDebtUSD = Math.max(0, (prevHS.otherConsumerLoanDebtUSD || 0) * (1 - otherLoanPaydownRate) + weeklyNewOtherLoansUSD);
+  // 2. Liability side — HH3: household debt is no longer evolved here by paydown constants
+  // and a borrowing multiplier. The three lines are DERIVED SUMS of the itemized pools on the
+  // named banks' books; the bank-diversification stage originates (priced, capital-gated,
+  // demand off the same confidence-and-rate appetite that used to live here), amortizes by
+  // annuity arithmetic on each pool's own terms, and writes the sums back. This stage carries
+  // last week's lines forward and reads last week's real flows.
+  const newMortgageDebtUSD = prevHS.mortgageDebtUSD || 0;
+  const newCreditCardDebtUSD = prevHS.creditCardDebtUSD || 0;
+  const newOtherLoanDebtUSD = prevHS.otherConsumerLoanDebtUSD || 0;
 
   // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
   const defaultOccupationShares: Record<OccupationType, number> = BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
@@ -362,7 +351,11 @@ export function evolveRegionMacro(
   }
 
   // Private-Sector Segments evolution driven by specific demand signals & occupational wage costs
-  const rawMortgageGrowthSignal = prevHS.mortgageDebtUSD > 0 ? (newMortgageDebtUSD / prevHS.mortgageDebtUSD - 1) * 52 : 0;
+  // HH3: the real book change — this week's derived sum against last week's (both written by
+  // the lending pass), not a paydown formula's drift.
+  const rawMortgageGrowthSignal = (prevHS.priorMortgageDebtUSD ?? 0) > 0
+    ? (newMortgageDebtUSD / (prevHS.priorMortgageDebtUSD ?? newMortgageDebtUSD) - 1) * 52
+    : 0;
   const mortgageGrowthSignal = Number.isFinite(rawMortgageGrowthSignal) ? Math.max(-0.15, Math.min(0.20, rawMortgageGrowthSignal)) : 0;
   const seedMarginByType: Record<PrivateSegmentType, number> = {
     MANUFACTURING: 0.09,
@@ -438,19 +431,21 @@ export function evolveRegionMacro(
   const wealthChangeUSD = (prevHS.netWorthUSD ?? 0) - (prevHS.priorNetWorthUSD ?? prevHS.netWorthUSD ?? 0);
   const balanceSheetWealthEffect =
     (WEALTH_MARGINAL_PROPENSITY_TO_CONSUME * wealthChangeUSD) / Math.max(1, region.estimatedHouseholdIncomeUSD);
-  const creditFundedSpendingUSD = (weeklyNewCCDebtUSD + weeklyNewOtherLoansUSD) * 0.8; // credit directly buying goods
+  // HH3: the real card/term origination the banks actually granted last week — the same flow
+  // that left their sheets as cash to the merchants.
+  const creditFundedSpendingUSD = (prevHS.weeklyNewConsumerCreditUSD ?? 0) * 0.8; // credit directly buying goods
   const weeklyIncomeUSD = region.estimatedHouseholdIncomeUSD / 52;
   const creditSpendingBoostPct = weeklyIncomeUSD > 0 ? (creditFundedSpendingUSD / weeklyIncomeUSD) * 0.05 : 0;
 
-  // Correct debtServiceBurden to use the real liability-weighted rate:
-  const effectiveBorrowingRate = (
-    newMortgageDebtUSD * (region.zeroRates.tenor5Y + 0.015) +
-    newCreditCardDebtUSD * (region.policyRate + 0.14) +
-    newOtherLoanDebtUSD * (region.policyRate + 0.05)
-  ) / Math.max(1, totalHouseholdDebtUSD);
-
-  const newDebtServiceBurden = (totalHouseholdDebtUSD * (effectiveBorrowingRate / 52)) / Math.max(1, weeklyIncomeUSD);
+  // HH3: the debt service burden is MEASURED — the interest and scheduled principal the
+  // itemized books actually accrued last week, over weekly income — not a liability-weighted
+  // guess at rates the books don't carry. (The books' own consumption debit waits on HH4's
+  // cohort budgets AND a real dividend channel back to household income: debiting one side of
+  // that loop alone is the HH1c leak in a new costume.)
   const baselineDebtServiceBurden = 0.055; // Baseline ~5.5% debt service burden of household income
+  const newDebtServiceBurden = prevHS.weeklyDebtServiceUSD !== undefined
+    ? prevHS.weeklyDebtServiceUSD / Math.max(1, weeklyIncomeUSD)
+    : baselineDebtServiceBurden;
   const debtServiceDrag = (newDebtServiceBurden - baselineDebtServiceBurden) * 0.4;
 
   // Update newRealConsumptionGrowth with real balance-sheet channels:
@@ -568,7 +563,6 @@ export function evolveRegionMacro(
     // G2: the aggregate's business book is the sum of real loans (02b overwrites this
     // aggregate with the named banks' sum anyway) — no formula target.
     region.bankingSector.businessLoanBookUSD,
-    prevHS.householdDebtToIncomeRatio,
     newEstimatedHouseholdIncomeUSD,
     newSavingsRate,
     region.policyRate,
@@ -580,8 +574,7 @@ export function evolveRegionMacro(
     newBalanceSheetStance,
     newGdpGrowth,
     region.creditConditionsSpilloverAdjustment ?? 0,
-    microFeedback.monetizedAmountUSD ?? 0,
-    normalizedTiers
+    microFeedback.monetizedAmountUSD ?? 0
   );
 
   // The wage-push and monetary-pressure terms that used to be added to CPI here are gone. Both
@@ -893,9 +886,15 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       etfHoldingsUSD: prevHS.etfHoldingsUSD ?? 0,
       privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
       unmodeledFinancialAssetsUSD: prevHS.unmodeledFinancialAssetsUSD ?? newEquityHoldingsUSD,
+      // HH3: derived sums of the banks' itemized pools, carried through and overwritten by the
+      // bank-diversification stage after its lending passes run.
       mortgageDebtUSD: newMortgageDebtUSD,
       creditCardDebtUSD: newCreditCardDebtUSD,
       otherConsumerLoanDebtUSD: newOtherLoanDebtUSD,
+      priorMortgageDebtUSD: prevHS.priorMortgageDebtUSD ?? newMortgageDebtUSD,
+      weeklyMortgageOriginationUSD: prevHS.weeklyMortgageOriginationUSD ?? 0,
+      weeklyNewConsumerCreditUSD: prevHS.weeklyNewConsumerCreditUSD ?? 0,
+      weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
     },
     bankingSector: newBankingSector,
     estimatedHouseholdIncomeUSD: newEstimatedHouseholdIncomeUSD,
