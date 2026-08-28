@@ -25,11 +25,14 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
-import { subUnitTradability, createSeedGlobalGoodsMarket, GlobalGoodsMarketState } from '../../../domain/global-goods';
 import { WeeklyStepContext } from './context';
-import { random, getRngState, setRngState } from '../../rng';
+import { random } from '../../rng';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
-import { createInitialContext } from './context';
+import { convertLocal, localToUsd, FxToUsd } from '../../../domain/currency';
+import { laneKey } from '../../../domain/carrier';
+import { laneDistanceNm } from '../../../domain/geography';
+import { SourcingSplit } from './sourcing-intent';
+import { getFxToUsd } from './06-fx-and-trade';
 import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
 
 export const MARKET_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -161,6 +164,18 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
   ctx.prevActiveFirms.forEach(walk);
   ctx.prevActivePrivateFirms.forEach(walk);
   return { byRegion, lookup };
+}
+
+/**
+ * What the sourcing intent and the freight market decided earlier in the week, which is what the
+ * goods auction needs to know to price a foreign quote against a domestic one.
+ */
+interface SourcingContext {
+  splitByRegionSubUnit: Map<string, SourcingSplit>;
+  /** Cleared freight per tonne by lane, each in that lane's own money. */
+  freightRateByLane: Record<string, number>;
+  unitMassTonnes: Record<string, number>;
+  fxToUsd: FxToUsd;
 }
 
 /**
@@ -665,32 +680,38 @@ function buildRegionDemandPlans(
  *
  * Returns each region's surviving contract book for this sub-unit.
  */
+/**
+ * One sub-unit's whole week, across the four producing regions' books.
+ *
+ * XB3a-3: there is no world book. Each region's suppliers offer EX-WORKS into their own market,
+ * and every region's buyers bid into all four at their own LANDED cost — the ex-works price
+ * converted into their money, plus what it costs to get it there. One price per book, and the
+ * wedge sits on each buyer's own reservation, which is exactly how it works: a mill quotes at the
+ * gate and the buyer pays the freight.
+ */
 function runSubUnitMarkets(
   ctx: WeeklyStepContext,
-  state: GameState,
   subUnitId: string,
   govShare: number,
   hhShare: number,
   indexes: Record<RegionId, RegionMarketIndex>,
   lookup: GlobalFirmLookup,
-  contractsByRegion: Record<RegionId, SupplyContract[]>
+  contractsByRegion: Record<RegionId, SupplyContract[]>,
+  sourcing: SourcingContext
 ): Record<RegionId, SupplyContract[]> {
   const { companyUpdates, nextWeek } = ctx;
-  const tradability = subUnitTradability(subUnitId);
 
   const isRecipeInputCategory = Object.values(CATEGORY_INPUT_REQUIREMENTS).some(reqs => (reqs as any)?.[subUnitId] !== undefined);
   const capexSupplierWeight = CAPEX_SUPPLIER_WEIGHTS[subUnitId];
   const isCapexSupplierCategory = capexSupplierWeight !== undefined;
+  const massTonnes = sourcing.unitMassTonnes[subUnitId] ?? 0;
 
   // --- 1. Each book's anchor price, read before anything this week moves it.
-  const regionReferencePrice = {} as Record<RegionId, number>;
-  const regionLocalAnchorPrice = {} as Record<RegionId, number>;
+  const anchorPrice = {} as Record<RegionId, number>;
   MARKET_REGION_IDS.forEach(regionId => {
     const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId] as any;
     const published = demandState?.unitPriceUSD;
-    regionReferencePrice[regionId] = published > 0 ? published : 1;
-    const local = demandState?.localUnitPriceUSD;
-    regionLocalAnchorPrice[regionId] = local > 0 ? local : regionReferencePrice[regionId];
+    anchorPrice[regionId] = published > 0 ? published : 1;
   });
 
   // --- 2. Contracts settle first, region by region, against a global counterparty lookup.
@@ -698,12 +719,10 @@ function runSubUnitMarkets(
   const survivingContracts = {} as Record<RegionId, SupplyContract[]>;
   MARKET_REGION_IDS.forEach(regionId => {
     survivingContracts[regionId] = settleContracts(
-      ctx, subUnitId, contractsByRegion[regionId] ?? [], lookup, regionReferencePrice, contractSalesUnitsBySupplier
+      ctx, subUnitId, contractsByRegion[regionId] ?? [], lookup, anchorPrice, contractSalesUnitsBySupplier
     );
   });
 
-  // A firm's contract commitments span every region's book once contracts can be cross-border,
-  // so they are indexed across all four rather than per region.
   const contractUnitsBySupplier = new Map<string, number>();
   const contractUnitsByCustomer = new Map<string, number>();
   MARKET_REGION_IDS.forEach(regionId => {
@@ -713,58 +732,22 @@ function runSubUnitMarkets(
     });
   });
 
-  // --- 3. The world book's own price state.
-  let globalMarket: GlobalGoodsMarketState | undefined = state.globalGoodsMarkets[subUnitId];
-  if (tradability > 0 && !globalMarket) {
-    // Opens on the supply-weighted average of the regions' own prices, so the world book's first
-    // week starts where the goods it is about to trade are already priced rather than at an
-    // invented level (§7.4).
-    let num = 0, den = 0;
-    MARKET_REGION_IDS.forEach(regionId => {
-      const w = (indexes[regionId].suppliersBySubUnit.get(subUnitId) ?? []).reduce((s, c) => s + c.annualRevenue, 0) || 1;
-      num += regionReferencePrice[regionId] * w;
-      den += w;
-    });
-    globalMarket = createSeedGlobalGoodsMarket(subUnitId, den > 0 ? num / den : 1);
-    state.globalGoodsMarkets[subUnitId] = globalMarket;
-  }
-
-  // Suppliers price their NEXT offer off the price this same clearing produces — a one-period
-  // feedback loop. Combined with how elastic productionResponseFactor is, reacting to the raw,
-  // single-week cleared price is the textbook cobweb-cycle setup: overproduce this week because
-  // last week's price was high, crash the price, underproduce next week, repeat — with the
-  // swings growing, not damping. Suppliers instead react to a slow-moving average (an
-  // "expectation"), which is what breaks a cobweb cycle in practice.
-  if (globalMarket) {
-    if (!(globalMarket.smoothedUnitPriceUSD > 0)) globalMarket.smoothedUnitPriceUSD = globalMarket.unitPriceUSD;
-    globalMarket.smoothedUnitPriceUSD = globalMarket.smoothedUnitPriceUSD * 0.75 + globalMarket.unitPriceUSD * 0.25;
-    globalMarket.clearedUnitsThisWeek = 0;
-    globalMarket.crossBorderValueUSD = 0;
-  }
-
-  // --- 4. Every participant's week, decided once.
+  // --- 3. Every participant's week, decided once.
   const supplyPlans: SupplyPlan[] = [];
   const demandPlans: DemandPlan[] = [];
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
     const demandState = reg.categoryDemand[subUnitId] as any;
     if (!demandState) return;
-    if (!(demandState.localUnitPriceUSD > 0)) demandState.localUnitPriceUSD = regionLocalAnchorPrice[regionId];
-    if (!(demandState.smoothedUnitPriceUSD > 0)) demandState.smoothedUnitPriceUSD = demandState.localUnitPriceUSD;
-    demandState.smoothedUnitPriceUSD = demandState.smoothedUnitPriceUSD * 0.75 + demandState.localUnitPriceUSD * 0.25;
-
-    // A firm sells into both books, so what it expects to be paid is the share-weighted blend of
-    // the two expectations — the same split that decides where its output goes.
-    const blendedExpectedPrice = globalMarket
-      ? demandState.smoothedUnitPriceUSD * (1 - tradability) + globalMarket.smoothedUnitPriceUSD * tradability
-      : demandState.smoothedUnitPriceUSD;
+    if (!(demandState.smoothedUnitPriceUSD > 0)) demandState.smoothedUnitPriceUSD = anchorPrice[regionId];
+    demandState.smoothedUnitPriceUSD = demandState.smoothedUnitPriceUSD * 0.75 + anchorPrice[regionId] * 0.25;
 
     supplyPlans.push(...buildRegionSupplyPlans(
-      subUnitId, reg, regionId, indexes[regionId], regionReferencePrice[regionId], blendedExpectedPrice,
+      subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceUSD,
       contractUnitsBySupplier, isCapexSupplierCategory, capexSupplierWeight
     ));
     demandPlans.push(...buildRegionDemandPlans(
-      subUnitId, reg, regionId, indexes[regionId], regionReferencePrice[regionId],
+      subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId],
       contractUnitsByCustomer, isCapexSupplierCategory, capexSupplierWeight, isRecipeInputCategory,
       govShare, hhShare
     ));
@@ -772,117 +755,155 @@ function runSubUnitMarkets(
 
   const offerRegionByKey = new Map<string, RegionId>();
   supplyPlans.forEach(p => offerRegionByKey.set(p.key, p.regionId));
-  const demandedUnitsByRegion = {} as Record<RegionId, number>;
-  MARKET_REGION_IDS.forEach(r => { demandedUnitsByRegion[r] = 0; });
-  demandPlans.forEach(p => { demandedUnitsByRegion[p.regionId] += p.demandUnits; });
 
-  // --- 5. Split each participant by tradability and clear the five books.
-  const globalBids: UnitBid[] = [];
-  const globalOffers: UnitOffer[] = [];
-  const localBids = {} as Record<RegionId, UnitBid[]>;
-  const localOffers = {} as Record<RegionId, UnitOffer[]>;
-  MARKET_REGION_IDS.forEach(r => { localBids[r] = []; localOffers[r] = []; });
+  // --- 4. Where each region intends to buy this good, from the sourcing intent. A buyer with no
+  //        intent on record sources at home, which is what it does when it has looked at nothing.
+  const originShare = (buyerRegion: RegionId): Record<string, number> => {
+    const split = sourcing.splitByRegionSubUnit.get(`${buyerRegion}|${subUnitId}`);
+    const shares: Record<string, number> = {};
+    let total = 0;
+    if (split) MARKET_REGION_IDS.forEach(o => { total += split.unitsByOrigin[o] ?? 0; });
+    if (!(total > 0)) { shares[buyerRegion] = 1; return shares; }
+    MARKET_REGION_IDS.forEach(o => {
+      const u = split!.unitsByOrigin[o] ?? 0;
+      if (u > 0) shares[o] = u / total;
+    });
+    return shares;
+  };
+
+  /** What it costs this buyer, in ITS money, to bring one unit in from that origin. */
+  const freightPerUnitBuyerMoney = (origin: RegionId, buyer: RegionId): number => {
+    if (!(massTonnes > 0)) return 0;
+    const rateLaneMoney = sourcing.freightRateByLane[laneKey(origin, buyer)] ?? 0;
+    return convertLocal(rateLaneMoney * massTonnes, origin, buyer, sourcing.fxToUsd);
+  };
+
+  // --- 5. Build the four books. Suppliers offer only at home; buyers bid everywhere they intend.
+  const bidsByOrigin = {} as Record<RegionId, UnitBid[]>;
+  const offersByOrigin = {} as Record<RegionId, UnitOffer[]>;
+  MARKET_REGION_IDS.forEach(r => { bidsByOrigin[r] = []; offersByOrigin[r] = []; });
 
   supplyPlans.forEach(plan => {
     if (plan.openOfferUnits <= 0.001) return;
-    const globalUnits = plan.openOfferUnits * tradability;
-    const localUnits = plan.openOfferUnits - globalUnits;
-    if (globalUnits > 0.001) globalOffers.push({ companyId: plan.key, regionId: plan.regionId, quantityUnits: globalUnits, minPriceUSD: plan.minPriceUSD });
-    if (localUnits > 0.001) localOffers[plan.regionId].push({ companyId: plan.key, regionId: plan.regionId, quantityUnits: localUnits, minPriceUSD: plan.minPriceUSD });
+    offersByOrigin[plan.regionId].push({
+      companyId: plan.key, regionId: plan.regionId,
+      quantityUnits: plan.openOfferUnits, minPriceUSD: plan.minPriceUSD,
+    });
   });
+
   demandPlans.forEach(plan => {
     if (plan.demandUnits <= 0.001) return;
-    const globalUnits = plan.demandUnits * tradability;
-    const localUnits = plan.demandUnits - globalUnits;
-    const shape = (units: number): UnitBid => ({
-      companyId: plan.key,
-      isHouseholdAggregate: plan.isHouseholdAggregate,
-      isGovernmentAggregate: plan.isGovernmentAggregate,
-      regionId: plan.regionId,
-      quantityUnits: units,
-      maxPriceUSD: plan.maxPriceUSD,
+    const shares = originShare(plan.regionId);
+    Object.keys(shares).forEach(originKey => {
+      const origin = originKey as RegionId;
+      const units = plan.demandUnits * shares[origin];
+      if (units <= 0.001) return;
+      // The buyer's ceiling is what it will pay DELIVERED, in its own money. What it can offer at
+      // the far gate is that less the freight, converted into the seller's money — which is the
+      // whole of landed-cost sourcing, expressed as a reservation.
+      const exWorksCeilingBuyerMoney = plan.maxPriceUSD - freightPerUnitBuyerMoney(origin, plan.regionId);
+      if (!(exWorksCeilingBuyerMoney > 0)) return;
+      bidsByOrigin[origin].push({
+        companyId: plan.key,
+        isHouseholdAggregate: plan.isHouseholdAggregate,
+        isGovernmentAggregate: plan.isGovernmentAggregate,
+        regionId: plan.regionId,
+        quantityUnits: units,
+        maxPriceUSD: convertLocal(exWorksCeilingBuyerMoney, plan.regionId, origin, sourcing.fxToUsd),
+      });
     });
-    if (globalUnits > 0.001) globalBids.push(shape(globalUnits));
-    if (localUnits > 0.001) localBids[plan.regionId].push(shape(localUnits));
   });
 
-  const globalResult = globalMarket
-    ? clearBook(globalBids, globalOffers, globalMarket.unitPriceUSD, offerRegionByKey)
-    : EMPTY_BOOK(0);
-  const localResults = {} as Record<RegionId, BookResult>;
-  MARKET_REGION_IDS.forEach(regionId => {
-    localResults[regionId] = clearBook(localBids[regionId], localOffers[regionId], regionLocalAnchorPrice[regionId], offerRegionByKey);
+  const results = {} as Record<RegionId, BookResult>;
+  MARKET_REGION_IDS.forEach(origin => {
+    results[origin] = clearBook(bidsByOrigin[origin], offersByOrigin[origin], anchorPrice[origin], offerRegionByKey);
   });
 
-  // --- 6. Trade accounting: an export is a fill whose two sides sat in different regions.
-  if (globalMarket && globalResult.clearedUnits > 0.0001) {
-    globalMarket.clearedUnitsThisWeek = globalResult.clearedUnits;
-    globalResult.lotsByBuyer.forEach((lots, buyerKey) => {
+  // --- 6. Trade, and the freight it took. An export is a fill whose buyer sat elsewhere.
+  const shippedTonnesByLane: Record<string, number> = {};
+  MARKET_REGION_IDS.forEach(origin => {
+    const book = results[origin];
+    if (book.clearedUnits <= 0.0001) return;
+    book.lotsByBuyer.forEach((lots, buyerKey) => {
       const buyerRegion = buyerRegionOfKey(buyerKey, lookup);
       if (!buyerRegion) return;
       lots.forEach(lot => {
-        if (lot.sellerRegion === buyerRegion) return;
-        const valueUSD = lot.units * globalResult.clearedPriceUSD;
-        ctx.bilateralTradeWeeklyUSD[lot.sellerRegion][buyerRegion] += valueUSD;
-        globalMarket!.crossBorderValueUSD += valueUSD;
+        if (lot.sellerRegion === buyerRegion) {
+          // A domestic sale still has to be carried, and that is a real cost on a real haul.
+          if (massTonnes > 0) {
+            const key = laneKey(lot.sellerRegion, buyerRegion);
+            shippedTonnesByLane[key] = (shippedTonnesByLane[key] ?? 0) + lot.units * massTonnes;
+          }
+          return;
+        }
+        const valueBuyerMoney = convertLocal(lot.units * book.clearedPriceUSD, lot.sellerRegion, buyerRegion, sourcing.fxToUsd);
+        // Trade is reported in USD, because a world total in four different monies is not a total.
+        ctx.bilateralTradeWeeklyUSD[lot.sellerRegion][buyerRegion] +=
+          localToUsd(valueBuyerMoney, buyerRegion, sourcing.fxToUsd);
+        if (massTonnes > 0) {
+          const key = laneKey(lot.sellerRegion, buyerRegion);
+          shippedTonnesByLane[key] = (shippedTonnesByLane[key] ?? 0) + lot.units * massTonnes;
+        }
       });
     });
-  }
-
-  // --- 7. Each region's published price: what its buyers actually paid, across both books.
-  const globalUnitsBoughtByRegion = sumPurchaseUnitsByRegion(globalResult, lookup);
-  const regionPublishedPrice = {} as Record<RegionId, number>;
-  MARKET_REGION_IDS.forEach(regionId => {
-    const local = localResults[regionId];
-    const globalUnitsBought = globalUnitsBoughtByRegion[regionId] ?? 0;
-    const localUnits = local.clearedUnits;
-    const num = localUnits * local.clearedPriceUSD + globalUnitsBought * globalResult.clearedPriceUSD;
-    const den = localUnits + globalUnitsBought;
-    regionPublishedPrice[regionId] = den > 0.0001
-      ? num / den
-      // Nothing traded in either book this week: the honest price is still what the two books
-      // are asking, blended the way this region's trade actually splits.
-      : (globalMarket ? local.clearedPriceUSD * (1 - tradability) + globalResult.clearedPriceUSD * tradability : local.clearedPriceUSD);
+  });
+  Object.keys(shippedTonnesByLane).forEach(key => {
+    ctx.shippedTonnesByLane[key] = (ctx.shippedTonnesByLane[key] ?? 0) + shippedTonnesByLane[key];
   });
 
-  // --- 8. Settle production, inventory and cash ONCE per supplier, across both books.
+  // --- 7. Each region's published price: what its own buyers actually paid, delivered, in their
+  //        own money. It is a MEASUREMENT of transactions and never an input to one.
+  const paidValue = {} as Record<RegionId, number>;
+  const paidUnits = {} as Record<RegionId, number>;
+  MARKET_REGION_IDS.forEach(r => { paidValue[r] = 0; paidUnits[r] = 0; });
+  MARKET_REGION_IDS.forEach(origin => {
+    const book = results[origin];
+    if (book.clearedUnits <= 0.0001) return;
+    book.lotsByBuyer.forEach((lots, buyerKey) => {
+      const buyerRegion = buyerRegionOfKey(buyerKey, lookup);
+      if (!buyerRegion) return;
+      lots.forEach(lot => {
+        const exWorksBuyerMoney = convertLocal(book.clearedPriceUSD, lot.sellerRegion, buyerRegion, sourcing.fxToUsd);
+        const landed = exWorksBuyerMoney + freightPerUnitBuyerMoney(lot.sellerRegion, buyerRegion);
+        paidValue[buyerRegion] += lot.units * landed;
+        paidUnits[buyerRegion] += lot.units;
+      });
+    });
+  });
+  const publishedPrice = {} as Record<RegionId, number>;
+  MARKET_REGION_IDS.forEach(r => {
+    publishedPrice[r] = paidUnits[r] > 0.0001 ? paidValue[r] / paidUnits[r] : results[r].clearedPriceUSD;
+  });
+
+  // --- 8. Settle production, inventory and cash ONCE per supplier. A seller books its own money.
   supplyPlans.forEach(plan => {
-    const globalSale = globalResult.salesByKey.get(plan.key);
-    const localSale = localResults[plan.regionId].salesByKey.get(plan.key);
-    const soldUnits = (globalSale?.quantity ?? 0) + (localSale?.quantity ?? 0);
-    const soldUSD = (globalSale?.amount ?? 0) + (localSale?.amount ?? 0);
-
-    if (plan.company) {
-      const comp = plan.company;
-      if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
-      const supUp = companyUpdates[comp.ticker];
-      const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
-      setOutputInventory(
-        supUp, subUnitId,
-        Math.max(0, plan.initialInventoryUnits + plan.targetProductionUnits - contractSalesUnitsThisSubUnit - soldUnits),
-        regionPublishedPrice[plan.regionId]
-      );
-      if (soldUnits > 0) {
-        supUp.salesUnits = (supUp.salesUnits ?? 0) + soldUnits;
-        supUp.salesUSD = (supUp.salesUSD ?? 0) + soldUSD;
-      }
-      supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + plan.targetProductionUSD;
+    const sale = results[plan.regionId].salesByKey.get(plan.key);
+    const soldUnits = sale?.quantity ?? 0;
+    const soldValue = sale?.amount ?? 0;
+    if (!plan.company) return;
+    const comp = plan.company;
+    if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+    const supUp = companyUpdates[comp.ticker];
+    const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
+    setOutputInventory(
+      supUp, subUnitId,
+      Math.max(0, plan.initialInventoryUnits + plan.targetProductionUnits - contractSalesUnitsThisSubUnit - soldUnits),
+      results[plan.regionId].clearedPriceUSD
+    );
+    if (soldUnits > 0) {
+      supUp.salesUnits = (supUp.salesUnits ?? 0) + soldUnits;
+      supUp.salesUSD = (supUp.salesUSD ?? 0) + soldValue;
     }
+    supUp._targetProductionUSD = (supUp._targetProductionUSD ?? 0) + plan.targetProductionUSD;
   });
 
-  // Credit each private segment's real cleared sale — not a Company, so it isn't in
-  // companyUpdates; annualRevenueUSD is a run-rate (not an accumulator), so replace THIS
-  // category's own prior contribution rather than stacking another annualized figure on top.
-  // Tracked per sub-unit category (not one shared scalar) since multiple categories can route
-  // to the same segment within the same week — see the field's own doc comment.
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
     const creditSegment = (segmentType: string | undefined, bookField: 'realSupplySalesDerivedAnnualRevenueUSDBySubUnit' | 'capexDerivedAnnualRevenueUSDBySubUnit') => {
       if (!segmentType) return;
       const segment = reg.privateSectorSegments?.find(s => s.segmentType === segmentType);
       if (!segment) return;
-      const key = privateSegmentOfferId(regionId, segmentType);
-      const amount = (globalResult.salesByKey.get(key)?.amount ?? 0) + (localResults[regionId].salesByKey.get(key)?.amount ?? 0);
+      const amount = results[regionId].salesByKey.get(privateSegmentOfferId(regionId, segmentType))?.amount ?? 0;
       const newAnnualizedContribution = amount * 52;
       const book = (segment as any)[bookField] ?? {};
       const priorContribution = book[subUnitId] ?? 0;
@@ -894,66 +915,65 @@ function runSubUnitMarkets(
     creditSegment(isCapexSupplierCategory ? CAPEX_CATEGORY_PRIVATE_SEGMENT[subUnitId] : undefined, 'capexDerivedAnnualRevenueUSDBySubUnit');
   });
 
-  // --- 9. Settle every buyer once, with real lots from whichever book each fill came from.
+  // --- 9. Settle every buyer once, in ITS money, at the landed cost it actually paid.
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
     const comp = plan.company;
-    const globalBuy = globalResult.purchasesByKey.get(plan.key);
-    const localBuy = localResults[plan.regionId].purchasesByKey.get(plan.key);
-    const units = (globalBuy?.quantity ?? 0) + (localBuy?.quantity ?? 0);
-    const amount = (globalBuy?.amount ?? 0) + (localBuy?.amount ?? 0);
+    let units = 0;
+    let landedCost = 0;
+    MARKET_REGION_IDS.forEach(origin => {
+      const book = results[origin];
+      const buy = book.purchasesByKey.get(plan.key!);
+      if (!buy || buy.quantity <= 0.0001) return;
+      // A lot bought abroad is paid for in the seller's money and carried home; both legs land on
+      // this buyer's books in its own money.
+      const exWorksBuyerMoney = convertLocal(book.clearedPriceUSD, origin, plan.regionId, sourcing.fxToUsd);
+      const perUnit = exWorksBuyerMoney + freightPerUnitBuyerMoney(origin, plan.regionId);
+      units += buy.quantity;
+      landedCost += buy.quantity * perUnit;
+      (book.lotsByBuyer.get(plan.key!) ?? []).forEach(l => {
+        if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+        addInputInventory(companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
+      });
+    });
     if (units <= 0.0001) return;
-
     if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
     const custUp = companyUpdates[comp.ticker];
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + units;
-    custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + amount;
-    (globalResult.lotsByBuyer.get(plan.key) ?? []).forEach(l => {
-      addInputInventory(custUp, comp, subUnitId, l.sellerKey, l.units, l.units * globalResult.clearedPriceUSD, nextWeek);
-    });
-    (localResults[plan.regionId].lotsByBuyer.get(plan.key) ?? []).forEach(l => {
-      addInputInventory(custUp, comp, subUnitId, l.sellerKey, l.units, l.units * localResults[plan.regionId].clearedPriceUSD, nextWeek);
-    });
+    custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + landedCost;
   });
 
   // --- 10. Aggregate buyers: the household durable stock and the treasury's realized spend.
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
-    if (subUnitId === 'passenger_vehicles') {
-      const filled = (globalResult.householdFillUnitsByRegion[regionId] ?? 0) + (localResults[regionId].householdFillUnitsByRegion[regionId] ?? 0);
-      if (filled > 0) reg.householdState.durableGoodsStockUnits = (reg.householdState.durableGoodsStockUnits ?? 0) + filled;
+    let hhUnits = 0;
+    let govSpend = 0;
+    MARKET_REGION_IDS.forEach(origin => {
+      hhUnits += results[origin].householdFillUnitsByRegion[regionId] ?? 0;
+      const spendOriginMoney = results[origin].governmentSpendUSDByRegion[regionId] ?? 0;
+      govSpend += convertLocal(spendOriginMoney, origin, regionId, sourcing.fxToUsd);
+    });
+    if (subUnitId === 'passenger_vehicles' && hhUnits > 0) {
+      reg.householdState.durableGoodsStockUnits = (reg.householdState.durableGoodsStockUnits ?? 0) + hhUnits;
     }
-    // PUB1e: what the government actually bought, at the price it actually paid. This is the
-    // real G, and the treasury's account is debited by it in stage 11 — before, the goods moved
-    // and no money left the government.
-    const govSpend = (globalResult.governmentSpendUSDByRegion[regionId] ?? 0) + (localResults[regionId].governmentSpendUSDByRegion[regionId] ?? 0);
     if (govSpend > 0) reg.governmentProcurementSpentUSD = (reg.governmentProcurementSpentUSD ?? 0) + govSpend;
   });
 
-  // --- 11. Contract formation, once per buyer per week across both books.
-  formContracts(subUnitId, globalResult, localResults, supplyPlans, demandPlans, regionPublishedPrice, survivingContracts);
+  // --- 11. Contract formation, once per buyer per week across the books it bought in.
+  formContracts(subUnitId, results, supplyPlans, demandPlans, publishedPrice, survivingContracts);
 
   // --- 12. Publish the week's prices and metrics.
-  if (globalMarket) {
-    globalMarket.unitPriceUSD = globalResult.clearedPriceUSD;
-    if (!(globalMarket.baseUnitPriceUSD > 0)) globalMarket.baseUnitPriceUSD = globalResult.clearedPriceUSD;
-  }
   MARKET_REGION_IDS.forEach(regionId => {
     const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId] as any;
     if (!demandState) return;
-    const local = localResults[regionId];
-    demandState.localUnitPriceUSD = Number(local.clearedPriceUSD.toFixed(2));
-    demandState.unitPriceUSD = Number(regionPublishedPrice[regionId].toFixed(2));
+    demandState.exWorksUnitPriceUSD = Number(results[regionId].clearedPriceUSD.toFixed(2));
+    demandState.unitPriceUSD = Number(publishedPrice[regionId].toFixed(2));
 
     const contracts = survivingContracts[regionId];
     const contractUnits = contracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
-    demandState.totalUnitsSuppliedThisWeek = local.clearedUnits + (globalUnitsBoughtByRegion[regionId] ?? 0) + contractUnits;
-    // Each plan's demandUnits is the buyer's full requested amount (allocation is pro-rata,
-    // computed separately), so this sum already is the region's whole open-market demand.
-    demandState.totalUnitsDemandedThisWeek = demandedUnitsByRegion[regionId] + contractUnits;
-    // S8: measured against a FIXED baseline, not against last week. The old form made this a
-    // week-over-week change while every consumer read it as a level versus baseline (1.0 = at
-    // baseline) — two periodicities in one field, exactly what rule 9 exists to catch.
+    demandState.totalUnitsSuppliedThisWeek = results[regionId].clearedUnits + contractUnits;
+    demandState.totalUnitsDemandedThisWeek =
+      demandPlans.reduce((s, p) => s + (p.regionId === regionId ? p.demandUnits : 0), 0) + contractUnits;
     if (!(demandState.baseUnitPriceUSD > 0)) demandState.baseUnitPriceUSD = demandState.unitPriceUSD;
     demandState.clearedInputPriceIndex = Number((demandState.unitPriceUSD / demandState.baseUnitPriceUSD).toFixed(4));
   });
@@ -974,38 +994,20 @@ function buyerRegionOfKey(key: string, lookup: GlobalFirmLookup): RegionId | und
   return undefined;
 }
 
-/** Units each region's buyers took out of the world book this week — its real imports in units. */
-function sumPurchaseUnitsByRegion(book: BookResult, lookup: GlobalFirmLookup): Record<string, number> {
-  const units: Record<string, number> = {};
-  book.lotsByBuyer.forEach((lots, buyerKey) => {
-    const region = buyerRegionOfKey(buyerKey, lookup);
-    if (!region) return;
-    lots.forEach(l => { units[region] = (units[region] ?? 0) + l.units; });
-  });
-  return units;
-}
-
-/**
- * New long-term supply deals, from whoever actually transacted this week.
- *
- * Candidates are the participants in the money at their book's clearing price. A buyer that
- * cleared in BOTH books is still one buyer with one chance of striking a deal this week —
- * running formation per book would double the rate at which the economy contracts itself.
- * A contract is filed in its CUSTOMER's region.
- */
 function formContracts(
   subUnitId: string,
-  globalResult: BookResult,
-  localResults: Record<RegionId, BookResult>,
+  results: Record<RegionId, BookResult>,
   supplyPlans: SupplyPlan[],
   demandPlans: DemandPlan[],
   regionPublishedPrice: Record<RegionId, number>,
   survivingContracts: Record<RegionId, SupplyContract[]>
 ): void {
-  const inMoneyOfferKeys = new Set<string>(globalResult.inMoneyOfferKeys);
-  MARKET_REGION_IDS.forEach(r => localResults[r].inMoneyOfferKeys.forEach(k => inMoneyOfferKeys.add(k)));
-  const inMoneyBidKeys = new Set<string>(globalResult.inMoneyBidKeys);
-  MARKET_REGION_IDS.forEach(r => localResults[r].inMoneyBidKeys.forEach(k => inMoneyBidKeys.add(k)));
+  const inMoneyOfferKeys = new Set<string>();
+  const inMoneyBidKeys = new Set<string>();
+  MARKET_REGION_IDS.forEach(r => {
+    results[r].inMoneyOfferKeys.forEach(k => inMoneyOfferKeys.add(k));
+    results[r].inMoneyBidKeys.forEach(k => inMoneyBidKeys.add(k));
+  });
 
   const candidateSuppliers = supplyPlans.filter(p => p.company && inMoneyOfferKeys.has(p.key));
   if (candidateSuppliers.length === 0) return;
@@ -1073,16 +1075,24 @@ function computeRealizedVol(historicalValues: number[], window: number): number 
   return Math.sqrt(variance) * Math.sqrt(52);
 }
 
+
 export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): void {
   const { byRegion: indexes, lookup } = buildMarketIndexes(ctx);
 
   MARKET_REGION_IDS.forEach(exporter => {
     MARKET_REGION_IDS.forEach(importer => { ctx.bilateralTradeWeeklyUSD[exporter][importer] = 0; });
   });
+  ctx.shippedTonnesByLane = {};
+  ctx.carrierFreightRevenue = {};
+  ctx.carrierTonneNm = {};
 
-  // Partition every region's contract book by sub-unit ONCE, so each market touches only its own
-  // paper instead of walking the whole book to find it. Buckets for sub-units the loop never
-  // visits are still carried through, so no contract is lost.
+  const sourcing: SourcingContext = {
+    splitByRegionSubUnit: ctx.sourcingSplitByRegionSubUnit,
+    freightRateByLane: ctx.freightRatePerTonneLaneMoneyByLane,
+    unitMassTonnes: state.unitMassTonnes,
+    fxToUsd: (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId),
+  };
+
   const contractsByRegionBySubUnit = {} as Record<RegionId, Map<string, SupplyContract[]>>;
   MARKET_REGION_IDS.forEach(regionId => {
     const map = new Map<string, SupplyContract[]>();
@@ -1097,9 +1107,9 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     const own = {} as Record<RegionId, SupplyContract[]>;
     MARKET_REGION_IDS.forEach(r => { own[r] = contractsByRegionBySubUnit[r].get(subUnit.unitId) ?? []; });
     const survivors = runSubUnitMarkets(
-      ctx, state, subUnit.unitId,
+      ctx, subUnit.unitId,
       subUnit.buyerMix.GOVERNMENT ?? 0, subUnit.buyerMix.HOUSEHOLD ?? 0,
-      indexes, lookup, own
+      indexes, lookup, own, sourcing
     );
     MARKET_REGION_IDS.forEach(r => { contractsByRegionBySubUnit[r].set(subUnit.unitId, survivors[r]); });
   });
@@ -1110,64 +1120,33 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     ctx.updatedRegions[regionId].activeContracts = reassembled;
   });
 
+  // Carriers are paid for what actually SHIPPED, not for what was booked. Booked space that went
+  // unused earns nothing, which is what a spot charter is; the buyer's side of the same flow has
+  // already left its books inside the landed cost it paid (rule 14 — both legs, same pass).
+  const clearing = ctx.freightClearing;
+  if (clearing) {
+    Object.keys(ctx.shippedTonnesByLane).forEach(lane => {
+      const tonnes = ctx.shippedTonnesByLane[lane];
+      const rateLaneMoney = ctx.freightRatePerTonneLaneMoneyByLane[lane] ?? 0;
+      if (!(tonnes > 0) || !(rateLaneMoney > 0)) return;
+      const origin = lane.split('>')[0] as RegionId;
+      const shares = clearing.carrierShareByLane.get(lane);
+      if (!shares || shares.size === 0) return;
+      shares.forEach((share, ticker) => {
+        const carrier = lookup.byTicker.get(ticker);
+        if (!carrier) return;
+        // Paid in the lane's money, booked in the carrier's own.
+        const revenue = convertLocal(tonnes * rateLaneMoney * share, origin, carrier.region as RegionId, sourcing.fxToUsd);
+        ctx.carrierFreightRevenue[ticker] = (ctx.carrierFreightRevenue[ticker] ?? 0) + revenue;
+        ctx.carrierTonneNm[ticker] = (ctx.carrierTonneNm[ticker] ?? 0)
+          + tonnes * share * laneDistanceNm(origin, lane.split('>')[1] as RegionId);
+      });
+    });
+  }
+
   const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);
   const baselineVol = 0.16;
   const usaRegime = ctx.updatedRegions.USA.cycleRegime;
   const regimeVolPremium = usaRegime === 'Recession' ? 0.08 : usaRegime === 'Slowdown' ? 0.03 : 0;
   ctx.marketVolComponent = Math.max(0, realizedIndexVol - baselineVol) * 0.5 + regimeVolPremium;
-}
-
-/**
- * The opening trade position, measured by RUNNING the market rather than by describing it.
- *
- * §7.4's strictest form: seed by calling the engine's own code, not by writing something that
- * resembles its output. The alternative — a formula that estimates what the world book would
- * clear — would be exactly the second representation XB3a exists to delete, and it would drift
- * from the auction the first time either changed.
- *
- * The run happens on a structural copy, so every mutation a real week makes (cleared prices,
- * capacity seeding, contracts, scrappage, segment revenue) lands on the copy and is discarded;
- * only the cross-border flows are read back. The RNG position is restored afterwards, so week 1
- * draws exactly what it would have drawn had this never run.
- *
- * It matters because net exports are a real component of the expenditure identity: opening every
- * region at zero trade made week 1 step straight to the structural balance, which for the USA is
- * several percent of output that the GDP series could only read as a collapse in growth.
- */
-export function measureOpeningTradeWeeklyUSD(
-  companies: Company[],
-  regions: Record<RegionId, Region>
-): Record<RegionId, { exportsWeeklyUSD: number; importsWeeklyUSD: number }> {
-  const rngStateBefore = getRngState();
-  const probeState = {
-    currentWeek: 0,
-    companies: structuredClone(companies),
-    regions: structuredClone(regions),
-    globalGoodsMarkets: {},
-    fxPairs: [],
-    institutionalEntities: [],
-    commodities: [],
-    marketIndexes: [],
-    primaryOfferings: [],
-    marketVolPremium: 0,
-    portfolio: { positions: [] },
-    compositeIndices: { us500: { historical: [] } },
-  } as unknown as GameState;
-
-  const ctx = createInitialContext(probeState);
-  runUnitBiddingStage(probeState, ctx);
-  setRngState(rngStateBefore);
-
-  const opening = {} as Record<RegionId, { exportsWeeklyUSD: number; importsWeeklyUSD: number }>;
-  MARKET_REGION_IDS.forEach(regionId => {
-    let exportsWeeklyUSD = 0;
-    let importsWeeklyUSD = 0;
-    MARKET_REGION_IDS.forEach(counterparty => {
-      if (counterparty === regionId) return;
-      exportsWeeklyUSD += ctx.bilateralTradeWeeklyUSD[regionId][counterparty];
-      importsWeeklyUSD += ctx.bilateralTradeWeeklyUSD[counterparty][regionId];
-    });
-    opening[regionId] = { exportsWeeklyUSD, importsWeeklyUSD };
-  });
-  return opening;
 }

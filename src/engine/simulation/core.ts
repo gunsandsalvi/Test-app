@@ -31,6 +31,8 @@ import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign
 import { runBillAccretionStage } from './stages/bill-accretion';
 import { runFxHedgingStage } from './stages/fx-hedging';
 import { runFxClearingStage, recordForeignHoldingsSnapshot } from './stages/fx-clearing';
+import { runSourcingIntentStage } from './stages/sourcing-intent';
+import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 import { distributeMoneyFundIncome } from './stages/money-market-fund';
@@ -95,6 +97,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('labor-market', () => runLaborMarketStage(state, ctx));
   run('03-category-demand', () => runCategoryDemandStage(state, ctx));
   run('04-input-output', () => runInputOutputStage(state, ctx));
+  // XB3a: the week's first two passes. A buyer forms its sourcing plan against observed prices
+  // and books the freight it implies; the rate clears against real carrier capacity; the goods
+  // auction then prices every origin at the landed cost that rate produces. No lag, no iteration.
+  run('sourcing-intent', () => runSourcingIntentStage(state, ctx));
+  run('freight-clearing', () => runFreightClearingStage(state, ctx));
   run('05-unit-bidding', () => runUnitBiddingStage(state, ctx));
   run('06-fx-and-trade', () => runFxAndTradeStage(state, ctx));
   run('07-commodities', () => runCommoditiesStage(state, ctx));

@@ -16,6 +16,9 @@ import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { fuelPriceUsdPerTonne, crewAnnualWageUSD } from './freight-clearing';
+import { weeklyCapacityTonnes } from '../../../domain/carrier';
+import { laneDistanceNm } from '../../../domain/geography';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
@@ -306,6 +309,38 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newEbit = Math.max(1, newEbitda);
       newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
       newEps = perShare(newNetIncome);
+    } else if (comp.financialStatementProfile === 'CARRIER') {
+      // XB3a-2: a carrier's revenue is the freight it actually carried this week, at the rate its
+      // lanes cleared at — not units sold into the goods auction, which it does not participate
+      // in. Its costs are the fuel it really burned at the refined-product market's own price and
+      // the crew it really employs at the region's going wage, so a fuel spike or a wage round
+      // lands on its margin the same week.
+      const weeklyFreightUSD = ctx.carrierFreightRevenue[comp.ticker] ?? 0;
+      newRevenue = Math.max(10, weeklyFreightUSD * 52);
+      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
+
+      const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, (state as any).unitMassTonnes ?? {});
+      const wage = crewAnnualWageUSD(reg, comp.region);
+      let weeklyFuelTonnes = 0;
+      let crew = 0;
+      (comp.carrierFleet?.assets ?? []).forEach((asset: any) => {
+        crew += asset.crewCount ?? 0;
+        const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
+        const perWeek = weeklyCapacityTonnes(asset, distanceNm);
+        const voyages = asset.capacityTonnes > 0 ? perWeek / asset.capacityTonnes : 0;
+        weeklyFuelTonnes += voyages * (asset.fuelTonnesPerNm ?? 0) * distanceNm;
+      });
+      const annualFuel = weeklyFuelTonnes * fuelUsdPerTonne * 52;
+      const annualCrew = crew * wage;
+      newEbitda = newRevenue - annualFuel - annualCrew;
+      newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
+      newEbit = newEbitda - (comp.grossPPEUSD ?? 0) / 20;
+      newNetIncome = (newEbit - annualInterest) * (newEbit > 0 ? (1 - taxRate) : 1);
+      newEps = perShare(newNetIncome);
+      if (comp.carrierFleet) {
+        comp.carrierFleet.lastWeekTonneNm = ctx.carrierTonneNm[comp.ticker] ?? 0;
+        comp.carrierFleet.lastWeekFreightRevenueUSD = weeklyFreightUSD;
+      }
     } else {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;

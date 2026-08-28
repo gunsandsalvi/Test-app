@@ -108,6 +108,22 @@ export interface WeeklyStepContext {
    * `Region.exportsUSD` it feeds — rule 9.
    */
   bilateralTradeWeeklyUSD: Record<RegionId, Record<RegionId, number>>;
+  /** XB3a-3 — where each region intends to source each good this week, set by the sourcing-intent
+   *  stage and read by the goods auction. key: `${buyerRegion}|${subUnitId}`. */
+  sourcingSplitByRegionSubUnit: Map<string, import('./sourcing-intent').SourcingSplit>;
+  /** XB3a-2 — this week's cleared freight per tonne by lane, each in that lane's own money. */
+  freightRatePerTonneLaneMoneyByLane: Record<string, number>;
+  /** XB3a-3 — tonnage the goods auction actually put on each lane, which is what carriers are
+   *  paid for. Booked capacity that went unused earns nothing, as on a real spot market. */
+  shippedTonnesByLane: Record<string, number>;
+  /** XB3a-3 — this week's forward freight bookings, from the sourcing intent. */
+  laneBookings: import('./sourcing-intent').LaneBooking[];
+  /** XB3a-2 — what each carrier earned and carried this week, in its OWN money, from real
+   *  shipments. Read by stage 08 to build the carriers' P&L. */
+  carrierFreightRevenue: Record<string, number>;
+  carrierTonneNm: Record<string, number>;
+  /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
+  freightClearing?: import('./freight-clearing').FreightClearing;
 
   // Stage 11 output, read by stage 13
   weeklyInterestIncomeUSD: number;
@@ -187,6 +203,12 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
       UK: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
       JPN: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     },
+    sourcingSplitByRegionSubUnit: new Map(),
+    freightRatePerTonneLaneMoneyByLane: {},
+    shippedTonnesByLane: {},
+    laneBookings: [],
+    carrierFreightRevenue: {},
+    carrierTonneNm: {},
 
     weeklyInterestIncomeUSD: 0,
     weeklyFinancingCostUSD: 0,

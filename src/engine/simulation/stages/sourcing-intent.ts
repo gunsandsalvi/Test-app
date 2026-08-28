@@ -19,10 +19,15 @@
  * a bound rather than a price — the error §7.21 and §7.75 both record.
  */
 
-import { Region, RegionId } from '../../../types';
+import { GameState, Region, RegionId } from '../../../types';
+import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { laneDistanceNm } from '../../../domain/geography';
 import { deliveryModeOf } from '../../../domain/goods-physical';
 import { laneKey } from '../../../domain/carrier';
+import { WeeklyStepContext } from './context';
+import { getFxToUsd } from './06-fx-and-trade';
+import { collectCarriers, marginalRatesForAllLanes } from './freight-clearing';
+import { convertLocal, FxToUsd } from '../../../domain/currency';
 
 export const SOURCING_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
@@ -34,10 +39,11 @@ export interface LaneBooking {
   units: number;
   tonnes: number;
   /**
-   * The most this cargo will pay per tonne on this lane: what sourcing from THIS origin saves the
-   * buyer against its next-best alternative. Zero-mass goods never book.
+   * The most this cargo will pay per tonne on this lane, in the LANE's own money: what sourcing
+   * from this origin saves the buyer against its next-best alternative. Zero-mass goods never
+   * book. Named for its currency because mixing two of them silently is rule 9's whole point.
    */
-  maxRateUsdPerTonne: number;
+  maxRatePerTonneLaneMoney: number;
 }
 
 /** How a region intends to split its need for one good across the regions that can supply it. */
@@ -54,7 +60,7 @@ export interface SourcingIntent {
   splitByRegionSubUnit: Map<string, SourcingSplit>;
 }
 
-/** What a good costs to move one unit from an origin to a destination, at a given lane rate. */
+/** What a good costs to move one unit on a lane, in the lane's own money, at a given rate. */
 export function freightPerUnitUSD(
   subUnitId: string,
   from: RegionId,
@@ -83,28 +89,32 @@ export function computeSourcingIntent(args: {
   subUnitIds: string[];
   unitMassTonnes: Record<string, number>;
   /** Last cleared freight, USD per tonne, by lane key. Empty at seed. */
-  freightRateUsdPerTonneByLane: Record<string, number>;
+  freightRatePerTonneLaneMoneyByLane: Record<string, number>;
   /** What one tonne costs a carrier to move on a lane — the floor the rate falls to when the
    *  market is slack, used as the expectation before any rate has ever cleared. */
-  marginalRateUsdPerTonneByLane: Record<string, number>;
+  marginalRatePerTonneLaneMoneyByLane: Record<string, number>;
+  /** XB3b — USD per unit of each region's money, so a foreign quote can be compared with a
+   *  domestic one. Without it the lowest-price-level region undercuts every other on every good
+   *  and supplies the whole world, which is a missing conversion rather than competitiveness. */
+  fxToUsd: FxToUsd;
 }): SourcingIntent {
-  const { regions, subUnitIds, unitMassTonnes, freightRateUsdPerTonneByLane, marginalRateUsdPerTonneByLane } = args;
+  const { regions, subUnitIds, unitMassTonnes, freightRatePerTonneLaneMoneyByLane, marginalRatePerTonneLaneMoneyByLane, fxToUsd } = args;
   const bookings: LaneBooking[] = [];
   const splitByRegionSubUnit = new Map<string, SourcingSplit>();
 
   const expectedRate = (from: RegionId, to: RegionId): number => {
     const key = laneKey(from, to);
-    const cleared = freightRateUsdPerTonneByLane[key];
+    const cleared = freightRatePerTonneLaneMoneyByLane[key];
     if (typeof cleared === 'number' && cleared > 0 && isFinite(cleared)) return cleared;
     // Before a lane has ever cleared, the honest expectation is what it costs a carrier to do it.
-    return marginalRateUsdPerTonneByLane[key] ?? 0;
+    return marginalRatePerTonneLaneMoneyByLane[key] ?? 0;
   };
 
   subUnitIds.forEach(subUnitId => {
     const massTonnes = unitMassTonnes[subUnitId] ?? 0;
 
     // Every (buyer, origin) pair that is physically possible, with what it would land at.
-    interface Pair { buyer: RegionId; origin: RegionId; exWorks: number; landed: number }
+    interface Pair { buyer: RegionId; origin: RegionId; exWorks: number; exWorksInBuyerMoney: number; landed: number }
     const pairs: Pair[] = [];
     const needRemaining: Record<string, number> = {};
     const supplyRemaining: Record<string, number> = {};
@@ -125,8 +135,16 @@ export function computeSourcingIntent(args: {
         if (supplyRemaining[origin] === undefined) {
           supplyRemaining[origin] = Math.max(0, Number(originState.totalUnitsSuppliedThisWeek) || 0);
         }
-        const freight = freightPerUnitUSD(subUnitId, origin, buyer, massTonnes, expectedRate(origin, buyer));
-        pairs.push({ buyer, origin, exWorks, landed: exWorks + freight });
+        // Both legs converted into the BUYER's money, which is the only basis on which a
+        // foreign quote and a domestic one are the same kind of number. A lane is quoted in its
+        // ORIGIN's money, because that is where the carrier's fuel and crew are paid.
+        const exWorksInBuyerMoney = convertLocal(exWorks, origin, buyer, fxToUsd);
+        const freightOriginMoney = freightPerUnitUSD(subUnitId, origin, buyer, massTonnes, expectedRate(origin, buyer));
+        const freightInBuyerMoney = convertLocal(freightOriginMoney, origin, buyer, fxToUsd);
+        pairs.push({
+          buyer, origin, exWorks, exWorksInBuyerMoney,
+          landed: exWorksInBuyerMoney + freightInBuyerMoney,
+        });
       });
     });
     if (pairs.length === 0) return;
@@ -176,15 +194,18 @@ export function computeSourcingIntent(args: {
       splitByRegionSubUnit.set(key, split);
 
       if (!(massTonnes > 0)) return; // digital and in-place goods book no freight
-      const maxFreightPerUnit = alternativeLanded - pair.exWorks;
-      if (!(maxFreightPerUnit > 0)) return; // not worth reaching at any freight
+      // The surplus is computed in the buyer's money, then quoted back into the lane's own
+      // currency so it can be compared with what a carrier there will accept.
+      const maxFreightPerUnitBuyerMoney = alternativeLanded - pair.exWorksInBuyerMoney;
+      if (!(maxFreightPerUnitBuyerMoney > 0)) return; // not worth reaching at any freight
+      const maxFreightPerUnitLaneMoney = convertLocal(maxFreightPerUnitBuyerMoney, pair.buyer, pair.origin, fxToUsd);
       bookings.push({
         from: pair.origin,
         to: pair.buyer,
         subUnitId,
         units,
         tonnes: units * massTonnes,
-        maxRateUsdPerTonne: maxFreightPerUnit / massTonnes,
+        maxRatePerTonneLaneMoney: maxFreightPerUnitLaneMoney / massTonnes,
       });
     });
   });
@@ -195,4 +216,24 @@ export function computeSourcingIntent(args: {
 /** Great-circle-ish lane length, re-exported so callers do not each import geography. */
 export function laneDistance(from: RegionId, to: RegionId): number {
   return laneDistanceNm(from, to);
+}
+
+/**
+ * The week's first pass: every region decides where it intends to buy, and books the freight that
+ * implies. Runs before the freight market, which clears against these bookings, and before the
+ * goods auction, which sources at the rate that clears.
+ */
+export function runSourcingIntentStage(state: GameState, ctx: WeeklyStepContext): void {
+  const fxToUsd = (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId);
+  const marginal = marginalRatesForAllLanes(collectCarriers(state), ctx.updatedRegions, state.unitMassTonnes, fxToUsd);
+  const intent = computeSourcingIntent({
+    regions: ctx.updatedRegions,
+    subUnitIds: Object.values(INDUSTRY_SUBUNITS).flat().map(su => su.unitId),
+    unitMassTonnes: state.unitMassTonnes,
+    freightRatePerTonneLaneMoneyByLane: state.freightRatePerTonneLaneMoneyByLane ?? {},
+    marginalRatePerTonneLaneMoneyByLane: marginal,
+    fxToUsd,
+  });
+  ctx.sourcingSplitByRegionSubUnit = intent.splitByRegionSubUnit;
+  ctx.laneBookings = intent.bookings;
 }

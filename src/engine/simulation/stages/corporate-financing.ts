@@ -31,7 +31,7 @@
 import { Company, CreditRating } from '../../../types';
 
 /** Leverage (debt / EBITDA) beyond which lenders stop funding, by rating. */
-const COVENANT_LEVERAGE_CEILING: Record<CreditRating, number> = {
+export const COVENANT_LEVERAGE_CEILING: Record<CreditRating, number> = {
   AAA: 3.0, AA: 3.5, A: 4.0, BBB: 4.5, BB: 5.5, B: 6.5, CCC: 7.0, D: 0,
 };
 

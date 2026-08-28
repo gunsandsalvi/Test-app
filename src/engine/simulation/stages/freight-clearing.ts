@@ -25,17 +25,21 @@ import {
   FreightAsset, laneKey, marginalCostPerTonneNmUSD, weeklyCapacityTonnes,
 } from '../../../domain/carrier';
 import { getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { convertLocal, FxToUsd } from '../../../domain/currency';
 import { LaneBooking, SOURCING_REGION_IDS } from './sourcing-intent';
+import { WeeklyStepContext } from './context';
+import { getFxToUsd } from './06-fx-and-trade';
 import { clearDoubleAuction, AuctionBid, AuctionOffer } from './double-auction';
 
 /** The good a ship burns. Its cleared price per tonne IS the bunker price. */
 export const FUEL_SUBUNIT_ID = 'refined_products';
 
 export interface FreightClearing {
-  /** What a tonne cost to move on each lane this week. */
-  rateUsdPerTonneByLane: Record<string, number>;
-  /** The floor each lane would clear at if the fleet were idle — what it costs a carrier to sail. */
-  marginalRateUsdPerTonneByLane: Record<string, number>;
+  /** What a tonne cost to move on each lane this week, in the LANE'S OWN money (its origin's). */
+  ratePerTonneLaneMoneyByLane: Record<string, number>;
+  /** The floor each lane would clear at if the fleet were idle — what it costs a carrier to sail,
+   *  in the lane's own money. */
+  marginalRatePerTonneLaneMoneyByLane: Record<string, number>;
   /** Tonnes each carrier actually carried, what it earned, and the fuel that took. */
   carrierTonnesCarried: Map<string, number>;
   carrierRevenueUSD: Map<string, number>;
@@ -44,6 +48,9 @@ export interface FreightClearing {
   laneFillRatio: Record<string, number>;
   /** Per lane, the share of each good's booked cargo that shipped. */
   shippedShareByLaneSubUnit: Map<string, number>;
+  /** Each carrier's share of a lane's cleared tonnage, so what actually ships can be paid to
+   *  the operators that carried it: lane key -> ticker -> share. */
+  carrierShareByLane: Map<string, Map<string, number>>;
   /** Capacity offered and taken, for the diagnostics a freight market is judged on. */
   laneCapacityTonnes: Record<string, number>;
   laneBookedTonnes: Record<string, number>;
@@ -51,13 +58,14 @@ export interface FreightClearing {
 
 export function emptyFreightClearing(): FreightClearing {
   return {
-    rateUsdPerTonneByLane: {},
-    marginalRateUsdPerTonneByLane: {},
+    ratePerTonneLaneMoneyByLane: {},
+    marginalRatePerTonneLaneMoneyByLane: {},
     carrierTonnesCarried: new Map(),
     carrierRevenueUSD: new Map(),
     carrierFuelBurnedTonnes: new Map(),
     laneFillRatio: {},
     shippedShareByLaneSubUnit: new Map(),
+    carrierShareByLane: new Map(),
     laneCapacityTonnes: {},
     laneBookedTonnes: {},
   };
@@ -94,7 +102,8 @@ export function isCarrier(c: Company): boolean {
 function buildCarrierOffers(
   carriers: Company[],
   regions: Record<RegionId, Region>,
-  unitMassTonnes: Record<string, number>
+  unitMassTonnes: Record<string, number>,
+  fxToUsd: FxToUsd
 ): { offersByLane: Map<string, AuctionOffer[]>; marginalByLane: Record<string, number>; capacityByLane: Record<string, number> } {
   const offersByLane = new Map<string, AuctionOffer[]>();
   const marginalByLane: Record<string, number> = {};
@@ -113,9 +122,13 @@ function buildCarrierOffers(
       const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
       if (!(distanceNm > 0)) return;
       const capacity = weeklyCapacityTonnes(asset, distanceNm);
-      const minPrice = marginalCostPerTonneNmUSD({
+      // A carrier's fuel and crew are paid in its OWN money; a lane is quoted in its origin's.
+      // A Japanese operator on a European route competes at the euro equivalent of its yen costs,
+      // which is the channel by which a weak home currency makes an operator cheap abroad.
+      const costInCarrierMoney = marginalCostPerTonneNmUSD({
         asset, fuelPriceUsdPerTonne: fuelUsdPerTonne, annualCrewWageUSD: wage, distanceNm,
       }) * distanceNm;
+      const minPrice = convertLocal(costInCarrierMoney, home, asset.laneFrom, fxToUsd);
       const existing = byLane.get(key);
       if (existing) {
         existing.capacityTonnes += capacity;
@@ -147,10 +160,10 @@ function buildCarrierOffers(
 export function marginalRatesForAllLanes(
   carriers: Company[],
   regions: Record<RegionId, Region>,
-  unitMassTonnes: Record<string, number>
+  unitMassTonnes: Record<string, number>,
+  fxToUsd: FxToUsd
 ): Record<string, number> {
-  const { marginalByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes);
-  return marginalByLane;
+  return buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd).marginalByLane;
 }
 
 export function runFreightClearing(args: {
@@ -158,19 +171,20 @@ export function runFreightClearing(args: {
   regions: Record<RegionId, Region>;
   unitMassTonnes: Record<string, number>;
   bookings: LaneBooking[];
+  fxToUsd: FxToUsd;
 }): FreightClearing {
-  const { carriers, regions, unitMassTonnes, bookings } = args;
+  const { carriers, regions, unitMassTonnes, bookings, fxToUsd } = args;
   const result = emptyFreightClearing();
 
-  const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes);
-  result.marginalRateUsdPerTonneByLane = marginalByLane;
+  const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd);
+  result.marginalRatePerTonneLaneMoneyByLane = marginalByLane;
   result.laneCapacityTonnes = capacityByLane;
 
   // Bookings grouped by lane, and within a lane by good — a lane's demand curve is the several
   // cargoes on it, each with its own reservation, which is what gives it a slope.
   const bookingsByLane = new Map<string, LaneBooking[]>();
   bookings.forEach(b => {
-    if (!(b.tonnes > 0) || !(b.maxRateUsdPerTonne > 0)) return;
+    if (!(b.tonnes > 0) || !(b.maxRatePerTonneLaneMoney > 0)) return;
     const key = laneKey(b.from, b.to);
     const bucket = bookingsByLane.get(key) ?? [];
     bucket.push(b);
@@ -184,17 +198,17 @@ export function runFreightClearing(args: {
     if (offers.length === 0) {
       // Nobody serves this lane. The cargo does not move, and that is a real answer — a route
       // with no ships on it is how a trade link fails to exist.
-      result.rateUsdPerTonneByLane[key] = anchor;
+      result.ratePerTonneLaneMoneyByLane[key] = anchor;
       result.laneFillRatio[key] = 0;
       return;
     }
 
     const bids: AuctionBid[] = laneBookings.map(b => ({
-      key: b.subUnitId, quantity: b.tonnes, maxPrice: b.maxRateUsdPerTonne,
+      key: b.subUnitId, quantity: b.tonnes, maxPrice: b.maxRatePerTonneLaneMoney,
     }));
     const cleared = clearDoubleAuction(bids, offers, anchor);
 
-    result.rateUsdPerTonneByLane[key] = cleared.clearedPrice;
+    result.ratePerTonneLaneMoneyByLane[key] = cleared.clearedPrice;
     const booked = result.laneBookedTonnes[key] ?? 0;
     result.laneFillRatio[key] = booked > 0 ? cleared.clearedQuantity / booked : 0;
 
@@ -208,6 +222,11 @@ export function runFreightClearing(args: {
 
     // What each carrier carried, earned, and burned doing it.
     const distanceNm = laneDistanceNm(...(key.split('>') as [RegionId, RegionId]));
+    if (cleared.clearedQuantity > 0) {
+      const shares = new Map<string, number>();
+      cleared.sales.forEach((fill, ticker) => shares.set(ticker, fill.quantity / cleared.clearedQuantity));
+      result.carrierShareByLane.set(key, shares);
+    }
     cleared.sales.forEach((fill, ticker) => {
       result.carrierTonnesCarried.set(ticker, (result.carrierTonnesCarried.get(ticker) ?? 0) + fill.quantity);
       result.carrierRevenueUSD.set(ticker, (result.carrierRevenueUSD.get(ticker) ?? 0) + fill.amount);
@@ -231,3 +250,27 @@ export function collectCarriers(state: GameState): Company[] {
 }
 
 export { SOURCING_REGION_IDS };
+
+/**
+ * The week's second pass: the freight market clears against the bookings the sourcing intent just
+ * placed. The rate it prints is what the goods auction then charges every buyer for distance.
+ */
+export function runFreightClearingStage(state: GameState, ctx: WeeklyStepContext): void {
+  const fxToUsd = (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId);
+  const carriers = collectCarriers(state);
+  const clearing = runFreightClearing({
+    carriers,
+    regions: ctx.updatedRegions,
+    unitMassTonnes: state.unitMassTonnes,
+    bookings: ctx.laneBookings,
+    fxToUsd,
+  });
+  // A lane nobody currently serves still needs a price, or a route can never open: what it would
+  // cost to sail is the honest answer until somebody does.
+  ctx.freightRatePerTonneLaneMoneyByLane = {
+    ...clearing.marginalRatePerTonneLaneMoneyByLane,
+    ...clearing.ratePerTonneLaneMoneyByLane,
+  };
+  state.freightRatePerTonneLaneMoneyByLane = ctx.freightRatePerTonneLaneMoneyByLane;
+  ctx.freightClearing = clearing;
+}

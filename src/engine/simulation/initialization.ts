@@ -17,8 +17,11 @@ import { generateInitialCompanies, generatePrivateCompanies } from '../companyGe
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
-import { measureOpeningTradeWeeklyUSD } from './stages/05-unit-bidding';
 import { unitMassTonnes } from '../../domain/goods-physical';
+import { generateCarriers, seedFreightDemand, specMarginalRatesByLane } from '../bootstrap/carriers';
+import { runFreightClearing } from './stages/freight-clearing';
+import { getFxToUsd } from './stages/06-fx-and-trade';
+import { localToUsd } from '../../domain/currency';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { refreshRegionalHoldingsView } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
@@ -715,22 +718,42 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     );
   });
 
-  // Open the regions on their real trade position rather than at zero exports and zero imports,
-  // by running the world book once on a throwaway copy — the same auction the weekly step runs
-  // (see measureOpeningTradeWeeklyUSD). Seeding this before the GDP re-anchor below matters: net
-  // exports are a real component of the identity, and starting them at zero made week 1 read the
-  // entire structural trade balance as a one-week collapse in output. Annualised here because
-  // that is the periodicity these three fields carry everywhere they are read (rule 9).
-  {
-    const opening = measureOpeningTradeWeeklyUSD(companies, regions);
-    (Object.keys(regions) as RegionId[]).forEach((regionId) => {
-      regions[regionId].exportsUSD = Number((opening[regionId].exportsWeeklyUSD * 52).toFixed(0));
-      regions[regionId].importsUSD = Number((opening[regionId].importsWeeklyUSD * 52).toFixed(0));
-      regions[regionId].tradeBalance = regions[regionId].exportsUSD - regions[regionId].importsUSD;
-    });
-  }
-
+  // XB3a-2: the logistics sector, which this economy did not have. The fleet is sized by running
+  // the sourcing intent against the bootstrap economy, and the carriers' books are built on the
+  // rate that auction actually clears — so freight opens somewhere a week of this simulation
+  // would produce rather than on an artifact of a guessed fleet (§7.4).
   const seededUnitMassTonnes = seedUnitMassTonnes(regions);
+  const seedFxToUsd = (regionId: RegionId) => getFxToUsd(fxPairs, regionId);
+  const carrierTickers = new Set<string>(companies.map(c => c.ticker));
+  const carrierNames = new Set<string>(companies.map(c => c.name));
+  const carriers = generateCarriers(regions, seededUnitMassTonnes, seedFxToUsd, carrierTickers, carrierNames);
+  companies.push(...carriers);
+  const seededFreightRates = (() => {
+    const { bookings } = seedFreightDemand(regions, seededUnitMassTonnes, seedFxToUsd);
+    // Open the regions on their real trade position rather than at zero exports and zero imports.
+    // Net exports are a real component of the expenditure identity, and starting them at zero made
+    // week 1 read the entire structural balance as a collapse in output. This is the engine's own
+    // sourcing decision, taken once at seed prices — not a parallel formula (§7.4).
+    (Object.keys(regions) as RegionId[]).forEach(r => { regions[r].exportsUSD = 0; regions[r].importsUSD = 0; });
+    bookings.forEach(b => {
+      if (b.from === b.to) return;
+      const exWorks = Number((regions[b.from].categoryDemand[b.subUnitId] as any)?.unitPriceUSD) || 0;
+      const valueUSD = localToUsd(b.units * exWorks, b.from, seedFxToUsd) * 52;
+      regions[b.from].exportsUSD += valueUSD;
+      regions[b.to].importsUSD += valueUSD;
+    });
+    (Object.keys(regions) as RegionId[]).forEach(r => {
+      regions[r].exportsUSD = Number(regions[r].exportsUSD.toFixed(0));
+      regions[r].importsUSD = Number(regions[r].importsUSD.toFixed(0));
+      regions[r].tradeBalance = regions[r].exportsUSD - regions[r].importsUSD;
+    });
+    const clearing = runFreightClearing({
+      carriers, regions, unitMassTonnes: seededUnitMassTonnes, bookings, fxToUsd: seedFxToUsd,
+    });
+    // A lane no carrier serves still needs a price to be evaluated against, or a route can never
+    // open: what it would cost to sail is the honest answer until somebody does.
+    return { ...specMarginalRatesByLane(regions, seededUnitMassTonnes), ...clearing.ratePerTonneLaneMoneyByLane };
+  })();
 
   const commodities = getInitialCommodities();
   const allGeneratedCompanies = companies;
@@ -990,12 +1013,8 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     rngSeed: seed,
     rngState: getRngState(),
     primaryOfferings: [],
-    // XB3a — born EMPTY for the same reason the indexes are: each world book prices itself the
-    // first week it clears, off the regions' own bootstrapped prices. Writing a level here would
-    // be a stated version of what the auction produces.
-    globalGoodsMarkets: {},
     unitMassTonnes: seededUnitMassTonnes,
-    freightRateUsdPerTonneByLane: {},
+    freightRatePerTonneLaneMoneyByLane: seededFreightRates,
     // Born EMPTY: the first weekly pass strikes every index's membership from the market that
     // actually exists, at base 100. Seeding a constituent list here would be a second, stated
     // version of a rule the engine already runs (§7.4's seed-shape rule).

@@ -25,8 +25,11 @@ import {
   weeklyCapacityTonnes,
 } from '../../domain/carrier';
 import { computeSourcingIntent, LaneBooking, SOURCING_REGION_IDS } from '../simulation/stages/sourcing-intent';
+import { FxToUsd } from '../../domain/currency';
 import { crewAnnualWageUSD, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
 import { RATING_OAS_SPREADS } from '../pricing';
+import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equity-valuation';
+import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { generateUniqueTicker, generateUniqueName } from './firms';
 
 /**
@@ -36,9 +39,16 @@ import { generateUniqueTicker, generateUniqueName } from './firms';
  */
 const CARRIERS_PER_REGION = 3;
 
+/**
+ * What a lender advances against a hull. Ship finance is asset-based and this is the standard
+ * advance rate against a vessel — a real lending primitive, of the same kind as the haircuts and
+ * regulatory ratios rule 4 allows.
+ */
+const SHIP_FINANCE_LOAN_TO_VALUE = 0.55;
+
 /** What one tonne costs to move on a lane using the standard equipment for it, before any
  *  carrier exists. The floor the intent is formed against on a lane that has never cleared. */
-export function specMarginalRateUsdPerTonne(
+export function specMarginalRatePerTonneLaneMoney(
   from: RegionId,
   to: RegionId,
   regions: Record<RegionId, Region>,
@@ -66,7 +76,7 @@ export function specMarginalRatesByLane(
   const rates: Record<string, number> = {};
   SOURCING_REGION_IDS.forEach(from => {
     SOURCING_REGION_IDS.forEach(to => {
-      rates[laneKey(from, to)] = specMarginalRateUsdPerTonne(from, to, regions, unitMassTonnes);
+      rates[laneKey(from, to)] = specMarginalRatePerTonneLaneMoney(from, to, regions, unitMassTonnes);
     });
   });
   return rates;
@@ -79,15 +89,17 @@ export function specMarginalRatesByLane(
  */
 export function seedFreightDemand(
   regions: Record<RegionId, Region>,
-  unitMassTonnes: Record<string, number>
+  unitMassTonnes: Record<string, number>,
+  fxToUsd: FxToUsd
 ): { tonnesByLane: Record<string, number>; bookings: LaneBooking[] } {
   const marginal = specMarginalRatesByLane(regions, unitMassTonnes);
   const { bookings } = computeSourcingIntent({
     regions,
     subUnitIds: Object.values(INDUSTRY_SUBUNITS).flat().map(su => su.unitId),
     unitMassTonnes,
-    freightRateUsdPerTonneByLane: {},
-    marginalRateUsdPerTonneByLane: marginal,
+    freightRatePerTonneLaneMoneyByLane: {},
+    marginalRatePerTonneLaneMoneyByLane: marginal,
+    fxToUsd,
   });
   const tonnesByLane: Record<string, number> = {};
   bookings.forEach(b => {
@@ -135,10 +147,11 @@ function buildFleetForLanes(tonnesByLane: Record<string, number>, week: number):
 export function generateCarriers(
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
+  fxToUsd: FxToUsd,
   existingTickers: Set<string>,
   existingNames: Set<string>
 ): Company[] {
-  const { tonnesByLane, bookings } = seedFreightDemand(regions, unitMassTonnes);
+  const { tonnesByLane, bookings } = seedFreightDemand(regions, unitMassTonnes, fxToUsd);
   const allAssets = buildFleetForLanes(tonnesByLane, 0);
 
   const carriers: { region: RegionId; assets: FreightAsset[] }[] = [];
@@ -175,7 +188,7 @@ export function generateCarriers(
     region: c.region,
     carrierFleet: { assets: c.assets, fuelInventoryTonnes: 0, lastWeekTonneNm: 0, lastWeekFreightRevenueUSD: 0 },
   })) as unknown as Company[];
-  const clearing = runFreightClearing({ carriers: provisional, regions, unitMassTonnes, bookings });
+  const clearing = runFreightClearing({ carriers: provisional, regions, unitMassTonnes, bookings, fxToUsd });
 
   return staffed.map((c, idx) => buildCarrierCompany(
     c.region, c.assets, idx, regions, unitMassTonnes,
@@ -235,8 +248,15 @@ function buildCarrierCompany(
   const ebit = ebitda - depreciation;
 
   const policyRate = regions[region].policyRate ?? 0.045;
-  // A ship is collateral, so the fleet is financed the way real tonnage is: against the asset.
-  const debtBase = Math.round(grossPPEUSD * 0.55);
+  // A ship is collateral, so the fleet is financed the way real tonnage is: against the asset, at
+  // the loan-to-value a lender will advance against a hull. But a lender lends against the CASH
+  // FLOW too, and whichever binds is the constraint — so the fleet's debt is also capped by the
+  // covenant ceiling this model already applies to every other borrower (see
+  // corporate-financing.ts). Without that second leg the seed produced carriers at 21x leverage,
+  // which is not a shipping cycle, it is a §7.4 cold start that defaults in the first weeks.
+  const assetBackedUSD = grossPPEUSD * SHIP_FINANCE_LOAN_TO_VALUE;
+  const cashFlowBackedUSD = Math.max(0, ebitda) * COVENANT_LEVERAGE_CEILING.B;
+  const debtBase = Math.round(Math.min(assetBackedUSD, cashFlowBackedUSD));
   const annualInterest = debtBase * (policyRate + 0.02);
   const coverage = annualInterest > 0 ? ebit / annualInterest : 99;
   const leverage = ebitda > 0 ? debtBase / ebitda : 99;
@@ -250,6 +270,22 @@ function buildCarrierCompany(
     lastWeekFreightRevenueUSD: 0,
   };
 
+  // Carriers are LISTED. The shipping majors are public companies in reality, and it is also what
+  // puts them inside every mechanism the model already has — the weekly P&L pass, the rating
+  // ladder, equity clearing, default — instead of needing a special case in each. Seeded through
+  // the SAME valuation function the market itself prices with, never a multiple (§7.31).
+  const sharesOutstanding = Math.max(1, Math.round(grossPPEUSD / 1000));
+  const bookEquityUSD = grossPPEUSD * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
+  const stockPrice = Number(fairValuePerShare({
+    annualEarningsUSD: Math.round((ebit - annualInterest) * 0.78),
+    sharesOutstanding,
+    bookEquityUSD,
+    netInvestmentRate: 0,
+    riskFreeRate: policyRate,
+    beta: 1.0,
+    holderRequiredReturn: REPRESENTATIVE_HOLDER_REQUIRED_RETURN,
+  }).toFixed(2));
+
   return {
     id: `${region}_CAR_${ticker}`,
     ticker,
@@ -258,17 +294,18 @@ function buildCarrierCompany(
     sector: 'Industrials',
     financialStatementProfile: 'CARRIER',
     carrierFleet: fleet,
-    listingStatus: 'PRIVATE',
-    ownership: { founderPct: 1.0 },
+    listingStatus: 'PUBLIC',
+    ownership: { founderPct: 0 },
+    earningsWeekModulo: (idx % 13) + 1,
     baselineAnnualRevenue: annualRevenue, annualRevenue,
     previousEmployeeCount: employeeCount, employeeCount, baselineEmployeeCount: employeeCount,
     ebitda,
     baselineEbitdaMargin: annualRevenue > 0 ? ebitda / annualRevenue : 0,
     ebit,
     netIncome: Math.round((ebit - annualInterest) * 0.78),
-    eps: 0,
-    sharesOutstanding: 0, stockPrice: 0, marketCap: 0,
-    historicalPrices: [], forwardPE: 0,
+    eps: Number(((ebit - annualInterest) * 0.78 / sharesOutstanding).toFixed(2)),
+    sharesOutstanding, stockPrice, marketCap: stockPrice * sharesOutstanding,
+    historicalPrices: [stockPrice], forwardPE: 0,
     cash: Math.round(Math.max(0, ebitda) * 0.6),
     totalDebt: debtBase,
     currentLiabilities: Math.round(debtBase * 0.2),

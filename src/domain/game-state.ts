@@ -31,19 +31,16 @@ export interface GameState {
   /** ETF — the published indexes: membership struck quarterly, level moved weekly by the
    * constituents' own cleared prices (`stages/index-calculation.ts`). */
   marketIndexes: import('./indexes').MarketIndex[];
-  /** XB3a — one world book per sub-unit, keyed by subUnitId. The tradable share of every
-   *  region's supply and demand clears here; an export is a fill whose buyer and seller sat in
-   *  different regions. See domain/global-goods.ts. */
-  globalGoodsMarkets: Record<string, import('./global-goods').GlobalGoodsMarketState>;
   /** XB3a-1 — the physical mass of one unit of each sub-unit's output, in tonnes. Derived once
    *  at seed from the good's own baseline price and its real value density (see
    *  domain/goods-physical.ts) and never moved after: mass is physical, so when a good's price
    *  doubles the same tonne is worth twice as much rather than weighing half as much. This is
    *  what freight is charged on. */
   unitMassTonnes: Record<string, number>;
-  /** XB3a-2 — last cleared freight, USD per tonne, by directed lane key ("USA>EUR"). What a
-   *  buyer forms its next sourcing intent against. */
-  freightRateUsdPerTonneByLane: Record<string, number>;
+  /** XB3a-2 — last cleared freight per tonne by directed lane key ("USA>EUR"), each in that
+   *  lane's OWN money (its origin's), which is where the carrier's fuel and crew are paid. What a
+   *  buyer forms its next sourcing intent against, converting into its own money to compare. */
+  freightRatePerTonneLaneMoneyByLane: Record<string, number>;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;

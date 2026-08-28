@@ -234,23 +234,6 @@ export interface GovDebtTranche {
   tenorAtIssuanceYears: number;
 }
 
-export const CATEGORY_TRADABILITY: Record<string, number> = {
-  Energy: 0.80,
-  MaterialsChemicals: 0.70,
-  IndustrialsMachinery: 0.50,
-  AerospaceDefense: 0.60,
-  AutomotiveTransport: 0.55,
-  TechHardwareSemis: 0.75,
-  SoftwareDigitalServices: 0.85,
-  Telecommunications: 0.20,
-  HealthcarePharma: 0.30,
-  ConsumerStaples: 0.05,
-  ConsumerDiscretionaryRetail: 0.15,
-  LuxuryGoods: 0.40,
-  MediaEntertainment: 0.50,
-  RealEstateConstruction: 0.02,
-};
-
 export type PrivateSegmentType = 'MANUFACTURING' | 'PROFESSIONAL_SERVICES' | 'RETAIL_TRADE' | 'CONSTRUCTION_REALESTATE' | 'HEALTHCARE_SERVICES';
 
 export interface PrivateSectorSegment {
