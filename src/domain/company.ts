@@ -423,6 +423,16 @@ export interface Company {
   // actual bid/offer clearing — open-market plus active-contract volume) — persisted onto the
   // company so the UI can show real weekly production/purchasing activity, not just the target.
   lastWeekSalesUSD?: number;
+  /**
+   * HH6 — the wage this firm OFFERS, as a multiple of the going rate for its own occupation
+   * mix. 1.0 is the market rate. Set weekly from its real vacancy-fill experience (cannot fill
+   * → raise) and its margin headroom (losing money → cannot). The occupation wage indexes are
+   * the employment-weighted average of these, so what households earn is what firms pay.
+   */
+  offeredWageIndex?: number;
+  /** HH6 — the share of this firm's own postings that went unfilled last week: its measured
+   * hiring difficulty, and the input to the wage push above. */
+  unfilledVacancyShare?: number;
   lastWeekPurchasesUSD?: number;
   treasuryHoldings: ItemizedHolding[];
   producedCommodityId?: string;

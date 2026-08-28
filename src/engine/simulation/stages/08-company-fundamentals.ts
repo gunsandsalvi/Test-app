@@ -158,6 +158,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         isDefaulted: defaulted,
         creditRating: rating,
         ratingHistory: comp.creditRating === rating ? comp.ratingHistory : [...(comp.ratingHistory || []).slice(-12), rating],
+        // HH5/HH6: a private firm is an employer like any other — it posts vacancies, consumes
+        // real matches and pays a real wage. This path rebuilds from a fixed field list too,
+        // so its headcount and wage were being silently dropped: the whole hidden tier hired
+        // and fired in the labor market and then reverted to its old payroll every week.
+        employeeCount: defaulted ? 0 : Math.max(1, Math.round(
+          companyUpdates[comp.ticker]?.employeeCount ?? comp.employeeCount
+        )),
+        previousEmployeeCount: comp.employeeCount,
+        offeredWageIndex: companyUpdates[comp.ticker]?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0,
+        unfilledVacancyShare: companyUpdates[comp.ticker]?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0,
       };
     }
 
@@ -1442,6 +1452,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       baselineRecoveryRate: newBaselineRecoveryRate,
       baselineDividendYield: newBaselineDividendYield,
       previousEmployeeCount: comp.employeeCount,
+      // HH6: the wage this firm offers and the hiring difficulty behind it are the labor
+      // market stage's decisions — carried through explicitly, like employeeCount above,
+      // because this stage rebuilds the company from a fixed field list and anything not
+      // named here is silently dropped (which is exactly what happened first time).
+      offeredWageIndex: companyUpdates[comp.ticker]?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0,
+      unfilledVacancyShare: companyUpdates[comp.ticker]?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0,
       previousCapex: comp.capex,
       maintenanceCapex: Number(newMaintenanceCapex.toFixed(1)),
       growthCapex: Number(newGrowthCapex.toFixed(1)),

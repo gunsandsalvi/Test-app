@@ -11,7 +11,6 @@ import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking'
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
-import { NEUTRAL_LABOR_TIGHTNESS } from '../../domain/region-macro';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
 
 /**
@@ -311,38 +310,13 @@ export function evolveRegionMacro(
     MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
   };
 
-  const occDemandInput = microFeedback.occupationDemand || {
-    GENERAL: 0,
-    SKILLED_TRADES: 0,
-    TECHNICAL_ENGINEERING: 0,
-    SPECIALIZED_PROFESSIONAL: 0,
-    MANAGERIAL_FINANCIAL: 0,
-  };
 
-  // HH5: EMPLOYMENT is the labor market stage's — matched, with friction, from real vacancies
-  // and real seekers. What remains here is the WAGE response, and it now reads real vacancy
-  // tightness (open positions per seeker) instead of a ratio of two stocks that were never
-  // allowed to disagree. A tight market bids wages up; a slack one does not.
-  const newOccupationPools = (Object.keys(currentOccupationPools) as OccupationType[]).reduce((acc, occ) => {
-    const pool = currentOccupationPools[occ];
-    const availableSupply = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ]);
-    const seekers = Math.max(1, availableSupply - pool.employed);
-    const tightness = Math.max(0.05, Math.min(3.0, (pool.vacancies ?? 0) / seekers));
-
-    // Wage growth tracks tightness around the market's OWN neutral point — the same
-    // vacancies-per-seeker the matching function is calibrated at, so the wage rule and the
-    // matching rule cannot disagree about what "normal" means.
-    const targetWageGrowth = 0.02 + (tightness - NEUTRAL_LABOR_TIGHTNESS) * 0.06;
-    const rawWageGrowthAnnual = pool.wageGrowthAnnual * 0.9 + targetWageGrowth * 0.1;
-    const newWageGrowthAnnual = Math.max(-0.05, Math.min(0.15, rawWageGrowthAnnual));
-    const newWageIndex = Math.max(0.1, Math.min(10.0, pool.wageIndex * (1 + newWageGrowthAnnual / 52)));
-    acc[occ] = {
-      ...pool,
-      wageIndex: Number(newWageIndex.toFixed(4)),
-      wageGrowthAnnual: Number(newWageGrowthAnnual.toFixed(4)),
-    };
-    return acc;
-  }, {} as Record<OccupationType, OccupationPool>);
+  // HH5/HH6: this stage no longer sets employment OR wages. Employment is matched in the
+  // labor market stage; the going wage per occupation is the employment-weighted average of
+  // what real firms offer, set there too. The tightness->wage formula that used to live here
+  // walked an index no employer's payroll referred to — the last piece of the wage that was
+  // nobody's decision. The pools pass through untouched.
+  const newOccupationPools = currentOccupationPools;
 
   // X4: Retraining friction — slow, asymmetric flow between pools
   const avgWageIndex = (Object.values(newOccupationPools) as OccupationPool[]).reduce((s, p) => s + p.wageIndex, 0) / 5;
