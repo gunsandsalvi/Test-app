@@ -28,6 +28,7 @@ import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputL
 import { subUnitTradability, createSeedGlobalGoodsMarket, GlobalGoodsMarketState } from '../../../domain/global-goods';
 import { WeeklyStepContext } from './context';
 import { random, getRngState, setRngState } from '../../rng';
+import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
 import { createInitialContext } from './context';
 import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
 
@@ -192,21 +193,20 @@ interface DemandPlan {
   maxPriceUSD: number;
 }
 
-interface BookFill {
-  units: number;
-  amount: number;
-}
+/** A settlement key for a participant that is not a Company: the aggregates, by region. */
+const householdKey = (regionId: RegionId) => `HOUSEHOLD:${regionId}`;
+const governmentKey = (regionId: RegionId) => `GOVERNMENT:${regionId}`;
 
 interface BookResult {
   clearedPriceUSD: number;
   clearedUnits: number;
-  salesByKey: Map<string, BookFill>;
-  purchasesByKey: Map<string, BookFill>;
+  salesByKey: Map<string, AuctionFill>;
+  purchasesByKey: Map<string, AuctionFill>;
   householdFillUnitsByRegion: Record<string, number>;
   governmentSpendUSDByRegion: Record<string, number>;
   lotsByBuyer: Map<string, { sellerKey: string; sellerRegion: RegionId; units: number }[]>;
-  inMoneyBids: UnitBid[];
-  inMoneyOffers: UnitOffer[];
+  inMoneyBidKeys: Set<string>;
+  inMoneyOfferKeys: Set<string>;
 }
 
 const EMPTY_BOOK = (anchorPrice: number): BookResult => ({
@@ -217,126 +217,58 @@ const EMPTY_BOOK = (anchorPrice: number): BookResult => ({
   householdFillUnitsByRegion: {},
   governmentSpendUSDByRegion: {},
   lotsByBuyer: new Map(),
-  inMoneyBids: [],
-  inMoneyOffers: [],
+  inMoneyBidKeys: new Set(),
+  inMoneyOfferKeys: new Set(),
 });
 
 /**
- * One double auction: discover the clearing price, then allocate pro rata among everyone in the
- * money on the constrained side.
- *
- * The discovery walk only DISCOVERS clearedPriceUSD/clearedUnits; it does not decide who gets
- * how much (it used to double as the allocation mechanism, via indices draining the sorted
- * arrays in order) — a company sorted near the back of the queue could be shut out completely
- * even when aggregate supply and demand balanced exactly. Allocation is pro-rata among everyone
- * who clears at the market price, the way real double auctions and oversubscribed IPO
- * allocations actually work.
+ * The goods market's wrapper over the shared double auction (`double-auction.ts`): it hands the
+ * auction plain keyed bids and offers, then puts the goods-specific meaning back on the result —
+ * whose household bought, whose treasury was debited, and which region each lot's seller sat in.
  */
-function clearBook(bids: UnitBid[], offers: UnitOffer[], anchorPrice: number, offerRegionByKey: Map<string, RegionId>): BookResult {
-  if (bids.length === 0 || offers.length === 0) return EMPTY_BOOK(anchorPrice);
-
-  bids.sort((a, b) => b.maxPriceUSD - a.maxPriceUSD);
-  offers.sort((a, b) => a.minPriceUSD - b.minPriceUSD);
-
-  let clearedPriceUSD = anchorPrice;
-  let clearedUnits = 0;
-  {
-    let bidIdx = 0;
-    let offerIdx = 0;
-    const remainingBidQty = bids.map(b => b.quantityUnits);
-    const remainingOfferQty = offers.map(o => o.quantityUnits);
-    let loopCounter = 0;
-    while (bidIdx < bids.length && offerIdx < offers.length) {
-      if (loopCounter++ > 10000) break;
-      const bid = bids[bidIdx];
-      const offer = offers[offerIdx];
-      if (bid.maxPriceUSD >= offer.minPriceUSD) {
-        const transactQty = Math.min(remainingBidQty[bidIdx], remainingOfferQty[offerIdx]);
-        if (!isFinite(transactQty) || isNaN(transactQty) || transactQty <= 0) {
-          bidIdx++;
-          offerIdx++;
-          continue;
-        }
-        clearedPriceUSD = (bid.maxPriceUSD + offer.minPriceUSD) / 2;
-        clearedUnits += transactQty;
-        remainingBidQty[bidIdx] -= transactQty;
-        remainingOfferQty[offerIdx] -= transactQty;
-        if (remainingBidQty[bidIdx] <= 0.0001) bidIdx++;
-        if (remainingOfferQty[offerIdx] <= 0.0001) offerIdx++;
-      } else {
-        break;
-      }
-    }
-  }
-
-  const result = EMPTY_BOOK(clearedPriceUSD);
-  result.clearedUnits = clearedUnits;
-  // Every bid/offer that would trade at all at the clearing price is "in the money"; everyone
-  // on the constrained side (whichever of demand/supply is smaller) gets the same fill ratio —
-  // no one is shut out just because of where their entry happened to land in a sorted array.
-  result.inMoneyBids = bids.filter(b => b.maxPriceUSD >= clearedPriceUSD);
-  result.inMoneyOffers = offers.filter(o => o.minPriceUSD <= clearedPriceUSD);
-  if (clearedUnits <= 0.0001) return result;
-
-  const totalInMoneyBidQty = result.inMoneyBids.reduce((s, b) => s + b.quantityUnits, 0);
-  const totalInMoneyOfferQty = result.inMoneyOffers.reduce((s, o) => s + o.quantityUnits, 0);
-  const bidFillRatio = totalInMoneyBidQty > 0 ? Math.min(1, clearedUnits / totalInMoneyBidQty) : 0;
-  const offerFillRatio = totalInMoneyOfferQty > 0 ? Math.min(1, clearedUnits / totalInMoneyOfferQty) : 0;
-
-  result.inMoneyOffers.forEach(offer => {
-    const filledQty = offer.quantityUnits * offerFillRatio;
-    if (filledQty <= 0.0001) return;
-    const existing = result.salesByKey.get(offer.companyId);
-    if (existing) { existing.units += filledQty; existing.amount += filledQty * clearedPriceUSD; }
-    else result.salesByKey.set(offer.companyId, { units: filledQty, amount: filledQty * clearedPriceUSD });
+function clearBook(
+  bids: UnitBid[],
+  offers: UnitOffer[],
+  anchorPrice: number,
+  offerRegionByKey: Map<string, RegionId>
+): BookResult {
+  const bidRegionByKey = new Map<string, RegionId>();
+  const auctionBids: AuctionBid[] = bids.map(b => {
+    const key = b.companyId
+      ?? (b.isHouseholdAggregate ? householdKey(b.regionId) : governmentKey(b.regionId));
+    bidRegionByKey.set(key, b.regionId);
+    return { key, quantity: b.quantityUnits, maxPrice: b.maxPriceUSD };
   });
+  const auctionOffers: AuctionOffer[] = offers.map(o => ({
+    key: o.companyId, quantity: o.quantityUnits, minPrice: o.minPriceUSD,
+  }));
 
-  result.inMoneyBids.forEach(bid => {
-    const filledQty = bid.quantityUnits * bidFillRatio;
-    if (filledQty <= 0.0001) return;
-    const region = bid.regionId;
-    if (bid.companyId) {
-      const existing = result.purchasesByKey.get(bid.companyId);
-      if (existing) { existing.units += filledQty; existing.amount += filledQty * clearedPriceUSD; }
-      else result.purchasesByKey.set(bid.companyId, { units: filledQty, amount: filledQty * clearedPriceUSD });
-    }
-    if (bid.isHouseholdAggregate) {
-      result.householdFillUnitsByRegion[region] = (result.householdFillUnitsByRegion[region] ?? 0) + filledQty;
-    }
-    if (bid.isGovernmentAggregate) {
-      result.governmentSpendUSDByRegion[region] =
-        (result.governmentSpendUSDByRegion[region] ?? 0) + filledQty * clearedPriceUSD;
+  const cleared = clearDoubleAuction(auctionBids, auctionOffers, anchorPrice);
+
+  const result = EMPTY_BOOK(cleared.clearedPrice);
+  result.clearedUnits = cleared.clearedQuantity;
+  result.salesByKey = cleared.sales;
+  result.purchasesByKey = cleared.purchases;
+  cleared.inMoneyBids.forEach(b => result.inMoneyBidKeys.add(b.key));
+  cleared.inMoneyOffers.forEach(o => result.inMoneyOfferKeys.add(o.key));
+
+  cleared.purchases.forEach((fill, key) => {
+    const region = bidRegionByKey.get(key);
+    if (!region) return;
+    if (key === householdKey(region)) {
+      result.householdFillUnitsByRegion[region] = (result.householdFillUnitsByRegion[region] ?? 0) + fill.quantity;
+    } else if (key === governmentKey(region)) {
+      result.governmentSpendUSDByRegion[region] = (result.governmentSpendUSDByRegion[region] ?? 0) + fill.amount;
     }
   });
 
-  // 1$ is 1$ Phase 6: real open-market purchase lots — WHO a company's cleared purchase this
-  // week actually came from, not just an anonymous pooled total. Pro-rata clearing doesn't pair
-  // specific buyers with specific sellers (unlike a contract, which already has a named
-  // supplier), but the aggregate quantities on both sides are fully known, so a simple
-  // northwest-corner allocation (walk both sides in order, filling from the current seller until
-  // either it or the current buyer is exhausted, then advance) produces a real, quantity-
-  // consistent buyer/seller pairing — the same real-double-auction assumption a clearinghouse
-  // actually uses to settle trades, not an invented attribution. XB3a reads the SAME pairing to
-  // decide what crossed a border: an export is a lot whose two sides sit in different regions.
-  const sellerRemaining = result.inMoneyOffers
-    .map(o => ({ key: o.companyId, region: o.regionId, qty: o.quantityUnits * offerFillRatio }))
-    .filter(s => s.qty > 0.0001);
-  const buyerRemaining = result.inMoneyBids
-    .map(b => ({ key: b.companyId ?? (b.isHouseholdAggregate ? `HOUSEHOLD:${b.regionId}` : `GOVERNMENT:${b.regionId}`), region: b.regionId, qty: b.quantityUnits * bidFillRatio }))
-    .filter(b => b.qty > 0.0001);
-  let si = 0, bi = 0;
-  while (si < sellerRemaining.length && bi < buyerRemaining.length) {
-    const s = sellerRemaining[si], b = buyerRemaining[bi];
-    const qty = Math.min(s.qty, b.qty);
-    if (qty > 0.0001) {
-      const bucket = result.lotsByBuyer.get(b.key);
-      const lot = { sellerKey: s.key, sellerRegion: offerRegionByKey.get(s.key) ?? s.region, units: qty };
-      if (bucket) bucket.push(lot); else result.lotsByBuyer.set(b.key, [lot]);
-    }
-    s.qty -= qty; b.qty -= qty;
-    if (s.qty <= 0.0001) si++;
-    if (b.qty <= 0.0001) bi++;
-  }
+  cleared.lotsByBuyer.forEach((lots, buyerKey) => {
+    result.lotsByBuyer.set(buyerKey, lots.map(l => ({
+      sellerKey: l.sellerKey,
+      sellerRegion: offerRegionByKey.get(l.sellerKey) ?? (bidRegionByKey.get(buyerKey) as RegionId),
+      units: l.quantity,
+    })));
+  });
 
   return result;
 }
@@ -917,7 +849,7 @@ function runSubUnitMarkets(
   supplyPlans.forEach(plan => {
     const globalSale = globalResult.salesByKey.get(plan.key);
     const localSale = localResults[plan.regionId].salesByKey.get(plan.key);
-    const soldUnits = (globalSale?.units ?? 0) + (localSale?.units ?? 0);
+    const soldUnits = (globalSale?.quantity ?? 0) + (localSale?.quantity ?? 0);
     const soldUSD = (globalSale?.amount ?? 0) + (localSale?.amount ?? 0);
 
     if (plan.company) {
@@ -968,7 +900,7 @@ function runSubUnitMarkets(
     const comp = plan.company;
     const globalBuy = globalResult.purchasesByKey.get(plan.key);
     const localBuy = localResults[plan.regionId].purchasesByKey.get(plan.key);
-    const units = (globalBuy?.units ?? 0) + (localBuy?.units ?? 0);
+    const units = (globalBuy?.quantity ?? 0) + (localBuy?.quantity ?? 0);
     const amount = (globalBuy?.amount ?? 0) + (localBuy?.amount ?? 0);
     if (units <= 0.0001) return;
 
@@ -1070,12 +1002,10 @@ function formContracts(
   regionPublishedPrice: Record<RegionId, number>,
   survivingContracts: Record<RegionId, SupplyContract[]>
 ): void {
-  const inMoneyOfferKeys = new Set<string>();
-  globalResult.inMoneyOffers.forEach(o => inMoneyOfferKeys.add(o.companyId));
-  MARKET_REGION_IDS.forEach(r => localResults[r].inMoneyOffers.forEach(o => inMoneyOfferKeys.add(o.companyId)));
-  const inMoneyBidKeys = new Set<string>();
-  globalResult.inMoneyBids.forEach(b => { if (b.companyId) inMoneyBidKeys.add(b.companyId); });
-  MARKET_REGION_IDS.forEach(r => localResults[r].inMoneyBids.forEach(b => { if (b.companyId) inMoneyBidKeys.add(b.companyId); }));
+  const inMoneyOfferKeys = new Set<string>(globalResult.inMoneyOfferKeys);
+  MARKET_REGION_IDS.forEach(r => localResults[r].inMoneyOfferKeys.forEach(k => inMoneyOfferKeys.add(k)));
+  const inMoneyBidKeys = new Set<string>(globalResult.inMoneyBidKeys);
+  MARKET_REGION_IDS.forEach(r => localResults[r].inMoneyBidKeys.forEach(k => inMoneyBidKeys.add(k)));
 
   const candidateSuppliers = supplyPlans.filter(p => p.company && inMoneyOfferKeys.has(p.key));
   if (candidateSuppliers.length === 0) return;
