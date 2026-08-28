@@ -463,15 +463,18 @@ it into the acquirer.
 capital income inside the income measure (the recycle's real components live budget-side);
 the residual recycle share is a §6 watch line that decays as receipt channels become real.
 
-**HH5 — A real labor market.** A new stage between 02b and 03: companies post openings from real
-capacity need (production plans vs headcount, data stage 05 already implies); cohorts move toward
-better wages with real friction; quits and layoffs move real payroll. **This closes the root labor
-disagreement** the model has carried from the start: the bootstrap's firms demand ~11–14% fewer
-workers than the population primitives supply, so the occupation pools imply 11–14% unemployment
-while `reg.unemploymentRate` reports ~4.5% — two representations of one real thing. Writing the
-pool-implied rate into the field was tried in S1 and deliberately reverted; the real fix is making
-both sides real. It also closes the consequence: bottom-up GDP starts 6–9% below the supply-side
-anchor and reads as a permanent output gap.
+**HH5 — DONE (§7.58).** The labor market is a matching market between 02b and 03: vacancies from
+real output growth, separations as quits plus layoffs with hiring faster than firing, hires from
+a Cobb-Douglas matching function on the real stocks — so a vacancy takes ~6 weeks to fill and an
+unfilled one carries over (and is withdrawn at 10%/wk). **The root disagreement is closed:** there
+were THREE rates, not two (the GDP-gap formula at 4.5%, a dead `unemploymentRateBottomUp` at 37%,
+and pool-implied 8–17%); now employment is the sum of what real employers carry, the pools are a
+derived view of it, and the rate is a reading of the same stock — asserted weekly. The Beveridge
+relation EMERGES (−0.32 to −0.35 full sample; −0.87 to −0.95 once the vacancy stock is
+established). **Still open:** wage SETTING is HH6's, and the per-occupation mismatch the market now
+exposes (one occupation tight at V/U≈40 while two run zero vacancies against real unemployment) is
+what HH6's wage response and the retraining flow have to work on. The bottom-up-GDP-vs-anchor gap
+named here is NOT yet re-measured — do that at the start of HH6.
 
 **HH6 — Corporate wage and management policy** (absorbs #52, runs parallel with HH5): per-company
 wage setting from vacancy-fill experience and margin headroom, hiring and firing from real capacity
@@ -937,6 +940,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **Damper-bound instruments** | 1,961 persistently bound (3+ consecutive weeks) on the 60-week harness. The number to watch DOWN as the wides get a real buyer base; it rose when the loan book grew, which is expected. Not a defect on its own — a print held away from its solve is only wrong if it stays there. |
 | **Index funds without a buyer** | Was 15 of 27; **MS1 took it to 10** by adding households, who index everything and fill all four broad-market funds (§7.47). The diagnosis in this row was partly wrong and worth correcting: the empty all-cap funds were not a universe-size problem, they were a missing SECTOR. What remains — the large-cap and high-yield funds — is the genuine version: ~25 large-cap names and 8–65 HY issuers are few enough for any institution here to research directly, and households buy the broad market rather than a size tier. That closes as HC births, real IPOs and BP1's registry grow the universe. **Still do NOT tune the research-capacity primitive until the funds fill** — that would be fitting a constant to a desired outcome. |
 | **`unmodeledCapitalReceiptShareOfIncome`** | HH4b's named residual: the slice of the debt-service recycle whose return path to household income is unbuilt (bank retained earnings, institutional dividend passthrough). Derived once at seed (≈ debt service less deposit interest, per region), it decays only when a receipt channel becomes real — real institutional dividend income to claims (CAL/PUB territory), real bank payout routing. Watch it DOWN like the unmodeled-assets line; never re-derive it to a bigger value. |
+| **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ## 7. Record & lessons (do not re-learn)
@@ -2487,4 +2491,49 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       the seed identities before it.
     - Deterministic throughout; harness green after each slice; M2 stopped counting wholesale
       money as household deposits.
+58. **HH5: the labor market becomes a market, and the third unemployment rate nobody knew about.**
+    The plan said two representations. There were three: `reg.unemploymentRate` (a GDP-gap /
+    NAIRU-pull / participation formula, 4.5% seeded), the occupation pools (8–17% implied), and
+    **`unemploymentRateBottomUp`, written every single week and read by NOTHING** — and wrong on
+    its own terms, because it summed public-company employment and forgot the entire private
+    tier, so it printed 37% against a full-employment economy. Dead state can be wrong for years
+    precisely because nothing reads it; grep for the readers before trusting a field.
+    - **The market.** Firms post vacancies from real output growth; quits and layoffs run with
+      hiring faster than firing; a per-occupation Cobb-Douglas matching function turns the real
+      stocks of vacancies and seekers into hires, pro-rata per occupation so a firm short of
+      engineers can still staff its general roles. Employment has ONE representation — the
+      employers' own books — and the pools and the rate are derived from it by a reconciler that
+      runs again at the END of the week, so a firm that goes bankrupt in stage 08 releases its
+      staff the same week rather than leaving phantom employment behind.
+    - **Stage 08 was overwriting the market every week.** Its `headcountPressure` drift
+      (cash < 0 ? −1.5% : margin/regime nudges) still ran after the matching stage had settled
+      hires and layoffs, and silently replaced the result: the pools drifted 3.9% above the
+      employers' books by week 43. Two representations of one firm's payroll, and the newer one
+      lost. **When a new stage takes ownership of a quantity, the old writer has to be deleted in
+      the same change — not left to be found by an invariant later.**
+    - **Three shape errors, each caught by measurement rather than by reasoning.** (a) Labor
+      demand was first written as a LEVEL ratio, `plannedOutput / revenuePerEmployee`; levels
+      drift apart and by week 30 every firm wanted 29% more staff than it had while real GDP was
+      flat. Deflating did not help because the defect was the shape — a growth-on-growth form has
+      no level to drift and is stable by construction. (b) The matching efficiency was GUESSED at
+      0.62, which implied a resting vacancy stock of 12.8k against a realistic 520k and filled
+      every opening inside a week; deriving it from two observable facts (separations ~3.4%/month,
+      openings ~4.5% of employment at ~1 vacancy per seeker) pins it AND pins time-to-fill at six
+      weeks. (c) Unfilled vacancies never expired, so an occupation nobody could staff accumulated
+      186k openings against ONE job seeker — a "tightness" of 186,000, which is not a market but
+      an unbounded accumulator. Firms withdraw postings they cannot fill.
+    - **Two §7.4 cold starts, one of them arbitrary.** Opening the vacancy stock at ZERO made it
+      climb from nothing for forty weeks while unemployment also rose, so the two moved TOGETHER
+      and the Beveridge relation printed **+0.94** — a cold-start artifact that looked exactly
+      like a broken labor market. And the occupation labor-force mix was the demand mix times a
+      table of per-occupation "slack multipliers" (1.04–1.12) whose only effect was to leave
+      TECHNICAL_ENGINEERING with literally zero job seekers at birth. **An arbitrary constant in
+      a seed does not stay in the seed** — it becomes an economic finding a reader cannot
+      distinguish from a real one. Both now open at the engine's own rest point, through the
+      engine's own reconciler: week 0 reads u=4.50%, V/U=0.96, vacancy rate 4.32% in all four
+      regions, which are the real-world numbers.
+    - **Measured:** unemployment runs a 3.5–18% range across 60 weeks (the high end during the
+      §6 inflation escape); the Beveridge relation is negative in all four regions and strongly
+      so once the stock is established. Deterministic; two new identity invariants (pools vs
+      employers, rate vs its own stock) hold to 0.2%.
 
