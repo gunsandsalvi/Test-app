@@ -56,6 +56,9 @@ import {
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+
+// One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
+const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
@@ -289,8 +292,8 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // want the bond at all; above it, it scales into its policy size. The old engine used the
       // same numbers to nudge a quantity target, which is why spreads could settle through zero:
       // a nudged quota still has to be filled at whatever price results.
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      companyTerms.forEach((t) => {
+      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(companyTerms.length);
+      companyTerms.forEach((t, ti) => {
         // Rating enters this book in the two places it really acts: the capital the position
         // consumes and the size of the sub-IG sleeve the holder will run — never a prohibition
         // (see subInvestmentGradeSizeFactor for what modelling it as one did to HY clearing).
@@ -307,7 +310,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             });
         const sizeFactor = t.subIG ? entitySubIGFactor : 1;
         const structuralSizeUSD = t.liveFloatUSD * entityShare * sizeFactor;
-        demandByInstrumentId.set(t.id, {
+        demandByIndex[ti] = {
           // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
           reservationStat: reservationBps + hedgeAdjBps,
           maxHoldingUSD: structuralSizeUSD * overweightMultiple,
@@ -317,10 +320,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
             (totalCashDemandWeightUSD > 0
               ? (cashDemandWeightByCompany.get(t.id) ?? 0) / totalCashDemandWeightUSD
               : 0),
-        });
+        };
       });
 
-      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId };
+      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandByIndex };
     });
 
     const priorDealerInventoryById = new Map<string, number>();

@@ -120,6 +120,11 @@ export interface ClearingParticipant {
   id: string;
   currentHoldingsByInstrumentId: Map<string, number>;
   demandByInstrumentId: Map<string, ParticipantDemand>;
+  /** Dense alternative to the Map, aligned with the INSTRUMENTS array: adapters whose books
+   *  cover every name (the credit and equity adapters post a schedule for each of ~350 names per
+   *  entity) hand demand over by index and skip ~120k string-keyed Map inserts a week. When
+   *  present it is authoritative for this participant; the Map stays for sparse participants. */
+  demandByIndex?: (ParticipantDemand | undefined)[];
 }
 
 /**
@@ -353,7 +358,7 @@ export function clearFinancialAsset(
   });
   let totalDealerRevenueUSD = 0;
 
-  instruments.forEach((inst) => {
+  instruments.forEach((inst, instIdx) => {
     const offeringUSD = Math.max(0, inst.primaryOfferingUSD ?? 0);
     // A DEBUT issuer — an LBO financing, a first term loan, an IPO — has NO outstanding stock:
     // its entire book is the offering itself. Gating on the outstanding float alone dropped it
@@ -381,7 +386,7 @@ export function clearFinancialAsset(
     // sum runs through the same non-zero terms in the same sequence the per-participant walk did.
     colCount = 0;
     participants.forEach((p) => {
-      const d = p.demandByInstrumentId.get(inst.id);
+      const d = p.demandByIndex !== undefined ? p.demandByIndex[instIdx] : p.demandByInstrumentId.get(inst.id);
       if (!d) return;
       pushPreparedDemand(d, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0);
     });
@@ -434,7 +439,7 @@ export function clearFinancialAsset(
     let wantedTotalUSD = 0;
     let coreTotalUSD = 0;
     participants.forEach((p) => {
-      const d = p.demandByInstrumentId.get(inst.id);
+      const d = p.demandByIndex !== undefined ? p.demandByIndex[instIdx] : p.demandByInstrumentId.get(inst.id);
       const previousUSD = p.currentHoldingsByInstrumentId.get(inst.id) ?? 0;
       const filledUSD = d ? demandAtStat(d, clearedStat, inst.statKind, previousUSD) : 0;
       const affordableUSD = d?.maxNetPurchaseUSD === undefined

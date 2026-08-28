@@ -32,6 +32,9 @@ import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { entityRequiredReturn, MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+
+// One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
+const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
@@ -232,8 +235,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         cashDemandWeightByCompany.set(c.id, weightUSD);
         totalCashDemandWeightUSD += weightUSD;
       });
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      regionCompanies.forEach((c) => {
+      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(regionCompanies.length);
+      regionCompanies.forEach((c, ci) => {
         const fair = c.isDefaulted ? 0 : fairValuePerShare({
           annualEarningsUSD: c.netIncome,
           sharesOutstanding: liveSharesOf(c),
@@ -252,18 +255,19 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const cashShare = totalCashDemandWeightUSD > 0
           ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
           : 0;
-        demandByInstrumentId.set(c.id, {
+        demandByIndex[ci] = {
           reservationStat: fair,
           maxHoldingUSD: structuralShares * MAX_OVERWEIGHT_MULTIPLE,
           fullSizeStatRange: Math.max(0.01, fair * FULL_SIZE_PRICE_DISCOUNT),
           // Budget in SHARES at the current price — a holder cannot buy what it cannot fund.
           maxNetPurchaseUSD: (budgetUSD * cashShare) / Math.max(0.01, refPrice),
-        });
+        };
       });
       return {
         id: entity.id,
         currentHoldingsByInstrumentId: currentSharesByEntity.get(entity.id)!,
-        demandByInstrumentId,
+        demandByInstrumentId: EMPTY_DEMAND_MAP,
+        demandByIndex,
       };
     });
 

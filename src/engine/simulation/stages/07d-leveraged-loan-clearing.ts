@@ -40,6 +40,9 @@ import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+
+// One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
+const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
@@ -273,8 +276,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // clears its cost at a tighter margin than the same issuer's unsecured paper. That is the
       // structural relationship between the two markets, expressed where it belongs — in what
       // each set of holders will pay — rather than as a fixed multiple between two statistics.
-      const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      companyTerms.forEach((t) => {
+      const demandByIndex: (ParticipantDemand | undefined)[] = new Array(companyTerms.length);
+      companyTerms.forEach((t, ti) => {
         // The loan's recovery is derived from the same senior-lien discount that scales its
         // expected loss, and the collateral that raises recovery also lowers the capital its
         // spread risk consumes — one lien, both consequences (terms hoisted above).
@@ -288,7 +291,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
               creditConditionsIndex: reg.bankingSector.creditConditionsIndex ?? 0,
             });
         const structuralSizeUSD = t.liveFloatUSD * entityShare;
-        demandByInstrumentId.set(t.id, {
+        demandByIndex[ti] = {
           // XB2: a cross-border loan is hedged like a bond — the CIP cost is in the requirement.
           reservationStat: reservationBps + hedgeAdjBps,
           maxHoldingUSD: structuralSizeUSD * overweightMultiple,
@@ -298,10 +301,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
             (totalCashDemandWeightUSD > 0
               ? (cashDemandWeightByCompany.get(t.id) ?? 0) / totalCashDemandWeightUSD
               : 0),
-        });
+        };
       });
 
-      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId };
+      return { id: entity.id, currentHoldingsByInstrumentId: currentHoldingByCompany, demandByInstrumentId: EMPTY_DEMAND_MAP, demandByIndex };
     });
 
     const priorDealerInventoryById = new Map<string, number>();
