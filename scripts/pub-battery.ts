@@ -154,13 +154,21 @@ console.log('\n--- 5. THE TREASURY ACCOUNT ---');
   const meanDeficit = out.reduce((a, v, i) => a + (v - rev[i]), 0) / out.length;
   const dryWeeks = rev.filter(v => v < 1e8).length;
   console.log(`  mean weekly deficit (outlays - revenue) ${B(meanDeficit)}; negative nominal yields in ${negativeYield} region-weeks`);
-  // Revenue became bottom-up in PUB1b/1c (real bases x real rates); the SPENDING path is still
-  // a top-down formula. If the two grow at different rates the account cannot help drifting, so
-  // measure both rather than reporting only the balance.
-  const g = (a: number[]) => (a[0] > 0 ? a[a.length - 1] / a[0] : 0);
-  const rev4 = rev.map((v, i) => rev.slice(Math.max(0, i - 3), i + 1).reduce((x, y) => x + y, 0));
-  const spend = series.outlays;
-  console.log(`  revenue (4wk sum) x${g(rev4).toFixed(1)} over the run vs outlays x${g(spend).toFixed(1)} — bottom-up base against a formula path`);
+  // Revenue is bottom-up (PUB1b/1c) and the spending PATH is still a formula, so compare their
+  // growth. It MUST be a trailing ANNUAL sum: receipts are quarterly-lumpy by design, and
+  // comparing short windows at two endpoints measures whether each window happened to contain a
+  // collection date, not growth. Doing exactly that once reported a 25x divergence that is
+  // really 1.3x — see §7.68's correction.
+  const trail = (a: number[], end: number, n = 52) => a.slice(Math.max(0, end - n), end).reduce((x, y) => x + y, 0);
+  if (WEEKS >= 104) {
+    const half = Math.floor(WEEKS / 2);
+    const rg = trail(rev, WEEKS) / Math.max(1, trail(rev, half));
+    const og = trail(series.outlays, WEEKS) / Math.max(1, trail(series.outlays, half));
+    console.log(`  trailing-52wk revenue ${B(trail(rev, WEEKS))} vs outlays ${B(trail(series.outlays, WEEKS))} = ${(trail(rev, WEEKS) / Math.max(1, trail(series.outlays, WEEKS))).toFixed(2)}x`);
+    console.log(`  growth w${half} -> w${WEEKS}: revenue x${rg.toFixed(1)}, outlays x${og.toFixed(1)} — both LAG the price level; revenue lags less, which is what fills the account`);
+  } else {
+    console.log(`  (revenue/outlays growth needs >=104 weeks: a trailing-annual window on quarterly receipts)`);
+  }
   console.log(`  revenue is LUMPY by design (PUB1c calendars): ${dryWeeks}/${WEEKS} weeks collect under 0.1B, peak ${B(Math.max(...rev))} — the swing a TGA exists to absorb`);
 }
 
