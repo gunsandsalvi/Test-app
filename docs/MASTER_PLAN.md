@@ -229,21 +229,21 @@ metrics to watch rather than work.
 | # | Tier | Project | Prereqs |
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
-| 1 | foundation | **L — Ledger integrity batch** | none |
-| 2 | foundation | **MS — Main Street: households become real** | none |
-| 3 | foundation | **PUB — The public sector: treasury + central bank** | MS (household taxes) |
-| 4 | foundation | **BP1 — One industry registry** | none |
-| 5 | markets | **G3 — One dealer system** | none (S9 done) |
-| 6 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
-| 7 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
-| 8 | markets | **G6 — Institutional liabilities** | MS (contributions), PUB |
-| 9 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| 10 | depth | **IND — Industry depth** (profiles, electricity, share-vs-margin, antitrust) | BP1 |
-| 11 | depth | **CAL — Payment calendars** | none |
-| 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
-| 13 | depth | **HC3b — The product-market handover** | BP1 |
-| 14 | last | **S-final — Validation gate** | everything above |
-| 15 | last | **AU — Aurora, the UI rebuild** | everything above |
+| ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
+| 1 | foundation | **MS2-MS4 — Main Street: cohorts, labor market, wage policy** *(MS1 closed §7.47)* | none |
+| 2 | foundation | **PUB — The public sector: treasury + central bank** | MS (household taxes) |
+| 3 | foundation | **BP1 — One industry registry** | none |
+| 4 | markets | **G3 — One dealer system** | none (S9 done) |
+| 5 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
+| 6 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
+| 7 | markets | **G6 — Institutional liabilities** | MS (contributions), PUB |
+| 8 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
+| 9 | depth | **IND — Industry depth** (profiles, electricity, share-vs-margin, antitrust) | BP1 |
+| 10 | depth | **CAL — Payment calendars** | none |
+| 11 | depth | **ETF2 — A real price for ETF shares** | G3 |
+| 12 | depth | **HC3b — The product-market handover** | BP1 |
+| 13 | last | **S-final — Validation gate** | everything above |
+| 14 | last | **AU — Aurora, the UI rebuild** | everything above |
 
 **What changed in this reordering.** Six projects merged into three: commodity futures (ex-G7)
 and corporate/bank hedging (ex-WS11) are slices of derivatives (ex-G4), because both are its
