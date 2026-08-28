@@ -36,9 +36,14 @@ These are standing user directives. They are not suggestions.
    an institutional entity, a private-sector segment, government, households). The recurring
    anti-pattern to hunt and kill is **two disconnected representations of the same real
    thing** — a real cleared/settled ledger and a parallel formula that overwrites or ignores it.
-4. **No real-world data.** No real tickers, company names, observed market prices, or copied
-   spread tables. Everything is generated from internal primitives (productivity, inflation
-   target, cost-of-production, Gordon growth, geometric rating-spread progression, etc.).
+4. **No real-world data, and no real-world OUTCOMES either.** No real tickers, company names,
+   observed market prices, or copied spread tables. Everything is generated from internal
+   primitives (productivity, inflation target, cost-of-production, Gordon growth, geometric
+   rating-spread progression). **The sharper half of this rule:** a real-world *primitive* is
+   fine (a tax rate, a replacement rate, a regulatory ratio, a haircut); a real-world
+   *equilibrium* is not. Dollar invoicing dominance, a 24% foreign ownership share, a fixed
+   central-bank market share are RESULTS of histories this simulation does not have. Import one
+   and the model can never tell you anything about it, because you assumed the answer.
 5. **Target allocations are long-term policy guides only.** What a participant actually buys
    each week is a tactical decision from real characteristics (value vs. its own fair-price
    view, momentum, mandate, duration fit) — never the target mechanically.
@@ -79,20 +84,67 @@ These are standing user directives. They are not suggestions.
     you touch a file, trim the over-long comments already in it. Same for this document: every
     record is the finding, the number, and the lesson. No information is dropped; the narrative is.
 
+12. **Do not evaluate market behaviour mid-update.** (User directive, 2026-08-28, after several
+    reminders.) When a project is underway, BUILD THE WHOLE THING before measuring. Do not run
+    `npm run verify` to see how the economy is behaving, do not classify violation counts, do not
+    A/B market outcomes to explain a moved number. A project of any size touches everything at
+    once; numbers taken halfway through describe an economy that does not exist yet, and chasing
+    them fragments the work and wastes the run. **Measure once, at the end.** The narrow
+    exceptions are structural, not behavioural: `tsc`/`build` to confirm it compiles, and a
+    targeted probe that a mechanism you JUST wrote is wired (a field persists, a leg exists, a
+    counterparty is present). **The harness may be deliberately red mid-project — see §6's first
+    row before assuming something is broken.**
+
+13. **Ownership, prices, quantities and capacities are OUTCOMES.** Never impose a share, a price,
+    a flow or a capacity that a mechanism should produce. If an aggregate needs a number, it comes
+    from the participants' own books and constraints, and the market decides the rest. Deleted for
+    exactly this reason: `foreignShare` (an ownership share owning nothing — 442B of claims with
+    no holder, §7.72), forced sovereign placement (§7.65), the QE/QT stance scalar (§7.66), and
+    five FX constants invented to manufacture a curve that books should produce (§7.75). **A
+    residual with no holder is a defect, not a boundary** — a named gap is legitimate only with a
+    size, an owner and a scheduled closing slice; otherwise it is a plug with paperwork.
+
+14. **Every flow has two sides, and both legs go in the same pass.** A security movement has a
+    cash leg. A derivative has a counterparty with a balance sheet and finite capacity. A payment
+    leaving one book arrives on another. **A one-sided flow is a defect even when nothing fails
+    and every test passes.** Building a two-sided flow one side at a time is how a leg goes
+    missing: §7.75's cross-border settlement bought the euro and never sold the yen, and it took a
+    direct question to find because nothing errored.
+
+15. **A bound is not a price.** All markets clear through
+    `stages/financial-clearing-engine.ts`: a participant posts a reservation level, a
+    `fullSizeStatRange` to scale in over, a `maxHoldingUSD` cap, a `maxNetPurchaseUSD` cash budget
+    and a `minHoldingUSD` floor, and the solve is a bisection with **saturation clearing** and a
+    dealer residual. If demand cannot absorb the float, clear at the saturation point and let the
+    dealer carry the rest — never park the print on a clamp and call it a price. This error has
+    been made and recorded twice (§7.21, §7.75). Do not make it a third time.
+
+16. **Delivery.** One bounded commit per slice, pushed. Commit messages and §7 records both state
+    what changed, WHY, and the measured numbers — written for a reader who was not here. **No
+    model identifiers in any committed artifact** (commit messages, PR bodies, code comments).
+    Do not open a PR unless asked.
+
 ### 1.10 Verification ladder (every work item)
 
 ```
-npm run lint                       # tsc --noEmit
+npx tsc --noEmit                   # typecheck — safe at any time
+npm run build                      # build — safe at any time
 bash scripts/check-hygiene.sh      # no root-level scratch files
-<short scratchpad diagnostic>      # 5-week smoke minimum; 60-week revenue-ratio
-                                   # diagnostic for anything touching revenue/cash;
-                                   # targeted trace for the subsystem changed
-npm run verify                     # ONLY at end of a whole project (260 weeks)
+npm run verify                     # hygiene + 60-week invariants harness (~1 min)
+                                   # END OF PROJECT ONLY — see rule 12
+npm run profile                    # per-stage runtime. Baseline: 604 ms/week, stage 05 at
+                                   # 31.0% (183.9 ms) and stage 08 at 21.2%. A code comment
+                                   # claiming stage 05 is 72.6% is stale.
+npx tsx scripts/hh-battery.ts 120  # household close-out battery (~2 min)
+npx tsx scripts/pub-battery.ts 120 # public-sector close-out battery (~2 min)
+WEEKS=260 npm run verify           # ASK THE USER FIRST — long run, section close only
 ```
 
+Every project ends with its own close-out battery on this pattern: every verify criterion in its
+§5 entry, measured once, reporting numbers and judging nothing by itself.
+
 Scratch scripts live in the session scratchpad, never in the repo. Delete all debug
-`console.log` blocks before committing (this has been missed before — grep for
-`DEBUG` and `console.log` in `src/engine/` before every commit).
+`console.log` blocks before committing (grep for `DEBUG` and `console.log` in `src/engine/`).
 
 ---
 
