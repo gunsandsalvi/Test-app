@@ -35,6 +35,12 @@ export interface GameState {
    *  region's supply and demand clears here; an export is a fill whose buyer and seller sat in
    *  different regions. See domain/global-goods.ts. */
   globalGoodsMarkets: Record<string, import('./global-goods').GlobalGoodsMarketState>;
+  /** XB3a-1 — the physical mass of one unit of each sub-unit's output, in tonnes. Derived once
+   *  at seed from the good's own baseline price and its real value density (see
+   *  domain/goods-physical.ts) and never moved after: mass is physical, so when a good's price
+   *  doubles the same tonne is worth twice as much rather than weighing half as much. This is
+   *  what freight is charged on. */
+  unitMassTonnes: Record<string, number>;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   regions: Record<RegionId, Region>;

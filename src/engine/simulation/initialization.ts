@@ -10,7 +10,7 @@ import { restingVacancies } from '../../domain/region-macro';
 import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
 import { chooseLeadBank } from '../../domain/primary-market';
-import { RegionId, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
+import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
@@ -18,6 +18,7 @@ import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { measureOpeningTradeWeeklyUSD } from './stages/05-unit-bidding';
+import { unitMassTonnes } from '../../domain/goods-physical';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { refreshRegionalHoldingsView } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
@@ -37,6 +38,28 @@ import {
  * weeks, reaches the same state — which is what makes any before/after measurement of this
  * simulation mean anything (see engine/rng.ts).
  */
+/**
+ * One unit's physical mass, per sub-unit, fixed for the life of the world (XB3a-1).
+ *
+ * A "unit" here is an abstract bundle worth roughly the same across every good, so what it
+ * physically weighs is that bundle's value divided by the material's own value density. The
+ * bundle value is averaged across the four regions because mass is a property of the good, not
+ * of where it happens to be priced.
+ */
+function seedUnitMassTonnes(regions: Record<RegionId, Region>): Record<string, number> {
+  const regionIds = Object.keys(regions) as RegionId[];
+  const masses: Record<string, number> = {};
+  Object.values(INDUSTRY_SUBUNITS).flat().forEach((subUnit) => {
+    const prices = regionIds
+      .map((r) => (regions[r].categoryDemand[subUnit.unitId] as any)?.unitPriceUSD)
+      .filter((p): p is number => typeof p === 'number' && p > 0);
+    if (prices.length === 0) return;
+    const meanPriceUSD = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+    masses[subUnit.unitId] = unitMassTonnes(subUnit.unitId, meanPriceUSD);
+  });
+  return masses;
+}
+
 export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
   setSimulationSeed(seed);
   const regions = getInitialRegions();
@@ -969,6 +992,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // first week it clears, off the regions' own bootstrapped prices. Writing a level here would
     // be a stated version of what the auction produces.
     globalGoodsMarkets: {},
+    unitMassTonnes: seedUnitMassTonnes(regions),
     // Born EMPTY: the first weekly pass strikes every index's membership from the market that
     // actually exists, at base 100. Seeding a constituent list here would be a second, stated
     // version of a rule the engine already runs (§7.4's seed-shape rule).

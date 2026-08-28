@@ -18,6 +18,30 @@ export const CURRENCY_BY_REGION: Record<RegionId, string> = {
   JPN: 'JPY',
 };
 
+/**
+ * Shipping distance between regions, in nautical miles, over the routes freight actually takes
+ * (XB3a-1). A physical fact about the planet, which is the kind of real-world primitive rule 4
+ * allows — unlike a trade share, which is a result.
+ *
+ * The diagonal is a region's own average domestic haul, and it is NOT zero: moving goods inside
+ * a country costs real money and takes real time, and a domestic supplier that is merely CLOSER
+ * than a foreign one is the honest comparison. Setting it to zero would hand every domestic
+ * seller a free advantage — an imported assumption dressed as geography.
+ *
+ * Ocean routes: New York-Rotterdam, New York-Southampton, Los Angeles-Yokohama,
+ * Rotterdam-Southampton, and the two Suez runs to Japan.
+ */
+export const LANE_DISTANCE_NM: Record<RegionId, Record<RegionId, number>> = {
+  USA: { USA: 800, EUR: 3_300, UK: 3_000, JPN: 4_800 },
+  EUR: { USA: 3_300, EUR: 500, UK: 250, JPN: 11_200 },
+  UK: { USA: 3_000, EUR: 250, UK: 150, JPN: 11_300 },
+  JPN: { USA: 4_800, EUR: 11_200, UK: 11_300, JPN: 250 },
+};
+
+export function laneDistanceNm(from: RegionId, to: RegionId): number {
+  return LANE_DISTANCE_NM[from]?.[to] ?? 0;
+}
+
 /** Conventional pair label, e.g. EUR/USD, GBP/USD, USD/JPY. */
 export function fxPairLabel(base: RegionId, quote: RegionId): string {
   return `${CURRENCY_BY_REGION[base]}/${CURRENCY_BY_REGION[quote]}`;
