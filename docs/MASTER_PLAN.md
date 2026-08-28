@@ -630,23 +630,19 @@ and payroll monthly, consumption tax quarterly — so nothing is paid weekly any
 real collections **~50% → 99–100%** of revenue, `unmodeledTaxRevenueUSD` to 0.00B, and the TGA
 swings 43 → 30 → 66 → 43 → 86B across the calendar.
 
-**PUB1d — Real fiscal counterparty (remaining).** Real tax collection (corporate from real quarterly profits
-via the S5 ledgers; household from real wages, post-MS); spending decomposed as above; coupons
-actually paid to holders out of the account; procurement through real stage-05 bids; the funded
-deficit fully derived. **This also closes the asymmetric boundary** §6 has carried: bank sovereign
-carry is credited today while the government debits nothing and institutions are denied the same
-coupons.
+**PUB1d — DONE (§7.65).** Sovereign issuance goes through its own book. The forced placement is
+gone: new paper simply exists and 07c prices the enlarged bucket against budget-constrained
+demand, the dealer holding what finds no buyer — which is what an undersubscribed auction is.
+**Correction to this entry's earlier diagnosis:** it blamed a 50.3B one-week fall in institutional
+cash on the placement path. The A/B says otherwise — worst institutional cash is unchanged
+(−45.9B before, −47.9B after at w26) and the real cause is an ETF running negative net assets,
+now a §6 defect of its own. What the placement really cost was the sovereign market: removing it
+took bank reserves at w40 from **−29.0B to +84.7B** and the 2Y at w26 from **0.98% to 2.62%**.
 
-**PUB1b — Sovereign issuance goes through its own book.** Found while closing L7 (§7.46).
-`11-fiscal-and-sovereign-debt.ts` PLACES new government paper on holders by scaling their existing
-positions and debiting cash — with **no affordability check at all**. It is forced: a real-money
-entity that cannot pay still takes the paper, and ends the week with negative cash. Measured at a
-large issuance week, institutional cash falls 50.3B in one week against a `LEVERAGE_ALLOWANCE` of
-zero for every real-money type. Every clearing stage in the engine respects S11's budget
-constraint; this path predates it and does not. The file says so itself — "this is placement, not
-underwriting: no fee, no book-building, no auction price discovery" — and 07c, the sovereign
-clearing book, already exists. The fix is to route issuance through it, which is what makes an
-undersubscribed auction a real event rather than a forced take-up.
+**PUB1e — Procurement through real bids (remaining).** Government purchases still enter demand as
+an aggregate rather than as stage-05 bids by a named buyer. Everything else this entry once
+listed — real tax collection, the spending decomposition, coupons paid out of the account, the
+funded deficit — landed in PUB1a–1d.
 
 **PUB2a — DONE (§7.62).** The CB has a real balance sheet: its sovereign book as assets, and
 reserves + the **Treasury General Account** + currency as liabilities. The TGA is the point — a
@@ -973,6 +969,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | ~~**Household deposits: two representations**~~ | **CLOSED (§7.57, HH4d).** The banks' `depositsUSD` IS the household stock now, split from `wholesaleFundingUSD` at seed (418B USA — the funding that was wearing the deposit label), moved by named flows only, reconciled to the household state weekly with the identity asserted (0.1% band, 60 weeks green). The closing invariant also caught bank M&A stranding the target's whole balance sheet — fixed in stage 10. |
 | **Equity prices run away past ~week 80** | **Found by the HH close-out battery (§7.60); NOT HH's.** Median USA share price runs 7.9 (w80) → 184 (w100) → 5,048 (w120) while median EPS moves 0.39 → 0.57 — an implied ~8,850x earnings. Institutional claims stay flat at ~530B, housing/deposits/debt are all sane, so it is the equity market alone; household net worth only shows it because HH2/HH4c correctly mark households to it (568x income at w120). Consistent with the §6 damper-bound watchlist plus §7.18's want/have: a growing pool of money chasing a fixed float, printing at the damper limit week after week, which compounds. **The 60-week harness cannot see this** — prices are still sane at w60 — so the first action is a longer harness window, then the real fix is asset supply (**SCALE**'s bigger universe, **HC** births, **G3**/ETF2's dealer capacity), not a cap on the price. |
 | **Real growth prints escape at horizon** | **Found in HH2, pre-existing, unowned.** Consumption growth −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree: −119.87% / −209.30%, GDP identical to four significant figures — so this is not HH2's, and HH2 slightly damps it. **Nothing in §6 recorded it and the harness does not check it**, which is the first thing to fix: a growth rate that can print −200% is a band the harness should assert. Likely the same family as G1b (the price level escaping takes the real deflator with it), but a different symptom and worth confirming separately before assuming so — if real growth is being deflated by an escaping index, the defect is G1b's; if the nominal path itself collapses, it is not. |
+| **An ETF pays out net assets it does not have** | **Found in PUB1d (§7.65); owner ETF2, not PUB.** `USA_IG_ETF` runs cash 0.04B (w13) → **−47.9B** (w26) against a 14.5B holdings book — **net assets −33.4B**, a fund that owes more than it owns. The signature is a steady ~3.5B/week outflow while holdings barely move and shares outstanding fall 2.3e8 → 1.7e7: redemptions keep paying cash out after `navPerShare` has already gone to 0.0000 because `navUSD` is non-positive. The per-book purchase budgets are sound (`etf-demand.ts` and 07b both cap at `max(0, cashUSD)`), so the leak is on the **redemption** side of `etf-flows.ts`, not the buy side. Present identically before and after PUB1d — do not re-attribute it to sovereign placement. The invariants harness does not assert non-negative fund net assets; adding that assert is the first action. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
@@ -987,7 +984,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | ~~**Bottom-up GDP below the supply anchor**~~ | **The comparison no longer exists — do not re-measure it this way.** HH5's scope named a 6–9% permanent output gap between bottom-up GDP and the supply-side anchor. Re-measured at the start of HH6 it prints exactly 0.0% every week from week 1, because `estimatedNominalGdpUSD` is now set to `lastWeekNominalGdpUSD` — the anchor IS the lagged bottom-up series, so the test compares a number to a copy of itself. The gap is neither closed nor open; the independent supply-side anchor was collapsed into the demand-side measure by an earlier change and nothing records when. A real potential-output series (PUB's, or a capital-and-labor production function) has to exist before this can be asked again. |
 | **`governmentInterestToUnmodeledHoldersUSD`** | PUB1a's named boundary: ~48% of the government's interest bill has no recipient, because the central bank (15% of the stock) and foreign holders (24%) are not entities yet. The debit is real and the crowding-out it causes is real; the credit is missing. **PUB2** closes the central-bank half — and in reality that half is remitted straight back to the treasury, so it is a wash rather than a cost — and **XB** closes the foreign half, which genuinely does leave. Watch this line down; do not net it out by shrinking the interest bill, which would understate the debt burden. |
 | ~~**`unmodeledTaxRevenueUSD`**~~ | **CLOSED (§7.64).** PUB1c added the two missing instruments — employer payroll tax and consumption tax — and real collections went ~50% → 99–100% of revenue. The line stays in the code as the honest residual if a future change outruns the bases again; it currently reads 0.00B. |
-| **TGA drifts up over a quarter-scale horizon** | Watch, do not chase (rule 10). With receipts now real and larger than the old formula assumed, the treasury runs a surplus until `spending = revenue + deficit` catches up a week later, and the account drifts 46B → 86B over 26 weeks. Self-correcting in direction; re-measure after PUB's issuance slice, which is what a real treasury uses to manage the balance. |
+| **TGA level over a quarter-scale horizon** | Watch, do not chase (rule 10). **Re-measured after PUB1d** as that row asked: the account no longer drifts monotonically — it now sawtooths, filling on the quarterly remittance dates and drawing down between them (39 → 33 → 66 → 59 → 51 → 44 → 86B over 26 weeks), which is the shape a treasury balance actually has. What remains is the LEVEL at each quarter's peak creeping up, because receipts are larger than the old formula assumed and spending catches up a week later. Re-measure once PUB1e puts procurement through real bids. |
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
@@ -1652,3 +1649,72 @@ that proved it, the lesson.
       the household channels push both ways and neither is the stabiliser); tax collection has no
       treasury; the residual capital-receipt share sits at 14.7% of income because bank and
       institutional payouts have no route home. All three want **PUB**.
+61. **PUB1a: the government pays its interest.** Spending decomposes as `interest + procurement +
+    transfers`, interest computed off the real debt stack and taken OFF THE TOP — so debt service
+    crowds out the primary budget rather than being added to a deficit that already includes it.
+    Coupons go to real holders, replacing a WS7-era carry that credited banks and money funds
+    while the issuer paid nothing. Measured: interest 10.4% → 12.6% of spending as debt/GDP runs
+    108% → 171%. **Only 52% of the bill reaches a modelled holder** (banks 22%, institutions 30%);
+    the CB's 15% and foreign 24% are named in `governmentInterestToUnmodeledHoldersUSD` rather
+    than netted out, which would understate the burden.
+62. **PUB2a: the central bank gets a balance sheet, and the treasury gets an account.** Two
+    scalars retired — a phantom 1e12 `centralBankReservesUSD` sitting beside real per-bank cash,
+    and a `centralBankBalanceSheet` GDP ratio drifting on a stance multiplier. In their place: the
+    sovereign book as assets, reserves + **TGA** + currency as liabilities, currency the residual
+    that closes it (the CB is the one book allowed to issue what balances itself). **The TGA is
+    the mechanism** — a treasury account is a CB liability, so filling it drains reserves and
+    spending returns them, and WS6's repo market already exists to feel it. Remittances go
+    negative when policy exceeds the portfolio yield, which is the real post-hiking-cycle
+    phenomenon for free.
+    - **Two lessons, both about posting a leg twice.** `evolveBankingSector` already credits each
+      bank's sovereign coupon to cash AND equity; crediting reserves again in the CB stage broke
+      the per-bank balance sheet by exactly the coupon, on every bank. What was missing was only
+      the OTHER side — the treasury paying it. And the TGA was debited by every deficit and
+      credited by no financing at all, so it ran to **−40.3B by week 60**: a treasury account
+      without issuance proceeds is a cash flow with one leg.
+    - **Named, not forced:** `unbackedBankCashUSD`. Real reserves exist because the CB bought
+      something; here a bank's cash also grows from deposits and lending, so the identity does not
+      close on its own. It shrinks as PUB2b's QE grows the asset side.
+63. **PUB1b: tax is collected from real payers.** `governmentRevenueUSD` is now what actually
+    arrived, so the TGA draws down between tax dates and jumps on them — the swing a treasury
+    account exists to express. **The finding:** the fiscal block thought it collected 25% of GDP
+    while the modelled bases support ~50–60% of that, because **there was no consumption or
+    payroll tax anywhere**. Named as `unmodeledTaxRevenueUSD` rather than closed by shrinking the
+    state, which would model a different economy.
+64. **PUB1c: the two missing instruments, and taxes stop being weekly.** An **employer payroll
+    tax** carved out of the labor share (which is TOTAL COMPENSATION, so households are paid it
+    net) and a **consumption tax** as a wedge inside the cohort budget (disposable income
+    unchanged, real purchases smaller — what a VAT does). Neither touches the S1 identity.
+    Measured: real collections **~50% → 99–100%**, `unmodeledTaxRevenueUSD` to 0.00B.
+    - **Periodicity is part of the number (rule 9), and "weekly" was the tell.** Households and
+      SME pools were remitting every week, which no tax authority does. Every stream is now on its
+      own calendar — corporate, SME and consumption tax quarterly, withholding and payroll monthly
+      — and the TGA swings 43 → 30 → 66 → 43 → 86B across it.
+    - **Two bugs the calendar exposed.** `currentWeekMod13` runs 1–13 and never 0, so a quarterly
+      trigger written against `=== 0` never fired and the accrued liability grew to 5.35B unpaid.
+      And with receipts lumpy and outlays smooth, a 4-week operating balance ran the TGA negative
+      by week 10 — raised to 10 weeks, which is what a real treasury holds when it cannot yet
+      issue cash-management bills.
+    - **Capital income is not derived from wages.** Splitting the wage bill for payroll tax shrank
+      household capital income with it and the S1 assert fired at 78.66% against a required
+      79.46%. Capital income is a share of OUTPUT, keyed off total compensation.
+65. **PUB1d: the auction stops being a forced take-up, and a workaround outlives its reason.**
+    Stage 11 used to PLACE each new issue on existing holders pro-rata and debit their cash, with
+    **no affordability check anywhere**. Its stated reason was real when written: unheld paper made
+    every issuance week a one-sided demand shock and drove the 2Y negative against a 3% policy
+    rate. Two later changes retired that reason without anyone going back — **S11** gave every
+    holder a budget, and **§7.21** made `solveClearingStat` clear at the saturation point instead
+    of returning its search bound. So the fix was a deletion: the new issue simply exists, 07c
+    prices the enlarged bucket next week, and the dealer holds what finds no buyer — **which is
+    what an undersubscribed auction IS.**
+    - **Measured A/B:** bank reserves at w40 **−29.0B → +84.7B**; the 2Y at w26 **0.98% → 2.62%**,
+      with no negative yield anywhere; dealer residual 123B (w40) and 197B (w52) — a real primary
+      dealer's inventory, which is the honest place for unsold paper.
+    - **The lesson is §7.51's, in the other direction.** A refusal outlives its reason; so does a
+      workaround. Both need a date and a condition, and neither gets re-checked unless the code
+      says what would retire it.
+    - **A mis-attribution corrected.** PUB1b's write-up blamed a 50.3B one-week fall in
+      institutional cash on this placement path. The A/B disproves it — worst institutional cash
+      is unchanged either way (−45.9B vs −47.9B at w26). Tracing it found an ETF running negative
+      NET ASSETS, present in both worlds; recorded in §6 with ETF2 as owner rather than fixed
+      inside a fiscal slice. **Two defects that move together are not one defect.**

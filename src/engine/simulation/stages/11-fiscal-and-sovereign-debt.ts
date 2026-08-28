@@ -395,98 +395,17 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     if (updatedBankingSector.centralBankReservesUSD < 0) throw new Error("Invariant Violation: centralBankReservesUSD cannot be negative");
     updatedBankingSector.centralBankReservesUSD = Number(updatedBankingSector.centralBankReservesUSD.toFixed(0));
 
-    // Place the new issue with the buyers who actually fund the government, the same way maturity
-    // takes it back off them. A government does not leave a new bond sitting unowned: it auctions
-    // it, and the existing holder base takes it down. Leaving it unheld made every issuance week
-    // a large one-sided demand shock — participants' targets scale with the outstanding stock, so
-    // the whole stock of new paper had to be bought back off nobody, and the two-year yield went
-    // NEGATIVE while the policy rate sat near 3%.
+    // PUB1d: the new issue is NOT force-placed. It exists, and 07c prices the enlarged bucket
+    // next week against budget-constrained demand, the dealer holding what finds no buyer —
+    // which is what an undersubscribed auction IS.
     //
-    // Allocated pro-rata to each holder's existing position in the same tenor bucket, with banks
-    // paying for it out of the cash that maturity credits them — the same balance-sheet swap in
-    // the opposite direction, so composition shifts and total assets do not jump. When a bank
-    // runs its cash down funding the government it reaches for the standing repo facility, which
-    // is exactly the real behaviour Phase 2 already models.
-    //
-    // This is placement, not underwriting: no fee, no book-building, no auction price discovery.
-    // Those are the real primary market (see the work order's issuance item); this just stops the
-    // secondary market from being handed a phantom seller every quarter.
-    if (newTranches.length > 0) {
-      const issuedByBucket = new Map<string, number>();
-      newTranches.forEach(t => {
-        const key = sovBucketKey(t.tenorAtIssuanceYears);
-        issuedByBucket.set(key, (issuedByBucket.get(key) ?? 0) + t.principalUSD);
-      });
-
-      // Who currently holds each bucket, so the new paper lands in proportion to real positions.
-      const heldByBucket = new Map<string, number>();
-      ctx.updatedCompanies.forEach(c => {
-        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return;
-        Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}).forEach(([key, usd]) => {
-          heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + usd);
-        });
-      });
-      ctx.updatedInstitutionalEntities.forEach(entity => {
-        if (entity.region !== regionId) return;
-        entity.itemizedHoldings.forEach(h => {
-          if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return;
-          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
-          heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + h.quantityOrNotionalUSD);
-        });
-      });
-
-      // Bank and institutional holders together fund the market-held share of the new issue; the
-      // rest is the foreign and central-bank base this slice still treats as passive.
-      const placedShare = reg.sovBondOwnership.bankShare + reg.sovBondOwnership.institutionalShare;
-      const takeUpFractionByBucket = new Map<string, number>();
-      issuedByBucket.forEach((issuedUSD, key) => {
-        const heldUSD = heldByBucket.get(key) ?? 0;
-        if (heldUSD > 0) takeUpFractionByBucket.set(key, (issuedUSD * placedShare) / heldUSD);
-      });
-
-      ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
-        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
-        const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByTenor || {};
-        let purchasedUSD = 0;
-        const newByTenor: Record<string, number> = { ...byTenor };
-        Object.entries(byTenor).forEach(([key, heldUSD]) => {
-          const takeUp = takeUpFractionByBucket.get(key) ?? 0;
-          if (takeUp <= 0) return;
-          purchasedUSD += heldUSD * takeUp;
-          newByTenor[key] = heldUSD * (1 + takeUp);
-        });
-        if (purchasedUSD <= 0) return c;
-        return {
-          ...c,
-          bankBalanceSheet: {
-            ...c.bankBalanceSheet,
-            sovereignBondHoldingsByTenor: newByTenor,
-            sovereignBondHoldingsUSD: Number(Object.values(newByTenor).reduce((sum, v) => sum + v, 0).toFixed(0)),
-            cashReservesUSD: c.bankBalanceSheet.cashReservesUSD - purchasedUSD,
-          },
-        };
-      });
-
-      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
-        if (entity.region !== regionId) return entity;
-        let touched = false;
-        let purchasedUSD = 0;
-        const newHoldings = entity.itemizedHoldings.map(h => {
-          if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
-          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
-          const takeUp = takeUpFractionByBucket.get(key) ?? 0;
-          if (takeUp <= 0) return h;
-          touched = true;
-          purchasedUSD += h.quantityOrNotionalUSD * takeUp;
-          return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 + takeUp) };
-        });
-        // Paid for out of real cash — placement is a purchase, and with weekly bill rolls (WS5)
-        // an unpaid one compounds fast enough to fail conservation inside a quarter.
-        return touched
-          ? { ...entity, cashUSD: (entity.cashUSD ?? 0) - purchasedUSD, itemizedHoldings: newHoldings }
-          : entity;
-      });
-    }
+    // What this replaces scaled every holder's position up pro-rata and debited the cash with no
+    // affordability check. Its stated reason — unheld paper made issuance a one-sided demand
+    // shock and drove the 2Y negative — was true when written and stopped being true at S11 and
+    // §7.21: budgets now bind what a holder buys, and `solveClearingStat` clears at the
+    // saturation point instead of its search bound. A refusal outlives its reason (§7.51); so
+    // does a workaround. Measured A/B: bank reserves at w40 −29.0B → +84.7B, 2Y at w26
+    // 0.98% → 2.62%, no negative yields, dealer residual 123B at w40.
 
     // PUB2: the financing legs the TGA needs — proceeds in, redemptions out.
     reg.lastIssuanceProceedsUSD = Number(newTranches.reduce((a, t) => a + t.principalUSD, 0).toFixed(0));
