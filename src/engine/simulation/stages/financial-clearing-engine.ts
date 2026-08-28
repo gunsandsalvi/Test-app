@@ -210,39 +210,61 @@ function demandAtStat(
  * contribution is an exact +0. Same arithmetic, same participant order, byte-identical world
  * (§7.32's constraint); only the redundant work is gone.
  */
-interface PreparedDemand {
-  reservationStat: number;
-  range: number;
-  maxHoldingUSD: number;
-  affordableUSD: number;
-  mandatedCoreUSD: number;
+/**
+ * Column layout, in module-scope scratch reused across instruments. The bisection reads these
+ * ~62 times per instrument; flat Float64Array columns give V8 pure double loads with no property
+ * lookups and no per-instrument allocation (the profiler put the GC at 187 ms/week — reuse is
+ * half the point). Same expressions, same evaluation order, byte-identical world.
+ */
+let colReservation = new Float64Array(64);
+let colRange = new Float64Array(64);
+let colMaxHolding = new Float64Array(64);
+let colAffordable = new Float64Array(64);
+let colCore = new Float64Array(64);
+let colCount = 0;
+
+function growColumns(n: number) {
+  if (n <= colReservation.length) return;
+  let size = colReservation.length;
+  while (size < n) size *= 2;
+  colReservation = new Float64Array(size);
+  colRange = new Float64Array(size);
+  colMaxHolding = new Float64Array(size);
+  colAffordable = new Float64Array(size);
+  colCore = new Float64Array(size);
 }
 
-function prepareDemand(demand: ParticipantDemand, previousHoldingUSD: number): PreparedDemand {
+function pushPreparedDemand(demand: ParticipantDemand, previousHoldingUSD: number) {
+  growColumns(colCount + 1);
   const range = Math.max(1e-6, demand.fullSizeStatRange);
   const affordableUSD = demand.maxNetPurchaseUSD === undefined
     ? Infinity
     : previousHoldingUSD + Math.max(0, demand.maxNetPurchaseUSD);
-  const mandatedCoreUSD = Math.min(demand.minHoldingUSD ?? 0, affordableUSD);
-  return { reservationStat: demand.reservationStat, range, maxHoldingUSD: demand.maxHoldingUSD, affordableUSD, mandatedCoreUSD };
-}
-
-function preparedDemandAtStat(e: PreparedDemand, stat: number, isYieldLike: boolean): number {
-  const distanceIntoTheMoney = isYieldLike ? stat - e.reservationStat : e.reservationStat - stat;
-  const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / e.range));
-  const wantedUSD = e.maxHoldingUSD * fraction;
-  return Math.max(e.mandatedCoreUSD, Math.min(wantedUSD, e.affordableUSD));
+  colReservation[colCount] = demand.reservationStat;
+  colRange[colCount] = range;
+  colMaxHolding[colCount] = demand.maxHoldingUSD;
+  colAffordable[colCount] = affordableUSD;
+  colCore[colCount] = Math.min(demand.minHoldingUSD ?? 0, affordableUSD);
+  colCount++;
 }
 
 function solveClearingStat(
-  inst: ClearingInstrument,
-  prepared: PreparedDemand[],
+  inst: { statKind: ClearingInstrument['statKind']; tradableFloatUSD: number },
   bracketLow: number,
   bracketHigh: number
 ): number {
   const isYieldLike = inst.statKind === 'YIELD_LIKE';
-  const totalDemandAt = (stat: number) =>
-    prepared.reduce((sum, e) => sum + preparedDemandAtStat(e, stat, isYieldLike), 0);
+  const n = colCount;
+  const totalDemandAt = (stat: number) => {
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const distanceIntoTheMoney = isYieldLike ? stat - colReservation[i] : colReservation[i] - stat;
+      const fraction = Math.max(0, Math.min(1, distanceIntoTheMoney / colRange[i]));
+      const wantedUSD = colMaxHolding[i] * fraction;
+      sum += Math.max(colCore[i], Math.min(wantedUSD, colAffordable[i]));
+    }
+    return sum;
+  };
 
   // Demand rises with the statistic for YIELD_LIKE and falls for PRICE_LIKE; orient the search so
   // that `lo` is always the low-demand end.
@@ -315,15 +337,15 @@ export function clearFinancialAsset(
 
     // The stat-independent half of every schedule, once — in participants order, so the demand
     // sum runs through the same non-zero terms in the same sequence the per-participant walk did.
-    const prepared: PreparedDemand[] = [];
+    colCount = 0;
     participants.forEach((p) => {
       const d = p.demandByInstrumentId.get(inst.id);
       if (!d) return;
-      prepared.push(prepareDemand(d, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0));
+      pushPreparedDemand(d, p.currentHoldingsByInstrumentId.get(inst.id) ?? 0);
     });
 
     let liveFloatUSD = inst.tradableFloatUSD + offeringUSD;
-    let solvedStat = solveClearingStat({ ...inst, tradableFloatUSD: liveFloatUSD }, prepared, bracketLow, bracketHigh);
+    let solvedStat = solveClearingStat({ statKind: inst.statKind, tradableFloatUSD: liveFloatUSD }, bracketLow, bracketHigh);
     let offeringWithdrawn = false;
     if (offeringUSD > 0 && inst.primaryWithdrawStat !== undefined) {
       const beyondWalkAway = isYieldLike
@@ -334,7 +356,7 @@ export function clearFinancialAsset(
         // outstanding stock clears on its own.
         offeringWithdrawn = true;
         liveFloatUSD = inst.tradableFloatUSD;
-        solvedStat = solveClearingStat(inst, prepared, bracketLow, bracketHigh);
+        solvedStat = solveClearingStat(inst, bracketLow, bracketHigh);
       }
     }
 

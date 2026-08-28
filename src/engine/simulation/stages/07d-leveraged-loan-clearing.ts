@@ -219,10 +219,36 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const pdByCompanyId = new Map<string, number>();
     regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(c)));
 
+    // Per-company terms hoisted out of the per-entity loops — same expressions once instead of
+    // per (entity x name) pair; see 07b's twin comment.
+    const loanRecoveryRate = 1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE);
+    const companyTerms = regionCompanies.map((c) => {
+      const annualPd = pdByCompanyId.get(c.id)!;
+      const durationYears = loanCreditDurationYears(c);
+      return {
+        id: c.id,
+        liveFloatUSD: liveTradableFloatUSD(c),
+        offeringUSD: offeringSizeUSD(c),
+        expectedLossBps: annualPd * (1 - loanRecoveryRate) * 10000,
+        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, durationYears) * SENIOR_LIEN_DISCOUNT,
+        distressedReservationBps: computeDistressedReservationSpreadBps({
+          annualDefaultProbability: annualPd,
+          recoveryRate: loanRecoveryRate,
+          durationYears,
+        }),
+      };
+    });
+    const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
+
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
-      const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
+      const entityShare = entityShareOfSector / sectorTotal;
+      const requiredReturn = entityRequiredReturn(entity);
+      const isHedgeFund = entity.entityType === 'HEDGE_FUND';
+      const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
+        ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
+      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
       // The entity's real money for this auction (S11), directed at the names where paper is
       // actually changing hands: a live offering, or the gap between what this holder targets and
       // what it already owns. A name it is already at target in, with nothing on offer, needs
@@ -234,11 +260,11 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN');
       const cashDemandWeightByCompany = new Map<string, number>();
       let totalCashDemandWeightUSD = 0;
-      regionCompanies.forEach((c) => {
-        const structuralUSD = liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal);
-        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(c.id) ?? 0));
-        const weightUSD = offeringSizeUSD(c) + gapToTargetUSD;
-        cashDemandWeightByCompany.set(c.id, weightUSD);
+      companyTerms.forEach((t) => {
+        const structuralUSD = t.liveFloatUSD * entityShare;
+        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(t.id) ?? 0));
+        const weightUSD = t.offeringUSD + gapToTargetUSD;
+        cashDemandWeightByCompany.set(t.id, weightUSD);
         totalCashDemandWeightUSD += weightUSD;
       });
 
@@ -248,42 +274,29 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // structural relationship between the two markets, expressed where it belongs — in what
       // each set of holders will pay — rather than as a fixed multiple between two statistics.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      regionCompanies.forEach((c) => {
+      companyTerms.forEach((t) => {
         // The loan's recovery is derived from the same senior-lien discount that scales its
-        // expected loss: a loss 0.85x the unsecured claim's IS a recovery that much higher.
-        // Derived rather than stated so the two cannot drift apart.
-        const annualPd = pdByCompanyId.get(c.id)!;
-        const loanRecoveryRate = 1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE);
-        const reservationBps = entity.entityType === 'HEDGE_FUND'
-          ? computeDistressedReservationSpreadBps({
-              annualDefaultProbability: annualPd,
-              recoveryRate: loanRecoveryRate,
-              durationYears: loanCreditDurationYears(c),
-            })
+        // expected loss, and the collateral that raises recovery also lowers the capital its
+        // spread risk consumes — one lien, both consequences (terms hoisted above).
+        const reservationBps = isHedgeFund
+          ? t.distressedReservationBps
           : computeReservationSpreadBps({
               entityType: entity.entityType,
-              requiredReturn: entityRequiredReturn(entity),
-              expectedLossBps: annualPd * (1 - loanRecoveryRate) * 10000,
-              // Same rating x duration schedule as the bond book at the secured discount: the
-              // collateral that raises the loan's recovery also lowers the capital its spread
-              // risk consumes — one lien, both consequences.
-              capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, loanCreditDurationYears(c)) * SENIOR_LIEN_DISCOUNT,
+              requiredReturn,
+              expectedLossBps: t.expectedLossBps,
+              capitalChargeRate: t.capitalChargeRate,
               creditConditionsIndex: reg.bankingSector.creditConditionsIndex ?? 0,
             });
-        const structuralSizeUSD = liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal);
-        demandByInstrumentId.set(c.id, {
+        const structuralSizeUSD = t.liveFloatUSD * entityShare;
+        demandByInstrumentId.set(t.id, {
           // XB2: a cross-border loan is hedged like a bond — the CIP cost is in the requirement.
-          reservationStat: reservationBps
-            + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate)),
-          maxHoldingUSD:
-            structuralSizeUSD *
-            (entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE),
+          reservationStat: reservationBps + hedgeAdjBps,
+          maxHoldingUSD: structuralSizeUSD * overweightMultiple,
           fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
           maxNetPurchaseUSD:
             classBudgetUSD *
             (totalCashDemandWeightUSD > 0
-              ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
+              ? (cashDemandWeightByCompany.get(t.id) ?? 0) / totalCashDemandWeightUSD
               : 0),
         });
       });

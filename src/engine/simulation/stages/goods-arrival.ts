@@ -53,17 +53,19 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     // A buyer that no longer exists cannot take delivery; the consignment is written off rather
     // than landed on nobody, which would be inventory with no owner.
     if (!buyer) return;
-    const existing: InputLot[] = update.inputInventoryBySubUnit[shipment.subUnitId]
-      ?? [...(buyer.inputInventoryBySubUnit?.[shipment.subUnitId] ?? [])];
-    update.inputInventoryBySubUnit[shipment.subUnitId] = [
-      ...existing,
-      {
-        sellerId: shipment.sellerKey,
-        unitsHeld: shipment.units,
-        unitPriceUSD: shipment.landedCostPerUnit,
-        acquiredWeek: state.currentWeek,
-      },
-    ];
+    // Copy once on first touch, append in place after — same list, none of the per-shipment
+    // whole-array rebuilds (the GC was 10% of the weekly step before this pass).
+    let lots: InputLot[] | undefined = update.inputInventoryBySubUnit[shipment.subUnitId];
+    if (!lots) {
+      lots = [...(buyer.inputInventoryBySubUnit?.[shipment.subUnitId] ?? [])];
+      update.inputInventoryBySubUnit[shipment.subUnitId] = lots;
+    }
+    lots.push({
+      sellerId: shipment.sellerKey,
+      unitsHeld: shipment.units,
+      unitPriceUSD: shipment.landedCostPerUnit,
+      acquiredWeek: state.currentWeek,
+    });
     arrivedUnits += shipment.units;
   });
 

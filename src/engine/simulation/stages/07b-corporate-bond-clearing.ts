@@ -228,12 +228,42 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     const pdByCompanyId = new Map<string, number>();
     regionCompanies.forEach((c) => pdByCompanyId.set(c.id, computeAnnualDefaultProbability(c)));
 
+    // Everything about a COMPANY that the per-entity loops below were recomputing per pair —
+    // ~35 entities x ~350 names x 4 regions of identical answers per week. Hoisted once, same
+    // expressions, same values (§7.32's optimization discipline; the profiler put this adapter
+    // at 120 ms/week of self time).
+    const companyTerms = regionCompanies.map((c) => {
+      const annualPd = pdByCompanyId.get(c.id)!;
+      const durationYears = creditDurationYears(c);
+      return {
+        id: c.id,
+        creditRating: c.creditRating,
+        subIG: !isInvestmentGrade(c.creditRating),
+        liveFloatUSD: liveTradableFloatUSD(c),
+        offeringUSD: offeringSizeUSD(c),
+        expectedLossBps: annualPd * (1 - CREDIT_RECOVERY_RATE) * 10000,
+        capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, durationYears),
+        distressedReservationBps: computeDistressedReservationSpreadBps({
+          annualDefaultProbability: annualPd,
+          recoveryRate: CREDIT_RECOVERY_RATE,
+          durationYears,
+        }),
+      };
+    });
+    // Identical for every entity; the old code re-reduced it inside each entity's closure.
+    const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
+
     const participants: ClearingParticipant[] = regionEntities.map((entity) => {
       const currentHoldingByCompany = currentHoldingByCompanyByEntity.get(entity.id)!;
       const entityShareOfSector = rawEntityTargets.get(entity.id) ?? 0;
-      // XB1: the sector total is now the SUM of what the real bidders want, not an imposed
-      // aggregate — so a name's structural size is its share of genuine demand.
-      const sectorTotal = Array.from(rawEntityTargets.values()).reduce((a, v) => a + v, 0) || 1;
+      // Per-entity invariants of the per-name loops below.
+      const entityShare = entityShareOfSector / sectorTotal;
+      const entitySubIGFactor = subInvestmentGradeSizeFactor(entity.entityType);
+      const requiredReturn = entityRequiredReturn(entity);
+      const isHedgeFund = entity.entityType === 'HEDGE_FUND';
+      const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
+        ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
+      const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
       // The entity's real budget for this auction (S11): available cash plus its type's genuine
       // leverage capacity, sliced to this asset class by its own targets, then directed at the
       // names where paper is actually changing hands — a live offering, or the gap between what
@@ -244,12 +274,12 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND');
       const cashDemandWeightByCompany = new Map<string, number>();
       let totalCashDemandWeightUSD = 0;
-      regionCompanies.forEach((c) => {
-        const f = !isInvestmentGrade(c.creditRating) ? subInvestmentGradeSizeFactor(entity.entityType) : 1;
-        const structuralUSD = liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal) * f;
-        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(c.id) ?? 0));
-        const weightUSD = offeringSizeUSD(c) + gapToTargetUSD;
-        cashDemandWeightByCompany.set(c.id, weightUSD);
+      companyTerms.forEach((t) => {
+        const f = t.subIG ? entitySubIGFactor : 1;
+        const structuralUSD = t.liveFloatUSD * entityShare * f;
+        const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(t.id) ?? 0));
+        const weightUSD = t.offeringUSD + gapToTargetUSD;
+        cashDemandWeightByCompany.set(t.id, weightUSD);
         totalCashDemandWeightUSD += weightUSD;
       });
 
@@ -260,51 +290,32 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // same numbers to nudge a quantity target, which is why spreads could settle through zero:
       // a nudged quota still has to be filled at whatever price results.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      regionCompanies.forEach((c) => {
+      companyTerms.forEach((t) => {
         // Rating enters this book in the two places it really acts: the capital the position
-        // consumes (stepping by notch and scaling with duration — see
-        // spreadRiskCapitalChargeRate) and the size of the sub-IG sleeve the holder will run.
-        // It is deliberately NOT a prohibition — see subInvestmentGradeSizeFactor for what
-        // modelling it as one did to high-yield clearing.
-        const subIG = !isInvestmentGrade(c.creditRating);
-        // Two pricing regimes, one issuer hazard. Regulated holders price spread vs expected
-        // loss + capital cost; the distressed fund prices cash price vs discounted expected
-        // recovery (see computeDistressedReservationSpreadBps) — naturally absent from
-        // performing paper, always present at some price for broken paper.
-        const annualPd = pdByCompanyId.get(c.id)!;
-        const reservationBps = entity.entityType === 'HEDGE_FUND'
-          ? computeDistressedReservationSpreadBps({
-              annualDefaultProbability: annualPd,
-              recoveryRate: CREDIT_RECOVERY_RATE,
-              durationYears: creditDurationYears(c),
-            })
+        // consumes and the size of the sub-IG sleeve the holder will run — never a prohibition
+        // (see subInvestmentGradeSizeFactor for what modelling it as one did to HY clearing).
+        // Two pricing regimes, one issuer hazard: regulated holders price spread vs expected
+        // loss + capital cost; the distressed fund prices vs discounted expected recovery.
+        const reservationBps = isHedgeFund
+          ? t.distressedReservationBps
           : computeReservationSpreadBps({
               entityType: entity.entityType,
-              requiredReturn: entityRequiredReturn(entity),
-              expectedLossBps: annualPd * (1 - CREDIT_RECOVERY_RATE) * 10000,
-              capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, creditDurationYears(c)),
+              requiredReturn,
+              expectedLossBps: t.expectedLossBps,
+              capitalChargeRate: t.capitalChargeRate,
               creditConditionsIndex,
             });
-        // Structural size is the entity's own share of the name at its sub-IG sleeve factor —
-        // no per-name renormalisation (deleted per §7.19 item 2, now that budgets and the
-        // distressed regime exist): demand meets float when real buyers with real money choose
-        // to hold it, and the dealer absorbs any genuine residual.
-        const sizeFactor = subIG ? subInvestmentGradeSizeFactor(entity.entityType) : 1;
-        const structuralSizeUSD =
-          liveTradableFloatUSD(c) * (entityShareOfSector / sectorTotal) * sizeFactor;
-        const overweightMultiple =
-          entity.entityType === 'HEDGE_FUND' ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;
-        demandByInstrumentId.set(c.id, {
+        const sizeFactor = t.subIG ? entitySubIGFactor : 1;
+        const structuralSizeUSD = t.liveFloatUSD * entityShare * sizeFactor;
+        demandByInstrumentId.set(t.id, {
           // XB2: hedged, so a foreign buyer's requirement carries the CIP cost of the hedge.
-          reservationStat: reservationBps
-            + (entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
-                ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate)),
+          reservationStat: reservationBps + hedgeAdjBps,
           maxHoldingUSD: structuralSizeUSD * overweightMultiple,
           fullSizeStatRange: FULL_SIZE_SPREAD_RANGE_BPS,
           maxNetPurchaseUSD:
             classBudgetUSD *
             (totalCashDemandWeightUSD > 0
-              ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
+              ? (cashDemandWeightByCompany.get(t.id) ?? 0) / totalCashDemandWeightUSD
               : 0),
         });
       });

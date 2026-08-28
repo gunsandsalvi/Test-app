@@ -28,7 +28,7 @@ import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputL
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
-import { convertLocal, localToUsd, FxToUsd } from '../../../domain/currency';
+import { convertLocal, localToUsd, fromTable, snapshotFxToUsd, FxToUsd } from '../../../domain/currency';
 import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
 import { laneDistanceNm } from '../../../domain/geography';
 import { SourcingSplit } from './sourcing-intent';
@@ -77,11 +77,15 @@ function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, u
 function addInputInventory(update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number) {
   if (addedUnits <= 0.0001) return;
   if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
-  const existingLots: InputLot[] = update.inputInventoryBySubUnit[subUnitId] ?? [...(baseComp.inputInventoryBySubUnit?.[subUnitId] ?? [])];
-  update.inputInventoryBySubUnit[subUnitId] = [
-    ...existingLots,
-    { sellerId, unitsHeld: addedUnits, unitPriceUSD: addedValueUSD / addedUnits, acquiredWeek: week },
-  ];
+  // Copy the persisted lots ONCE on first touch, then push into the week-local array in place.
+  // The old form rebuilt the whole array per lot — O(k²) copying for a buyer credited k lots in a
+  // week, all of it garbage — for a list whose final contents and order are exactly these.
+  let lots: InputLot[] | undefined = update.inputInventoryBySubUnit[subUnitId];
+  if (!lots) {
+    lots = [...(baseComp.inputInventoryBySubUnit?.[subUnitId] ?? [])];
+    update.inputInventoryBySubUnit[subUnitId] = lots;
+  }
+  lots.push({ sellerId, unitsHeld: addedUnits, unitPriceUSD: addedValueUSD / addedUnits, acquiredWeek: week });
 }
 
 /**
@@ -185,12 +189,10 @@ interface SourcingContext {
   /** Whether that week's book for a good left unfilled DEMAND rather than unsold supply — which
    *  is what decides who can insist on being paid in their own money. */
   sellerIsShort: (subUnitId: string, origin: RegionId) => boolean;
-  /** Per-week memoisation, because both are deterministic within a week and the lot loop asked
-   *  for them once per LOT — ~14k structural-PD evaluations for ~2k distinct buyers, the same
-   *  per-item-recomputation shape §7.32's optimization lessons record. Caching changes nothing
-   *  but the clock: same inputs, same answers, byte-identical world. */
+  /** Per-week memoisation: the buyer's structural PD is deterministic within a week and the lot
+   *  loop asked for it once per LOT — ~14k evaluations for ~2k distinct buyers. Same inputs,
+   *  same answers, byte-identical world. (Invoice-region memoisation lives per sub-unit pass.) */
   buyerAnnualPdByTicker: Map<string, number>;
-  invoiceRegionByKey: Map<string, RegionId>;
 }
 
 /**
@@ -773,25 +775,41 @@ function runSubUnitMarkets(
 
   // --- 4. Where each region intends to buy this good, from the sourcing intent. A buyer with no
   //        intent on record sources at home, which is what it does when it has looked at nothing.
+  const originShareCache = new Map<RegionId, Record<string, number>>();
   const originShare = (buyerRegion: RegionId): Record<string, number> => {
+    const cached = originShareCache.get(buyerRegion);
+    if (cached) return cached;
     const split = sourcing.splitByRegionSubUnit.get(`${buyerRegion}|${subUnitId}`);
     const shares: Record<string, number> = {};
     let total = 0;
     if (split) MARKET_REGION_IDS.forEach(o => { total += split.unitsByOrigin[o] ?? 0; });
-    if (!(total > 0)) { shares[buyerRegion] = 1; return shares; }
+    if (!(total > 0)) { shares[buyerRegion] = 1; originShareCache.set(buyerRegion, shares); return shares; }
     MARKET_REGION_IDS.forEach(o => {
       const u = split!.unitsByOrigin[o] ?? 0;
       if (u > 0) shares[o] = u / total;
     });
+    originShareCache.set(buyerRegion, shares);
     return shares;
   };
 
-  /** What it costs this buyer, in ITS money, to bring one unit in from that origin. */
-  const freightPerUnitBuyerMoney = (origin: RegionId, buyer: RegionId): number => {
-    if (!(massTonnes > 0)) return 0;
-    const rateLaneMoney = sourcing.freightRateByLane[laneKey(origin, buyer)] ?? 0;
-    return convertLocal(rateLaneMoney * massTonnes, origin, buyer, sourcing.fxToUsd);
-  };
+  /** What it costs this buyer, in ITS money, to bring one unit in from that origin. All sixteen
+   *  values are fixed for this sub-unit's whole pass (rate, mass, fx), so they are computed once
+   *  by the identical expression and the per-lot call becomes a table read — the closure it
+   *  replaces built a lane-key string and ran two rate lookups per LOT. */
+  const freightPUMatrix = new Map<RegionId, Map<RegionId, number>>();
+  MARKET_REGION_IDS.forEach(origin => {
+    const row = new Map<RegionId, number>();
+    MARKET_REGION_IDS.forEach(buyer => {
+      row.set(buyer, !(massTonnes > 0) ? 0
+        : convertLocal((sourcing.freightRateByLane[laneKey(origin, buyer)] ?? 0) * massTonnes, origin, buyer, sourcing.fxToUsd));
+    });
+    freightPUMatrix.set(origin, row);
+  });
+  const freightPerUnitBuyerMoney = (origin: RegionId, buyer: RegionId): number =>
+    freightPUMatrix.get(origin)!.get(buyer)!;
+  // Invoice currency per (origin, buyer) is fixed within this sub-unit's pass; the per-lot
+  // string-keyed lookup this replaces allocated a key per cross-border lot.
+  const invoiceRegionCache = new Map<RegionId, Map<RegionId, RegionId>>();
 
   // --- 5. Build the four books. Suppliers offer only at home; buyers bid everywhere they intend.
   const bidsByOrigin = {} as Record<RegionId, UnitBid[]>;
@@ -933,8 +951,13 @@ function runSubUnitMarkets(
   // --- 9. Settle every buyer once, in ITS money, at the landed cost it actually paid.
   const deferredPurchaseUSD = new Map<string, number>();
   const deferredSaleKeyed = new Map<string, number>();
+  // Who actually bought anywhere this week — plans absent from every book write nothing and are
+  // skipped before the per-origin walk (bit-exact: they returned with no writes anyway).
+  const purchasedKeys = new Set<string>();
+  MARKET_REGION_IDS.forEach(origin => results[origin].purchasesByKey.forEach((_, k) => purchasedKeys.add(k)));
   demandPlans.forEach(plan => {
     if (!plan.company || !plan.key) return;
+    if (!purchasedKeys.has(plan.key)) return;
     const comp = plan.company;
     let units = 0;
     let landedCost = 0;
@@ -970,8 +993,9 @@ function runSubUnitMarkets(
         // aggregate has no cash leg here to defer, so deferring one would invent an exposure.
         const seller = lookup.byTicker.get(l.sellerKey);
         if (!seller || origin === plan.regionId) return;
-        const invoiceCacheKey = `${origin}|${plan.regionId}|${subUnitId}`;
-        let invoiceRegion = sourcing.invoiceRegionByKey.get(invoiceCacheKey);
+        let invRow = invoiceRegionCache.get(origin);
+        if (!invRow) { invRow = new Map(); invoiceRegionCache.set(origin, invRow); }
+        let invoiceRegion = invRow.get(plan.regionId);
         if (invoiceRegion === undefined) {
           invoiceRegion = chooseInvoiceRegion({
             sellerRegion: origin,
@@ -981,7 +1005,7 @@ function runSubUnitMarkets(
             quotedPairs: sourcing.quotedPairs,
             sellerIsShort: sourcing.sellerIsShort(subUnitId, origin),
           });
-          sourcing.invoiceRegionByKey.set(invoiceCacheKey, invoiceRegion);
+          invRow.set(plan.regionId, invoiceRegion);
         }
         const currency = invoiceCurrencyOf(invoiceRegion);
         const usdPerCurrency = sourcing.fxToUsd(invoiceRegion);
@@ -1065,7 +1089,7 @@ function runSubUnitMarkets(
     demandState.clearedInputPriceIndex = Number((demandState.unitPriceUSD / demandState.baseUnitPriceUSD).toFixed(4));
   });
 
-  return survivingContracts;
+    return survivingContracts;
 }
 
 /** Which region a settlement key buys for. Company tickers are globally unique; the aggregate
@@ -1179,7 +1203,9 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     splitByRegionSubUnit: ctx.sourcingSplitByRegionSubUnit,
     freightRateByLane: ctx.freightRatePerTonneLaneMoneyByLane,
     unitMassTonnes: state.unitMassTonnes,
-    fxToUsd: (regionId: RegionId) => getFxToUsd(state.fxPairs, regionId),
+    // Snapshotted ONCE: getFxToUsd scans the pair list per call, and stage 05 converts per LOT.
+    // Same values, one table lookup instead of a linear search (rates are fixed within the pass).
+    fxToUsd: fromTable(snapshotFxToUsd(MARKET_REGION_IDS, (r) => getFxToUsd(state.fxPairs, r))),
     fxPairIlliquidity: state.fxPairIlliquidity ?? {},
     quotedPairs: state.fxPairs.map(p => ({ base: p.base, quote: p.quote })),
     sellerIsShort: (subUnitId: string, origin: RegionId) => {
@@ -1187,7 +1213,6 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       return (Number(d?.totalUnitsDemandedThisWeek) || 0) > (Number(d?.totalUnitsSuppliedThisWeek) || 0);
     },
     buyerAnnualPdByTicker: new Map(),
-    invoiceRegionByKey: new Map(),
   };
 
   const contractsByRegionBySubUnit = {} as Record<RegionId, Map<string, SupplyContract[]>>;
@@ -1241,9 +1266,12 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     });
   }
 
-  // Everything dispatched this week joins what is already on the water.
-  state.goodsInTransit = [...(state.goodsInTransit ?? []), ...ctx.shipmentsDispatched];
-  state.tradeInvoices = [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked];
+  // Everything dispatched this week joins what is already on the water — appended in place, the
+  // same order the spread produced, without copying tens of thousands of live entries weekly.
+  if (!state.goodsInTransit) state.goodsInTransit = [];
+  for (const sh of ctx.shipmentsDispatched) state.goodsInTransit.push(sh);
+  if (!state.tradeInvoices) state.tradeInvoices = [];
+  for (const inv of ctx.tradeInvoicesBooked) state.tradeInvoices.push(inv);
 
   const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);
   const baselineVol = 0.16;
