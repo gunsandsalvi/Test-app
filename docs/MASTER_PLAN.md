@@ -235,7 +235,7 @@ metrics to watch rather than work.
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
-| 1 | foundation | **HH — The household sector, to corporate depth** (absorbs G6) | none |
+| ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
 | 2 | foundation | **BP1 — One industry registry** | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | 4 | foundation | **PUB — The public sector: treasury + central bank** | HH (household taxes) |
@@ -476,13 +476,15 @@ exposes (one occupation tight at V/U≈40 while two run zero vacancies against r
 what HH6's wage response and the retraining flow have to work on. The bottom-up-GDP-vs-anchor gap
 named here is NOT yet re-measured — do that at the start of HH6.
 
-**HH6 — Corporate wage and management policy** (absorbs #52, runs parallel with HH5): per-company
-wage setting from vacancy-fill experience and margin headroom, hiring and firing from real capacity
-economics, `executionQuality` feeding retention. **Wage drift dies here** — a company that cannot
-fill openings raises its offered wage, and that is wage-push. Also closes the `macro/evolution.ts`
-wage/tightness defect: nominal wage growth goes negative (−2.5% by week 40) while inflation runs at
-10%, a 12% real-wage collapse a year, because the tightness→wage formula has no bargaining
-mechanism in it.
+**HH6 — DONE (§7.59).** Each firm carries an `offeredWageIndex` set from its own unfilled
+postings (wage push) and its margin headroom (a firm losing money does not give raises); the
+occupation going rate is the employment-weighted average of what firms offer; quits respond to
+relative pay and execution quality, so a raise retains staff. The region-level tightness→wage
+formula is deleted. Bargaining is over REAL wages, so the going rate also recovers part of the
+cost of living — deliberately partial, because full indexation pins the real wage and hands the
+model a mechanical spiral. The named defect is closed: nominal wage growth was −2.5% against 10%
+inflation, and is now +4.7% against 10.3%. **Verified by lag structure, not by a contemporaneous
+correlation:** unfilled vacancy share LEADS wage growth, 0.08 (1wk) → 0.41 (4wk) → **0.71 (8wk)**.
 
 **Verify (whole project):** household financial assets reconcile to real claims on real
 counterparties, and `unmodeledFinancialAssetsUSD` falls toward zero as each slice lands — it is the
@@ -928,6 +930,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | ~~**#67 — USA bank capital → 0**~~ | **CLOSED (§7.55) — re-measured after HH3 and the collapse is gone.** Capital ratio runs 11.6% → 14.7% through week 80 (was: → 0 by week ~70), NIM in band throughout. The bleed was the fictional consumer book: a formula target earning a formula yield and losing a formula loss rate, none of which the bank's capital could price or gate. With the book real — real margins quoted off measured tier losses, real amortization, origination capital-gated at the 8% floor — the banking system carries its full household book and earns its keep. |
 | ~~**#18 — companies at the revenue floor**~~ | **CLOSED (§7.49), and the diagnosis was wrong for a year.** The four names were the four regional HEDGE FUNDS, whose "revenue" is a fee on their book — the harness was applying an operating company's growth ceiling to a fund. And they had not grown: their book SHRANK 76.8B → 62.4B while the reported revenue rose 29x, because the generator seeded `aumUSD` as a multiple of an operating company's revenue while the entity carried the real marked book. A §7.4 cold start, not a runaway. Seeding the shell at the size it actually manages took it to 1.1x. |
 | ~~**Household deposits: two representations**~~ | **CLOSED (§7.57, HH4d).** The banks' `depositsUSD` IS the household stock now, split from `wholesaleFundingUSD` at seed (418B USA — the funding that was wearing the deposit label), moved by named flows only, reconciled to the household state weekly with the identity asserted (0.1% band, 60 weeks green). The closing invariant also caught bank M&A stranding the target's whole balance sheet — fixed in stage 10. |
+| **Equity prices run away past ~week 80** | **Found by the HH close-out battery (§7.60); NOT HH's.** Median USA share price runs 7.9 (w80) → 184 (w100) → 5,048 (w120) while median EPS moves 0.39 → 0.57 — an implied ~8,850x earnings. Institutional claims stay flat at ~530B, housing/deposits/debt are all sane, so it is the equity market alone; household net worth only shows it because HH2/HH4c correctly mark households to it (568x income at w120). Consistent with the §6 damper-bound watchlist plus §7.18's want/have: a growing pool of money chasing a fixed float, printing at the damper limit week after week, which compounds. **The 60-week harness cannot see this** — prices are still sane at w60 — so the first action is a longer harness window, then the real fix is asset supply (**SCALE**'s bigger universe, **HC** births, **G3**/ETF2's dealer capacity), not a cap on the price. |
 | **Real growth prints escape at horizon** | **Found in HH2, pre-existing, unowned.** Consumption growth −105.91% and GDP growth −209.30% at week 60. A/B against the pre-HH2 tree: −119.87% / −209.30%, GDP identical to four significant figures — so this is not HH2's, and HH2 slightly damps it. **Nothing in §6 recorded it and the harness does not check it**, which is the first thing to fix: a growth rate that can print −200% is a band the harness should assert. Likely the same family as G1b (the price level escaping takes the real deflator with it), but a different symptom and worth confirming separately before assuming so — if real growth is being deflated by an escaping index, the defect is G1b's; if the nominal path itself collapses, it is not. |
 | **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
 
@@ -940,6 +943,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **Damper-bound instruments** | 1,961 persistently bound (3+ consecutive weeks) on the 60-week harness. The number to watch DOWN as the wides get a real buyer base; it rose when the loan book grew, which is expected. Not a defect on its own — a print held away from its solve is only wrong if it stays there. |
 | **Index funds without a buyer** | Was 15 of 27; **MS1 took it to 10** by adding households, who index everything and fill all four broad-market funds (§7.47). The diagnosis in this row was partly wrong and worth correcting: the empty all-cap funds were not a universe-size problem, they were a missing SECTOR. What remains — the large-cap and high-yield funds — is the genuine version: ~25 large-cap names and 8–65 HY issuers are few enough for any institution here to research directly, and households buy the broad market rather than a size tier. That closes as HC births, real IPOs and BP1's registry grow the universe. **Still do NOT tune the research-capacity primitive until the funds fill** — that would be fitting a constant to a desired outcome. |
 | **`unmodeledCapitalReceiptShareOfIncome`** | HH4b's named residual: the slice of the debt-service recycle whose return path to household income is unbuilt (bank retained earnings, institutional dividend passthrough). Derived once at seed (≈ debt service less deposit interest, per region), it decays only when a receipt channel becomes real — real institutional dividend income to claims (CAL/PUB territory), real bank payout routing. Watch it DOWN like the unmodeled-assets line; never re-derive it to a bigger value. |
+| ~~**Bottom-up GDP below the supply anchor**~~ | **The comparison no longer exists — do not re-measure it this way.** HH5's scope named a 6–9% permanent output gap between bottom-up GDP and the supply-side anchor. Re-measured at the start of HH6 it prints exactly 0.0% every week from week 1, because `estimatedNominalGdpUSD` is now set to `lastWeekNominalGdpUSD` — the anchor IS the lagged bottom-up series, so the test compares a number to a copy of itself. The gap is neither closed nor open; the independent supply-side anchor was collapsed into the demand-side measure by an earlier change and nothing records when. A real potential-output series (PUB's, or a capital-and-labor production function) has to exist before this can be asked again. |
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
@@ -2536,4 +2540,68 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
       §6 inflation escape); the Beveridge relation is negative in all four regions and strongly
       so once the stock is established. Deterministic; two new identity invariants (pools vs
       employers, rate vs its own stock) hold to 0.2%.
+59. **HH6: a wage somebody decides.** Firms now set their own offer from unfilled postings and
+    margin headroom; the going rate is the employment-weighted average of those offers; quits
+    respond to relative pay. The region-level tightness→wage formula is gone — it walked an
+    index no employer's payroll referred to.
+    - **Two bugs, one lesson each.** (a) **Stage 08 rebuilds every company from a fixed field
+      list**, so anything written to `companyUpdates` and not named there is silently dropped.
+      The wage fields were — and so, since HH5, were **private firms' headcounts**: the whole
+      hidden tier posted vacancies, consumed real matches, and reverted to its old payroll every
+      week. A stage that reconstructs objects is a silent-drop hazard for every other stage that
+      writes to them. (b) The first wage rule blended a level against a scaled copy of itself,
+      `prev*inertia + prev*(1+t/52)*(1-inertia)`, which algebraically delivers **t x 0.06** —
+      six percent of the intended move, so no wage went anywhere. Stickiness belongs in the size
+      of the target, not in a blend of a level with itself.
+    - **A semantic error worth naming:** the going rate first multiplied the firms' average
+      premium every week. A relative index is not a growth rate — compounding a 2% premium
+      weekly is 180% a year. The going rate now closes ~15% of the gap and the firms' premium is
+      renormalized by the same factor, so the premium is counted once.
+    - **Cost of living, deliberately incomplete.** Without it nominal wages ignored prices
+      entirely. With FULL indexation the real wage becomes a constant and the model gets a
+      mechanical spiral, so the pass-through is 0.6 — which is also the empirical fact that real
+      wages fall during inflation surges.
+    - **The cost, measured and accepted:** A/B against pre-HH6, terminal inflation at week 60
+      goes 150.7% → 165.9% and unemployment 17.9% → 22.5%. HH6 amplifies the §6 inflation escape
+      by ~15pp, because a cost-of-living wage channel is exactly what amplifies a spiral. The
+      channel is real and the plan asked for it; what is missing is the thing that BREAKS a
+      spiral, which is a central bank that acts — **PUB**. Recorded rather than tuned away.
+    - **Verify by lag, not by level:** contemporaneous wage~tightness reads −0.10 pre-escape,
+      because the channel operates with an ~8 week lag and cost-of-living dominates the
+      contemporaneous number. Netting the COLA component out of wage growth in the escape window
+      gives +0.95 against tightness, and unfilled-share LEADS wage growth 0.08 → 0.41 → 0.71 at
+      1/4/8 weeks. **A channel with a lag is invisible to a same-week correlation; measure the
+      lag structure before concluding a mechanism does not work.**
+60. **HH CLOSED — the close-out battery, and what it found.** `scripts/hh-battery.ts` runs every
+    verify criterion §5-HH sets, as a measurement. Results at 120 weeks:
+    - **The scoreboard is closed.** `unmodeledFinancialAssetsUSD` runs 1,029.8B (seed) → 462.7B
+      (w1) → 214.0B (w40) → **0.0B by w60**, and rose in ZERO weeks of 120. Every dollar of
+      household financial assets is now a claim on a named counterparty. (Honest reading: it
+      reaches zero because real attributed claims overtake the carried aggregate, which is what
+      the placeholder was there to absorb.)
+    - **Claims reconcile in both directions, to 0.00%, in all four regions**: institutional
+      beneficiary liabilities equal household claims; net worth equals the sum of its marked
+      parts; the four wealth tiers sum to the aggregate; household deposits equal the named
+      banks' household-deposit lines.
+    - **The recession transmission the simulation exists to have, demonstrated.** Killing the
+      largest USA employer (207.4k jobs, 1.73% of the labor force) against a same-seed control:
+      unemployment **+1.62pp** within a week, consumption budgets **−1.41%** by week 2 and
+      **−2.16%** by week 4, household income −1.36%, decaying over 8–16 weeks as the labor
+      market reabsorbs. A firm failing now propagates to real household demand through real
+      payroll. (At +30 weeks the control world is WORSE than the shocked one — the escape
+      dominates by then, which is a limit on how far out this test can read.)
+    - **Labor relations hold:** Beveridge −0.55 levels / −0.71 changes in the pre-escape window,
+      −0.97 / −0.55 in the escape; every macro field finite in all four regions at 120 weeks.
+    - **And it found a defect nothing else could see** (now §6): equity prices run away past
+      ~week 80 — median share price 7.9 → 5,048 by w120 against EPS 0.39 → 0.57. **The 60-week
+      harness cannot see it.** The battery only caught it because HH2/HH4c made households mark
+      to real prices, so the runaway surfaced as a 568x net-worth-to-income ratio. Making a
+      sector real makes other sectors' defects visible — which is the argument for closing HH
+      before PUB, and the argument for a longer harness window now.
+    - **What HH does NOT close, and cannot:** the §6 inflation escape (HH4b damps it ~11pp, HH6
+      amplifies it ~15pp — the household channels push both ways and neither is the stabiliser);
+      tax collection has no treasury to arrive at; the residual capital-receipt share sits at
+      14.7% of income because bank and institutional payouts have no route home. All three want
+      **PUB**. The user's read is the right one: without a functioning government and central
+      bank there are still holes, and they are now the LARGEST holes rather than one of many.
 
