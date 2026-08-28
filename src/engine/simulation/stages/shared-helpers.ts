@@ -339,6 +339,27 @@ export function applyPendingCorporateActionSettlements(
         const ratio = pending.get(key);
         if (ratio === undefined) return h;
         touched = true;
+        // THE PRINCIPAL'S CASH LEG. A redemption is money: the issuer pays its lenders back and
+        // their claim shrinks by exactly what they were paid. Before this, the notional simply
+        // left the holder's book and arrived nowhere — a transfer from lenders to no one, and a
+        // conservation break in the securities ledger sitting underneath every price the model
+        // cleared against those books.
+        //
+        // Derived from the composed ratio rather than recorded separately, so it stays exact when
+        // two actions hit one instrument in a week (the ratios multiply; the notional change is
+        // whatever the product implies). Debt redeems at PAR, so the notional change IS the cash
+        // — the call premium on top of it rides the explicit `pendingHolderCashUSD` path above,
+        // and equity is excluded because a share is bought at a negotiated price rather than at
+        // its carrying value (a take-private pays its own takeout, §7.43).
+        //
+        // The mirror case is a float INCREASE that did not come through the auction: paper placed
+        // pro rata with the existing holder base, which they must pay for. WS8 primary issuance is
+        // already netted out of this ratio by stage 08 (it inflates the pre-action float by the
+        // market take), so what remains here is a genuine placement and it is charged, not gifted.
+        const principalCashUSD = h.instrumentType === 'EQUITY'
+          ? 0
+          : h.quantityOrNotionalUSD * (1 - ratio);
+        cashUSD += principalCashUSD;
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
       })
       .filter((h) => h.quantityOrNotionalUSD > 1);
