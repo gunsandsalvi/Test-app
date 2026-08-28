@@ -24,7 +24,7 @@ import { sovBucketKey } from './stages/shared-helpers';
 import { setSimulationSeed, getRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
-import { decomposeGovernmentSpending } from '../../domain/government';
+import { decomposeGovernmentSpending, governmentObligationsWeeklyUSD } from '../../domain/government';
 import {
   computeExpenditureGdpUSD,
   GOV_PROCUREMENT_SHARE_OF_SPENDING,
@@ -635,20 +635,29 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const realWageIncomeUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce(
       (sum, occ) => sum + baseAnnualWageUSD[occ] * reg.occupationPools[occ].wageIndex * reg.occupationPools[occ].employed, 0
     );
+    const realEmployedForWages = (Object.keys(reg.occupationPools) as OccupationType[])
+      .reduce((sum, occ) => sum + reg.occupationPools[occ].employed, 0);
     const realUnemploymentBenefitsUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce((sum, occ) => {
       const unemployedInPool = totalLaborForce * (reg.occupationLaborForceShare[occ] ?? 0) - reg.occupationPools[occ].employed;
       return sum + baseAnnualWageUSD[occ] * Math.max(0, unemployedInPool) * UNEMPLOYMENT_REPLACEMENT_RATE;
     }, 0);
     // §7.4: this restatement is the SECOND computation of household income at seed (the macro
-    // bootstrap does the first), so it must carve the same lines off the transfer base or it
-    // silently overwrites the first with a different economy. It was omitting debt service
-    // (a PUB1a leftover) as well as PUB3's payroll.
-    reg.estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
-      wageIncomeUSD: realWageIncomeUSD,
-      governmentSpendingWeeklyUSD: reg.governmentSpendingUSD,
+    // bootstrap does the first), so it must read the same transfer number or it silently
+    // overwrites the first with a different economy. It used to re-derive transfers from the
+    // spending budget while omitting debt service — a PUB1a leftover that won for six slices.
+    // PUB3b: there is now one transfer number and both callers read it.
+    const seedObligations = governmentObligationsWeeklyUSD({
       interestWeeklyUSD: reg.governmentInterestWeeklyUSD ?? 0,
       payrollWeeklyUSD: reg.governmentPayrollWeeklyUSD ?? 0,
-      unemploymentBenefitsUSD: realUnemploymentBenefitsUSD,
+      unemploymentBenefitsWeeklyUSD: realUnemploymentBenefitsUSD / 52,
+      retiredPopulation: reg.totalPopulation * (reg.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0),
+      averageAnnualWageUSD: realEmployedForWages > 0 ? realWageIncomeUSD / realEmployedForWages : 0,
+      fiscalStanceScore: reg.fiscalStanceScore,
+    });
+    reg.governmentSpendingUSD = Number(seedObligations.totalUSD.toFixed(0));
+    reg.estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+      wageIncomeUSD: realWageIncomeUSD,
+      transfersWeeklyUSD: seedObligations.transfersUSD,
     }).toFixed(0));
 
     // With income now on its real footing, restate the reported GDP series to what this
@@ -666,7 +675,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       householdIncomeUSD: reg.estimatedHouseholdIncomeUSD,
       savingsRate: reg.householdState.savingsRate,
       investmentUSD: trackedInvestmentUSD * investmentScaleFactor,
-      governmentSpendingWeeklyUSD: reg.governmentSpendingUSD,
+      // PUB1e/PUB3b: G is the procurement budget the government will actually bid, annualised —
+      // the same number stage 05 bids and stage 11 debits the account by.
+      governmentPurchasesUSD: seedObligations.procurementBudgetUSD * 52,
       netExportsUSD: reg.exportsUSD - reg.importsUSD,
     });
     // Build the real consumer basket now that every sub-unit carries its bootstrapped price.

@@ -172,3 +172,39 @@ export function openMarketPolicy(args: {
   }
   return { reinvestmentShare: 1, netPurchaseUSD: 0 };
 }
+
+/**
+ * PUB3c — cash-management bills: what a treasury issues to bridge its own account.
+ *
+ * The gap this closes: the government spends every week but raises bond financing on a QUARTERLY
+ * calendar (stage 11 accumulates `pendingUnfundedDeficitUSD` for 13 weeks), so between auctions
+ * the TGA absorbs the entire shortfall. That works while the buffer is large enough and fails the
+ * moment obligations grow — measured, the account ran to −497.5B once PUB3b indexed spending to
+ * real wages.
+ *
+ * A negative treasury account is not a fiscal outcome, it is a MISSING INSTRUMENT: a real
+ * treasury facing a cash shortfall issues cash-management bills, days to weeks, sized to the gap.
+ * It is allowed to run a large deficit; it is not allowed to have less than nothing in the bank.
+ *
+ * Returns the EXTRA bill issuance this week: what it takes to restore the operating balance,
+ * raised over a few weeks rather than in one block so the front end is not handed a cliff.
+ * Negative gaps return zero — a treasury above target simply issues less, which the bill-share
+ * rule already does.
+ */
+export function cashManagementBillIssuanceUSD(args: {
+  treasuryAccountUSD: number;
+  /** Weekly outlays, which set the size of the operating balance the treasury wants. */
+  weeklyOutlaysUSD: number;
+}): number {
+  const targetUSD = Math.max(0, args.weeklyOutlaysUSD) * TGA_TARGET_WEEKS_OF_SPENDING;
+  const shortfallUSD = targetUSD - args.treasuryAccountUSD;
+  if (shortfallUSD <= 0) return 0;
+  return shortfallUSD * CMB_GAP_CLOSE_RATE_WEEKLY;
+}
+
+/**
+ * Share of a cash shortfall bridged per week. A treasury does not raise a quarter's worth of
+ * operating balance in one auction — it rebuilds over several, which is also what keeps the
+ * bill program's size a smooth supply the market can absorb rather than a cliff.
+ */
+export const CMB_GAP_CLOSE_RATE_WEEKLY = 0.34;

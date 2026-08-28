@@ -639,6 +639,13 @@ cash on the placement path. The A/B says otherwise — worst institutional cash 
 now a §6 defect of its own. What the placement really cost was the sovereign market: removing it
 took bank reserves at w40 from **−29.0B to +84.7B** and the 2Y at w26 from **0.98% to 2.62%**.
 
+**PUB3 — DONE (§7.70).** The budget is a sum of real obligations — interest + payroll + benefits
++ procurement, every line a real quantity at a real price — and the deficit is an OUTCOME.
+**PUB3c** adds the cash-management bills that bridge the treasury's account between quarterly
+bond auctions, without which a wage-indexed budget runs the TGA negative. Measured: TGA negative
+in 0 of 480 region-weeks, revenue/outlays 0.47x, debt/GDP to 213% — a real fiscal path rather
+than a defined one.
+
 **PUB1e — DONE (§7.67).** Procurement is one number, bid in the real goods market and paid for
 out of the treasury's account. There were FOUR representations of "what the government buys";
 now stage 03 derives the per-category budget from the primary budget, stage 05 bids exactly it,
@@ -990,7 +997,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **Occupational mismatch** | HH5's labor market exposes it for the first time: at week 40 one occupation runs tight (V/U≈40, wage growth at its cap) while two carry real unemployment against zero vacancies. The seed no longer causes it (§7.58 removed the arbitrary slack multipliers), so what remains is produced by the sector composition moving faster than the retraining flow can follow. **HH6** owns the response — a firm that cannot fill a role raises its offered wage, which is what should pull workers across. Measure the spread of V/U across occupations before and after HH6; do NOT tune the retraining speeds to flatten it first. |
 | **Sovereign price elasticity to a size-only bidder** | **Found in PUB2b (§7.66).** A 34B difference in the central bank's book moved the USA 2Y by ~490bp at w30 — a very high elasticity for a market that size. Consistent with the damper watch above (1,964 instruments persistently bound: the books ARE thin, so an inelastic buyer has to move the level a long way to find sellers), and with §7.18's want/have. **Do not soften it in the clearing engine** — prices are cleared, and tuning the auction to produce a gentler response would be fitting the mechanism to a desired number. It should fall as **SCALE** and **G3** grow the universe and the dealer's capacity; re-measure then. |
 | **The goods market cannot fill a quarter of what is bid** | **Found in PUB1e (§7.67).** ~25% of the government's procurement budget goes unfilled at any price: aggregate bids exceed aggregate supply and every in-money bidder is rationed pro-rata, so households are short by the same ratio. Long-standing and not PUB's — it only became visible because the government is the first buyer whose unfilled demand costs something. **Do not close it by shrinking the bids**: the demand is real and the supply side is what is missing. Expect it to fall as **SCALE** grows the firm universe and **BP1**'s taxonomy lets more sub-units be supplied; re-measure the fill ratio then. **§7.69 (PUB3a) then closed most of it**: with the government's payroll carved out of the primary budget, the procurement budget is one the market can supply — unspent 22.7B/wk → **1.3B/wk**, fill range 7.7–87.5% → **46.3–100%**. The row was measuring an oversized budget as much as a short market. What remains is the genuine shortage; re-measure as **SCALE** and **BP1** grow the supply side. |
-| **The fiscal block's two sides are indexed to different bases** | **Restated by §7.70, which attempted the fix and reverted it.** Trailing-annual revenue grows x8.7 against outlays x6.5 (GDP x12.4): both lag the price level, revenue lags less, so the treasury runs a 20–36% surplus and the TGA reaches ~1.1T. The obvious fix — make the budget a sum of real obligations, deficit as an outcome — was built and **broke a hard invariant at week 120** (TGA to −497.5B, revenue/outlays 0.50x), because obligations index to WAGES while collections index to tax bases that do not track wages. **PUB3b is blocked on a precondition, not on effort**: real tax bases that move with wages, and/or cash-management issuance so the account can be bridged. Do not retry it without both. |
+| ~~**The whole fiscal block is indexed to a lagged nominal aggregate**~~ | **CLOSED (§7.70).** The budget is a sum of real obligations and the deficit is an outcome; cash-management bills (PUB3c) bridge the treasury's account between quarterly bond auctions, so the TGA is never negative. What replaces it is not a defect but a RESULT to watch: outlays now outgrow revenue (x14.8 against x9.3, trailing-annual) and debt/GDP runs to 213%, because obligations index to wages while the tax bases do not. That is a real fiscal dynamic, now financed by real issuance. **Watch, do not damp revenue or cap the deficit** — re-measure once the §6 inflation escape is closed, since the wage/base wedge is largely its shadow. |
 | **`unbackedBankCashUSD` explodes past the harness window** | **Found by the PUB battery (§7.68).** 97B (w13) → 107B (w52) → **2,183B (w120)**. PUB2b shrank it at w52 (304B → 100B) by giving the central bank a live book, and that fix holds — but reserves grow from deposits and lending far faster than any central-bank purchase backs them once the escape takes hold. **The 60-week harness cannot see this.** Owners: the §6 inflation escape first, then whatever gives bank reserves a single representation. Watch it, do not force the identity closed. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
@@ -1855,29 +1862,34 @@ that proved it, the lesson.
     - **What it does NOT fix:** the budget TOTAL is still `lastWeekNominalGdpUSD x (taxRate +
       deficitPct)`. Revenue/outlays is 1.18x (was 1.20x) and the TGA still reaches 1,141B. That is
       PUB3b.
-70. **PUB3b ATTEMPTED AND REVERTED: a negative result worth more than the code.** The plan said
-    make the budget TOTAL a sum of real obligations — interest + payroll + benefits + procurement
-    — with the deficit as an outcome, deleting `spending = lastWeekNominalGdpUSD x (taxRate +
-    deficitPct)`. It was built, it compiled, the 60-week harness passed, and **at 120 weeks it
-    broke a hard invariant: the TGA went negative in 53 region-weeks, to −497.5B**, with
-    revenue/outlays at **0.50x** — a government spending twice its income.
-    - **The bases were not the problem.** They calibrated beautifully: the implied benefit landed
-      at **51–53% of the average wage across all four independently-sized regions**, inside the
-      real OECD replacement band, and procurement/payroll at a consistent 1.06–1.08x. Four
-      regions agreeing is the same sanity check §7.9 applies to the household tax rate.
-    - **The problem is an INDEXATION MISMATCH, and it is real rather than a bug.** Obligations are
-      indexed to WAGES (payroll by headcount x wage; benefits by beneficiaries x wage). Collections
-      come from tax bases that do not grow with wages at the same rate. Re-basing one side alone
-      makes the government structurally unfinanced — which is a true statement about a real
-      economy and an invariant violation in this one.
-    - **What it did improve, measured before the revert:** crowding-out −0.767 → **−0.924**
-      (procurement share) and −0.533 → **−0.892** (realized spend); `unbackedBankCashUSD` at w13
-      91.6B → 11.2B. So the direction is right.
-    - **The precondition PUB3b needs**, and the reason it is not merely "finish it": either the
-      tax system's real bases must move with wages the way benefits do, or the treasury needs the
-      cash-management issuance PUB2a's own comment already promised ("a real treasury either holds
-      a bigger balance or issues cash-management bills to bridge") so the account can be bridged
-      rather than going negative. Probably both. **A 60-week harness passing is not evidence**:
-      this one did, and the failure lives at week 90+.
-    - The attempt is stashed, not deleted. **Shipping it green-at-60 would have been exactly the
-      thing this project exists to stop.**
+70. **PUB3b/3c: the budget becomes a sum of real obligations — and a reverted change that should
+    not have been reverted.** `spending = lastWeekNominalGdpUSD x (taxRate + deficitPct)` is gone.
+    The budget is now interest + payroll + benefits + procurement, every line a real quantity at a
+    real price, and **the deficit is an OUTCOME**. The automatic stabilizer is real with it: a
+    recession puts people on benefits and takes the tax base down at the same time.
+    - **The bases calibrate, which is the check they are sane.** The implied benefit lands at
+      **51–53% of the average wage across all four independently-sized regions** — inside the real
+      OECD replacement band — and procurement/payroll at a consistent 1.06–1.08x. Same test §7.9
+      applies to the household tax rate.
+    - **The judgment error, recorded because it is the lesson.** First attempt broke a hard
+      invariant at w120: the TGA went to **−497.5B** across 53 region-weeks. I reverted the
+      spending path. That was wrong. **A negative treasury account is not a fiscal outcome, it is
+      a missing instrument** — and the user said so: governments really do run wage-indexed
+      obligations against lagging receipts, and they cover the gap by issuing. The invariant was
+      pointing at the financing, and I deleted the diagnosis instead of building the mechanism.
+    - **PUB3c, the mechanism that was missing.** Bond financing is QUARTERLY (stage 11 accumulates
+      `pendingUnfundedDeficitUSD` for 13 weeks) while the government spends every week, so between
+      auctions the TGA absorbs the whole gap. Cash-management bills now bridge it: when the
+      account is under its operating balance the bill program issues the difference, over a few
+      weeks rather than in one block. PUB2a's own comment had promised exactly this and nobody
+      went back for it. **TGA negative in 0 of 480 region-weeks**, 1,475B of CMBs across 26 weeks.
+    - **The fiscal path is now an outcome, and it is heavy:** trailing revenue/outlays **0.47x**,
+      outlays growing x14.8 against revenue x9.3, debt/GDP to 213%. That is a government that
+      cannot fund wage-indexed commitments from its tax base — a real dynamic the old formula hid
+      by construction, since it defined spending as revenue plus a fixed deficit share.
+    - **THE FIXED ENVELOPE WAS MANUFACTURING CROWDING-OUT.** The debt-spiral shock used to cut
+      real procurement **43–58%** on impact; it now cuts **0.0–4.2%**. That is not a lost
+      mechanism, it is a corrected one: a real government facing a rate spike borrows, it does not
+      cut pensions that quarter. Crowding out still shows over the long run (corr −0.836 on the
+      procurement share, −0.715 on realized spend) through the debt path and the fiscal stance.
+      **An impressive number can be an artifact of the constraint you imposed.**

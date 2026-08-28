@@ -142,3 +142,72 @@ export function governmentOutlaysUSD(parts: {
  * bidder pro-rata, which no willingness to pay can fix.
  */
 export const GOVERNMENT_BID_PRICE_TOLERANCE = 0.50;
+
+/**
+ * PUB3b — the budget as a sum of real obligations, so the deficit is an OUTCOME.
+ *
+ * What this replaces: `spending = lastWeekNominalGdpUSD x (taxRate + deficitPct) / 52`. The whole
+ * fiscal state was a share of a LAGGED nominal aggregate, which is why revenue (real bases at
+ * real prices, since PUB1b/1c) and outlays drifted apart whenever the price level moved — the
+ * measured 1.18x wedge that fills the treasury's account.
+ *
+ * Now every line is a real quantity at a real price: staff the government has, people it owes a
+ * benefit to, goods its operations consume, coupons its stack costs. The deficit is what is left
+ * when revenue is subtracted, not an input — which also makes the automatic stabilizer real: a
+ * recession puts more people on benefits and takes the tax base down, and the deficit widens
+ * because both of those really happened.
+ */
+export function governmentObligationsWeeklyUSD(args: {
+  interestWeeklyUSD: number;
+  payrollWeeklyUSD: number;
+  /** Real unemployed x real wage x the replacement rate — the existing UI computation. */
+  unemploymentBenefitsWeeklyUSD: number;
+  /** Real retired headcount. */
+  retiredPopulation: number;
+  /** The pools' real average annual wage — benefits are indexed to earnings, as they are. */
+  averageAnnualWageUSD: number;
+  fiscalStanceScore: number;
+}): { interestUSD: number; payrollUSD: number; transfersUSD: number; procurementBudgetUSD: number; totalUSD: number } {
+  const socialBenefitsUSD =
+    (Math.max(0, args.retiredPopulation) * Math.max(0, args.averageAnnualWageUSD) * SOCIAL_BENEFIT_REPLACEMENT_RATE) / 52;
+  const transfersUSD = Math.max(0, args.unemploymentBenefitsWeeklyUSD) + socialBenefitsUSD;
+  const payrollUSD = Math.max(0, args.payrollWeeklyUSD);
+  const procurementBudgetUSD =
+    payrollUSD * PROCUREMENT_PER_PAYROLL_DOLLAR * (1 + args.fiscalStanceScore * FISCAL_STANCE_PROCUREMENT_SENSITIVITY);
+  const interestUSD = Math.max(0, args.interestWeeklyUSD);
+  return {
+    interestUSD, payrollUSD, transfersUSD, procurementBudgetUSD,
+    totalUSD: interestUSD + payrollUSD + transfersUSD + procurementBudgetUSD,
+  };
+}
+
+/**
+ * Benefit paid to the non-working population, as a share of the average wage.
+ *
+ * Honest about what it aggregates: this ONE program stands for the whole non-unemployment
+ * transfer state — public pensions, health, disability, family support — sized by the retired
+ * population because that is where the bulk of real transfer spending goes. Splitting it needs
+ * those programs modelled separately, and until they are, one named program beats four guesses.
+ *
+ * The value is not chosen: it is what the model's own real bases (retired headcount x average
+ * wage) require to reproduce the transfer level the fiscal block already ran at, and it lands at
+ * **51–53% across all four independently-sized regions** — inside the real OECD public
+ * replacement-rate band of 40–60%. That agreement is the check that the bases are sane, the same
+ * test the national-accounts header applies to the household tax rate.
+ */
+export const SOCIAL_BENEFIT_REPLACEMENT_RATE = 0.52;
+
+/**
+ * Goods and services the government's operations consume, per dollar of its own payroll. An
+ * agency with more staff buys more of everything; anchoring to payroll rather than to GDP means
+ * procurement moves with real headcount and real wages instead of a nominal aggregate.
+ *
+ * Measured at 1.06–1.08x across the four regions under the previous share-of-GDP budget. Real
+ * national accounts run nearer 1.4x (purchases ~31% of spending against compensation ~22%); this
+ * keeps the model's own composition rather than importing that, so the change is a re-basing and
+ * not a re-sizing. Moving toward 1.4 is a deliberate composition change, not a fix.
+ */
+export const PROCUREMENT_PER_PAYROLL_DOLLAR = 1.07;
+
+/** How hard a full stimulus (stance 1.0) leans on government hiring, per week. */
+export const GOV_HIRING_RESPONSE_TO_STANCE = 0.0004;

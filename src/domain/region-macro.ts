@@ -570,8 +570,10 @@ export interface Region {
   governmentProcurementSpentUSD?: number;
   /** Budget the goods market could not supply. Named, not assumed spent. */
   unspentProcurementBudgetUSD?: number;
-  /** What actually left the account: interest + transfers + realized procurement. */
+  /** What actually left the account: interest + payroll + transfers + realized procurement. */
   governmentOutlaysUSD?: number;
+  /** PUB3c: bills issued this week purely to bridge the treasury's cash position. */
+  cashManagementBillIssuanceUSD?: number;
   /** PUB2 — the central bank's real balance sheet (`centralBank` above is just its name). The
    * treasury's account lives on it as a liability, which is what makes TGA flows move reserves. */
   centralBankSheet?: CentralBank;

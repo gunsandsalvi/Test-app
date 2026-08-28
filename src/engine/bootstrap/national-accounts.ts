@@ -90,30 +90,7 @@ export const CONSUMPTION_TAX_RATE = 0.10;
  */
 export const UNEMPLOYMENT_REPLACEMENT_RATE = 0.35;
 
-/**
- * Government transfers to households, annualised. PUB1: interest is a contractual claim that
- * comes off the top, so only the PRIMARY budget splits between transfers and procurement —
- * which is how a rising debt service crowds them out.
- */
-export function computeGovernmentTransfersUSD(
-  governmentSpendingWeeklyUSD: number,
-  interestWeeklyUSD: number = 0,
-  /** PUB3: staff pay comes off the top with interest — see the payroll double count below. */
-  payrollWeeklyUSD: number = 0
-): number {
-  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD - payrollWeeklyUSD)
-    * 52 * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
-}
 
-/** Government purchases of goods and services, annualised. Primary budget only — see above. */
-export function computeGovernmentPurchasesUSD(
-  governmentSpendingWeeklyUSD: number,
-  interestWeeklyUSD: number = 0,
-  payrollWeeklyUSD: number = 0
-): number {
-  return Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD - payrollWeeklyUSD)
-    * 52 * GOV_PROCUREMENT_SHARE_OF_SPENDING;
-}
 
 /**
  * Household disposable income: the one definition used by both the cold-start bootstrap and the
@@ -140,28 +117,24 @@ export function computeHouseholdDisposableIncomeUSD(parts: {
   /** TOTAL COMPENSATION (the labor share). The employer payroll tax is split out inside, so
    * callers pass one number and cannot disagree about where the split happens. */
   wageIncomeUSD: number;
-  governmentSpendingWeeklyUSD: number;
-  unemploymentBenefitsUSD: number;
-  /** PUB1: debt service leaves the transfer base — it is paid to bondholders. */
-  interestWeeklyUSD?: number;
-  /** PUB3: so does government payroll — see the double count below. */
-  payrollWeeklyUSD?: number;
+  /**
+   * PUB3b: the government's REAL transfer obligation this week (unemployment benefits plus the
+   * social/retirement program), from `governmentObligationsWeeklyUSD`. It used to be derived here
+   * as a share of the spending budget — a second representation of a number the budget already
+   * owned, and the reason the transfer line and the budget line could disagree.
+   */
+  transfersWeeklyUSD: number;
 }): number {
   // Capital income is a share of OUTPUT, keyed off total compensation — it has nothing to do
   // with the payroll tax, and deriving it from post-tax wages shrank it by the payroll rate
   // (measured: the identity assert fired at 78.66% against a required 79.46%).
   const capitalIncomeUSD = parts.wageIncomeUSD * HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR;
   const { grossWagesUSD } = splitWageBill(parts.wageIncomeUSD);
-  // PUB3: the government's own wage bill leaves the transfer base. Its employees are 14.3% of
-  // the pools, so their pay is ALREADY in wageIncomeUSD above — leaving it in the transfer
-  // envelope credited households the same ~8% of output twice, once as wages and once as a
-  // transfer. Removing it takes away no income anyone was really owed.
-  const transfersUSD = Math.max(
-    computeGovernmentTransfersUSD(
-      parts.governmentSpendingWeeklyUSD, parts.interestWeeklyUSD ?? 0, parts.payrollWeeklyUSD ?? 0
-    ),
-    parts.unemploymentBenefitsUSD
-  );
+  // PUB3b: the transfers households receive ARE the ones the government budgeted, annualised.
+  // The `max(computedTransfers, unemploymentBenefits)` this replaces existed because neither
+  // number was real; now unemployment benefits are one term INSIDE the obligation, so the
+  // stabilizer is a sum rather than a comparison.
+  const transfersUSD = Math.max(0, parts.transfersWeeklyUSD) * 52;
   const grossIncomeUSD = grossWagesUSD + capitalIncomeUSD + transfersUSD;
   return grossIncomeUSD * (1 - HOUSEHOLD_EFFECTIVE_TAX_RATE);
 }
@@ -181,15 +154,14 @@ export function assertHouseholdIncomeIdentity(
   regionId: string,
   householdIncomeUSD: number,
   outputUSD: number,
-  governmentSpendingWeeklyUSD: number,
-  // PUB1: interest is paid to bondholders, not to households, so it leaves the transfer base.
-  interestWeeklyUSD: number = 0,
-  // PUB3: so does the government's own payroll — households have it already, as wages.
-  payrollWeeklyUSD: number = 0
+  /**
+   * PUB3b: the government's REAL weekly transfer obligation. It used to be re-derived here from
+   * the spending budget and a procurement share — a third representation of a number the budget
+   * owns, which is exactly what the assert exists to catch elsewhere.
+   */
+  transfersWeeklyUSD: number
 ): void {
-  const govSpendShareOfOutput =
-    (Math.max(0, governmentSpendingWeeklyUSD - interestWeeklyUSD - payrollWeeklyUSD) * 52) / outputUSD;
-  const transferShare = govSpendShareOfOutput * (1 - GOV_PROCUREMENT_SHARE_OF_SPENDING);
+  const transferShare = (Math.max(0, transfersWeeklyUSD) * 52) / outputUSD;
   // PUB1c: households receive the labor share NET of the employer's payroll tax.
   const expectedShare =
     (LABOR_SHARE_OF_OUTPUT / (1 + EMPLOYER_PAYROLL_TAX_RATE)
@@ -220,11 +192,12 @@ export function computeExpenditureGdpUSD(parts: {
   householdIncomeUSD: number;
   savingsRate: number;
   investmentUSD: number;
-  governmentSpendingWeeklyUSD: number;
+  /** PUB1e/PUB3b: G is the procurement the government REALLY bought, annualised. */
+  governmentPurchasesUSD: number;
   netExportsUSD: number;
 }): { consumptionUSD: number; governmentPurchasesUSD: number; gdpUSD: number } {
   const consumptionUSD = parts.householdIncomeUSD * (1 - parts.savingsRate);
-  const governmentPurchasesUSD = computeGovernmentPurchasesUSD(parts.governmentSpendingWeeklyUSD);
+  const governmentPurchasesUSD = parts.governmentPurchasesUSD;
   return {
     consumptionUSD,
     governmentPurchasesUSD,

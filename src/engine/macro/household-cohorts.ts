@@ -18,7 +18,7 @@ import {
   OccupationType, WealthTier, WealthTierData, OccupationPool, HouseholdCohort,
 } from '../../domain/region-macro';
 import {
-  computeGovernmentTransfersUSD, HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR,
+  HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR,
   HOUSEHOLD_EFFECTIVE_TAX_RATE, UNEMPLOYMENT_REPLACEMENT_RATE, CONSUMPTION_TAX_RATE, splitWageBill, EMPLOYER_PAYROLL_TAX_RATE,
 } from '../bootstrap/national-accounts';
 
@@ -129,12 +129,8 @@ export interface CohortBuildInputs {
   baseAnnualWageUSD: Record<OccupationType, number>;
   /** Labor force per occupation (employed + unemployed), the same figure the benefits sum uses. */
   laborForceByOccupation: Record<OccupationType, number>;
-  /**
-   * The PRIMARY budget available for transfers: spending less debt service (PUB1) and less the
-   * government's own payroll (PUB3). Callers net both off, because both are already paid to
-   * someone else — bondholders and the government's own staff.
-   */
-  governmentSpendingWeeklyUSD: number;
+  /** PUB3b: the government's REAL weekly transfer obligation — the one number the budget owns. */
+  governmentTransfersWeeklyUSD: number;
   /** The region's behavioural aggregate savings rate — the anchor the tier cross-section is
    * normalized to, so the aggregate saving flow is unchanged by construction. */
   aggregateSavingsRate: number;
@@ -178,7 +174,7 @@ export interface CohortBuildResult {
 export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildResult {
   const {
     occupationPools, baseAnnualWageUSD, laborForceByOccupation,
-    governmentSpendingWeeklyUSD, aggregateSavingsRate, weeklyDebtServiceUSD, wealthDistribution,
+    governmentTransfersWeeklyUSD, aggregateSavingsRate, weeklyDebtServiceUSD, wealthDistribution,
   } = inputs;
 
   // ---- 1. Membership: transpose the tier→occupation mixes into per-occupation tier weights,
@@ -233,7 +229,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // the excess over benefits is means-tested down the distribution. Capital income follows the
   // prior week's tier equity exposure — where the claims actually sit. ----
   const aggregateTransfersUSD = Math.max(
-    computeGovernmentTransfersUSD(governmentSpendingWeeklyUSD), totalBenefitsUSD
+    governmentTransfersWeeklyUSD * 52, totalBenefitsUSD
   );
   const excessTransfersUSD = aggregateTransfersUSD - totalBenefitsUSD;
   // Keyed off TOTAL COMPENSATION, matching the aggregate derivation — capital income is a share

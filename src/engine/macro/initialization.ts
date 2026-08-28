@@ -4,7 +4,7 @@ import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, Cr
 import { buildHouseholdCohorts } from './household-cohorts';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
-import { governmentPayrollWeeklyUSD } from '../../domain/government';
+import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
@@ -270,7 +270,6 @@ function buildRegion(regionId: RegionId): Region {
   });
 
   const governmentRevenueUSD = Number(((estimatedNominalGdpUSD * EFFECTIVE_TAX_RATE) / 52).toFixed(0));
-  const governmentSpendingUSD = Number((governmentRevenueUSD + (estimatedNominalGdpUSD * FISCAL_DEFICIT_PCT_GDP) / 52).toFixed(0));
 
   // Household income comes from the one shared national-accounts derivation (wages + capital
   // income + government transfers, net of household tax) that the weekly evolution also uses,
@@ -308,16 +307,25 @@ function buildRegion(regionId: RegionId): Region {
     ),
     occupationMix: GOVERNMENT_OCCUPATION_MIX,
   });
-  const estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
-    wageIncomeUSD: totalWageIncomeUSD,
-    governmentSpendingWeeklyUSD: governmentSpendingUSD,
+  const seedLifeCycle = createLifeCycleDistribution();
+  // PUB3b (§7.4): the seed budget is the same sum of real obligations the weekly step computes,
+  // so week 0's fiscal state and week 1's are the same shape rather than two derivations.
+  const seedAvgAnnualWageUSD = totalEmployed > 0 ? totalWageIncomeUSD / totalEmployed : 0;
+  const seedObligations = governmentObligationsWeeklyUSD({
     interestWeeklyUSD: seedInterestWeeklyUSD,
     payrollWeeklyUSD: seedPayrollWeeklyUSD,
-    unemploymentBenefitsUSD: initialUnemploymentBenefitsUSD,
+    unemploymentBenefitsWeeklyUSD: initialUnemploymentBenefitsUSD / 52,
+    retiredPopulation: totalPopulation * (seedLifeCycle.RETIRED?.shareOfPopulation ?? 0),
+    averageAnnualWageUSD: seedAvgAnnualWageUSD,
+    fiscalStanceScore: 0,
+  });
+  const governmentSpendingUSD = Number(seedObligations.totalUSD.toFixed(0));
+  const estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+    wageIncomeUSD: totalWageIncomeUSD,
+    transfersWeeklyUSD: seedObligations.transfersUSD,
   }).toFixed(0));
   assertHouseholdIncomeIdentity(
-    regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, governmentSpendingUSD,
-    seedInterestWeeklyUSD, seedPayrollWeeklyUSD
+    regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, seedObligations.transfersUSD
   );
   const lastWeekNominalGdpUSD = estimatedNominalGdpUSD;
 
@@ -334,8 +342,7 @@ function buildRegion(regionId: RegionId): Region {
     occupationPools,
     baseAnnualWageUSD,
     laborForceByOccupation,
-    governmentSpendingWeeklyUSD: Math.max(0,
-      governmentSpendingUSD - seedInterestWeeklyUSD - seedPayrollWeeklyUSD),
+    governmentTransfersWeeklyUSD: seedObligations.transfersUSD,
     aggregateSavingsRate: HOUSEHOLD_SAVINGS_RATE,
     weeklyDebtServiceUSD: 0,
     // Zero here to match the zero debt service: both sides of the budget loop arrive together
@@ -573,7 +580,7 @@ function buildRegion(regionId: RegionId): Region {
     historicalZeroCurves: [{ week: 1, ...zeroRates }],
     wealthDistribution: seedWealthDistribution,
     housingMarket: createHousingMarket(regionId, estimatedHouseholdIncomeUSD, totalPopulation),
-    lifeCycleDistribution: createLifeCycleDistribution(),
+    lifeCycleDistribution: seedLifeCycle,
   };
 
   region.categoryDemand = createInitialCategoryDemand(gdpGrowth, estimatedHouseholdIncomeUSD, lastWeekNominalGdpUSD, totalPopulation, TARGET_FIRMS_PER_REGION);

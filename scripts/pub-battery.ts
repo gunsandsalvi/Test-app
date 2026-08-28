@@ -55,7 +55,7 @@ let s = createInitialGameState(DEFAULT_SIMULATION_SEED);
 const series: Record<string, number[]> = {
   interestShare: [], procShare: [], procSpent: [], unspentProc: [], stance: [],
   tga: [], cbBook: [], reinvest: [], remit: [], policy: [], portYield: [],
-  unbacked: [], unmodeledTax: [], revenue: [], outlays: [], debtGdp: [], y2: [], y10: [],
+  unbacked: [], unmodeledTax: [], revenue: [], outlays: [], debtGdp: [], y2: [], y10: [], cmb: [],
 };
 let shockState: GameState | null = null; let shockRng = 0;
 const SHOCK_WEEK = Math.min(40, Math.floor(WEEKS / 3));
@@ -81,6 +81,7 @@ for (let w = 1; w <= WEEKS; w++) {
   series.unmodeledTax.push(reg.unmodeledTaxRevenueUSD ?? 0);
   series.revenue.push(reg.governmentRevenueUSD);
   series.outlays.push(reg.governmentOutlaysUSD ?? 0);
+  series.cmb.push(reg.cashManagementBillIssuanceUSD ?? 0);
   series.debtGdp.push(reg.debtToGdpPctBottomUp ?? 0);
   series.y2.push(reg.zeroRates.tenor2Y);
   series.y10.push(reg.zeroRates.tenor10Y);
@@ -165,7 +166,11 @@ console.log('\n--- 5. THE TREASURY ACCOUNT ---');
     const rg = trail(rev, WEEKS) / Math.max(1, trail(rev, half));
     const og = trail(series.outlays, WEEKS) / Math.max(1, trail(series.outlays, half));
     console.log(`  trailing-52wk revenue ${B(trail(rev, WEEKS))} vs outlays ${B(trail(series.outlays, WEEKS))} = ${(trail(rev, WEEKS) / Math.max(1, trail(series.outlays, WEEKS))).toFixed(2)}x`);
-    console.log(`  growth w${half} -> w${WEEKS}: revenue x${rg.toFixed(1)}, outlays x${og.toFixed(1)} — both LAG the price level; revenue lags less, which is what fills the account`);
+    const lead = rg > og ? 'revenue outgrows outlays, filling the account'
+      : 'outlays outgrow revenue, so the deficit is structural and must be financed';
+    console.log(`  growth w${half} -> w${WEEKS}: revenue x${rg.toFixed(1)}, outlays x${og.toFixed(1)} — ${lead}`);
+    const cmb = series.cmb.reduce((a, v) => a + v, 0);
+    console.log(`  cash-management bills issued to bridge the account: ${B(cmb)} total, ${series.cmb.filter(v => v > 0).length}/${WEEKS} weeks (PUB3c)`);
   } else {
     console.log(`  (revenue/outlays growth needs >=104 weeks: a trailing-annual window on quarterly receipts)`);
   }

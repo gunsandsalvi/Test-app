@@ -15,7 +15,7 @@ import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-acco
 import { buildCpiBasket, computeCpiLevel, CPI_BASKET_REBASE_WEEKS } from './price-index';
 import { attributeItemizedHoldings, sovBucketKey } from './shared-helpers';
 import { weeklyInterestExpenseUSD, sovereignCouponByBucket, decomposeGovernmentSpending, governmentOutlaysUSD } from '../../../domain/government';
-import { centralBankAssetsUSD, openMarketPolicy } from '../../../domain/central-bank';
+import { centralBankAssetsUSD, openMarketPolicy, cashManagementBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView } from './holdings-view';
 
@@ -374,10 +374,21 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const billFundedDeficitUSD = weeklyDeficitUSD * billShareOfNewMoney;
     const marketFundedDeficitUSD = weeklyDeficitUSD - billFundedDeficitUSD;
 
+    // PUB3c: cash-management bills. Bond financing is quarterly (see the calendar below) but the
+    // government spends every week, so between auctions the TGA is the only thing absorbing the
+    // gap. When it falls below its operating balance the treasury issues bills to bridge —
+    // which is what a real treasury does, and what stops a negative account being mistaken for
+    // a fiscal result. Sized off REALIZED outlays, so it responds to what actually went out.
+    const cmbIssuanceUSD = cashManagementBillIssuanceUSD({
+      treasuryAccountUSD: reg.centralBankSheet?.treasuryAccountUSD ?? 0,
+      weeklyOutlaysUSD: reg.governmentOutlaysUSD ?? reg.governmentSpendingUSD,
+    });
+    reg.cashManagementBillIssuanceUSD = Number(cmbIssuanceUSD.toFixed(0));
+
     // Weekly bill issuance: the roll plus the bill share of new money, split across the three
     // programs, priced off the real cleared bill curve (07f ran before this stage).
     const newTranches: GovDebtTranche[] = [];
-    const weeklyBillIssuanceUSD = maturedBillPrincipalUSD + billFundedDeficitUSD;
+    const weeklyBillIssuanceUSD = maturedBillPrincipalUSD + billFundedDeficitUSD + cmbIssuanceUSD;
     if (weeklyBillIssuanceUSD > 1000) {
       ([[13, 0.25, 0.4], [26, 0.5, 0.35], [52, 1, 0.25]] as const).forEach(([weeks, tenorYears, weight]) => {
         const principal = weeklyBillIssuanceUSD * weight;

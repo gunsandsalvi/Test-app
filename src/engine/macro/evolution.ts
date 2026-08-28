@@ -12,7 +12,10 @@ import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
-import { weeklyInterestExpenseUSD, governmentPayrollWeeklyUSD } from '../../domain/government';
+import {
+  weeklyInterestExpenseUSD, governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD,
+  GOV_HIRING_RESPONSE_TO_STANCE,
+} from '../../domain/government';
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
@@ -186,7 +189,6 @@ export function evolveRegionMacro(
   const newEffectiveTaxRate = Math.max(0.10, Math.min(0.50, isFinite(region.effectiveTaxRate + taxRateDrift) ? region.effectiveTaxRate + taxRateDrift : 0.25));
 
   const newGovernmentRevenueUSD = Math.max(1e8, newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52); // weekly flow
-  const newGovernmentSpendingUSD = Math.max(1e8, newGovernmentRevenueUSD + (newEstimatedNominalGdpUSD * newFiscalDeficitPctGdp) / 52); // spending = revenue + deficit, by definition
   // PUB1: what the debt stack actually costs. Not added to spending — carved out of it.
   const govInterestWeeklyUSD = weeklyInterestExpenseUSD(region.govDebtTranches);
 
@@ -202,16 +204,6 @@ export function evolveRegionMacro(
   const nonEmployableDrift = (random() - 0.5) * 0.00002; // tiny, structural, not cycle-driven
   const newNonEmployablePct = (region.nonEmployablePct + nonEmployableDrift);
 
-  // Government employment responds to real spending growth
-  const spendingGrowthRate = region.governmentSpendingUSD > 0 ? (newGovernmentSpendingUSD - region.governmentSpendingUSD) / region.governmentSpendingUSD : 0;
-  // Government spending has its own startup transient (near-zero/degenerate at generation, then jumping to
-  // its real mature value once evolution first runs) — bidirectional, since the transient can show up as
-  // either an anomalous spike or an anomalous collapse depending on which value is compared against which.
-  const isGovSpendingStartupTransition = region.governmentSpendingUSD < newGovernmentSpendingUSD * 0.2 || newGovernmentSpendingUSD < region.governmentSpendingUSD * 0.2;
-  const targetGovEmploymentGrowthRate = isGovSpendingStartupTransition ? 0 : (spendingGrowthRate * 0.3);
-  const prevGovEmploymentGrowthRate = (region as any).govEmploymentGrowthRate ?? targetGovEmploymentGrowthRate;
-  const govEmploymentGrowthRate = prevGovEmploymentGrowthRate * 0.85 + targetGovEmploymentGrowthRate * 0.15;
-  const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
   let newPotentialGdpGrowth = region.potentialGdpGrowth;
   if (week % 52 === 0) {
@@ -272,6 +264,17 @@ export function evolveRegionMacro(
   const netPopulationGrowthRate = netAnnualGrowthRate / 52;
   const newTotalPopulation = Math.max(1, Math.round(region.totalPopulation * (1 + netPopulationGrowthRate)));
   const totalLaborForce = newTotalPopulation * (1 - newNonEmployablePct) * newParticipation;
+
+  // PUB3b: government headcount follows the POPULATION IT SERVES, leaning on the fiscal stance —
+  // austerity freezes hiring, stimulus adds staff. It used to respond to spending growth, which
+  // is now circular: payroll is the biggest line of the budget, so a budget derived from staffing
+  // cannot also determine it. Population and stance are both real and neither depends on the
+  // budget this week.
+  const targetGovEmploymentGrowthRate =
+    netPopulationGrowthRate + newFiscalStanceScore * GOV_HIRING_RESPONSE_TO_STANCE;
+  const prevGovEmploymentGrowthRate = (region as any).govEmploymentGrowthRate ?? targetGovEmploymentGrowthRate;
+  const govEmploymentGrowthRate = prevGovEmploymentGrowthRate * 0.85 + targetGovEmploymentGrowthRate * 0.15;
+  const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
   const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5 - 0.1 * ((newCCI - 100) / 100);
   const realRateGap = laggedPolicyRate - newNeutralRate;
@@ -465,6 +468,8 @@ export function evolveRegionMacro(
     const pool = newOccupationPools[occ];
     return sum + baseAnnualWageUSD[occ] * pool.wageIndex * pool.employed;
   }, 0);
+  const totalEmployedForWages = (Object.keys(newOccupationPools) as OccupationType[])
+    .reduce((sum, occ) => sum + newOccupationPools[occ].employed, 0);
   // PUB1c: the wage bill is total compensation; the employer's payroll tax leaves it first.
   const { grossWagesUSD, employerPayrollTaxUSD } = splitWageBill(totalWageIncomeUSD);
   // PUB3: the government's own share of that bill — the employees it really has, at the wages
@@ -484,18 +489,28 @@ export function evolveRegionMacro(
     const unemployedInPool = Math.max(0, availableSupplyForOcc - pool.employed);
     return sum + baseAnnualWageUSD[occ] * pool.wageIndex * unemployedInPool * UNEMPLOYMENT_REPLACEMENT_RATE;
   }, 0);
+  // ---- PUB3b: the budget IS the sum of what the government really owes this week. The old
+  // `revenue + deficit x GDP` made the whole fiscal state a share of a LAGGED nominal aggregate,
+  // which is why revenue (real bases at real prices since PUB1b/1c) drifted away from outlays
+  // whenever the price level moved. The deficit is now an OUTCOME, and the automatic stabilizer
+  // is real: a recession puts people on benefits and takes the tax base down at the same time.
+  const govObligations = governmentObligationsWeeklyUSD({
+    interestWeeklyUSD: govInterestWeeklyUSD,
+    payrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
+    unemploymentBenefitsWeeklyUSD: unemploymentBenefitsUSD / 52,
+    retiredPopulation: newTotalPopulation * (region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0),
+    averageAnnualWageUSD: totalEmployedForWages > 0 ? totalWageIncomeUSD / totalEmployedForWages : 0,
+    fiscalStanceScore: newFiscalStanceScore,
+  });
+  const newGovernmentSpendingUSD = Math.max(1e8, govObligations.totalUSD);
+
   // The same national-accounts derivation the cold-start bootstrap uses. It used to be written
   // out separately here (wages + unemployment transfers + a flat 15% capital income, no tax and
   // no government transfers), so the week-1 economy did not describe the same one the bootstrap
   // had built — the two definitions have to be one definition.
   const newEstimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
     wageIncomeUSD: totalWageIncomeUSD,
-    governmentSpendingWeeklyUSD: region.governmentSpendingUSD,
-    interestWeeklyUSD: region.governmentInterestWeeklyUSD ?? 0,
-    // PUB3: payroll leaves the transfer base. Households already receive these wages inside the
-    // labor share above — counting them again as transfers credited the same ~8% of output twice.
-    payrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
-    unemploymentBenefitsUSD,
+    transfersWeeklyUSD: govObligations.transfersUSD,
   }).toFixed(0));
 
   // HH4: the same income, decomposed — ~20 occupation x wealth-tier cohorts built from the
@@ -520,8 +535,7 @@ export function evolveRegionMacro(
     occupationPools: newOccupationPools,
     baseAnnualWageUSD,
     laborForceByOccupation,
-    governmentSpendingWeeklyUSD: Math.max(0,
-      region.governmentSpendingUSD - (region.governmentInterestWeeklyUSD ?? 0) - newGovernmentPayrollWeeklyUSD),
+    governmentTransfersWeeklyUSD: govObligations.transfersUSD,
     aggregateSavingsRate: newSavingsRate,
     weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
     annualCapitalReceiptsUSD,
