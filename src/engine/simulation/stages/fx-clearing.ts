@@ -120,12 +120,16 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     addPairFlow(flows, region, 'USA', -pos);
   });
 
-  // ---- What the bank FX desks can still commit, which is what bounds the arbitrage. ----
+  // ---- What the bank FX desks can still commit, which is what bounds the arbitrage — and,
+  // per desk, the share of the market-making residual each one warehouses below. ----
   let arbitrageCapacityUSD = 0;
+  const deskCapacityByTicker = new Map<string, number>();
   ctx.updatedCompanies.forEach((c: any) => {
     const sheet = c.bankBalanceSheet;
     if (!sheet) return;
-    arbitrageCapacityUSD += fxDeskCapacityUSD(leverageHeadroomUSD(sheet), sheet.fxDealerBook);
+    const capUSD = fxDeskCapacityUSD(leverageHeadroomUSD(sheet), sheet.fxDealerBook);
+    if (capUSD > 0) deskCapacityByTicker.set(c.ticker, capUSD);
+    arbitrageCapacityUSD += capUSD;
   });
 
   // A central bank has ONE reserve pot, not one per pair. XB6 put it in every pair it is a side
@@ -144,6 +148,9 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   const clearedRateByPair = new Map<string, number>();
   const residualByPair = new Map<string, number>();
   const grossByPair = new Map<string, number>();
+  /** The market-maker's position after the week: what the desks bought of the base that nobody
+   * else would (clients net sellers), or sold that nobody else offered (clients net buyers). */
+  const dealerLongBaseByPair = new Map<string, number>();
 
   pairs.forEach((fx) => {
     const key = pairKey(fx.base, fx.quote);
@@ -186,22 +193,49 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       participants.push({ id: `${e.id}-${key}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
     });
 
-    // Either side's central bank may lean against a move in its own money, and only as far as its
-    // real reserves allow (XB5).
-    ([fx.base, fx.quote] as RegionId[]).forEach(side => {
-      const cb = ctx.updatedRegions[side]?.centralBankSheet;
-      if (!cb) return;
-      const budgetUSD = reserveBudgetRemaining.get(side) ?? 0;
-      if (!(budgetUSD > 0)) return; // a bank out of reserves stops bidding, and the rate moves
-      const demand = new Map<string, ParticipantDemand>();
-      demand.set(instrument.id, {
-        reservationStat: currentRate * (1 - sign * CENTRAL_BANK_RESERVATION_MOVE_PCT / 100),
-        maxHoldingUSD: budgetUSD,
-        fullSizeStatRange: currentRate * (CENTRAL_BANK_FULL_SIZE_RANGE_PCT / 100),
-        maxNetPurchaseUSD: budgetUSD,
-      });
-      participants.push({ id: `CB-${side}-${key}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
-    });
+    // The central bank DEFENDS its own money, and only when the move against it has already
+    // exhausted the private elastic side (the reservation is derived from the speculators' own
+    // full-deployment point — see fx-market.ts). Only the falling side's bank acts, in the one
+    // direction its balance sheet can honestly express (XB5):
+    //   base falling  -> the base bank BUYS its own currency, spending reserves;
+    //   quote falling -> the quote bank SELLS the base currency out of its reserve holdings.
+    // The first version put a reservation on the WRONG side of the market — `1 - sign * pct`
+    // against the speculators' `1 + sign * pct` — which left the bank fully in the money the
+    // moment its currency slipped at all: every week, at full size, ahead of every private
+    // buyer. That was the trigger-happiness, and no threshold constant could gate it from the
+    // wrong side of the price. There is no automatic accumulation branch: buying foreign
+    // currency to hold your own DOWN is a policy regime, not a market reflex.
+    if (sign < 0) {
+      const cb = ctx.updatedRegions[fx.base]?.centralBankSheet;
+      const budgetUSD = reserveBudgetRemaining.get(fx.base) ?? 0;
+      if (cb && budgetUSD > 0) {
+        const demand = new Map<string, ParticipantDemand>();
+        demand.set(instrument.id, {
+          reservationStat: currentRate * (1 - CENTRAL_BANK_RESERVATION_MOVE_PCT / 100),
+          maxHoldingUSD: budgetUSD,
+          fullSizeStatRange: currentRate * (CENTRAL_BANK_FULL_SIZE_RANGE_PCT / 100),
+          maxNetPurchaseUSD: budgetUSD,
+        });
+        participants.push({ id: `CB-${fx.base}-${key}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
+      }
+    } else {
+      const cb = ctx.updatedRegions[fx.quote]?.centralBankSheet;
+      const baseReservesUSD = Math.max(0, Number(cb?.fxReservesByRegion?.[fx.base]) || 0);
+      const sellableUSD = Math.min(reserveBudgetRemaining.get(fx.quote) ?? 0, baseReservesUSD);
+      if (cb && sellableUSD > 0) {
+        const holdings = new Map<string, number>([[instrument.id, sellableUSD]]);
+        const demand = new Map<string, ParticipantDemand>();
+        demand.set(instrument.id, {
+          // Holds its position until the base has risen past the threshold, then sells into the
+          // strength, fully out by threshold + range — the mirror image of the buy side.
+          reservationStat: currentRate * (1 + (CENTRAL_BANK_RESERVATION_MOVE_PCT + CENTRAL_BANK_FULL_SIZE_RANGE_PCT) / 100),
+          maxHoldingUSD: sellableUSD,
+          fullSizeStatRange: currentRate * (CENTRAL_BANK_FULL_SIZE_RANGE_PCT / 100),
+          maxNetPurchaseUSD: 0,
+        });
+        participants.push({ id: `CB-${fx.quote}-${key}`, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
+      }
+    }
 
     // The triangular arbitrageur. Its reservation is not a preference or a coefficient — it is
     // the rate the OTHER TWO legs imply for this pair. Below it the desks buy the base, above it
@@ -227,6 +261,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     if (participants.length === 0) {
       clearedRateByPair.set(key, currentRate);
       residualByPair.set(key, netBaseDemandUSD);
+      dealerLongBaseByPair.set(key, -netBaseDemandUSD);
       return;
     }
 
@@ -237,26 +272,43 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
 
     clearedRateByPair.set(key, result.newStatById.get(instrument.id) ?? currentRate);
-    residualByPair.set(key, result.newDealerInventoryById.get(instrument.id) ?? 0);
+    const residualUSD = result.newDealerInventoryById.get(instrument.id) ?? 0;
+    residualByPair.set(key, residualUSD);
+    // The engine's residual is a magnitude on a one-sided float; the DIRECTION is the adapter's
+    // (the float was oriented by `sign`). A desk making the market takes the other side of the
+    // unmet flow: clients net sellers of the base leave it LONG, net buyers leave it SHORT.
+    dealerLongBaseByPair.set(key, -sign * Math.abs(residualUSD));
 
-    // XB5: what a central bank actually took MOVES its reserves. Defending your own money means
-    // buying it with somebody else's, which spends them; a bank at zero stops being able to bid.
-    ([fx.base, fx.quote] as RegionId[]).forEach(side => {
-      const cb = ctx.updatedRegions[side]?.centralBankSheet;
-      if (!cb) return;
-      const filled = -(result.netCashDeltaByParticipantId.get(`CB-${side}-${key}`) ?? 0);
-      if (!(Math.abs(filled) > 0)) return;
-      // What it spent here is no longer available in the next pair this week.
-      reserveBudgetRemaining.set(side, Math.max(0, (reserveBudgetRemaining.get(side) ?? 0) - Math.abs(filled)));
-      const book = { ...(cb.fxReservesByRegion ?? {}) };
-      const held = Object.keys(book).reduce((a, k) => a + Math.max(0, Number(book[k]) || 0), 0);
-      if (!(held > 0)) return;
-      Object.keys(book).forEach(k => {
-        const share = Math.max(0, Number(book[k]) || 0) / held;
-        book[k] = Math.max(0, (Number(book[k]) || 0) - filled * share);
-      });
-      cb.fxReservesByRegion = book;
-    });
+    // XB5: what a central bank actually took MOVES its reserves, in the one direction each
+    // defense runs. The base bank's purchase of its own currency spends foreign reserves
+    // pro-rata across whatever it holds; the quote bank's sale of the base currency comes off
+    // that specific reserve line, and the own-currency proceeds are extinguished (a central
+    // bank's own money is not an asset to it). Either bank at zero stops being able to act.
+    if (sign < 0) {
+      const cb = ctx.updatedRegions[fx.base]?.centralBankSheet;
+      const ownBoughtUSD = -(result.netCashDeltaByParticipantId.get(`CB-${fx.base}-${key}`) ?? 0);
+      if (cb && ownBoughtUSD > 0) {
+        reserveBudgetRemaining.set(fx.base, Math.max(0, (reserveBudgetRemaining.get(fx.base) ?? 0) - ownBoughtUSD));
+        const book = { ...(cb.fxReservesByRegion ?? {}) };
+        const held = Object.keys(book).reduce((a, k) => a + Math.max(0, Number(book[k]) || 0), 0);
+        if (held > 0) {
+          Object.keys(book).forEach(k => {
+            const share = Math.max(0, Number(book[k]) || 0) / held;
+            book[k] = Math.max(0, (Number(book[k]) || 0) - ownBoughtUSD * share);
+          });
+          cb.fxReservesByRegion = book;
+        }
+      }
+    } else {
+      const cb = ctx.updatedRegions[fx.quote]?.centralBankSheet;
+      const soldBaseUSD = result.netCashDeltaByParticipantId.get(`CB-${fx.quote}-${key}`) ?? 0;
+      if (cb && soldBaseUSD > 0) {
+        reserveBudgetRemaining.set(fx.quote, Math.max(0, (reserveBudgetRemaining.get(fx.quote) ?? 0) - soldBaseUSD));
+        const book = { ...(cb.fxReservesByRegion ?? {}) };
+        book[fx.base] = Math.max(0, (Number(book[fx.base]) || 0) - soldBaseUSD);
+        cb.fxReservesByRegion = book;
+      }
+    }
   });
 
   // Apply what cleared, pair by pair. Pairs are PRIMARY now: a cross rate is what its own book
@@ -309,6 +361,46 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       return { ...c, bankBalanceSheet: nextSheet };
     });
   });
+
+  // ---- The desks ARE the market's dealer (the user's question that exposed this: "does FX
+  // clearing still go through banks?" — it did not, quite). Every other book in this model
+  // hands its unabsorbed residual to named banks; here it was published as a statistic and
+  // owned by nobody. The flow the elastic side could not take is now warehoused on the same
+  // fxDealerBook the hedging desks already run, split by each desk's real committed capacity —
+  // so next week's flattening flow works the position off, inventory consumes desk capacity
+  // (fxDeskCapacityUSD reads the book), and a market with no absorber leaves the banks
+  // visibly carrying it. The book is NOTIONAL risk, so no cash leg is invented here; the pip
+  // the desks should earn on client flow needs those clients' conversions to stop happening
+  // at mid elsewhere first (§6).
+  if (deskCapacityByTicker.size > 0 && arbitrageCapacityUSD > 0) {
+    const warehouseDeltaByTicker = new Map<string, Partial<Record<RegionId, number>>>();
+    dealerLongBaseByPair.forEach((longBaseUSD, key) => {
+      if (!(Math.abs(longBaseUSD) > 1)) return;
+      const [base, quote] = key.split('/') as [RegionId, RegionId];
+      deskCapacityByTicker.forEach((capUSD, ticker) => {
+        const share = capUSD / arbitrageCapacityUSD;
+        let delta = warehouseDeltaByTicker.get(ticker);
+        if (!delta) { delta = {}; warehouseDeltaByTicker.set(ticker, delta); }
+        if (base !== 'USA') delta[base] = (delta[base] ?? 0) + longBaseUSD * share;
+        if (quote !== 'USA') delta[quote] = (delta[quote] ?? 0) - longBaseUSD * share;
+      });
+    });
+    if (warehouseDeltaByTicker.size > 0) {
+      ctx.updatedCompanies = ctx.updatedCompanies.map((c: any) => {
+        const delta = warehouseDeltaByTicker.get(c.ticker);
+        const sheet = ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet;
+        if (!delta || !sheet?.fxDealerBook) return c;
+        const nextNet = { ...sheet.fxDealerBook.netNotionalByRegion };
+        (Object.keys(delta) as RegionId[]).forEach(r => {
+          nextNet[r] = (Number(nextNet[r]) || 0) + delta[r]!;
+        });
+        const nextSheet = { ...sheet, fxDealerBook: { ...sheet.fxDealerBook, netNotionalByRegion: nextNet } };
+        if (!ctx.companyUpdates[c.ticker]) ctx.companyUpdates[c.ticker] = {};
+        ctx.companyUpdates[c.ticker].bankBalanceSheet = nextSheet;
+        return { ...c, bankBalanceSheet: nextSheet };
+      });
+    }
+  }
 
   // XB6 publishes what each PAIR could not absorb, which is the only honest measure this model
   // has of how deep a pair is. A pair whose whole flow clears is cheap to transact in; one where

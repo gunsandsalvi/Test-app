@@ -24,9 +24,10 @@
  * one-way and the elastic side is thin, the rate moves a long way — which is what a currency
  * crisis IS, and it is now something this model can produce rather than assume.
  *
- * The numéraire is the USD, so what clears is each region's currency VALUE in USD and every pair
- * is derived from two of those. Four independently drifting pairs could violate triangular
- * arbitrage; three cleared values cannot.
+ * XB6 made every PAIR primary: each clears on its own book and its own flow, and triangular
+ * consistency is an OUTCOME — held together by the bank desks' arbitrage capital, not by
+ * construction. (This paragraph once said the USD was the numéraire and crosses were derived;
+ * that construction is gone, and with it the built-in guarantee it provided.)
  */
 
 /**
@@ -43,12 +44,21 @@ export const SPECULATOR_FULL_SIZE_RANGE_PCT = 4.0;
 export const SPECULATOR_FX_RISK_BUDGET = 0.15;
 
 /**
- * A central bank smooths; it does not defend a level. So it wants none until the move is large,
- * and its size is bounded by real reserves.
+ * A central bank counters DISORDERLY markets; it does not defend a level and it does not trade
+ * inside the range where private capital still absorbs the flow. Major-currency central banks
+ * intervene in spot FX rarely — the routine stress tool is the swap-line network (see §6; it
+ * needs an FX funding market this model does not have yet) — and when they do step in it is
+ * because the private elastic side is exhausted. So the reservation is DERIVED from exactly
+ * that point: the move at which the speculators are fully deployed. Below it the central bank
+ * has no bid at all; the 3.0 this replaces sat INSIDE the speculators' own scale-in range, which
+ * made the central bank the market's first buyer every week rather than its last.
  */
-export const CENTRAL_BANK_RESERVATION_MOVE_PCT = 3.0;
+export const CENTRAL_BANK_RESERVATION_MOVE_PCT =
+  SPECULATOR_RESERVATION_MOVE_PCT + SPECULATOR_FULL_SIZE_RANGE_PCT;
 export const CENTRAL_BANK_FULL_SIZE_RANGE_PCT = 5.0;
+/** Share of the reserve book one week's operation may commit — desk capacity, drawn as spent. */
 export const CENTRAL_BANK_FX_INTERVENTION_SHARE = 0.10;
+
 
 /** The rate is a PRICE_LIKE statistic: demand falls as the currency gets dearer. */
 export const FX_STAT_KIND = 'PRICE_LIKE' as const;
