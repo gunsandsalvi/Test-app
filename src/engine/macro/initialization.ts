@@ -143,7 +143,14 @@ function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDeb
   ];
 }
 
-// Structural region identifiers (currency/central-bank labels), not numeric data.
+/**
+ * RULE 4, OPEN, on two counts. The names are real institutions — 'Federal Reserve', 'Bank of
+ * England', 'Bank of Japan', 'European Central Bank', and the four countries — which §6.3-D
+ * records; "not numeric data" does not exempt them, since rule 4 names real tickers and company
+ * names first. And `sovereignRating` is ASSIGNED here (USA AA, UK AA, JPN A, EUR AAA) when a
+ * rating is an OUTCOME of debt and deficit — the same rating `evolution.ts` then walks from a
+ * formula debt ratio nobody measures (§6.1). Owner: IDX (7) for the names, MAC (6) for the rating.
+ */
 const REGION_IDENTITY: Record<RegionId, { name: string; currency: string; symbol: string; centralBank: string; sovereignRating: Region['sovereignRating'] }> = {
   USA: { name: 'United States', currency: 'USD', symbol: '$', centralBank: 'Federal Reserve', sovereignRating: 'AA' },
   UK: { name: 'United Kingdom', currency: 'GBP', symbol: '£', centralBank: 'Bank of England', sovereignRating: 'AA' },
@@ -161,6 +168,9 @@ const BIRTH_RATE_ANNUAL = 0.010;
 const DEATH_RATE_ANNUAL = 0.0095;
 const NET_MIGRATION_RATE_ANNUAL = 0.002;
 const EFFECTIVE_TAX_RATE = 0.31;
+// RULE 13: a deficit and a debt ratio are OUTCOMES, and PUB3b already makes the deficit one
+// (`governmentObligationsWeeklyUSD`). These seed a parallel top-down pair that `evolution.ts`
+// then walks and rates the sovereign off — see §6.1. Owner: MAC (6).
 const FISCAL_DEFICIT_PCT_GDP = 0.05;
 const DEBT_TO_GDP_PCT = 1.0;
 const GOV_EMPLOYMENT_SHARE_OF_POPULATION = 0.055;
@@ -196,6 +206,10 @@ const GOV_DEBT_TENOR_WEIGHTS: { tenorYears: number; tenorWeeks: number; weight: 
   { tenorYears: 30, tenorWeeks: 1560, weight: 0.123 },
 ];
 
+// RULE 4: observed household balance-sheet ratios. `equityHoldingsToIncome` is the one the
+// household state's `unmodeledFinancialAssetsUSD` doc already names as the source of its own
+// named gap ("real households hold roughly 1.5x income in financial assets and the seed says
+// so"). Cohort balance sheets (§6.1 / MAC) replace the whole line with accumulation.
 const HOUSEHOLD_DEBT_RATIOS = { creditCardToIncome: 0.075, otherConsumerLoanToIncome: 0.133, mortgageToIncome: 0.90, depositsToIncome: 0.65, equityHoldingsToIncome: 1.8 };
 const HOUSEHOLD_SAVINGS_RATE = 0.065;
 

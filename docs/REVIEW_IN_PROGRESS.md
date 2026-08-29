@@ -348,3 +348,18 @@ buying bonds pays the seller, it does not print deposits into household accounts
 deposit rate is genuinely derived — the model already simulates the alternative a treasurer would
 take, so the rate a corporate balance commands is the money fund's own yield.
 
+### `src/engine/macro/initialization.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **M11** | **A — completes D31's story** | `macro/initialization.ts:164` | **`sovereignRating` is ASSIGNED per region at seed** (USA AA, UK AA, JPN A, EUR AAA), and `DEBT_TO_GDP_PCT = 1.0` / `FISCAL_DEFICIT_PCT_GDP = 0.05` seed the top-down pair beside it. Together with D31 the fiscal story is now complete and all three legs are top-down: **the debt ratio is assigned at seed, walked weekly by a formula, and rates the sovereign** — while the real stack and the real obligations-based deficit sit beside it, measured and unused. A rating is an outcome of debt and deficit; here it is an input to a chain that never touches either real number. **Owner: MAC (6).** |
+| M12 | **A** | `macro/initialization.ts:147` | **Real institution names**: 'Federal Reserve', 'Bank of England', 'Bank of Japan', 'European Central Bank', plus the four country names. The comment exempts them as "structural region identifiers… not numeric data" — but rule 4 names real tickers and company names *first*; it is not a rule about numbers. §6.3-D has this. **Owner: IDX (7)**, with the index brands. |
+| M13 | **A** | `macro/initialization.ts:199` | **`HOUSEHOLD_DEBT_RATIOS` are observed household balance-sheet ratios** (mortgage/income 0.90, equity/income 1.8, deposits/income 0.65). `equityHoldingsToIncome` is the one the household state's own `unmodeledFinancialAssetsUSD` doc already cites as the source of its named gap — "real households hold roughly 1.5x income in financial assets and the seed says so". Cohort balance sheets (M7) replace the line with accumulation. |
+
+### `src/engine/macro/evolution.ts` — the household half
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **M14** | **A — D31's sibling** | `macro/evolution.ts:222` | **Two wage growths, and the formula one drives consumption.** LAB made the wage a real price: each firm sets `offeredWageIndex` from its own unfilled postings and margin headroom, and each occupation pool's `wageGrowthAnnual` is the employment-weighted average of what firms actually offer — stage 08 reads that one (`getBlendedWageGrowth`), and so does the UI. The Phillips curve `0.025 + 0.8 × slack + 0.1 × expectedInflation` survives beside it, and **it is the formula that feeds `realWageGainEffect` (consumption, line 401) and `cciEquilibrium` (consumer confidence)**. So what households are paid and what they spend out of are two different numbers. Exactly D31's shape — a formula outliving the mechanism that replaced it, and being the one a downstream decision reads. **Owner: MAC (6).** |
+| M15 | **A** | `macro/evolution.ts:227-233` | **Consumer confidence is a four-coefficient formula** (`100 + wageGap×150 − unempGap×200 − inflGap×80 + shock×1000`, reverting at 0.08, clamped [30,170]) and the **savings rate is a three-term one** (`0.05 + inflGap×0.5 − 0.1×cciGap + realRateGap×0.4`). §6.3-B/C list both; what the audit did not say is that they are *chained* — confidence feeds the savings rate, the savings rate feeds consumption, and confidence's largest input is M14's fake wage growth. MAC's (b) half is this chain. |
+

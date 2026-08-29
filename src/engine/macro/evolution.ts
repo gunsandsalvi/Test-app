@@ -219,6 +219,15 @@ export function evolveRegionMacro(
   const prevSmoothedSlackGap = region.smoothedSlackGap !== undefined ? region.smoothedSlackGap : slackGap;
   const newSmoothedSlackGap = prevSmoothedSlackGap * 0.85 + slackGap * 0.15;
   
+  // RULE 3, OPEN — TWO WAGE GROWTHS, AND THE FORMULA ONE DRIVES CONSUMPTION.
+  // LAB made the wage a real price: each firm sets `offeredWageIndex` from its own unfilled
+  // postings and its own margin headroom, and each occupation pool's `wageGrowthAnnual` is the
+  // employment-weighted average of what firms actually offer. Stage 08 reads that one
+  // (`getBlendedWageGrowth`) and so does the UI. This Phillips curve — an intercept, a slack
+  // coefficient and an expected-inflation coefficient, all invented — survives beside it, and it
+  // is THIS one that feeds `realWageGainEffect` (consumption) and `cciEquilibrium` (confidence).
+  // So what households are paid and what they spend out of are two different numbers.
+  // Owner: MAC (6). Delete it and read the pools.
   const taperedSlackEffect = newSmoothedSlackGap > 0.01 ? 0.01 + (newSmoothedSlackGap - 0.01) * 0.3 : newSmoothedSlackGap;
   const newWageGrowth = (0.025 + 0.8 * taperedSlackEffect + 0.1 * region.expectedInflation);
   const { updatedBuffer: newWageGrowthLagBuffer, laggedValue: laggedWageGrowth } = pushAndReadLagged(region.wageGrowthLagBuffer || [], newWageGrowth, 3);
