@@ -55,7 +55,7 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       // HC3: private firms are real employers with real sector occupation mixes; the segments
       // supply only the SME residual's statistical demand.
       [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms],
-      state.regions[regionId].privateSectorSegments,
+      state.regions[regionId].smePools,
       regionId,
       state.regions[regionId].governmentEmployment
     );

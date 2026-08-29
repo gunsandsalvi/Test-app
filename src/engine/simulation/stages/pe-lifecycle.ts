@@ -570,7 +570,7 @@ export function runFirmBirthsForRegion(
 ): Company[] {
   // Quarterly, like every other structural event in this simulation.
   if (nextWeek % 13 !== 0) return [];
-  const segs = reg.privateSectorSegments || [];
+  const segs = reg.smePools || [];
   if (segs.length === 0) return [];
 
   // The pool that has grown the most relative to the named tier it feeds — a real formation
@@ -578,11 +578,11 @@ export function runFirmBirthsForRegion(
   const namedBySegment = new Map<string, number>();
   ctx.updatedCompanies.forEach((c) => {
     if (c.region !== regionId || c.listingStatus !== 'PRIVATE' || !isActiveCompany(c)) return;
-    const seg = (c as any).privateSegmentType as string | undefined;
+    const seg = (c as any).smePoolIndustry as string | undefined;
     if (seg) namedBySegment.set(seg, (namedBySegment.get(seg) ?? 0) + c.annualRevenue);
   });
   const candidate = segs
-    .map((seg) => ({ seg, ratio: seg.annualRevenueUSD / Math.max(1, namedBySegment.get(seg.segmentType) ?? 1) }))
+    .map((seg) => ({ seg, ratio: seg.annualRevenueUSD / Math.max(1, namedBySegment.get(seg.industry) ?? 1) }))
     .sort((a, b) => b.ratio - a.ratio)[0];
   if (!candidate || candidate.seg.annualRevenueUSD <= 0) return [];
 
@@ -596,7 +596,7 @@ export function runFirmBirthsForRegion(
   const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
   const names = new Set(ctx.updatedCompanies.map((c) => c.name));
   const born = generate(regionId, [{
-    segmentType: seg.segmentType,
+    industry: seg.industry,
     annualRevenueUSD: revenueUSD,
     ebitdaMargin: seg.marginPct,
     leverage: 2.5,
@@ -617,7 +617,7 @@ export function runFirmBirthsForRegion(
     c.cash = 0;
     if (openingCashUSD > 0) {
       pay(ctx, {
-        payer: { kind: 'SEGMENT', region: regionId, segmentType: seg.segmentType },
+        payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
         payee: { kind: 'COMPANY', ticker: c.ticker },
         amountUSD: openingCashUSD,
         reason: 'firm birth: opening balance carved from pool',

@@ -315,7 +315,7 @@ export interface Company {
   lastRecapWeek?: number;
   /** HC1/HC8: the SME pool this private firm was carved from — conservation needs to know
    * which aggregate a firm came out of (and, at HC8, which one a birth reduces). */
-  privateSegmentType?: import('./region-macro').PrivateSegmentType;
+  smePoolIndustry?: import('./industry').Industry;
   /** HC8: week this firm was born out of its pool (absent for the Wave 1 cohort). */
   bornWeek?: number;
 

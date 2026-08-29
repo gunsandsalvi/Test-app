@@ -21,7 +21,6 @@
 import type { Industry, BuyerType, HouseholdPriceTier } from './industry';
 import type { DeliveryMode } from './goods-physical';
 
-export type PrivateSegmentType = 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES';
 /** The producing sector whose companies carry an industry's lines — a GICS-style taxonomy
  * primitive. Financials and Banks produce no goods (their stage-08 consumer-revenue proxy line
  * is FINANCIAL_SECTOR_PROXY_LINES below, and IND4 owns retiring it). */
@@ -41,8 +40,6 @@ export interface SubUnitSpec {
   householdPriceTier?: HouseholdPriceTier;
   /** Share of any buyer's capex basket this category takes (capital-goods categories only). */
   capexBasketWeight?: number;
-  capexPrivateSegment?: PrivateSegmentType;
-  privateSupplySegment?: PrivateSegmentType;
   linkedCommodities?: { commodityId: string; intensityShare: number }[];
   // ---- IND's dials. Storability and carrying cost are DERIVED from the physics above
   // (see isStorable / annualCarryingCostRateOf) rather than stated twice; these two are not
@@ -54,6 +51,17 @@ export interface SubUnitSpec {
 export interface IndustrySpec {
   /** Which sector's companies produce this industry's goods (BP1b: line assignment reads this). */
   sector: ProducingSector;
+  /**
+   * SEG — the share of this industry's activity carried by firms too small to name: its SME
+   * tier. A structural fact about how an industry is organised, and it differs enormously —
+   * construction and professional services are SME-dominated because the efficient scale is a
+   * crew or a practice, while semiconductors and aerospace are not because the efficient scale
+   * is a fab or an assembly line. Stated per industry (rule 4 allows a real-world primitive;
+   * it is not an equilibrium), and it is the ONLY size input the SME tier takes: a pool's
+   * opening revenue is its industry's real demand times this, so the tier's composition is an
+   * outcome of where demand actually is rather than five hardcoded GDP shares (§5-SEG).
+   */
+  smeShareOfActivity: number;
   /** What a producer in this industry consumes per dollar of output (absent = no recipe). */
   recipeInputs?: Record<string, number>;
   subUnits: SubUnitSpec[];
@@ -62,6 +70,7 @@ export interface IndustrySpec {
 export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Energy: {
     sector: 'Energy',
+    smeShareOfActivity: 0.15,
     subUnits: [
       {
         unitId: 'upstream_extraction',
@@ -69,7 +78,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 400,
-        privateSupplySegment: 'MANUFACTURING',
         linkedCommodities: [{ commodityId: 'CRUDE_OIL', intensityShare: 0.35 }, { commodityId: 'HEAVY_CRUDE_OIL', intensityShare: 0.3 }, { commodityId: 'NATURAL_GAS', intensityShare: 0.2 }],
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
@@ -88,6 +96,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   MaterialsChemicals: {
     sector: 'Industrials',
+    smeShareOfActivity: 0.25,
     subUnits: [
       {
         unitId: 'industrial_chemicals',
@@ -124,7 +133,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 5_000,
-        privateSupplySegment: 'MANUFACTURING',
         linkedCommodities: [{ commodityId: 'GOLD', intensityShare: 0.05 }, { commodityId: 'SILVER', intensityShare: 0.08 }, { commodityId: 'COPPER', intensityShare: 0.15 }],
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
@@ -145,6 +153,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   IndustrialsMachinery: {
     sector: 'Industrials',
+    smeShareOfActivity: 0.42,
     recipeInputs: { upstream_extraction: 0.015, specialty_metals: 0.03 },
     subUnits: [
       {
@@ -154,7 +163,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 12_000,
         capexBasketWeight: 0.3,
-        capexPrivateSegment: 'MANUFACTURING',
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -165,7 +173,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 40_000,
         capexBasketWeight: 0.2,
-        capexPrivateSegment: 'MANUFACTURING',
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -173,6 +180,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   AerospaceDefense: {
     sector: 'Industrials',
+    smeShareOfActivity: 0.14,
     recipeInputs: { upstream_extraction: 0.02, specialty_metals: 0.025 },
     subUnits: [
       {
@@ -197,6 +205,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   AutomotiveTransport: {
     sector: 'Consumer',
+    smeShareOfActivity: 0.22,
     recipeInputs: { upstream_extraction: 0.025, specialty_metals: 0.03 },
     subUnits: [
       {
@@ -215,7 +224,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 15_000,
         capexBasketWeight: 0.1,
-        capexPrivateSegment: 'MANUFACTURING',
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -223,6 +231,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   TechHardwareSemis: {
     sector: 'Tech',
+    smeShareOfActivity: 0.12,
     recipeInputs: { upstream_extraction: 0.008, specialty_metals: 0.01 },
     subUnits: [
       {
@@ -247,6 +256,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   SoftwareDigitalServices: {
     sector: 'Tech',
+    smeShareOfActivity: 0.35,
     recipeInputs: { upstream_extraction: 0.002 },
     subUnits: [
       {
@@ -255,7 +265,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.1, CORPORATE: 0.9 },
         deliveryMode: 'DIGITAL',
         capexBasketWeight: 0.15,
-        capexPrivateSegment: 'PROFESSIONAL_SERVICES',
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -271,6 +280,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   Telecommunications: {
     sector: 'Tech',
+    smeShareOfActivity: 0.1,
     subUnits: [
       {
         unitId: 'network_infrastructure',
@@ -285,6 +295,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   HealthcarePharma: {
     sector: 'Consumer',
+    smeShareOfActivity: 0.38,
     subUnits: [
       {
         unitId: 'pharmaceuticals',
@@ -310,6 +321,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   ConsumerStaples: {
     sector: 'Consumer',
+    smeShareOfActivity: 0.28,
     recipeInputs: { upstream_extraction: 0.001, agricultural_commodities: 0.12 },
     subUnits: [
       {
@@ -337,6 +349,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   ConsumerDiscretionaryRetail: {
     sector: 'Consumer',
+    smeShareOfActivity: 0.52,
     recipeInputs: { upstream_extraction: 0.002 },
     subUnits: [
       {
@@ -361,6 +374,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   LuxuryGoods: {
     sector: 'Consumer',
+    smeShareOfActivity: 0.2,
     subUnits: [
       {
         unitId: 'luxury_goods',
@@ -376,6 +390,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   MediaEntertainment: {
     sector: 'Consumer',
+    smeShareOfActivity: 0.45,
     subUnits: [
       {
         unitId: 'media_content',
@@ -389,6 +404,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   },
   RealEstateConstruction: {
     sector: 'Industrials',
+    smeShareOfActivity: 0.78,
     subUnits: [
       {
         unitId: 'residential_construction',
@@ -404,7 +420,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.45, CORPORATE: 0.55 },
         deliveryMode: 'IN_PLACE',
         capexBasketWeight: 0.25,
-        capexPrivateSegment: 'CONSTRUCTION_REALESTATE',
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -447,11 +462,7 @@ export const VIEW_CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<str
 const CAPEX_ORDER = ['heavy_equipment', 'industrial_automation', 'commercial_construction', 'enterprise_software', 'commercial_fleet'];
 export const VIEW_CAPEX_SUPPLIER_WEIGHTS: Record<string, number> =
   Object.fromEntries(CAPEX_ORDER.map(id => [id, byId.get(id)!.capexBasketWeight!]));
-export const VIEW_CAPEX_CATEGORY_PRIVATE_SEGMENT: Record<string, PrivateSegmentType> =
-  Object.fromEntries(CAPEX_ORDER.map(id => [id, byId.get(id)!.capexPrivateSegment!]));
 
-export const VIEW_PRIVATE_SEGMENT_SUPPLY_CATEGORIES: Record<string, PrivateSegmentType> =
-  Object.fromEntries(['upstream_extraction', 'specialty_metals'].map(id => [id, byId.get(id)!.privateSupplySegment!]));
 
 const TIER_ORDER = ['refined_products', 'household_chemicals', 'food_beverage', 'household_essentials', 'pharmaceuticals', 'agricultural_commodities', 'luxury_goods'];
 export const VIEW_CATEGORY_PRICE_TIER: Record<string, HouseholdPriceTier> =
@@ -554,4 +565,44 @@ export function purchaseKindOf(unitId: string): PurchaseKind {
   if (recipeInputIds.has(unitId)) return 'RECIPE_INPUT';
   if (byId.get(unitId)?.capexBasketWeight !== undefined) return 'CAPITAL_GOOD';
   return 'OPERATING';
+}
+
+// ============================== SEG — the SME tier ==============================
+
+/**
+ * Every industry that has an SME tier: all of them, in registry order. This is the SEG tier's
+ * whole roster — there is no second list to maintain, so an industry added to the registry has
+ * a pool in every region the moment it exists (rule 17). It replaces `Industry`, five
+ * hardcoded buckets that covered 7 of 36 sub-units and could never grow with the registry.
+ */
+export const SME_POOL_INDUSTRIES: Industry[] = Object.keys(INDUSTRY_REGISTRY) as Industry[];
+
+/** The sub-units an SME pool in this industry produces — the same list its named firms produce. */
+export function smePoolSubUnits(industry: Industry): SubUnitSpec[] {
+  return INDUSTRY_REGISTRY[industry].subUnits;
+}
+
+/** What an SME pool in this industry consumes per dollar of output — its industry's own recipe. */
+export function smePoolRecipeInputs(industry: Industry): Record<string, number> {
+  return INDUSTRY_REGISTRY[industry].recipeInputs ?? {};
+}
+
+/** The commodities this industry's output is linked to, from its sub-units' own linkages — so a
+ *  pool's commodity supply is derived from what it actually produces rather than from a
+ *  hardcoded list bolted onto one bucket. */
+export function smePoolLinkedCommodities(industry: Industry): { commodityId: string; intensityShare: number }[] {
+  return INDUSTRY_REGISTRY[industry].subUnits.flatMap((su) => su.linkedCommodities ?? []);
+}
+
+/** Which industry produces a sub-unit — the parent lookup the SME tier needs to know whose pool
+ *  offers into a given auction. Built once from the registry, so it can never disagree with it. */
+const INDUSTRY_BY_SUBUNIT: Map<string, Industry> = (() => {
+  const m = new Map<string, Industry>();
+  (Object.entries(INDUSTRY_REGISTRY) as [Industry, IndustrySpec][])
+    .forEach(([industry, spec]) => spec.subUnits.forEach((su) => m.set(su.unitId, industry)));
+  return m;
+})();
+
+export function industryOfSubUnit(unitId: string): Industry | undefined {
+  return INDUSTRY_BY_SUBUNIT.get(unitId);
 }

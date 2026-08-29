@@ -1,7 +1,7 @@
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, HouseholdState, PrivateSegmentType, OccupationType, OccupationPool, PRIVATE_SEGMENT_OCCUPATION_MIX, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
+import { RegionId, Region, FxPair, Commodity, HouseholdState, Industry, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import {
   computeHouseholdDisposableIncomeUSD,
@@ -9,6 +9,7 @@ import {
 } from '../bootstrap/national-accounts';
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
+import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
@@ -33,38 +34,6 @@ export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
 }
 
-function getSegmentDemandSignal(segmentType: PrivateSegmentType, reg: Region, _prevHS: HouseholdState): number {
-  const cat = reg.categoryDemand as any;
-  switch (segmentType) {
-    case 'MANUFACTURING': {
-      const g1 = cat.heavy_equipment?.demandGrowthAnnual ?? 0;
-      const g2 = cat.industrial_automation?.demandGrowthAnnual ?? 0;
-      const g3 = cat.industrial_chemicals?.demandGrowthAnnual ?? 0;
-      return (g1 + g2 + g3) / 3;
-    }
-    case 'PROFESSIONAL_SERVICES': {
-      const g1 = cat.enterprise_software?.demandGrowthAnnual ?? 0;
-      const g2 = cat.network_infrastructure?.demandGrowthAnnual ?? 0;
-      return (g1 + g2) / 2;
-    }
-    case 'RETAIL_TRADE': {
-      const g1 = cat.food_beverage?.demandGrowthAnnual ?? 0;
-      const g2 = cat.apparel_retail?.demandGrowthAnnual ?? 0;
-      const g3 = cat.luxury_goods?.demandGrowthAnnual ?? 0;
-      return (g1 + g2 + g3) / 3;
-    }
-    case 'CONSTRUCTION_REALESTATE': {
-      return 0;
-    }
-    case 'HEALTHCARE_SERVICES': {
-      const g1 = cat.pharmaceuticals?.demandGrowthAnnual ?? 0;
-      const g2 = cat.medtech_devices?.demandGrowthAnnual ?? 0;
-      return (g1 + g2) / 2;
-    }
-    default:
-      return 0;
-  }
-}
 
 function pushAndReadLagged(buffer: number[], newValue: number, lagWeeks: number): { updatedBuffer: number[]; laggedValue: number } {
   const updatedBuffer = [...buffer, newValue].slice(-8);
@@ -349,53 +318,19 @@ export function evolveRegionMacro(
     ? (newMortgageDebtUSD / (prevHS.priorMortgageDebtUSD ?? newMortgageDebtUSD) - 1) * 52
     : 0;
   const mortgageGrowthSignal = Number.isFinite(rawMortgageGrowthSignal) ? Math.max(-0.15, Math.min(0.20, rawMortgageGrowthSignal)) : 0;
-  const seedMarginByType: Record<PrivateSegmentType, number> = {
-    MANUFACTURING: 0.09,
-    PROFESSIONAL_SERVICES: 0.14,
-    RETAIL_TRADE: 0.05,
-    CONSTRUCTION_REALESTATE: 0.10,
-    HEALTHCARE_SERVICES: 0.12,
-  };
+  // SEG-A/D: the pools are NOT walked here any more. Revenue used to move by
+  // `demandSignal x 0.06` and employment by `x 0.05`, both clamped to +/-4%/wk, off a
+  // hand-written switch mapping five buckets to a few category growth rates (with
+  // CONSTRUCTION_REALESTATE hardcoded to `return 0`). That is an imposed outcome (rule 13) and
+  // it froze the tier's composition at its seed shares forever, because every bucket got the
+  // same treatment and nothing ever reallocated between them.
+  //
+  // What replaces it: a pool's revenue is what it MEASURABLY SOLD in stage 05's auctions
+  // (SEG-B credits it there), its employment is set by the labor market off that revenue like
+  // any named firm's, its margin moves with its own measured costs, and its debt is the derived
+  // sum of the banks' pool loans. This stage carries the state forward and owns nothing of it.
+  const newSmePools: any[] = (region.smePools || []).map(seg => ({ ...seg }));
 
-  const newPrivateSectorSegments: any[] = (region.privateSectorSegments || []).map(seg => {
-    const demandSignal = seg.segmentType === 'CONSTRUCTION_REALESTATE' ? mortgageGrowthSignal : getSegmentDemandSignal(seg.segmentType, region, prevHS);
-    const employmentGrowthRate = Math.max(-0.04, Math.min(0.04, demandSignal * 0.05));
-    const newEmployment = Math.max(1, Math.round(seg.employment * (1 + employmentGrowthRate / 52)));
-    const revenueGrowthRate = Math.max(-0.04, Math.min(0.05, demandSignal * 0.06));
-    const newAnnualRevenueUSD = Math.max(1, seg.annualRevenueUSD * (1 + revenueGrowthRate / 52));
-
-    const segOccMix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 };
-    const segWageGrowth = getBlendedWageGrowth(segOccMix, newOccupationPools);
-    const wageDrag = Math.max(0, segWageGrowth - 0.028) * 0.05;
-
-    const marginReversion = (seedMarginByType[seg.segmentType] - seg.marginPct) * 0.02; // pulls back toward each segment's realistic baseline
-    const marginDrift = (demandSignal * 0.01) + marginReversion - wageDrag * 0.02;
-    const newMarginPct = (seg.marginPct + marginDrift); // ceiling lowered from 0.30 to 0.22
-    const segmentDebtServiceCoverage = newAnnualRevenueUSD * newMarginPct / Math.max(1, ((seg as any).debtUSD ?? 0) * 0.08);
-    const newDefaultRateAnnualPct = Math.max(0.005, Math.min(0.15, 0.02 + (1 / Math.max(0.5, segmentDebtServiceCoverage)) * 0.03 + region.bankingSector.creditConditionsIndex * 0.02));
-    const formationRate = Math.max(-0.002, Math.min(0.002, (demandSignal - newDefaultRateAnnualPct) * 0.1));
-    const finalEmployment = Math.max(1, Math.round(newEmployment * (1 + formationRate)));
-
-    return {
-      segmentType: seg.segmentType,
-      employment: finalEmployment,
-      annualRevenueUSD: Number(newAnnualRevenueUSD.toFixed(0)),
-      marginPct: Number(newMarginPct.toFixed(4)),
-      // G2: the pool's debt is the sum of the REAL loans banks hold against it (bank-lending.ts
-      // owns it). The `revenue x 2` fallback is the deleted seed primitive — an unpriced,
-      // unlent 17.8x-EBITDA scalar; a pool with no loans has no debt.
-      debtUSD: (seg as any).debtUSD ?? 0,
-      defaultRateAnnualPct: newDefaultRateAnnualPct,
-      // G2: the SELF-FUNDED half of a pool's capex. The debt-funded half is added by
-      // bank-lending.ts at the moment the loan is originated — that is the last link in the
-      // transmission chain (a hike cuts origination, which cuts the capex it funded, which
-      // stage 03 reads into real category demand).
-      capexUSD: newAnnualRevenueUSD * 0.05,
-      // HH5: the segment's own revenue history, so the labor market can read its real output
-      // growth the same way it reads a named firm's.
-      revenueHistoryUSD: [...(seg.revenueHistoryUSD ?? [seg.annualRevenueUSD]).slice(-12), newAnnualRevenueUSD],
-    };
-  });
 
 
   const totalHouseholdDebtUSD = newMortgageDebtUSD + newCreditCardDebtUSD + newOtherLoanDebtUSD;
@@ -868,7 +803,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     netMigrationRateAnnual: migrationRate,
     nonEmployablePct: newNonEmployablePct,
     governmentEmployment: newGovernmentEmployment,
-    privateSectorSegments: newPrivateSectorSegments as any,
+    smePools: newSmePools as any,
     occupationPools: newOccupationPools,
     occupationLaborForceShare: newLaborForceShares,
     estimatedNominalGdpUSD: newEstimatedNominalGdpUSD,
@@ -974,9 +909,17 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
  */
 
 export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, regions: Record<RegionId, Region>): number {
+  // SEG-A: which pools supply a commodity comes from the REGISTRY's own sub-unit linkages —
+  // the industries whose output is actually linked to it — rather than from a hardcoded list
+  // bolted onto one bucket (MANUFACTURING_LINKED_COMMODITIES, deleted). A pool's contribution
+  // is its revenue times the linkage's own intensity share, so adding a linked sub-unit to the
+  // registry brings its SME tier's supply with it.
   return (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
-    const segs = regions[r].privateSectorSegments.filter(seg => (seg.producedCommodityIds || []).includes(commodityId));
-    return s + segs.reduce((s2, seg) => s2 + (seg.annualRevenueUSD * 0.008) / segs.length / 52, 0); // a tagged segment's real commodity-specific output is a small slice of its total revenue, not 15% of the whole sector
+    return s + (regions[r].smePools || []).reduce((s2, pool) => {
+      const linkage = smePoolLinkedCommodities(pool.industry).find(l => l.commodityId === commodityId);
+      if (!linkage) return s2;
+      return s2 + (pool.annualRevenueUSD * linkage.intensityShare) / 52;
+    }, 0);
   }, 0);
 }
 

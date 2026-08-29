@@ -45,9 +45,9 @@ export type PartyRef =
   | { kind: 'BANK_CREDIT'; ticker: string }
   | { kind: 'INSTITUTION'; id: string }
   /** SEG1 — a private-sector segment pool: the mass of small firms below naming resolution.
-   *  Its balance is `cashUSD` on the region's `PrivateSectorSegment`, held across the region's
+   *  Its balance is `cashUSD` on the region's `SmePool`, held across the region's
    *  banks pro-rata by market share (small firms bank everywhere; there is no house bank). */
-  | { kind: 'SEGMENT'; region: RegionId; segmentType: string }
+  | { kind: 'SEGMENT'; region: RegionId; industry: string }
   | { kind: 'HOUSEHOLD'; region: RegionId }
   | { kind: 'GOVERNMENT'; region: RegionId }
   | { kind: 'CENTRAL_BANK'; region: RegionId }
@@ -107,7 +107,7 @@ export interface SettlementReport {
 const partyKey = (p: PartyRef): string =>
   p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' ? `${p.kind}:${p.ticker}`
     : p.kind === 'INSTITUTION' ? `INSTITUTION:${p.id}`
-      : p.kind === 'SEGMENT' ? `SEGMENT:${p.region}:${p.segmentType}`
+      : p.kind === 'SEGMENT' ? `SEGMENT:${p.region}:${p.industry}`
         : `${p.kind}:${p.region}`;
 
 /**
@@ -188,8 +188,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         // SEG1: the pool's balance moves, and the liability sits with the region's banks in
         // proportion to their size — same shape as the boundary's banking, but on a NAMED line
         // belonging to a real (aggregate) actor rather than to nobody.
-        const seg = ctx.updatedRegions[party.region]?.privateSectorSegments
-          ?.find((s) => s.segmentType === party.segmentType);
+        const seg = ctx.updatedRegions[party.region]?.smePools
+          ?.find((s) => s.industry === party.industry);
         if (!seg) { report.unresolvedUSD += deltaUSD; return; }
         seg.cashUSD = (seg.cashUSD ?? 0) + deltaUSD;
         const segBanks = ctx.updatedCompanies.filter(

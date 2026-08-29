@@ -92,7 +92,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const trackedFirms = updatedCompanies.filter(f => f.region === regionId && isActiveCompany(f));
     const trackedInvestmentUSD = trackedFirms.reduce((s, f) => s + f.maintenanceCapex + f.growthCapex, 0);
     const trackedEmployment = trackedFirms.reduce((s, f) => s + f.employeeCount, 0);
-    const totalPrivateEmployment = (reg.privateSectorSegments || []).reduce((s, seg) => s + seg.employment, 0);
+    const totalPrivateEmployment = (reg.smePools || []).reduce((s, seg) => s + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + totalPrivateEmployment) / trackedEmployment : 1;
     const investmentComponentUSD = trackedInvestmentUSD * investmentScaleFactor;
 
@@ -294,13 +294,13 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // cash arriving a settlement day later). The regional accrual below stays as the statement's
     // smooth expectation; the PAYMENT is per segment.
     let smeAccrualWeeklyUSD = 0;
-    (reg.privateSectorSegments || []).forEach((sg) => {
+    (reg.smePools || []).forEach((sg) => {
       const accrualUSD = Math.max(0, sg.annualRevenueUSD * sg.marginPct) * (reg.effectiveTaxRate ?? 0.21) / 52;
       smeAccrualWeeklyUSD += accrualUSD;
       sg.accruedTaxUSD = (sg.accruedTaxUSD ?? 0) + accrualUSD;
       if (isQuarterEnd && (sg.accruedTaxUSD ?? 0) > 0) {
         pay(ctx, {
-          payer: { kind: 'SEGMENT', region: regionId, segmentType: sg.segmentType },
+          payer: { kind: 'SEGMENT', region: regionId, industry: sg.industry },
           payee: { kind: 'GOVERNMENT', region: regionId },
           amountUSD: sg.accruedTaxUSD!,
           reason: 'SME tax (quarterly remittance)',

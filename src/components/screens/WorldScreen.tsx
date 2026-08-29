@@ -341,15 +341,15 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
                   {/* Bubbles */}
                   {(() => {
-                    const maxSegRevenue = Math.max(...reg.privateSectorSegments.map(s => s.annualRevenueUSD), 1);
-                    return reg.privateSectorSegments.map((seg, i) => {
+                    const maxSegRevenue = Math.max(...reg.smePools.map(s => s.annualRevenueUSD), 1);
+                    return reg.smePools.map((seg, i) => {
                       const x = 30 + Math.min(250, seg.marginPct * 1250);
                       const y = 150 - Math.min(130, (seg.annualRevenueUSD / maxSegRevenue) * 130);
                       const r = Math.max(10, Math.min(26, Math.sqrt(seg.employment) / 100));
-                      const isSel = selectedSegment === seg.segmentType;
+                      const isSel = selectedSegment === seg.industry;
 
                       return (
-                        <g key={seg.segmentType} onClick={() => setSelectedSegment(isSel ? null : seg.segmentType)} className="cursor-pointer">
+                        <g key={seg.industry} onClick={() => setSelectedSegment(isSel ? null : seg.industry)} className="cursor-pointer">
                           <circle
                             cx={x}
                             cy={y}
@@ -360,7 +360,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
                             strokeWidth={isSel ? 2 : 1}
                           />
                           <text x={x} y={y + 3} fontSize="7" textAnchor="middle" fill="white" fontWeight="bold">
-                            {seg.segmentType.substring(0, 4)}
+                            {seg.industry.substring(0, 4)}
                           </text>
                         </g>
                       );
@@ -371,15 +371,15 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
               {/* Segment Legend & Detail Card */}
               <div className="grid grid-cols-2 gap-1.5 pt-1">
-                {reg.privateSectorSegments.map((seg, i) => (
+                {reg.smePools.map((seg, i) => (
                   <button
-                    key={seg.segmentType}
-                    onClick={() => setSelectedSegment(selectedSegment === seg.segmentType ? null : seg.segmentType)}
-                    className={`p-2 rounded-lg border text-left transition-colors ${selectedSegment === seg.segmentType ? 'bg-[var(--bg-panel)] border-[var(--text-primary)]' : 'bg-[var(--bg-elevated)] border-[var(--border-hairline)]'}`}
+                    key={seg.industry}
+                    onClick={() => setSelectedSegment(selectedSegment === seg.industry ? null : seg.industry)}
+                    className={`p-2 rounded-lg border text-left transition-colors ${selectedSegment === seg.industry ? 'bg-[var(--bg-panel)] border-[var(--text-primary)]' : 'bg-[var(--bg-elevated)] border-[var(--border-hairline)]'}`}
                   >
                     <div className="flex items-center gap-1.5">
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: `hsl(${i * 65 + 180}, 65%, 55%)` }} />
-                      <span className="text-xs font-bold text-[var(--text-primary)]">{seg.segmentType}</span>
+                      <span className="text-xs font-bold text-[var(--text-primary)]">{seg.industry}</span>
                     </div>
                     <div className="text-[10px] text-[var(--text-tertiary)] mt-1 font-mono">
                       Margin: {formatPercent(seg.marginPct, { isDecimal: true })} · Rev: {formatCurrency(seg.annualRevenueUSD, { compact: true })}

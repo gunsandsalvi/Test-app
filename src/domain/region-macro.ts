@@ -7,6 +7,7 @@
  */
 
 import { RegionId } from './geography';
+import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSector, AssetOwnershipShares } from './banking';
 import { InstitutionalSector } from './institutions';
@@ -234,45 +235,44 @@ export interface GovDebtTranche {
   tenorAtIssuanceYears: number;
 }
 
-export type PrivateSegmentType = 'MANUFACTURING' | 'PROFESSIONAL_SERVICES' | 'RETAIL_TRADE' | 'CONSTRUCTION_REALESTATE' | 'HEALTHCARE_SERVICES';
-
-export interface PrivateSectorSegment {
-  segmentType: PrivateSegmentType;
-  /** SEG1 — the pool's own money: the summed deposit balances of the small firms below naming
-   * resolution. Held at the region's banks pro-rata by market share (a mass of small firms
-   * banks everywhere, unlike a corporate with a house bank) as `smeDepositsUSD`, and moved
-   * ONLY by the settlement layer — the segment is a party (`SEGMENT` PartyRef) like everyone
-   * else. Seeded at the named private tier's measured cash/revenue ratio. */
+/**
+ * SEG — the SME tier of ONE registry industry in one region: the mass of firms too small to
+ * name. A pool is a firm without a name — it holds real books, buys its industry's real recipe
+ * inputs and sells its industry's real sub-units into the same auctions, under the same buyer
+ * mixes, as the named firms above it.
+ *
+ * It replaces `SmePool`, five hardcoded buckets (MANUFACTURING, RETAIL_TRADE, …)
+ * that were a parallel taxonomy beside `INDUSTRY_REGISTRY`: they were seeded from three
+ * constants each, sold into 7 of 36 sub-units, bought in exactly one place, and could never
+ * cover a product line added to the registry — rule 17 failing outright (§5-SEG).
+ */
+export interface SmePool {
+  /** The registry industry this pool is the small-firm tier of. One pool per region x industry. */
+  industry: Industry;
+  /** SEG-C — the pool's own money: the summed deposit balances of the small firms in it. Held
+   * at the region's banks pro-rata by market share (a mass of small firms banks everywhere,
+   * unlike a corporate with a house bank) as `smeDepositsUSD`, and moved ONLY by the settlement
+   * layer — the pool is a party (`SEGMENT` PartyRef) like everyone else. */
   cashUSD?: number;
-  /** SEG2g — tax accrued weekly on the pool's earnings and REMITTED quarterly as a real
-   * SEGMENT → GOVERNMENT payment (stage 11), replacing the payer-less revenue statistic. */
+  /** SEG-C — tax accrued weekly on the pool's earnings and REMITTED quarterly as a real
+   * SEGMENT to GOVERNMENT payment (stage 11), replacing the payer-less revenue statistic. */
   accruedTaxUSD?: number;
+  /** The DERIVED SUM of the SME_POOL loans the region's banks hold against this pool — one
+   * representation (rule 3); bank-lending.ts and 02b own it. */
   debtUSD: number;
   defaultRateAnnualPct: number;
   capexUSD: number;
   employment: number;
-  /** HH5 — the segment pool's recent annual-revenue prints, so its hiring can read its own
-   * real output growth the way a named firm reads its revenue history. */
+  /** The pool's recent annual-revenue prints, so its hiring reads its own real output growth
+   * the way a named firm reads its revenue history. */
   revenueHistoryUSD?: number[];
   annualRevenueUSD: number;
   marginPct: number;
-  producedCommodityIds?: string[];
-  commoditySupplyShareUSD?: Record<string, number>;
-  // This week's real capex-derived contribution to annualRevenueUSD, keyed by capex sub-unit
-  // category (see 05-unit-bidding.ts) — tracked per category, not one shared scalar, because
-  // several capex categories can route to the SAME segment (e.g. heavy_equipment,
-  // industrial_automation, and commercial_fleet all fall to MANUFACTURING); a single shared
-  // field meant each category's weekly update wrongly subtracted a DIFFERENT category's
-  // just-written contribution as if it were its own prior week's value, corrupting
-  // annualRevenueUSD every week multiple categories touched the same segment. Each category
-  // subtracts only its own prior entry and writes only its own new one, so contributions from
-  // different categories to the same segment add up instead of clobbering each other.
-  capexDerivedAnnualRevenueUSDBySubUnit?: Record<string, number>;
-  // 1$ is 1$ Phase 3: this week's real annualized contribution from acting as a named seller in
-  // 05-unit-bidding.ts's auction (e.g. specialty_metals, which can otherwise have zero real
-  // public-company suppliers in a region), keyed by sub-unit category for the identical
-  // multiple-categories-one-segment reason as capexDerivedAnnualRevenueUSDBySubUnit above.
-  realSupplySalesDerivedAnnualRevenueUSDBySubUnit?: Record<string, number>;
+  /** SEG-B — this week's real annualized receipts per sub-unit sold, from the pool's own
+   * participation in stage 05's auctions. One book: a pool sells every sub-unit its industry
+   * produces through one mechanism, so the old capex-derived / supply-derived pair (two routes,
+   * two books, each able to clobber the other) collapses to this. */
+  salesDerivedAnnualRevenueUSDBySubUnit?: Record<string, number>;
 }
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
@@ -426,13 +426,6 @@ export const SECTOR_OCCUPATION_MIX: Record<string, Partial<Record<OccupationType
   Utilities: { SKILLED_TRADES: 0.40, TECHNICAL_ENGINEERING: 0.20, GENERAL: 0.40 },
 };
 
-export const PRIVATE_SEGMENT_OCCUPATION_MIX: Record<PrivateSegmentType, Partial<Record<OccupationType, number>>> = {
-  MANUFACTURING: { SKILLED_TRADES: 0.45, TECHNICAL_ENGINEERING: 0.15, GENERAL: 0.40 },
-  PROFESSIONAL_SERVICES: { TECHNICAL_ENGINEERING: 0.30, SPECIALIZED_PROFESSIONAL: 0.25, MANAGERIAL_FINANCIAL: 0.15, GENERAL: 0.30 },
-  RETAIL_TRADE: { GENERAL: 0.92, MANAGERIAL_FINANCIAL: 0.08 },
-  CONSTRUCTION_REALESTATE: { SKILLED_TRADES: 0.65, GENERAL: 0.35 },
-  HEALTHCARE_SERVICES: { SPECIALIZED_PROFESSIONAL: 0.55, GENERAL: 0.45 },
-};
 
 export interface Region {
   id: RegionId;
@@ -530,7 +523,9 @@ export interface Region {
   netMigrationRateAnnual: number;
   nonEmployablePct: number;
   governmentEmployment: number;
-  privateSectorSegments: PrivateSectorSegment[];
+  /** SEG — the SME tier, one pool per registry industry. Was `smePools`: five
+   * hardcoded buckets that no product line added to the registry could ever join. */
+  smePools: SmePool[];
   supplyRelationships?: SupplyRelationship[];
   occupationPools: Record<OccupationType, OccupationPool>;
   occupationLaborForceShare: Record<OccupationType, number>;

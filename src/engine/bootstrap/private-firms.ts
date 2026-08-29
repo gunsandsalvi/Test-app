@@ -20,10 +20,12 @@
  */
 
 import { RegionId } from '../../domain/geography';
-import { PrivateSegmentType } from '../../domain/region-macro';
+import { Industry } from '../../domain/industry';
+import { INDUSTRY_REGISTRY } from '../../domain/industry-registry';
+import { sectorBaselineMarginPct } from './firms';
 
 export interface PrivateFirmSeed {
-  segmentType: PrivateSegmentType;
+  industry: Industry;
   annualRevenueUSD: number;
   ebitdaMargin: number;
   /** Debt / EBITDA. The sponsor-style subset carries real LBO leverage — that is what a real
@@ -31,6 +33,10 @@ export interface PrivateFirmSeed {
   leverage: number;
   sponsorStyle: boolean;
   employeeCount: number;
+  /** SEG-D — the product mix the firm is born with: what its POOL actually sells, by sub-unit.
+   * A firm carved out of a pool sells what that pool sells. Absent at the cold start (no pool
+   * has measured receipts yet), where the generator splits its industry's sub-units evenly. */
+  productMixBySubUnit?: Record<string, number>;
 }
 
 export const PRIVATE_FIRMS_PER_REGION = 300;
@@ -44,18 +50,10 @@ const PARETO_ALPHA = 1.16;
 /** Share of named private firms that are sponsor-owned in style (real LBO-level leverage). */
 const SPONSOR_STYLE_SHARE = 0.4;
 
-/** Deterministic-ish margins by segment, matching the segment profiles' economics. */
-const SEGMENT_MARGIN: Record<PrivateSegmentType, number> = {
-  MANUFACTURING: 0.14,
-  PROFESSIONAL_SERVICES: 0.18,
-  RETAIL_TRADE: 0.08,
-  CONSTRUCTION_REALESTATE: 0.12,
-  HEALTHCARE_SERVICES: 0.15,
-};
 
 export function generatePrivateFirmSeeds(
   _region: RegionId,
-  segments: { segmentType: PrivateSegmentType; annualRevenueUSD: number; debtUSD: number; employment: number }[]
+  segments: { industry: Industry; annualRevenueUSD: number; debtUSD: number; employment: number }[]
 ): PrivateFirmSeed[] {
   const totalRevenueUSD = segments.reduce((a, s) => a + s.annualRevenueUSD, 0) || 1;
   const seeds: PrivateFirmSeed[] = [];
@@ -80,7 +78,9 @@ export function generatePrivateFirmSeeds(
 
     rawSizes.forEach((raw, i) => {
       const revenueUSD = tierRevenueUSD * (raw / rawSum);
-      const margin = SEGMENT_MARGIN[seg.segmentType];
+      // A named firm earns its sector's own margin — the SME discount applies to the POOL it
+      // is carved out of, not to the named tier being carved.
+      const margin = sectorBaselineMarginPct(INDUSTRY_REGISTRY[seg.industry].sector as any);
       // Sponsor-style concentrates in the middle of the size distribution (real LBOs do — the
       // largest private firms are founder/family empires, the smallest are below sponsor size).
       const sizeRank = i / Math.max(1, n - 1); // 0 = largest (quantile order), 1 = smallest
@@ -89,7 +89,7 @@ export function generatePrivateFirmSeeds(
         ? 4.5 + 2.0 * ((i * 7919) % 100) / 100 // 4.5–6.5, deterministic spread
         : 1.5 + 3.0 * ((i * 104729) % 100) / 100; // 1.5–4.5
       seeds.push({
-        segmentType: seg.segmentType,
+        industry: seg.industry,
         annualRevenueUSD: revenueUSD,
         ebitdaMargin: margin,
         leverage,

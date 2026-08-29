@@ -6,7 +6,7 @@
  */
 
 import { RegionId } from './geography';
-import { VIEW_CATEGORY_INPUT_REQUIREMENTS, VIEW_CAPEX_SUPPLIER_WEIGHTS, VIEW_CAPEX_CATEGORY_PRIVATE_SEGMENT, VIEW_PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from './industry-registry';
+import { VIEW_CATEGORY_INPUT_REQUIREMENTS, VIEW_CAPEX_SUPPLIER_WEIGHTS } from './industry-registry';
 
 export interface UnitBid {
   companyId?: string;
@@ -129,29 +129,11 @@ export interface SupplyRelationship {
 // BP1a: derived from the industry registry (capexBasketWeight per capital-goods sub-unit).
 export const CAPEX_SUPPLIER_WEIGHTS: Record<string, number> = VIEW_CAPEX_SUPPLIER_WEIGHTS;
 
-// Real, non-public counterparty for the share of capex a region's public companies can't supply
-// (insufficient in-region public capacity in a given category) — private/non-traded firms in
-// this segment are a genuine seller of the same goods, not a residual write-off.
-// BP1a: derived from the industry registry.
-export const CAPEX_CATEGORY_PRIVATE_SEGMENT: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = VIEW_CAPEX_CATEGORY_PRIVATE_SEGMENT;
 
 // Share of each capex category's demand met by real in-region public companies before falling
-// back to the private-sector segment above — public capital-goods producers are typically the
-// large/anchor suppliers, but plenty of real-world capex (small contractors, private IT
-// consultancies, regional construction firms) genuinely goes to non-public firms.
+// back to the SME pool of the category's own industry (SEG-B) — public capital-goods producers
+// are typically the large/anchor suppliers, but plenty of real-world capex (small contractors,
+// private IT consultancies, regional construction firms) genuinely goes to non-public firms.
 export const CAPEX_PUBLIC_SUPPLY_SHARE = 0.65;
 
-// 1$ is 1$ Phase 3: real non-public counterparty allowed to submit a genuine, sellable offer in
-// 05-unit-bidding.ts's auction for these categories — not every category needs this (most have
-// plenty of real public suppliers), but a few (confirmed: specialty_metals) can end up with
-// literally zero real public-company suppliers generated in a region, permanently starving
-// every company whose recipe needs them. Distinct from CAPEX_CATEGORY_PRIVATE_SEGMENT above
-// (that's for capital-goods purchases settled in 08b-capex-settlement.ts; this is a real named
-// seller inside the actual per-unit auction).
-// BP1a: derived from the industry registry.
-export const PRIVATE_SEGMENT_SUPPLY_CATEGORIES: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = VIEW_PRIVATE_SEGMENT_SUPPLY_CATEGORIES;
 
-// Share of the segment's real annual revenue treated as this category's real weekly production
-// capacity when it participates as a seller — modest, since a segment plausibly does many
-// things besides this one category, mirroring CAPEX_SUPPLIER_WEIGHTS' basket-share approach.
-export const PRIVATE_SEGMENT_SUPPLY_SHARE = 0.08;

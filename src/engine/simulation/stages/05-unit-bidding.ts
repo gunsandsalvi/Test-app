@@ -25,7 +25,8 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { isStorable, purchaseKindOf } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
-import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
+import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs } from '../../../domain/industry-registry';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
@@ -46,7 +47,7 @@ export const MARKET_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 // real ticker so the post-clearing crediting step can tell it apart from a real company sale.
 // XB3a qualifies it by region: four regions each run a MANUFACTURING segment, and in the world
 // book they are four different counterparties bidding against each other.
-const privateSegmentOfferId = (regionId: RegionId, segmentType: string) => `PRIVATE:${regionId}:${segmentType}`;
+const privateSegmentOfferId = (regionId: RegionId, industry: string) => `PRIVATE:${regionId}:${industry}`;
 // Share of a buyer's real weekly input need it locks under a long-term contract when one forms;
 // the rest stays spot-purchased. Real procurement splits roughly this way.
 const CONTRACTED_DEMAND_SHARE = 0.6;
@@ -80,8 +81,8 @@ function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): 
   // instead of the boundary. The key embeds the segment's OWN region (it can sell into another
   // region's book), so parse it rather than trusting the market's origin.
   if (key.startsWith('PRIVATE:')) {
-    const [, segRegion, segmentType] = key.split(':');
-    return { kind: 'SEGMENT', region: segRegion as RegionId, segmentType };
+    const [, segRegion, industry] = key.split(':');
+    return { kind: 'SEGMENT', region: segRegion as RegionId, industry };
   }
   // Seed suppliers are real sellers with no cash ledger of their own yet — named to the
   // boundary until a project gives them one.
@@ -249,7 +250,7 @@ interface SupplyPlan {
   key: string;
   regionId: RegionId;
   company?: Company;
-  segmentType?: string;
+  industry?: string;
   initialInventoryUnits: number;
   targetProductionUnits: number;
   targetProductionUSD: number;
@@ -523,53 +524,49 @@ function buildRegionSupplyPlans(
     });
   });
 
-  // 1$ is 1$ Phase 3: a real, sellable private-sector offer for categories where public company
-  // supply can be sparse or entirely absent (confirmed: specialty_metals had zero real
-  // suppliers in a sampled region) — a genuine named counterparty, not a residual write-off.
-  const privateSegmentType = PRIVATE_SEGMENT_SUPPLY_CATEGORIES[subUnitId];
-  if (privateSegmentType) {
-    const segment = reg.privateSectorSegments?.find(s => s.segmentType === privateSegmentType);
-    if (segment) {
-      const segmentOfferUnits = ((segment.annualRevenueUSD / 52) * PRIVATE_SEGMENT_SUPPLY_SHARE) / referencePriceUSD;
-      if (segmentOfferUnits > 0.001) {
-        plans.push({
-          key: privateSegmentOfferId(regionId, privateSegmentType),
-          regionId,
-          segmentType: privateSegmentType,
-          initialInventoryUnits: 0,
-          targetProductionUnits: 0,
-          targetProductionUSD: 0,
-          contractSalesCommittedUnits: 0,
-          openOfferUnits: segmentOfferUnits,
-          minPriceUSD: referencePriceUSD * 0.90,
-        });
+  // ---- SEG-B: the SME pool of the industry that PRODUCES this sub-unit offers into it. ----
+  //
+  // What this replaces: two hardcoded tables (PRIVATE_SEGMENT_SUPPLY_CATEGORIES for two
+  // sub-units, CAPEX_CATEGORY_PRIVATE_SEGMENT for five) that let five buckets sell into 7 of the
+  // registry's 36 sub-units and left four of them, ~32% of employment, selling nothing at all.
+  // Now every sub-unit has a pool behind it, because every sub-unit has a parent industry.
+  //
+  // The pool's capacity for THIS sub-unit is its own weekly revenue allocated by its product
+  // mix: what it measurably sold here last week (SEG-D's `salesDerivedAnnualRevenueUSDBySubUnit`),
+  // and at the cold start the sub-unit's share of its industry's own demand — so a pool puts its
+  // capacity where the demand is instead of against a fixed 8% share of one category.
+  //
+  // It prices off its OWN unit cost, which its margin defines. A thin-margin pool has less room
+  // to undercut, which is the real reason small firms in low-margin trades are price-takers.
+  {
+    const owningIndustry = industryOfSubUnit(subUnitId);
+    const pool = owningIndustry ? reg.smePools?.find(p => p.industry === owningIndustry) : undefined;
+    if (pool && owningIndustry) {
+      const siblings = smePoolSubUnits(owningIndustry);
+      const measured = pool.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
+      const measuredTotal = siblings.reduce((a, su) => a + Math.max(0, measured[su.unitId] ?? 0), 0);
+      let mixShare: number;
+      if (measuredTotal > 0) {
+        mixShare = Math.max(0, measured[subUnitId] ?? 0) / measuredTotal;
+      } else {
+        const demandOf = (id: string) => reg.categoryDemand[id]?.demandLevelUSD ?? 0;
+        const demandTotal = siblings.reduce((a, su) => a + demandOf(su.unitId), 0);
+        mixShare = demandTotal > 0 ? demandOf(subUnitId) / demandTotal : 1 / Math.max(1, siblings.length);
       }
-    }
-  }
-
-  // 1$ is 1$ Phase 4: for capital-goods categories, the private segment is a real seller of
-  // whatever share of the region's aggregate real capex demand in-region public producers don't
-  // cover — the same CAPEX_PUBLIC_SUPPLY_SHARE split, as a real price-competing offer in the
-  // actual auction rather than an un-auctioned credit to the segment's revenue.
-  const capexPrivateSegmentType = isCapexSupplierCategory ? CAPEX_CATEGORY_PRIVATE_SEGMENT[subUnitId] : undefined;
-  if (capexPrivateSegmentType) {
-    const capexSegment = reg.privateSectorSegments?.find(s => s.segmentType === capexPrivateSegmentType);
-    if (capexSegment) {
-      const totalRegionCapexUSD = index.activeFirms.reduce((s, c) => s + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)), 0);
-      const totalCategoryCapexDemandUSD = totalRegionCapexUSD * capexSupplierWeight!;
-      const privateShareUSD = (1 - CAPEX_PUBLIC_SUPPLY_SHARE) * totalCategoryCapexDemandUSD;
-      const capexSegmentOfferUnits = (privateShareUSD / 52) / referencePriceUSD;
-      if (capexSegmentOfferUnits > 0.001) {
+      const poolOfferUnits = ((pool.annualRevenueUSD / 52) * mixShare) / referencePriceUSD;
+      if (poolOfferUnits > 0.001) {
         plans.push({
-          key: privateSegmentOfferId(regionId, capexPrivateSegmentType),
+          key: privateSegmentOfferId(regionId, owningIndustry),
           regionId,
-          segmentType: capexPrivateSegmentType,
+          industry: owningIndustry,
           initialInventoryUnits: 0,
           targetProductionUnits: 0,
           targetProductionUSD: 0,
           contractSalesCommittedUnits: 0,
-          openOfferUnits: capexSegmentOfferUnits,
-          minPriceUSD: referencePriceUSD * 0.90,
+          openOfferUnits: poolOfferUnits,
+          // Its own unit cost: a pool earning a 9% margin cannot sell below 91 cents on the
+          // dollar of the reference price and stay solvent.
+          minPriceUSD: referencePriceUSD * Math.max(0.5, 1 - pool.marginPct),
         });
       }
     }
@@ -658,13 +655,13 @@ function buildRegionDemandPlans(
   // bids for capital-goods categories from its own real capexUSD, so a segment's capex dollars
   // land on a real named supplier instead of being credited as an ambient revenue bump.
   if (isCapexSupplierCategory) {
-    (reg.privateSectorSegments || []).forEach(segment => {
+    (reg.smePools || []).forEach(segment => {
       const segCapexUSD = segment.capexUSD ?? 0;
       if (segCapexUSD <= 0) return;
       const demandUnits = ((segCapexUSD / 52) * capexSupplierWeight!) / referencePriceUSD;
       if (demandUnits <= 0.001) return;
       plans.push({
-        key: privateSegmentOfferId(regionId, segment.segmentType),
+        key: privateSegmentOfferId(regionId, segment.industry),
         regionId,
         demandUnits,
         maxPriceUSD: referencePriceUSD * (0.95 + random() * 0.1),
@@ -672,27 +669,28 @@ function buildRegionDemandPlans(
     });
   }
 
-  // 1$ is 1$ Phase 3 (demand-side): the MANUFACTURING segment is the private-sector stand-in
-  // for real industrial production — it already sells upstream_extraction/specialty_metals
-  // output and capital-goods capacity — so it also consumes the same literal recipe inputs a
-  // real IndustrialsMachinery company would, closing the loop on its supply-side role with a
-  // real purchase instead of leaving it a pure seller with no input demand of its own. (The
-  // other segment types are deliberately left out: which categories they'd plausibly consume
-  // isn't grounded in the existing data, and guessing is BP1's job to retire.)
+  // ---- SEG-B: EVERY pool buys its own industry's recipe inputs. ----
+  //
+  // What this replaces: one hardcoded branch in which the MANUFACTURING bucket bought
+  // IndustrialsMachinery's recipe, under a comment saying the other four buckets were "left out"
+  // because guessing their inputs "is BP1's job to retire". BP1 closed and never retired it, so
+  // four of five buckets bought nothing — pure sellers, with input costs that existed only as a
+  // margin subtracted from revenue. Now a pool consumes its OWN industry's recipe, the same
+  // literal `recipeInputs` a named firm of that industry consumes, so it competes for inputs in
+  // the same books it sells into.
   if (isRecipeInputCategory) {
-    const manufacturingSegment = reg.privateSectorSegments?.find(s => s.segmentType === 'MANUFACTURING');
-    const intensity = CATEGORY_INPUT_REQUIREMENTS['IndustrialsMachinery']?.[subUnitId];
-    if (manufacturingSegment && intensity) {
-      const demandUnits = ((manufacturingSegment.annualRevenueUSD / 52) * intensity) / referencePriceUSD;
-      if (demandUnits > 0.001) {
-        plans.push({
-          key: privateSegmentOfferId(regionId, 'MANUFACTURING'),
-          regionId,
-          demandUnits,
-          maxPriceUSD: referencePriceUSD * (0.95 + random() * 0.1),
-        });
-      }
-    }
+    (reg.smePools || []).forEach(pool => {
+      const intensity = smePoolRecipeInputs(pool.industry)[subUnitId];
+      if (!intensity) return;
+      const demandUnits = ((pool.annualRevenueUSD / 52) * intensity) / referencePriceUSD;
+      if (demandUnits <= 0.001) return;
+      plans.push({
+        key: privateSegmentOfferId(regionId, pool.industry),
+        regionId,
+        demandUnits,
+        maxPriceUSD: referencePriceUSD * (0.95 + random() * 0.1),
+      });
+    });
   }
 
   // Government Aggregate Bid — PUB1e: the treasury's OWN weekly budget for this category, set by
@@ -988,20 +986,21 @@ function runSubUnitMarkets(
 
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
-    const creditSegment = (segmentType: string | undefined, bookField: 'realSupplySalesDerivedAnnualRevenueUSDBySubUnit' | 'capexDerivedAnnualRevenueUSDBySubUnit') => {
-      if (!segmentType) return;
-      const segment = reg.privateSectorSegments?.find(s => s.segmentType === segmentType);
-      if (!segment) return;
-      const amount = results[regionId].salesByKey.get(privateSegmentOfferId(regionId, segmentType))?.amount ?? 0;
-      const newAnnualizedContribution = amount * 52;
-      const book = (segment as any)[bookField] ?? {};
-      const priorContribution = book[subUnitId] ?? 0;
-      segment.annualRevenueUSD = Math.max(1, segment.annualRevenueUSD - priorContribution + newAnnualizedContribution);
-      book[subUnitId] = newAnnualizedContribution;
-      (segment as any)[bookField] = book;
-    };
-    creditSegment(PRIVATE_SEGMENT_SUPPLY_CATEGORIES[subUnitId], 'realSupplySalesDerivedAnnualRevenueUSDBySubUnit');
-    creditSegment(isCapexSupplierCategory ? CAPEX_CATEGORY_PRIVATE_SEGMENT[subUnitId] : undefined, 'capexDerivedAnnualRevenueUSDBySubUnit');
+    // SEG-B/D: the pool's revenue is what it MEASURABLY SOLD. One book keyed by sub-unit —
+    // the old pair (a supply book and a capex book) existed only because a bucket could be
+    // credited through two different hardcoded routes, and each route's write subtracted the
+    // other's prior contribution as if it were its own.
+    const owningIndustry = industryOfSubUnit(subUnitId);
+    const pool = owningIndustry ? reg.smePools?.find(p => p.industry === owningIndustry) : undefined;
+    if (pool && owningIndustry) {
+      const amountUSD = results[regionId].salesByKey.get(privateSegmentOfferId(regionId, owningIndustry))?.amount ?? 0;
+      const newAnnualizedUSD = amountUSD * 52;
+      const book = pool.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
+      const priorUSD = book[subUnitId] ?? 0;
+      pool.annualRevenueUSD = Math.max(1, pool.annualRevenueUSD - priorUSD + newAnnualizedUSD);
+      book[subUnitId] = newAnnualizedUSD;
+      pool.salesDerivedAnnualRevenueUSDBySubUnit = book;
+    }
   });
 
   // --- 9. Settle every buyer once, in ITS money, at the landed cost it actually paid.

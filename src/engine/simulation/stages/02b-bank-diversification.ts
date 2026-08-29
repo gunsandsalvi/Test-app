@@ -118,7 +118,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // SEG1: the segment pools' balances, reconciled the same way — each pool's cash sits across
     // the region's banks pro-rata by market share (settlement spreads it identically; this
     // catches share drift and any balance moved outside instructions, with the reserve leg).
-    const segmentCashUSD = (reg.privateSectorSegments || []).reduce((a, s) => a + Math.max(0, s.cashUSD ?? 0), 0);
+    const segmentCashUSD = (reg.smePools || []).reduce((a, s) => a + Math.max(0, s.cashUSD ?? 0), 0);
     const regionBankShareTotal = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
 
     // HH3: the week's real household-credit flows, per bank, for the region roll-up below.
@@ -153,12 +153,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       (prevSheet.businessLoans || [])
         .filter((l) => l.status === 'PERFORMING' && l.borrowerKind === 'SME_POOL')
         .forEach((l) => {
-          const seg = (reg.privateSectorSegments || []).find((s) => smePoolId(regionId, s.segmentType) === l.borrowerId);
+          const seg = (reg.smePools || []).find((s) => smePoolId(regionId, s.industry) === l.borrowerId);
           if (!seg) return;
           const interestUSD = (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52;
           priorSmeInterestWeeklyUSD += interestUSD;
           pay(ctx, {
-            payer: { kind: 'SEGMENT', region: regionId, segmentType: seg.segmentType },
+            payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
             payee: { kind: 'BANK', ticker: bank.ticker },
             amountUSD: interestUSD,
             reason: 'SME pool interest to the lending bank',
@@ -217,10 +217,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // SEG2e: a loan creates a deposit — the pool's new money is written by this bank's own
       // credit (no reserve moves) and lands on the pool's cash and this bank's smeDepositsUSD
       // line at settlement, in the same week the loan appeared on the book above.
-      lending.smeOriginationBySegment.forEach((grantedUSD, segmentType) => {
+      lending.smeOriginationBySegment.forEach((grantedUSD, industry) => {
         pay(ctx, {
           payer: { kind: 'BANK_CREDIT', ticker: bank.ticker },
-          payee: { kind: 'SEGMENT', region: regionId, segmentType },
+          payee: { kind: 'SEGMENT', region: regionId, industry },
           amountUSD: grantedUSD,
           reason: 'SME loan origination creates the pool deposit',
         });
@@ -277,8 +277,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         if (l.borrowerKind !== 'SME_POOL') return;
         poolTotals.set(l.borrowerId, (poolTotals.get(l.borrowerId) ?? 0) + l.principalUSD);
       }));
-      (reg.privateSectorSegments || []).forEach((seg) => {
-        seg.debtUSD = Number((poolTotals.get(smePoolId(regionId, seg.segmentType)) ?? 0).toFixed(0));
+      (reg.smePools || []).forEach((seg) => {
+        seg.debtUSD = Number((poolTotals.get(smePoolId(regionId, seg.industry)) ?? 0).toFixed(0));
       });
     }
 

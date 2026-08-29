@@ -16,7 +16,8 @@ import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
-import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
+import { industryOfSubUnit } from '../../../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
@@ -372,7 +373,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           // A private-segment offer (05-unit-bidding.ts's PRIVATE_SEGMENT_SUPPLY_CATEGORIES) is
           // just as real a supply source as a public company's product line.
           const hasRealSupply = (suppliedSubUnitsByRegion.get(comp.region)?.has(inputSubUnit) ?? false)
-            || PRIVATE_SEGMENT_SUPPLY_CATEGORIES[inputSubUnit] !== undefined;
+            || industryOfSubUnit(inputSubUnit) !== undefined;
           if (!hasRealSupply) return;
           const inputUnitPrice = (reg.categoryDemand[inputSubUnit as any] as any)?.unitPriceUSD ?? 1;
           const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);

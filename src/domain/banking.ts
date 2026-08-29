@@ -235,7 +235,7 @@ export function annuityWeeklyPrincipalUSD(principalUSD: number, rateAnnual: numb
 /** G2: one real loan to one named borrower on one named bank's book. */
 export interface BankLoan {
   id: string;
-  /** A company.id, or an SME pool id "<region>_SEG_<segmentType>". */
+  /** A company.id, or an SME pool id "<region>_SEG_<industry>". */
   borrowerId: string;
   borrowerKind: 'COMPANY_FACILITY' | 'SME_POOL';
   principalUSD: number;

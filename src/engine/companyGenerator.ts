@@ -826,13 +826,6 @@ export function generateInitialCompanies(
 // exactly like a Wave 1 carve, because it is one.
 // ---------------------------------------------------------------------------------------------
 
-const SEGMENT_SECTOR: Record<string, Sector> = {
-  MANUFACTURING: 'Industrials',
-  PROFESSIONAL_SERVICES: 'Tech',
-  RETAIL_TRADE: 'Consumer',
-  CONSTRUCTION_REALESTATE: 'Industrials',
-  HEALTHCARE_SERVICES: 'Consumer', // closest fit in the sector taxonomy until BP1 re-keys categories
-};
 
 export function generatePrivateCompanies(
   region: RegionId,
@@ -842,7 +835,10 @@ export function generatePrivateCompanies(
   existingNames: Set<string>
 ): Company[] {
   return seeds.map((seed, idx) => {
-    const sector = SEGMENT_SECTOR[seed.segmentType] ?? 'Industrials';
+    // SEG-A: a born firm's sector is its INDUSTRY's sector, straight from the registry — the
+    // five-bucket map this replaces collapsed the tier into three sectors and filed healthcare
+    // under "Consumer" as the "closest fit".
+    const sector = INDUSTRY_REGISTRY[seed.industry].sector as Sector;
     const ticker = generateUniqueTicker(existingTickers);
     const name = generateUniqueName(`${region} ${sector}`, sector, existingNames);
     const revBase = Math.round(seed.annualRevenueUSD);
@@ -870,7 +866,7 @@ export function generatePrivateCompanies(
       listingStatus: 'PRIVATE',
       // HC8: the pool this firm was carved from — births read it to find the right pool,
       // and a carve must always know which aggregate it came out of.
-      privateSegmentType: seed.segmentType,
+      smePoolIndustry: seed.industry,
       // Founder/family owned until HC4 assigns real PE sponsors to the sponsorStyle cohort —
       // the leverage is already theirs, the owner arrives with the PE entities.
       ownership: { founderPct: 1.0 },
@@ -913,7 +909,27 @@ export function generatePrivateCompanies(
       recoveryRate: 0.40, baselineRecoveryRate: 0.40,
       // Goods-market participation arrives with HC3's conservation-checked handover; until then
       // the segments keep carrying this revenue in stage 05 and this array stays empty.
-      productLines: [],
+      // SEG-D: a born firm enters the world able to SELL. It used to arrive with no product
+      // lines at all — a company that could not participate in any auction, in any category,
+      // ever. Its mix is its pool's own measured mix where one exists, and an even split of its
+      // industry's sub-units at the cold start.
+      productLines: (() => {
+        const subUnits = INDUSTRY_REGISTRY[seed.industry].subUnits;
+        const mix = seed.productMixBySubUnit;
+        const mixTotal = mix ? Object.values(mix).reduce((a, v) => a + Math.max(0, v), 0) : 0;
+        if (mix && mixTotal > 0) {
+          return Object.entries(mix)
+            .filter(([, v]) => v > 0)
+            .map(([subUnitId, v]) => ({
+              industry: seed.industry, subUnitId,
+              revenueShare: v / mixTotal, competitiveness: 0,
+            }));
+        }
+        return subUnits.map(su => ({
+          industry: seed.industry, subUnitId: su.unitId,
+          revenueShare: 1 / subUnits.length, competitiveness: 0,
+        }));
+      })(),
       leverage: debtBase / Math.max(1, ebitda),
       interestCoverage: coverage,
       // No quarterly reporting apparatus: a private firm does not report, is not covered, and

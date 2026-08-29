@@ -87,7 +87,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const allNames = new Set(companies.map(c => c.name));
     (Object.keys(regions) as RegionId[]).forEach(regionId => {
       const reg = regions[regionId];
-      const segs = reg.privateSectorSegments || [];
+      const segs = reg.smePools || [];
       const seeds = generatePrivateFirmSeeds(regionId, segs);
       const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, allTickers, allNames);
 
@@ -105,7 +105,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
       // primitive). Employment / revenue / capex: exactly what the named tier now carries.
       segs.forEach(seg => {
-        const segIdx = seeds.map((sd, i) => sd.segmentType === seg.segmentType ? i : -1).filter(i => i >= 0);
+        const segIdx = seeds.map((sd, i) => sd.industry === seg.industry ? i : -1).filter(i => i >= 0);
         const segFirms = segIdx.map(i => firms[i]);
         seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - segFirms.reduce((a, f) => a + f.totalDebt, 0)));
         seg.employment = Math.max(1000, Math.round(seg.employment - segFirms.reduce((a, f) => a + f.employeeCount, 0)));
@@ -449,11 +449,11 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         const tierRevenueUSD = namedPrivate.reduce((a, c) => a + Math.max(0, c.annualRevenue), 0);
         const tierCashUSD = namedPrivate.reduce((a, c) => a + Math.max(0, c.cash), 0);
         const cashToRevenue = tierRevenueUSD > 0 ? tierCashUSD / tierRevenueUSD : 0.08;
-        (reg.privateSectorSegments || []).forEach(seg => {
+        (reg.smePools || []).forEach(seg => {
           seg.cashUSD = Math.round(Math.max(0, seg.annualRevenueUSD) * cashToRevenue);
         });
       }
-      const segmentCashTotalUSD = (reg.privateSectorSegments || []).reduce((a, s) => a + (s.cashUSD ?? 0), 0);
+      const segmentCashTotalUSD = (reg.smePools || []).reduce((a, s) => a + (s.cashUSD ?? 0), 0);
       const bankShareTotal = regionBanksForLending.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
       regionBanksForLending.forEach(b => {
         const corpUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
@@ -653,7 +653,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         .filter(c => isActiveCompany(c))
         .reduce((a, c) => a + Math.max(0, c.employeeCount), 0);
       const residual = targetEmployed - firmEmployment - reg.governmentEmployment;
-      const segs = reg.privateSectorSegments || [];
+      const segs = reg.smePools || [];
       const segTotal = segs.reduce((a, sg) => a + Math.max(0, sg.employment), 0);
       if (segs.length > 0 && segTotal > 0 && residual > 0) {
         segs.forEach((sg) => {
@@ -670,7 +670,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // BORN with, indistinguishable at a glance from one it had produced. Uniform slack means
     // any mismatch after week 0 is one the economy really generated, which is what the
     // retraining flow exists to work on.
-    const week1OccDemand = computeOccupationDemand(regionCompanies, reg.privateSectorSegments, regionId, reg.governmentEmployment) as Record<OccupationType, number>;
+    const week1OccDemand = computeOccupationDemand(regionCompanies, reg.smePools, regionId, reg.governmentEmployment) as Record<OccupationType, number>;
     const week1DemandTotal = Object.values(week1OccDemand).reduce((s, v) => s + v, 0);
     (Object.keys(reg.occupationLaborForceShare) as OccupationType[]).forEach((occ) => {
       reg.occupationLaborForceShare[occ] = week1DemandTotal > 0
@@ -731,7 +731,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const regionFirms = regionCompanies.filter(c => !c.isDefaulted && !c.mergerAcquired);
     const trackedInvestmentUSD = regionFirms.reduce((sum, c) => sum + c.maintenanceCapex + c.growthCapex, 0);
     const trackedEmployment = regionFirms.reduce((sum, c) => sum + c.employeeCount, 0);
-    const privateEmployment = (reg.privateSectorSegments || []).reduce((sum, seg) => sum + seg.employment, 0);
+    const privateEmployment = (reg.smePools || []).reduce((sum, seg) => sum + seg.employment, 0);
     const investmentScaleFactor = trackedEmployment > 0 ? (trackedEmployment + privateEmployment) / trackedEmployment : 1;
     const { gdpUSD: bottomUpGdpUSD } = computeExpenditureGdpUSD({
       householdIncomeUSD: reg.estimatedHouseholdIncomeUSD,

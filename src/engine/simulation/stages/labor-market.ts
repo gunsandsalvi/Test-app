@@ -36,7 +36,7 @@
 
 import { GameState, RegionId, Company, OccupationType } from '../../../types';
 import {
-  SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX,
+  SECTOR_OCCUPATION_MIX,
   MATCHING_EFFICIENCY, MATCHING_ELASTICITY, BASELINE_QUIT_RATE_WEEKLY, LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
   HIRING_ADJUSTMENT_SPEED_MULTIPLE, LAYOFF_SPEED_MULTIPLE, DISTRESS_LAYOFF_SPEED,
   VACANCY_WITHDRAWAL_RATE_WEEKLY,
@@ -48,6 +48,7 @@ import {
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 
 const OCCUPATIONS: OccupationType[] = [
   'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
@@ -155,7 +156,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
 
     // The private segments are employers too — the SME residual hires on the same logic, off
     // its own revenue and its own productivity.
-    (reg.privateSectorSegments || []).forEach((seg) => {
+    (reg.smePools || []).forEach((seg) => {
       const current = Math.max(0, seg.employment);
       if (current <= 0) return;
       // Same growth-on-growth rule as a named firm, off the segment's own revenue history.
@@ -164,7 +165,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       );
       const desiredWeeklyChange = current * (growthAnnual / 52);
       const quits = current * quitRateWeekly;
-      const mix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 };
+      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any);
       const vacancies = desiredWeeklyChange >= 0
         ? desiredWeeklyChange * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits
         : quits;
@@ -199,8 +200,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const mix = occupationMixFor(comp.sector);
       OCCUPATIONS.forEach((occ) => { employedByOccBefore[occ] += Math.max(0, comp.employeeCount) * (mix[occ] ?? 0); });
     });
-    (reg.privateSectorSegments || []).forEach((seg) => {
-      const mix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 };
+    (reg.smePools || []).forEach((seg) => {
+      const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any);
       OCCUPATIONS.forEach((occ) => {
         employedByOccBefore[occ] += Math.max(0, seg.employment) * ((mix as Partial<Record<OccupationType, number>>)[occ] ?? 0);
       });
@@ -295,7 +296,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       ctx.companyUpdates[comp.ticker].unfilledVacancyShare = Number(unfilledShare.toFixed(4));
     });
     segmentPostings.forEach(({ seg, vacancies, layoffs, quits }) => {
-      const mix = (PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType] ?? { GENERAL: 1.0 }) as Partial<Record<OccupationType, number>>;
+      const mix = (occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any)) as Partial<Record<OccupationType, number>>;
       const hired = filledFor(vacancies, mix);
       seg.employment = Math.max(0, Math.round(seg.employment + hired - layoffs - quits));
     });
@@ -396,9 +397,8 @@ export function reconcileEmploymentView(
     const mix = occupationMixFor(comp.sector);
     OCCUPATIONS.forEach((occ) => { employedByOcc[occ] += Math.max(0, comp.employeeCount) * (mix[occ] ?? 0); });
   });
-  (reg.privateSectorSegments || []).forEach((seg: any) => {
-    const mix = (PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType as keyof typeof PRIVATE_SEGMENT_OCCUPATION_MIX]
-      ?? { GENERAL: 1.0 }) as Partial<Record<OccupationType, number>>;
+  (reg.smePools || []).forEach((seg: any) => {
+    const mix = (occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any)) as Partial<Record<OccupationType, number>>;
     OCCUPATIONS.forEach((occ) => {
       employedByOcc[occ] += Math.max(0, seg.employment) * (mix[occ] ?? 0);
     });

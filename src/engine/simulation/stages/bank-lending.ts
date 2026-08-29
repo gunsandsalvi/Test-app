@@ -44,7 +44,7 @@ import {
   FORECLOSURE_COST_SHARE, MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, MORTGAGE_MIN_LOSS_SEVERITY,
 } from '../../../domain/banking';
 import { CreditTierBook, AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
-import { PrivateSectorSegment } from '../../../domain/region-macro';
+import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE } from './shared-helpers';
 
@@ -76,10 +76,10 @@ export function quoteLoanMarginBps(params: {
   return Math.max(25, Math.round(expectedLossBps + capitalCostBps));
 }
 
-export const smePoolId = (regionId: RegionId, segmentType: string) => `${regionId}_SEG_${segmentType}`;
+export const smePoolId = (regionId: RegionId, industry: string) => `${regionId}_SEG_${industry}`;
 
 /** The pool's PD from its own real default experience — the segment's annual default rate. */
-function smePoolAnnualPd(seg: PrivateSectorSegment): number {
+function smePoolAnnualPd(seg: SmePool): number {
   return Math.max(0.002, Math.min(0.25, seg.defaultRateAnnualPct));
 }
 
@@ -106,7 +106,7 @@ export function migrateSmeDebtAtSeed(
   reg: Region,
   banks: Company[]
 ): void {
-  const segs = reg.privateSectorSegments || [];
+  const segs = reg.smePools || [];
   const segEbitdaUSD = segs.map((s) => Math.max(0, s.annualRevenueUSD * s.marginPct));
   const totalEbitdaUSD = segEbitdaUSD.reduce((a, b) => a + b, 0);
   if (!(totalEbitdaUSD > 0) || banks.length === 0) return;
@@ -128,8 +128,8 @@ export function migrateSmeDebtAtSeed(
       const principalUSD = Math.round(migratedUSD * bankShare * (segEbitdaUSD[i] / totalEbitdaUSD));
       if (principalUSD <= 0) return;
       loans.push({
-        id: `${bank.ticker}-SME-${seg.segmentType}`,
-        borrowerId: smePoolId(regionId, seg.segmentType),
+        id: `${bank.ticker}-SME-${seg.industry}`,
+        borrowerId: smePoolId(regionId, seg.industry),
         borrowerKind: 'SME_POOL',
         principalUSD,
         marginBps: quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0 }),
@@ -155,7 +155,7 @@ export function migrateSmeDebtAtSeed(
     migratedBySegment.set(l.borrowerId, (migratedBySegment.get(l.borrowerId) ?? 0) + l.principalUSD);
   }));
   segs.forEach((seg) => {
-    seg.debtUSD = migratedBySegment.get(smePoolId(regionId, seg.segmentType)) ?? 0;
+    seg.debtUSD = migratedBySegment.get(smePoolId(regionId, seg.industry)) ?? 0;
   });
 }
 
@@ -170,7 +170,7 @@ export interface WeeklyLendingResult {
   /** Net facility money created (+) / destroyed (−) this week — excluded from the reserve
    * settlement of the corporate-deposit view. */
   facilityNetOriginationUSD: number;
-  /** SEG2e — this week's SME origination per segmentType. The caller (02b) books the deposit
+  /** SEG2e — this week's SME origination per industry. The caller (02b) books the deposit
    * half through settlement (BANK_CREDIT → SEGMENT), so the pool's new money lands on its own
    * line with no reserve move; the loan half was already written in place here. */
   smeOriginationBySegment: Map<string, number>;
@@ -240,7 +240,7 @@ export function runBankWeeklyLending(
   // ---- SME losses at the pool's own real default rate — the bank's measured loss experience,
   // replacing the contagion formula for the itemized book. ----
   let loanLossWeeklyUSD = 0;
-  const segByPool = new Map((reg.privateSectorSegments || []).map((s) => [smePoolId(regionId, s.segmentType), s]));
+  const segByPool = new Map((reg.smePools || []).map((s) => [smePoolId(regionId, s.industry), s]));
   loans = loans.map((l) => {
     if (l.borrowerKind !== 'SME_POOL') return l;
     const seg = segByPool.get(l.borrowerId);
@@ -255,8 +255,8 @@ export function runBankWeeklyLending(
   let declinedOriginationUSD = 0;
   const smeOriginationBySegment = new Map<string, number>();
   const equityUSD = sheet.bankEquityUSD;
-  (reg.privateSectorSegments || []).forEach((seg) => {
-    const poolId = smePoolId(regionId, seg.segmentType);
+  (reg.smePools || []).forEach((seg) => {
+    const poolId = smePoolId(regionId, seg.industry);
     const poolLoan = loans.find((l) => l.borrowerId === poolId && l.borrowerKind === 'SME_POOL');
     const ebitdaUSD = Math.max(0, seg.annualRevenueUSD * seg.marginPct);
     const ceilingUSD = ebitdaUSD * SME_SERVICEABLE_LEVERAGE;
@@ -286,7 +286,7 @@ export function runBankWeeklyLending(
     declinedOriginationUSD += demandUSD - grantedUSD;
     if (grantedUSD <= 0) return;
 
-    smeOriginationBySegment.set(seg.segmentType, (smeOriginationBySegment.get(seg.segmentType) ?? 0) + grantedUSD);
+    smeOriginationBySegment.set(seg.industry, (smeOriginationBySegment.get(seg.industry) ?? 0) + grantedUSD);
     const marginBps = quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0 });
     if (poolLoan) {
       poolLoan.principalUSD += grantedUSD;
@@ -294,7 +294,7 @@ export function runBankWeeklyLending(
       poolLoan.marginBps = Math.round((poolLoan.marginBps * (poolLoan.principalUSD - grantedUSD) + marginBps * grantedUSD) / Math.max(1, poolLoan.principalUSD));
     } else {
       loans.push({
-        id: `${bank.ticker}-SME-${seg.segmentType}`,
+        id: `${bank.ticker}-SME-${seg.industry}`,
         borrowerId: poolId, borrowerKind: 'SME_POOL', principalUSD: grantedUSD,
         marginBps, originationWeek: nextWeek, termWeeks: 52 * 5, status: 'PERFORMING',
       });

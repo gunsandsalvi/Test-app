@@ -86,11 +86,11 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       const regionEmployedForWages = Math.max(1, Object.values(reg.occupationPools ?? {})
         .reduce((a: number, pool: any) => a + (pool?.employed ?? 0), 0));
       const perWorkerWeeklyUSD = ((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployedForWages) / 52;
-      (reg.privateSectorSegments || []).forEach((seg) => {
+      (reg.smePools || []).forEach((seg) => {
         const wagesUSD = seg.employment * perWorkerWeeklyUSD;
         if (wagesUSD > 0) {
           pay(ctx, {
-            payer: { kind: 'SEGMENT', region: regionId, segmentType: seg.segmentType },
+            payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
             payee: { kind: 'HOUSEHOLD', region: regionId },
             amountUSD: wagesUSD,
             reason: 'private-sector tier wages',

@@ -4,10 +4,11 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
-import { Company, Region, PrivateSectorSegment, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
+import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { SECTOR_OCCUPATION_MIX, PRIVATE_SEGMENT_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { SECTOR_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
+import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 
 // Holder-class rebalancing coefficients (see computeTargetOwnershipShares below).
 const EQUITY_ATTRACTIVENESS_SENSITIVITY = 0.6;
@@ -121,7 +122,7 @@ export function getRatingBucket(rating: string): 'IG' | 'HY' {
 }
 
 
-export function computeOccupationDemand(companies: Company[], privateSegments: PrivateSectorSegment[], regionId: RegionId, governmentEmployment?: number): Record<string, number> {
+export function computeOccupationDemand(companies: Company[], privateSegments: SmePool[], regionId: RegionId, governmentEmployment?: number): Record<string, number> {
   const demand: Record<string, number> = {
     GENERAL: 0,
     SKILLED_TRADES: 0,
@@ -139,7 +140,7 @@ export function computeOccupationDemand(companies: Company[], privateSegments: P
   });
 
   (privateSegments || []).forEach(seg => {
-    const mix = PRIVATE_SEGMENT_OCCUPATION_MIX[seg.segmentType];
+    const mix = SECTOR_OCCUPATION_MIX[INDUSTRY_REGISTRY[seg.industry].sector as keyof typeof SECTOR_OCCUPATION_MIX];
     if (!mix) { demand.GENERAL += seg.employment; return; }
     Object.keys(mix).forEach((occ) => {
       demand[occ] += seg.employment * ((mix as any)[occ] ?? 0);

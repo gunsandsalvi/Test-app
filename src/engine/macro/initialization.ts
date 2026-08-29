@@ -1,11 +1,13 @@
 import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { priceCommodityFutures } from '../pricing';
-import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, PrivateSectorSegment, PrivateSegmentType, GovDebtTranche } from '../../types';
+import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, SmePool, Industry, GovDebtTranche } from '../../types';
 import { buildHouseholdCohorts } from './household-cohorts';
 import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
 import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
+import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits } from '../../domain/industry-registry';
+import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, SME_TIER_EMPLOYMENT_SHARE } from '../bootstrap/firms';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
@@ -187,15 +189,6 @@ const OWNERSHIP_SHARES = {
 
 const INSTITUTIONAL_SECTOR_RATIOS = { cashToGdp: 0.010, sectorEquityToGdp: 0.012, investmentIncomeMargin: 0.028 };
 
-const PRIVATE_SEGMENT_PROFILE: Record<PrivateSegmentType, { employmentShare: number; revenueToGdp: number; marginPct: number }> = {
-  MANUFACTURING: { employmentShare: 0.150, revenueToGdp: 0.110, marginPct: 0.09 },
-  PROFESSIONAL_SERVICES: { employmentShare: 0.120, revenueToGdp: 0.090, marginPct: 0.14 },
-  RETAIL_TRADE: { employmentShare: 0.180, revenueToGdp: 0.095, marginPct: 0.05 },
-  CONSTRUCTION_REALESTATE: { employmentShare: 0.090, revenueToGdp: 0.065, marginPct: 0.10 },
-  HEALTHCARE_SERVICES: { employmentShare: 0.060, revenueToGdp: 0.050, marginPct: 0.12 },
-};
-const MANUFACTURING_COMMODITY_SUPPLY_SHARE = 0.0375; // share of MANUFACTURING segment revenue, per linked commodity
-const MANUFACTURING_LINKED_COMMODITIES = ['COPPER', 'WHEAT', 'CORN', 'SOYBEANS'];
 
 // WS5: ~18% of the stock is bills (13/26/52-week paper) — the real treasury mix runs 15-25%
 // bills; the bond weights carry the rest in the same proportions as before.
@@ -402,27 +395,9 @@ function buildRegion(regionId: RegionId): Region {
   const equityHoldingsUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.equityHoldingsToIncome).toFixed(0));
   const householdDebtToIncomeRatio = Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / Math.max(1, estimatedHouseholdIncomeUSD)).toFixed(3));
 
-  const privateSectorSegments: PrivateSectorSegment[] = (Object.keys(PRIVATE_SEGMENT_PROFILE) as PrivateSegmentType[]).map((segmentType) => {
-    const profile = PRIVATE_SEGMENT_PROFILE[segmentType];
-    const annualRevenueUSD = Number((estimatedNominalGdpUSD * profile.revenueToGdp).toFixed(0));
-    const segment: PrivateSectorSegment = {
-      segmentType,
-      employment: Math.round(totalEmployed * profile.employmentShare),
-      annualRevenueUSD,
-      marginPct: profile.marginPct,
-      debtUSD: annualRevenueUSD * 2,
-      defaultRateAnnualPct: 0.02,
-      capexUSD: annualRevenueUSD * 0.05,
-    };
-    if (segmentType === 'MANUFACTURING') {
-      segment.producedCommodityIds = MANUFACTURING_LINKED_COMMODITIES;
-      segment.commoditySupplyShareUSD = MANUFACTURING_LINKED_COMMODITIES.reduce((acc, id) => {
-        acc[id] = Number((annualRevenueUSD * MANUFACTURING_COMMODITY_SUPPLY_SHARE).toFixed(0));
-        return acc;
-      }, {} as Record<string, number>);
-    }
-    return segment;
-  });
+  // SEG-A: the SME pools are seeded from the region's REAL demand, so they are built after
+  // `categoryDemand` exists (below, once the region object is assembled).
+  const smePools: SmePool[] = [];
 
   const region: Region = {
     id: regionId,
@@ -487,7 +462,7 @@ function buildRegion(regionId: RegionId): Region {
     netMigrationRateAnnual: NET_MIGRATION_RATE_ANNUAL,
     nonEmployablePct: NON_EMPLOYABLE_PCT,
     governmentEmployment,
-    privateSectorSegments,
+    smePools,
     occupationPools,
     occupationLaborForceShare,
     estimatedNominalGdpUSD,
@@ -579,6 +554,47 @@ function buildRegion(regionId: RegionId): Region {
   };
 
   region.categoryDemand = createInitialCategoryDemand(gdpGrowth, estimatedHouseholdIncomeUSD, lastWeekNominalGdpUSD, totalPopulation, TARGET_FIRMS_PER_REGION);
+
+  // ---- SEG-A: the SME tier, one pool per registry industry, sized by REAL DEMAND ----
+  //
+  // Each industry's pool opens at its industry's own demand times that industry's stated SME
+  // intensity (`smeShareOfActivity`) — so the tier's composition is an outcome of where demand
+  // actually is, and an industry added to the registry gets a pool automatically. What this
+  // replaces: five buckets whose sizes were `revenueToGdp` constants, frozen forever.
+  //
+  // Employment splits the tier's total across pools BY REVENUE — deliberately a neutral split,
+  // not a fabricated per-industry productivity table. Revenue per worker then diverges from the
+  // pools' own measured P&L (SEG-D), which is where a difference in productivity should come
+  // from. Total employment is what matters at the seed and it is conserved exactly.
+  //
+  // Margin is the named tier's own sector margin less the SME discount — read from the SAME
+  // `SECTOR_PROFILE` the company generator uses, so there is one margin primitive, not two.
+  {
+    const demandOf = (unitId: string) => region.categoryDemand[unitId]?.demandLevelUSD ?? 0;
+    const revenueByIndustry = new Map<Industry, number>();
+    SME_POOL_INDUSTRIES.forEach((industry) => {
+      const industryDemandUSD = smePoolSubUnits(industry).reduce((a, su) => a + demandOf(su.unitId), 0);
+      revenueByIndustry.set(industry, industryDemandUSD * INDUSTRY_REGISTRY[industry].smeShareOfActivity);
+    });
+    const totalPoolRevenueUSD = Array.from(revenueByIndustry.values()).reduce((a, v) => a + v, 0) || 1;
+    const tierEmployment = Math.round(totalEmployed * SME_TIER_EMPLOYMENT_SHARE);
+    SME_POOL_INDUSTRIES.forEach((industry) => {
+      const annualRevenueUSD = Number((revenueByIndustry.get(industry) ?? 0).toFixed(0));
+      if (annualRevenueUSD <= 0) return;
+      const sector = INDUSTRY_REGISTRY[industry].sector;
+      smePools.push({
+        industry,
+        employment: Math.max(1, Math.round(tierEmployment * (annualRevenueUSD / totalPoolRevenueUSD))),
+        annualRevenueUSD,
+        marginPct: Number((sectorBaselineMarginPct(sector) * (1 - SME_MARGIN_DISCOUNT)).toFixed(4)),
+        // No lender yet: the seed migration (bank-lending.ts) itemizes what the banks can
+        // actually carry onto real loans and writes this back as their derived sum (rule 3).
+        debtUSD: 0,
+        defaultRateAnnualPct: 0.02,
+        capexUSD: Number((annualRevenueUSD * 0.05).toFixed(0)),
+      });
+    });
+  }
 
   return region;
 }

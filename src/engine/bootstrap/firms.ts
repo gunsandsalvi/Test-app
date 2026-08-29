@@ -96,6 +96,28 @@ const FIRM_CONCENTRATION_DECAY = 0.80;
 // (debt/EBITDA) and cash intensity (cash/EBITDA). Lower-ranked (smaller) firms in the same
 // sector are progressively thinner-margined and more levered, reflecting scale economics
 // rather than independently hand-set financials.
+/**
+ * SEG — how much thinner an SME pool's margin is than the named tier's in the same sector.
+ * Small firms really do earn less per dollar of revenue: less purchasing power over inputs, no
+ * scale in overhead, weaker pricing power. One number for the model, applied to the sector
+ * margin below rather than a second margin table (rule 3 — one primitive per real quantity).
+ */
+export const SME_MARGIN_DISCOUNT = 0.35;
+
+/**
+ * SEG — the SME tier's share of total employment before the named private tier is carved out of
+ * it. Small firms employ roughly half of a developed economy's workers; this is that fact, and
+ * it is the ONE aggregate the tier takes. Its split ACROSS industries is not stated anywhere —
+ * that follows each industry's own demand (see the seed in macro/initialization.ts).
+ */
+export const SME_TIER_EMPLOYMENT_SHARE = 0.60;
+
+/** The named tier's baseline EBITDA margin for a sector — the SME pools read this too, so one
+ *  table serves both tiers. */
+export function sectorBaselineMarginPct(sector: Sector): number {
+  return SECTOR_PROFILE[sector]?.margin ?? 0.20;
+}
+
 const SECTOR_PROFILE: Record<Sector, { margin: number; leverage: number; cashToEbitda: number; beta: number }> = {
   Tech: { margin: 0.42, leverage: 1.1, cashToEbitda: 2.2, beta: 1.30 },
   Energy: { margin: 0.33, leverage: 1.6, cashToEbitda: 0.9, beta: 1.12 },

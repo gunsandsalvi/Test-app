@@ -229,7 +229,7 @@ function checkLaborMarketIdentity(state: GameState, week: number) {
     const employerHeadcount = state.companies
       .filter((c) => c.region === region && isActiveCompany(c))
       .reduce((a, c) => a + Math.max(0, c.employeeCount), 0)
-      + (reg.privateSectorSegments || []).reduce((a, s) => a + Math.max(0, s.employment), 0)
+      + (reg.smePools || []).reduce((a, s) => a + Math.max(0, s.employment), 0)
       + reg.governmentEmployment;
     const poolEmployed = Object.values(reg.occupationPools).reduce((a: number, p: any) => a + (p.employed ?? 0), 0);
     // Tight band (0.2%): the pools are DERIVED from this exact sum by the end-of-week
