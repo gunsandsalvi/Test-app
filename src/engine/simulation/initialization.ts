@@ -771,6 +771,31 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // opens in the shape the engine maintains).
     //
     // The wage table is scaled so that paying it across the BASELINE OCCUPATION MIX costs the
+    // IND-R5 (§7.4: seed by the engine's own code). A bank's revenue was a Pareto draw from the
+    // same small-firm curve every company uses, with no relation to the balance sheet it was
+    // about to be given: measured, a USA bank opened at 1.68B against 7.47B of NIM-implied
+    // revenue, and `bankProfile`'s 85/15 blend then spent YEARS climbing toward its real scale.
+    // Two costs, both real. Every consumer read that convergence as output growth — the labor
+    // market's hiring signal among them. And its payroll was sized for the bank it is, not the
+    // bank its revenue said it was: 11.6k staff costing ~7.5B a year against 1.68B of revenue,
+    // so the first week's P&L showed a loss so large the affordability rule cut the entire
+    // workforce to the one-employee floor by week 3 (§7.108, §7.109).
+    //
+    // A bank's opening revenue IS what its opening balance sheet earns.
+    regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet).forEach((c) => {
+      const sheet = c.bankBalanceSheet!;
+      const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
+        .reduce((a, v) => a + (Number(v) || 0), 0);
+      const earningAssetsUSD = sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD;
+      const nimRevenueUSD = earningAssetsUSD * reg.bankingSector.netInterestMarginPct;
+      if (!(nimRevenueUSD > 0)) return;
+      c.annualRevenue = Number(nimRevenueUSD.toFixed(0));
+      c.baselineAnnualRevenue = c.annualRevenue;
+      c.ebitda = Number((c.annualRevenue * (c.baselineEbitdaMargin ?? 0.40)).toFixed(0));
+      c.ebit = c.ebitda;
+      c.revenueHistory = [];
+    });
+
     // labor share of output — a per-capita accounting construction. It is then paid per EMPLOYED
     // WORKER by firms whose earnings are their own, and the two do not agree: the table implied a
     // payroll the firms did not have the output to fund. That was invisible while wages were not
