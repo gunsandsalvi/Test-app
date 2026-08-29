@@ -180,6 +180,25 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     target.bankBalanceSheet = undefined;
   }
 
+  // OWN7: the target's PAPER moves with its debt. Holdings are keyed by the issuer's company
+  // id, so a holder of the target's bonds or loans kept a row against a company that has just
+  // left the books — while the same principal, now on the acquirer's ladder, was re-cleared to
+  // the same institutions the following week. One tranche, two holders' rows, and the
+  // conservation check saw the corporate books mint claims on the merger week (measured: 161B
+  // held against 131B outstanding in USA leveraged loans). The equity rows are NOT re-keyed:
+  // the target's shareholders were paid in the tender above, they did not become the acquirer's.
+  const mergedIds = new Set([target.id]);
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    let touched = false;
+    const rows = e.itemizedHoldings.map((h) => {
+      if (!mergedIds.has(h.instrumentId)) return h;
+      if (h.instrumentType !== 'CORP_BOND' && h.instrumentType !== 'LEVERAGED_LOAN') return h;
+      touched = true;
+      return { ...h, instrumentId: acquirer.id, issuerRegion: acquirer.region };
+    });
+    if (touched) e.itemizedHoldings = rows;
+  });
+
   // Target is absorbed and exits active operations
   target.mergerAcquired = true;
   target.acquiredByTicker = acquirer.ticker;

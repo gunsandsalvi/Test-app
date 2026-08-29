@@ -80,19 +80,42 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       (t) => t.maturityWeek > ctx.nextWeek && sovBucketKey(t.tenorAtIssuanceYears).startsWith('b')
     );
     const outstandingByBucket = new Map<string, number>();
+    const bucketKeyByTrancheId = new Map<string, string>();
     liveBillTranches.forEach((t) => {
       const key = sovBucketKey(t.tenorAtIssuanceYears);
       outstandingByBucket.set(key, (outstandingByBucket.get(key) ?? 0) + t.principalUSD);
+      bucketKeyByTrancheId.set(t.id, key);
     });
 
     const activeBuckets = SOV_BILL_BUCKETS.filter((b) => (outstandingByBucket.get(b.key) ?? 0) > 0);
     if (activeBuckets.length > 0) {
-      // The whole bill stock is tradable — every holder is real (banks, institutions at home
-      // and abroad, the central bank since PUB2b) and every one of them bids here.
+      const billBucketKeys = activeBuckets.map((b) => b.key);
+      const cbOrder = reg.centralBankSheet
+        ? centralBankParticipant(reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k))
+        : null;
+      // OWN7 — same shrink as 07c: the float is what the bidders here can hold between them.
+      // The central bank on a no-order week, and the corporate treasuries that park cash in
+      // short paper and never bid, both keep their positions — so neither one's paper is for
+      // sale and handing it to the bidders is a claim minted.
+      const nonParticipantByBucket = new Map<string, number>();
+      const reserveBucket = (key: string | undefined, usd: number) => {
+        if (!key || !(usd > 0)) return;
+        nonParticipantByBucket.set(key, (nonParticipantByBucket.get(key) ?? 0) + usd);
+      };
+      if (!cbOrder && reg.centralBankSheet) {
+        Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
+          .forEach(([key, usd]) => reserveBucket(key, Number(usd) || 0));
+      }
+      ctx.prevActiveFirms.forEach((c) => {
+        if (c.region !== regionId) return;
+        (c.treasuryHoldings || []).forEach((h) =>
+          reserveBucket(bucketKeyByTrancheId.get(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
+      });
       const instruments: ClearingInstrument[] = activeBuckets.map((b) => ({
         id: billInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        tradableFloatUSD: outstandingByBucket.get(b.key) ?? 0,
+        tradableFloatUSD: Math.max(0,
+          (outstandingByBucket.get(b.key) ?? 0) - (nonParticipantByBucket.get(b.key) ?? 0)),
         currentStat: Math.max(1, calculateNelsonSiegelZeroRate(b.years, reg.yieldCurveParams) * 10000),
         statKind: 'YIELD_LIKE',
         durationYears: b.years,
@@ -204,11 +227,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       });
 
       // PUB2b: a maturing bill rolls back into bills, so the CB's book keeps its shape rather
-      // than drifting up the curve. Same size-with-no-reservation order as in 07c.
-      const billBucketKeys = activeBuckets.map((b) => b.key);
-      const cbOrder = reg.centralBankSheet
-        ? centralBankParticipant(reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k))
-        : null;
+      // than drifting up the curve. Same size-with-no-reservation order as in 07c; read above,
+      // because whether it bids also decides whether its book is part of the float.
       if (cbOrder) participants.push(cbOrder.participant);
       if (reg.centralBankSheet) {
         reg.centralBankSheet.lastOrderPlacedUSD =

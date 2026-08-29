@@ -233,12 +233,19 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
   });
   // Second pass: a facility's issuer region comes from the borrower, which may not be the
   // lender's — resolved only once every company's region is known.
+  //
+  // OWN7: POOL loans are excluded. An SME pool's debt is a scalar on the pool (`seg.debtUSD`),
+  // not a tranche on any company, so it has no place in a register whose denominator is the
+  // named companies' debt ladders — counting it put ~22% of corporate "ownership" in the banks'
+  // column against paper that does not exist, which is most of what made these shares sum above
+  // one. Rule 3: one real thing, one representation, and the pool's is its own.
   state.companies.forEach((c) => {
     const sheet = c.bankBalanceSheet;
     if (!sheet || !isActiveCompany(c)) return;
     (sheet.businessLoans || []).forEach((l) => {
-      const issuerRegion = companyRegionById.get(l.borrowerId) ?? c.region;
-      const a = acc(issuerRegion);
+      if (l.borrowerKind !== 'COMPANY_FACILITY') return;
+      const issuerRegion = companyRegionById.get(l.borrowerId);
+      const a = issuerRegion ? acc(issuerRegion) : undefined;
       if (a) a.corpBond.bankUSD += Math.max(0, l.principalUSD);
     });
   });

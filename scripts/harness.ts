@@ -104,46 +104,106 @@ const clone = (s: GameState): GameState => structuredClone(s);
  * MS and WS9 land). Overshoot is the failure that matters: if the real books together claim MORE
  * than the instrument's outstanding, some formula is minting claims.
  */
+/**
+ * Nobody can hold more of an instrument than exists — the ledger-minting test.
+ *
+ * OWN7 step 1: this compared the wrong two numbers for as long as XB1 has existed. It filtered
+ * holders on the HOLDER's region and then counted every position they held regardless of the
+ * ISSUER's, so a JPN insurer's USA bonds were scored against JPN outstanding. And it left three
+ * real holders off the held side entirely — the central bank's sovereign book, corporate
+ * treasuries, and the banks' own `businessLoans` (which ARE floating corporate debt) — so the
+ * test was understated by exactly those, on top of being mis-keyed.
+ *
+ * Both sides are keyed to the ISSUER's region now, the same way `measuredOwnershipAllRegions`
+ * keys the ownership register. It stays a ONE-SIDED test: households and other unnamed holders
+ * are the residual and are not itemised anywhere, so `held` is legitimately below `outstanding`
+ * — only exceeding it is a defect.
+ */
 function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
   const out: Violation[] = [];
-  (['USA', 'EUR', 'UK', 'JPN'] as const).forEach(regionId => {
-    const reg: any = (state as any).regions[regionId];
-    const cos = state.companies.filter((c: any) => c.region === regionId && !c.isDefaulted && !c.mergerAcquired);
-    const fixedOutstanding = cos.reduce((a: number, c: any) =>
-      a + (c.debtTranches || []).filter((t: any) => t.rateType === 'FIXED').reduce((x: number, t: any) => x + t.principalUSD, 0), 0);
-    const floatOutstanding = cos.reduce((a: number, c: any) =>
-      a + (c.debtTranches || []).filter((t: any) => t.rateType === 'FLOATING').reduce((x: number, t: any) => x + t.principalUSD, 0), 0);
-    const sovOutstanding = (reg.govDebtTranches || []).reduce((a: number, t: any) => a + t.principalUSD, 0);
+  const regionIds = ['USA', 'EUR', 'UK', 'JPN'] as const;
+  type Book = { corp: number; loan: number; sov: number };
+  const held: Record<string, Book> = {};
+  const outstanding: Record<string, Book> = {};
+  regionIds.forEach((r) => {
+    held[r] = { corp: 0, loan: 0, sov: 0 };
+    outstanding[r] = { corp: 0, loan: 0, sov: 0 };
+  });
 
-    let heldCorp = 0, heldLoan = 0, heldSov = 0;
-    state.institutionalEntities.forEach((e: any) => {
-      if (e.region !== regionId) return;
-      e.itemizedHoldings.forEach((h: any) => {
-        const v = h.quantityOrNotionalUSD ?? 0;
-        if (h.instrumentType === 'CORP_BOND') heldCorp += v;
-        else if (h.instrumentType === 'LEVERAGED_LOAN') heldLoan += v;
-        else if (h.instrumentType === 'GOV_BOND') heldSov += v;
-      });
+  const companyRegionById = new Map<string, string>();
+  state.companies.forEach((c: any) => {
+    companyRegionById.set(c.id, c.region);
+    if (c.isDefaulted || c.mergerAcquired) return;
+    const o = outstanding[c.region];
+    if (!o) return;
+    (c.debtTranches || []).forEach((t: any) => {
+      if (t.rateType === 'FIXED') o.corp += t.principalUSD; else o.loan += t.principalUSD;
     });
-    state.companies.forEach((c: any) => {
-      if (c.region !== regionId || !c.bankBalanceSheet) return;
-      heldSov += (Object.values(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}) as any[])
+  });
+  regionIds.forEach((r) => {
+    const reg: any = (state as any).regions[r];
+    outstanding[r].sov = (reg?.govDebtTranches || []).reduce((a: number, t: any) => a + t.principalUSD, 0);
+  });
+
+  const addHolding = (h: any) => {
+    const b = held[h.issuerRegion];
+    if (!b) return;
+    const v = h.quantityOrNotionalUSD ?? 0;
+    if (h.instrumentType === 'CORP_BOND') b.corp += v;
+    else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v;
+    else if (h.instrumentType === 'GOV_BOND') b.sov += v;
+  };
+  state.institutionalEntities.forEach((e: any) => {
+    if (e.isDefaulted) return;
+    e.itemizedHoldings.forEach(addHolding);
+  });
+  state.companies.forEach((c: any) => {
+    if (c.isDefaulted || c.mergerAcquired) return;
+    // A corporate treasury parks cash in its own government's paper (stage 08).
+    (c.treasuryHoldings || []).forEach(addHolding);
+    const bs = c.bankBalanceSheet;
+    if (!bs) return;
+    // A bank's liquidity buffer is its OWN sovereign — 07c/07f give it no foreign bucket, and
+    // the buckets are keyed by bare tenor, so the bank's region IS the issuer's.
+    const b = held[c.region];
+    if (b) {
+      b.sov += (Object.values(bs.sovereignBondHoldingsByTenor || {}) as any[])
         .reduce((a: number, v: any) => a + (Number(v) || 0), 0);
+    }
+    // A drawn facility is floating corporate debt on the BORROWER's region, which is not
+    // necessarily the lender's. Pool loans are excluded: an SME pool's debt is a scalar on the
+    // pool (`seg.debtUSD`), not a tranche on any company, so it has no outstanding to score
+    // against and counting it here reported 41% over from week 1.
+    (bs.businessLoans || []).forEach((l: any) => {
+      if (l.borrowerKind !== 'COMPANY_FACILITY') return;
+      const region = companyRegionById.get(l.borrowerId);
+      if (!region) return;
+      const lb = held[region];
+      if (lb) lb.loan += Math.max(0, l.principalUSD);
     });
-    (reg.bankingSector.corpBondDealerInventory || []).forEach((p: any) => { heldCorp += p.inventoryUSD; });
-    (reg.bankingSector.loanDealerInventory || []).forEach((p: any) => { heldLoan += p.inventoryUSD; });
+  });
+  regionIds.forEach((r) => {
+    const reg: any = (state as any).regions[r];
+    (reg.bankingSector.corpBondDealerInventory || []).forEach((p: any) => { held[r].corp += p.inventoryUSD; });
+    (reg.bankingSector.loanDealerInventory || []).forEach((p: any) => { held[r].loan += p.inventoryUSD; });
+    (reg.bankingSector.sovBondDealerInventory || []).forEach((p: any) => { held[r].sov += p.inventoryUSD; });
+    Object.values(reg.centralBankSheet?.sovereignHoldingsByTenor || {}).forEach((usd: any) => {
+      held[r].sov += Math.max(0, Number(usd) || 0);
+    });
+  });
 
+  regionIds.forEach((r) => {
     const cases: [string, number, number][] = [
-      ['corporate bonds', heldCorp, fixedOutstanding],
-      ['leveraged loans', heldLoan, floatOutstanding],
-      ['sovereign bonds', heldSov, sovOutstanding],
+      ['corporate bonds', held[r].corp, outstanding[r].corp],
+      ['leveraged loans', held[r].loan, outstanding[r].loan],
+      ['sovereign bonds', held[r].sov, outstanding[r].sov],
     ];
-    cases.forEach(([label, held, outstanding]) => {
-      if (outstanding <= 0) return;
-      if (held > outstanding * 1.02) {
+    cases.forEach(([label, h, o]) => {
+      if (o <= 0) return;
+      if (h > o * 1.02) {
         out.push({
           week,
-          message: `${regionId} ${label}: real books hold ${(held / 1e9).toFixed(1)}B against ${(outstanding / 1e9).toFixed(1)}B outstanding (${((held / outstanding - 1) * 100).toFixed(1)}% over) — a ledger is minting claims`
+          message: `${r} ${label}: real books hold ${(h / 1e9).toFixed(1)}B against ${(o / 1e9).toFixed(1)}B outstanding (${((h / o - 1) * 100).toFixed(1)}% over) — a ledger is minting claims`
         });
       }
     });
@@ -492,8 +552,12 @@ function checkOwnershipConservation(state: GameState, week: number) {
     (['equityOwnership', 'corpBondOwnership', 'sovBondOwnership'] as const).forEach(key => {
       const o = reg[key];
       if (!o) return;
-      // XB1: foreign ownership is no longer a share in this object — it is measured from real
-      // holdings (measuredForeignOwnership), so it is not part of this conservation sum.
+      // OWN1: every share here is measured off the register, which attributes a holding to its
+      // ISSUER's region — so a foreign fund's paper is already INSIDE `institutionalShare` and
+      // there is nothing separate to add. (This comment used to say foreign ownership was "not
+      // part of this conservation sum"; that was true before OWN1 and has been wrong since.)
+      // The three named holders plus the household residual are the whole of it, so a sum above
+      // one is holders owning more than exists — a real defect, never a keying artifact.
       const totalShareAccounted = o.bankShare + o.institutionalShare + o.centralBankShare;
       const impliedHousehold = 1 - totalShareAccounted;
       if (totalShareAccounted < -0.001 || totalShareAccounted > 1.001 || impliedHousehold < -0.001 || impliedHousehold > 1.001) {

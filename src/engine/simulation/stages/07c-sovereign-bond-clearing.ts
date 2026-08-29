@@ -192,6 +192,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     if (liveTranches.length === 0) return;
 
     const outstandingByBucket = new Map<string, number>();
+    const bucketKeyByTrancheId = new Map<string, string>();
     TENOR_BUCKETS.forEach((b) => outstandingByBucket.set(b.key, 0));
     liveTranches.forEach((t) => {
       // Bills (below 2Y) clear in 07f-short-debt-clearing.ts; folding them in here would count
@@ -201,10 +202,44 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         Math.abs(b.years - t.tenorAtIssuanceYears) < Math.abs(best.years - t.tenorAtIssuanceYears) ? b : best
       );
       outstandingByBucket.set(bucket.key, (outstandingByBucket.get(bucket.key) ?? 0) + t.principalUSD);
+      bucketKeyByTrancheId.set(t.id, bucket.key);
     });
 
     const activeBuckets = TENOR_BUCKETS.filter((b) => (outstandingByBucket.get(b.key) ?? 0) > 0);
     if (activeBuckets.length === 0) return;
+    const bondBucketKeys = activeBuckets.map((b) => b.key);
+
+    // PUB2b: the central bank's open-market order, placed by stage 11 last week. It is a size
+    // with no reservation level — policy is a quantity this auction prices, not a premium.
+    // Read BEFORE the float below, because whether it bids decides whether its book is for sale.
+    const cbOrder = reg.centralBankSheet
+      ? centralBankParticipant(reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k))
+      : null;
+
+    // OWN7 — the missing shrink. The float is what the participants in THIS book can hold
+    // between them, not the whole issue. A holder that is not in the book keeps its position, so
+    // its paper was never for sale, and handing it to the bidders is how the sovereign ledger
+    // came to show every holder together owning ~114% of what exists. Two such holders:
+    //   - the CENTRAL BANK on a week it places no order. `centralBankParticipant` returns null
+    //     then, so it leaves the book holding ~15% of the stock while the float still counts it.
+    //     On an order week it IS a participant (with `minHoldingUSD` = its book), so it is
+    //     inside the float and nothing is subtracted.
+    //   - CORPORATE TREASURIES, which park cash in short paper (stage 08) and never bid.
+    const nonParticipantByBucket = new Map<string, number>();
+    const reserveBucket = (key: string | undefined, usd: number) => {
+      if (!key || !(usd > 0)) return;
+      nonParticipantByBucket.set(key, (nonParticipantByBucket.get(key) ?? 0) + usd);
+    };
+    if (!cbOrder && reg.centralBankSheet) {
+      Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
+        .forEach(([key, usd]) => reserveBucket(key, Number(usd) || 0));
+    }
+    ctx.prevActiveFirms.forEach((c) => {
+      if (c.region !== regionId) return;
+      (c.treasuryHoldings || []).forEach((h) =>
+        reserveBucket(bucketKeyByTrancheId.get(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
+    });
+
     const totalOutstandingUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
     const historyLen = reg.historicalZeroCurves?.length ?? 0;
 
@@ -213,11 +248,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       return {
         id: bucketInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        // XB1: the WHOLE stock is tradable. Every holder is real now — banks, institutions at
-        // home and abroad, and the central bank since PUB2b — so there is no block sitting
-        // outside the market. The share this used to subtract was `foreignShare`, an owner that
-        // did not exist.
-        tradableFloatUSD: outstandingByBucket.get(b.key) ?? 0,
+        // XB1 removed the `foreignShare` carve-out, which subtracted an owner that did not
+        // exist. OWN7 puts back the carve-out that IS real: what holders outside this book
+        // already own (above). Every bidder here is a real holder, so what is left is genuinely
+        // in play — and the allocation now sums to the stock rather than past it.
+        tradableFloatUSD: Math.max(0,
+          (outstandingByBucket.get(b.key) ?? 0) - (nonParticipantByBucket.get(b.key) ?? 0)),
         currentStat: currentYieldDecimal * 10000, // bps
         statKind: 'YIELD_LIKE',
         durationYears: b.years,
@@ -378,13 +414,6 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     const priorDealerInventoryById = new Map<string, number>();
     (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(bucketInstrumentId(regionId, p.tenorKey), p.inventoryUSD));
-
-    // PUB2b: the central bank's open-market order, placed by stage 11 last week. It is a size
-    // with no reservation level — policy is a quantity this auction prices, not a premium.
-    const bondBucketKeys = activeBuckets.map((b) => b.key);
-    const cbOrder = reg.centralBankSheet
-      ? centralBankParticipant(reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k))
-      : null;
 
     const result = clearFinancialAsset(
       instruments,
