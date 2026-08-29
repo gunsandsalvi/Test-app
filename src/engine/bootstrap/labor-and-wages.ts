@@ -78,3 +78,33 @@ export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType,
   });
   return result;
 }
+
+/**
+ * HH — what an employer's payroll costs it for one week: its headcount, at the occupations it
+ * employs, at the wage those occupations currently clear at.
+ *
+ * This is the one place a wage bill is computed, and every employer uses it — named firms,
+ * SME pools, and the government. It replaces two different derivations that both keyed off
+ * `estimatedHouseholdIncomeUSD / employed`: a per-capita income figure standing in for a wage,
+ * which made every employer pay the same average, and — once household income became the sum of
+ * what employers pay — made the number depend on itself.
+ *
+ * `wageMultiplier` is the employer's own position in the wage distribution: a firm's
+ * `offeredWageIndex`, which moves with its own hiring success, or the SME tier's discount. The
+ * per-occupation `wageIndex` is the market's, set in the labor market by what employers offer.
+ */
+export function weeklyWageBillUSD(
+  headcount: number,
+  occupationMix: Partial<Record<OccupationType, number>>,
+  baseAnnualWageUSD: Record<OccupationType, number>,
+  occupationPools: Record<OccupationType, { wageIndex: number }>,
+  wageMultiplier = 1
+): number {
+  if (!(headcount > 0)) return 0;
+  const annualPerWorkerUSD = (Object.keys(occupationMix) as OccupationType[]).reduce((sum, occ) => {
+    const share = occupationMix[occ] ?? 0;
+    if (share <= 0) return sum;
+    return sum + share * (baseAnnualWageUSD[occ] ?? 0) * (occupationPools[occ]?.wageIndex ?? 1);
+  }, 0);
+  return (headcount * annualPerWorkerUSD * wageMultiplier) / 52;
+}

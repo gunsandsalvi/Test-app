@@ -71,6 +71,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Energy: {
     sector: 'Energy',
     smeShareOfActivity: 0.15,
+    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'upstream_extraction',
@@ -97,6 +98,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   MaterialsChemicals: {
     sector: 'Industrials',
     smeShareOfActivity: 0.25,
+    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'industrial_chemicals',
@@ -154,7 +156,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   IndustrialsMachinery: {
     sector: 'Industrials',
     smeShareOfActivity: 0.42,
-    recipeInputs: { upstream_extraction: 0.015, specialty_metals: 0.03 },
+    recipeInputs: { upstream_extraction: 0.015, specialty_metals: 0.03, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'heavy_equipment',
@@ -181,7 +183,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   AerospaceDefense: {
     sector: 'Industrials',
     smeShareOfActivity: 0.14,
-    recipeInputs: { upstream_extraction: 0.02, specialty_metals: 0.025 },
+    recipeInputs: { upstream_extraction: 0.02, specialty_metals: 0.025, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'defense_systems',
@@ -206,7 +208,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   AutomotiveTransport: {
     sector: 'Consumer',
     smeShareOfActivity: 0.22,
-    recipeInputs: { upstream_extraction: 0.025, specialty_metals: 0.03 },
+    recipeInputs: { upstream_extraction: 0.025, specialty_metals: 0.03, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'passenger_vehicles',
@@ -232,7 +234,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   TechHardwareSemis: {
     sector: 'Tech',
     smeShareOfActivity: 0.12,
-    recipeInputs: { upstream_extraction: 0.008, specialty_metals: 0.01 },
+    recipeInputs: { upstream_extraction: 0.008, specialty_metals: 0.01, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'semiconductors',
@@ -257,7 +259,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   SoftwareDigitalServices: {
     sector: 'Tech',
     smeShareOfActivity: 0.35,
-    recipeInputs: { upstream_extraction: 0.002 },
+    recipeInputs: { upstream_extraction: 0.002, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'enterprise_software',
@@ -281,6 +283,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Telecommunications: {
     sector: 'Tech',
     smeShareOfActivity: 0.1,
+    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'network_infrastructure',
@@ -296,7 +299,17 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   HealthcarePharma: {
     sector: 'Consumer',
     smeShareOfActivity: 0.38,
+    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
+      {
+        unitId: 'health_services',
+        label: "Health Services",
+        buyerMix: { HOUSEHOLD: 0.55, GOVERNMENT: 0.43, CORPORATE: 0.02 },
+        deliveryMode: 'IN_PLACE',
+        householdPriceTier: 'STAPLE',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
       {
         unitId: 'pharmaceuticals',
         label: "Pharmaceuticals",
@@ -322,7 +335,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   ConsumerStaples: {
     sector: 'Consumer',
     smeShareOfActivity: 0.28,
-    recipeInputs: { upstream_extraction: 0.001, agricultural_commodities: 0.12 },
+    recipeInputs: { upstream_extraction: 0.001, agricultural_commodities: 0.12, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'food_beverage',
@@ -350,7 +363,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   ConsumerDiscretionaryRetail: {
     sector: 'Consumer',
     smeShareOfActivity: 0.52,
-    recipeInputs: { upstream_extraction: 0.002 },
+    recipeInputs: { upstream_extraction: 0.002, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'apparel_retail',
@@ -375,6 +388,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   LuxuryGoods: {
     sector: 'Consumer',
     smeShareOfActivity: 0.2,
+    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'luxury_goods',
@@ -391,6 +405,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   MediaEntertainment: {
     sector: 'Consumer',
     smeShareOfActivity: 0.45,
+    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'media_content',
@@ -402,10 +417,99 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
     ],
   },
+  /**
+   * SVC — services households buy. Roughly two thirds of consumption in a developed economy, and
+   * until now the taxonomy had none of it: the whole consumption budget was allocated across
+   * goods sub-units, so goods demand carried spending that in reality goes to rent, care,
+   * restaurants and schooling. They clear in the same auction as everything else — IN_PLACE, so
+   * they are made where they stand, carry no freight and cannot be inventoried (IND1).
+   */
+  PersonalConsumerServices: {
+    sector: 'Consumer',
+    smeShareOfActivity: 0.72,
+    recipeInputs: { food_beverage: 0.22, household_essentials: 0.04, facilities_and_logistics: 0.05 },
+    subUnits: [
+      {
+        unitId: 'food_service',
+        label: "Food Service & Hospitality",
+        buyerMix: { HOUSEHOLD: 0.92, GOVERNMENT: 0.02, CORPORATE: 0.06 },
+        deliveryMode: 'IN_PLACE',
+        householdPriceTier: 'STANDARD',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
+      {
+        unitId: 'personal_care_services',
+        label: "Personal & Household Services",
+        buyerMix: { HOUSEHOLD: 0.96, GOVERNMENT: 0.02, CORPORATE: 0.02 },
+        deliveryMode: 'IN_PLACE',
+        householdPriceTier: 'STANDARD',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
+      {
+        unitId: 'education_services',
+        label: "Education & Training",
+        buyerMix: { HOUSEHOLD: 0.42, GOVERNMENT: 0.55, CORPORATE: 0.03 },
+        deliveryMode: 'IN_PLACE',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
+    ],
+  },
+  /**
+   * SVC — the services firms buy from each other: accountants, consultants, cleaning, security,
+   * logistics, maintenance. This is what a company's operating cost beyond its bought inputs
+   * actually IS, and it used to leave the model as a payment to nobody.
+   */
+  BusinessSupportServices: {
+    sector: 'Industrials',
+    smeShareOfActivity: 0.58,
+    recipeInputs: { enterprise_software: 0.04, refined_products: 0.03 },
+    subUnits: [
+      {
+        unitId: 'professional_services',
+        label: "Professional & Advisory Services",
+        buyerMix: { HOUSEHOLD: 0.06, GOVERNMENT: 0.14, CORPORATE: 0.80 },
+        deliveryMode: 'IN_PLACE',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
+      {
+        unitId: 'facilities_and_logistics',
+        label: "Facilities & Logistics Services",
+        buyerMix: { HOUSEHOLD: 0.04, GOVERNMENT: 0.12, CORPORATE: 0.84 },
+        deliveryMode: 'IN_PLACE',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
+      {
+        unitId: 'repair_and_maintenance',
+        label: "Repair & Maintenance",
+        buyerMix: { HOUSEHOLD: 0.50, GOVERNMENT: 0.08, CORPORATE: 0.42 },
+        deliveryMode: 'IN_PLACE',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
+    ],
+  },
   RealEstateConstruction: {
     sector: 'Industrials',
     smeShareOfActivity: 0.78,
+    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
+      {
+        // SVC: the largest single line in household consumption in every developed economy, and
+        // the model had no market for it — rent was inside a consumption budget that only ever
+        // bid for goods.
+        unitId: 'housing_rental_services',
+        label: "Housing & Rental Services",
+        buyerMix: { HOUSEHOLD: 0.90, GOVERNMENT: 0.04, CORPORATE: 0.06 },
+        deliveryMode: 'IN_PLACE',
+        householdPriceTier: 'STAPLE',
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
       {
         unitId: 'residential_construction',
         label: "Residential Construction",
@@ -452,9 +556,17 @@ export const VIEW_SUBUNIT_PHYSICAL: Record<string, { deliveryMode: DeliveryMode;
   }]));
 
 /** Legacy literal order — 04-input-output's demander loop iterates this and carries RNG lanes. */
+// SVC: EVERY industry with a recipe, not the seven the legacy table happened to list. The
+// original order is preserved at the head so the existing industries keep their iteration
+// position; the rest follow in registry order. An industry whose recipe was invisible here
+// bought none of its inputs in the auction — which is what services were, for all fourteen.
 const RECIPE_INDUSTRY_ORDER: Industry[] = [
   'TechHardwareSemis', 'SoftwareDigitalServices', 'AutomotiveTransport', 'AerospaceDefense',
   'IndustrialsMachinery', 'ConsumerStaples', 'ConsumerDiscretionaryRetail',
+  ...(Object.keys(INDUSTRY_REGISTRY) as Industry[]).filter(ind =>
+    INDUSTRY_REGISTRY[ind].recipeInputs
+    && !['TechHardwareSemis', 'SoftwareDigitalServices', 'AutomotiveTransport', 'AerospaceDefense',
+      'IndustrialsMachinery', 'ConsumerStaples', 'ConsumerDiscretionaryRetail'].includes(ind)),
 ];
 export const VIEW_CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> =
   Object.fromEntries(RECIPE_INDUSTRY_ORDER.map(ind => [ind, { ...INDUSTRY_REGISTRY[ind].recipeInputs }]));
@@ -465,8 +577,13 @@ export const VIEW_CAPEX_SUPPLIER_WEIGHTS: Record<string, number> =
 
 
 const TIER_ORDER = ['refined_products', 'household_chemicals', 'food_beverage', 'household_essentials', 'pharmaceuticals', 'agricultural_commodities', 'luxury_goods'];
-export const VIEW_CATEGORY_PRICE_TIER: Record<string, HouseholdPriceTier> =
-  Object.fromEntries(TIER_ORDER.map(id => [id, byId.get(id)!.householdPriceTier!]));
+export const VIEW_CATEGORY_PRICE_TIER: Record<string, HouseholdPriceTier> = Object.fromEntries([
+  ...TIER_ORDER.map(id => [id, byId.get(id)!.householdPriceTier!] as const),
+  // SVC: and every other sub-unit that declares a tier — rent and health are STAPLE, which is
+  // what makes household demand for them inelastic when supply tightens.
+  ...allSubUnits.filter(su => su.householdPriceTier && !TIER_ORDER.includes(su.unitId))
+    .map(su => [su.unitId, su.householdPriceTier!] as const),
+]);
 
 /** Legacy commodity order preserved (working-table calibration iterates it). */
 const LINKAGE_ORDER = ['CRUDE_OIL', 'HEAVY_CRUDE_OIL', 'NATURAL_GAS', 'GOLD', 'SILVER', 'COPPER', 'WHEAT', 'CORN', 'SOYBEANS'];

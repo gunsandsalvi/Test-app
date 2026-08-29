@@ -14,6 +14,9 @@ import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-acco
 import { decomposeGovernmentSpending } from '../../../domain/government';
 import { pay } from './settlement';
 import { SME_WAGE_GAP } from '../../bootstrap/firms';
+import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
+import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { WeeklyStepContext } from './context';
 
 export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -76,31 +79,46 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           reason: 'government payroll',
         });
       }
-      // SEG2c: the tier's employers pay their own wage bills now — each segment pays its
-      // headcount at the region's per-worker income (the SAME convention stage 08 uses for the
-      // named firms, so one wage level prices every employer), from its own book through
-      // settlement. The residual-from-a-statistic form this replaces was the right bridge while
-      // the tier had no ledger: a payer with no book could only ever be the remainder of a
-      // top-down total. With books, an over-derived wage bill drains the segment's cash and
-      // shows up as measurable distress instead of compounding into a statistic (the 4e16
-      // deposits explosion was the FIELD-NAME bug plus a math guard, §7.94 — not this form).
-      const regionEmployedForWages = Math.max(1, Object.values(reg.occupationPools ?? {})
-        .reduce((a: number, pool: any) => a + (pool?.employed ?? 0), 0));
-      // SEG3: at the SME tier's own wage level, which is really lower than the economy's average
-      // employer pays (SME_WAGE_GAP) — the same structural difference as its thinner margin.
-      const perWorkerWeeklyUSD = (((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployedForWages) / 52)
-        * (1 - SME_WAGE_GAP);
-      (reg.smePools || []).forEach((seg) => {
-        const wagesUSD = seg.employment * perWorkerWeeklyUSD;
-        if (wagesUSD > 0) {
-          pay(ctx, {
-            payer: { kind: 'SEGMENT', region: regionId, industry: seg.industry },
-            payee: { kind: 'HOUSEHOLD', region: regionId },
-            amountUSD: wagesUSD,
-            reason: 'private-sector tier wages',
-          });
-        }
-      });
+      // HH: transfers are a PAYMENT. Unemployment benefits and the social programme used to
+      // reach household INCOME through the accounting identity while never reaching household
+      // CASH — a one-sided flow (rule 14) that only became visible when income became the sum of
+      // what households actually receive.
+      const transfersUSD = reg.governmentTransfersWeeklyUSD ?? 0;
+      if (transfersUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'GOVERNMENT', region: regionId },
+          payee: { kind: 'HOUSEHOLD', region: regionId },
+          amountUSD: transfersUSD,
+          reason: 'government transfers',
+        });
+      }
+      // SEG2c/HH: each pool pays its own payroll, through the same one wage-bill computation
+      // every employer uses — its headcount, in the occupations its industry's sector employs,
+      // at the wage those occupations clear at, times the SME tier's own wage level.
+      //
+      // The residual-of-a-top-down-total form this replaced was the right bridge while the tier
+      // had no ledger. It is the wrong one now: with books, an over-derived wage bill drains a
+      // pool's cash and shows up as measurable distress instead of disappearing into a statistic.
+      {
+        const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
+        (reg.smePools || []).forEach((pool) => {
+          const wagesUSD = weeklyWageBillUSD(
+            pool.employment,
+            SECTOR_OCCUPATION_MIX[INDUSTRY_REGISTRY[pool.industry].sector as keyof typeof SECTOR_OCCUPATION_MIX] ?? { GENERAL: 1.0 },
+            baseAnnualWageUSD,
+            reg.occupationPools,
+            1 - SME_WAGE_GAP
+          );
+          if (wagesUSD > 0) {
+            pay(ctx, {
+              payer: { kind: 'SEGMENT', region: regionId, industry: pool.industry },
+              payee: { kind: 'HOUSEHOLD', region: regionId },
+              amountUSD: wagesUSD,
+              reason: 'private-sector tier wages',
+            });
+          }
+        });
+      }
     }
 
     const govBudget = decomposeGovernmentSpending(

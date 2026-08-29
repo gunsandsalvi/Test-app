@@ -443,10 +443,48 @@ export function evolveRegionMacro(
   // out separately here (wages + unemployment transfers + a flat 15% capital income, no tax and
   // no government transfers), so the week-1 economy did not describe the same one the bootstrap
   // had built — the two definitions have to be one definition.
-  const newEstimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
-    wageIncomeUSD: totalWageIncomeUSD,
-    transfersWeeklyUSD: govObligations.transfersUSD,
-  }).toFixed(0));
+  // HH4b — the capital receipts that recycle debt service back into the consumption budget:
+  // real deposit interest, real dividends on the households' direct equity, and the named seed
+  // residual (see the builder's input doc). At seed the sum equals debt service by the
+  // residual's construction; from week 1 the two move apart with rates and payouts, and that
+  // differential is the household rate channel.
+  const annualCapitalReceiptsUSD = {
+    depositInterestUSD: (prevHS.depositsUSD ?? 0) * (region.policyRate * 0.6),
+    dividendsUSD: (prevHS.directEquityUSD ?? 0) * (microFeedback.avgListedDividendYieldAnnual ?? 0),
+    // HH: a LEVEL carried forward, not a share of the income it is an input to — the share form
+    // made income depend on itself the moment income became the measured sum. It shrinks only
+    // when one of HH4b's unbuilt receipt channels becomes a real payment (§6 watches it down).
+    residualUSD: prevHS.unmodeledCapitalReceiptResidualAnnualUSD
+      ?? (prevHS.unmodeledCapitalReceiptShareOfIncome ?? 0) * region.estimatedHouseholdIncomeUSD,
+  };
+  // HH — INCOME IS THE SUM OF PAYMENTS. It used to be
+  // `computeHouseholdDisposableIncomeUSD(totalWageIncomeUSD, transfers)`: wages as
+  // productivity x LABOR_SHARE_OF_OUTPUT across the occupation pools, capital income as a fixed
+  // ratio to wages, tax as a flat effective rate. Three imposed constants deciding what half the
+  // economy earns, while the employers who actually pay it were paying a different number
+  // through settlement (rule 3, and the last big one in the household sector).
+  //
+  // What replaces it: what households MEASURABLY received last week — every employer's wage
+  // payment, the government's transfers, and the interest the banks really paid on their
+  // deposits — less the tax they really remitted, annualised. The dividend leg on their direct
+  // equity is a real holding at a real cleared yield and stays; `capitalReceiptsAnnualUSD`
+  // carries the ONE named residual left (HH4b's unbuilt receipt channels), as a level that
+  // shrinks when a channel becomes real rather than as a share of the income it feeds.
+  //
+  // Non-circular by construction: wages come from each employer's own offer and headcount, not
+  // from this number. The seed still opens on the identity (§7.4) and week 1 is the first week
+  // this measurement exists.
+  const measuredWeeklyReceiptsUSD = region.lastWeekHouseholdReceiptsUSD;
+  const newEstimatedHouseholdIncomeUSD = measuredWeeklyReceiptsUSD !== undefined
+    ? Number(Math.max(0,
+      (measuredWeeklyReceiptsUSD - (region.lastWeekHouseholdTaxPaidUSD ?? 0)) * 52
+      + annualCapitalReceiptsUSD.dividendsUSD
+      + annualCapitalReceiptsUSD.residualUSD
+    ).toFixed(0))
+    : Number(computeHouseholdDisposableIncomeUSD({
+      wageIncomeUSD: totalWageIncomeUSD,
+      transfersWeeklyUSD: govObligations.transfersUSD,
+    }).toFixed(0));
 
   // HH4: the same income, decomposed — ~20 occupation x wealth-tier cohorts built from the
   // same pools, wages and transfer arithmetic, so their sums reproduce the aggregate above to
@@ -456,16 +494,6 @@ export function evolveRegionMacro(
   (Object.keys(newOccupationPools) as OccupationType[]).forEach((occ) => {
     laborForceByOccupation[occ] = totalLaborForce * (currentLaborForceShares[occ] ?? defaultOccupationShares[occ] ?? 0);
   });
-  // HH4b — the capital receipts that recycle debt service back into the consumption budget:
-  // real deposit interest, real dividends on the households' direct equity, and the named seed
-  // residual (see the builder's input doc). At seed the sum equals debt service by the
-  // residual's construction; from week 1 the two move apart with rates and payouts, and that
-  // differential is the household rate channel.
-  const annualCapitalReceiptsUSD = {
-    depositInterestUSD: (prevHS.depositsUSD ?? 0) * (region.policyRate * 0.6),
-    dividendsUSD: (prevHS.directEquityUSD ?? 0) * (microFeedback.avgListedDividendYieldAnnual ?? 0),
-    residualUSD: (prevHS.unmodeledCapitalReceiptShareOfIncome ?? 0) * region.estimatedHouseholdIncomeUSD,
-  };
   const cohortResult = buildHouseholdCohorts({
     occupationPools: newOccupationPools,
     baseAnnualWageUSD,
@@ -473,6 +501,8 @@ export function evolveRegionMacro(
     governmentTransfersWeeklyUSD: govObligations.transfersUSD,
     aggregateSavingsRate: newSavingsRate,
     weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
+    // HH: the cohorts decompose the measured aggregate rather than deriving their own.
+    measuredDisposableIncomeUSD: newEstimatedHouseholdIncomeUSD,
     annualCapitalReceiptsUSD,
     wealthDistribution: region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD),
   });
@@ -818,6 +848,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     governmentRevenueUSD: newGovernmentRevenueUSD,
     governmentSpendingUSD: newGovernmentSpendingUSD,
     governmentPayrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
+    governmentTransfersWeeklyUSD: govObligations.transfersUSD,
     governmentInterestWeeklyUSD: Number(govInterestWeeklyUSD.toFixed(0)),
     employerPayrollTaxWeeklyUSD: Number((employerPayrollTaxUSD / 52).toFixed(0)),
     householdState: {

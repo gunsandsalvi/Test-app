@@ -10,12 +10,15 @@ import { isActiveCompany } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
 import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
+import { LABOR_SHARE_OF_OUTPUT } from '../bootstrap/national-accounts';
+import { SME_PRODUCTIVITY_DISCOUNT } from '../bootstrap/firms';
 import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
+import { INDUSTRY_REGISTRY } from '../../domain/industry-registry';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { unitMassTonnes } from '../../domain/goods-physical';
@@ -91,32 +94,76 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       const seeds = generatePrivateFirmSeeds(regionId, segs);
       const firms = generatePrivateCompanies(regionId, seeds, reg.policyRate, allTickers, allNames);
 
-      // HC3 finding, measured the hard way: private firms must NOT sell into the public
-      // sub-unit markets yet. The auctioned categories' demand is calibrated against public
-      // supply; the hidden tier's output is real but sells OUTSIDE the modeled taxonomy
-      // (services, local trade — categories that do not exist yet). Injecting its 165B/region
-      // of supply into markets sized for 211B of public revenue collapsed both (measured:
-      // -10% to -22% growth, unemployment pinned at its cap). Product-market entry therefore
-      // waits for BP1's registry to carry the hidden sector's real categories (tracked as HC3b
-      // in the plan); until then productLines stays empty and firm revenue evolves against its
-      // own baseline. What DOES hand over now, conserving exactly: employment (real occupation
-      // demand) and capex (real bids in the same capex categories public firms buy from).
-
-      // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
-      // primitive). Employment / revenue / capex: exactly what the named tier now carries.
+      // HC3b: the named private tier SELLS. It was held out with a measurement — injecting its
+      // supply into markets sized for public supply cost 10-22% of growth — and what changed is
+      // that the markets are no longer sized that way: SEG put an SME pool behind every one of
+      // the registry's sub-units, and SVC added the service categories where most of this tier
+      // actually trades. The tier's output is carved OUT of its pool rather than added on top
+      // (HC's conservation rule), so total supply is unchanged by naming a firm.
+      //
+      // Each firm is dealt its pool's own goods mix — the sub-units of its industry, weighted by
+      // the region's real demand for each — the same rule a birth uses.
       segs.forEach(seg => {
         const segIdx = seeds.map((sd, i) => sd.industry === seg.industry ? i : -1).filter(i => i >= 0);
         const segFirms = segIdx.map(i => firms[i]);
+        const subUnits = INDUSTRY_REGISTRY[seg.industry].subUnits;
+        const demandOf = (id: string) => reg.categoryDemand[id]?.demandLevelUSD ?? 0;
+        const demandTotal = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
+        segFirms.forEach(f => {
+          f.productLines = subUnits.map(su => ({
+            industry: seg.industry,
+            subUnitId: su.unitId,
+            revenueShare: demandTotal > 0 ? demandOf(su.unitId) / demandTotal : 1 / Math.max(1, subUnits.length),
+            competitiveness: 0,
+            categoryMarketShare: 0,
+          })).filter(l => l.revenueShare > 0);
+        });
+        // The carves. Debt: serviceable ladders only (see HC1's finding on the segment debt
+        // primitive). Revenue, employment and capex: exactly what the named tier now carries.
+        const namedRevenueUSD = segFirms.reduce((a, f) => a + f.annualRevenue, 0);
         seg.debtUSD = Math.round(Math.max(0, seg.debtUSD - segFirms.reduce((a, f) => a + f.totalDebt, 0)));
         seg.employment = Math.max(1000, Math.round(seg.employment - segFirms.reduce((a, f) => a + f.employeeCount, 0)));
-        // annualRevenueUSD deliberately NOT carved: the segment's stage-05 footprint (its buy-side
-        // demand and niche supply share) still represents the whole hidden tier's goods activity
-        // until HC3b moves the tier's product markets into the taxonomy.
+        seg.annualRevenueUSD = Math.max(1, Math.round(seg.annualRevenueUSD - namedRevenueUSD));
         seg.capexUSD = Math.round(Math.max(0, seg.capexUSD - segFirms.reduce((a, f) => a + f.capex, 0)));
       });
 
+      // SEG/HH: a pool employs the headcount its OWN revenue supports, at the tier's own
+      // revenue per worker (the named tier's, less the SME productivity discount). Employment
+      // follows revenue; it is not handed the labor force's leftovers. The residual form this
+      // replaces left the pools carrying every worker the named firms and the government did
+      // not, against revenue the named tier had just been carved out of — measured as a layoff
+      // cascade that took the tier from 3.86M to 1.44M workers in twenty weeks and unemployment
+      // past 30% in all four regions.
+      {
+        const namedTier = companies.filter(c => c.region === regionId && !c.isBankEntity).concat(firms);
+        const namedEmployment = namedTier.reduce((a, c) => a + Math.max(0, c.employeeCount), 0);
+        const namedRevenueUSD = namedTier.reduce((a, c) => a + Math.max(0, c.annualRevenue), 0);
+        const namedRevenuePerWorkerUSD = namedEmployment > 0 ? namedRevenueUSD / namedEmployment : 0;
+        const poolRevenuePerWorkerUSD = namedRevenuePerWorkerUSD * (1 - SME_PRODUCTIVITY_DISCOUNT);
+        if (poolRevenuePerWorkerUSD > 0) {
+          segs.forEach(seg => {
+            seg.employment = Math.max(1, Math.round(seg.annualRevenueUSD / poolRevenuePerWorkerUSD));
+          });
+        }
+      }
+
       privateFirmsByRegion.set(regionId, firms);
       companies.push(...firms);
+
+      // HC3b: every seller's share of every market it is in, recomputed now that the private
+      // tier is in those markets too. The generator computed shares over the public tier alone
+      // (it ran before these firms existed), and stage 08 SCALES this number weekly — so a firm
+      // left at zero could never gain any share at all, and the public firms' shares would have
+      // been claims on a market they no longer have to themselves.
+      const regionSellers = companies.filter(c => c.region === regionId && !c.isBankEntity);
+      const marketUSD = new Map<string, number>();
+      regionSellers.forEach(c => (c.productLines || []).forEach(l => {
+        marketUSD.set(l.subUnitId, (marketUSD.get(l.subUnitId) ?? 0) + l.revenueShare * c.annualRevenue);
+      }));
+      regionSellers.forEach(c => (c.productLines || []).forEach(l => {
+        const totalUSD = marketUSD.get(l.subUnitId) ?? 0;
+        l.categoryMarketShare = totalUSD > 0 ? Number(((l.revenueShare * c.annualRevenue) / totalUSD).toFixed(6)) : 0;
+      }));
     });
   }
 
@@ -647,20 +694,11 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // "everything that is not a named firm or the government" tier — so their employment is
     // what the reported rate requires once the other two are counted.
     const totalLaborForce = reg.totalPopulation * (1 - reg.nonEmployablePct) * reg.laborForceParticipation;
-    {
-      const targetEmployed = totalLaborForce * (1 - reg.unemploymentRate);
-      const firmEmployment = regionCompanies
-        .filter(c => isActiveCompany(c))
-        .reduce((a, c) => a + Math.max(0, c.employeeCount), 0);
-      const residual = targetEmployed - firmEmployment - reg.governmentEmployment;
-      const segs = reg.smePools || [];
-      const segTotal = segs.reduce((a, sg) => a + Math.max(0, sg.employment), 0);
-      if (segs.length > 0 && segTotal > 0 && residual > 0) {
-        segs.forEach((sg) => {
-          sg.employment = Math.max(1, Math.round(residual * (Math.max(0, sg.employment) / segTotal)));
-        });
-      }
-    }
+    // HH: employment is what employers actually employ, and UNEMPLOYMENT IS THE RESIDUAL — not
+    // the other way round. The block deleted here did the reverse: it took a target employment
+    // level from the region's assumed unemployment rate and handed the pools whatever the real
+    // firms and the government did not employ, which is how the tier came to carry headcount its
+    // revenue could not pay for. The rate is now read off the real employment stock below.
 
     // The labor-force MIX opens at the mix employers actually demand. It used to be that mix
     // times a table of per-occupation "slack multipliers" (1.04 to 1.12), and that arbitrary
@@ -693,7 +731,33 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // saw zero vacancies and would otherwise leave tightness reading 0.00 at week 0).
     reconcileEmploymentView(reg, regionCompanies.filter(c => isActiveCompany(c)));
 
+    // HH — reconcile the WAGE LEVEL to the employment that must be paid at it (§7.4: the seed
+    // opens in the shape the engine maintains).
+    //
+    // `getBaseAnnualWageUSD` scales its table so that paying it across the BASELINE OCCUPATION
+    // MIX costs the labor share of output — a per-capita construction. It is then paid per
+    // EMPLOYED WORKER, and the two differ by the participation and employment rates, so the
+    // table implies a wage bill the region's employers do not have the output to fund. Nothing
+    // exposed that while household income was itself derived from the same table; once every
+    // employer pays its own payroll out of its own cash, the gap became mass layoffs — measured
+    // at 30% unemployment by week 17 and 50% by week 60, in all four regions.
+    //
+    // The index the labor market already uses IS the wage level's degree of freedom, so the
+    // reconciliation lands there: open it where the implied bill equals the labor share of the
+    // region's real output, and let the market move it from week 1 like any other price.
     const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
+    {
+      const impliedBillUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce(
+        (sum, occ) => sum + baseAnnualWageUSD[occ] * reg.occupationPools[occ].employed, 0
+      );
+      const affordableBillUSD = LABOR_SHARE_OF_OUTPUT * Math.max(1, reg.estimatedNominalGdpUSD);
+      if (impliedBillUSD > 0) {
+        const scale = affordableBillUSD / impliedBillUSD;
+        (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
+          reg.occupationPools[occ].wageIndex = Number((reg.occupationPools[occ].wageIndex * scale).toFixed(5));
+        });
+      }
+    }
     const realWageIncomeUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce(
       (sum, occ) => sum + baseAnnualWageUSD[occ] * reg.occupationPools[occ].wageIndex * reg.occupationPools[occ].employed, 0
     );

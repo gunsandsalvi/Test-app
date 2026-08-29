@@ -128,6 +128,9 @@ export interface BankingSector {
    * and reconciled weekly like the corporate and institutional lines. Mostly transaction
    * balances of small firms, so it pays nothing — which is what small-business checking pays. */
   smeDepositsUSD?: number;
+  /** HH — a reported weekly FLOW (not a stock): interest this bank paid its household
+   *  depositors, at its own deposit rate. Part of measured household income. */
+  householdDepositInterestWeeklyUSD?: number;
   /**
    * HH4d — the funding that is NOT household deposits: bonds, interbank and other wholesale
    * money, split out at seed so `depositsUSD` can be the real household stock (it used to be

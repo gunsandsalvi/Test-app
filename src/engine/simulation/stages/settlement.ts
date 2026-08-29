@@ -89,6 +89,11 @@ export interface SettlementReport {
   unmodeledDepositDeltaByBank: Map<string, number>;
   /** SEG1 — per-bank movement of the private-sector segment pools' deposit line. */
   smeDepositDeltaByBank: Map<string, number>;
+  /** HH — every household flow this week, per region, keyed by the payment's own reason and
+   *  signed from the household's side. Household INCOME is derived from this (see
+   *  stages/household-balance-sheet.ts): what they were actually paid, not a labor-share
+   *  identity. Free, like the pools' P&L — every household flow is already a payment. */
+  householdFlowsByRegion: Map<string, Map<string, number>>;
   /** SEG-D — every pool flow this week, keyed `<region>:<industry>` then by the payment's own
    *  reason, signed from the pool's side. This is the pool's INCOME STATEMENT, and it is free:
    *  every pool flow is already a payment passing through here, so a new kind of pool flow shows
@@ -136,6 +141,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     unmodeledDepositDeltaByBank: new Map(),
     smeDepositDeltaByBank: new Map(),
     smePoolFlowsByPool: new Map(),
+    householdFlowsByRegion: new Map(),
     creditCreatedByBank: new Map(),
     bankEquityDeltaByBank: new Map(),
     unmodeledByReason: new Map(),
@@ -166,6 +172,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     // SEG-D: the pools' income statement, built from the payments themselves.
     if (i.payer.kind === 'SEGMENT') addToPool(report, i.payer.region, i.payer.industry, i.reason, -i.amountUSD);
     if (i.payee.kind === 'SEGMENT') addToPool(report, i.payee.region, i.payee.industry, i.reason, i.amountUSD);
+    if (i.payer.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, i.payer.region, i.reason, -i.amountUSD);
+    if (i.payee.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, i.payee.region, i.reason, i.amountUSD);
   });
 
   // ---- 2. Apply each party's net change to the balance it actually holds, and record which
@@ -376,9 +384,12 @@ function creditBank(report: SettlementReport, bankTicker: string | undefined, de
 }
 
 function addToPool(report: SettlementReport, region: string, industry: string, reason: string, deltaUSD: number): void {
-  const key = `${region}:${industry}`;
-  let inner = report.smePoolFlowsByPool.get(key);
-  if (!inner) { inner = new Map(); report.smePoolFlowsByPool.set(key, inner); }
+  addToNested(report.smePoolFlowsByPool, `${region}:${industry}`, reason, deltaUSD);
+}
+
+function addToNested(outer: Map<string, Map<string, number>>, key: string, reason: string, deltaUSD: number): void {
+  let inner = outer.get(key);
+  if (!inner) { inner = new Map(); outer.set(key, inner); }
   inner.set(reason, (inner.get(reason) ?? 0) + deltaUSD);
 }
 

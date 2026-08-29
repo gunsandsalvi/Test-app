@@ -13,7 +13,8 @@ export type Industry =
   | 'Energy' | 'MaterialsChemicals' | 'IndustrialsMachinery' | 'AerospaceDefense'
   | 'AutomotiveTransport' | 'TechHardwareSemis' | 'SoftwareDigitalServices' | 'Telecommunications'
   | 'HealthcarePharma' | 'ConsumerStaples' | 'ConsumerDiscretionaryRetail' | 'LuxuryGoods'
-  | 'MediaEntertainment' | 'RealEstateConstruction';
+  | 'MediaEntertainment' | 'RealEstateConstruction'
+  | 'PersonalConsumerServices' | 'BusinessSupportServices';
 
 export type ProductCategory = Industry;
 

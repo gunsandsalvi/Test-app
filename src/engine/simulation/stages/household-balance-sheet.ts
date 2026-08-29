@@ -45,6 +45,26 @@ const BENEFICIARY_TYPES: InstitutionalEntity['entityType'][] = [
 ];
 
 export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepContext): void {
+  // ---- 0. HH: what households MEASURABLY earned this week. Household income is the sum of what
+  // they were paid — every employer's wages, the government's transfers, the interest the banks
+  // really paid on their deposits — less the tax they really remitted. Recorded here for stage
+  // 02 to read next week; a spend is not income, so purchases are excluded by name. ----
+  const householdFlows = ctx.lastSettlementReport?.householdFlowsByRegion;
+  if (householdFlows) {
+    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
+      const reg = ctx.updatedRegions[regionId];
+      if (!reg) return;
+      let receiptsUSD = reg.householdDepositInterestWeeklyUSD ?? 0;
+      let taxPaidUSD = 0;
+      householdFlows.get(regionId)?.forEach((amountUSD, reason) => {
+        if (amountUSD > 0) { receiptsUSD += amountUSD; return; }
+        if (reason.includes('tax')) taxPaidUSD += -amountUSD;
+      });
+      reg.lastWeekHouseholdReceiptsUSD = Number(receiptsUSD.toFixed(0));
+      reg.lastWeekHouseholdTaxPaidUSD = Number(taxPaidUSD.toFixed(0));
+    });
+  }
+
   // ---- 1. Each institution records what it owes its beneficiaries. ----
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     if (!BENEFICIARY_TYPES.includes(entity.entityType)) {

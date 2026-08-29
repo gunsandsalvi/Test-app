@@ -56,7 +56,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const reg = updatedRegions[regionId];
     // SETL-B: what the named companies paid this week, carried so next week's tier wage bill is
     // the remainder rather than a second derivation.
-    reg.lastWeekCompanyWagesUSD = ctx.companyWagesPaidByRegion[regionId] ?? 0;
 
     // Rebase annually onto current spending patterns, chain-linked from the current level so the
     // series has no step at the rebase — what a statistical agency does when consumption habits
@@ -323,6 +322,18 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const payrollTaxWeeklyUSD = isMonthEnd ? reg.accruedPayrollTaxUSD : 0;
     if (isQuarterEnd) { reg.accruedSmeTaxUSD = 0; reg.accruedConsumptionTaxUSD = 0; }
     if (isMonthEnd) { reg.accruedHouseholdTaxUSD = 0; reg.accruedPayrollTaxUSD = 0; }
+
+    // HH: households remit their own tax. It used to be deducted inside the income identity and
+    // credited to the treasury with no payer on either side — the household half of the same
+    // one-sided flow as the transfers above. On the same real calendars as the accrual.
+    if (householdTaxWeeklyUSD + consumptionTaxWeeklyUSD > 0) {
+      pay(ctx, {
+        payer: { kind: 'HOUSEHOLD', region: regionId },
+        payee: { kind: 'GOVERNMENT', region: regionId },
+        amountUSD: householdTaxWeeklyUSD + consumptionTaxWeeklyUSD,
+        reason: 'household tax remittance',
+      });
+    }
 
     const corporateTaxWeeklyUSD = ctx.taxCollectedByRegion[regionId] ?? 0;
     reg.taxCollectedCorporateUSD = Number(corporateTaxWeeklyUSD.toFixed(0));

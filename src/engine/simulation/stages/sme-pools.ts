@@ -19,7 +19,6 @@
 
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { pay } from './settlement';
 
 /**
  * How fast a measured margin is allowed to move the pool's carried margin. A week of receipts is
@@ -39,50 +38,6 @@ const TARGET_CAPEX_TO_REVENUE = 0.05;
 export function runSmePoolStage(ctx: WeeklyStepContext): void {
   const flows = ctx.lastSettlementReport?.smePoolFlowsByPool;
   if (!flows) return;
-
-  // ---- SEG3: households buy SERVICES, and the small-firm tier is who sells them. ----
-  //
-  // A household's consumption budget is spent on far more than the auctioned goods taxonomy:
-  // rent, repairs, restaurants, care, local trade. Whatever the week's budget did not spend in
-  // the goods books is that spending, and its supplier is the SME tier — split across the pools
-  // by size, because a household's services basket really is spread across the whole tier
-  // rather than bought from one industry.
-  //
-  // Without this the pools paid a full wage bill out of auction receipts alone and ran their
-  // cash negative within six months — the books proving a payer was missing, which is the point
-  // of giving them books. These payments are recorded after the week's settlement cutoff, so
-  // they settle in the next cycle.
-  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
-    const reg = ctx.updatedRegions[regionId];
-    const pools = reg?.smePools ?? [];
-    if (pools.length === 0) return;
-    const cohorts = reg.householdState.cohorts ?? [];
-    const consumptionBudgetWeeklyUSD = (cohorts.length > 0
-      ? cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0)
-      : reg.estimatedHouseholdIncomeUSD * (1 - reg.householdState.savingsRate)) / 52;
-    const goodsSpentUSD = ctx.householdGoodsSpendByRegion[regionId] ?? 0;
-    const servicesBudgetUSD = Math.max(0, consumptionBudgetWeeklyUSD - goodsSpentUSD);
-    if (servicesBudgetUSD <= 0) return;
-    const totalRevenueUSD = pools.reduce((a, p) => a + Math.max(0, p.annualRevenueUSD), 0);
-    if (!(totalRevenueUSD > 0)) return;
-    // The tier does not sell ALL of it. Named firms sell services too — that is what their
-    // `non-auction operating receipts` line is — so households' services budget is split with
-    // them by revenue share. The named tier's own half stays where §6 already tracks it; taking
-    // all of it here would have paid the pools for the large firms' business as well, which
-    // showed up immediately as 35-70% pool margins.
-    const namedRevenueUSD = ctx.updatedCompanies.reduce(
-      (a, c) => a + (c.region === regionId && !c.isBankEntity ? Math.max(0, c.annualRevenue) : 0), 0);
-    const servicesSpendUSD = servicesBudgetUSD * (totalRevenueUSD / Math.max(1, totalRevenueUSD + namedRevenueUSD));
-    pools.forEach((pool) => {
-      pay(ctx, {
-        payer: { kind: 'HOUSEHOLD', region: regionId },
-        payee: { kind: 'SEGMENT', region: regionId, industry: pool.industry },
-        amountUSD: servicesSpendUSD * (Math.max(0, pool.annualRevenueUSD) / totalRevenueUSD),
-        reason: 'household services purchase',
-      });
-    });
-  });
-  ctx.householdGoodsSpendByRegion = {};
 
   (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];

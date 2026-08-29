@@ -313,6 +313,10 @@ export function evolveBankingSector(
   const newMoneySupplyM2USD = depositsUSD + (prevBanking.corporateDepositsUSD ?? 0);
 
   return {
+    // HH: a reported FLOW, not a balance-sheet line — what this bank actually paid its household
+    // depositors this week, at its own deposit rate. Read by 02b and summed per region so
+    // household income can MEASURE it instead of re-deriving it as `policyRate x 0.6`.
+    householdDepositInterestWeeklyUSD: Number(weeklyDepositInterestUSD.toFixed(0)),
     businessLoanBookUSD: Number(businessLoanUSD.toFixed(0)),
     consumerLoanBookUSD: Number(consumerLoanUSD.toFixed(0)),
     depositsUSD: Number(depositsUSD.toFixed(0)),

@@ -136,6 +136,11 @@ export interface CohortBuildInputs {
   aggregateSavingsRate: number;
   /** HH3's real weekly debt service (interest + required principal), annualized inside. */
   weeklyDebtServiceUSD: number;
+  /** HH — the region's MEASURED disposable household income (annual): the sum of what households
+   *  were actually paid, less what they actually remitted. The cross-section below is scaled to
+   *  it, so the decomposition and the aggregate are one number rather than two derivations.
+   *  Absent at the cold start, where the seed identity still sets the level (§7.4). */
+  measuredDisposableIncomeUSD?: number;
   /**
    * HH4b — the capital receipts that recycle debt service back into the budget, ANNUAL USD,
    * in three components because their INCIDENCE differs and the incidence is the point:
@@ -175,6 +180,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const {
     occupationPools, baseAnnualWageUSD, laborForceByOccupation,
     governmentTransfersWeeklyUSD, aggregateSavingsRate, weeklyDebtServiceUSD, wealthDistribution,
+    measuredDisposableIncomeUSD,
   } = inputs;
 
   // ---- 1. Membership: transpose the tier→occupation mixes into per-occupation tier weights,
@@ -268,12 +274,30 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const annualDebtServiceUSD = Math.max(0, weeklyDebtServiceUSD) * 52;
   const dsNorm = WEALTH_TIERS.reduce((a, t) => a + TIER_DEBT_SERVICE_WEIGHT[t], 0) || 1;
 
-  const preliminary = cells.map((c) => {
+  // HH: the cohorts DISTRIBUTE household income; they do not re-derive it. The cross-section —
+  // who earns what, relative to whom — is built above from real employment, real occupation
+  // wages, real benefits and the tier tax ladder. The LEVEL is the measured sum of what
+  // households were actually paid (`measuredDisposableIncomeUSD`), so the decomposition cannot
+  // disagree with the aggregate it decomposes. It used to compute its own total from the same
+  // three imposed constants the aggregate used, which made the identity hold only for as long as
+  // both derivations stayed identical — they stopped the moment income became a measured sum
+  // (measured: cohorts summed to 440.48B against an aggregate of 377.12B).
+  const rawPreliminary = cells.map((c) => {
     const grossUSD = grossOf(c);
     const taxRate = HOUSEHOLD_EFFECTIVE_TAX_RATE * (TIER_TAX_RATE_MULTIPLIER[c.tier] / taxMultNorm);
     const taxUSD = grossUSD * taxRate;
     return { c, grossUSD, taxUSD, dispUSD: grossUSD - taxUSD };
   });
+  const rawDisposableUSD = rawPreliminary.reduce((a, x) => a + x.dispUSD, 0);
+  const incomeScale = (measuredDisposableIncomeUSD !== undefined && rawDisposableUSD > 0)
+    ? measuredDisposableIncomeUSD / rawDisposableUSD
+    : 1;
+  const preliminary = rawPreliminary.map((x) => ({
+    c: x.c,
+    grossUSD: x.grossUSD * incomeScale,
+    taxUSD: x.taxUSD * incomeScale,
+    dispUSD: x.dispUSD * incomeScale,
+  }));
   const totalDisposableIncomeUSD = preliminary.reduce((a, x) => a + x.dispUSD, 0);
   const targetSavingsUSD = Math.max(0, aggregateSavingsRate) * totalDisposableIncomeUSD;
   const savingsBaseUSD = preliminary.reduce(

@@ -129,6 +129,16 @@ export const SME_TIER_EMPLOYMENT_SHARE = 0.60;
  */
 export const SME_WAGE_GAP = 0.22;
 
+/**
+ * SEG — how much less output an SME pool produces per worker than the named tier. Small firms
+ * really are less productive per head: less capital per worker, no scale, thinner specialisation.
+ * It is what turns a pool's REVENUE into the headcount that revenue supports, which is the
+ * direction employment has to run — a pool employs who it can pay, and unemployment is what is
+ * left over. The reverse (fix employment, let income follow) is what produced a tier carrying
+ * 3.86M workers against revenue that had been carved down to support far fewer.
+ */
+export const SME_PRODUCTIVITY_DISCOUNT = 0.30;
+
 /** The named tier's baseline EBITDA margin for a sector — the SME pools read this too, so one
  *  table serves both tiers. */
 export function sectorBaselineMarginPct(sector: Sector): number {

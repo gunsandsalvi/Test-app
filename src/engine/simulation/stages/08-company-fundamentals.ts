@@ -33,6 +33,7 @@ import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
 import { pay, PartyRef } from './settlement';
+import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
 import { random } from '../../rng';
@@ -52,28 +53,6 @@ function lotArrayValueUSD(lots: InputLot[]): number {
     lotValueCache.set(lots, v);
   }
   return v;
-}
-
-/**
- * SEG3 — which SME pool a firm buys its non-auctioned services from. Deterministic in the firm's
- * ticker (no RNG draw, so the stream is untouched) and weighted by pool revenue, so the aggregate
- * split across firms follows the real size of each industry's small-firm tier.
- */
-function servicesSupplierParty(
-  ticker: string,
-  pools: { industry: string; annualRevenueUSD: number }[],
-  region: import('../../../types').RegionId
-): PartyRef {
-  const totalUSD = pools.reduce((a, p) => a + Math.max(0, p.annualRevenueUSD), 0);
-  if (!(totalUSD > 0)) return { kind: 'UNMODELED', region };
-  let h = 2166136261;
-  for (let i = 0; i < ticker.length; i++) { h ^= ticker.charCodeAt(i); h = Math.imul(h, 16777619); }
-  let pick = ((h >>> 0) / 4294967296) * totalUSD;
-  for (const p of pools) {
-    pick -= Math.max(0, p.annualRevenueUSD);
-    if (pick <= 0) return { kind: 'SEGMENT', region, industry: p.industry };
-  }
-  return { kind: 'SEGMENT', region, industry: pools[pools.length - 1].industry };
 }
 
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
@@ -750,35 +729,35 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // until those sellers exist. The split is the company's own wage bill against its other
       // operating costs — not a chosen ratio.
       const opexOutflowUSD = Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD));
-      // The wage share of operating cost, from the company's OWN wage bill — its headcount at
-      // the region's wage level against the week's operating outflow.
-      // The wage share of this week's operating outflow, from the company's own payroll: its
-      // headcount at the region's per-worker income. A firm that employs more of the region's
-      // workers pays more of its costs to households, which is the relationship being expressed.
-      // Everyone the region's own labour pools say is employed — HH5's measure, not a proxy.
-      // The field is `employed`; reading a name that does not exist gave 0, and the Math.max(1)
-      // guard below turned that into a divisor of ONE — so every company classified 100% of its
-      // operating outflow as wages, and the same read made household deposits reach 4e16 through
-      // stage 03. A math guard is not a default: it hid a wrong field name for two commits
-      // (rule 2 — if a number explodes, find the mechanism; never clamp the symptom).
-      const regionEmployed = Math.max(1, Object.values(reg.occupationPools ?? {})
-        .reduce((a: number, pool: any) => a + (pool?.employed ?? 0), 0));
-      const weeklyWageBillUSD = (comp.employeeCount * ((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployed)) / 52;
-      const wageShare = Math.min(1, Math.max(0, weeklyWageBillUSD / Math.max(1, accruedOutflowsWeekly)));
-      const wagesPaidUSD = opexOutflowUSD * wageShare;
-      post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
-      ctx.companyWagesPaidByRegion[comp.region] = (ctx.companyWagesPaidByRegion[comp.region] ?? 0) + wagesPaidUSD;
-      // SEG3: the rest of a firm's operating cost is SERVICES AND LOCAL SUPPLY — accountants,
-      // logistics, maintenance, contractors — and in every real economy the sector that sells
-      // them is the small-firm tier. It used to post to the boundary (measured: -55.6B over 24
-      // weeks with no payee), while the same tier was paying a full wage bill out of auction
-      // receipts alone and running its cash negative. Both halves were the same missing flow.
+      // HH: THE FIRM'S OWN PAYROLL — its headcount, in the occupations its sector employs, at
+      // the wage those occupations clear at, times the wage this firm itself offers
+      // (`offeredWageIndex`, which moves with its own hiring success in the labor market).
       //
-      // The supplier is ONE pool, picked by the firm's own ticker weighted by pool size, rather
-      // than a fourteenth of the spend to each: a real firm buys its services from particular
-      // suppliers, and across two thousand firms the weights reproduce the sector split anyway.
-      post('other opex beyond auction settlements', -opexOutflowUSD * (1 - wageShare),
-        servicesSupplierParty(comp.ticker, reg.smePools ?? [], comp.region));
+      // What this replaces: `employeeCount x (estimatedHouseholdIncomeUSD / regionEmployed)`, a
+      // per-capita INCOME figure standing in for a wage. Every employer in a region paid the same
+      // average regardless of who it employed or what it offered, and once household income
+      // became the sum of what employers pay, the number would have depended on itself.
+      //
+      // A firm pays its staff in full. What is left of the week's operating outflow is the rest
+      // of running the business; it cannot be negative, and a payroll larger than the accrued
+      // operating cost is a firm whose cash falls faster than its P&L — which is what that is.
+      const wagesPaidUSD = weeklyWageBillUSD(
+        comp.employeeCount,
+        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+        getBaseAnnualWageUSD(comp.region),
+        reg.occupationPools,
+        comp.offeredWageIndex ?? 1.0
+      );
+      post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
+      // SVC: services are a real market now — professional, facilities and repair sub-units sit
+      // in the registry, this firm's recipe includes them, and it BIDS for them in stage 05
+      // against real sellers like any other input. What remains on this line is the operating
+      // cost that is neither wages nor a purchase the auction covers.
+      //
+      // The supplier used to be picked here, by a size-weighted hash over the SME pools. That was
+      // an allocation standing in for a purchasing decision — the thing rule 13 forbids — and it
+      // is deleted rather than tuned.
+      post('other opex beyond auction settlements', -Math.max(0, opexOutflowUSD - wagesPaidUSD));
       post('inventory carrying cost', -carryingCostUSD);
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.

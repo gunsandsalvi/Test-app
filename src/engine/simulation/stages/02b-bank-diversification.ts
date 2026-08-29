@@ -367,6 +367,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       corporateDepositsUSD: sumField((s) => s.corporateDepositsUSD ?? 0),
     };
 
+    // HH: what the region's banks actually paid household depositors this week — measured, so
+    // household income can read it instead of re-deriving it at `policyRate x 0.6`.
+    reg.householdDepositInterestWeeklyUSD = Number(newSheets.reduce(
+      (a, { sheet }) => a + (sheet.householdDepositInterestWeeklyUSD ?? 0), 0).toFixed(0));
+
     // ---- HH3: the household sector's debt lines become what they now are — DERIVED SUMS of
     // the itemized pools on the named banks — and the week's real flows are recorded for the
     // household side to read next week (deposit credit, consumption boost, debt service). ----

@@ -214,6 +214,9 @@ export interface HouseholdState {
    * unbuilt channels). Derived ONCE at the HH3 seed migration as (debt service − real
    * receipts) / income, so the seed budget nets to zero; §6 owns watching it decay. */
   unmodeledCapitalReceiptShareOfIncome?: number;
+  /** HH — the same residual as a carried LEVEL (annual USD). Once income is the measured sum of
+   *  payments, a residual expressed as a SHARE of income makes income depend on itself. */
+  unmodeledCapitalReceiptResidualAnnualUSD?: number;
   /** Last week's mortgage book, so demand signals can read a real change (set with the sums). */
   priorMortgageDebtUSD?: number;
   /** HH3 — last week's real flows off the itemized books, written by the lending pass:
@@ -507,9 +510,6 @@ export interface Region {
   sovereignRating: 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
   laggedPolicyRateEMA: number;
   laborForceParticipation: number;
-  /** SETL-B — last week's measured company payroll, so the private tier pays the REMAINDER of
-   * the economy's wage bill rather than a second derivation of its own. */
-  lastWeekCompanyWagesUSD?: number;
   inflationDeviationStreak: number;
   smoothedSlackGap?: number;
   policyRateLagBuffer: number[];
@@ -560,6 +560,16 @@ export interface Region {
    * cannot disagree.
    */
   governmentPayrollWeeklyUSD?: number;
+  /** PUB3b — the government's real transfer obligation this week, paid to households as a real
+   *  payment in stage 03 (it used to reach household INCOME without ever reaching their cash). */
+  governmentTransfersWeeklyUSD?: number;
+  /** HH — interest the region's banks actually paid on household deposits this week, summed from
+   *  their own deposit rates. Part of measured household income; not re-derived anywhere. */
+  householdDepositInterestWeeklyUSD?: number;
+  /** HH — what households MEASURABLY received and paid last week, from the settlement report.
+   *  `estimatedHouseholdIncomeUSD` is derived from this rather than from a labor-share identity. */
+  lastWeekHouseholdReceiptsUSD?: number;
+  lastWeekHouseholdTaxPaidUSD?: number;
   /**
    * PUB1e: the ONE per-category procurement budget. Stage 03 derives it from the treasury's real
    * primary budget; stage 05 bids exactly it. Before this the two disagreed — the demand stage

@@ -1179,9 +1179,6 @@ function runSubUnitMarkets(
         const hhUSD = ((book.householdFillUnitsByRegion[buyerRegion] ?? 0) * book.clearedPriceUSD / claimUSD) * aggregateUSD * sellerShare;
         const govUSD = ((book.governmentSpendUSDByRegion[buyerRegion] ?? 0) / claimUSD) * aggregateUSD * sellerShare;
         pay(ctx, { payer: { kind: 'HOUSEHOLD', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: hhUSD, reason: 'household goods purchase' });
-        // SEG3: what households really spent on auctioned goods, so the sme-pools stage can tell
-        // it apart from the rest of their consumption budget — which is spent on services.
-        if (hhUSD > 0) ctx.householdGoodsSpendByRegion[buyerRegion] = (ctx.householdGoodsSpendByRegion[buyerRegion] ?? 0) + hhUSD;
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: govUSD, reason: 'government procurement' });
       });
     });
