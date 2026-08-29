@@ -639,15 +639,21 @@ demand signal together, and it wants measuring alongside §6.1's seed-employment
 its opening EBITDA follows from it. Measured after: 7% payroll-to-revenue, $644k revenue per
 employee, and the years-long convergence artifact is gone.
 
-**IND8 — Rating generation.** Week-0 USA is AAA 16% / AA 39% / A 45%, **zero BBB and zero HY**,
-with 55% of debt AA or better, inverted against reality. Dynamics are fine (BBB 39% / HY 16% by
-week 40) and HC's sponsor-owned firms supplied the missing HY universe, so what is left is the
-generator's own distribution. Re-measure first, then fix at source.
+**IND8 — Rating generation.  *(DONE §7.113)*** The seed's leverage was a deterministic function
+of (sector, rank) — every firm of a given sector and size opened with an IDENTICAL balance sheet,
+so the universe's credit quality was a projection of seven sector curves: 98% investment grade,
+**zero BBB and zero high yield**. Leverage is now drawn as a share of each firm's own covenant
+capacity (`COVENANT_LEVERAGE_CEILING`, the engine's own rule) at its unlevered quality, and the
+rating follows from the leverage that produces — one rater, seed and week. **BBB 0% → 14%,
+p90 leverage 3.5x → 4.2x.** Seed HY stays near zero and that is correct: the covenant rule is
+what stops a firm ISSUING its way to high yield, so HY arrives through deterioration (BBB 39% /
+HY 16% by week 40, as the dynamics always did) and from HC's LBO tier, measured at p50 3.8x.
 
-**IND9 — The segment debt primitive.** `debtUSD = annualRevenueUSD * 2` implies ~15x debt/EBITDA
-on the private sector in aggregate, which no real balance sheet services. G2 itemized the bank
-book, so segment debt can be recalibrated to what real SME leverage on segment EBITDA and real
-bank capital can carry. Re-measure §7.18's want/have afterwards.
+**IND9 — The segment debt primitive.  *(DONE — by G2, confirmed by measurement §7.113)*** G2's
+`migrateSmeDebtAtSeed` already recalibrated `debtUSD = 2 × revenue` to min(serviceable,
+capital-carriable) and deleted the remainder. **Measured at seed: 2.7x EBITDA and 0.38x revenue
+in all four regions**, against the ~17.8x the row was opened for. Nothing left to do; §7.18's
+want/have was re-measured at the same time.
 
 **IND10 — Production time and WIP.** Fulfilment time as a stock: an order in production is
 work-in-progress between input lots and finished output, with a per-sub-unit production lead time
@@ -4134,3 +4140,32 @@ that proved it, the lesson.
     - **Verified:** 237 suppliers, USA supplier shares summing to exactly 100% (GUARD's own
       invariant, silent), $15.2B of electricity revenue by week 3, and no firm anywhere holding
       it in inventory. Six-week probe 13 → 12 violations.
+
+113. **IND8 and IND9 — every firm of a size was the same firm, and one row was already closed.**
+    - **IND9 was done and nobody had checked.** G2's `migrateSmeDebtAtSeed` recalibrated the
+      `debtUSD = 2 × revenue` scalar to min(serviceable, capital-carriable) and deleted the
+      remainder. **Measured: 2.7x EBITDA and 0.38x revenue in all four regions**, against the
+      ~17.8x the row was opened for. Re-measuring before working is what the row itself asked
+      for, and it saved the work entirely.
+    - **IND8's real defect was not the distribution's SHAPE, it was that there wasn't one.**
+      `buildTemplate` is deterministic in (sector, rank): leverage was a flat sector constant
+      scaled by size, so **every firm of a given sector and size opened with an identical balance
+      sheet** and the whole universe's credit quality was a projection of seven curves. 199
+      listed USA non-financials at 98% investment grade, **zero BBB, zero high yield** — so the
+      cohort 07b and 07d exist to price had no issuers and the credit market could not price
+      risk. That is IND's headline ("every corporate is the same firm") showing up in the
+      balance sheet.
+    - **The fix uses the engine's own covenant rule rather than a new table.** A firm's leverage
+      is where its own financing history left it; the model has no history, so the seed must
+      draw it — what it must not do is draw the same number for everyone. It now draws a takeup
+      share of each firm's own `COVENANT_LEVERAGE_CEILING` at its unlevered quality, and the
+      rating is computed from the leverage that produces, by the same `determineCreditRating` the
+      weekly stage uses. **BBB 0% → 14% of firms; p90 leverage 3.5x → 4.2x.**
+    - **The ceiling is applied ONCE, not iterated to a fixed point** — in that table a weaker
+      credit carries a LOOSER covenant (descriptively right: high-yield issuers do run higher
+      leverage), so each downgrade would license more debt and the iteration runs away to CCC.
+      Worth recording because the mistake is inviting.
+    - **Seed high yield stays near zero, and that is correct.** The covenant rule is precisely
+      what stops a firm ISSUING its way into high yield; HY arrives by DETERIORATION (the
+      dynamics already deliver BBB 39% / HY 16% by week 40) and from HC's sponsor-owned tier,
+      measured at p50 3.8x and p90 6.0x. Six-week probe 12 → 9 violations.

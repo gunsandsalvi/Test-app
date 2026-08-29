@@ -9,6 +9,7 @@
 
 import { RegionId, Sector, CreditRating } from '../../types';
 import { determineCreditRating } from '../simulation/credit';
+import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { GENERATED_COMMODITIES } from './commodities-and-fx';
 import { random } from '../rng';
 
@@ -178,6 +179,15 @@ const FIRM_SCALE_UNIT_USD = 130_000;
 // (`yield-curves.ts`), so this could read it rather than assume a rate.
 const INTEREST_RATE_ASSUMPTION = 0.045;
 
+/**
+ * IND8 — the least levered a firm opens, as a share of what its lenders would fund. The upper
+ * end is the covenant ceiling itself: a firm that has used all its capacity. Firms sit across
+ * that range because their financing histories differed, which is the one thing the seed cannot
+ * reconstruct and must therefore draw. It is a dispersion, not a level — the LEVEL is the
+ * engine's own covenant rule.
+ */
+const MIN_COVENANT_TAKEUP = 0.15;
+
 function ratingFor(revBase: number, ebitdaMargin: number, debtBase: number): CreditRating {
   const ebitda = revBase * ebitdaMargin;
   const ebit = Math.max(1, ebitda - revBase * 0.05); // 5% D&A, matches downstream company construction
@@ -200,7 +210,31 @@ function buildTemplate(
   const revBase = Math.round(FIRM_SCALE_UNIT_USD * scale);
   // Smaller (higher-rank) firms run thinner margins and carry proportionally more debt.
   const ebitdaMargin = Number(Math.max(0.05, profile.margin * (0.65 + 0.35 * scale)).toFixed(3));
-  const debtBase = Math.round(revBase * ebitdaMargin * profile.leverage * (1 + (1 - scale) * 0.5));
+  // IND8 — WHERE A FIRM'S OWN FINANCING HISTORY LEFT IT.
+  //
+  // `buildTemplate` is deterministic in (sector, rank), so leverage used to be a flat sector
+  // constant scaled by size: every firm of a given sector and size opened with an IDENTICAL
+  // balance sheet, and the whole universe's credit quality was a projection of seven sector
+  // curves. Measured at seed: 199 listed USA non-financials at debt/EBITDA p50 2.0x and p90
+  // 3.5x — **98% investment grade, zero BBB, zero high yield**, so the high-yield cohort 07b and
+  // 07d exist to price had no issuers at all and the credit market could not price risk.
+  //
+  // A firm's leverage is where its own past financing decisions left it, and the model has no
+  // past — so the seed must draw it. What it must not do is draw the SAME number for every firm.
+  // The draw is bounded by the ENGINE'S OWN covenant rule rather than a new table: a firm sits
+  // somewhere between an unlevered sheet and what its lenders would actually fund at its own
+  // credit quality (`COVENANT_LEVERAGE_CEILING`, `corporate-financing.ts`). The ceiling is taken
+  // at the firm's UNLEVERED quality and applied once — iterating to a fixed point runs away,
+  // because in that table a weaker credit carries a LOOSER covenant (which is descriptively
+  // right: high-yield issuers do run higher leverage) and each downgrade would license more debt.
+  //
+  // The rating below is then computed from the leverage this actually produced — an outcome, by
+  // the same `determineCreditRating` the weekly stage uses (§7.4: one rater, seed and week).
+  const unleveredLeverage = profile.leverage * (1 + (1 - scale) * 0.5);
+  const unleveredRating = ratingFor(revBase, ebitdaMargin, revBase * ebitdaMargin * unleveredLeverage);
+  const covenantCeiling = COVENANT_LEVERAGE_CEILING[unleveredRating] ?? 4.0;
+  const leverageTakeup = MIN_COVENANT_TAKEUP + random() * (1 - MIN_COVENANT_TAKEUP);
+  const debtBase = Math.round(revBase * ebitdaMargin * covenantCeiling * leverageTakeup);
   const cashBase = Math.round(revBase * ebitdaMargin * profile.cashToEbitda);
   const shares = Math.max(50, Math.round(1000 * scale));
   const ticker = generateUniqueTicker(existingTickers);
