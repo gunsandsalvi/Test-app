@@ -589,6 +589,46 @@ derive from each registry entry's own physics (value density, shelf life); softw
 hold no inventory. `purchaseKindOf` routes purchases to lots / PP&E-on-delivery / expensed,
 closing §6's lot leak at the root and making investment supply-constrained.
 
+**IND-R6 — ONE FIRM MODEL, ONE PATH. *(User question, 2026-08-29: "why don't private tracked
+firms build from the same modularity as public ones? Shouldn't any change work exactly for
+both?")*** They should, and there is no modelling reason they do not. HC deliberately gave private
+firms **no parallel type** — they are real `Company` objects — but stage 08 has a parallel **code
+path**: `if (!isPubliclyListed(comp)) { ...abbreviated rebuild...; return; }` at ~161, and
+everything below it is the public firm. The branch is not a different model, it is a shortened
+copy of the same one, and it skips payroll, capex, PP&E, inventory, input consumption, cost
+drivers, the debt lifecycle and offerings. **Only a few of those are genuinely public-only**
+(share price, buybacks, dividends to public holders, index membership, market offerings); the
+rest a private firm plainly has. Rule 17, with `listingStatus` as the kind being switched on.
+
+**What the fork has already cost, all measured 2026-08-29:**
+- **Three fields silently dropped** by its fixed rebuild list — headcount, `offeredWageIndex`
+  (§7.41's own record) and now `recurringRevenueBaseUSD` (§7.114): 240 listed firms carried a
+  contracted base and **zero** private ones.
+- **1,712 private firms employing 8.20M people — more than TWICE the listed tier's 3.99M — pay
+  no wages at all.** The branch returns before the payroll block, so **67% of the USA's named
+  wage bill never reaches a household** (owed 4.31B/wk, paid 1.43B/wk; 3.12B of the gap is this
+  tier). This is IND-R1's defect, unfixed, at 46x the size of the bank version that was fixed.
+- **2.91B a week of private cash moves by direct mutation**, outside the settlement layer CASH
+  was declared closed on: an EBITDA accrual from nobody, interest to nobody, taxes reaching no
+  government.
+
+**AND THE SEMANTICS HAVE DRIFTED, WHICH IS WHY "JUST DO THE SAME THING" DOES NOT WORK.** The
+public path's margin is a **gross** margin — payroll is charged separately on top. The private
+path's `baselineEbitdaMargin` is effectively a **net** one, because payroll was never charged
+there. Same concept, same naming, opposite meaning (rule 3). **Attempted and reverted the same
+day:** hoisting payroll above the branch and charging the private tier the same deviation
+double-counts against an already-net margin, tipped 1,712 firms below their cost of capital and
+took unemployment to 42% by week 10 — harness 8 → 196 violations. The attempt is recorded because
+the trap is not visible from the code.
+
+**The fix is to DELETE the branch, not to patch it.** One operating model for every firm; being
+listed becomes a profile that ADDS public-market behaviour, exactly as IND-R1 made payroll common
+and left profiles to vary only revenue mechanism and cost shape. Reconciling the two margin
+definitions is part of it and belongs with **IND3** (cost shapes), which is what makes a margin an
+outcome rather than a stored number — so this slice runs WITH IND3, not before it.
+**Verify:** no `isPubliclyListed` branch in stage 08; every field added to a company reaches both
+tiers without a second write site; the private tier pays its 8.20M workers.
+
 **IND2 — Revenue mechanism.  *(SUBSCRIPTION done §7.114; PROJECT/ROYALTY deferred to IND10/11)***
 How a cleared transaction becomes REVENUE is a property of what was sold, from the registry.
 `UNIT_SALE` is recognised on delivery and production that did not sell is not revenue — which was
@@ -4221,3 +4261,26 @@ that proved it, the lesson.
     - **PROJECT and ROYALTY are deferred to IND10/IND11 on purpose.** Both need a backlog STOCK
       to live on, and IND11 builds it. Implementing a second backlog here to delete it there is
       the wasted motion the profiles' own header warns about. Six-week probe 9 → 8 violations.
+
+115. **IND-R6 — the private tier is a second code path, and it has been quietly eating changes.**
+    Asked directly by the user: why do private firms not build from the same modularity as public
+    ones, if they are the same thing minus a listing tag? They should, and there is no modelling
+    reason they do not.
+    - **HC gave them no parallel TYPE and stage 08 gave them a parallel PATH.** An early return
+      at ~161 hands private firms an abbreviated rebuild — revenue, EBITDA, D&A, net income,
+      cash, rating, employment — and skips payroll, capex, inventory, inputs, cost drivers, the
+      debt lifecycle and offerings. Only a handful of those are genuinely public-only.
+    - **Measured cost.** Three fields silently dropped by its fixed field list (headcount, wage
+      index, and §7.114's contracted base — 240 listed firms carried one, zero private).
+      **1,712 firms employing 8.20M people, twice the listed tier, paying NO wages** — 67% of the
+      USA's named wage bill never reaching a household, 3.12B/wk of it here, which is IND-R1's
+      defect at 46x the size of the bank version that got fixed. And 2.91B/wk of cash moving by
+      direct mutation outside the settlement layer.
+    - **THE LESSON, and it is the one worth keeping: a forked path does not just duplicate code,
+      it lets the SEMANTICS drift.** The public margin is GROSS (payroll charged on top); the
+      private one is NET (payroll never charged). Same name, opposite meaning. Copying the public
+      treatment across therefore double-counts — attempted the same day, it tipped 1,712 firms
+      below their cost of capital, took unemployment to 42% by week 10 and the harness 8 → 196.
+      **Reverted, and recorded, because the trap is invisible from the code.**
+    - **So the fix is to delete the branch, not patch it**, and it runs WITH IND3 because
+      reconciling the two margin definitions is exactly what IND3 does.
