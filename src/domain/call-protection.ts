@@ -124,9 +124,13 @@ export function callPricePerDollar(
 }
 
 /**
- * Tranches created before call protection existed carry no kind. A floating tranche is a loan and
- * a fixed one is treated as the most permissive regime, so old paper never becomes retrospectively
- * uncallable — the honest default for data that predates the rule.
+ * Fallback for a tranche carrying no kind.
+ *
+ * There is no such thing as legacy data here — every world is regenerated from seed — so this
+ * only fires when a tranche-creating site FORGOT to set `callProtection`. It then silently
+ * assigns the most permissive regime (MAKE_WHOLE), which is the cheapest to call out of. A miss
+ * is therefore invisible. Every live creation site was checked 2026-08-29 and is either explicit
+ * or correctly exempt (bank facility / commercial paper); this stays as a guard, not a migration.
  */
 function resolveProtection(tranche: DebtTranche): CallProtectionKind | undefined {
   if (tranche.isBankFacility || tranche.isCommercialPaper) return undefined;

@@ -1,10 +1,11 @@
-/**
- * Financial Instruments & Trading Assets Domain Model
+/** Tradeable asset types, the player's positions, the player-facing dealers, and commodities.
  *
- * Models tradeable asset classes (equities, corporate bonds, sovereign bonds, CDS, IRS, TRS, XCS, commodities, options, FX spot),
- * portfolio positions, dealer market makers, tradeable instrument definitions, and physical commodities.
- * Read and updated by market pricing, trade execution, portfolio valuation, and risk/margin engines.
- */
+ *  RULE 3, OPEN: `Dealer` below is a SECOND dealer system. It quotes the player by formula
+ *  (`baseSpreadBps × spreadMultiplier`, an `axeDiscountPct`, a `creditLimitUSD`) while the banks
+ *  run real dealer inventories in the clearing books off their own balance sheets. Two
+ *  representations of one real thing, and only one of them has a balance sheet. It also carries
+ *  presentation fields (`tagline`, `axeBadge`, `color`) on a domain trading entity.
+ *  Owner: G3 (8) — "one dealer system" is its name. */
 
 import { RegionId } from './geography';
 import { VIEW_BASE_COMMODITY_CATEGORY_LINKAGE } from './industry-registry';

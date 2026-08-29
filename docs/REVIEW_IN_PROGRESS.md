@@ -105,3 +105,46 @@ unavailable *at any price*. The defect is only in what it charges, not in what i
 `etf.ts`'s sublinear research capacity (cube root, anchored at two real points) is a well-argued
 primitive and its own comment records why the linear version broke the whole mechanism.
 
+### `src/domain` — batch 6 (primary-market, call-protection)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| D18 | **A** | `primary-market.ts` | **`UNDERWRITING_FEE_BPS` (50/150/300) is a fixed price schedule.** A fee is what a bank CHARGES, and competing desks bid it down for an easy deal and up for a hard one. One fixed table means an issuer's placement cost never responds to how many banks want the mandate or how the book is going — and the fee is real money moving between real balance sheets. Rule 1. **Owner: G3 (8).** |
+| D19 | **B** | `primary-market.ts` | **`chooseLeadBank` is a draw, not a relationship.** A stable hash of the issuer id weighted by deposit share: nothing the bank DID wins it the mandate — not its price, not its balance sheet, not whether it already lent to this issuer — and no issuer ever moves banks. The comment called it "relationship banking rather than an RNG draw"; a deterministic hash keyed on an id is an RNG draw with a fixed seed. Rule 13. **Owner: G3 (8).** |
+| D20 | **B, latent** | `call-protection.ts` | `resolveProtection`'s fallback is justified as "the honest default for data that predates the rule" — but no world here has legacy data; every run regenerates from seed. It fires only when a creation site FORGOT to set `callProtection`, and it then silently assigns MAKE_WHOLE, the cheapest regime to call out of. A miss is invisible. *Checked every live tranche-creating site: all are explicit or correctly exempt (bank facility / CP), so nothing is wrong today* — but the guard hides the next one. Same family as `safeRate` (D8). |
+
+**Clean, and another standard-setter:** `call-protection.ts` itself. Three regimes that are real
+market conventions (loan 101 soft call, HY NC1 on a declining schedule derived from the issue's
+own coupon, IG make-whole), a make-whole discount spread that is deliberately the SAME constant
+as the dealer's bid-offer because they are the same real cost, and "never less than par" because
+every real call provision is written "the greater of par and…". `primary-market.ts`'s offering
+lifecycle is right too — the defect is only in what the underwriter charges and how it is chosen.
+
+### `src/domain` — batch 7 (market-microstructure, institutions)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| D21 | **A** | `market-microstructure.ts` | **`CAPEX_PUBLIC_SUPPLY_SHARE = 0.65` decides who supplies capex by constant.** 65% of every capex category's demand is routed to public companies before falling back to that industry's SME pool. Both tiers already bid in the SAME auction since SEG, so they should compete on price and the split should be the RESULT. This is exactly the disease OWN removed from the ownership registers, still live on the supply side. Rule 13. **Owner: CAP (4).** |
+| D22 | **A** | `institutions.ts` | **`INSURER_EXPENSE_RATIO = 0.20` is an outcome stated as a primitive.** An expense ratio is what an insurer's own cost structure produces — staff, systems, distribution. One constant for every insurer in every region means no insurer can be better or worse run than another, which is the one thing this number should express. Rule 13. **Owner: IND (3).** |
+| D23 | **B, root cause** | `institutions.ts` | **`beneficiaryLiabilityUSD = totalAssetsUSD − equityCapitalUSD` runs the causality backwards.** In reality a pension fund is as big as the entitlements it owes; here the liability is derived FROM the assets. That is why the institutional sector has no bottom-up size anchor, and therefore why `INSTITUTIONAL_OPENING_BOOK_SHARE` survived OWN6 (§6.1). Reversing it — build the claim from the household side, size the entity from the claim — closes both at once. The field's doc presented the residual as settled design; it now names the limitation. |
+| D24 | E | `market-microstructure.ts`, `institutions.ts` | Both carried "Models X… written and updated by Y" headers restating the type names below them. Trimmed. |
+
+**Watch, not a finding:** `createSeedCategoryDemandState` opens every category at
+`inventoryLevelUSD = 10% of annual demand` and `crowdingIntensity = 0.1`. Seed constants with one
+owner, which §7.4 sanctions — but the inventory stock is a real quantity, and CAP should check
+whether 10% is what the production decision would actually hold.
+
+### `src/domain` — batch 8 (instruments, carrier)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| D25 | **C** | `instruments.ts` | **A second dealer system, confirmed at the type level.** `Dealer` quotes the player by formula — `baseSpreadBps × spreadMultiplier`, an `axeDiscountPct`, a `creditLimitUSD` — while the named banks run real dealer inventories inside the clearing books off their own balance sheets. Two representations of one real thing, and only one of them has a balance sheet or can run out of capacity. It also carries presentation fields (`tagline`, `axeBadge`, `color`) on a domain trading entity. **Owner: G3 (8)** — this plus §6.1's regional-desk row is the whole of what "one dealer system" means. |
+| D26 | **B** | `carrier.ts` | **The carrier's offer floor is short-run marginal cost with no capital recovery.** `marginalCostPerTonneNmUSD` is fuel plus crew. The vessel's own cost is carried (`capitalCostUSD`, `usefulLifeYears`) and depreciated on the P&L, but it is not in the floor — so a balanced freight market clears at a level that never returns the fleet's capital, and no carrier can rationally replace a ship. Correct as a *marginal* cost; wrong as the *only* floor a supplier posts. Relevant to §6.1's freight-rate runaway, which is the same market. **Owner: CAP (4).** |
+
+**Clean, and the best physics in the codebase:** the rest of `carrier.ts`. Capacity is a real
+stock whose weekly throughput falls out of round-trip time, so an 11,000-mile lane delivers its
+hold about once a month without anyone saying so; the SEA/ROAD cost asymmetry (fuel dominates a
+ship, crew dominates a truck) is arithmetic from real equipment specs, so a fuel spike reprices
+ocean freight and a wage rise reprices haulage; and lanes are DIRECTED because a head-haul and a
+back-haul are genuinely different markets. No coefficient anywhere.
+

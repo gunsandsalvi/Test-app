@@ -124,6 +124,12 @@ export function weeklyCapacityTonnes(asset: FreightAsset, distanceNm: number): n
  * What it costs the carrier to move one tonne one nautical mile — the level below which it will
  * not offer, because it would be paying to carry the cargo.
  *
+ * SHORT-RUN ONLY: fuel and crew, no capital. The vessel's own cost (`capitalCostUSD` over
+ * `usefulLifeYears`) is booked as PP&E and depreciated on the carrier's P&L, but it is not in
+ * this floor — so in a balanced market freight clears at a level that never returns the fleet's
+ * capital and no carrier can rationally replace a ship. Correct as a marginal cost; wrong as the
+ * only floor a carrier posts. Owner: CAP (4), which gives firms a real production decision.
+ *
  * Fuel is a real purchase of refined product at that market's own cleared price, and crew is real
  * labour at the region's real wage. Both are costs the carrier actually books; neither is a
  * parameter. Note the asymmetry the specs above produce: for a ship, fuel dominates and crew is

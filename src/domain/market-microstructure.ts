@@ -1,9 +1,5 @@
-/**
- * Market Microstructure Domain Model
- *
- * Models sub-unit bids, offers, supply contracts, category demand states, input-output requirement matrices,
- * and inter-company supply relationships. Owned and updated by category demand, input-output, and unit bidding simulation stages.
- */
+/** Bids, offers, supply contracts and the per-category demand state stages 03/04/05 pass between
+ *  them. The input-output and capex-basket tables are views onto the industry registry. */
 
 import { RegionId } from './geography';
 import { VIEW_CATEGORY_INPUT_REQUIREMENTS, VIEW_CAPEX_SUPPLIER_WEIGHTS } from './industry-registry';
@@ -130,10 +126,15 @@ export interface SupplyRelationship {
 export const CAPEX_SUPPLIER_WEIGHTS: Record<string, number> = VIEW_CAPEX_SUPPLIER_WEIGHTS;
 
 
-// Share of each capex category's demand met by real in-region public companies before falling
-// back to the SME pool of the category's own industry (SEG-B) — public capital-goods producers
-// are typically the large/anchor suppliers, but plenty of real-world capex (small contractors,
-// private IT consultancies, regional construction firms) genuinely goes to non-public firms.
+/**
+ * Share of each capex category's demand routed to public companies before falling back to that
+ * industry's SME pool.
+ *
+ * RULE 13, OPEN: this is an imposed supply share — who supplies a buyer is decided by a constant
+ * rather than by who bids what. Both tiers already trade in the same auction (SEG), so the pools
+ * and the public firms should compete for capex on price and the split should be the RESULT.
+ * Same disease OWN removed from the ownership registers. Owner: CAP (4).
+ */
 export const CAPEX_PUBLIC_SUPPLY_SHARE = 0.65;
 
 

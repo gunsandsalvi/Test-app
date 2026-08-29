@@ -81,10 +81,12 @@ export interface PrimaryOffering {
 }
 
 /**
- * Underwriting fees by instrument, in bps of size — structural primitives like the deposit
- * beta (BP2's industry profiles and G3's competing desks are where they become outcomes).
- * Ordered the way real placement difficulty orders them: loans need syndication, equity needs
- * a book of new owners.
+ * Underwriting fees by instrument, in bps of size. Ordered the way real placement difficulty
+ * orders them: loans need syndication, equity needs a book of new owners.
+ *
+ * RULE 1, OPEN: a fee is a PRICE, and competing desks should bid it down for an easy deal and up
+ * for a hard one. One fixed schedule means an issuer's placement cost never responds to how many
+ * banks want the mandate or how the deal is going. Owner: G3 (8).
  */
 export const UNDERWRITING_FEE_BPS: Record<PrimaryOfferingInstrumentType, number> = {
   CORP_BOND: 50,
@@ -93,9 +95,12 @@ export const UNDERWRITING_FEE_BPS: Record<PrimaryOfferingInstrumentType, number>
 };
 
 /**
- * The issuer's house bank: deterministic, market-share-weighted by a stable hash of the issuer
- * id — relationship banking rather than an RNG draw, so the same issuer always mandates the
- * same lead and the fee flow is attributable across weeks.
+ * The issuer's house bank: a stable hash of the issuer id, weighted by measured deposit share.
+ * Stable across weeks, so fee flow is attributable.
+ *
+ * RULE 13, OPEN: this is a draw, not a relationship. Nothing the bank DID wins it the mandate —
+ * not its price, not its balance sheet, not whether it lent to this issuer before — and no
+ * issuer ever moves. A real house-bank relationship is won and lost. Owner: G3 (8).
  */
 export function chooseLeadBank(
   issuerId: string,

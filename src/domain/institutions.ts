@@ -1,10 +1,5 @@
-/**
- * Non-Bank Financial Institutions Domain Model
- *
- * Models non-bank institutional entities (insurers, asset managers, pension funds),
- * target asset allocation matrices, balance sheets, and capital bases.
- * Written and updated by institutional allocation and market evolution simulation stages.
- */
+/** The non-bank institutions — insurers, managers, pension funds, hedge funds, PE, money funds,
+ *  ETFs — their mandates, their real books and the claims their beneficiaries hold on them. */
 
 import { RegionId } from './geography';
 import { FxForward } from './fx-hedging';
@@ -30,7 +25,13 @@ export interface InstitutionalSector {
  * §7.51). A structural primitive with one owner; it becomes an outcome in IND.
  */
 export const PREMIUM_TO_SURPLUS_RATIO = 1.2;
-/** The share of premium that goes on running the business rather than paying claims. */
+/**
+ * The share of premium that goes on running the business rather than paying claims.
+ *
+ * RULE 13, OPEN: an expense ratio is an OUTCOME of an insurer's own cost structure — its staff,
+ * its systems, what it pays for distribution — not a primitive. It is the same 0.20 for every
+ * insurer in every region, so no insurer can be better run than another. Owner: IND (3).
+ */
 export const INSURER_EXPENSE_RATIO = 0.20;
 
 export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND' | 'ETF';
@@ -65,6 +66,12 @@ export interface InstitutionalEntity {
    * HH1 — what this institution owes its ultimate BENEFICIARIES: policyholder reserves, pension
    * entitlements, fund shares. A derived residual, `totalAssetsUSD - equityCapitalUSD`, carried
    * here so both sides of the claim are visible on the books that hold them.
+   *
+   * THE DIRECTION IS BACKWARDS, and it is load-bearing (§6.1, OWN6). In reality an institution's
+   * assets exist BECAUSE it owes somebody: a pension fund is as big as its entitlements. Deriving
+   * the liability from the assets means the sector's SIZE has no bottom-up anchor, which is why
+   * `INSTITUTIONAL_OPENING_BOOK_SHARE` cannot yet be removed from the seed. Reverse it — build
+   * the claim from the household side and size the entity from it — and that seed share goes.
    *
    * It was implicit and therefore owned by nobody. Measured at 740B across insurers, pension
    * funds and asset managers (§7.48): the asset existed on this sheet and the matching claim
