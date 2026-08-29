@@ -312,6 +312,7 @@ metrics to watch rather than work.
 | — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
+| 1.5 | foundation | **CASH — Corporate cash settles through banks** (found by §7.86; the banks' missing deposit base, and the last big "1$ is 1$" boundary) | none |
 | ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
@@ -1290,6 +1291,27 @@ investment timing responds to depreciation treatment.
 
 ---
 
+### CASH — Corporate cash settles through banks  *(Tier 1; found by §7.86)*
+
+**The boundary:** a company's cash is a number on the company. When one firm pays another, both
+S5 ledgers move and no bank's balance sheet does — so `corporateDepositsUSD` reports a stock the
+banking system does not hold, and the banks' only real deposit base is households (~52% of
+assets, against a real ~75-80%). Everything downstream is distorted: banks fund the gap with
+wholesale money at policy-plus-spread, which is why a rate cycle destroys them (§7.86), and
+deposit competition, the money multiplier and the MMF sweep all price against a deposit base
+missing its corporate half.
+
+**The work:** a corporate payment debits the payer's bank and credits the payee's — deposits move
+between banks, and a bank that wins relationships wins funding. Cash held at a bank IS that
+bank's liability, earning what the relationship commands (the sweep already models the
+alternative). The per-bank identity must close every week throughout: that gate is what disproved
+the shortcut (§7.86).
+
+**Verify:** the identity holds per bank per week; deposits ≈ households + corporates; the
+wholesale share falls toward its real range; NIM survives a rate cycle with no band touched.
+
+---
+
 ### CAL — Payment calendars  *(Tier 3, item 11)*
 
 Coupons, loan interest and dividends accrue as smooth weekly 1/52 flows on both sides — stage 08's
@@ -1448,7 +1470,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **An ETF pays out net assets it does not have** | **Found in PUB1d (§7.65); owner ETF2, not PUB.** `USA_IG_ETF` runs cash 0.04B (w13) → **−47.9B** (w26) against a 14.5B holdings book — **net assets −33.4B**, a fund that owes more than it owns. The signature is a steady ~3.5B/week outflow while holdings barely move and shares outstanding fall 2.3e8 → 1.7e7: redemptions keep paying cash out after `navPerShare` has already gone to 0.0000 because `navUSD` is non-positive. The per-book purchase budgets are sound (`etf-demand.ts` and 07b both cap at `max(0, cashUSD)`), so the leak is on the **redemption** side of `etf-flows.ts`, not the buy side. Present identically before and after PUB1d — do not re-attribute it to sovereign placement. The invariants harness does not assert non-negative fund net assets; adding that assert is the first action. |
 | **The central bank intervenes in FX with its BOND book — a live bug** | **Introduced in XB2d, shipped, must be fixed before XB closes.** `fx-clearing.ts` sizes the central bank's FX participation off `centralBankAssetsUSD(cb)`, which returns its DOMESTIC SOVEREIGN book (100–140B). A central bank does not intervene with its own government bonds; it intervenes with **FX reserves**, which do not exist in this model. Three consequences: the CB bids with the wrong (and large) balance sheet, intervention never changes reserves — buying your own currency should DEPLETE them — and the PUB2a identity `assets = reserves + TGA + currency` has no FX line, so a reserve stock would not close it. See **XB5** in §5. |
 | **Does the treasury optimise issuance on the curve? — A DECISION, not a defect** | **Needs a user answer; do not change it unilaterally.** The model's treasury leans opportunistically in two places: the bill share via `costLean = clamp(±0.05, (2Y − 3M) × 2)`, and the bond tenor mix via `steepnessAdjustment = (30Y − 2Y) × 3` in `11-fiscal-and-sovereign-debt.ts` — so a 1pp steepening shifts ~1.5pp of issuance into the 2Y. Real debt-management offices run "regular and predictable" and explicitly do NOT time the curve, because surprising the market lifts the term premium by more than the tactical saving. So this model's issuer exploits a curve the model itself produces. Options: keep it, damp the coefficients, or replace with a published-calendar rule. |
-| **THE USA BANK COHORT IS THE TOP OPEN DEFECT — NIM *and* capital** | **Re-measured at BP1's close (§7.84): 41 of the harness's 47 violations are this one story** — 26 weeks of USA bank NIM out of band (running NEGATIVE from w38, reaching −0.057) and 15 weeks of USA bank capital ratio out of band. This row previously read "effectively resolved, one breach-week at w60, do not open work unless it regrows": it regrew. Two independent measurements now point at it (the FX sweep first, §7.82, then BP1's close-out), and a bank earning a negative interest margin for twenty-three consecutive weeks while its capital ratio leaves its band is a mechanism defect, not a band-tuning question. **Do not widen the bands.** Start from where the margin is earned: G2's transmission gives the loan book its rate, HH3/HH4d the deposit book its cost, and 07f/02b the wholesale funding — find which leg reprices wrongly against the others. First work item of the next session. |
+| **THE USA BANK COHORT — DIAGNOSED (§7.86): NOT A BANK DEFECT** | **Re-measured at BP1's close (§7.84): 41 of the harness's 47 violations are this one story** — 26 weeks of USA bank NIM out of band (running NEGATIVE from w38, reaching −0.057) and 15 weeks of USA bank capital ratio out of band. This row previously read "effectively resolved, one breach-week at w60, do not open work unless it regrows": it regrew. Two independent measurements now point at it (the FX sweep first, §7.82, then BP1's close-out), and a bank earning a negative interest margin for twenty-three consecutive weeks while its capital ratio leaves its band is a mechanism defect, not a band-tuning question. **Do not widen the bands.** **Diagnosed 2026-08-29 (§7.86) — the bank arithmetic is largely right; the collapse is produced by three things none of which the bank owns.** (1) **Corporate cash lives outside the banking system**: a company payment moves the payer's and payee's S5 ledgers and no bank's book, so `corporateDepositsUSD` is a VIEW with no matching asset — proven by attempting the opposite, which broke the per-bank identity by exactly that line's size (1,012 violations, reverted). Households are therefore the ONLY deposit base, covering ~52% of assets, so the banks run ~48% wholesale funding against a real-world ~10-20%. (2) **That wholesale funding reprices instantly with policy while the asset book cannot** — 506B of household loans at fixed WAC plus ~290B of sovereigns at old coupons — so the margin inverts as soon as policy passes the book's yield: a real unhedged duration mismatch, and the model has no hedging (**DER**). (3) **Policy reaches 7-10% only because of the §6 inflation escape** (G1b); at the seed's 3.8% the margin is healthy (0.028). **The fix is the corporate-cash boundary, not the bank** — see §5-CASH. Do not touch NIM until it lands. |
 
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
 
@@ -2884,3 +2906,30 @@ that proved it, the lesson.
       it is not mistaken for fixed. And the private-firm path still ignores delivered capex (it
       has no PP&E roll-forward at all); it no longer accumulates dead lots either, so this is a
       gap to close when HC's tier gets a real balance sheet, not a regression.
+86. **The bank cohort, diagnosed — and the deepest "1$ is 1$" boundary in the model found by
+    asking whether a company's cash is anywhere.** Three real defects fixed, one hypothesis
+    disproved by measurement, and the actual root named.
+    - **Fixed: wholesale funding was frozen at its seed value forever.** `evolveBankingSector`
+      carried `prevBanking.wholesaleFundingUSD` unchanged while deposits grew and the asset book
+      amortised, so the bank kept paying policy-plus-spread on funding it no longer needed. It is
+      now the weekly residual of the same identity the seed uses and the harness asserts (rule 13:
+      a stock a mechanism should produce is not carried as a constant).
+    - **Fixed: firms born after the seed had no bank at all.** `homeBankTicker` was assigned only
+      at seed, so every HC birth cohort held its cash outside any bank's view — 12 unbanked firms
+      growing with each cohort. Births now bank like everyone else (1,208/1,208 private firms).
+    - **Fixed: the lead bank on a deal was a second hash rather than the relationship.** Issuance
+      re-ran `chooseLeadBank(comp.id, ...)` instead of reading `comp.homeBankTicker` — two
+      representations of "which bank serves this firm" that agreed only by coincidence (rule 3).
+      Choosing the relationship on COMPETITIVENESS rather than a hash is IND4/G3's.
+    - **Disproved, by measurement: corporate deposits are not the banks' missing funding.** Total
+      corporate cash is 57B against an 826B bank book (7%), so funding them with it moved
+      wholesale by 11B. Attempting it also broke the per-bank balance-sheet identity in all 1,012
+      bank-weeks — because the cash it represents **does not exist inside the banking system**.
+      A company payment moves two S5 ledgers and no bank's book; `corporateDepositsUSD` is a
+      reporting view with no matching asset. That is the honest answer to "does one dollar equal
+      one dollar": for corporate cash, no — and it is why banks are ~48% wholesale-funded.
+    - **Net: 71 → 68 violations, the bank story unchanged at 64 of them.** Not a disappointment
+      but a result: the bank's arithmetic is right, and its collapse is the joint product of the
+      corporate-cash boundary, the absence of hedging (DER) and the §6 inflation escape driving
+      policy to 10%. **Do not tune the bank.** §7.34's lesson again: a number that looks like one
+      sector's defect can be another sector's missing mechanism, and the identity tells you which.
