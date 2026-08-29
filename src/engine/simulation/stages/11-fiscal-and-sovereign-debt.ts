@@ -127,6 +127,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const newDerivedNominalGdpUSD = gdpLevelLastWeek > 0 ? gdpLevelLastWeek * 0.9 + instantaneousNominalGdpUSD * 0.1 : instantaneousNominalGdpUSD;
     const isStartupTransition = gdpLevelLastWeek < newDerivedNominalGdpUSD * 0.2;
     const rawWeeklyRealGrowthRate = (!isStartupTransition && gdpLevelLastWeek > 0 && isFinite(newDerivedNominalGdpUSD) && isFinite(gdpLevelLastWeek))
+      // RULE 2, OPEN, and worse than an ordinary clamp: this bounds a MEASUREMENT. GDP here is
+      // summed bottom-up from real settled activity, and the growth rate that sum implies is then
+      // held inside +/-4%/wk before anyone reads it. A clamped statistic is not a statistic. If
+      // the raw number is too noisy to publish, the smoothing two lines below is the honest tool.
       ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
       : 0;
     const prevSmoothedWeeklyRate = (reg as any).smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;

@@ -381,3 +381,27 @@ replaced (`exportShareCapture`, a clamped formula handing exporters a share of f
 a competitiveness score, credited separately in stage 08 — two mechanisms for one sale).
 The annualisation is explicitly labelled per rule 9.
 
+### stages batch 2 — clamps the §6.4 inventory does not list
+
+A scan of every numeric bound across all 53 stage files, excluding genuine mathematical guards
+(divide-by-zero floors, probabilities in [0,1], `min(matches, vacancies, seekers)`). §6.4's
+inventory was built from the audit and is incomplete. Six real ones it does not name:
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| **S4** | **D — and it blocks CAP** | `08-company-fundamentals.ts:451-452` | **A firm's EBITDA margin cannot leave [2%, 65%]**, whatever its costs and prices do. **So no firm can report a loss at the EBITDA line.** CAP's entire mechanism — a firm that cannot cover unit cost STOPS producing rather than throttling to 30% — cannot fire while this holds, and neither can any distress logic that reads EBITDA. This belongs at the *top* of CAP's clamp list, not missing from it. |
+| **S5** | **D, rule 15** | `08-company-fundamentals.ts:1424` | **A $0.10 floor on a cleared share price.** `comp.stockPrice` arrives from 07e's auction and is then floored. A company the market has decided is worthless prints ten cents rather than approaching zero, and that number feeds market cap, index levels and the take-private arithmetic. **Owner: IDX (7)**, alongside the index clamp. |
+| **S6** | **D, worse than a clamp** | `11-fiscal-and-sovereign-debt.ts:130` | **Measured GDP growth is clamped to ±4%/wk.** GDP is summed bottom-up from real settled activity and the growth rate that sum implies is bounded before anyone reads it. **A clamped statistic is not a statistic.** If the raw figure is too noisy, the 0.85/0.15 smoothing two lines below is the honest tool. |
+| S7 | **D** | `08-company-fundamentals.ts:675` | `growthCapexAllocationShare = max(0.4, …)`, commented "even at max payout pressure, still reinvests at least 40% — **realistic**, not zero". A floor justified as realistic is exactly the shape rule 2 exists to catch: a firm under real payout pressure does cut investment to zero. **Owner: CAP (4).** |
+| S8 | **D, rule 15** | `05-unit-bidding.ts:572` | An SME pool's offer floor is `referencePrice × max(0.5, 1 − marginPct)` — so a pool cannot offer below half the reference price however thin its margin. A floor on an offer price. **Owner: CAP (4).** |
+| S9 | **D** | `05-unit-bidding.ts:431` | `inputSupplyConstraintFactor = min(prior, max(0.3, fillRate))` — however badly a firm's inputs are rationed, its production constraint bottoms at 0.3. The supply shock a real shortage would cause is bounded away. **Owner: CAP (4).** |
+
+*Also confirmed at the line, already in §6.4: production throttle [0.3,1.0] and response ×[0.5,2.0]
+(`05:469,471`), capacity growth ±2%/wk (`05:496`), cost rate [0.40,0.98] (`05:505`), coverage
+[−50,50] (`08:192`), firm revenue growth ±5%/wk (`08:518`), recovery-rate floor 0.10 (`08:1548`).*
+
+**The pattern worth naming:** S4 + `05:505`'s cost rate together mean a firm's margin is
+structurally bounded away from zero from two directions at once. CAP is not "remove four bounds
+and add a production rule" — it has to remove the margin floor FIRST, because until a firm can
+run a loss, the decision CAP exists to build has nothing to decide.
+

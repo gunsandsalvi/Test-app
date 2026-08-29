@@ -448,6 +448,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
       const baselineMargin = comp.baselineEbitdaMargin ?? (comp.ebitda / Math.max(1, comp.annualRevenue));
+      // RULE 2, OPEN — AND THIS IS THE ONE THAT BLOCKS CAP. A firm's EBITDA margin cannot leave
+      // [2%, 65%] whatever its costs and prices do, so **no firm can report a loss at the EBITDA
+      // line**. CAP's whole mechanism — a firm that cannot cover unit cost STOPS producing
+      // rather than throttling — cannot fire while this holds, and neither can the distress
+      // pricing that reads EBITDA. Not listed in §6.4's clamp inventory; it should be, at the
+      // top of CAP's (4).
       const targetMargin = Math.min(0.65, Math.max(0.04, baselineMargin - wageCompression - capacityDecayPenalty - avgCrowdingIntensity * 0.08 - inputPriceDrag * 0.03));
       newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (random() - 0.5) * 0.004));
 
@@ -672,7 +678,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const qCapexEffect = ((tobinsQ - 1) * 0.2);
     const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
     const competitivenessCapexEffect = (avgCompetitiveness * 0.15);
-    const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75); // even at max payout pressure, still reinvests at least 40% — realistic, not zero
+    // RULE 2: a floor justified as "realistic" is the shape rule 2 exists to catch. A firm under
+    // real payout pressure DOES cut investment to zero, and whether it can is CAP's (4) question.
+    const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75);
     const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
     let newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
     let newRndExpense = comp.rndExpense ?? 0;
@@ -1421,6 +1429,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // maintained rather than used. An earnings surprise already moves the price through the
     // earnings it reports, and a downgrade through the cleared spread — the narrative is an
     // output of real mechanisms, not an input beside them.
+    // RULE 15, OPEN: `comp.stockPrice` arrives here as 07e's CLEARED price, and this floors it at
+    // $0.10. A bound is not a price. A company whose equity the market has decided is worthless
+    // prints ten cents instead of approaching zero, which then feeds market cap, index levels and
+    // the take-private arithmetic. Owner: IDX (7), with the index clamp.
     let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number(comp.stockPrice.toFixed(2)));
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
     // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
