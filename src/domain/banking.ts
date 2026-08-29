@@ -178,7 +178,14 @@ export interface HouseholdLoanPool {
   wamWeeks?: number;
 }
 
-/** What wholesale money costs over policy — senior bank funding trades tight. */
+/**
+ * What wholesale money costs over policy.
+ *
+ * RULE 1, OPEN: this is the PRICE of a bank's own funding, and it is the same 40bps for a
+ * well-capitalised bank and one whose capital ratio has left its band. A bank's funding spread is
+ * exactly where the market's view of it shows up — and §6.1's USA cohort story is about banks
+ * funding ~48% wholesale, so this number is load-bearing there. Owner: G3 (8).
+ */
 export const WHOLESALE_FUNDING_SPREAD_BPS = 40;
 
 /** Basel-style risk weights: a secured mortgage consumes less capital than unsecured credit. */
@@ -190,7 +197,15 @@ export const MORTGAGE_SEED_WAM_WEEKS = 21 * 52;
 /** Auto/personal term credit: 5-year annuities, seeded mid-life. */
 export const CONSUMER_TERM_WEEKS = 5 * 52;
 export const CONSUMER_TERM_SEED_WAM_WEEKS = Math.round(2.5 * 52);
-/** Primary mortgage spread over the cleared 10Y: origination + servicing + credit, ~170bps. */
+/**
+ * Primary mortgage spread over the cleared 10Y.
+ *
+ * RULE 1, OPEN: a mortgage rate is a PRICE, and this states it. `BankLoan.marginBps` right below
+ * documents the correct treatment for business loans — "quoted by the bank's own credit
+ * arithmetic at origination, the same expected-loss + capital-cost pricing the bond market uses"
+ * — and the household book simply does not do it. Every bank charges every borrower the same
+ * 170bps whatever its funding costs or its losses run. Owner: HSG (10).
+ */
 export const MORTGAGE_SPREAD_OVER_10Y_BPS = 170;
 /**
  * The revolving pool's weekly payment rate. A NAMED behavioural primitive, not a derivation:
@@ -206,11 +221,23 @@ export const CARD_POOL_PAYMENT_RATE_WEEKLY = 0.04;
  * already counted in consumption, cycled through the card. ~2.5%/month minimum ≈ 0.5%/wk.
  */
 export const CARD_MIN_PRINCIPAL_RATE_WEEKLY = 0.005;
-/** Card issuance runs real operating cost (servicing, fraud, rewards) that term credit doesn't. */
+/**
+ * Card issuance runs real operating cost (servicing, fraud, rewards) that term credit doesn't.
+ *
+ * RULE 13, OPEN: one number per product for every bank, so no bank can run its card book more
+ * cheaply than another — the same shape as `INSURER_EXPENSE_RATIO`. Owner: IND (3).
+ */
 export const CARD_OPERATING_COST_BPS = 500;
 export const CONSUMER_TERM_OPERATING_COST_BPS = 150;
-/** Share of the owner-occupied housing stock that trades per year — the real driver of
- * mortgage origination demand, now computable because HH2 made the stock physical. */
+/**
+ * Share of the owner-occupied housing stock that trades per year — the driver of mortgage
+ * origination demand.
+ *
+ * RULE 4/13, OPEN: an observed real-world turnover rate. How many houses change hands is an
+ * OUTCOME of households deciding to move against a price, which is precisely what HSG builds; a
+ * constant here means origination volume cannot respond to the housing market at all.
+ * Owner: HSG (10).
+ */
 export const HOUSING_TURNOVER_RATE_ANNUAL = 0.04;
 export const MORTGAGE_LTV_AT_ORIGINATION = 0.80;
 /** Foreclosure recovers the house less the real cost of taking and selling it. */

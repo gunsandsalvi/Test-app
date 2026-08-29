@@ -148,3 +148,40 @@ ship, crew dominates a truck) is arithmetic from real equipment specs, so a fuel
 ocean freight and a wage rise reprices haulage; and lanes are DIRECTED because a head-haul and a
 back-haul are genuinely different markets. No coefficient anywhere.
 
+### `src/domain` — batch 9 (banking)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| D27 | **A** | `banking.ts` | **`MORTGAGE_SPREAD_OVER_10Y_BPS = 170` states a price.** The file itself documents the correct treatment thirty lines below, on `BankLoan.marginBps`: "quoted by the bank's own credit arithmetic at origination, the same expected-loss + capital-cost pricing the bond market uses." The corporate book does that; the household book does not. Every bank charges every borrower 170bps whatever its funding costs or its losses run. Rule 1. **Owner: HSG (10).** |
+| D28 | **A** | `banking.ts` | **`WHOLESALE_FUNDING_SPREAD_BPS = 40` is the price of a bank's own funding, fixed.** Identical for a well-capitalised bank and one whose capital ratio has left its band — when a funding spread is exactly where the market's view of a bank shows up. Load-bearing for §6.1's USA cohort, which is a story about banks funding ~48% wholesale. Rule 1. **Owner: G3 (8).** |
+| D29 | **A** | `banking.ts` | **`HOUSING_TURNOVER_RATE_ANNUAL = 0.04` is an observed real-world rate.** How many houses change hands is an outcome of households deciding to move against a price — exactly what HSG builds. As a constant, mortgage origination volume cannot respond to the housing market at all. Rule 4's sharper half. **Owner: HSG (10).** |
+| D30 | **A** | `banking.ts` | **`CARD_OPERATING_COST_BPS = 500` / `CONSUMER_TERM_OPERATING_COST_BPS = 150`** — one operating cost per product for every bank, so no bank runs its card book more cheaply than another. Same shape as `INSURER_EXPENSE_RATIO` (D22). **Owner: IND (3).** |
+
+**Clean, and an example of the right fix:** `annuityWeeklyPrincipalUSD`. The comment on `wamWeeks`
+records what it replaced — a `0.0004/wk` "≈2%/yr" mortgage paydown constant — and states the
+principle exactly: *"the rate a book amortizes at is arithmetic on its own terms, not a number
+chosen to look like one."* `CARD_POOL_PAYMENT_RATE_WEEKLY` is also handled correctly: a named
+behavioural primitive that says why it cannot yet be derived (a revolving balance has no
+schedule to amortise) rather than pretending it is one. Basel risk weights, LTV and mortgage
+term are proper rule-4 primitives.
+
+### `src/domain/government.ts` + the fiscal machinery it exposed in `macro/evolution.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **D31** | **A, the biggest so far** | `macro/evolution.ts:709` | **Two debt-to-GDP ratios, and the fake one rates the sovereign.** `debtToGdpPct` is walked weekly from `newFiscalDeficitPctGdp` — itself a formula: a stance step-function plus `0.15 × tanh(outputGap × 2)`, smoothed 0.85/0.15. PUB3b already replaced that: `governmentObligationsWeeklyUSD` makes the deficit an OUTCOME of real obligations less real revenue, and stage 11 computes `debtToGdpPctBottomUp` from the real stack over measured GDP. **Nothing reconciles the two, and it is the FORMULA one that drives the sovereign rating** (`evolution.ts:714-721`), hence the sovereign spread. So a downgrade — and the borrowing cost that follows — is decided by the number nobody measures, while the real one sits beside it unused. Rule 3 in its exact recurring shape: a real ledger and a parallel formula that ignores it. **Owner: MAC (6).** Verified: `fiscalDeficitPctGdp` and `structuralDeficitPctGdp` have no reader outside `evolution.ts` and the seed. |
+| D32 | **C** | `macro/evolution.ts:160` | **`governmentRevenueUSD = GDP × effectiveTaxRate / 52` is computed and then overwritten** by stage 11's real sum of what the bases actually paid (PUB1b/1c). It survives only to fill the field between stage 02 and stage 11 — so anything reading government revenue in that window gets the formula. Should carry last week's measured figure forward, exactly as inflation already does two lines above it. **Owner: MAC (6).** |
+| D33 | **A** | `macro/evolution.ts:120` | **The fiscal stance is a step function on a regime LABEL**: +0.15 in a labelled recession above 7% unemployment, −0.10 in a labelled expansion 3pp above target, else ×0.95 decay. Five invented numbers deciding fiscal policy, and none of them is the government's own budget position — which is what actually constrains a real stimulus. Rule 13. **Owner: MAC (6).** |
+| D34 | **A** | `macro/evolution.ts:112` | **`creditTierBooks` imposes both the distribution and the prices**: shares 0.25/0.35/0.25/0.15 across SUPER_PRIME→SUBPRIME and rates 6%/12%/19%/28%. Which households are which credit quality is an outcome of their real balance sheets (HH4's cohorts carry them), and the rate is a price the lending bank sets. §6.3-B has the rate half; the SHARES half was not recorded. **Owner: CRD (9).** |
+| D35 | **B** | `domain/government.ts` | **`PROCUREMENT_PER_PAYROLL_DOLLAR = 1.07` is calibrated to a formula that was deleted.** Its own comment says so honestly: "Measured at 1.06–1.08x across the four regions under the previous share-of-GDP budget… this keeps the model's own composition rather than importing" the real 1.4x. So the composition of government spending is still inherited from the top-down budget PUB3b replaced. Not wrong to have done it that way in the transition; wrong to leave it as the permanent answer. **Owner: PUB follow-up (§6).** |
+
+**Clean, and unusually so:** the rest of `government.ts`. `discountBillProceedsUSD` gets a genuinely
+subtle thing right and documents the trap in both directions (issuing bills at par *and* paying
+them a coupon nets out correctly, so nothing looks broken while the treasury holds a phantom
+discount and holders receive a coupon that does not exist). `weeklyBillDiscountAccrualUSD` is
+deliberately a statistic and not a debit, with the reason stated. `governmentPayrollWeeklyUSD`
+records the defect it closed — 1.65M USA staff, 8.1% of GDP, employed and paid by nobody, and
+counted twice in household income. `SOCIAL_BENEFIT_REPLACEMENT_RATE` is derived from the model's
+own bases and checked against a real band rather than imported from one. `primaryShare` flooring
+at zero with "that is a debt spiral, and it is allowed to happen" is rule 2 applied correctly.
+
