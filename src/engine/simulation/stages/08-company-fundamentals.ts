@@ -70,6 +70,14 @@ const BASELINE_WAGE_POOLS = {
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
 const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
 
+/**
+ * CAP — the share of a measured capacity shortfall a firm tries to close in a year. A behavioural
+ * primitive of the same kind as `WEEKLY_ISSUANCE_TAKEUP_RATE`: real capacity arrives in lumps
+ * after a build, so a firm short by a third does not order a third more plant this week. What it
+ * can fund is bounded by its own cash and cost of debt, not by a number here.
+ */
+const CAPACITY_CATCHUP_SHARE_ANNUAL = 0.35;
+
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
   const refinanceNews: NewsItem[] = [];
@@ -712,7 +720,31 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // RULE 2: a floor justified as "realistic" is the shape rule 2 exists to catch. A firm under
     // real payout pressure DOES cut investment to zero, and whether it can is CAP's (4) question.
     const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75);
-    const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare;
+
+    // CAP — A FIRM EXPANDS WHEN THE MARKET IT SELLS INTO CANNOT BE MET.
+    //
+    // Every term above is about the firm's FINANCES — cost of debt, cash, Tobin's Q, payout
+    // pressure — and none is about whether it can fill the orders in front of it. So a firm that
+    // stocked out every week invested exactly like one sitting on a full warehouse, and a market
+    // in permanent shortage had no mechanism that could ever supply it. That is why §7.127's
+    // supply famine persists after both of its other links were fixed: upstream extraction ran
+    // demand at 1.6x supply with zero inventory from week 8 and its producers' capex never
+    // noticed.
+    //
+    // The signal is the measured shortfall in the firm's OWN categories — demand the auction
+    // could not fill — not a regime label. A firm short by a third wants a third more plant and
+    // closes some share of that gap a year. What it can actually fund is already bounded by the
+    // cash and rate terms above, so nothing here needs a cap (rule 2).
+    const categoryShortfall = (comp.productLines || []).reduce((acc, l) => {
+      const cd = reg.categoryDemand[l.subUnitId] as any;
+      const supplied = cd?.totalUnitsSuppliedThisWeek ?? 0;
+      const demanded = cd?.totalUnitsDemandedThisWeek ?? 0;
+      if (!(supplied > 0) || !(demanded > 0)) return acc;
+      return acc + Math.max(0, demanded / supplied - 1) * (l.revenueShare ?? 1);
+    }, 0);
+    const shortageCapexMultiple = 1 + categoryShortfall * CAPACITY_CATCHUP_SHARE_ANNUAL;
+
+    const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare * shortageCapexMultiple;
     let newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
     let newRndExpense = comp.rndExpense ?? 0;
     if ((comp.productLines || []).some(l => l.industry === 'TechHardwareSemis' || l.industry === 'SoftwareDigitalServices')) {

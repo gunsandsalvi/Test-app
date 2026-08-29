@@ -4958,3 +4958,27 @@ that proved it, the lesson.
       grows only with delivered net investment, which cannot answer a shortage of this size.
       **Owner: CAP (item 4) for the capacity decision, NAT for extraction as an outcome of cost
       and ore grade.** MAC(a) is blocked behind them; it was never about expectations or policy.
+
+129. **CAP — investment responds to a measured shortfall, and it costs something.** The third link
+    of §7.127's chain, added; not a closure.
+    - **The capex decision had no term for "I cannot fill my orders."** Every input to
+      `targetGrowthCapex` was FINANCIAL — cost of debt, cash health, Tobin's Q, payout pressure —
+      so a firm that stocked out every week invested exactly like one sitting on a full warehouse,
+      and a market in permanent shortage had no mechanism that could ever supply it. That is why
+      §7.127's famine survived both of its other fixes.
+    - **The signal is the firm's own measured shortfall** — demand the auction could not fill in
+      the categories it actually sells into, weighted by line — not a regime label or a confidence
+      index. `CAPACITY_CATCHUP_SHARE_ANNUAL` is the share of that gap a firm closes in a year, a
+      behavioural primitive of the same kind as `WEEKLY_ISSUANCE_TAKEUP_RATE`; what it can fund is
+      bounded by the cash and rate terms already there, so it needs no cap (rule 2).
+    - **Measured: harness stays green, and the deflation gets WORSE — −11.9% → −16.3% at week
+      10.** Recorded rather than reverted, because the mechanism is real and its absence was the
+      defect; but it is a genuine cost and the next slice owns it. **The likely reason is that
+      CAP's other half is missing:** capacity that arrives on a lag adds supply into a market
+      whose price is already falling, and a firm that cannot cover unit cost still THROTTLES
+      rather than STOPS (§5-CAP's own mechanism, still unbuilt). An investment response without a
+      production-stopping rule is half a control loop.
+    - **So MAC(a) remains open with all three links now understood:** the demand side (CHAIN-D,
+      done), the two bases of the commodity market (§7.128, done), the price-versus-volume
+      confusion in the seed (§7.127, done), and the capacity response (here, done but
+      destabilising without CAP's production decision). **The remaining work is CAP's, not MAC's.**
