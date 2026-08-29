@@ -159,7 +159,7 @@ export function formSupplyRelationships(regionId: RegionId, companies: Company[]
 
   regionFirms.forEach(customer => {
     (customer.productLines || []).forEach(line => {
-      const reqs = CATEGORY_INPUT_REQUIREMENTS[line.industry];
+      const reqs = CATEGORY_INPUT_REQUIREMENTS[line.subUnitId];
       if (!reqs) return;
       Object.entries(reqs).forEach(([inputSubUnitId, intensity]) => {
         if (!intensity) return;

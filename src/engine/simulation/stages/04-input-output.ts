@@ -4,10 +4,12 @@
  * Clears each region's input-category supply against downstream demander requirements
  * (CATEGORY_INPUT_REQUIREMENTS), updating the supplying sub-unit's cleared input price
  * index and each demander's input-cost pressure / fulfillment ratio.
+ *
+ * CHAIN-D: both sides of this are now SUB-UNITS. The demander used to be an industry, which
+ * meant one recipe per sector and one shortage shared by every product in it.
  */
 
-import { GameState, RegionId, Industry, COMMODITY_CATEGORY_LINKAGE } from '../../../types';
-import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
+import { GameState, RegionId, COMMODITY_CATEGORY_LINKAGE } from '../../../types';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { WeeklyStepContext } from './context';
 
@@ -25,12 +27,19 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
   // identity of the long-tracked task #18/#49 "residual" mass-cohort collapse. Fixed by pooling
   // every demander industry's bid against the ONE real supply figure for a shared input category
   // before clearing, the way a real, undifferentiated commodity stock actually works.
-  const demandersByInputCat: Record<string, { demanderIndustry: string; intensity: number }[]> = {};
-  Object.entries(CATEGORY_INPUT_REQUIREMENTS).forEach(([demanderIndustry, requirements]) => {
+  //
+  // CHAIN-D: the demander is a PRODUCT, not an industry. It used to be an industry, which cost
+  // two approximations at once — a recipe had to describe every product of a sector at the same
+  // time (so it could only name what they had in common, which is overhead), and the result had
+  // to be fanned back onto every sub-unit of that industry whether or not it needed the input.
+  // Semiconductors and consumer devices are one industry and draw on completely different
+  // things; each now bids for its own inputs and wears its own shortage.
+  const demandersByInputCat: Record<string, { demanderSubUnit: string; intensity: number }[]> = {};
+  Object.entries(CATEGORY_INPUT_REQUIREMENTS).forEach(([demanderSubUnit, requirements]) => {
     if (!requirements) return;
     Object.entries(requirements).forEach(([inputCat, intensity]) => {
       if (!demandersByInputCat[inputCat]) demandersByInputCat[inputCat] = [];
-      demandersByInputCat[inputCat].push({ demanderIndustry, intensity: intensity ?? 0 });
+      demandersByInputCat[inputCat].push({ demanderSubUnit, intensity: intensity ?? 0 });
     });
   });
 
@@ -69,15 +78,14 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
   // real demand share of the GLOBAL total determines its real share of that global supply — the
   // same "ration proportionally to who actually wants it" principle already used for pro-rata
   // auction allocation elsewhere in this pipeline, not an arbitrary per-region split.
-  const bidQuantitiesByRegionAndInputCat: Record<RegionId, Record<string, { demanderIndustry: string; bidQuantity: number }[]>> = {} as any;
+  const bidQuantitiesByRegionAndInputCat: Record<RegionId, Record<string, { demanderSubUnit: string; bidQuantity: number }[]>> = {} as any;
   regionIds.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
     bidQuantitiesByRegionAndInputCat[regionId] = {};
     Object.entries(demandersByInputCat).forEach(([inputCat, demanders]) => {
       bidQuantitiesByRegionAndInputCat[regionId][inputCat] = demanders.map(d => {
-        const subUnitsForDemander = INDUSTRY_SUBUNITS[d.demanderIndustry as Industry] || [];
-        const demanderDemandLevel = subUnitsForDemander.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0), 0);
-        return { demanderIndustry: d.demanderIndustry, bidQuantity: demanderDemandLevel * d.intensity / 52 };
+        const demanderDemandLevel = reg.categoryDemand[d.demanderSubUnit as any]?.demandLevelUSD ?? 0;
+        return { demanderSubUnit: d.demanderSubUnit, bidQuantity: demanderDemandLevel * d.intensity / 52 };
       });
     });
   });
@@ -92,14 +100,14 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];
 
-    // A demander industry that needs MULTIPLE input categories (e.g. TechHardwareSemis needs
-    // both upstream_extraction and specialty_metals) used to have its own subUnits'
-    // inputCostPressure/_fulfillmentRatio silently overwritten by whichever input category
-    // happened to be processed last — the same single-shared-field collision, just on the
-    // demander side. Accumulated here instead: fulfillment takes the WORST (min) input as the
-    // real bottleneck (can't ship a product missing either of two required inputs), cost
-    // pressure SUMS across inputs (each scarce input adds its own real cost pressure).
-    const perDemanderIndustry: Record<string, { minFulfillment: number; sumCostPressure: number }> = {};
+    // A demander that needs MULTIPLE input categories (passenger vehicles need both specialty
+    // metals and semiconductors) used to have its inputCostPressure/_fulfillmentRatio silently
+    // overwritten by whichever input category happened to be processed last — the same
+    // single-shared-field collision, just on the demander side. Accumulated here instead:
+    // fulfillment takes the WORST (min) input as the real bottleneck (can't ship a product
+    // missing either of two required inputs), cost pressure SUMS across inputs (each scarce
+    // input adds its own real cost pressure).
+    const perDemanderSubUnit: Record<string, { minFulfillment: number; sumCostPressure: number }> = {};
 
     Object.entries(demandersByInputCat).forEach(([inputCat, demanders]) => {
       const supplier = reg.categoryDemand[inputCat as any] as any;
@@ -132,24 +140,21 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
       supplier.inventoryLevelUSD = Math.max(0, totalAvailableSupply - quantityFulfilled);
       supplier._fulfillmentRatio = totalAvailableSupply > 0 ? quantityFulfilled / totalAvailableSupply : 1;
 
-      demanderBidQuantities.forEach(({ demanderIndustry }) => {
-        const existing = perDemanderIndustry[demanderIndustry] ?? { minFulfillment: 1, sumCostPressure: 0 };
-        perDemanderIndustry[demanderIndustry] = {
+      demanderBidQuantities.forEach(({ demanderSubUnit }) => {
+        const existing = perDemanderSubUnit[demanderSubUnit] ?? { minFulfillment: 1, sumCostPressure: 0 };
+        perDemanderSubUnit[demanderSubUnit] = {
           minFulfillment: Math.min(existing.minFulfillment, overallFulfillmentRatio),
           sumCostPressure: existing.sumCostPressure + Math.max(0, newPriceIndex - 1.0),
         };
       });
     });
 
-    Object.entries(perDemanderIndustry).forEach(([demanderIndustry, result]) => {
-      const subUnitsForDemander = INDUSTRY_SUBUNITS[demanderIndustry as Industry] || [];
-      subUnitsForDemander.forEach(su => {
-        const demanderEntry = reg.categoryDemand[su.unitId as any] as any;
-        if (demanderEntry) {
-          demanderEntry.inputCostPressure = Number(result.sumCostPressure.toFixed(4));
-          demanderEntry._fulfillmentRatio = Number(result.minFulfillment.toFixed(4));
-        }
-      });
+    Object.entries(perDemanderSubUnit).forEach(([demanderSubUnit, result]) => {
+      const demanderEntry = reg.categoryDemand[demanderSubUnit as any] as any;
+      if (demanderEntry) {
+        demanderEntry.inputCostPressure = Number(result.sumCostPressure.toFixed(4));
+        demanderEntry._fulfillmentRatio = Number(result.minFulfillment.toFixed(4));
+      }
     });
 
     // after the loop, snapshot this week's inventory as next week's lag anchor:

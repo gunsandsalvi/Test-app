@@ -66,7 +66,7 @@ const CONTRACTED_DEMAND_SHARE = 0.6;
 // what it consumes there, rather than two independently-sized, unrelated numbers.
 function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): number {
   return (comp.productLines || []).reduce((sum, line) => {
-    const reqs = CATEGORY_INPUT_REQUIREMENTS[line.industry];
+    const reqs = CATEGORY_INPUT_REQUIREMENTS[line.subUnitId];
     const intensity = reqs?.[inputSubUnitId];
     if (!intensity) return sum;
     return sum + (comp.annualRevenue / 52) * (line.revenueShare ?? 1.0) * intensity;
@@ -207,7 +207,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     (c.productLines || []).forEach((l) => {
       const arr = index.suppliersBySubUnit.get(l.subUnitId);
       if (arr) arr.push(c); else index.suppliersBySubUnit.set(l.subUnitId, [c]);
-      const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
+      const reqs = CATEGORY_INPUT_REQUIREMENTS[l.subUnitId];
       if (reqs) {
         Object.keys(reqs).forEach(inputSubUnitId => {
           if (!(reqs as any)[inputSubUnitId]) return;
@@ -690,7 +690,9 @@ function buildRegionDemandPlans(
   // the same books it sells into.
   if (isRecipeInputCategory) {
     (reg.smePools || []).forEach(pool => {
-      const intensity = smePoolRecipeInputs(pool.industry)[subUnitId];
+      // CHAIN-D: blended over what this pool actually SELLS, because its industry's products no
+      // longer share one recipe. A pool with no sales yet falls back to an equal split.
+      const intensity = smePoolRecipeInputs(pool.industry, pool.salesDerivedAnnualRevenueUSDBySubUnit)[subUnitId];
       if (!intensity) return;
       const demandUnits = ((pool.annualRevenueUSD / 52) * intensity) / referencePriceUSD;
       if (demandUnits <= 0.001) return;

@@ -405,7 +405,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // supply glut and demand is trivially met, the opposite of a real constraint. Reading the
       // supplier-side field here meant every company touching an input category collapsed
       // toward zero from an abundant supply, not a shortage.
-      const linesNeedingInputs = (comp.productLines || []).filter(l => CATEGORY_INPUT_REQUIREMENTS[l.industry]);
+      const linesNeedingInputs = (comp.productLines || []).filter(l => CATEGORY_INPUT_REQUIREMENTS[l.subUnitId]);
       const relevantFulfillment = linesNeedingInputs.length > 0
         ? linesNeedingInputs.reduce((min, l) => Math.min(min, (reg.categoryDemand[l.subUnitId as any] as any)?._fulfillmentRatio ?? 1), 1)
         : 1;
@@ -436,7 +436,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // inputs it actually used, not an invented intensity ratio.
       let realInputConsumptionCostUSD = 0;
       linesNeedingInputs.forEach(l => {
-        const reqs = CATEGORY_INPUT_REQUIREMENTS[l.industry];
+        const reqs = CATEGORY_INPUT_REQUIREMENTS[l.subUnitId];
         if (!reqs) return;
         const lineProductionUSD = (comp.annualRevenue / 52) * (l.revenueShare ?? 1.0);
         Object.entries(reqs).forEach(([inputSubUnit, intensity]) => {
