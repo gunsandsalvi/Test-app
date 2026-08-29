@@ -313,7 +313,7 @@ metrics to watch rather than work.
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
 | 1.5 | foundation | **CASH — Corporate cash settles through banks** (found by §7.86; the banks' missing deposit base, and the last big "1$ is 1$" boundary) | none |
-| 1.6 | foundation | **SEG — The SME tier, keyed to the registry** (opened 2026-08-29; rescoped same day — the five hardcoded buckets are a parallel taxonomy BP1's registry was built to absorb, and rule 17 fails on them outright) | CASH (SETL1–5), BP1 |
+| ✓ | foundation | ~~**SEG — The SME tier, keyed to the registry**~~ *(CLOSED §7.95–97; opened and rescoped 2026-08-29)* — one pool per region × industry, trading in every market, on the settlement rail. Harness 59 → 36. | CASH (SETL1–5), BP1 |
 | ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
@@ -1333,7 +1333,28 @@ wholesale share falls toward its real range; NIM survives a rate cycle with no b
 
 ---
 
-### SEG — The SME tier, keyed to the registry  *(Tier 1, item 1.6; opened 2026-08-29, RESCOPED the same day after the first design was rejected)*
+### SEG — The SME tier, keyed to the registry  *(CLOSED — §7.95–97)*
+
+**Closed 2026-08-29. Measured at close-out: 36 harness violations against a 59 baseline**, zero
+balance-sheet identity breaks, zero NaN, no unemployment breaches, the three revenue-runaway
+violations gone, and `unresolvedUSD` at 0. Pools hold 47% of employment and 47% of revenue, their
+composition moves with demand (USA RealEstateConstruction 18.9% → 27.6% of pool revenue over 24
+weeks), and the private-tier wage line is gone from the settlement boundary. What remains of the
+harness is 35 of the §6 USA bank-cohort story plus the sovereign-auction check.
+
+**Two things this project deliberately did NOT do, both still open:**
+- **The cold-start named private tier still has no product lines.** SEG gave them to BIRTHS only.
+  Injecting the whole seeded tier's supply into markets sized for public supply is **HC3b**, which
+  deferred it with a measurement (−10% to −22% growth), and reversing that in passing was not
+  SEG's call.
+- **Household income is still a top-down statistic** (`estimatedHouseholdIncomeUSD`) while what
+  employers actually pay is now a bottom-up sum, and applying `SME_WAGE_GAP` widened the gap
+  between them. That is the honest direction — income should BE the sum of payments — but the two
+  numbers now visibly disagree and nothing reconciles them. Owner: the HH follow-up in §6.
+
+The original scoping, kept because §7.95's lesson is about it:
+
+### SEG — the design, as scoped  *(historical)*
 
 **The first design was wrong and the rejection was right.** It proposed giving real books to
 `PrivateSegmentType` — five hardcoded buckets (MANUFACTURING, PROFESSIONAL_SERVICES, RETAIL_TRADE,
@@ -1594,6 +1615,8 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **The goods market cannot fill a quarter of what is bid** | **Found in PUB1e (§7.67).** ~25% of the government's procurement budget goes unfilled at any price: aggregate bids exceed aggregate supply and every in-money bidder is rationed pro-rata, so households are short by the same ratio. Long-standing and not PUB's — it only became visible because the government is the first buyer whose unfilled demand costs something. **Do not close it by shrinking the bids**: the demand is real and the supply side is what is missing. Expect it to fall as **SCALE** grows the firm universe and **BP1**'s taxonomy lets more sub-units be supplied; re-measure the fill ratio then. **§7.69 (PUB3a) then closed most of it**: with the government's payroll carved out of the primary budget, the procurement budget is one the market can supply — unspent 22.7B/wk → **1.3B/wk**, fill range 7.7–87.5% → **46.3–100%**. The row was measuring an oversized budget as much as a short market. What remains is the genuine shortage; re-measure as **SCALE** and **BP1** grow the supply side. |
 | ~~**The whole fiscal block is indexed to a lagged nominal aggregate**~~ | **CLOSED (§7.70).** The budget is a sum of real obligations and the deficit is an outcome; cash-management bills (PUB3c) bridge the treasury's account between quarterly bond auctions, so the TGA is never negative. What replaces it is not a defect but a RESULT to watch: outlays now outgrow revenue (x14.8 against x9.3, trailing-annual) and debt/GDP runs to 213%, because obligations index to wages while the tax bases do not. That is a real fiscal dynamic, now financed by real issuance. **Watch, do not damp revenue or cap the deficit** — re-measure once the §6 inflation escape is closed, since the wage/base wedge is largely its shadow. |
 | **`unbackedBankCashUSD` explodes past the harness window** | **Found by the PUB battery (§7.68).** 97B (w13) → 107B (w52) → **2,183B (w120)**. PUB2b shrank it at w52 (304B → 100B) by giving the central bank a live book, and that fix holds — but reserves grow from deposits and lending far faster than any central-bank purchase backs them once the escape takes hold. **The 60-week harness cannot see this.** Owners: the §6 inflation escape first, then whatever gives bank reserves a single representation. Watch it, do not force the identity closed. |
+| **Household income: a top-down statistic against a bottom-up sum** | **Opened by SEG (§7.96).** What employers actually pay households is now measured — named firms' payroll, government payroll, and the SME pools' own wage bill at `SME_WAGE_GAP` below the average — while `estimatedHouseholdIncomeUSD` remains the top-down anchor that sizes consumption, the tax base and the per-worker wage those payments are computed FROM. The two now visibly disagree and nothing reconciles them; the wage gap widened it deliberately, because the alternative was a tier insolvent from week 0. This is the last big "two representations of one thing" in the household sector (rule 3). Fix by making income the sum of payments and re-deriving what currently reads the anchor — do NOT close it by removing the wage gap, which would restore the insolvency. |
+| **The named private tier still sells nothing** | **Restated by SEG (§7.96), owner HC3b.** SEG gave born firms real product lines from their pool's industry; the ~300 seeded private firms per region still carry `productLines: []` and cannot participate in any auction. HC3b deferred that with a measurement (−10% to −22% growth when the tier's supply was injected into markets sized for public supply), and SEG deliberately did not reverse it. Now cheaper to revisit than it was: the SME pools already sell across all 36 sub-units, so the taxonomy's supply side is no longer calibrated to public firms alone. Re-measure the supply/demand balance per industry (SEG's seed probe put it at 1.12 overall, 0.29–3.20 by industry) before deciding. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ## 7. Record & lessons (do not re-learn)
@@ -3249,3 +3272,67 @@ that proved it, the lesson.
       balance sheets, now banked) out of these aggregates; what remains is the residue nobody
       carved. Finishing it is a project — see §5-HC3b/BP1's universe growth — and until it lands,
       the tier's wage bill must stay a residual: a sector with no books cannot pay from books.
+
+95. **SEG — half assed, said so, and re-scoped.** The first design gave real books to
+    `PrivateSegmentType`: five hardcoded buckets. The user rejected it with three questions, and
+    each answered itself against a measurement. *Is creation based on all available industries?*
+    No — 14 industries / 36 sub-units in the registry against 5 buckets seeded from three
+    constants each; births collapsed them into 3 sectors and arrived with `productLines: []`,
+    unable to sell anything anywhere; HEALTHCARE_SERVICES was filed under "Consumer" as the
+    "closest fit until BP1 re-keys categories", and BP1 closed without ever re-keying it. *Does
+    the share change with demand?* No — revenue walked `demandSignal x 0.06` clamped to +/-4%,
+    every bucket treated identically, nothing ever reallocating between them, so the composition
+    at week 500 was the seed's (CONSTRUCTION_REALESTATE's demand signal was a hardcoded
+    `return 0`). *Are they active producers and consumers?* Barely — they sold into 7 of 36
+    sub-units and bought in exactly ONE place, under a comment saying the other four buckets were
+    "deliberately left out... guessing is BP1's job to retire". Four of five buckets, 32% of
+    employment, bought nothing and sold nothing.
+    **The lesson is about what to check before building, not about SMEs.** Every one of those
+    facts was visible in the code before the first design was written; the recon that produced it
+    looked at how the object was WIRED (who reads it, who pays it) and never asked whether the
+    object was the right one. When a plan is to give something "real books", check first that
+    the something is real: banking a fiction carefully still leaves a fiction. The tell was
+    available and ignored — `SubUnitSpec` carried `capexPrivateSegment` and `privateSupplySegment`
+    fields pointing the registry's sub-units back at the five buckets, which is a taxonomy
+    leaking into the one that was built to replace it.
+
+96. **SEG, rebuilt: the SME tier keyed to the registry.** One pool per (region x industry), 14 of
+    them, seeded from each industry's own real demand times a stated `smeShareOfActivity` (SME
+    intensity is a real structural fact and varies hugely: 0.78 construction, 0.12 semis). Pools
+    buy their industry's recipe inputs and sell its sub-units in the same auctions under the same
+    buyer mixes as named firms, hold cash at the region's banks (`smeDepositsUSD`, pro-rata by
+    market share, inside the per-bank identity), pay their own wages, SME-pool interest and
+    quarterly tax, and develop from a P&L measured out of the settlement report. Deleted, not
+    adapted: `PrivateSegmentType`, `PRIVATE_SEGMENT_PROFILE`, `SEGMENT_SECTOR`,
+    `PRIVATE_SEGMENT_OCCUPATION_MIX`, `getSegmentDemandSignal` and its walk,
+    `PRIVATE_SEGMENT_SUPPLY_CATEGORIES`, `CAPEX_CATEGORY_PRIVATE_SEGMENT`. Pools read
+    `SECTOR_OCCUPATION_MIX` through their industry's sector — the table named firms already use —
+    so the tier needed no occupation primitive of its own.
+    **Measured at close-out: 36 harness violations against a 59 baseline**, zero balance-sheet
+    identity breaks, zero NaN, no unemployment breaches, and the three revenue-runaway violations
+    gone. Pools hold 47% of employment and 47% of revenue (the independent 47%/49% audit in
+    7.94), their composition MOVES with demand (USA RealEstateConstruction 18.9% -> 27.6% of pool
+    revenue over 24 weeks while Energy and TechHardwareSemis shrink), and the private-tier wage
+    line — previously the largest entry in the settlement boundary at ~143B/12wk — is gone.
+
+97. **Giving something books is a way of FINDING missing flows.** Three defects surfaced the
+    moment the pools had a balance sheet to run down, none of them in SEG's own code:
+    (a) carriers, money funds and ETFs are created after the seed's home-bank passes, so they
+    banked nowhere and settlement counted every payment to them as unresolved — **11.7B a week**
+    for the money funds alone, invisible until the pools started trading with everyone;
+    (b) `fx-hedging` rebuilt bank sheets from a stale snapshot parked in `companyUpdates` by
+    stage 08, which runs BEFORE settlement, silently reverting every balance-sheet line
+    settlement had moved that week — harmless for as long as each flow's two halves were written
+    by one stage, and a bug the instant SEG split a pair across stages (an SME loan books in 02b,
+    the deposit it creates at settlement), after which the revert kept the asset and dropped the
+    liability;
+    (c) the pools ran their cash negative in six months, which was not a pool defect at all: the
+    settlement boundary was simultaneously showing firms' non-auction opex paid to nobody and
+    households' consumption budget never reaching a goods auction. Those were the tier's two real
+    customers. **A book that goes negative names the flow that is missing** — the same diagnostic
+    the per-bank identity has been all along, applied to a new sector.
+    Corollary, learned the same way: `SME_WAGE_GAP` is load-bearing, not decoration. Paying every
+    pool worker the economy-wide average charged the tier a wage bill sized by its EMPLOYMENT
+    share against income sized by its REVENUE share, and those differ by region — EUR opens at
+    58% of employment against 42% of revenue, so its pools were insolvent from week 0 and the
+    layoff cascade took EUR unemployment past 30% by week 58.
