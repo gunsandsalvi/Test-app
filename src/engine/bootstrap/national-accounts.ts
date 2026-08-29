@@ -30,9 +30,14 @@
  * defect. The INCOME identity, which is fully determined by these constants, is asserted exactly
  * at init by assertHouseholdIncomeIdentity below.
  *
- * When Main Street lands (households as real named agents with real payroll, real taxes and
- * real transfer receipts), household income becomes a genuine sum over those agents and the
- * calibrated constants here are replaced by the flows themselves.
+ * **THIS FILE'S OWN EXIT CONDITION HAS BEEN MET AND IT HAS NOT EXITED.** The paragraph that
+ * stood here said the constants are "replaced by the flows themselves" once households are real
+ * agents with real payroll, taxes and transfer receipts. They are: HH closed (§7.60), and §7.96
+ * made household income the measured sum of what employers actually pay. Yet
+ * `computeHouseholdDisposableIncomeUSD` survives as the fallback, `assertHouseholdIncomeIdentity`
+ * still ENFORCES these shares at startup, and `LABOR_SHARE_OF_OUTPUT` still sets the wage LEVEL
+ * through `getBaseAnnualWageUSD`. So the measured sum and the identity coexist and disagree —
+ * §6.1's household-income row. Retiring this module is that row's real content.
  */
 
 /** Share of output paid out as wages — the labor share. */

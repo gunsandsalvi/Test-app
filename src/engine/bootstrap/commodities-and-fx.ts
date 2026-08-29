@@ -1,14 +1,20 @@
 /**
  * Commodities & FX Primitives
  *
- * Step 5 of the generative bootstrap pipeline. Commodity spot prices are derived from a
- * cost-of-production primitive against a per-commodity scarcity index (a structural
- * resource-endowment proxy) — real, understandable commodity-category names/ids (Crude Oil,
- * Copper, Wheat, ...) so a company's productLines/input recipe can name what it actually
- * produces or consumes, but the price series itself stays entirely synthetic: no real-world
- * observed prices, benchmarks, or exchange tickers are used. FX rates are derived from relative
- * purchasing power (productivity-per-capita) across the four generated economies rather than
- * quoted market rates.
+ * Step 5 of the generative bootstrap pipeline. Commodity spot is
+ * `PRODUCTION_COST_UNIT x categoryCostFactor x scarcityIndex`; FX is derived from relative
+ * productivity-per-capita rather than a quoted rate.
+ *
+ * **RULE 4 VIOLATION, OPEN — and this header used to deny it.** It said "the price series itself
+ * stays entirely synthetic: no real-world observed prices". Multiply the three factors out and
+ * every seeded price is a recognisable real market price: crude $76/bbl, natural gas $3.00/mmbtu,
+ * gold $2,730/oz, silver $32.20/oz, copper $4.48/lb, wheat $6.00/bu, corn $4.32/bu, soybeans
+ * $10.50/bu. `scarcityIndex` is not a resource-endowment primitive; it is the observed price
+ * back-solved out of the other two factors. The import is not even faithful — HEAVY_CRUDE_OIL
+ * seeds ABOVE light crude, where real heavy grades trade at a discount.
+ *
+ * The honest primitive is what it claims to be: extraction cost and ore grade / energy density,
+ * from which a price follows. Owner: NAT (15), which owns commodity supply.
  */
 
 import { RegionId } from '../../types';

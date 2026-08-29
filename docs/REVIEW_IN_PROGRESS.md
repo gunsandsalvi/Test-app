@@ -234,3 +234,46 @@ rule 2 applied correctly again. `smeShareOfActivity` argues its own rule-4 case 
 (efficient scale is a crew or a fab — a structural fact, not an equilibrium). `SME_POOL_INDUSTRIES`
 derives the roster from the registry so there is no second list to maintain.
 
+---
+
+## `src/engine/bootstrap`
+
+### batch 1 (category-demand, population, yield-curves)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| B1 | **B** | `bootstrap/category-demand.ts` | **One consumption intensity for every good in the economy.** `HOUSEHOLD_PER_CAPITA_UNIT_INTENSITY = 0.02` and `CORPORATE_PER_FIRM_UNIT_INTENSITY = 1.5` are applied to all 36 sub-units, so a household consumes as many units of aerospace as of food. This is why every sub-unit's baseline price lands at the same order of magnitude (~$70k) and a "unit" is an abstract bundle — `goods-physical.ts` documents that consequence without naming this cause. **The CPI basket is built on these weights**, so the measured price index inherits a basket with no relative quantities in it. The registry already carries per-good physics; consumption intensity belongs beside them. **Owner: IND (3), via the registry.** |
+| B2 | watch | `bootstrap/yield-curves.ts` | `TERM_PREMIUM_SLOPE`/`TERM_PREMIUM_CURVATURE` give the opening curve a chosen slope and hump. Seed-only — 07c reprices every point from week 1 — but §7.4's standard is that the seed should be the shape the auction would itself clear. Flagged in place, not a defect today. |
+
+**Clean:** `population.ts` is exactly right — Zipf ranks over a reference unit, with the comment
+stating outright that the ranks are "an arbitrary modeling choice… not derived from any observed
+population ranking", and deliberately using a *different* order for productivity so size and
+productivity are not forced to coincide. `yield-curves.ts` derives the neutral rate from generated
+productivity growth plus the inflation-target primitive rather than quoting a rate per region.
+
+### `src/engine/bootstrap` — batch 2 (national-accounts, labor-and-wages, private-firms)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **B3** | **A** | `bootstrap/national-accounts.ts` | **The file states its own retirement condition and the condition has been met.** Its header said the calibrated shares are "replaced by the flows themselves" once households are real agents with real payroll, taxes and transfer receipts. They are — HH closed (§7.60) and §7.96 made household income the measured sum of what employers pay. Yet `computeHouseholdDisposableIncomeUSD` survives as the live fallback, `assertHouseholdIncomeIdentity` still **enforces** the shares at startup, and `LABOR_SHARE_OF_OUTPUT` still sets the wage LEVEL through `getBaseAnnualWageUSD`. This *is* §6.1's household-income row, stated precisely: retiring this module is that row's actual content, not a vague "reconcile the two". |
+| B4 | **A** | `bootstrap/private-firms.ts` | **`NAMED_TIER_REVENUE_SHARE = 0.6` states a cut point a distribution already decides.** A Pareto tail (`PARETO_ALPHA = 1.16`) determines which firms are large enough to name; stating the tail's revenue share separately means the share and the distribution can disagree. The cut should fall out of the distribution. Rule 13. **Owner: DYN (22).** |
+
+**Clean, and worth quoting:** `labor-and-wages.ts`'s `BASELINE_WEIGHTED_TIER_PREMIUM`. Tier
+premiums say how occupations are paid *relative to each other* and must not also move the
+absolute level — the bug it fixed had the wage bill at `0.62 × 1.4957 = 93%` of output and
+household income at 106.6% of GDP. And it normalises against the BASELINE mix, not the drifting
+live one, deliberately, so a real shift toward higher-skill work still raises the average wage
+instead of being cancelled. That distinction is the difference between a normalisation and a
+clamp. `weeklyWageBillUSD` is the single wage-bill derivation every employer uses, and its
+comment records that the two it replaced keyed off `householdIncome / employed` — which, once
+income became the sum of what employers pay, made the number depend on itself.
+
+### `src/engine/bootstrap/commodities-and-fx.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **B5** | **A, rule 4, with the comment denying it** | `bootstrap/commodities-and-fx.ts` | **Every seeded commodity price is a real observed market price, back-solved into a "scarcity index".** The header asserted "the price series itself stays entirely synthetic: no real-world observed prices, benchmarks, or exchange tickers are used." Multiply `PRODUCTION_COST_UNIT (40) × categoryCostFactor × scarcityIndex` out: crude **$76.00/bbl**, natural gas **$3.00/mmbtu**, gold **$2,730/oz**, silver **$32.20/oz**, copper **$4.48/lb**, wheat **$6.00/bu**, corn **$4.32/bu**, soybeans **$10.50/bu**. Those are not synthetic. `scarcityIndex` is the observed price divided by the other two factors — a real-world outcome wearing a primitive's name, which is rule 4's sharper half exactly. **The import is not even faithful:** `HEAVY_CRUDE_OIL` seeds at $80 against light crude's $76, where real heavy grades trade at a *discount*. The honest primitive is what the file claims — extraction cost and ore grade / energy density, from which a price follows. **Owner: NAT (15).** |
+
+*Second case in this review of a comment asserting the opposite of what the code does — after the
+FX damper (D5). Both were load-bearing claims a reader would have trusted.*
+

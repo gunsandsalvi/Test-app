@@ -20,7 +20,9 @@ export const INFLATION_TARGET = 0.02;
 const BASE_TREND_GROWTH = 0.018;
 const CONVERGENCE_EXPONENT = 0.6;
 
-// Structural term-premium coefficients giving the initial curve a mild upward slope/hump.
+// The opening curve's slope and hump. SEED ONLY — 07c reprices every point from week 1 off real
+// cleared demand, and this exists so week 1 has an anchor to move from. Watch it against §7.4:
+// the honest seed is the shape that auction would itself clear, not a chosen slope.
 const TERM_PREMIUM_SLOPE = -0.004;
 const TERM_PREMIUM_CURVATURE = 0.006;
 const CURVE_DECAY_LAMBDA = 2.0;
