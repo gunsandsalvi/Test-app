@@ -1619,6 +1619,84 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **The named private tier still sells nothing** | **Restated by SEG (§7.96), owner HC3b.** SEG gave born firms real product lines from their pool's industry; the ~300 seeded private firms per region still carry `productLines: []` and cannot participate in any auction. HC3b deferred that with a measurement (−10% to −22% growth when the tier's supply was injected into markets sized for public supply), and SEG deliberately did not reverse it. Now cheaper to revisit than it was: the SME pools already sell across all 36 sub-units, so the taxonomy's supply side is no longer calibrated to public firms alone. Re-measure the supply/demand balance per industry (SEG's seed probe put it at 1.12 overall, 0.29–3.20 by industry) before deciding. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
+### 6.3 Rule audit — every file, 2026-08-29
+
+Swept all 153 files / 37,284 lines: read in full through `domain/`, `bootstrap/`, `macro/` and the
+small stages, and every remaining line scanned for the violation shapes (clamps on economic
+quantities, imposed shares, formula-set prices, real-world names, magic coefficients) with the
+context of each hit read. Ordered by how much they decide.
+
+**A. The top-down core — imposed shares that decide aggregates**
+
+| Where | What | Rule |
+|---|---|---|
+| `bootstrap/national-accounts.ts` | `LABOR_SHARE_OF_OUTPUT` 0.62, `HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT` 0.13, `GOV_PROCUREMENT_SHARE_OF_SPENDING` 0.35, `HOUSEHOLD_EFFECTIVE_TAX_RATE` 0.1322 **solved from the identity**. `assertHouseholdIncomeIdentity` then ENFORCES them at startup. The file's own header says they are placeholders "replaced by the flows themselves" once households are real agents. | 4, 13 |
+| `bootstrap/labor-and-wages.ts:70` | `getBaseAnnualWageUSD` = productivity × labor share. **The wage LEVEL is an accounting identity**, not a market outcome — the root of the employment collapse when wages became real payments. | 13 |
+| `macro/household-cohorts.ts` | **Nine** imposed distribution tables (`TIER_OCCUPATION_MIXES`, `TIER_WAGE_MULTIPLIER`, `TIER_TAX_RATE_MULTIPLIER`, `TIER_TRANSFER_WEIGHT`, `TIER_RESIDUAL_RECEIPT_WEIGHT`, `TIER_DEBT_SERVICE_WEIGHT`, `TIER_SPEND_MIX`, `TIER_BALANCE_SHEET_WEIGHTS`, `TIER_WEALTH_MPC`). The whole household cross-section — who earns, owns, pays tax and spends on what — is stated. `TIER_BALANCE_SHEET_WEIGHTS` is documented "US SCF-shaped": an observed real-world distribution. `TIER_SPEND_MIX` is "calibrated so the blend reproduces" a target. | 4, 13 |
+| `macro/initialization.ts:29` | `createWealthDistribution` — income and net-worth shares per tier, savings rates, equity exposure, `netWorth = income × 3.5`. The wealth distribution is an input. | 4, 13 |
+| `macro/initialization.ts:183` | **`OWNERSHIP_SHARES`** (equity/corp/sov × bank/institutional/central-bank). Consumed as `tradableShare = 1 − bankShare` in **07b, 07d, 07e** and as `bankShare × outstanding` in **07c** — an imposed share decides how much of every instrument can be traded and what banks target. This is the surviving twin of `foreignShare`, which rule 13 names as deleted for exactly this. | 13 |
+| `bootstrap/firms.ts:245-279` | `institutionalMarketShare` (.42/.17/.10/.06/.18/.07) and `bankMarketShare = 0.35 × 0.72^rank`. Market shares imposed by rank and never moved by performance — and `bankMarketShare` is then the ALLOCATION KEY for deposits, SME pool cash, the unmodeled boundary and FX desk capacity. | 13 |
+| `stages/shared-helpers.ts:210-211` | Ownership shares drift toward targets and are clamped (`institutionalShare` [0.10,0.65], `bankShare` [0.01,0.10]); `02-region-macro.ts:21` caps non-household ownership at 0.85 and rescales the three shares to sum to 1. | 2, 5, 13 |
+
+**B. Prices and rates set by formula rather than cleared**
+
+| Where | What | Rule |
+|---|---|---|
+| `macro/evolution.ts:743-747` | **House prices**: `priceIndexDelta = (1 − supplyDemandRatio) × 0.002 × creditFactor`, index clamped [0.5, 3.0]. Housing is on household balance sheets and drives the wealth effect. | 1, 2 |
+| `macro/evolution.ts:553-560` | Consumer credit tier interest rates: `avgInterestRate + creditConditionsIndex × 0.05/0.03/0.01/0.005`. A price moved by an index. | 1 |
+| `macro/evolution.ts:215` | `newWageGrowth = 0.025 + 0.8 × slack + 0.1 × expectedInflation` — a Phillips curve with invented coefficients setting the wage. | 1, 13 |
+| `macro/evolution.ts:248-251` | The savings RATE (hence consumption, hence C) from `0.05 + inflationGap × 0.5 − 0.1 × CCI-gap + realRateGap × 0.4`. | 13 |
+| `macro/evolution.ts:220` | Consumer confidence from coefficients 150/200/80/1000, then clamped [30, 170]. | 2, 13 |
+| `macro/banking.ts:302` | `creditConditionsIndex = capitalGap × 8 + (0.025 − NIM) × 10 + spillover`, which then drives credit conditions and the tier rates above. | 13 |
+| `macro/banking.ts:240` | Deposit beta floor `policyRate × 0.45`; `:281` payout ratio step function; `:286` universal 14% target capital. | 13 |
+| `stages/05-unit-bidding.ts:1273` | Contract price = published price × `(1 − (bargainingPower − 0.3) × 0.05)`. | 1, 15 |
+| `domain/dealer-derivatives.ts:106` | `FX_SPOT_PRICE_IMPACT_PER_GDP` — a price-impact coefficient. | 1 |
+
+**C. Clamps on economic quantities (rule 2)**
+
+`labor-market.ts:435` **unemployment clamped to [0, 0.5]** — this is why the harness prints
+"reported 50.00% is not the reading of its own employment stock (53.19%)": the clamp hides the
+real number. Also: firm revenue growth ±5%/wk (`08:499`), **CDS spread [10, 5000] bps**
+(`08:1301`), leverage [0,100] and coverage [±50] (`08:830/835`), Tobin's Q [0.1,10]
+(`08:438/627`), production throttle [0.3,1.0] and capacity growth ±2% (`05:469/496`), cost rate
+[0.40,0.98] (`05:505`), wage index [0.1,20] and wage growth [−20%,+35%] (`labor-market:349/354`),
+**equity index change ±15%/wk** (`macro/indices.ts:45` — which would mask §6's equity runaway in
+the published index), expected inflation [−20%,+50%], effective tax rate [10%,50%], population
+growth, migration, mortgage growth ±, commodity supply drift ±4%, savings cap 90% of disposable.
+
+**D. Rule 4 — real-world names and data**
+
+`macro/indices.ts` publishes **'S&P 500 Composite', 'Euro Stoxx 50', 'FTSE 100', 'Nikkei 225',
+'S&P GSCI Commodity Index'** — real index brands, in the UI. `macro/initialization.ts:147`
+names 'Federal Reserve', 'Bank of England', 'Bank of Japan', 'European Central Bank'.
+`macro/weather.ts` uses real geography ('Midwest', 'Great Plains', 'North Sea', 'Mediterranean').
+`household-cohorts.ts:96` cites the US SCF. (`newsGenerator.ts:226` records that an earlier
+real-world-reference block was already deleted for this rule — the same standard applies here.)
+
+**E. Outcomes imposed rather than transmitted**
+
+`macro/weather.ts` gives every weather event a stated `gdpImpactPct` and `inflationImpactPct`.
+The file `macro/evolution.ts:75` correctly deleted the CPI shortcut for exactly this reason —
+bad weather should reach prices through real crop supply — but the GDP and inflation impact
+fields remain and are still carried on the state. `bootstrap/firms.ts:214` fixes market
+structure (10 firms/sector, flat across regions). `macro/initialization.ts:163-166` seeds
+`EFFECTIVE_TAX_RATE`, `FISCAL_DEFICIT_PCT_GDP`, `DEBT_TO_GDP_PCT` and government employment
+share — a deficit and a debt ratio are outcomes.
+
+**F. Two representations (rule 3), live**
+
+`macro/evolution.ts:452` still derives household deposit interest as `deposits × policyRate × 0.6`
+for the cohort allocation while the banks now report what they actually paid
+(`householdDepositInterestWeeklyUSD`) — two numbers for one flow, introduced by the HH work in
+progress and to be collapsed onto the measured one. `domain/currency.ts:30` `safeRate()` silently
+returns 1 for a non-finite or zero FX rate — a default standing in for a broken read, the shape
+§7.94 was found by.
+
+**What this audit is not.** It does not include the primitives the rules explicitly allow: lane
+distances, value densities, tax and replacement rates, regulatory ratios (Basel leverage, risk
+weights), the administered corridor spreads, or the seed-shape constants §7.4 sanctions — those
+were checked and left. The list above is what decides an outcome the model should produce.
+
 ## 7. Record & lessons (do not re-learn)
 
 Numbering is referenced from §5 and §6 — never renumber. Each entry: what was wrong, the number
