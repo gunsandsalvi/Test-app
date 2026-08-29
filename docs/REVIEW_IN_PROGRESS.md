@@ -363,3 +363,21 @@ take, so the rate a corporate balance commands is the money fund's own yield.
 | **M14** | **A — D31's sibling** | `macro/evolution.ts:222` | **Two wage growths, and the formula one drives consumption.** LAB made the wage a real price: each firm sets `offeredWageIndex` from its own unfilled postings and margin headroom, and each occupation pool's `wageGrowthAnnual` is the employment-weighted average of what firms actually offer — stage 08 reads that one (`getBlendedWageGrowth`), and so does the UI. The Phillips curve `0.025 + 0.8 × slack + 0.1 × expectedInflation` survives beside it, and **it is the formula that feeds `realWageGainEffect` (consumption, line 401) and `cciEquilibrium` (consumer confidence)**. So what households are paid and what they spend out of are two different numbers. Exactly D31's shape — a formula outliving the mechanism that replaced it, and being the one a downstream decision reads. **Owner: MAC (6).** |
 | M15 | **A** | `macro/evolution.ts:227-233` | **Consumer confidence is a four-coefficient formula** (`100 + wageGap×150 − unempGap×200 − inflGap×80 + shock×1000`, reverting at 0.08, clamped [30,170]) and the **savings rate is a three-term one** (`0.05 + inflGap×0.5 − 0.1×cciGap + realRateGap×0.4`). §6.3-B/C list both; what the audit did not say is that they are *chained* — confidence feeds the savings rate, the savings rate feeds consumption, and confidence's largest input is M14's fake wage growth. MAC's (b) half is this chain. |
 
+---
+
+## `src/engine/simulation/stages`
+
+### batch 1 (01-macro-feedback, 06-fx-and-trade, 07-commodities)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **S1** | **Dead code, with a weekly cost** | `stages/01-macro-feedback.ts` | **Three of stage 01's five outputs are dead, and one of them walks the whole universe to produce them.** (a) `regionFloatingPrincipal` sums every company's floating tranches each week to feed `evolveBankingSector`'s `businessLoanBookInputUSD` — a parameter that is **declared and never read**, because G2 made business lending the itemized stage's decision and deleted the target formula that consumed it (`macro/banking.ts:298` records that deletion). It also counts `isBankFacility` tranches, which is precisely the double-count 07d exists to avoid. (b) `marginCompression` / `avgMargin`: stage 02 passes a literal `marginCompression: 0`, and nothing else reads either; the `0.22` threshold has no owner. (c) `creditContagionBps`: stage 02 likewise passes a literal `0`. Delete all three with their call sites. |
+| S2 | **A** | `stages/01-macro-feedback.ts` | **`creditContagionBps = recentDefaultsCount × 12`, then `systemicStressFactorGlobal = min(0.3, bps/500)`** — and *this one is live*: stage 08 reads it (`08:1546`). So a defaults count is converted to basis points by a coefficient and fed into pricing. Rule 1: a credit spread is a cleared price. **Owner: G5 (14).** *(The default-decay window itself is well done — a rolling year, freshest-weighted, plus the currently-distressed cohort, replacing an ever-ratcheting all-time count.)* |
+| S3 | **B, latent** | `stages/06-fx-and-trade.ts` | **`getFxToUsd` returns `1.0` when no pair matches** — the fourth instance of the silent-default shape, and the most pointed one, because the comment directly above it describes what that fallback already did once: "every lookup missed and every caller silently got a hardcoded fallback, which is why the exchange rate had never moved anything: the one function converting to USD returned a constant." The lookup was fixed; the fallback that made the failure invisible was kept. |
+
+**Clean:** `06-fx-and-trade.ts` is a good example of a stage that stopped computing and started
+reporting — trade is now the sum of stage 05's cross-border fills, and its comment names what it
+replaced (`exportShareCapture`, a clamped formula handing exporters a share of foreign demand on
+a competitiveness score, credited separately in stage 08 — two mechanisms for one sale).
+The annualisation is explicitly labelled per rule 9.
+

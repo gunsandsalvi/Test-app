@@ -33,6 +33,10 @@ export function getFxToUsd(updatedFxPairs: FxPair[], regionId: RegionId): number
   if (direct && direct.rate > 0 && isFinite(direct.rate)) return direct.rate;
   const inverse = updatedFxPairs.find((p) => p.base === 'USA' && p.quote === regionId);
   if (inverse && inverse.rate > 0 && isFinite(inverse.rate)) return 1 / inverse.rate;
+  // The paragraph above describes what this fallback once did: every lookup missed, every caller
+  // silently got a constant, and the exchange rate moved nothing for the model's whole life. The
+  // lookup is fixed; the silent fallback that made the failure invisible is still here. Fourth
+  // instance of that shape (with `safeRate`, `resolveProtection`, `isPubliclyListed`).
   return 1.0;
 }
 
