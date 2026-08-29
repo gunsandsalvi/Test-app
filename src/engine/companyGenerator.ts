@@ -1,5 +1,5 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
-import { INDUSTRY_REGISTRY, subUnitsByProducingSector, FINANCIAL_SECTOR_PROXY_LINES, ProducingSector } from '../domain/industry-registry';
+import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector } from '../domain/industry-registry';
 import { callProtectionForIssue } from '../domain/call-protection';
 import { isInvestmentGrade } from './simulation/stages/asset-allocation';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
@@ -766,9 +766,16 @@ export function generateInitialCompanies(
           }
         }
 
-        if (lines.length === 0 && (sector === 'Financials' || sector === 'Banks')) {
-          lines = FINANCIAL_SECTOR_PROXY_LINES.map(l => ({ ...l }));
-        } else if (lines.length === 0 && sectorSubUnits.length > 0 && totalWeightUSD > 0) {
+        // IND-R2: a financial firm gets NO product line. It used to get an `enterprise_software`
+        // one as a revenue proxy, and a product line is what registers a supplier in stage 05's
+        // index — so 16 banks and 24 institutions were offering enterprise software into the
+        // goods auction, the category's shares summed to 646% against 400% for every other, and
+        // the real software firms were diluted ~62%. It was incoherent besides: a bank routes to
+        // `bankProfile`, which never accounts for producing anything, so the supply was real to
+        // the auction and invisible to the producer's own P&L. Financial revenue comes from the
+        // profiles, which is what they are for.
+        if (lines.length === 0 && sectorSubUnits.length > 0 && totalWeightUSD > 0
+            && sector !== 'Financials' && sector !== 'Banks') {
           const k = Math.min(3, sectorSubUnits.length);
           const scored = sectorSubUnits.map((x, idx) => ({
             x, idx,

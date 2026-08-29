@@ -554,6 +554,17 @@ real share because the auction fills cheaper offers first. No synthetic share va
 forces a divestiture — split the company into two real companies through the existing generation
 machinery, dividing product lines, debt and holders — plus an M&A freeze flag stage 10 respects.
 
+**IND-R5 — a bank's seed revenue is a Pareto draw, and it spends years converging on its real
+scale.** Found while verifying IND-R1 (§7.108). `bankProfile` blends 85/15 toward the
+NIM-implied figure and its own comment says the generation-time seed "has no relation to the
+region's actual banking-sector balance sheet". Measured: a USA bank opens at **1.68B of revenue
+against 7.47B NIM-implied**, and climbs 1.68 → 2.55 → 3.30 → 4.19 → 4.94B in four weeks — a
+model artifact that every consumer reads as real output growth, the labor market's hiring signal
+among them. §7.4's rule applies exactly: seed by the engine's own code, so a bank's opening
+revenue should BE what its opening balance sheet earns. **Not done here on purpose** — it
+multiplies bank revenue ~4x at week 0, which moves market caps, index levels and the labour
+demand signal together, and it wants measuring alongside §6.1's seed-employment slice.
+
 **IND8 — Rating generation.** Week-0 USA is AAA 16% / AA 39% / A 45%, **zero BBB and zero HY**,
 with 55% of debt AA or better, inverted against reality. Dynamics are fine (BBB 39% / HY 16% by
 week 40) and HC's sponsor-owned firms supplied the missing HY universe, so what is left is the
@@ -1686,7 +1697,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **`unbackedBankCashUSD` explodes past the harness window** | **Found by the PUB battery (§7.68).** 97B (w13) → 107B (w52) → **2,183B (w120)**. PUB2b shrank it at w52 (304B → 100B) by giving the central bank a live book, and that fix holds — but reserves grow from deposits and lending far faster than any central-bank purchase backs them once the escape takes hold. **The 60-week harness cannot see this.** Owners: the §6 inflation escape first, then whatever gives bank reserves a single representation. Watch it, do not force the identity closed. |
 | **Household income: a top-down statistic against a bottom-up sum** | **Opened by SEG (§7.96).** What employers actually pay households is now measured — named firms' payroll, government payroll, and the SME pools' own wage bill at `SME_WAGE_GAP` below the average — while `estimatedHouseholdIncomeUSD` remains the top-down anchor that sizes consumption, the tax base and the per-worker wage those payments are computed FROM. The two now visibly disagree and nothing reconciles them; the wage gap widened it deliberately, because the alternative was a tier insolvent from week 0. This is the last big "two representations of one thing" in the household sector (rule 3). Fix by making income the sum of payments and re-deriving what currently reads the anchor — do NOT close it by removing the wage gap, which would restore the insolvency. |
 | **The named private tier still sells nothing** | **Restated by SEG (§7.96), owner HC3b.** SEG gave born firms real product lines from their pool's industry; the ~300 seeded private firms per region still carry `productLines: []` and cannot participate in any auction. HC3b deferred that with a measurement (−10% to −22% growth when the tier's supply was injected into markets sized for public supply), and SEG deliberately did not reverse it. Now cheaper to revisit than it was: the SME pools already sell across all 36 sub-units, so the taxonomy's supply side is no longer calibrated to public firms alone. Re-measure the supply/demand balance per industry (SEG's seed probe put it at 1.12 overall, 0.29–3.20 by industry) before deciding. |
-| **The seed's three employment primitives disagree** | **Exposed by LAB (2026-08-29), pre-existing, now visible.** Three seed primitives jointly determine how many people have jobs at week 0 and they do not agree: the labor force (`population` Zipf x `1 - nonEmployablePct 0.36` x `participation 0.63`), the named tier's revenue (a flat **0.35 share of each category's demand** in `deriveInitialRevenueUSD`), and revenue-per-employee (`productivity x a sector multiple averaging ~2.5`, which is really the gross-output-to-value-added ratio and is load-bearing — normalizing it away was tried and put employment 68% ABOVE the labor force). Measured at seed: **USA 10.6%, UK 17.3%, JPN 26.1%, EUR 28.1% unemployment before a single week runs**, varying by region because the firm universe's revenue/GDP ratio does (2.34 USA against 1.88 EUR). This was invisible for the model's whole life because a top-down residual handed the SME pools whatever employment the real firms and the government did not take, pinning the print at the seeded 4.5%; LAB deleted that residual, so the disagreement now shows as the harness's unemployment band. **Do not fix it by restoring a residual, by widening the band, or by normalizing the capital-intensity multiples.** The honest fix is a seed-consistency slice: make the named tier's share of demand a DERIVED number — the share its real workforce can produce — instead of the hardcoded 0.35, and let the seed unemployment rate be the outcome. Blast radius is the whole firm universe's scale, which is why it is its own slice. |
+| **The seed's three employment primitives disagree** | **Exposed by LAB (2026-08-29), pre-existing, now visible.** Three seed primitives jointly determine how many people have jobs at week 0 and they do not agree: the labor force (`population` Zipf x `1 - nonEmployablePct 0.36` x `participation 0.63`), the named tier's revenue (a flat **0.35 share of each category's demand** in `deriveInitialRevenueUSD`), and revenue-per-employee (`productivity x a sector multiple averaging ~2.5`, which is really the gross-output-to-value-added ratio and is load-bearing — normalizing it away was tried and put employment 68% ABOVE the labor force). Measured at seed: **USA 10.6%, UK 17.3%, JPN 26.1%, EUR 28.1% unemployment before a single week runs**, varying by region because the firm universe's revenue/GDP ratio does (2.34 USA against 1.88 EUR). This was invisible for the model's whole life because a top-down residual handed the SME pools whatever employment the real firms and the government did not take, pinning the print at the seeded 4.5%; LAB deleted that residual, so the disagreement now shows as the harness's unemployment band. **Do not fix it by restoring a residual, by widening the band, or by normalizing the capital-intensity multiples.** The honest fix is a seed-consistency slice: make the named tier's share of demand a DERIVED number — the share its real workforce can produce — instead of the hardcoded 0.35, and let the seed unemployment rate be the outcome. Blast radius is the whole firm universe's scale, which is why it is its own slice. **Sharpened by IND-R1 (§7.108): the collapse is fastest where headcount is smallest.** Measured over four weeks from seed: USA unemployment 10.6% → 17.5%, non-bank employment 6.01M → 5.31M, and **the entire USA banking sector goes 34.2k → the one-employee-per-firm floor by week 3.** Tightness stays at 0.02-0.15 throughout, so it is layoffs, not quits. That floor is what makes IND-R1's bank wage leg nearly worthless in practice — the banks pay their staff for two weeks and then have none — so **this slice gates the value of IND-R1, not its correctness.** |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
 ### 6.3 Rule audit — what the 2026-08-29 sweep found, and what is still open
@@ -3867,3 +3878,40 @@ that proved it, the lesson.
       completely separate clock.
     - **The measurement itself is now one command** — `npm run profile` prints the table above,
       so the next person does not have to build it.
+
+108. **IND-R1 and IND-R2 — banks pay their staff, and financial firms stop supplying software.**
+    The two findings the review told IND to take first: one an active accounting error, one a
+    deletion the harness was already measuring.
+    - **IND-R1: payroll is common to every firm, because a firm with staff owes them whatever
+      kind of firm it is.** `weeklyPayrollUSD` lived inside the OPERATING branch, which banks
+      skip — so the labor market hired and fired bank staff, counted them in unemployment, and no
+      payroll ever hit bank EBITDA and no wage instruction was ever posted. Headcount with no wage
+      leg (rule 14), inflating measured employment against measured income. It is computed once
+      now, before the profile dispatch, and handed in; the profile decides only how its cost shape
+      absorbs it. A stated margin already contains a baseline wage bill, so those profiles charge
+      the DEVIATION; a profile that builds its costs up charges the whole bill.
+    - **The carrier had TWO payrolls, and the P&L read the one the labor market could not move.**
+      `annualCrew = sum(asset.crewCount) × crewAnnualWageUSD` was computed off the fleet spec
+      while `employeeCount` — which the labor market hires and fires, and which pays the
+      households — moved independently. Rule 3, found by making payroll common. One payroll now.
+    - **A bank's wage payment settles like any other**, and because a bank pays on its OWN
+      account the other leg is its equity, which is where a real bank's wage bill lands. The
+      per-bank identity holds through it by construction.
+    - **IND-R2: `FINANCIAL_SECTOR_PROXY_LINES` deleted.** A product line is what registers a
+      supplier in stage 05's index, so the proxy line put 16 banks and 24 institutions into the
+      enterprise-software market: shares summing to 646% against 400% for every other category,
+      the real software firms diluted ~62%, and the supply invisible to the sellers' own P&L
+      because a bank routes to `bankProfile`, which never accounts for producing anything.
+      **GUARD's share-sum invariant, written three commits earlier for exactly this, went from 24
+      violations in six weeks to zero** — the harness verifying its own finding's fix.
+    - **What the verification found that was NOT mine.** Bank headcount collapses 88k → the
+      one-employee floor by week 3 — **identical in an A/B against the pre-change tree**, so
+      pre-existing. Non-bank employment falls with it (6.01M → 5.31M) at tightness 0.02-0.15, so
+      it is layoffs, not quits: §6.1's seed-employment row, which now carries the measurement.
+      **It gates the VALUE of IND-R1, not its correctness** — the banks pay their staff for two
+      weeks and then have none.
+    - **And one new finding, recorded as IND-R5, not fixed:** a bank's seed revenue is a Pareto
+      draw (1.68B against 7.47B NIM-implied) and climbs toward its real scale for years, which
+      every consumer reads as real output growth. §7.4's rule, and a ~4x week-0 move that wants
+      measuring alongside the seed-employment slice.
+    - **Six-week probe: 26 → 12 violations, five families.** The 60-week run is deferred.

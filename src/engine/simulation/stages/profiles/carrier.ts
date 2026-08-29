@@ -1,13 +1,14 @@
 /** A carrier's P&L: the freight it really carried against the fuel it really burned (moved verbatim from stage 08, BP1c). */
 
 import { random } from '../../../rng';
-import { fuelPriceUsdPerTonne, crewAnnualWageUSD } from '../freight-clearing';
+import { fuelPriceUsdPerTonne } from '../freight-clearing';
 import { weeklyCapacityTonnes } from '../../../../domain/carrier';
 import { laneDistanceNm } from '../../../../domain/geography';
 import { ProfileInput, ProfilePnl } from './types';
 
 export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
-  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare } = input;
+  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
+    weeklyPayrollUSD } = input;
   let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
 
   // XB3a-2: a carrier's revenue is the freight it actually carried this week, at the rate its
@@ -20,18 +21,20 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
 
   const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, (state as any).unitMassTonnes ?? {});
-  const wage = crewAnnualWageUSD(reg, comp.region);
   let weeklyFuelTonnes = 0;
-  let crew = 0;
   (comp.carrierFleet?.assets ?? []).forEach((asset: any) => {
-    crew += asset.crewCount ?? 0;
     const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
     const perWeek = weeklyCapacityTonnes(asset, distanceNm);
     const voyages = asset.capacityTonnes > 0 ? perWeek / asset.capacityTonnes : 0;
     weeklyFuelTonnes += voyages * (asset.fuelTonnesPerNm ?? 0) * distanceNm;
   });
   const annualFuel = weeklyFuelTonnes * fuelUsdPerTonne * 52;
-  const annualCrew = crew * wage;
+  // IND-R1, rule 3: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageUSD` —
+  // a second wage bill computed off the fleet spec, which the labor market cannot touch, while
+  // `employeeCount` (which it hires and fires, and which pays the households) moved
+  // independently. A carrier builds its costs up rather than stating a margin, so it charges the
+  // whole bill, not the deviation.
+  const annualCrew = weeklyPayrollUSD * 52;
   newEbitda = newRevenue - annualFuel - annualCrew;
   newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
   newEbit = newEbitda - (comp.grossPPEUSD ?? 0) / 20;

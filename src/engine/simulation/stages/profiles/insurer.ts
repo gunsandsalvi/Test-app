@@ -5,7 +5,8 @@ import { PREMIUM_TO_SURPLUS_RATIO, INSURER_EXPENSE_RATIO } from '../../../../dom
 import { ProfileInput, ProfilePnl } from './types';
 
 export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
-  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare } = input;
+  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
+    payrollAboveBaselineAnnualUSD } = input;
   let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
 
   // HH1b — ONE INSURER, NOT TWO. This branch used to refuse the entity behind it, on the
@@ -43,7 +44,8 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   newRevenue = comp.insurancePremiumsWrittenUSD;
   comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
   newEbitdaMargin = 0.15;
-  newEbitda = (underwritingIncome + investmentIncome) * 52;
+  // IND-R1: its staff, at the deviation from the baseline the stated margin already carries.
+  newEbitda = (underwritingIncome + investmentIncome) * 52 - payrollAboveBaselineAnnualUSD;
   newEbit = Math.max(1, newEbitda);
   newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
   newEps = perShare(newNetIncome);

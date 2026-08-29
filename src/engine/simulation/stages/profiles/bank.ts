@@ -14,7 +14,8 @@ import { random } from '../../../rng';
 import { ProfileInput, ProfilePnl } from './types';
 
 export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
-  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare } = input;
+  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
+    payrollAboveBaselineAnnualUSD } = input;
   let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
 
   const share = comp.bankMarketShare ?? 0.25;
@@ -38,7 +39,11 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // revenue-growth-ceiling invariant on the way.
   newRevenue = Math.max(10, comp.annualRevenue * 0.85 + (impliedNimRev * 52) * 0.15);
   newEbitdaMargin = 0.40;
-  newEbitda = newRevenue * newEbitdaMargin - (loanLosses * 52);
+  // IND-R1: a bank has staff. The labor market hires and fires them and counts them in
+  // unemployment; before this they cost the bank nothing. The stated 0.40 margin already
+  // contains a baseline wage bill, so only the deviation is charged here — IND-R4 is where
+  // that stated margin dies and the whole bill becomes a real cost.
+  newEbitda = newRevenue * newEbitdaMargin - (loanLosses * 52) - payrollAboveBaselineAnnualUSD;
   newEbit = Math.max(1, newEbitda);
   newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
   newEps = perShare(newNetIncome);

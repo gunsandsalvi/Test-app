@@ -271,9 +271,35 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     let newEbitdaMargin = 0;
     let newEbitda = 0;
-    // LAB: the firm's real payroll for the week — charged against EBITDA below and paid as cash
-    // to households further down. One number, one owner.
-    let weeklyPayrollUSD = 0;
+    // IND-R1: EVERY firm's payroll, computed here — before the profile dispatch, because a firm
+    // with staff owes them whatever kind of firm it is. It used to live inside the OPERATING
+    // branch, so a bank's headcount was hired and fired by the labor market, counted in
+    // unemployment, and cost nothing and paid nobody: headcount with no wage leg (rule 14),
+    // inflating measured employment against measured income.
+    //
+    // What this is: the firm's real headcount, in the occupations its sector employs, at the wage
+    // those occupations clear at, times the wage this firm itself offers (`offeredWageIndex`,
+    // which moves with its own hiring success). One payroll, one owner, one representation —
+    // which is also what retires the carrier profile's separate `crewCount x wage` line.
+    const weeklyPayrollUSD = weeklyWageBillUSD(
+      comp.employeeCount,
+      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+      getBaseAnnualWageUSD(comp.region),
+      reg.occupationPools,
+      comp.offeredWageIndex ?? 1.0
+    );
+    const baselineWeeklyPayrollUSD = weeklyWageBillUSD(
+      comp.baselineEmployeeCount ?? comp.employeeCount,
+      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+      getBaseAnnualWageUSD(comp.region),
+      BASELINE_WAGE_POOLS,
+      1.0
+    );
+    // Only the DEVIATION from baseline payroll adjusts a stated margin, because a stated margin
+    // already contains a baseline wage bill; charging the whole payroll again would count it
+    // twice. A profile with no stated margin (the carrier) charges the payroll in full instead —
+    // that is the cost-shape choice a profile exists to make.
+    const payrollAboveBaselineAnnualUSD = (weeklyPayrollUSD - baselineWeeklyPayrollUSD) * 52;
     let newEbit = 0;
     let newNetIncome = 0;
     let newEps = 0;
@@ -319,7 +345,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // profiles of their own.
     const profileModule = PROFILE_REGISTRY[profileKeyOf(comp)];
     if (profileModule) {
-      const pnl = profileModule({ comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare });
+      const pnl = profileModule({ comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
+        weeklyPayrollUSD, payrollAboveBaselineAnnualUSD });
       newRevenue = pnl.newRevenue;
       newEbitdaMargin = pnl.newEbitdaMargin;
       newEbitda = pnl.newEbitda;
@@ -573,22 +600,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // This is what makes a wage a price rather than a charge. Before it, the going rate could
       // move and no firm's earnings noticed, so labor demand had nothing to respond to and the
       // entire adjustment fell on cash exhaustion (measured: a 30-50% unemployment cascade).
-      weeklyPayrollUSD = weeklyWageBillUSD(
-        comp.employeeCount,
-        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-        getBaseAnnualWageUSD(comp.region),
-        reg.occupationPools,
-        comp.offeredWageIndex ?? 1.0
-      );
-      const baselineWeeklyPayrollUSD = weeklyWageBillUSD(
-        comp.baselineEmployeeCount ?? comp.employeeCount,
-        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-        getBaseAnnualWageUSD(comp.region),
-        BASELINE_WAGE_POOLS,
-        1.0
-      );
-      const payrollAboveBaselineAnnualUSD = (weeklyPayrollUSD - baselineWeeklyPayrollUSD) * 52;
-
       newEbitda = newRevenue * newEbitdaMargin - payrollAboveBaselineAnnualUSD;
       const da = newRevenue * 0.05;
       newEbit = Math.max(1, newEbitda - da);
@@ -757,6 +768,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // A bank's real flows live on its named balance sheet (02b); the company-level cash line
       // carries only the accrual bridge, as before, now as one visible entry.
       post('bank net income accrual', newNetIncome / 52);
+      // IND-R1: and its staff. A bank paying wages settles like any other payer — reserves out,
+      // households' deposits in — and because a bank's payment is on its OWN account the other
+      // leg is its equity, which is where a real bank's wage bill lands.
+      post('wages paid to households', -weeklyPayrollUSD, { kind: 'HOUSEHOLD', region: comp.region });
     } else {
       const settledSalesUSD = update?.salesUSD ?? 0;
       const settledPurchasesUSD = update?.purchasesUSD ?? 0;

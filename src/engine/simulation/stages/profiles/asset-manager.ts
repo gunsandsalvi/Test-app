@@ -5,7 +5,8 @@ import { random } from '../../../rng';
 import { ProfileInput, ProfilePnl } from './types';
 
 export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
-  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare } = input;
+  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
+    payrollAboveBaselineAnnualUSD } = input;
   let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
 
   const instEnt = entityById.get(comp.id);
@@ -25,7 +26,8 @@ export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) 
   newRevenue = Math.max(10, weeklyFees * 52);
   comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
   newEbitdaMargin = 0.35;
-  newEbitda = newRevenue * newEbitdaMargin;
+  // IND-R1: its staff, at the deviation from the baseline the stated margin already carries.
+  newEbitda = newRevenue * newEbitdaMargin - payrollAboveBaselineAnnualUSD;
   newEbit = Math.max(1, newEbitda);
   newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
   newEps = perShare(newNetIncome);

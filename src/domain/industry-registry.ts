@@ -22,8 +22,10 @@ import type { Industry, BuyerType, HouseholdPriceTier } from './industry';
 import type { DeliveryMode } from './goods-physical';
 
 /** The producing sector whose companies carry an industry's lines — a GICS-style taxonomy
- * primitive. Financials and Banks produce no goods (their stage-08 consumer-revenue proxy line
- * is FINANCIAL_SECTOR_PROXY_LINES below, and IND4 owns retiring it). */
+ * primitive. Financials and Banks produce no goods and now carry NO product line at all
+ * (IND-R2): a line is what registers a supplier in stage 05's index, so the proxy line they used
+ * to carry put 40 financial firms into the enterprise-software market. Their revenue comes from
+ * their stage-08 profiles. */
 export type ProducingSector = 'Tech' | 'Energy' | 'Industrials' | 'Consumer';
 /** IND2 will add SUBSCRIPTION | PROJECT | ROYALTY as profile modules; UNIT_SALE is today's world. */
 export type RevenueMechanism = 'UNIT_SALE';
@@ -605,28 +607,6 @@ export function subUnitsByProducingSector(): Record<ProducingSector, { industry:
   });
   return out;
 }
-
-/**
- * The financial sector's stage-08 consumer-revenue proxy (pre-BP1b hardcoded template).
- *
- * A bank does not produce software — and this is not merely cosmetic, because a `productLine` is
- * what registers a firm as a SUPPLIER in stage 05's auction index, which has no entity-type
- * filter. MEASURED at seed 2026-08-29: 276 suppliers of `enterprise_software`, of which **16
- * banks and 24 institutions**, and the category's market shares sum to **646%** against **400%**
- * (100% x four regions) for every other category in the model. Insurers and pension funds are
- * offering enterprise software into the goods market, and diluting the real software firms'
- * shares by ~62%.
- *
- * Worse, it is incoherent with stage 08: a bank routes to `bankProfile`, which computes its
- * revenue from its balance sheet and never accounts for producing anything. So the supply is
- * real to the auction and invisible to the producer's own P&L.
- *
- * Owner: IND — replace with real financial P&L lines and give the auction index no financial
- * suppliers at all.
- */
-export const FINANCIAL_SECTOR_PROXY_LINES = [
-  { industry: 'SoftwareDigitalServices' as Industry, subUnitId: 'enterprise_software', revenueShare: 1.0, competitiveness: 0 },
-];
 
 // ---------------------------------------------------------------------------------------------
 // IND1 — what a good physically is, on the holding side.
