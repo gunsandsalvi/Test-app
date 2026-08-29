@@ -232,6 +232,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       return sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
     }, 0);
     const weeklyInterest = annualInterest / 52;
+    // SETL4: interest goes to whoever actually lent. A bank FACILITY is paid to the house bank
+    // that wrote it; market paper is paid to the REGISTER, which knows who holds it. Splitting
+    // the two here is what lets each leg have a real payee instead of one aggregate leaving for
+    // the boundary while the lenders were credited independently (rule 3's double derivation).
+    const facilityInterestWeeklyUSD = nonMaturingTranches
+      .filter(t => t.isBankFacility)
+      .reduce((sum, t) => sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0) / 52;
+    const marketFixedInterestWeeklyUSD = nonMaturingTranches
+      .filter(t => !t.isBankFacility && t.rateType === 'FIXED')
+      .reduce((sum, t) => sum + t.principalUSD * (t.couponRate ?? 0.05), 0) / 52;
+    const marketFloatingInterestWeeklyUSD = nonMaturingTranches
+      .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
+      .reduce((sum, t) => sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0) / 52;
     const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
     const taxRate = 0.21;
 
@@ -710,10 +723,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const capexSettledUSD = update?.capexPurchasesUSD ?? 0;
       post('wages & other opex beyond auction settlements', -Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD)));
       post('inventory carrying cost', -carryingCostUSD);
-      // The lenders: bank facilities are paid to the house bank, market paper to its holders.
-      // Splitting the two is SETL4's (the register decides who receives); until then the whole
-      // leg names the boundary rather than paying the wrong counterparty.
-      post('interest paid', -weeklyInterest);
+      // SETL4: reported here, paid itemised below — the house bank for its facilities, the
+      // register for market paper. One aggregate line on the cash walk, three real payees.
+      post('interest paid', -weeklyInterest, undefined, false);
+      if (facilityInterestWeeklyUSD > 0 && comp.homeBankTicker) {
+        pay(ctx, {
+          payer: { kind: 'COMPANY', ticker: comp.ticker },
+          payee: { kind: 'BANK', ticker: comp.homeBankTicker },
+          amountUSD: facilityInterestWeeklyUSD,
+          reason: 'facility interest to the lending bank',
+        });
+      }
+      payHoldersCash(ctx, comp.id, 'CORP_BOND', marketFixedInterestWeeklyUSD);
+      payHoldersCash(ctx, comp.id, 'LEVERAGED_LOAN', marketFloatingInterestWeeklyUSD);
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
       const weeklyAccrualUSD = Math.max(0, (newEbit - annualInterest)) * (reg.effectiveTaxRate ?? 0.21) / 52;

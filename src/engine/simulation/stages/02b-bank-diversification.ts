@@ -134,6 +134,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const priorLoanInterestWeeklyUSD = (prevSheet.businessLoans || [])
         .filter((l) => l.status === 'PERFORMING')
         .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
+      // SETL4: the FACILITY slice of that interest is now paid by the borrower as a real payment
+      // (stage 08 → settlement), so the evolution must not credit it a second time. SME pools
+      // have no cash ledger of their own and still pay through the book.
+      const priorFacilityInterestWeeklyUSD = (prevSheet.businessLoans || [])
+        .filter((l) => l.status === 'PERFORMING' && l.borrowerKind === 'COMPANY_FACILITY')
+        .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
 
       // HH3: the household books' real accrual on the same prior-week basis — each pool at its
       // own terms (a mortgage pool at its fixed WAC, card/term at policy plus their margins).
@@ -166,7 +172,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         prevSheet.repoBorrowedUSD ?? 0,
         prevSheet.repoLentUSD ?? 0,
         reg.repoRateAnnual ?? reg.policyRate,
-        priorLoanInterestWeeklyUSD,
+        priorLoanInterestWeeklyUSD - priorFacilityInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
         // PUB1: real coupons on this bank's own sovereign book.
         Object.entries(prevSheet.sovereignBondHoldingsByTenor || {}).reduce(

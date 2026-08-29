@@ -83,6 +83,8 @@ export interface SettlementReport {
   institutionalDepositDeltaByBank: Map<string, number>;
   /** Per-bank movement of the named boundary's balance. */
   unmodeledDepositDeltaByBank: Map<string, number>;
+  /** Payments to/from a bank on its own account — income and expense, so equity moves too. */
+  bankEquityDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
   creditCreatedByBank: Map<string, number>;
   /** The boundary, decomposed by the flow that hit it. §6 wants this line watched DOWN; you
@@ -121,6 +123,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     institutionalDepositDeltaByBank: new Map(),
     unmodeledDepositDeltaByBank: new Map(),
     creditCreatedByBank: new Map(),
+    bankEquityDeltaByBank: new Map(),
     unmodeledByReason: new Map(),
     householdDeferredUSD: 0,
     unresolvedUSD: 0,
@@ -185,8 +188,12 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         return;
       }
       case 'BANK': {
-        // A bank paying on its OWN account (not a customer's) moves its reserves directly.
+        // A bank paying or being paid on its OWN account — not a customer's — moves its reserves,
+        // and because no deposit was created against them the other side is its EQUITY: this is
+        // the bank's own income or expense (SETL4: facility interest arrives this way). Crediting
+        // reserves alone would leave an asset with nothing behind it.
         addTo(report.reserveDeltaByBank, party.ticker, deltaUSD);
+        addTo(report.bankEquityDeltaByBank, party.ticker, deltaUSD);
         return;
       }
       case 'BANK_CREDIT': {
@@ -251,6 +258,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     bank.bankBalanceSheet = {
       ...bank.bankBalanceSheet,
       cashReservesUSD: bank.bankBalanceSheet.cashReservesUSD + deltaUSD,
+      bankEquityUSD: bank.bankBalanceSheet.bankEquityUSD + (report.bankEquityDeltaByBank.get(ticker) ?? 0),
       corporateDepositsUSD: bank.bankBalanceSheet.corporateDepositsUSD
         + (report.corporateDepositDeltaByBank.get(ticker) ?? 0),
       institutionalDepositsUSD: (bank.bankBalanceSheet.institutionalDepositsUSD ?? 0)

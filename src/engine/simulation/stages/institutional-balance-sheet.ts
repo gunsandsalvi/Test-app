@@ -136,16 +136,13 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       if (notional <= 0) return;
       const issuer = companyById.get((h as { instrumentId?: string }).instrumentId ?? '');
       if (!issuer) return;
-      if (h.instrumentType === 'CORP_BOND') {
-        const avgCoupon = avgFixedCouponOf(issuer);
-        if (avgCoupon === null) return;
-        weeklyIncomeUSD += (notional * avgCoupon) / 52;
-      } else if (h.instrumentType === 'LEVERAGED_LOAN') {
-        const avgMarginBps = avgFloatMarginBpsOf(issuer);
-        if (avgMarginBps === null) return;
-        const regionPolicyRate = ctx.updatedRegions[entity.region]?.policyRate ?? 0.03;
-        weeklyIncomeUSD += (notional * (regionPolicyRate + avgMarginBps / 10000)) / 52;
-      }
+      // SETL4: corporate coupons are no longer DERIVED here. The issuer pays them to the
+      // register and the settlement pass credits each holder its real share (stage 08 +
+      // shared-helpers) — one payment with a payer, instead of the issuer expensing interest on
+      // 100% of principal while holders independently accrued on their own holdings and the
+      // difference went nowhere (rule 3, and the residual the government side already names).
+      // Sovereign coupons below stay: the government pays them in stage 11.
+      void issuer;
     });
     // PUB1: sovereign coupons are REAL now — paid at each bucket's weighted-average coupon off
     // the issuing region's own debt stack, and debited from that government's account in stage
