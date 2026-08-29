@@ -732,8 +732,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // headcount at the region's per-worker income. A firm that employs more of the region's
       // workers pays more of its costs to households, which is the relationship being expressed.
       // Everyone the region's own labour pools say is employed — HH5's measure, not a proxy.
+      // The field is `employed`; reading a name that does not exist gave 0, and the Math.max(1)
+      // guard below turned that into a divisor of ONE — so every company classified 100% of its
+      // operating outflow as wages, and the same read made household deposits reach 4e16 through
+      // stage 03. A math guard is not a default: it hid a wrong field name for two commits
+      // (rule 2 — if a number explodes, find the mechanism; never clamp the symptom).
       const regionEmployed = Math.max(1, Object.values(reg.occupationPools ?? {})
-        .reduce((a: number, pool: any) => a + (pool?.employedCount ?? 0), 0));
+        .reduce((a: number, pool: any) => a + (pool?.employed ?? 0), 0));
       const weeklyWageBillUSD = (comp.employeeCount * ((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployed)) / 52;
       const wageShare = Math.min(1, Math.max(0, weeklyWageBillUSD / Math.max(1, accruedOutflowsWeekly)));
       const wagesPaidUSD = opexOutflowUSD * wageShare;

@@ -3118,10 +3118,15 @@ that proved it, the lesson.
       goods purchases moved the same balance through settlement. The derived inflow is gone and
       every employer pays: companies, the government from its real account, and the private tier.
       **The tier's wage bill is the REMAINDER** — total wages less government payroll less what
-      the named companies actually paid last week. Deriving it independently (segment headcount
-      times a per-worker income) made household deposits reach **4e16** in sixty weeks, because
-      two employment measures disagreed and the error compounded weekly. A residual cannot do
-      that: it is defined as what is left, so it cannot disagree with the total. **61 → 53.**
+      the named companies actually paid last week — because the tier keeps no books, not because
+      a measure disagrees.
+      **CORRECTION to the first write-up of this entry (§7.94):** the 4e16 explosion was blamed
+      on "two employment measures disagreeing". That was wrong. The code read
+      `occupationPools[].employedCount`, and the field is `employed` — the read returned 0 and a
+      `Math.max(1, …)` guard turned it into a divisor of ONE. A wrong field name, hidden by a
+      math guard, twice (rule 2: never clamp the symptom). The same read was live in stage 08,
+      where it made `wageShare` compute to 1, so every company classified 100% of its operating
+      outflow as wages for two commits. Fixed at both sites; the pools read 11.49M for the USA.
     - **THE LAST TRANCHE CANNOT BE INSTRUCTIONS, and this is a design finding rather than a
       shortfall.** The clearing books apply each participant's cash delta IMMEDIATELY, because
       the next book must read capacity net of what the previous one spent — defer them to
@@ -3139,3 +3144,24 @@ that proved it, the lesson.
       company, a household, a fund, a bank or the government moves is now either an instruction
       through the settlement layer or a reconciled leg with its reserve counterpart. What remains
       un-instructed is named, sized, and on a balance sheet the harness checks.
+94. **"Is that right?" — no. A wrong field hidden by a guard, and half the economy with no
+    books.** The user asked whether two employment measures and an untracked sector could
+    possibly be right. Neither was.
+    - **There were never two measures — there was one, misread.** `employedCount` does not exist;
+      the field is `employed`. `Math.max(1, sum)` then turned the zero into a divisor of one,
+      which is how a per-worker income became astronomical. It survived two commits and a
+      close-out because the guard made it look like arithmetic rather than a bug. **Any
+      `Math.max(1, x)` around a divisor is a place a wrong read can hide** — the guard belongs
+      after the value is known good, not around the lookup.
+    - **The private-sector segments are half the economy and have no books.** Measured for the
+      USA: **47% of employment (4.61M of 9.84M) and 49% of revenue (323B against 335B of named
+      firms)** — and their entire state is `{segmentType, employment, annualRevenueUSD, marginPct,
+      debtUSD, defaultRateAnnualPct, capexUSD, …}`. No cash, no balance sheet, no bank, no
+      counterparty. They employ, produce, buy capex, carry debt and now pay ~70% of the economy's
+      wages, all from the boundary — the largest fiction left in the model, and the one the
+      settlement layer made impossible to keep ignoring, because everything around them became
+      real.
+    - **This is HC's unfinished half.** HC carved a NAMED private tier (1,208 firms with real
+      balance sheets, now banked) out of these aggregates; what remains is the residue nobody
+      carved. Finishing it is a project — see §5-HC3b/BP1's universe growth — and until it lands,
+      the tier's wage bill must stay a residual: a sector with no books cannot pay from books.
