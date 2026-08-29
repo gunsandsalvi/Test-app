@@ -65,6 +65,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // scan of a multi-thousand-element array executed once per company.
   const entityById = new Map(state.institutionalEntities.map(e => [e.id, e]));
   const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
+  // SCALE: the one cross-company read in the loop below. Companies are now updated IN PLACE,
+  // so a customer processed after its supplier would otherwise read the supplier's POST-update
+  // book; snapshot the two supplier figures the relationship shock needs before anything moves,
+  // which is exactly what the old rebuild-a-fresh-object week gave every reader.
+  const supplierShockStats = new Map<string, { annualRevenue: number; invUSDByCategory: Map<string, number> }>();
   // Supply relationships indexed by customer. This was a full scan of the region's relationship
   // list for EVERY company — the same O(companies x list) shape that made corporate-action
   // settlement 12% of the weekly step. One grouping pass instead.
@@ -73,6 +78,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     (updatedRegions[rid]?.supplyRelationships || []).forEach((rel: any) => {
       const list = supplyRelsByCustomer.get(rel.customerCompanyId);
       if (list) list.push(rel); else supplyRelsByCustomer.set(rel.customerCompanyId, [rel]);
+      const supplier = firmById.get(rel.supplierCompanyId);
+      if (supplier) {
+        let stats = supplierShockStats.get(rel.supplierCompanyId);
+        if (!stats) {
+          stats = { annualRevenue: supplier.annualRevenue, invUSDByCategory: new Map() };
+          supplierShockStats.set(rel.supplierCompanyId, stats);
+        }
+        if (!stats.invUSDByCategory.has(rel.category)) {
+          stats.invUSDByCategory.set(rel.category, getOutputInventoryUSD(supplier, rel.category));
+        }
+      }
     });
   });
   /** The nearest short government tranche a corporate treasury would park cash in. One lookup
@@ -119,7 +135,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       comp.sharesOutstanding > 0 ? Number((amountUSD / comp.sharesOutstanding).toFixed(2)) : 0;
 
     if (!isActiveCompany(comp)) {
-      return { ...comp, previousEmployeeCount: 0, employeeCount: 0 };
+      return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
 
     // HC Wave 1: a PRIVATE company runs the reduced weekly path — the real balance-sheet walk
@@ -164,8 +180,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const leverage = comp.totalDebt / Math.max(1, ebitda);
       const defaulted = comp.isDefaulted || (cash < 0 && coverage < DEFAULT_COVERAGE_FLOOR);
       const rating = defaulted ? 'D' as const : determineCreditRating(leverage, coverage);
-      return {
-        ...comp,
+      // SCALE: assigned onto the live object rather than rebuilt as a fresh ~150-field snapshot
+      // per company per week (the literal's values are all evaluated before the first field is
+      // assigned, so every read of `comp` inside it still sees the pre-assignment value). The
+      // old snapshots were 2,600 tenured allocations a week feeding the GC's 12% share.
+      return Object.assign(comp, {
         annualRevenue: revenue,
         revenueHistory: [...(comp.revenueHistory || []).slice(-12), revenue],
         ebitda, ebit, netIncome: Math.round(netIncome),
@@ -186,7 +205,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         previousEmployeeCount: comp.employeeCount,
         offeredWageIndex: companyUpdates[comp.ticker]?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0,
         unfilledVacancyShare: companyUpdates[comp.ticker]?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0,
-      };
+      });
     }
 
     const reg = updatedRegions[comp.region];
@@ -456,16 +475,18 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
       newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + combinedFulfillment * 0.3);
 
-      // Supply relationship shocks
+      // Supply relationship shocks — read from the pre-loop snapshot (companies mutate in
+      // place now, and this is the loop's one cross-company read; the snapshot carries the
+      // pre-update figures every reader used to see).
       const rels = supplyRelsByCustomer.get(comp.id) ?? [];
       rels.forEach((rel) => {
-        const supplier = firmById.get(rel.supplierCompanyId);
-        if (!supplier) return;
+        const stats = supplierShockStats.get(rel.supplierCompanyId);
+        if (!stats) return;
         // The relationship's own category — a supplier's OTHER lines being backed up isn't this
         // customer's problem, only a glut in the specific good it actually buys from them.
-        const supplierInvUSD = getOutputInventoryUSD(supplier, rel.category);
-        if (supplierInvUSD > supplier.annualRevenue * 0.15) {
-          const distress = (supplierInvUSD / (supplier.annualRevenue * 0.15)) - 1;
+        const supplierInvUSD = stats.invUSDByCategory.get(rel.category)!;
+        if (supplierInvUSD > stats.annualRevenue * 0.15) {
+          const distress = (supplierInvUSD / (stats.annualRevenue * 0.15)) - 1;
           newInputSupplyConstraintFactor *= (1 - Math.min(0.2, distress * rel.relationshipStrength * 0.1));
         }
       });
@@ -1513,8 +1534,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     }
 
-    return {
-      ...comp,
+    // SCALE: same in-place assignment as the private path above — see that comment.
+    return Object.assign(comp, {
       revenueVolatility: Number(calculatedRevVol.toFixed(4)),
       segmentFinancials: calculatedSegmentFinancials,
       forwardPE: newForwardPE,
@@ -1600,7 +1621,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // Already real and already-cleared (07d-leveraged-loan-clearing.ts) — passed through as-is.
       leveragedLoan: comp.leveragedLoan,
       treasuryHoldings: newTreasuryHoldings,
-    };
+    });
   });
 
   // Every corporate action this stage recorded reaches the real books here, in one pass.
