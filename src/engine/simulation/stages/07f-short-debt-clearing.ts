@@ -36,7 +36,7 @@ import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nels
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
-import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, investableSurplusUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
@@ -140,7 +140,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const encumberedShare = totalBookUSD > 0
           ? Math.min(1, (sheet.repoEncumberedCollateralUSD ?? 0) / totalBookUSD)
           : 0;
-        const appetiteUSD = investableSurplusUSD(sheet);
+        const appetiteUSD = sovereignBookCapacityUSD(sheet);
         const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet);
         activeBuckets.forEach((b) => {
           const heldUSD = sheet.sovereignBondHoldingsByTenor?.[b.key] ?? 0;

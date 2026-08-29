@@ -122,20 +122,31 @@ export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector): number {
 }
 
 /**
- * The CEILING on it: funding the bank has raised and has neither lent out nor kept as cash has
- * to sit in something that pays. This is a residual of the bank's own balance sheet, so the
- * sector's appetite sums to whatever the sector's unlent funding is — it cannot exceed the
- * market several times over the way `deposits x a ratio` did, and it cannot be a share of a
- * market the bank has never seen.
+ * The CEILING on it: the sovereign book this bank's own EQUITY supports under the leverage
+ * floor — what it already holds, plus the balance sheet its capital still has room for.
+ *
+ * OWN8 — WHAT THIS REPLACES, AND WHY IT WAS WRONG. OWN3 used an `investableSurplusUSD`:
+ * `funding + equity - loans - cash - repoLent`. The balance sheet already says
+ * `funding + equity = loans + cash + repoLent + sovereign`, so **that expression IS the
+ * sovereign book, rearranged** — an accounting identity wearing a constraint's name. It equalled
+ * `sovBook` to the cent for every bank every week, so `maxHoldingUSD` came out strictly BELOW
+ * current holdings and no bank could ever buy another bond. Measured against pre-OWN: the USA
+ * sovereign book went 147B->285B before and 78B->53B after, cash/deposits 2.2% -> 47-68%, and
+ * because no bank was ever short its operating buffer the whole repo market printed ZERO volume.
+ *
+ * A ceiling must be able to exceed the position it bounds. Capital can: `leverageHeadroomUSD` is
+ * equity against unweighted assets, the one constraint that sees a zero-risk-weight sovereign
+ * book at all, and it is already what bounds the weekly FLOW in 07c/07f. What actually binds
+ * week to week is that flow — cash above the operating buffer plus unencumbered borrowing
+ * capacity — so a bank deploys idle cash into bonds at a price it will accept, which is the
+ * mechanism the residual was suppressing. REPO (§5) replaces even this: a real treasury's
+ * securities book is bounded by what it can FINANCE, and a funding market is what makes that
+ * bound real rather than notional.
  */
-export function investableSurplusUSD(sheet: BankingSector): number {
-  const fundingUSD = Math.max(0, sheet.depositsUSD) + (sheet.corporateDepositsUSD ?? 0)
-    + (sheet.institutionalDepositsUSD ?? 0) + (sheet.smeDepositsUSD ?? 0)
-    + (sheet.unmodeledDepositsUSD ?? 0) + (sheet.wholesaleFundingUSD ?? 0)
-    + Math.max(0, sheet.bankEquityUSD);
-  const deployedUSD = sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD
-    + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0);
-  return Math.max(0, fundingUSD - deployedUSD);
+export function sovereignBookCapacityUSD(sheet: BankingSector): number {
+  const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {})
+    .reduce((a, v) => a + (Number(v) || 0), 0);
+  return Math.max(0, sovUSD) + leverageHeadroomUSD(sheet);
 }
 
 const TENOR_BUCKET_YEARS: Record<string, number> = {
