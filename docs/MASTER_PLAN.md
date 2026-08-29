@@ -8,16 +8,18 @@ the former `ARCHITECTURE.md`, `CODEBASE_AUDIT.md`, `ONE_DOLLAR_PROJECT.md`,
 - §1 The rules of engagement (standing directives — read before touching anything)
 - §2 Codebase map (what every file is)
 - §3 Current state: what is genuinely real vs. still formula-driven
-- §4 **The global work order** (what to do, in what sequence, and why)
-- §5 Detailed work instructions, one section per work item (where the code goes, how to
-  structure the logic, how to verify)
-- §6 Bug backlog appendix (small/medium findings to batch)
-- §7 Record of completed work and hard-won lessons (do not re-learn these)
+- §4 **The global work order** — the only place a project's order and state live; §4.1 lists what
+  has closed and what each closed project left standing
+- §5 Detailed work instructions, one section per OPEN §4 item, in §4's order
+- §6 Open defects (§6.1), watchlist (§6.2), the standing rule audit (§6.3) and the clamp-removal
+  discipline (§6.4)
+- §7 Record of completed work and hard-won lessons (do not re-learn these; never renumbered)
 
 **How to work through this file:** take the next unfinished item in §4's order, read its §5
 section, implement it exactly where §5 says, run the verification ladder (§1.10), commit it as
-one bounded change with a message naming the item, then return to §4. Never start an item
-whose listed prerequisites aren't done.
+one bounded change with a message naming the item, then return to §4. Never start an item whose
+listed prerequisites aren't done. **When an item closes:** move its §4 row to §4.1 with one line
+on what it left standing, delete its §5 section, and write the record in §7.
 
 ---
 
@@ -250,7 +252,7 @@ schedule, AP capacity, the research-capacity primitive behind who indexes).
 ### 2.4 UI (`src/components/`) and invariants
 
 UI reads `GameState` only. Several components still contain second price-setters/fabricated
-numbers — see §5-G and §6. Invariants harness: `scripts/invariants.ts` via `npm run verify`
+numbers — see §5-G3 and §6. Invariants harness: `scripts/invariants.ts` via `npm run verify`
 (NaN purity, ownership conservation, NAV identity, fee conservation, MTM unfreezing, policy
 rate stability, default/merger disjointness, bank capital & NIM bands, IPO EPS, revenue 20x
 ceiling, sovereign absorption, equity-demand-moves-price, auction-moves-yields). Known harness state, measured at the WS5 close (§7.32/§7.34): **60 weeks, seed default —
@@ -264,130 +266,118 @@ and #18.
 
 ## 3. Current state: real vs. formula
 
-**Genuinely bottom-up today** (post "1$ is 1$", at rest): category demand → input-output →
-stage 05's real auctions with named counterparties, per-lot input provenance, real settled
-sales anchoring revenue, capex as real bids, private sector as a real participant *in the goods
-market*, commodities linked to real producer companies, per-bank balance sheets + real CB
-facilities, real gov tranche issuance, the measured CPI, the national-accounts identity, the
-single-owner sovereign curve, the 07b/07c/07d clearing markets — which since §7.16 price
-from real demand schedules rather than quantity targets — the primary market that brings new
-paper into those same books (WS8), itemized bank lending and endogenous money (G2), and the
-private sector's lifecycle: sponsors calling real LP capital, buying at the multiple the public
-market clears and marking at that same multiple (§7.41).
+**Genuinely bottom-up today.** Category demand → input-output → stage 05's real auctions with
+named counterparties, per-lot input provenance, real settled sales anchoring revenue, capex as
+real bids; commodities linked to real producer companies; the 07b/07c/07d/07e/07f clearing
+markets, which price from real demand schedules rather than quantity targets, plus the primary
+market that brings new paper into them (WS8); per-bank balance sheets, real central-bank
+facilities and itemized bank lending with endogenous money (G2); real government tranche issuance
+against real holders, both fiscal balance sheets and the remittance loop between them (PUB); the
+measured CPI and the single-owner sovereign curve; the private sector's lifecycle, sponsors
+calling real LP capital and marking at the multiple the public market clears (HC); households at
+corporate depth — real income statement, itemized consumer debt on named banks, real claims on
+institutions, and a labor market where employment is the sum of what real employers carry (HH);
+the SME tier as one pool per (region × industry) trading in every market (SEG); one settlement
+layer where a payment leaving one book arrives on another (CASH); labor demand responding to
+affordability (LAB); and ownership measured off the real books rather than assigned (OWN).
 
-**Still formula-driven** (each is a §4 work item, in that order): **the household sector**, which
-is modelled an order of magnitude more thinly than the corporate one — 4 regional aggregates
-against 2,004 named firms, a top-down income anchor instead of an income statement, consumer debt
-itemized to nobody, and 740B of institutional liabilities that are households' assets with no
-holder (HH, §7.48); **the public sector** — the government books no interest on its own debt and
-the central bank is a scalar (PUB); the industry taxonomy (BP1); the dual dealer system (G3);
-**every non-financial corporate's operating model**, which is one model with four sector
-coefficients on it — storable output for everyone including software, one COGS decomposition, and
-revenue only on settled unit sales, so no subscription, backlog or royalty business exists (IND,
-§7.50); derivatives, commodity futures and hedging incl. implied vol (DER); default resolution and
-recovery (G5); and FX (WS9).
+**Still formula-driven**, each a §4 item in that order: **every non-financial corporate's
+operating model**, which is one model with four sector coefficients on it — storable output for
+everyone including software, one COGS decomposition, revenue only on settled unit sales, so no
+subscription, backlog or royalty business exists (IND, §7.50), and production/capacity decisions
+inside it are walked between bounds (CAP); **banks, which skip that operating model entirely** —
+no payroll, capex, inputs or product lines, a hardcoded margin, random loan losses (§6.1, IND);
+**the dealer system**, one regional book copied onto four bank sheets with its P&L split by market
+share (G3); **housing**, the largest asset households own, priced by a drift formula between two
+bounds (HSG); **expectations, confidence and the savings rate**, all coefficient-driven (MAC);
+CDS and consumer credit rates (CRD); derivatives and hedging (DER); default recovery (G5); and
+weather, which states its own GDP and inflation impact instead of cutting a yield (NAT).
 
-**Real but structurally undersupplied** — a category worth naming separately, because these are
-not formulas and they still produce wrong prices. The clearing markets are honest mechanisms
-running on an asset universe that does not match the money pointed at it: institutional
-corporate-credit appetite ran **~6x the corporate credit that existed** (§7.18). HC Wave 1 took
-that to 3.8x by making the hidden sector's debt real and ownable (§7.33), and S11 gave entities
-the budget constraint they never had (§7.21); the residual closes through the §6 segment-debt
-primitive, G2's bank book and HH1's liability inflows. The lesson stands on its own: a correct
-auction over a short float still gives a wrong price, and no work inside the auction fixes it.
+**Real but structurally undersupplied** — worth naming separately, because these are not formulas
+and they still produce wrong prices. The clearing markets are honest mechanisms running on an
+asset universe that does not match the money pointed at it: institutional corporate-credit
+appetite ran **~6x the corporate credit that existed** (§7.18); HC Wave 1 took that to 3.8x
+(§7.33) and S11 gave entities the budget constraint they never had (§7.21). The residual closes
+through G2's bank book and HH1's liability inflows, and **SCALE** grows the universe itself. The
+lesson stands on its own: **a correct auction over a short float still gives a wrong price, and
+no work inside the auction fixes it.**
 
 ---
 
 ## 4. THE GLOBAL WORK ORDER
 
-Ordered **foundational → features**. A tier is built on the one above it; nothing lower is a
-prerequisite for anything higher. Work top to bottom within a tier.
+**This table is the only place a project's order and state live.** A project appears here once,
+in the tier it belongs to; its §5 entry appears in this same order. When it closes it leaves this
+table for §4.1 and its §5 entry is deleted — the substance is in §7, which is never renumbered.
 
-Every item in the old §6 bug backlog now has an owner and lives inside the project that closes
-it. What remains in §6 is only what no project owns: live defects with a named next action, and
-metrics to watch rather than work.
+Work top to bottom. Never start an item whose prereqs aren't done.
 
-| # | Tier | Project | Prereqs |
+| # | Tier | Project | Why here |
 |---|---|---|---|
-| — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
-| ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
-| ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
-| 1.5 | foundation | **CASH — Corporate cash settles through banks** (found by §7.86; the banks' missing deposit base, and the last big "1$ is 1$" boundary) | none |
-| ✓ | foundation | ~~**SEG — The SME tier, keyed to the registry**~~ *(CLOSED §7.95–97; opened and rescoped 2026-08-29)* — one pool per region × industry, trading in every market, on the settlement rail. Harness 59 → 36. | CASH (SETL1–5), BP1 |
-| ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
-| ~ | foundation | **OWN — Ownership is an outcome** (§6.4 project 2) — OWN1–OWN6 done (§7.98); **OWN7 open**: the corporate over-holding the deleted clamp exposed (§6.1) | none |
-| 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
-| ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
-| ~ | markets | **XB5 — Central-bank FX reserves** (small; blocks XB's close — see §6) | XB |
-| ~ | markets | **HF — Hedge fund strategies + prime brokerage** (typed funds; leverage gets a lender that can pull it) | none |
-| 5 | foundation | **DEM — Demographic variability** (small; rides beside HH4–HH5) | none |
-| 6 | markets | **G3 — One dealer system** | none (S9 done) |
-| 7 | markets | **DER — Derivatives and the people who hedge with them** | G3 |
-| 8 | markets | **G5 — Default resolution: recovery as an outcome** | none (G2 done) |
-| 9 | markets | **WS9 — Real trade & FX** | premise confirmation from the user |
-| ~ | markets | **XB — Cross-border portfolios and trade** — IN PROGRESS: XB1/XB2/XB2b–2f, XB3a-1/2/3/4, XB3b, XB4, XB5 done (§7.72–77). XB6 remains, and XB3a-5 is gated on it. Absorbed WS9 (FX now clears) and the minimum of DER (a real FX forward book with dealer capacity and margin). | (was WS9, DER — both now partly delivered inside XB) |
-| 11 | depth | **CAL — Payment calendars** | none |
-| 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
-| 13 | depth | **HC3b — The product-market handover** | BP1 |
-| 14 | depth | **SCALE — Universe scale-up under a wall-clock budget** | profiling first (rule: measure) |
-| 14.1 | depth | **MNC — Multinational production** (added 2026-08-29; intra-firm trade is a third of the real thing and zero here) | IND, XB |
-| 14.2 | depth | **CHAIN — Multi-tier supply chains** (real BOM graph; orders, not demand, go upstream — the bullwhip becomes producible) | BP1, IND10/11 |
-| 14.3 | depth | **DYN — Entry, exit, and industry structure** (concentration as an outcome; capacity scrapping; make-vs-buy from measured contract failure) | IND, BP1 |
-| 14.4 | depth | **PROD — Firm productivity and innovation** (R&D buys real outcomes; reallocation as the growth engine) | IND |
-| 14.5 | depth | **CRE — Commercial property and leases** (space, landlords, lease liabilities, CRE loans on named banks) | HH, G2 |
-| 14.6 | depth | **TAXR — Corporate tax, really** (tax vs book depreciation, carryforwards; transfer pricing after MNC) | PUB; MNC for cross-border |
-| 15 | last | **S-final — Validation gate** | everything above |
-| 16 | last | **AU — Aurora, the UI rebuild** | everything above |
+| — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
+| 1 | foundation | **CASH — one settlement layer** | One slice left (**SETL6**): 07b–07f move participant cash directly instead of as instructions. Everything measured about money is against that boundary. |
+| 2 | foundation | **OWN7 — the corporate over-holding** | Finishes OWN (§7.98). The harness is red on it and nothing else should be measured until it is closed. |
+| 3 | foundation | **IND — industry operating models** | Every non-financial corporate is still one model with four coefficients. Prereq: BP1 (done). Absorbs the §6.1 row that banks skip the operating path entirely. |
+| 4 | foundation | **CAP — production and capacity decisions** *(clamps)* | Runs with IND: it is the same operating model seen from the quantity side. |
+| 5 | foundation | **DEM — demographic variability** | Small; population growth is its clamp to delete (NAT's third bullet folds in here). |
+| 6 | foundation | **MAC — expectations and policy without bounds** *(clamps)* | Gated: its bounds exist to survive the §6 inflation escape, so that closes first. |
+| 7 | markets | **IDX — an index is a statistic** *(clamps)* | An afternoon, no prereqs, and it unmasks the §6 equity runaway in the published index. Take it whenever a short slice is wanted. |
+| 8 | markets | **G3 — one dealer system** | Also owns §6.1's regional dealer desk, and CRD's CDS book needs a dealer to trade in. |
+| 9 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | Needs G3 for the CDS half; the ratings half is independent. |
+| 10 | markets | **HSG — a housing market that clears** *(clamps)* | Independent. Houses are already a real stock on household balance sheets (HH2); they just have no book. |
+| 11 | markets | **XB — cross-border portfolios and trade** | IN PROGRESS. **XB6** remains and gates XB3a-5. Absorbed the old WS9 (FX clears) and the minimum of DER. |
+| 12 | markets | **HF — hedge fund strategies + prime brokerage** | Typed funds; leverage gets a lender that can pull it. |
+| 13 | markets | **DER — derivatives and the people who hedge with them** | Prereq G3. |
+| 14 | markets | **G5 — default resolution: recovery as an outcome** | Independent. |
+| 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | Small and now smaller: the weather impact fields are dead code. |
+| 16 | depth | **CAL — payment calendars** | Coupons, loan interest and dividends accrue as smooth 1/52 flows; real instruments pay on their own dates. |
+| 17 | depth | **ETF2 — a real price for ETF shares** | Prereq G3. |
+| 18 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
+| 19 | depth | **SCALE — universe scale-up under a wall-clock budget** | Wave 2 sequenced after IND. |
+| 20 | depth | **MNC — multinational production** | Prereqs IND, XB. |
+| 21 | depth | **CHAIN — multi-tier supply chains** | Prereqs BP1, IND10/11. |
+| 22 | depth | **DYN — entry, exit, and industry structure** | Prereqs IND, BP1. |
+| 23 | depth | **PROD — firm productivity and innovation** | Prereq IND. |
+| 24 | depth | **CRE — commercial property and leases** | Prereqs HH, G2 (both done). |
+| 25 | depth | **TAXR — corporate tax, really** | Prereq PUB (done); MNC for the cross-border half. |
+| 26 | last | **S-final — validation gate** | Everything above. |
+| 27 | last | **AU — Aurora, the UI rebuild** | Everything above. |
 
-**What changed in the 2026-08-28 reordering** (superseded in part by HH's merge above). Six
-projects merged into three: commodity futures (ex-G7)
-and corporate/bank hedging (ex-WS11) are slices of derivatives (ex-G4), because both are its
-users and neither is a market of its own; the central bank (ex-G9), government fiscal (ex-BP5)
-and government debt service (ex-S4r) are one balance sheet each way and became **PUB**, since
-remittances are the loop that closes between them and neither half is honest alone. Blueprint
-split: its registry is foundational and leads, its industry detail is depth and follows. The
-sentiment remainder (ex-G8) was an hour of dead-code deletion, not a project, and folded into
-**L**.
+*(clamps)* marks the six survivors of the clamp-removal programme (§6.4). They are ordinary work
+items in their proper tiers, not a separate track.
 
-**Why this order.** The macro root causes are done (§7.9–§7.11, §7.16) and so are the markets
-that price real instruments (WS4–WS8, G2, HC, ETF). What is left at the base is not a missing
-market — it is that two of the three sectors any economy has are still fictional in ways the
-markets above them cannot see.
+**Do not reorder this table without asking.** The sequence encodes prerequisites that are not all
+visible from a row: a market cannot be honest before the demand side it prices against is, and a
+clamp cannot be deleted before the mechanism under it exists (§6.4).
 
-**The household sector is modelled an order of magnitude more thinly than the corporate one**, and
-the asymmetry is measurable (§7.48): 2,004 named companies against 4 regional aggregates; a real
-income statement anchored to settled sales against a top-down income anchor; the S5 cash ledger
-against formula deltas; 82 itemized corporate loans on named banks' books against a 140B consumer
-book itemized to nobody. G2 gave corporate borrowers real lenders and left household borrowers an
-aggregate — the same project, half built. And the government **books no interest on its own debt
-at all**. Every market above these two prices correctly against a demand side that is, in those
-places, made up.
+### 4.1 Closed projects
 
-**And every non-financial corporate is the same firm.** Four coefficients vary by sector —
-pricing power, PP&E intensity and life, wage sensitivity — plus input recipes by category. Those
-are coefficients on ONE operating model, not different models. Every company produces storable
-units into stage 05's auction, holds output inventory decaying at a hardcoded 2%, books revenue
-only on settled unit sales, and runs one COGS decomposition. **Measured: enterprise software sits
-in physical inventory — 159 units worth 5.9M, spoiling like steel** (§7.50). There is no
-subscription, backlog, deferred or royalty revenue anywhere in the model; a firm with 90% gross
-margins and no warehouse is not expressible. The one sector done properly is financials, where
-`financialStatementProfile` gives banks, insurers and asset managers genuinely different P&L
-paths — so the model already knows operating models differ and applies that knowledge to exactly
-one sector. That is **IND**, widened from financial policy to operating models and moved to the
-foundation behind its registry.
+One line each. The build record and its lessons are in §7, referenced there and never renumbered.
 
-**Why G6 was absorbed rather than kept.** "Institutional liabilities" and "households become real"
-are ONE project seen from two ends: the claim linking a household to a pension fund is
-simultaneously the fund's liability and the household's asset. Keeping them as separate items
-guaranteed that building either alone would leave a gap to be named — which is exactly what
-happened in MS1, and the 740B it left unattributed (§7.48) is the measure of the mistake. They are
-now one item, **HH**, at the front.
+*§7 entries written before the 2026-08-29 reorganisation point at §5 sections for projects that
+have since closed (`§5-HH`, `§5-PUB`, `§5-HC`, `§5-S11`, `§5-SEG`). Those sections are gone; the
+row below is their replacement, and §7 itself is left exactly as written.*
 
-**Hidden Corporates and ETFs are closed** (§7.33, §7.41, §7.44). Do not reorder without asking.
+| Project | Closed | What it left standing |
+|---|---|---|
+| **L** — ledger integrity batch | §7.46 | Six real defects fixed; harness 5 → 4. |
+| **HC** — hidden corporates | §7.33, §7.41 | ~300 named private firms per region as real `Company` objects — no parallel type. PE sponsors call real LP capital and mark at the multiple the public market clears. **Conservation is the discipline:** tier-1 firms are carved OUT of the segment aggregates, never added on top. Only HC3b remains (§4 item 18). |
+| **ETF** — index funds and APs | §7.44 | 27 funds over 27 indexes; membership and weights are rules over cleared prices. **The shape later projects reuse:** an index fund posts a SIZE with no reservation level (`stages/etf-demand.ts`) — the price-insensitive schedule. |
+| **HH** — the household sector | §7.60 | Households at corporate depth: real income statement, itemized consumer debt on named banks, real claims on institutions, a labor market where employment is the sum of what real employers carry. Its two open remainders are §6 rows (occupational mismatch; the income anchor). |
+| **PUB** — treasury + central bank | §7.68 | Both balance sheets real and the remittance loop closed between them; the CB is a real bidder placing an open-market ORDER that 07c/07f price. Its remainder is a §6 watch (sovereign elasticity to a size-only bidder) and the spending PATH still being a formula. |
+| **BP1** — industry registry + rule 17 | §7.83–84 | `INDUSTRY_REGISTRY` as the one data source and `PROFILE_REGISTRY` as the one behavior dispatch — the structures rule 17 requires. Everything in IND and the depth tier writes registry fields or profile modules. |
+| **XB5** — central-bank FX reserves | §7.77 | Reserves are a real asset that intervention spends; a CB at zero cannot defend. **Named and left:** the USD is the numéraire so its own excess demand is never checked; there are outright forwards but no FX SWAPS (the instrument the cross-currency basis lives in); and no sovereign wealth fund as a distinct reserve manager. |
+| **WS9** — real trade & FX | absorbed into XB | The FX rate clears from real net currency demand; the drift formula and its UIP sign bug are gone. |
+| **SEG** — the SME tier, keyed to the registry | §7.95–97 | One pool per (region × industry) trading in every market, on the settlement rail. Harness 59 → 36. Its two deliberate omissions are §6.1 rows. |
+| **LAB** — labor demand, and the wage as a price | §6.4 project 1 | Harness 405 → 88; seven clamps out. Exposed the §6.1 seed-employment row. |
+| **OWN** — ownership is an outcome | §7.98 | Ownership is measured off the real books; no engine file reads a share to decide anything. OWN7 (§4 item 2) closes what it exposed. |
 
 ---
 
 ## 5. Detailed work instructions
+
+One section per open §4 item, **in §4's order**. A closed project has no section here — its build
+record and its lessons are in §7, and what it left standing for later work is one line in §4.1.
 
 ### P1 — Periodicity & units audit, and the MoM/YoY display convention  *(standing)*
 
@@ -413,212 +403,135 @@ home. Aurora inherits the convention rather than re-inventing it.
 
 ---
 
-### L — Ledger integrity batch  *(CLOSED — §7.46)*
+### CASH — One settlement layer, and money that is somebody's liability  *(item 1; found by §7.86; one slice left)*
 
-Seven items, six of them real defects and now fixed: the redemption cash leg, the unmarked
-CP-failure revolver, the phantom private share register, the book-value P/B price on banks and
-institutions, the dead sentiment field, and the earnings desk private firms were given at
-generation. The seventh did not reproduce and produced PUB1b instead. Harness 5 → 4 violations.
+**Rescoped 2026-08-29 on the user's question — "would it make sense to have cash settlement as a
+step by itself?"** Yes, and it is the better architecture. Cash movement was scattered across ~15
+stages each mutating its own field, which is precisely how corporate cash sat outside the banking
+system undetected for the model's whole life. Now stages RECORD payment instructions
+(`payer, payee, amount, reason`) and one settlement stage executes them: deposits move, each
+bank's net position settles in central-bank reserves, the government banks at the CB (so tax
+dates drain reserves), and any counterparty the model lacks is named `UNMODELED` — a visible
+deposit stock to watch down rather than money appearing from nowhere. A new payment type is one
+instruction and no new plumbing (rule 17).
 
-### HH — The household sector, to corporate depth  *(Tier 1, item 1; absorbs the old MS and G6)*
+**Slices:** **SETL1** the layer itself (§7.87); **SETL2** corporate cash (§7.88); **SETL2b** a
+loan creates a deposit rather than consuming reserves (§7.89); **SETL3** securities pay their
+holders and **SETL5** institutions bank (§7.91); **SETL4** coupons paid once, to whoever actually
+lent (§7.92); **SETL5b** nothing is born unbanked (§7.97). The per-bank identity was the gate at
+every step and held throughout.
 
-*Naming note: §7 records written before 2026-08-28 call the institutional-liability half **G6**
-and the household half **MS**. Those entries are history and are left as written; both now live
-here.*
+**SETL6 — the one slice left.** The boundary is down to `non-auction operating receipts` (+37B,
+the true boundary: revenue from customers the model does not contain) plus **the clearing books'
+own cash legs — 07b, 07c, 07d, 07e, 07f move participant cash DIRECTLY rather than as
+instructions** (§7.93). That is the last migration, and it is also what will let §7.91's
+institutional cash volatility be seen properly, because those legs ARE the volatility.
 
-**The case for this being first, in one table.** The two sectors are not modelled at the same
-depth, and nothing above them can be more honest than the demand side it prices against.
 
-| | Corporates | Households |
-|---|---|---|
-| Named entities | 2,004 | 4 regional aggregates |
-| Income statement | real, anchored to settled stage-05 sales | `estimatedHouseholdIncomeUSD`, a top-down anchor |
-| Cash | S5 ledger, every flow labelled | formula deltas |
-| Debt | 82 itemized loans on named banks + tranches with maturities, coupons, call protection | a 140B consumer book itemized to NOBODY; paydown-rate constants |
-| Cleared markets | 4 | 0 |
-| Default | real, on cash exhaustion | none |
+**The boundary:** a company's cash is a number on the company. When one firm pays another, both
+S5 ledgers move and no bank's balance sheet does — so `corporateDepositsUSD` reports a stock the
+banking system does not hold, and the banks' only real deposit base is households (~52% of
+assets, against a real ~75-80%). Everything downstream is distorted: banks fund the gap with
+wholesale money at policy-plus-spread, which is why a rate cycle destroys them (§7.86), and
+deposit competition, the money multiplier and the MMF sweep all price against a deposit base
+missing its corporate half.
 
-G2 gave corporate borrowers real lenders and left household borrowers an aggregate. Same project,
-half built.
+**The work:** a corporate payment debits the payer's bank and credits the payee's — deposits move
+between banks, and a bank that wins relationships wins funding. Cash held at a bank IS that
+bank's liability, earning what the relationship commands (the sweep already models the
+alternative). The per-bank identity must close every week throughout: that gate is what disproved
+the shortcut (§7.86).
 
-**MS1 is done** (§7.47): household equity is real claims — index-fund shares through the AP
-mechanism, the listed float institutions do not hold, founder stakes in the private tier — plus
-one named gap. What follows is the rest, and the FIRST slice is the one MS1's gap exposed.
-
-**HH1 — The claims that link households to institutions.** *(absorbs G6; do this first)*
-Measured (§7.48): insurers hold 495B of assets against 40B of their own equity, pension funds 146B
-against 17B, asset managers 188B against 31B. **740B is a liability to somebody and nobody holds
-the claim.** Those are policyholder reserves, pension entitlements and fund shares, and in reality
-every dollar of them is a household asset. The asset exists in this model and the claim does not —
-a rule-3 violation at 740B, and 46% of the gap MS1 had to name.
-
-Both sides close together, because they are one thing:
-- **Insurers:** premiums as a real expense line on companies and households; stochastic claims
-  scaled by real events; technical reserves = expected claims, held AS a household asset; the
-  liability duration is the reserve duration.
-- **Pensions:** contributions as a real slice of wages, benefits from a cohort table, entitlements
-  on the household balance sheet; the funded ratio is real and drives risk appetite the way it
-  actually does — underfunded funds reach for return, fully-funded funds derisk into bonds.
-- **Asset managers:** fund shares held by the households whose money it is.
-- **Then derive and retire the constants:** each entity's required return becomes its real
-  liability cost and its duration need its real liability duration, so
-  `REQUIRED_RETURN_ON_CAPITAL` and `INSTITUTIONAL_REAL_RETURN_BPS` become measured properties.
-  Demand curves stop being parallel because balance sheets genuinely differ.
-- **Also here: PE fundraising.** A sponsor calls its commitments, deploys them and stops forever —
-  undrawn capital runs 13.6B → 0.25B by week 90 and deal flow ends (§7.41). Real LPs size a new
-  vintage from their own allocation, which is a real decision only once their liabilities are.
-
-**HH1b — One institution, not two.** *(scope discovered while building HH1a — §7.49)*
-The Company shell and the InstitutionalEntity that share an `id` are the same firm and do not
-agree. An insurer reports 0.05B of revenue and 0.10B of market cap against an entity holding
-241.4B; its `technicalReservesUSD` prints 0.2B against a 221.9B beneficiary liability. The insurer
-branch of stage 08 explicitly refuses to read the entity, on a comment that predates S11 making
-`totalAssetsUSD` a real per-firm marked book — the asset-manager branch beside it already reads it
-and says so. Pension funds and hedge funds fall through to the generic consumer-revenue path.
-- Insurer float, premiums, claims and reserves come from the entity's real book, and
-  `technicalReservesUSD` becomes the beneficiary liability rather than a second version of it.
-- (Pension and hedge funds already read their entity's book via the `ASSET_MANAGER` profile —
-  an earlier draft of this section wrongly said they did not.)
-- **The constants: two retired, two kept honestly (§7.52).** An insurer's hurdle is now its real
-  COST OF FLOAT and a pension fund's its real FUNDING NEED. An asset manager's, a hedge fund's and
-  a sponsor's are not liability costs and stay stated — there is nothing there to measure, and
-  deriving them anyway would be a formula wearing a derivation's clothes.
-  `INSTITUTIONAL_REAL_RETURN_BPS` in 07c is still stated and still owed.
-- This also repairs what L4 exposed: institutions clear in 07e now, and until their P&L is their
-  real book they are priced on a shell.
-
-**HH1c — DONE (§7.52).** The liability flows are real and two of the four required-return
-constants are derived from them. What is NOT yet real, and is the honest next step for insurance:
-**claims are allocated in proportion to premiums**, which is right in aggregate and wrong in the
-way that matters — real claims are LUMPY, and the entire economic point of insurance is that the
-loss lands on one firm and the pool absorbs it. A claim against a real loss event needs a loss
-model; **G5**'s estates and the existing weather anomalies are the natural hooks. Until then this
-moves real money on a real schedule without yet transferring real risk.
-
-**HH2 — DONE (§7.53).** The house is on the balance sheet, computed from physical units, and net
-worth went 1,543B → 4,730B (1.5x → 4.61x income). It also exposed a units error in the wealth
-effect that had been hiding behind a small ratio. Original scope, for the record: households carry
-**1,061B of mortgage debt and own no house**: a balance sheet with the liability and not the asset. The model already has median home
-prices, a baseline, a price index and a 62% ownership rate — the housing stock is computable
-today. Home equity then responds to real prices, and the wealth effect finally has its largest
-real component. (Housing is the biggest asset most households own; leaving it out while carrying
-its mortgage biases net worth in one direction by construction.)
-
-**HH3 — DONE (§7.55).** Household debt is itemized mortgage / card / term pools on the named
-banks' books; the household lines are their derived sums; the paydown constants died into
-annuity arithmetic and the `bankedConsumerDebtShare` target died outright. The consumer-loan
-target boundary flow is closed; **it also resolved #67** (bank capital rises 11.6% → 14.7%
-through week 80 instead of collapsing) and gave the household sector its rate response (card and
-term books SHRINK when policy tightens). What it did NOT close: the deposit side — the banks'
-"household deposits" funding line (790B USA at seed, the balancing item) and the household
-state's own `depositsUSD` (372B) are still two representations, the gap being really unmodeled
-wholesale funding; and debt service is still paid from unmodeled income. Both are HH4's, which
-gives households the budget the payments come out of.
-
-**HH4 — Households as cohorts.** ~20 per region (occupation x wealth tier), not 300M
-individuals. **HH4a — DONE (§7.56):** the cohorts exist and are the SOURCE of the household
-cross-section — 14 real occupation x tier cells per region, wage bills split by within-occupation
-tier multipliers (occupation bills preserved exactly), progressive taxes renormalized to the flat
-aggregate rate to the dollar, means-tested transfers, capital income allocated by tier equity
-exposure, the savings cross-section λ-normalized to the behavioural aggregate rate, HH3's real
-debt service allocated as recorded per-cohort burden, and the spend-mix shares derived from
-cohort budgets. Three drift formulas died (tier income drift, the wealthSignal spend-share walk,
-the dead per-tier consumption sum), the decomposition identity is asserted weekly in the
-harness, and the 40-week aggregate paths are BIT-IDENTICAL to the pre-cohort world — the
-cross-section landed without moving a single aggregate flow, which was the design rule.
-**HH4b — DONE (§7.57).** Stage 03's C is the sum of the cohort budgets: disposable less savings
-less HH3's real debt service plus the capital receipts that recycle it (real deposit interest,
-real dividends off the marked direct-equity book, and a named seed residual for the unbuilt
-channels — three components with three DIFFERENT incidences, because the incidence is the
-point). The household pool allocates across categories by price tier off the cohort spend
-shares, and stage 05's bid premium is a tier property (staples inelastic, luxury the swing).
-Measured: the debt-service/receipts differential reaches −24B at the week-60 policy squeeze,
-the spend mix flees to essentials, and the pre-existing G1b escape ends ~11pp of inflation
-LOWER — the household rate channel is a real stabiliser now.
-**HH4c — DONE (§7.57).** Tier net worth is a derived split of the same marked balance-sheet
-components (SCF-shaped incidence weights), summing to the aggregate to the dollar; the
-equity-gain/savings-gain/retired-drawdown drift died; the wealth effect is tier-weighted MPCs
-(a housing move hits consumption ~2x an equal equity move, as the literature finds).
-**HH4d — DONE (§7.57).** One household deposit stock: the banks' `depositsUSD` line IS it,
-split from a new `wholesaleFundingUSD` at seed, moved by named flows only, with T+1
-settlement (`pendingBankSettlementUSD`) for every household flow that runs after the bank
-pass, and the identity asserted weekly. The unification invariant immediately caught a real
-pre-existing hole: bank M&A stranded the target's entire balance sheet — stage 10 now merges
-it into the acquirer.
-**Still owed from HH4, recorded:** tax COLLECTION routes to the treasury when PUB builds it
-(rates are real and progressive now); real dividend receipts still ride the constant-share
-capital income inside the income measure (the recycle's real components live budget-side);
-the residual recycle share is a §6 watch line that decays as receipt channels become real.
-
-**HH5 — DONE (§7.58).** The labor market is a matching market between 02b and 03: vacancies from
-real output growth, separations as quits plus layoffs with hiring faster than firing, hires from
-a Cobb-Douglas matching function on the real stocks — so a vacancy takes ~6 weeks to fill and an
-unfilled one carries over (and is withdrawn at 10%/wk). **The root disagreement is closed:** there
-were THREE rates, not two (the GDP-gap formula at 4.5%, a dead `unemploymentRateBottomUp` at 37%,
-and pool-implied 8–17%); now employment is the sum of what real employers carry, the pools are a
-derived view of it, and the rate is a reading of the same stock — asserted weekly. The Beveridge
-relation EMERGES (−0.32 to −0.35 full sample; −0.87 to −0.95 once the vacancy stock is
-established). **Still open:** wage SETTING is HH6's, and the per-occupation mismatch the market now
-exposes (one occupation tight at V/U≈40 while two run zero vacancies against real unemployment) is
-what HH6's wage response and the retraining flow have to work on. The bottom-up-GDP-vs-anchor gap
-named here is NOT yet re-measured — do that at the start of HH6.
-
-**HH6 — DONE (§7.59).** Each firm carries an `offeredWageIndex` set from its own unfilled
-postings (wage push) and its margin headroom (a firm losing money does not give raises); the
-occupation going rate is the employment-weighted average of what firms offer; quits respond to
-relative pay and execution quality, so a raise retains staff. The region-level tightness→wage
-formula is deleted. Bargaining is over REAL wages, so the going rate also recovers part of the
-cost of living — deliberately partial, because full indexation pins the real wage and hands the
-model a mechanical spiral. The named defect is closed: nominal wage growth was −2.5% against 10%
-inflation, and is now +4.7% against 10.3%. **Verified by lag structure, not by a contemporaneous
-correlation:** unfilled vacancy share LEADS wage growth, 0.08 (1wk) → 0.41 (4wk) → **0.71 (8wk)**.
-
-**Verify (whole project):** household financial assets reconcile to real claims on real
-counterparties, and `unmodeledFinancialAssetsUSD` falls toward zero as each slice lands — it is the
-project's own scoreboard; every institutional liability has a holder and every household asset an
-issuer; unemployment, wage growth and the vacancy rate move together in a Beveridge-ish relation; a
-big employer's failure raises regional unemployment and cuts real stage-05 consumption — the
-recession transmission the simulation exists to have.
-
-### BP1 — One industry registry, and the modularity contract  *(Tier 1, item 2; IN PROGRESS 2026-08-29)*
-
-**The charter is rule 17: one new thing = one targeted change.** A boat becomes a product line by
-writing one registry entry; the world then auctions it, freights its mass, buys it per its buyer
-mix and (once IND lands) produces it over its lead time and recognises its revenue by its named
-mechanism — with no stage edited. Two structures carry that:
-
-- **The registry (data).** `domain/industry-registry.ts`: one `INDUSTRY_REGISTRY` whose
-  `SubUnitSpec` carries everything about a good — label, buyer mix, household price tier,
-  physical (delivery mode, value density, shelf life), capex-basket weight and private-segment
-  fallbacks, commodity links — and per industry its recipe inputs. It also carries IND's dials
-  from day one at today's implicit values (`storable`, `carryingCostRate` 0.02,
-  `productionLeadWeeks` 0, `revenueMechanism` 'UNIT_SALE'), so IND's slices become value edits
-  plus one mechanism each. `INDUSTRY_SUBUNITS`, `SUBUNIT_PHYSICAL`, `CATEGORY_INPUT_REQUIREMENTS`,
-  `CAPEX_SUPPLIER_WEIGHTS`, `CAPEX_CATEGORY_PRIVATE_SEGMENT`, `PRIVATE_SEGMENT_SUPPLY_CATEGORIES`,
-  `CATEGORY_PRICE_TIER` and `BASE_COMMODITY_CATEGORY_LINKAGE` become DERIVED VIEWS re-exported
-  under their old names — zero consumer edits, and the world must hash byte-identical (key
-  ITERATION ORDER is load-bearing: stage 05's auction order and 04's demander order carry the RNG
-  lanes, so views materialise in the exact legacy order, stated explicitly where the registry's
-  own order differs). Consumers then migrate opportunistically and the views die.
-- **Profiles (behavior).** Where KIND changes behavior, a typed profile module behind a dispatch
-  table replaces the branch chain: stage 08's `financialStatementProfile` if/else becomes
-  `PROFILE_REGISTRY[profile].weeklyPnl(...)` (BP1c, byte-identical move); IND2's revenue
-  mechanisms, IND3's cost shapes and HF's strategies are born as profiles, never as branches.
-  The 57 `sector ===`/`entityType ===`/`financialStatementProfile ===` switches measured across
-  the codebase are the migration backlog.
-
-Slices: **BP1a** registry + views, byte-identical (**DONE §7.83**); **BP1b** the generator deals
-lines from the registry — a declared seed relabel (**DONE §7.84**); **BP1c** stage-08 profile
-dispatch, byte-identical (**DONE §7.84**). **BP1 IS CLOSED.** What remains for later slices, when
-something needs them: labor-intensity by occupation folding in, and the OPERATING path becoming
-profiles (IND2/IND3 own that). Foundational because everything
-in IND10–19 and the 14.x projects writes registry fields or profile modules, the **HC3b**
-handover reads it, and the listed universe's breadth rides on cheap industry entries (§6
-watchlist).
+**Verify:** the identity holds per bank per week; deposits ≈ households + corporates; the
+wholesale share falls toward its real range; NIM survives a rate cycle with no band touched.
 
 ---
 
-### IND — Industry operating models  *(Tier 1, item 3; needs BP1; slices IND10–19 added 2026-08-29 from the user's fulfilment/backlog/contract-breaks direction)*
+### OWN7 — The corporate over-holding OWN exposed  *(item 2; OWN1–OWN6 closed §7.98)*
+
+**The only open slice.** OWN made ownership a measurement (§7.98); the harness went 88 → 488 and
+357 of that is one family in two invariants — the corporate books holding ~13% more paper than
+exists. Both read ZERO before OWN, verified by an A/B against 86817cb, so this is over-placement,
+not a revealed disease. Two candidate causes, and the ORDER matters:
+
+1. **Fix the harness check first.** `scripts/invariants.ts:59-67` filters holders on
+   `e.region === regionId` and then counts every one of that holder's positions regardless of
+   `h.issuerRegion` — a region's entities' FOREIGN paper is scored against DOMESTIC outstanding.
+   Since XB1 made cross-border holdings real, that is the wrong comparison. Until it is out of the
+   way neither number means anything.
+2. **Then find the missing shrink.** OWN2 widened the corporate floats from `1 − 0.28` to the whole
+   outstanding, so the slack that used to absorb any lag between a tranche being REPAID and the
+   HOLDER's book coming down is gone. This is the corporate twin of §7.10, where maturing
+   sovereign tranches left the government's books but not their holders' and the banking sector
+   ended up owning 1.30x the two-year float.
+
+**Do not reinstate a float carve to make the numbers fit.** Full write-up in §6.1.
+
+**Verify:** the conservation invariant reads zero on a correct comparison; the measured
+`corpBondOwnership` shares sum below 1 with a real household residual.
+
+---
+
+**The design OWN was built to, kept because OWN7 is judged against it.**
+
+**The defect.** `OWNERSHIP_SHARES` in `macro/initialization.ts` assigns, by fiat, that banks hold
+3% of equity / 28% of corporate credit / 22% of sovereigns and institutions hold 42/45/30. Those
+numbers then decide real things: the tradable float of three clearing books (`1 - bankShare`),
+each bank's sovereign target (`bankShare x outstanding`), the 07f holding ceiling, household
+direct equity (`1 - institutionalShare`), and four seed allocations. They drift weekly on
+`(gdpGrowth + inflation) - tenor10Y` and are held inside `[0.10,0.65]` and `[0.01,0.10]`, then
+rescaled whenever the three sum above 0.85.
+
+Two rules break at once. Rule 4: a 28% bank share of corporate credit is a real-world
+*equilibrium*, not a primitive. Rule 13: **the share owns nothing.** Banks in this model hold
+sovereign bonds by tenor, itemized business loans and consumer pools — they hold no corporate
+bonds and no equity as investments; their only corporate-bond presence is the dealer inventory the
+engine already tracks separately. So `1 - 0.28` in 07b and `1 - 0.03` in 07e withhold float from
+holders who do not exist. This is exactly `foreignShare`'s disease (§7.72), one layer down.
+
+**The mechanism that replaces it.** A share is a MEASUREMENT of a register, taken after the books
+are written, and read by nobody who decides anything.
+
+1. **The register is measured** (`stages/holdings-view.ts`). `measuredOwnershipAllRegions(state)`
+   walks the same books `measuredForeignOwnershipAllRegions` already walks plus the banks' own
+   sheets, and returns per region per class `{ bankUSD, institutionalUSD, centralBankUSD,
+   outstandingUSD }`. Stage 11 — the statistics stage — writes the three shares onto the region
+   from it. `computeTargetOwnershipShares`, the 0.05 drift, both bands and the 0.85 rescale go.
+2. **Float is outstanding minus what real holders hold.** Each book subtracts the holdings of
+   parties that do not bid in it, measured per instrument: 07d subtracts each issuer's loans
+   sitting on named banks' itemized business-loan books; 07b and 07e subtract nothing, because
+   nothing is there. A dealer's inventory is not subtracted — it is a participant.
+3. **A bank's sovereign book is its own decision** (07c, 07f). The target stops being
+   `bankShare x outstanding` and becomes the bank's own liquidity requirement against its own
+   funding: a coverage ratio on deposits (a regulatory primitive, which rule 4 permits) net of
+   what it already holds and what is encumbered in repo. A big deposit base buys more bonds
+   because it has more to cover, not because a table says 22%.
+4. **Household direct equity is a residual of the register**, not `1 - institutionalShare`: per
+   listed name, market cap less what institutions, index funds and dealers actually hold. It is a
+   measurement of wealth, not an input to 07e, so nothing here is circular.
+5. **`bankMarketShare` is measured.** `0.35 x 0.72^rank` seeds four cohorts by fiat and is then
+   read as a settlement key and a revenue driver. A bank's share of its region is its own deposits
+   over the region's deposits, recomputed from the sheets each week.
+6. **The seed is bottom-up.** Delete `OWNERSHIP_SHARES`. Each holder's opening book comes from its
+   own balance sheet: banks buy sovereigns to their coverage ratio, institutions allocate their own
+   AUM by mandate, and whatever no named holder takes is the dealer's, sized and reported.
+
+**Slices** (rule 7 — one bounded commit each; rule 12 — measured ONCE at the end, not between):
+OWN1 register + shares become statistics; OWN2 floats; OWN3 the bank sovereign book; OWN4 the
+household residual; OWN5 `bankMarketShare`; OWN6 the seed and the deletion.
+
+**Verified once at OWN6 (§7.98).** Harness 88 → 488 against 86817cb; 73 are the §6 seed-employment
+row (improved from 81) and 357 are one new family — the corporate books holding ~13% more paper
+than exists. Both of its invariants read ZERO before OWN, so the widened floats are over-placing
+rather than revealing. **OWN7 closes it**, in this order: first fix the harness check itself
+(`invariants.ts:59-67` sums a region's entities' FOREIGN holdings against DOMESTIC outstanding,
+which since XB1 is the wrong comparison), then find where a corporate tranche is repaid without
+the holder's book shrinking — the corporate twin of §7.10. **Do not reinstate a float carve to
+make the numbers fit.** Full write-up in §6.1.
+
+---
+
+### IND — Industry operating models  *(item 3; needs BP1, done)*
 
 **The problem, stated plainly: every non-financial corporate in this model is the same firm.**
 
@@ -748,160 +661,29 @@ business's revenue survives a quarter with no new sales while a unit seller's do
 leverage differs measurably across industries in the same downturn; gross margins disperse by
 industry the way real ones do.
 
-### PUB — The public sector: treasury and central bank  *(Tier 1, item 4)*
+---
 
-Merges the old BP5 (government as fiscal counterparty), S4r (debt service) and G9 (central bank).
-They are one balance sheet seen from two sides, and remittances are the loop that closes between
-them — neither half is honest alone.
+### CAP — Production and capacity decisions  *(item 4, clamp programme; runs with IND)*
 
-**The defect that makes this foundational: the government books no interest expense at all.** A
-tranche's `couponRate` is stored and paid by nobody, received by nobody. It cannot be bolted on
-in isolation — funding it from outside the budget creates money, and adding it on top of the
-deficit double-counts, because a real fiscal deficit already includes interest. The correct
-decomposition is `governmentSpending = interest + procurement + transfers`, interest computed
-from the real debt stack and the remainder splitting by `GOV_PROCUREMENT_SHARE_OF_SPENDING`, kept
-consistent with the national-accounts identity of §7.9. Done properly it hands the simulation a
-real and important mechanism: rising debt and rising rates crowding out procurement and transfers,
-and in the limit a debt spiral.
+**Clamps it deletes:** production throttle [0.3, 1.0] and production response ×[0.5, 2.0]
+(`05:469`), capacity growth ±2%/wk (`05:496`), cost rate [0.40, 0.98] (`05:505`).
 
-**PUB1a — DONE (§7.61).** The government books real interest from its own debt stack, spending
-decomposes as `interest + procurement + transfers` (interest off the top, so debt service crowds
-out the primary budget), and coupons are paid to real holders — replacing the WS7-era carry that
-credited banks and money funds while the issuer paid nothing. Measured: interest 10.4% → 12.6% of
-spending as debt/GDP runs 108% → 171%. **Named boundary:** only 52% of the bill reaches a modelled
-holder (banks 22% + institutions 30%); the central bank's 15% and foreign 24% have no entity yet,
-so `governmentInterestToUnmodeledHoldersUSD` carries the rest and shrinks as PUB2 and XB land.
+**The mechanism.** A firm decides how much to make from its own numbers: its inventory position,
+the cleared price against its own MEASURED unit cost (it already carries per-lot input provenance,
+so it knows what its inputs actually cost), and its cash. A firm that cannot cover unit cost
+**stops producing** rather than throttling to 30% — that is the decision the throttle is standing
+in for, and it is the one that makes exit possible (DYN later reads it).
 
-**PUB1b — DONE (§7.63).** Tax is collected from real payers into the TGA: corporates accrue
-weekly and **remit quarterly** off a real accrued liability, SME pools and households pay weekly
-(households at HH4a's own progressive cohort rates). `governmentRevenueUSD` is now what actually
-arrived, so the treasury's account visibly draws down between tax dates and jumps on them —
-the swing a TGA exists to express. **The finding:** the fiscal block thought it collected 25% of
-GDP while the modelled tax bases support ~50–60% of that, because there is no consumption or
-payroll tax anywhere. Named as `unmodeledTaxRevenueUSD` rather than closed by shrinking the
-state, which would model a different economy.
+Capacity stops being a rate that is walked and clamped: it is DERIVED from PP&E, which IND1
+already grows by DELIVERED capex. Investment is already supply-constrained; capacity should
+simply read the result.
 
-**PUB1c — DONE (§7.64).** The two missing instruments exist and the gap is closed: an **employer
-payroll tax** carved out of the labor share (which is total compensation, so households are paid
-it net) and a **consumption tax** as a wedge inside the cohort budget (disposable income
-unchanged, real purchases smaller — what a VAT actually does). Neither touches the S1 identity.
-**Every stream now remits on its own real calendar** — corporate and SME quarterly, withholding
-and payroll monthly, consumption tax quarterly — so nothing is paid weekly any more. Measured:
-real collections **~50% → 99–100%** of revenue, `unmodeledTaxRevenueUSD` to 0.00B, and the TGA
-swings 43 → 30 → 66 → 43 → 86B across the calendar.
-
-**PUB1d — DONE (§7.65).** Sovereign issuance goes through its own book. The forced placement is
-gone: new paper simply exists and 07c prices the enlarged bucket against budget-constrained
-demand, the dealer holding what finds no buyer — which is what an undersubscribed auction is.
-**Correction to this entry's earlier diagnosis:** it blamed a 50.3B one-week fall in institutional
-cash on the placement path. The A/B says otherwise — worst institutional cash is unchanged
-(−45.9B before, −47.9B after at w26) and the real cause is an ETF running negative net assets,
-now a §6 defect of its own. What the placement really cost was the sovereign market: removing it
-took bank reserves at w40 from **−29.0B to +84.7B** and the 2Y at w26 from **0.98% to 2.62%**.
-
-**PUB3 — DONE (§7.70).** The budget is a sum of real obligations — interest + payroll + benefits
-+ procurement, every line a real quantity at a real price — and the deficit is an OUTCOME.
-**PUB3c** adds the cash-management bills that bridge the treasury's account between quarterly
-bond auctions, without which a wage-indexed budget runs the TGA negative. Measured: TGA negative
-in 0 of 480 region-weeks, revenue/outlays 0.47x, debt/GDP to 213% — a real fiscal path rather
-than a defined one.
-
-**PUB1e — DONE (§7.67).** Procurement is one number, bid in the real goods market and paid for
-out of the treasury's account. There were FOUR representations of "what the government buys";
-now stage 03 derives the per-category budget from the primary budget, stage 05 bids exactly it,
-and stage 11 debits the account by what actually filled. Measured: fill 43% -> 75% once the
-government's willingness to pay stopped excluding it from any category that moved 10% in a week;
-~25% of the budget still goes unspent against the goods market's own excess demand, named as
-`unspentProcurementBudgetUSD`. corr(interest share, procurement share) = **-0.666** over 100
-weeks — the crowding-out, now landing in real bids rather than a line item.
-
-**PUB2a — DONE (§7.62).** The CB has a real balance sheet: its sovereign book as assets, and
-reserves + the **Treasury General Account** + currency as liabilities. The TGA is the point — a
-treasury account is a LIABILITY OF THE CENTRAL BANK, so its flows move money in and out of the
-banking system. Remittances (coupon income less interest on reserves) go to the treasury and turn
-NEGATIVE when policy exceeds the portfolio yield, which is the real post-hiking-cycle phenomenon
-reproduced rather than modelled. Retires the phantom 1e12 `centralBankReservesUSD` and the
-balance-sheet drift. Identity asserted weekly; TGA asserted non-negative.
-
-**PUB2b — DONE (§7.66).** The balance sheet is a real quantity operation. The CB is redeemed like
-every other holder, and places an open-market ORDER that 07c and 07f price against everyone
-else's demand — reinvest what matured, buy a flow when the floor blocks the easing the Taylor
-rule wants, reinvest only part of it when the rate tool has room and the book sits above the
-share it was built at. Retires `balanceSheetStance` and the "monetization share" that printed
-deposits into households. Measured: the book stops being frozen (100B flat, 15.0% -> 11.4% of a
-growing stock) and lives (100B -> 137B, 15.0% -> 16.9%), `unbackedBankCashUSD` at w52 **304B ->
-100B**, and all three regimes fire in one 60-week run.
-
-**Still open after this slice** (the criteria it did not close): rising rates crowding out
-procurement is PUB1a's channel and wants PUB1e's real bids to be visible on the spending side.
-The §6 watch it adds is the sovereign book's price elasticity to a size-only bidder.
+**Verify:** a loss-making firm stops rather than throttles; capacity moves only when capex is
+delivered; no production decision reads a bound.
 
 ---
 
-### XB5 — Central-bank FX reserves  *(DONE — §7.77)*
-
-A central bank's FX participation is currently sized off its domestic bond book (§6), and reserves
-are the missing asset. Real reserve management is also one of the largest single participants in
-any FX market, so this is not cosmetic.
-
-- **`CentralBank.fxReservesByRegion: Record<RegionId, number>`** — real holdings of each foreign
-  currency, seeded at a share of the region's own external position rather than an invented level.
-- **Intervention MOVES them.** Buying your own currency sells reserves; selling it accumulates
-  them. A central bank that runs out of reserves cannot defend its currency — which is what makes
-  a defence fail, and is the mechanism a formula cannot express.
-- **The PUB2a identity absorbs them:** `assets = sovereign book + FX reserves`, still equal to
-  `reserves + TGA + currency`, with `centralBankAssetsUSD` updated and the invariant extended.
-- **Reserves earn.** They are held in the foreign sovereign's paper, so they belong in that
-  region's 07c/07f float as a real holder (the CB is already a participant there — this is the
-  same mechanism pointed abroad).
-- **Verify:** a defended currency depletes reserves; a CB at zero reserves stops bidding and the
-  rate moves; reserve income appears in the remittance loop.
-
-**Known FX simplifications to leave named rather than fixed here:** the USD is the numéraire so
-its own excess demand is never checked (a three-currency solve implies the fourth); the model has
-outright forwards but not FX SWAPS, which are the instrument the cross-currency basis actually
-lives in; and there is no sovereign wealth fund as a distinct reserve manager.
-
----
-
-### HF — Hedge fund strategies and prime brokerage  *(Tier 2; sized like G2)*
-
-Two defects, and the second is the same shape as every infinite-supply problem already deleted.
-
-**1. One `HEDGE_FUND` type does every strategy.** Real strategies are not variations of one fund;
-they are different businesses with different books, different counterparties and different failure
-modes. At minimum:
-- **Global macro** — directional rates and FX. This is the elastic side of the FX market XB2f
-  built, and today ALL hedge funds play that role, which is wrong: an equity long-short fund has
-  no view on the yen.
-- **Long-short equity** — paired longs and shorts, so it needs a real SHORT: borrowed stock, a
-  locate, a borrow fee, and a squeeze when the borrow is recalled. None of that exists yet.
-- **Long-short credit** — the same in bonds and loans, and the natural buyer of the basis trades
-  the dealer desks cannot carry.
-- **Distressed** — already referenced in 07b as the marginal buyer at the wides with a 0.22
-  hurdle; it should be a type rather than a coefficient on the generic fund.
-
-Each type gets its own mandate, hurdle and market participation, replacing the single
-`LEVERAGE_ALLOWANCE.HEDGE_FUND` and `liabilityDrivenCoreShare` special cases.
-
-**2. Leverage has no lender.** `LEVERAGE_ALLOWANCE.HEDGE_FUND = 0.22` is a static constant: a fund
-is simply *allowed* 22% leverage by nobody, funded by no one, at no price. The real thing is
-**prime brokerage** — a named bank lends against posted collateral, at a haircut, for a fee, and
-**can pull it**.
-- Leverage becomes a real liability of the fund and a real asset of the prime broker, consuming
-  the broker's own balance-sheet capacity exactly as the FX desk's PFE does (XB2b).
-- The haircut is the price, and it widens with the fund's concentration and the collateral's
-  volatility.
-- **Withdrawal is the point.** A broker cutting lines forces the fund to sell into a falling
-  market, which moves the price, which triggers the next margin call. That cascade is a real and
-  central mechanism this model cannot currently produce, because leverage is a constant.
-- **Verify:** a shock to a prime broker's capital measurably deleverages its funds; forced selling
-  shows up in the clearing books as real supply; a fund can fail from a margin call rather than
-  only from marks.
-
----
-
-### DEM — Demographic variability  *(Tier 1, item 5; small, rides beside HH4–HH5)*
+### DEM — Demographic variability  *(item 5; small; takes NAT's population-growth clamp)*
 
 The four regions currently share near-identical population dynamics: birth ~1.0%, death ~0.9%,
 migration ~0.2%, all constants, all alike — so populations differ only by their seeded level and
@@ -927,7 +709,52 @@ retired share; no demographic number re-rolls weekly.
 
 ---
 
-### G3 — One dealer system  *(Tier 2, item 6)*
+### MAC — Expectations and policy without bounds  *(item 6, clamp programme; gated on the inflation escape)*
+
+**Clamps it deletes:** expected inflation [−20%, +50%], Taylor output/inflation gaps ±10%, the
+0.20 policy-rate ceiling, effective tax rate [10%, 50%], consumer confidence [30, 170]
+(`macro/evolution.ts:220`, coefficients 150/200/80/1000), and the savings cap at 90% of
+disposable income.
+
+**Kept, and not a clamp:** the effective lower bound. A posted policy floor is the real-world
+mechanism — rule 1's named exception, the same standing as the SRF/ON RRP corridor. The 0.20
+ceiling has no such counterpart.
+
+Two halves, in order.
+
+- **(a) Close the §6 inflation escape (G1b) at its root.** These bounds exist to survive it.
+  Deleting them first just moves where the runaway prints.
+- **(b) Confidence and the savings rate become OUTCOMES.** Saving is what cohorts do not spend
+  once their budgets are real receipts — which they now are, since income is a measured sum
+  (§7.96). Confidence is a statistic read off measured unemployment and real income, not a driver
+  with four invented coefficients. `macro/evolution.ts:215`'s Phillips-curve wage formula and
+  `:248-251`'s savings-rate formula go with them.
+
+**Verify:** the policy rate is unbounded above and floors only at the ELB; the savings rate is a
+residual of real spending; confidence is derived from measured statistics.
+
+---
+
+### IDX — An index is a statistic  *(item 7, clamp programme; an afternoon, no prereqs)*
+
+**Clamp it deletes:** equity index change ±15%/wk (`macro/indices.ts:45`).
+
+**Nothing to build.** An index is the cap-weighted move of its own constituents, whatever that
+is. The clamp's only effect is to hide the §6 equity runaway inside the published index while the
+constituents themselves run; removing it makes the defect visible where a reader would look for
+it. This is the same doctrine as rule 15's — a bound is not a price, and it is not a level either.
+
+**Same commit, rule 4:** `macro/indices.ts` publishes 'S&P 500 Composite', 'Euro Stoxx 50',
+'FTSE 100', 'Nikkei 225' and 'S&P GSCI Commodity Index'; `macro/initialization.ts:147` names
+'Federal Reserve', 'Bank of England', 'Bank of Japan', 'European Central Bank'. Real brands, in
+the UI. Generate them from the region's own symbol and the index's own definition, the way every
+ticker and company name in the model already is.
+
+**Verify:** the index prints its constituents' actual move; the names are generated.
+
+---
+
+### G3 — One dealer system  *(item 8; also owns §6.1's regional dealer desk)*
 
 The dealer becomes what it is in reality: a desk inside a named bank. `DealerDesk {bankTicker,
 inventoryByInstrumentId, capitalAllocatedUSD}`; migrate the current region-level inventories to
@@ -953,97 +780,49 @@ quotes visibly wider — the real liquidity-cycle channel.
 
 ---
 
-### DER — Derivatives, and the people who hedge with them  *(Tier 2, item 7)*
+### CRD — Credit prices cleared, ratings handle zero earnings  *(item 9, clamp programme; CDS half needs G3)*
 
-Merges the old G4 (derivative markets), G7 (commodity futures) and WS11 (corporate and bank
-hedging). Futures and hedging were never separate markets — they are the users of this one, and
-splitting them across three projects hid that every one of them needs the same participant set.
+**Clamps it deletes:** CDS spread [10, 5000] bps (`08:1301`), leverage [0, 100] and coverage
+[±50] (`08:830/835`), consumer tier rates set by `creditConditionsIndex × 0.05/0.03/0.01/0.005`
+(`macro/evolution.ts:553-560`).
 
-Each instrument is an engine adapter with a small real participant set; the closed-form pricers
-remain MTM converters. **Build IRS first** — its natural two-sided demand already exists.
+Three independent halves.
 
-1. **IRS.** Par rates at 2/5/10Y per region, YIELD_LIKE. Payers of fixed: banks hedging G2 loan
-   books, corporates with floating debt. Receivers: insurers and pensions extending to liability
-   duration (from HH1; before it, from the duration gap 07b's fit already computes). The cleared
-   par rate minus the 07c bootstrap is a real swap spread — the first cross-market basis the sim
-   produces, and a powerful diagnostic.
-2. **CDS.** One IG and one HY index per region, single names later. Buyers: banks (G2 books),
-   hedge funds; sellers: yield-seeking insurers. Cleared index spread vs cash OAS is a real
-   CDS-cash basis. Margin flows are real cash through the ledgers.
-3. **Options.** One implied vol per equity index — and now per ETF, which is what a real equity
-   option complex is actually written on. Bank desks (G3) make markets; institutions buy downside
-   protection sized to their real equity books; inventory versus hedging demand clears the vol and
-   kills the `|| 0.3`. Realised-versus-implied desk P&L is real.
-4. **Commodity futures.** Four quarterly contracts per major commodity, PRICE_LIKE; spot stays
-   stage 07's real market. Producers hedge a fraction of real forward production; recipe-input
-   consumers hedge real forward requirements; bank and HF speculators trade value-versus-carry; a
-   storage arbitrageur's reservation is the cost-of-carry bound — spot plus financing plus storage
-   — which keeps the curve arbitrage-consistent without a clamp. Convenience yield becomes derived
-   from the cleared curve versus carry. Contracts cash-settle to real spot at expiry.
-5. **Corporate and bank hedging.** Exposure is already measurable from real books: FX from a
-   company's real cross-region sales, rates from its floating-debt share, commodities from its
-   real recipe quantities. Each company hedges a policy fraction (IND's profile) with a named bank
-   at the cleared level; the bank aggregates client flow and lays the net off through these same
-   markets; what it cannot lay off stays on its book and consumes real capital.
+- **CDS becomes a real traded instrument** in a book, like everything else that has a price
+  (rule 1). Needs G3's dealer to be the other side.
+- **The ratio clamps are the wrong fix for a real problem.** Leverage and coverage are bounded
+  only because EBITDA passes through zero and the ratio explodes. The honest place to handle that
+  is `determineCreditRating`: **a firm with no earnings is a distressed rating by definition**,
+  not a ratio held at 100. Fix it there and the bounds are unnecessary.
+- **Consumer credit is priced by the lending bank, per pool** — HH3's `householdLoans` pools
+  already carry the structure. A price moved by an index is not a price.
 
-**Verify:** swap spread and CDS-cash basis hold single-digit-bp bands in calm weeks and blow out
-under stress — the bases are the test that the legs are consistent; contango when inventories are
-high and backwardation when scarce, both of which genuinely occur in stage 07; expiry convergence
-within the dealer spread; hedged companies and producers demonstrably feel less P&L from the
-shocks they hedged, which is the whole point of items 4 and 5.
+**Verify:** a zero-EBITDA firm rates distressed without any ratio being bounded; consumer rates
+differ by bank and by pool; the CDS level is a clearing outcome.
 
 ---
 
-### G5 — Default resolution: recovery as an outcome  *(Tier 2, item 8)*
+### HSG — A housing market that clears  *(item 10, clamp programme; independent)*
 
-On default an `Estate {companyId, assets, claims[]}` opens instead of a constant recovery. Real
-assets (cash, receivables, inventory at real lot values, PP&E at a haircut) are sold over ~26–78
-weeks **through the real markets** — inventory into stage 05 as distressed offers, PP&E to peers
-as cheap capex — and proceeds waterfall to claims by real seniority (first-lien loans, then bonds,
-equity residual, usually zero). While the workout runs, defaulted claims keep trading in 07b/07d
-at the §7.20 recovery-based reservations, marked against the estate's own evolving asset value, so
-the model's distressed pricing and its resolution process read one book.
+**Clamps it deletes:** house price index [0.5, 3.0], credit factor [0.5, 1.5], the
+`|| 400000` price fallback, and the drift itself —
+`priceIndexDelta = (1 − supplyDemandRatio) × 0.002 × creditFactor` (`macro/evolution.ts:743-747`).
 
-**Recovery becomes an output**, and that closes the §7.20 loop: realized recoveries calibrate the
-priced LGD (a rolling realized-recovery average replaces the `CREDIT_RECOVERY_RATE` constant),
-completing the one-default-model unification whose hazard side landed in §7.20.
+**The mechanism.** Houses clear in a book like every other asset. Households bid out of real
+income and the mortgage credit banks actually grant (both exist: HH's measured receipts, G2/HH3's
+real mortgage origination on named banks) against the real stock HH2 already put on the household
+balance sheet. The price is what clears.
 
-**Also owned here:** the **public default rate**, ~10%/yr — 46 of 196 public firms by week 121
-against ~1–2%/yr in reality, while the private tier with real ladders shows zero, isolating the
-cause to the public path's cash accounting. And the **PE exit by sale** (sponsor-to-sponsor or
-strategic), the half of the capital-recycling loop a listing cannot provide; the estate machinery
-is the natural place for a whole-company transfer, or stage 10's merger path.
+This one matters more than its size suggests: housing is the largest asset households hold, so
+the wealth effect — and therefore consumption — currently rides on a drift formula with a bound
+on each end.
 
-**Verify:** recoveries disperse by asset-heaviness; waterfall conservation (proceeds =
-distributions exactly); loans recover above bonds; the public default rate falls toward the
-private tier's.
+**Verify:** the price is a clearing outcome; a credit tightening shows up as fewer bids rather
+than as a factor; the wealth effect moves with a cleared price.
 
 ---
 
-### WS9 — Real trade & FX  *(Tier 2, item 9)*
-
-**Confirm the currency-zone premise with the user first** (standing caveat). If confirmed:
-
-The FX rate clears from real net currency demand, replacing `06-fx-and-trade.ts`'s drift formula —
-the UIP sign bug and the gdp-poisoned capital-flow term die with it. Participants per pair:
-**trade flow** (inelastic), the cross-region purchases stages 05/06 already compute, an importer
-selling its own currency week by week at whatever the rate is; **carry and speculative flow**
-(elastic, the price-setter), banks and hedge funds with a reservation from the real cleared
-short-rate differential against the rate's recent path — this is where UIP lives as behaviour
-instead of a formula term; and **portfolio flow**, cross-border clearing fills once foreign
-holders exist. Engine `PRICE_LIKE` per pair; cross rates by triangulation from the three cleared
-USD pairs.
-
-**Also closes:** S7's foreign-share parameter, and the **three GLOBAL index funds**, which today
-have zero shares for an honest reason — every institutional book in the model is domestic, so
-there is no cross-border equity allocation for a global fund to draw on.
-
-**Verify:** a rate-differential shock moves the pair in the carry direction; trade deficits
-depreciate slowly against sticky flows; no drift term anywhere; the global funds fill.
-
----
-
-### XB — Cross-border portfolios and trade  *(Tier 2, item 10; IN PROGRESS)*
+### XB — Cross-border portfolios and trade  *(item 11; IN PROGRESS; absorbed the old WS9)*
 
 **Status: XB1, XB2, XB2b–XB2f, XB3a-1/2/3/4, XB3b, XB4, XB5 DONE (§7.72–77). XB3a-5 and XB6 REMAIN — and XB3a-5 is gated on XB6.**
 **The 60-week harness is deliberately RED while this runs — see §6 and rule 1 of `CLAUDE.md`.**
@@ -1183,7 +962,7 @@ the deletion of the dead `companyUpdates.cashChange`. **What is deleted:** the w
 
 ---
 
-### XB6 — Non-USD pairs clear directly  *(prerequisite for invoice currency)*
+### XB6 — Non-USD pairs clear directly  *(item 11, the slice that remains; gates XB3a-5)*
 
 XB2f made each currency's value clear against the USD, with every cross rate triangulated from
 two of those — which guarantees triangular consistency and was the right call for that slice. Its
@@ -1217,285 +996,131 @@ reconcile to who bought from whom.
 
 ---
 
-### MNC — Multinational production  *(depth, item 14.1; needs IND, XB)*
+### HF — Hedge fund strategies and prime brokerage  *(item 12; sized like G2)*
 
-Every firm is single-region while intra-firm trade is roughly a third of real world trade — here
-it is zero. The FDI decision (build abroad vs export, priced off the landed-cost machinery XB3a
-already runs), foreign subsidiaries as real plants with local costs and labor, intra-firm trade
-at transfer prices, structural FX exposure (transaction and translation) making the hedging
-desks' client book real demand, and profit repatriation through the FX books. TAXR's rate
-differences later make location a priced choice.
-**Verify:** FDI responds to landed-cost differentials; an intra-firm trade share EMERGES; one FX
-move changes a multinational's consolidated earnings through both channels.
+Two defects, and the second is the same shape as every infinite-supply problem already deleted.
 
----
+**1. One `HEDGE_FUND` type does every strategy.** Real strategies are not variations of one fund;
+they are different businesses with different books, different counterparties and different failure
+modes. At minimum:
+- **Global macro** — directional rates and FX. This is the elastic side of the FX market XB2f
+  built, and today ALL hedge funds play that role, which is wrong: an equity long-short fund has
+  no view on the yen.
+- **Long-short equity** — paired longs and shorts, so it needs a real SHORT: borrowed stock, a
+  locate, a borrow fee, and a squeeze when the borrow is recalled. None of that exists yet.
+- **Long-short credit** — the same in bonds and loans, and the natural buyer of the basis trades
+  the dealer desks cannot carry.
+- **Distressed** — already referenced in 07b as the marginal buyer at the wides with a 0.22
+  hurdle; it should be a type rather than a coefficient on the generic fund.
 
-### CHAIN — Multi-tier supply chains  *(depth, item 14.2; needs BP1, IND10/11)*
+Each type gets its own mandate, hurdle and market participation, replacing the single
+`LEVERAGE_ALLOWANCE.HEDGE_FUND` and `liabilityDrivenCoreShare` special cases.
 
-Recipes are one tier deep; real chains are graphs. BP1's registry carries a real BOM (components
-made from components); ORDERS — not final demand — propagate upstream through lead times and
-per-tier inventories, which is what makes the bullwhip producible instead of assumed; supplier
-concentration becomes chain-deep exposure (09 today sees only direct counterparties).
-**Verify:** upstream order volatility exceeds downstream demand volatility (the measured
-bullwhip); one supplier failure propagates through named tiers at the chain's own lead times.
-
----
-
-### DYN — Entry, exit, and industry structure  *(depth, item 14.3; needs IND, BP1)*
-
-Concentration as an outcome. Entry: sustained high category margins attract entrants through HC's
-existing birth machinery, aimed at the category. Exit: sustained losses idle capacity (mothballed,
-restartable), then scrap it — the missing half of every capacity cycle. Structure as strategy: a
-firm repeatedly burned by contract breaks (IND11's measured record) integrates upstream — the
-hold-up problem, priced by experience; conglomerates divest what they cannot run, giving stage
-10's M&A its logic; IND7's antitrust is this project's regulator.
-**Verify:** category margins mean-revert through entry/exit rather than assertion; capacity
-leaves in downturns and its absence is visible in supply; integration follows measured contract
-failure.
-
----
-
-### PROD — Firm productivity and innovation  *(depth, item 14.4; needs IND)*
-
-`rndExpense` buys nothing today. R&D becomes a real investment with uncertain outcomes — process
-(unit cost falls) or product (a new or better line through the registry) — and diffusion erodes
-any lead: temporary advantage, never a permanent monopoly (rule 4: import no equilibrium).
-Firm-level productivity DISPERSION plus reallocation of share to the productive (through IND6's
-real price competition) becomes the model's growth engine — which is what aggregate productivity
-growth mostly is.
-**Verify:** R&D intensity predicts margin/share outcomes noisily, not deterministically;
-aggregate productivity growth decomposes into within-firm and reallocation terms; cutting all R&D
-flattens growth over years, not weeks.
+**2. Leverage has no lender.** `LEVERAGE_ALLOWANCE.HEDGE_FUND = 0.22` is a static constant: a fund
+is simply *allowed* 22% leverage by nobody, funded by no one, at no price. The real thing is
+**prime brokerage** — a named bank lends against posted collateral, at a haircut, for a fee, and
+**can pull it**.
+- Leverage becomes a real liability of the fund and a real asset of the prime broker, consuming
+  the broker's own balance-sheet capacity exactly as the FX desk's PFE does (XB2b).
+- The haircut is the price, and it widens with the fund's concentration and the collateral's
+  volatility.
+- **Withdrawal is the point.** A broker cutting lines forces the fund to sell into a falling
+  market, which moves the price, which triggers the next margin call. That cascade is a real and
+  central mechanism this model cannot currently produce, because leverage is a constant.
+- **Verify:** a shock to a prime broker's capital measurably deleverages its funds; forced selling
+  shows up in the clearing books as real supply; a fund can fail from a margin call rather than
+  only from marks.
 
 ---
 
-### CRE — Commercial property and leases  *(depth, item 14.5; needs HH, G2)*
+### DER — Derivatives, and the people who hedge with them  *(item 13; needs G3)*
 
-Firms occupy space nothing produces. A commercial property market: space as a produced,
-long-lived asset (the construction sector builds it), owned by landlords, rented on multi-year
-leases that are real tenant liabilities, financed by CRE loans on named banks' books — the
-classic systemic channel (vacancy → landlord default → bank capital) the model cannot express
-today.
-**Verify:** rents clear on vacancy; lease obligations sit on tenant books; a CRE bust marks bank
-capital through named loans.
+Merges the old G4 (derivative markets), G7 (commodity futures) and WS11 (corporate and bank
+hedging). Futures and hedging were never separate markets — they are the users of this one, and
+splitting them across three projects hid that every one of them needs the same participant set.
 
----
+Each instrument is an engine adapter with a small real participant set; the closed-form pricers
+remain MTM converters. **Build IRS first** — its natural two-sided demand already exists.
 
-### TAXR — Corporate tax, really  *(depth, item 14.6; needs PUB (done); MNC for the cross-border half)*
+1. **IRS.** Par rates at 2/5/10Y per region, YIELD_LIKE. Payers of fixed: banks hedging G2 loan
+   books, corporates with floating debt. Receivers: insurers and pensions extending to liability
+   duration (from HH1; before it, from the duration gap 07b's fit already computes). The cleared
+   par rate minus the 07c bootstrap is a real swap spread — the first cross-market basis the sim
+   produces, and a powerful diagnostic.
+2. **CDS.** One IG and one HY index per region, single names later. Buyers: banks (G2 books),
+   hedge funds; sellers: yield-seeking insurers. Cleared index spread vs cash OAS is a real
+   CDS-cash basis. Margin flows are real cash through the ledgers.
+3. **Options.** One implied vol per equity index — and now per ETF, which is what a real equity
+   option complex is actually written on. Bank desks (G3) make markets; institutions buy downside
+   protection sized to their real equity books; inventory versus hedging demand clears the vol and
+   kills the `|| 0.3`. Realised-versus-implied desk P&L is real.
+4. **Commodity futures.** Four quarterly contracts per major commodity, PRICE_LIKE; spot stays
+   stage 07's real market. Producers hedge a fraction of real forward production; recipe-input
+   consumers hedge real forward requirements; bank and HF speculators trade value-versus-carry; a
+   storage arbitrageur's reservation is the cost-of-carry bound — spot plus financing plus storage
+   — which keeps the curve arbitrage-consistent without a clamp. Convenience yield becomes derived
+   from the cleared curve versus carry. Contracts cash-settle to real spot at expiry.
+5. **Corporate and bank hedging.** Exposure is already measurable from real books: FX from a
+   company's real cross-region sales, rates from its floating-debt share, commodities from its
+   real recipe quantities. Each company hedges a policy fraction (IND's profile) with a named bank
+   at the cleared level; the bank aggregates client flow and lays the net off through these same
+   markets; what it cannot lay off stays on its book and consumes real capital.
 
-A flat 21% on (EBIT − interest) prices no decision. Tax depreciation schedules vs book (the
-investment incentive), loss carryforwards (tax receipts fall FASTER than profits in downturns, so
-PUB's revenue finally feels recessions properly, and a recovering firm pays nothing for years),
-and — after MNC — profit booked where rates are lower, which is what makes transfer pricing
-matter.
-**Verify:** tax receipts are more cyclical than profits; carryforwards revive and expire;
-investment timing responds to depreciation treatment.
-
----
-
-### CASH — One settlement layer, and money that is somebody's liability  *(Tier 1; found by §7.86; IN PROGRESS)*
-
-**Rescoped 2026-08-29 on the user's question — "would it make sense to have cash settlement as a
-step by itself?"** Yes, and it is the better architecture. Cash movement was scattered across ~15
-stages each mutating its own field, which is precisely how corporate cash sat outside the banking
-system undetected for the model's whole life. Now stages RECORD payment instructions
-(`payer, payee, amount, reason`) and one settlement stage executes them: deposits move, each
-bank's net position settles in central-bank reserves, the government banks at the CB (so tax
-dates drain reserves), and any counterparty the model lacks is named `UNMODELED` — a visible
-deposit stock to watch down rather than money appearing from nowhere. A new payment type is one
-instruction and no new plumbing (rule 17).
-
-**Slices:** **SETL1** the layer itself (DONE §7.87); **SETL2** corporate cash routes through it
-(DONE §7.88); **SETL2b** a loan creates a deposit rather than consuming reserves (DONE §7.89);
-**SETL3** dividends — today they
-leave the payer and arrive nowhere; **SETL4** coupons — today the issuer pays on 100% of
-principal while holders accrue independently off their own books (two derivations of one payment,
-rule 3), so the difference vanishes. Then the remaining flows, stage by stage, with the per-bank
-identity as the gate at every step.
-
-
-
-**The boundary:** a company's cash is a number on the company. When one firm pays another, both
-S5 ledgers move and no bank's balance sheet does — so `corporateDepositsUSD` reports a stock the
-banking system does not hold, and the banks' only real deposit base is households (~52% of
-assets, against a real ~75-80%). Everything downstream is distorted: banks fund the gap with
-wholesale money at policy-plus-spread, which is why a rate cycle destroys them (§7.86), and
-deposit competition, the money multiplier and the MMF sweep all price against a deposit base
-missing its corporate half.
-
-**The work:** a corporate payment debits the payer's bank and credits the payee's — deposits move
-between banks, and a bank that wins relationships wins funding. Cash held at a bank IS that
-bank's liability, earning what the relationship commands (the sweep already models the
-alternative). The per-bank identity must close every week throughout: that gate is what disproved
-the shortcut (§7.86).
-
-**Verify:** the identity holds per bank per week; deposits ≈ households + corporates; the
-wholesale share falls toward its real range; NIM survives a rate cycle with no band touched.
+**Verify:** swap spread and CDS-cash basis hold single-digit-bp bands in calm weeks and blow out
+under stress — the bases are the test that the legs are consistent; contango when inventories are
+high and backwardation when scarce, both of which genuinely occur in stage 07; expiry convergence
+within the dealer spread; hedged companies and producers demonstrably feel less P&L from the
+shocks they hedged, which is the whole point of items 4 and 5.
 
 ---
 
-### SEG — The SME tier, keyed to the registry  *(CLOSED — §7.95–97)*
+### G5 — Default resolution: recovery as an outcome  *(item 14)*
 
-**Closed 2026-08-29. Measured at close-out: 36 harness violations against a 59 baseline**, zero
-balance-sheet identity breaks, zero NaN, no unemployment breaches, the three revenue-runaway
-violations gone, and `unresolvedUSD` at 0. Pools hold 47% of employment and 47% of revenue, their
-composition moves with demand (USA RealEstateConstruction 18.9% → 27.6% of pool revenue over 24
-weeks), and the private-tier wage line is gone from the settlement boundary. What remains of the
-harness is 35 of the §6 USA bank-cohort story plus the sovereign-auction check.
+On default an `Estate {companyId, assets, claims[]}` opens instead of a constant recovery. Real
+assets (cash, receivables, inventory at real lot values, PP&E at a haircut) are sold over ~26–78
+weeks **through the real markets** — inventory into stage 05 as distressed offers, PP&E to peers
+as cheap capex — and proceeds waterfall to claims by real seniority (first-lien loans, then bonds,
+equity residual, usually zero). While the workout runs, defaulted claims keep trading in 07b/07d
+at the §7.20 recovery-based reservations, marked against the estate's own evolving asset value, so
+the model's distressed pricing and its resolution process read one book.
 
-**Two things this project deliberately did NOT do, both still open:**
-- **The cold-start named private tier still has no product lines.** SEG gave them to BIRTHS only.
-  Injecting the whole seeded tier's supply into markets sized for public supply is **HC3b**, which
-  deferred it with a measurement (−10% to −22% growth), and reversing that in passing was not
-  SEG's call.
-- **Household income is still a top-down statistic** (`estimatedHouseholdIncomeUSD`) while what
-  employers actually pay is now a bottom-up sum, and applying `SME_WAGE_GAP` widened the gap
-  between them. That is the honest direction — income should BE the sum of payments — but the two
-  numbers now visibly disagree and nothing reconciles them. Owner: the HH follow-up in §6.
+**Recovery becomes an output**, and that closes the §7.20 loop: realized recoveries calibrate the
+priced LGD (a rolling realized-recovery average replaces the `CREDIT_RECOVERY_RATE` constant),
+completing the one-default-model unification whose hazard side landed in §7.20.
 
-The original scoping, kept because §7.95's lesson is about it:
+**Also owned here:** the **public default rate**, ~10%/yr — 46 of 196 public firms by week 121
+against ~1–2%/yr in reality, while the private tier with real ladders shows zero, isolating the
+cause to the public path's cash accounting. And the **PE exit by sale** (sponsor-to-sponsor or
+strategic), the half of the capital-recycling loop a listing cannot provide; the estate machinery
+is the natural place for a whole-company transfer, or stage 10's merger path.
 
-### SEG — the design, as scoped  *(historical)*
-
-**The first design was wrong and the rejection was right.** It proposed giving real books to
-`PrivateSegmentType` — five hardcoded buckets (MANUFACTURING, PROFESSIONAL_SERVICES, RETAIL_TRADE,
-CONSTRUCTION_REALESTATE, HEALTHCARE_SERVICES). Banking a fictional object carefully does not make
-it real. The user's three questions, answered with measurements:
-
-| Question | Answer |
-|---|---|
-| Is creation based on all available industries? | **No.** The registry carries **14 industries / 36 sub-units**; the SME tier is 5 buckets seeded from three constants each (`PRIVATE_SEGMENT_PROFILE`: employmentShare, revenueToGdp, marginPct × GDP). Births map through `SEGMENT_SECTOR`, collapsing 5 buckets into 3 sectors, and a born firm gets `productLines: []` — **it cannot sell anything in any market**. HEALTHCARE_SERVICES is born as "Consumer" under the comment *"closest fit until BP1 re-keys categories."* BP1 closed; it was never re-keyed. |
-| Does the share change with demand? | **No.** Revenue walks `demandSignal × 0.06`, employment `× 0.05`, both clamped to ±4%/wk. Every bucket gets the same treatment and nothing reallocates *between* them, so the composition at week 500 is the seed composition. CONSTRUCTION_REALESTATE's demand signal is a hardcoded `return 0`. |
-| Are they active producers and consumers? | **Barely.** Of 36 sub-units they sell into **7** (2 supply + 5 capex) and buy in **one** place — MANUFACTURING's recipe inputs — under a comment that the other four are *"deliberately left out… guessing is BP1's job to retire."* Four of five buckets, ≈32% of employment, buy nothing and sell nothing. |
-
-**The real defect: the SME tier is a parallel taxonomy the registry was built to absorb.** It even
-leaks backwards — `SubUnitSpec` carries `capexPrivateSegment` and `privateSupplySegment` pointing
-sub-units at the five buckets. **Rule 17 fails outright:** add a product line to the registry and
-you get zero SMEs in it, forever. So the object changes before it gets books.
-
-**The shape.** One SME pool per **(region × industry)**, keyed off `INDUSTRY_REGISTRY` — 14 × 4.
-A pool is *a firm without a name*: the mass below naming resolution in a real industry, holding
-real books, buying its industry's real recipe inputs and selling its industry's real sub-units
-into the same auctions, under the same buyer mixes, as the named firms above it. Adding an
-industry or a sub-unit to the registry gives it an SME tier automatically — rule 17 satisfied by
-construction, not by a mapping table.
-
-**What is DELETED, not adapted:** `PrivateSegmentType`, `PRIVATE_SEGMENT_PROFILE`,
-`SEGMENT_SECTOR`, `PRIVATE_SEGMENT_OCCUPATION_MIX`, `getSegmentDemandSignal` and its ±4% walk,
-`PRIVATE_SEGMENT_SUPPLY_CATEGORIES` / `CAPEX_CATEGORY_PRIVATE_SEGMENT` and the `capexPrivateSegment`
-/ `privateSupplySegment` fields they read. One taxonomy, not two.
-
-**New stated primitives — and only these.** Rule 4 allows real-world facts, not equilibria:
-- `smeShareOfActivity` per industry in the registry: SME intensity is a genuine structural fact
-  and it differs enormously by industry (construction and professional services are SME-dominated;
-  semiconductors and aerospace are not). One number per industry, stated once, cited.
-- `SME_PRODUCTIVITY_DISCOUNT` and `SME_MARGIN_DISCOUNT`: small firms really do produce less per
-  worker and earn thinner margins than large ones. Two numbers for the whole model.
-- **Nothing else.** The occupation mix is NOT a new primitive: pools read
-  `SECTOR_OCCUPATION_MIX[registry[industry].sector]` — the exact function named firms use, so one
-  mix serves both tiers and the old five-bucket mix table is deleted outright.
-
-**SEG-A — the registry becomes the taxonomy.** `PrivateSectorSegment` → `SmePool { industry,
-… }`, one per region × industry. Seeded from the region's own **real demand**: a pool's opening
-revenue is its industry's summed sub-unit `demandLevelUSD` × `smeShareOfActivity`, employment
-that revenue at the named tier's measured revenue-per-worker less the productivity discount, and
-margin the named tier's own measured margin in that industry less the margin discount (region-wide
-named margin as the fallback where an industry has no named firm yet). So the composition is an
-outcome of where demand actually is — never five constants. Pool creation moves after
-`categoryDemand` exists in the seed. `privateSegmentType` on `Company` becomes `smePoolIndustry`,
-and the labor market, evolution, WorldScreen and the bank pools re-key with it.
-
-**SEG-B — pools are real market participants.** The seven hardcoded categories go. Each pool
-offers every sub-unit its industry produces into stage 05, sized by its own capacity and priced
-the way a firm prices, and bids for its industry's `recipeInputs` and its capex basket out of its
-own budget. Same registry, same buyer mixes, same auctions as the named tier — so a pool competes
-with the named firms in its industry for the same customers, and demand reaching an industry
-reaches its SMEs.
-
-**SEG-C — books and settlement** *(the first design's SEG1/SEG2, re-pointed at the new object;
-the plumbing survives, its key changes)*. `cashUSD` per pool; the `SEGMENT` PartyRef becomes
-`{region, industry}`; `smeDepositsUSD` on bank sheets pro-rata by market share with the identity,
-funding split, 02b reconciliation and seeded reserves carrying it; pools pay their own wages,
-their own SME-pool loan interest, their own quarterly tax; loans create their deposits through
-`BANK_CREDIT`; `debtUSD` is the derived sum of the banks' pool loans. Already built against the
-five buckets and pushed (f778e2d, d0993bd) — including two defects found on the way and kept: the
-after-cutoff payment rollover (payments recorded after the settlement stage were dropped when the
-week ended, so take-private tender proceeds never landed) and the central-bank TGA double-count
-(every government leg settlement had migrated was being posted twice).
-
-**SEG-D — dynamism, development, births.** Revenue becomes measured receipts, not a walk; capacity
-and hiring are gated by the pool's own cash and granted credit; distress is cash-measured, with the
-same cash-exhaustion shape a named firm has. Births carve from the pool that has outgrown the named
-firms serving its industry, and the newborn is dealt **real product lines from its industry** via
-BP1's existing generator logic instead of `productLines: []`. Formation follows measured returns, so
-the tier's composition moves with demand rather than being frozen at seed.
-
-**Verify (once, at close-out):** per-bank identity zero; the settlement boundary's private-tier wage
-line (~143B/12wk) at zero; unresolvedUSD ≈ 0; every industry in the registry has a pool that both
-buys and sells; the SME share of employment and revenue moves measurably between industries over 60
-weeks (the composition is an outcome); named + pool employment conserved through the cutover week;
-a newborn firm has product lines and clears in a real auction in its first weeks.
+**Verify:** recoveries disperse by asset-heaviness; waterfall conservation (proceeds =
+distributions exactly); loans recover above bonds; the public default rate falls toward the
+private tier's.
 
 ---
 
-### OWN — Ownership is an outcome  *(§6.4 project 2; IN PROGRESS 2026-08-29)*
+### NAT — Nature transmits, it does not impose  *(item 15, clamp programme; small)*
 
-**The defect.** `OWNERSHIP_SHARES` in `macro/initialization.ts` assigns, by fiat, that banks hold
-3% of equity / 28% of corporate credit / 22% of sovereigns and institutions hold 42/45/30. Those
-numbers then decide real things: the tradable float of three clearing books (`1 - bankShare`),
-each bank's sovereign target (`bankShare x outstanding`), the 07f holding ceiling, household
-direct equity (`1 - institutionalShare`), and four seed allocations. They drift weekly on
-`(gdpGrowth + inflation) - tenor10Y` and are held inside `[0.10,0.65]` and `[0.01,0.10]`, then
-rescaled whenever the three sum above 0.85.
+**Clamps it deletes:** commodity supply drift ±4%, inventory [0, 100], migration ±1%.
+Population growth [−3%, +4%] goes to **DEM**, which owns population.
 
-Two rules break at once. Rule 4: a 28% bank share of corporate credit is a real-world
-*equilibrium*, not a primitive. Rule 13: **the share owns nothing.** Banks in this model hold
-sovereign bonds by tenor, itemized business loans and consumer pools — they hold no corporate
-bonds and no equity as investments; their only corporate-bond presence is the dealer inventory the
-engine already tracks separately. So `1 - 0.28` in 07b and `1 - 0.03` in 07e withhold float from
-holders who do not exist. This is exactly `foreignShare`'s disease (§7.72), one layer down.
+**The mechanism, which the codebase already names.** `macro/weather.ts` gives every event a
+stated `gdpImpactPct` and `inflationImpactPct` — an outcome imposed. `macro/evolution.ts:75`
+already deleted the CPI shortcut for exactly this reason and states the real chain: a drought cuts
+a real crop YIELD, the commodity book prices it, input costs rise, and the price index measures
+it. Delete the two impact fields and build the yield leg. Commodity supply comes from real
+producer capacity, which the commodity-linked producers already carry.
 
-**The mechanism that replaces it.** A share is a MEASUREMENT of a register, taken after the books
-are written, and read by nobody who decides anything.
+**Same commit, rule 4:** the file uses real geography — 'Midwest', 'Great Plains', 'North Sea',
+'Mediterranean'. Generate region-relative names.
 
-1. **The register is measured** (`stages/holdings-view.ts`). `measuredOwnershipAllRegions(state)`
-   walks the same books `measuredForeignOwnershipAllRegions` already walks plus the banks' own
-   sheets, and returns per region per class `{ bankUSD, institutionalUSD, centralBankUSD,
-   outstandingUSD }`. Stage 11 — the statistics stage — writes the three shares onto the region
-   from it. `computeTargetOwnershipShares`, the 0.05 drift, both bands and the 0.85 rescale go.
-2. **Float is outstanding minus what real holders hold.** Each book subtracts the holdings of
-   parties that do not bid in it, measured per instrument: 07d subtracts each issuer's loans
-   sitting on named banks' itemized business-loan books; 07b and 07e subtract nothing, because
-   nothing is there. A dealer's inventory is not subtracted — it is a participant.
-3. **A bank's sovereign book is its own decision** (07c, 07f). The target stops being
-   `bankShare x outstanding` and becomes the bank's own liquidity requirement against its own
-   funding: a coverage ratio on deposits (a regulatory primitive, which rule 4 permits) net of
-   what it already holds and what is encumbered in repo. A big deposit base buys more bonds
-   because it has more to cover, not because a table says 22%.
-4. **Household direct equity is a residual of the register**, not `1 - institutionalShare`: per
-   listed name, market cap less what institutions, index funds and dealers actually hold. It is a
-   measurement of wealth, not an input to 07e, so nothing here is circular.
-5. **`bankMarketShare` is measured.** `0.35 x 0.72^rank` seeds four cohorts by fiat and is then
-   read as a settlement key and a revenue driver. A bank's share of its region is its own deposits
-   over the region's deposits, recomputed from the sheets each week.
-6. **The seed is bottom-up.** Delete `OWNERSHIP_SHARES`. Each holder's opening book comes from its
-   own balance sheet: banks buy sovereigns to their coverage ratio, institutions allocate their own
-   AUM by mandate, and whatever no named holder takes is the dealer's, sized and reported.
+**Verify:** a weather event moves a yield and nothing else directly; the CPI change is the price
+index measuring it, not a field being added.
 
-**Slices** (rule 7 — one bounded commit each; rule 12 — measured ONCE at the end, not between):
-OWN1 register + shares become statistics; OWN2 floats; OWN3 the bank sovereign book; OWN4 the
-household residual; OWN5 `bankMarketShare`; OWN6 the seed and the deletion.
+---
 
-**Verified once at OWN6 (§7.98).** Harness 88 → 488 against 86817cb; 73 are the §6 seed-employment
-row (improved from 81) and 357 are one new family — the corporate books holding ~13% more paper
-than exists. Both of its invariants read ZERO before OWN, so the widened floats are over-placing
-rather than revealing. **OWN7 closes it**, in this order: first fix the harness check itself
-(`invariants.ts:59-67` sums a region's entities' FOREIGN holdings against DOMESTIC outstanding,
-which since XB1 is the wrong comparison), then find where a corporate tranche is repaid without
-the holder's book shrinking — the corporate twin of §7.10. **Do not reinstate a float carve to
-make the numbers fit.** Full write-up in §6.1.
-
-### CAL — Payment calendars  *(Tier 3, item 11)*
+### CAL — Payment calendars  *(item 16)*
 
 Coupons, loan interest and dividends accrue as smooth weekly 1/52 flows on both sides — stage 08's
 expense and `institutional-balance-sheet.ts`'s income. Real instruments pay on their own calendar:
@@ -1510,7 +1135,7 @@ lumpiness immediately.
 
 ---
 
-### ETF2 — A real price for ETF shares  *(Tier 3, item 12)*
+### ETF2 — A real price for ETF shares  *(item 17; needs G3)*
 
 Today a fund's shares are carried at NAV and the arbitrage residual is reported as
 `unmetFlowShare` — the fraction of a week's creation and redemption demand the authorised
@@ -1523,7 +1148,7 @@ sheet rather than a regional pool.
 
 ---
 
-### HC3b — The product-market handover  *(Tier 3, item 13)*
+### HC3b — The product-market handover  *(item 18; needs BP1, done)*
 
 The last piece owed from Hidden Corporates Wave 1, deferred with a reason and still waiting on
 BP1. The auctioned sub-unit categories' demand is calibrated against public supply, while the
@@ -1538,7 +1163,7 @@ switches on.
 
 ---
 
-### SCALE — Universe scale-up under a wall-clock budget  *(Tier 3, item 14)*
+### SCALE — Universe scale-up under a wall-clock budget  *(item 19; wave 2 after IND)*
 
 **The question, stated as a measurement:** how many public and private non-SME companies can the
 simulation carry before week-time becomes unacceptable — and what breaks first? The answer is a
@@ -1584,14 +1209,90 @@ FRONTIER (names vs seconds/week), not a feeling.
 
 ---
 
-### S-final — Validation gate  *(Tier 4, item 15)*
+### MNC — Multinational production  *(item 20; needs IND, XB)*
+
+Every firm is single-region while intra-firm trade is roughly a third of real world trade — here
+it is zero. The FDI decision (build abroad vs export, priced off the landed-cost machinery XB3a
+already runs), foreign subsidiaries as real plants with local costs and labor, intra-firm trade
+at transfer prices, structural FX exposure (transaction and translation) making the hedging
+desks' client book real demand, and profit repatriation through the FX books. TAXR's rate
+differences later make location a priced choice.
+**Verify:** FDI responds to landed-cost differentials; an intra-firm trade share EMERGES; one FX
+move changes a multinational's consolidated earnings through both channels.
+
+---
+
+### CHAIN — Multi-tier supply chains  *(item 21; needs BP1, IND10/11)*
+
+Recipes are one tier deep; real chains are graphs. BP1's registry carries a real BOM (components
+made from components); ORDERS — not final demand — propagate upstream through lead times and
+per-tier inventories, which is what makes the bullwhip producible instead of assumed; supplier
+concentration becomes chain-deep exposure (09 today sees only direct counterparties).
+**Verify:** upstream order volatility exceeds downstream demand volatility (the measured
+bullwhip); one supplier failure propagates through named tiers at the chain's own lead times.
+
+---
+
+### DYN — Entry, exit, and industry structure  *(item 22; needs IND, BP1)*
+
+Concentration as an outcome. Entry: sustained high category margins attract entrants through HC's
+existing birth machinery, aimed at the category. Exit: sustained losses idle capacity (mothballed,
+restartable), then scrap it — the missing half of every capacity cycle. Structure as strategy: a
+firm repeatedly burned by contract breaks (IND11's measured record) integrates upstream — the
+hold-up problem, priced by experience; conglomerates divest what they cannot run, giving stage
+10's M&A its logic; IND7's antitrust is this project's regulator.
+**Verify:** category margins mean-revert through entry/exit rather than assertion; capacity
+leaves in downturns and its absence is visible in supply; integration follows measured contract
+failure.
+
+---
+
+### PROD — Firm productivity and innovation  *(item 23; needs IND)*
+
+`rndExpense` buys nothing today. R&D becomes a real investment with uncertain outcomes — process
+(unit cost falls) or product (a new or better line through the registry) — and diffusion erodes
+any lead: temporary advantage, never a permanent monopoly (rule 4: import no equilibrium).
+Firm-level productivity DISPERSION plus reallocation of share to the productive (through IND6's
+real price competition) becomes the model's growth engine — which is what aggregate productivity
+growth mostly is.
+**Verify:** R&D intensity predicts margin/share outcomes noisily, not deterministically;
+aggregate productivity growth decomposes into within-firm and reallocation terms; cutting all R&D
+flattens growth over years, not weeks.
+
+---
+
+### CRE — Commercial property and leases  *(item 24; needs HH, G2 — both done)*
+
+Firms occupy space nothing produces. A commercial property market: space as a produced,
+long-lived asset (the construction sector builds it), owned by landlords, rented on multi-year
+leases that are real tenant liabilities, financed by CRE loans on named banks' books — the
+classic systemic channel (vacancy → landlord default → bank capital) the model cannot express
+today.
+**Verify:** rents clear on vacancy; lease obligations sit on tenant books; a CRE bust marks bank
+capital through named loans.
+
+---
+
+### TAXR — Corporate tax, really  *(item 25; needs PUB, done; MNC for the cross-border half)*
+
+A flat 21% on (EBIT − interest) prices no decision. Tax depreciation schedules vs book (the
+investment incentive), loss carryforwards (tax receipts fall FASTER than profits in downturns, so
+PUB's revenue finally feels recessions properly, and a recovering firm pays nothing for years),
+and — after MNC — profit booked where rates are lower, which is what makes transfer pricing
+matter.
+**Verify:** tax receipts are more cyclical than profits; carryforwards revive and expire;
+investment timing responds to depreciation treatment.
+
+---
+
+### S-final — Validation gate  *(item 26)*
 
 Full `npm run verify` green, closing #2/#14/#41, plus whatever residuals of #67 and #18 survive
 their owners above. Nothing else ships after this until it passes.
 
 ---
 
-### AU — Aurora, the UI rebuild  *(Tier 4, item 16)*
+### AU — Aurora, the UI rebuild  *(item 27)*
 
 Explicit mandate: delete every current UI element and rebuild from scratch — sleek, smart,
 interactive, real-world-inspired. **Required process, fixed in advance:** (1) a LONG series of
@@ -1601,28 +1302,6 @@ reacts to BEFORE production code; (3) real-world product inspiration (trading pl
 dashboards, data-dense consumer apps). Scope is all of `src/components/` plus `App.tsx`; the
 engine and domain layers are untouched. Sequenced last so it is designed against the complete
 simulation, and it inherits P1's display convention rather than re-inventing it.
-
----
-
-### CLOSED PROJECTS — architecture kept because later work ties into it
-
-**HC — Hidden Corporates** *(§7.33 Wave 1, §7.41 Wave 2)*. The hidden sector became the majority
-of the economy it is in reality: ~300 named private firms per region as real `Company` objects
-with `listingStatus`, an `ownership` block and everything else real firms have — **no parallel
-type**, because a second firm type would be two representations of one real thing. Below them the
-SME mass stays aggregate but real: its revenue is real stage-05 participation, its debt real bank
-loans, its losses the banks' real loan losses. PE sponsors are a real institutional type whose
-committed capital comes from real LP sleeves — PE-owned issuers ARE the B/BB loan universe.
-**Conservation is the build discipline:** tier-1 firms are carved OUT of the segment aggregates,
-never added on top, and Wave 2's births carry the same rule, so the economy's totals never change
-because a firm was created. Only HC3b remains, above.
-
-**ETF — Index funds and authorised participants** *(§7.44)*. Twenty-seven funds over twenty-seven
-indexes; membership and weights are rules run over cleared prices, funds hold their baskets for
-real, dealers create and redeem, and a research-capacity rule decides who indexes and who buys
-names. **The architectural note later projects need:** an index fund posts a SIZE with no
-reservation level (`stages/etf-demand.ts`) — the price-insensitive schedule — and that shape is now
-available to any adapter.
 
 ---
 
@@ -1683,52 +1362,54 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **The seed's three employment primitives disagree** | **Exposed by LAB (2026-08-29), pre-existing, now visible.** Three seed primitives jointly determine how many people have jobs at week 0 and they do not agree: the labor force (`population` Zipf x `1 - nonEmployablePct 0.36` x `participation 0.63`), the named tier's revenue (a flat **0.35 share of each category's demand** in `deriveInitialRevenueUSD`), and revenue-per-employee (`productivity x a sector multiple averaging ~2.5`, which is really the gross-output-to-value-added ratio and is load-bearing — normalizing it away was tried and put employment 68% ABOVE the labor force). Measured at seed: **USA 10.6%, UK 17.3%, JPN 26.1%, EUR 28.1% unemployment before a single week runs**, varying by region because the firm universe's revenue/GDP ratio does (2.34 USA against 1.88 EUR). This was invisible for the model's whole life because a top-down residual handed the SME pools whatever employment the real firms and the government did not take, pinning the print at the seeded 4.5%; LAB deleted that residual, so the disagreement now shows as the harness's unemployment band. **Do not fix it by restoring a residual, by widening the band, or by normalizing the capital-intensity multiples.** The honest fix is a seed-consistency slice: make the named tier's share of demand a DERIVED number — the share its real workforce can produce — instead of the hardcoded 0.35, and let the seed unemployment rate be the outcome. Blast radius is the whole firm universe's scale, which is why it is its own slice. |
 | **Loan-book Spearman noise** | Spearman(leverage, DM) runs 0.26–0.76 across weeks where the bond book holds 0.78–0.93 — consistent with sampling noise at 23–32 names per region. Re-measure as the loan universe grows; if it persists at larger n it is a real defect. |
 
-### 6.3 Rule audit — every file, 2026-08-29
+### 6.3 Rule audit — what the 2026-08-29 sweep found, and what is still open
 
 Swept all 153 files / 37,284 lines: read in full through `domain/`, `bootstrap/`, `macro/` and the
 small stages, and every remaining line scanned for the violation shapes (clamps on economic
 quantities, imposed shares, formula-set prices, real-world names, magic coefficients) with the
-context of each hit read. Ordered by how much they decide.
+context of each hit read. Ordered by how much they decide. **Rows struck through are closed; the
+rest name the §4 item that owns them.** This list is what decides an outcome the model should
+produce — it excludes the primitives the rules explicitly allow (lane distances, value densities,
+tax and replacement rates, regulatory ratios, the administered corridor spreads, the seed-shape
+constants §7.4 sanctions), which were checked and left.
 
 **A. The top-down core — imposed shares that decide aggregates**
 
 | Where | What | Rule |
 |---|---|---|
-| `bootstrap/national-accounts.ts` | `LABOR_SHARE_OF_OUTPUT` 0.62, `HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT` 0.13, `GOV_PROCUREMENT_SHARE_OF_SPENDING` 0.35, `HOUSEHOLD_EFFECTIVE_TAX_RATE` 0.1322 **solved from the identity**. `assertHouseholdIncomeIdentity` then ENFORCES them at startup. The file's own header says they are placeholders "replaced by the flows themselves" once households are real agents. | 4, 13 |
-| `bootstrap/labor-and-wages.ts:70` | `getBaseAnnualWageUSD` = productivity × labor share. **The wage LEVEL is an accounting identity**, not a market outcome — the root of the employment collapse when wages became real payments. | 13 |
-| `macro/household-cohorts.ts` | **Nine** imposed distribution tables (`TIER_OCCUPATION_MIXES`, `TIER_WAGE_MULTIPLIER`, `TIER_TAX_RATE_MULTIPLIER`, `TIER_TRANSFER_WEIGHT`, `TIER_RESIDUAL_RECEIPT_WEIGHT`, `TIER_DEBT_SERVICE_WEIGHT`, `TIER_SPEND_MIX`, `TIER_BALANCE_SHEET_WEIGHTS`, `TIER_WEALTH_MPC`). The whole household cross-section — who earns, owns, pays tax and spends on what — is stated. `TIER_BALANCE_SHEET_WEIGHTS` is documented "US SCF-shaped": an observed real-world distribution. `TIER_SPEND_MIX` is "calibrated so the blend reproduces" a target. | 4, 13 |
-| `macro/initialization.ts:29` | `createWealthDistribution` — income and net-worth shares per tier, savings rates, equity exposure, `netWorth = income × 3.5`. The wealth distribution is an input. | 4, 13 |
+| `bootstrap/national-accounts.ts` | `LABOR_SHARE_OF_OUTPUT` 0.62, `HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT` 0.13, `GOV_PROCUREMENT_SHARE_OF_SPENDING` 0.35, `HOUSEHOLD_EFFECTIVE_TAX_RATE` 0.1322 **solved from the identity**. `assertHouseholdIncomeIdentity` then ENFORCES them at startup. The file's own header says they are placeholders "replaced by the flows themselves" once households are real agents. | 4, 13 — **MAC (6)** |
+| `bootstrap/labor-and-wages.ts:70` | `getBaseAnnualWageUSD` = productivity × labor share. **The wage LEVEL is an accounting identity**, not a market outcome — the root of the employment collapse when wages became real payments. | 13 — **MAC (6)** |
+| `macro/household-cohorts.ts` | **Nine** imposed distribution tables (`TIER_OCCUPATION_MIXES`, `TIER_WAGE_MULTIPLIER`, `TIER_TAX_RATE_MULTIPLIER`, `TIER_TRANSFER_WEIGHT`, `TIER_RESIDUAL_RECEIPT_WEIGHT`, `TIER_DEBT_SERVICE_WEIGHT`, `TIER_SPEND_MIX`, `TIER_BALANCE_SHEET_WEIGHTS`, `TIER_WEALTH_MPC`). The whole household cross-section — who earns, owns, pays tax and spends on what — is stated. `TIER_BALANCE_SHEET_WEIGHTS` is documented "US SCF-shaped": an observed real-world distribution. `TIER_SPEND_MIX` is "calibrated so the blend reproduces" a target. | 4, 13 — **MAC (6)** |
+| `macro/initialization.ts:29` | `createWealthDistribution` — income and net-worth shares per tier, savings rates, equity exposure, `netWorth = income × 3.5`. The wealth distribution is an input. | 4, 13 — **DEM (5)** |
 | ~~`macro/initialization.ts:183`~~ | ~~**`OWNERSHIP_SHARES`**~~ **CLOSED by OWN1–OWN6 (§7.98).** Deleted. The registers are measured off the real books each week and nothing in the engine reads one to decide anything. What the deletion left behind is recorded in §6.1 (the corporate over-holding it exposed, and the institutional opening size that is still assigned). | 13 |
-| `bootstrap/firms.ts:245-279` | `institutionalMarketShare` (.42/.17/.10/.06/.18/.07) imposed by rank and never moved by performance — still open, and the sibling of §6.1's institutional-opening-size row. **`bankMarketShare` CLOSED by OWN5 (§7.98):** measured weekly in 02b as the deposits the bank actually holds over its region's; the seed value is the cohort's own firm-size curve. The old `0.35 × 0.72^rank` used a second private concentration decay and summed to **0.914**, so 8.6% of every regional banking aggregate was carved out to no bank at all. | 13 |
+| `bootstrap/firms.ts:245-279` | `institutionalMarketShare` (.42/.17/.10/.06/.18/.07) imposed by rank and never moved by performance — still open, and the sibling of §6.1's institutional-opening-size row. **`bankMarketShare` CLOSED by OWN5 (§7.98):** measured weekly in 02b as the deposits the bank actually holds over its region's; the seed value is the cohort's own firm-size curve. The old `0.35 × 0.72^rank` used a second private concentration decay and summed to **0.914**, so 8.6% of every regional banking aggregate was carved out to no bank at all. | 13 — **§6.1's institutional-opening-size row** |
 | ~~`stages/shared-helpers.ts:210-211`~~ | **CLOSED by OWN1 (§7.98).** `computeTargetOwnershipShares`, its two sensitivity coefficients, the 0.05 drift, both bands and `MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE` are deleted. Worth recording why the 0.85 rescale mattered: it made the harness's ownership-conservation check pass BY CONSTRUCTION, which is why removing it turned up §6.1's over-holding immediately. | 2, 5, 13 |
 
 **B. Prices and rates set by formula rather than cleared**
 
 | Where | What | Rule |
 |---|---|---|
-| `macro/evolution.ts:743-747` | **House prices**: `priceIndexDelta = (1 − supplyDemandRatio) × 0.002 × creditFactor`, index clamped [0.5, 3.0]. Housing is on household balance sheets and drives the wealth effect. | 1, 2 |
-| `macro/evolution.ts:553-560` | Consumer credit tier interest rates: `avgInterestRate + creditConditionsIndex × 0.05/0.03/0.01/0.005`. A price moved by an index. | 1 |
-| `macro/evolution.ts:215` | `newWageGrowth = 0.025 + 0.8 × slack + 0.1 × expectedInflation` — a Phillips curve with invented coefficients setting the wage. | 1, 13 |
-| `macro/evolution.ts:248-251` | The savings RATE (hence consumption, hence C) from `0.05 + inflationGap × 0.5 − 0.1 × CCI-gap + realRateGap × 0.4`. | 13 |
-| `macro/evolution.ts:220` | Consumer confidence from coefficients 150/200/80/1000, then clamped [30, 170]. | 2, 13 |
-| `macro/banking.ts:302` | `creditConditionsIndex = capitalGap × 8 + (0.025 − NIM) × 10 + spillover`, which then drives credit conditions and the tier rates above. | 13 |
-| `macro/banking.ts:240` | Deposit beta floor `policyRate × 0.45`; `:281` payout ratio step function; `:286` universal 14% target capital. | 13 |
-| `stages/05-unit-bidding.ts:1273` | Contract price = published price × `(1 − (bargainingPower − 0.3) × 0.05)`. | 1, 15 |
-| `domain/dealer-derivatives.ts:106` | `FX_SPOT_PRICE_IMPACT_PER_GDP` — a price-impact coefficient. | 1 |
+| `macro/evolution.ts:743-747` — **HSG (10)** | **House prices**: `priceIndexDelta = (1 − supplyDemandRatio) × 0.002 × creditFactor`, index clamped [0.5, 3.0]. Housing is on household balance sheets and drives the wealth effect. | 1, 2 |
+| `macro/evolution.ts:553-560` — **CRD (9)** | Consumer credit tier interest rates: `avgInterestRate + creditConditionsIndex × 0.05/0.03/0.01/0.005`. A price moved by an index. | 1 |
+| `macro/evolution.ts:215` — **MAC (6)** | `newWageGrowth = 0.025 + 0.8 × slack + 0.1 × expectedInflation` — a Phillips curve with invented coefficients setting the wage. | 1, 13 |
+| `macro/evolution.ts:248-251` — **MAC (6)** | The savings RATE (hence consumption, hence C) from `0.05 + inflationGap × 0.5 − 0.1 × CCI-gap + realRateGap × 0.4`. | 13 |
+| `macro/evolution.ts:220` — **MAC (6)** | Consumer confidence from coefficients 150/200/80/1000, then clamped [30, 170]. | 2, 13 |
+| `macro/banking.ts:302` — **CRD (9)** | `creditConditionsIndex = capitalGap × 8 + (0.025 − NIM) × 10 + spillover`, which then drives credit conditions and the tier rates above. | 13 |
+| `macro/banking.ts:240` — **G3 (8)** | Deposit beta floor `policyRate × 0.45`; `:281` payout ratio step function; `:286` universal 14% target capital. | 13 |
+| `stages/05-unit-bidding.ts:1273` — **CAP (4)** | Contract price = published price × `(1 − (bargainingPower − 0.3) × 0.05)`. | 1, 15 |
+| `domain/dealer-derivatives.ts:106` — **G3 (8)** | `FX_SPOT_PRICE_IMPACT_PER_GDP` — a price-impact coefficient. | 1 |
 
-**C. Clamps on economic quantities (rule 2)**
+**C. Clamps on economic quantities (rule 2)** — owners: CAP (4), MAC (6), IDX (7), CRD (9), NAT (15), DEM (5)
 
-`labor-market.ts:435` **unemployment clamped to [0, 0.5]** — this is why the harness prints
-"reported 50.00% is not the reading of its own employment stock (53.19%)": the clamp hides the
-real number. Also: firm revenue growth ±5%/wk (`08:499`), **CDS spread [10, 5000] bps**
+~~`labor-market.ts:435` unemployment [0, 0.5]~~ and ~~wage index [0.1, 20] / wage growth [−20%, +35%]~~ **deleted by LAB**, which is how §6.1's seed-employment row became visible. Still standing: firm revenue growth ±5%/wk (`08:499`), **CDS spread [10, 5000] bps**
 (`08:1301`), leverage [0,100] and coverage [±50] (`08:830/835`), Tobin's Q [0.1,10]
 (`08:438/627`), production throttle [0.3,1.0] and capacity growth ±2% (`05:469/496`), cost rate
-[0.40,0.98] (`05:505`), wage index [0.1,20] and wage growth [−20%,+35%] (`labor-market:349/354`),
+[0.40,0.98] (`05:505`),
 **equity index change ±15%/wk** (`macro/indices.ts:45` — which would mask §6's equity runaway in
 the published index), expected inflation [−20%,+50%], effective tax rate [10%,50%], population
 growth, migration, mortgage growth ±, commodity supply drift ±4%, savings cap 90% of disposable.
 
-**D. Rule 4 — real-world names and data**
+**D. Rule 4 — real-world names and data** — owners: IDX (7) for the index and central-bank brands, NAT (15) for the geography, MAC (6) for the SCF citation
 
 `macro/indices.ts` publishes **'S&P 500 Composite', 'Euro Stoxx 50', 'FTSE 100', 'Nikkei 225',
 'S&P GSCI Commodity Index'** — real index brands, in the UI. `macro/initialization.ts:147`
@@ -1737,7 +1418,7 @@ names 'Federal Reserve', 'Bank of England', 'Bank of Japan', 'European Central B
 `household-cohorts.ts:96` cites the US SCF. (`newsGenerator.ts:226` records that an earlier
 real-world-reference block was already deleted for this rule — the same standard applies here.)
 
-**E. Outcomes imposed rather than transmitted**
+**E. Outcomes imposed rather than transmitted** — owners: NAT (15) for weather, DYN (22) for market structure, MAC (6) for the seeded fiscal ratios
 
 `macro/weather.ts` gives every weather event a stated `gdpImpactPct` and `inflationImpactPct`.
 The file `macro/evolution.ts:75` correctly deleted the CPI shortcut for exactly this reason —
@@ -1747,7 +1428,7 @@ structure (10 firms/sector, flat across regions). `macro/initialization.ts:163-1
 `EFFECTIVE_TAX_RATE`, `FISCAL_DEFICIT_PCT_GDP`, `DEBT_TO_GDP_PCT` and government employment
 share — a deficit and a debt ratio are outcomes.
 
-**F. Two representations (rule 3), live**
+**F. Two representations (rule 3), live** — owners: MAC (6) for the deposit-interest duplicate, P1/XB6 for `safeRate`
 
 `macro/evolution.ts:452` still derives household deposit interest as `deposits × policyRate × 0.6`
 for the cohort allocation while the banks now report what they actually paid
@@ -1756,50 +1437,24 @@ progress and to be collapsed onto the measured one. `domain/currency.ts:30` `saf
 returns 1 for a non-finite or zero FX rate — a default standing in for a broken read, the shape
 §7.94 was found by.
 
-**What this audit is not.** It does not include the primitives the rules explicitly allow: lane
-distances, value densities, tax and replacement rates, regulatory ratios (Basel leverage, risk
-weights), the administered corridor spreads, or the seed-shape constants §7.4 sanctions — those
-were checked and left. The list above is what decides an outcome the model should produce.
+### 6.4 The clamp-removal discipline
 
-### 6.4 The clamp-removal programme — proposed 2026-08-29
+**The rule, which outlives the programme.** A clamp is a missing mechanism wearing a number.
+Removing one without building its mechanism is not a fix — it was tried on the wage on 2026-08-29
+and produced a 30–50% unemployment cascade in all four regions, which the unemployment clamp then
+hid. So: **no clamp is deleted except in the same commit as the system that makes it
+unnecessary**, and every clamp still standing names the project that will delete it.
 
-**The discipline, first.** A clamp is a missing mechanism wearing a number. Removing one without
-building its mechanism is not a fix — it was tried this afternoon on the wage and produced a
-30-50% unemployment cascade in all four regions, which the unemployment clamp then hid. So:
-**no clamp is deleted except in the same commit as the system that makes it unnecessary**, and
-every clamp still standing names the project that will delete it.
+**Not in scope — genuine mathematical guards, which rule 2 permits.** `Math.max(0, x)` on a
+quantity that cannot be negative; a probability held to [0,1];
+`Math.min(matches, vacancies, seekers)` (a hire cannot exceed either stock — an accounting
+identity); `Math.max(1, divisor)` where the divisor is structurally positive. These were checked
+across the whole codebase and left. Everything the programme touches decides an outcome.
 
-**Not in scope — genuine mathematical guards (rule 2 permits these).** `Math.max(0, x)` on a
-quantity that cannot be negative; a probability held to [0,1]; `Math.min(matches, vacancies,
-seekers)` (a hire cannot exceed either stock — an accounting identity); `Math.max(1, divisor)`
-where the divisor is structurally positive. These were checked and are left. Everything below
-decides an outcome.
-
-| # | Project | Clamps it deletes | The system it adds |
-|---|---|---|---|
-| 1 | **LAB — labor demand, and the wage as a price** | unemployment [0,0.5]; wage index [0.1,20]; wage growth [−20%,+35%]; firm wage change MIN/MAX; desired employment growth ±25%; quit rate ×[0.3,2.5]; firm quit multiplier [0.25,3.0] | A firm hires while the revenue a worker adds exceeds the wage it must pay, and sheds when it does not — labor DEMAND responds to affordability. The wage then clears: excess demand raises the going rate, excess supply lowers it, and the quantity adjusts, so no bound is needed on either. The wage LEVEL anchor moves off `productivity × LABOR_SHARE_OF_OUTPUT` onto each firm's own value added per worker. |
-| ~~2~~ | ~~**OWN — ownership is an outcome**~~ **BUILT 2026-08-29 (§7.98); OWN7 open — see §6.1.** | institutionalShare [0.10,0.65]; bankShare [0.01,0.10]; non-household ownership cap 0.85; the three-share rescale-to-1 | Delete `OWNERSHIP_SHARES`. Banks and institutions hold what they actually bought in the five clearing books; **tradable float = outstanding − what real holders hold**, not `1 − an imposed bankShare`. Household direct equity becomes the residual of a real register rather than `1 − institutionalShare`. Also retires `bankMarketShare = 0.35 × 0.72^rank`: a bank's share of deposits is the deposits it won. |
-| 3 | **IDX — an index is a statistic** | equity index change ±15%/wk | Nothing to build: the index is the cap-weighted move of its own constituents, whatever that is. Removing it makes §6's equity runaway visible in the published index instead of masked. Same commit renames the real-world brands (rule 4). |
-| 4 | **CAP — production and capacity decisions** | production throttle [0.3,1.0]; production response ×[0.5,2.0]; capacity growth ±2%/wk; cost rate [0.40,0.98] | Production is decided by the firm's own inventory position, the cleared price against its own measured unit cost (it already carries per-lot input provenance), and its cash. Capacity is DERIVED from PP&E, which IND1 already grows by delivered capex — so it stops being a rate that is walked and clamped. A firm that cannot cover unit cost stops producing rather than throttling to 30%. |
-| 5 | **CRD — credit prices cleared, ratings handle zero earnings** | CDS spread [10,5000] bps; leverage [0,100]; coverage [±50]; consumer tier rates by `cci × 0.05` | CDS becomes a real traded instrument in a book (needs G3's dealer). Leverage and coverage are clamped only because EBITDA can pass through zero — the honest fix is in `determineCreditRating`: a firm with no earnings is a distressed rating by definition, not a ratio held at 100. Consumer credit is priced per pool by the lending bank, as HH3's pools already allow. |
-| 6 | **HSG — a housing market that clears** | house price index [0.5,3.0]; credit factor [0.5,1.5]; the `\|\| 400000` price fallback | Houses clear in a book like everything else: households bid out of real income and the mortgage credit banks actually grant, against the real stock HH2 already put on the balance sheet, and the price is what clears. The `(1 − supplyDemandRatio) × 0.002` drift goes. |
-| 7 | **MAC — expectations and policy without bounds** | expected inflation [−20%,+50%]; Taylor output/inflation gaps ±10%; policy rate ceiling 0.20; effective tax [10%,50%]; consumer confidence [30,170]; savings cap 90% of disposable | Two halves. (a) Close §6's inflation escape (G1b) at its root — these bounds exist to survive it. (b) Make consumer confidence and the savings rate OUTCOMES: saving is what cohorts do not spend once budgets are real receipts, and confidence is a statistic read off measured unemployment and real income rather than a driver with coefficients 150/200/80/1000. **The effective lower bound stays** — a posted policy floor is the real-world mechanism (rule 1's named exception); the 0.20 ceiling is not. |
-| 8 | **NAT — nature transmits, it does not impose** | commodity supply drift ±4%; inventory [0,100]; population growth [−3%,+4%]; migration ±1% | Weather's stated `gdpImpactPct` and `inflationImpactPct` are deleted: a drought cuts a real crop YIELD, the commodity book prices it, input costs rise, and the price index measures it — the chain `macro/evolution.ts:75` already says is the real one. Commodity supply comes from real producer capacity. Population growth is DEM's. |
-
-**Ordering and why.** 1 first: it unblocks the work in flight and its clamp is actively hiding
-today's defect. 2 next: it is the largest single distortion, feeding the tradable float of all
-five clearing books. 3 is an afternoon and can go any time. 4-6 are real market builds, each
-independent. 7 waits for the inflation escape. 8 is small and last.
-
-**Status 2026-08-29.** 1 (LAB) closed, harness 405 → 88. 2 (OWN) built in six slices and pushed;
-its close-out measurement is in §7.98 and the defect it exposed is §6.1's first new row, owned by
-OWN7. **3 (IDX) is the next one to take** — it is an afternoon and now cheaper, since deleting the
-index clamp and the rule-4 brand names is one commit.
-
-**Verification, per project:** the harness measured ONCE at each project's close (rule 12), plus
-the specific reading that the deleted clamp used to hide — for LAB, that unemployment prints as
-an outcome and stays plausible without a bound; for IDX, what the index does when nothing holds
-it; for CAP, that a loss-making firm stops rather than throttles.
+**The eight projects it opened are now ordinary §4 items**, each in its proper tier rather than on
+a separate track: **LAB** (closed, harness 405 → 88), **OWN** (closed §7.98, OWN7 open as item 2),
+then **CAP** 4, **MAC** 6, **IDX** 7, **CRD** 9, **HSG** 10, **NAT** 15. Each §5 entry lists the
+clamps it deletes and the mechanism that replaces them.
 
 ## 7. Record & lessons (do not re-learn)
 
