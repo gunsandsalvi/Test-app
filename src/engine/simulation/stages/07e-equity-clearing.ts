@@ -54,8 +54,6 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
     // Only listed companies have a traded price; a private firm's equity is not for sale (HC).
-    // Banks and institutions keep their own book-value pricing in stage 08 for now — their equity
-    // is a claim on a balance sheet this engine does not yet model as shares.
     // Instruments carry SHARE counts as their quantity — see the module comment.
     // WS8/HC7: equity primaries — an IPO's new SHARES join this week's book, priced with the
     // outstanding float (the book clears in shares, so the offering size is a share count).

@@ -260,6 +260,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
       .reduce((sum, t) => sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0) / 52;
     const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
+    // RULE 3, OPEN: the CORPORATE tax rate is a bare literal here, and it is the only one the
+    // model has — `region.effectiveTaxRate` (which the fiscal stance drifts weekly) and
+    // `HOUSEHOLD_EFFECTIVE_TAX_RATE` govern the other two bases, and neither reaches this. So the
+    // government's own tax policy cannot touch corporate taxation at all, while stage 11 collects
+    // the proceeds as `taxCollectedCorporateUSD` and counts them in revenue. Owner: TAXR (25).
     const taxRate = 0.21;
 
     let updatedProductLines = comp.productLines || []; let newRevenue = 0;

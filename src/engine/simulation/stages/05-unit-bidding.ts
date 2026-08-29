@@ -48,8 +48,15 @@ export const MARKET_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 // XB3a qualifies it by region: four regions each run a MANUFACTURING segment, and in the world
 // book they are four different counterparties bidding against each other.
 const privateSegmentOfferId = (regionId: RegionId, industry: string) => `PRIVATE:${regionId}:${industry}`;
-// Share of a buyer's real weekly input need it locks under a long-term contract when one forms;
-// the rest stays spot-purchased. Real procurement splits roughly this way.
+/**
+ * Share of a buyer's real weekly input need it locks under a long-term contract when one forms;
+ * the rest stays spot-purchased.
+ *
+ * RULE 4/13, OPEN: "real procurement splits roughly this way" is an observed outcome. How much a
+ * buyer contracts is a DECISION against the risk it is hedging — supply reliability, price
+ * volatility, its own inventory — and CHAIN (21) makes exactly that decision real by sending
+ * orders rather than demand upstream. Owner: CHAIN (21).
+ */
 const CONTRACTED_DEMAND_SHARE = 0.6;
 
 // 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal

@@ -405,3 +405,29 @@ structurally bounded away from zero from two directions at once. CAP is not "rem
 and add a production rule" — it has to remove the margin floor FIRST, because until a firm can
 run a loss, the decision CAP exists to build has nothing to decide.
 
+### stages batch 3 (corporate tax, contracting, the dampers)
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| **S10** | **C** | `08-company-fundamentals.ts:263` | **The corporate tax rate is a bare `0.21` literal, and it is the only one the model has.** `region.effectiveTaxRate` — which the fiscal stance drifts weekly and which §6.3-C clamps to [10%, 50%] — governs a different base, and `HOUSEHOLD_EFFECTIVE_TAX_RATE` a third. Neither reaches this. So **the government's own tax policy cannot touch corporate taxation at all**, while stage 11 collects the proceeds as `taxCollectedCorporateUSD` and counts them in revenue. Three tax rates, no owner, and the largest one is a literal inside a company loop. **Owner: TAXR (25).** |
+| S11 | **A** | `05-unit-bidding.ts:53` | `CONTRACTED_DEMAND_SHARE = 0.6`, justified as "real procurement splits roughly this way" — an observed outcome. How much of its need a buyer locks under contract is a decision against the risk it is hedging (supply reliability, price volatility, its own inventory), and CHAIN makes exactly that decision real. **Owner: CHAIN (21).** |
+| S12 | **watch, connects D5** | `07b/07c/07d/07e/07f` | Each book carries a `MAX_WEEKLY_*_MOVE_PCT` damper (0.25 / 0.20 / 0.25 / 0.18 / 0.25) of the same kind as the FX damper D5 proved was *printing itself* 38 weeks in 40. §6.2 already watches "2,549 instruments persistently bound, worst streak 60 weeks" — **those are these**. D5 is not an FX-specific defect; it is the same mechanism measured in one market where somebody looked. When XB6 fixes the FX float, the same question should be asked of these five. |
+
+### stages batch 4 (settlement, 07e, 03)
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| S13 | **E, self-contradicting** | `07e-equity-clearing.ts:57` | **Two contradictory comments ten lines apart in the same function.** Line 57 said "Banks and institutions keep their own book-value pricing in stage 08 for now — their equity is a claim on a balance sheet this engine does not yet model as shares." Line 66 says "Banks and institutions are listed companies and **clear here like any other**… the reason for the carve-out is gone", and the filter confirms it — no entity-type exclusion. Stage 08 independently records the same thing ("the book-value × cycle-P/B branch that used to price banks and institutions here is GONE"). The stale half deleted. |
+| S14 | note | `settlement.ts` | **Households settle T+1; everyone else settles same-week.** `pendingBankSettlementUSD` defers the household bank leg by a week while companies, institutions, segments and the boundary all post immediately. Documented and defensible — a payroll credit really does clear next day — but it means household deposits are structurally a week behind household cash, and nothing else in the model has that lag. Worth knowing before anything reconciles the two. |
+
+**Clean, and the best-argued stage in the codebase:** `settlement.ts`. The real mechanism is
+stated precisely (same-bank payment = a relabelling with no reserve movement; cross-bank = a real
+reserve settlement; the government banks at the central bank, so tax dates drain the money
+market), `BANK_CREDIT` models endogenous money correctly (a loan creates a deposit with no reserve
+leaving the lender, and reserves move only when it is *spent* to another bank's customer), the
+`UNMODELED` boundary banks somewhere real rather than being a hole, and conservation is
+**asserted and throws** rather than plugged. `price-index.ts` is its equal: a Laspeyres basket on
+real cleared prices, chain-linked, with the explicit refusal to add a wage-push or money-growth
+term because "adding a separate formula term for them would be counting the same economics twice
+— once through the market and once around it."
+
