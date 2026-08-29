@@ -15,6 +15,21 @@ import { decomposeGovernmentSpending } from '../../../domain/government';
 import { WeeklyStepContext } from './context';
 
 export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext): void {
+  // SCALE: one pass over the firms' own product lines instead of a full firm-list filter per
+  // (region, category) — same firms in the same (firm-list) order, so the per-category reduce
+  // sees exactly the sequence the filter produced.
+  const firmsByRegionCat = new Map<string, Map<string, typeof ctx.prevActiveFirms>>();
+  ctx.prevActiveFirms.forEach(f => {
+    let byCat = firmsByRegionCat.get(f.region);
+    if (!byCat) { byCat = new Map(); firmsByRegionCat.set(f.region, byCat); }
+    const seen = new Set<string>();
+    (f.productLines || []).forEach(l => {
+      if (seen.has(l.subUnitId)) return;
+      seen.add(l.subUnitId);
+      const bucket = byCat!.get(l.subUnitId);
+      if (bucket) bucket.push(f); else byCat!.set(l.subUnitId, [f]);
+    });
+  });
   Object.keys(ctx.updatedRegions).forEach((regionIdKey) => {
     const regionId = regionIdKey as RegionId;
     const reg = ctx.updatedRegions[regionId];
@@ -22,7 +37,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
 
     const categorySupplyGrowth: Record<string, number> = {};
     (Object.keys(reg.categoryDemand) as string[]).forEach(cat => {
-      const firmsInCat = ctx.prevActiveFirms.filter(f => f.region === regionId && (f.productLines || []).some(l => l.subUnitId === cat));
+      const firmsInCat = firmsByRegionCat.get(regionId)?.get(cat) ?? [];
       if (firmsInCat.length === 0) { categorySupplyGrowth[cat] = 0; return; }
       categorySupplyGrowth[cat] = firmsInCat.reduce((s, f) => {
         const line = f.productLines.find(l => l.subUnitId === cat)!;

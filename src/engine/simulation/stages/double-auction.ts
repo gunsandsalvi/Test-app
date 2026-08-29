@@ -19,6 +19,8 @@
  * market's price is not the place to find out that they did.
  */
 
+import { sortIndexByKey } from './financial-clearing-engine';
+
 export interface AuctionBid {
   /** Whatever the caller needs to settle against — a ticker, a lane, an aggregate's key. */
   key: string;
@@ -63,8 +65,7 @@ const NEGLIGIBLE = 0.0001;
 
 /** Ascending stable sort of `arr` by the parallel `keys`, permuting `arr` in place. */
 function sortInPlaceByKey<T>(arr: T[], keys: number[]): void {
-  const idx = arr.map((_, i) => i);
-  idx.sort((a, b) => (keys[a] - keys[b]) || (a - b));
+  const idx = sortIndexByKey(keys, arr.length);
   const copy = arr.slice();
   for (let i = 0; i < arr.length; i++) arr[i] = copy[idx[i]];
 }
