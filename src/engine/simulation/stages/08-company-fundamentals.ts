@@ -480,6 +480,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const baselinePayrollRate = (baselineWeeklyPayrollUSD * 52) / Math.max(1, comp.baselineAnnualRevenue || comp.annualRevenue);
       const otherOpexRate = 1 - baselineMargin - baselineInputRate - baselinePayrollRate;
 
+      // §7.133 — TRIED AND REVERTED: overhead as a per-head dollar cost instead of
+      // `otherOpexRate x revenue`. The hypothesis was that a revenue-proportional overhead keeps
+      // the price ratchet alive (§7.132). It does, but this is not the fix: headcount is itself
+      // collapsing in the runs where the ratchet bites, so overhead collapsed with it, the floor
+      // fell anyway, deflation went −18.8% → −28.2% at week 10 and the harness went red. Tying a
+      // cost to a falling quantity is no better than tying it to a falling price.
       const inputCostAnnualUSD = realInputConsumptionCostUSD * 52;
       const payrollAnnualUSD = weeklyPayrollUSD * 52;
       const otherOpexAnnualUSD = otherOpexRate * comp.annualRevenue;

@@ -5072,3 +5072,22 @@ that proved it, the lesson.
       went 0.01x-14x → 0.13x-3.4x and the sovereign, commodity and profile ledgers all closed.
       But the level kept falling because the one line above was never touched. **Recorded so the
       sixth fix is the right one.**
+
+133. **A negative result, recorded because it was my own best hypothesis and it was wrong.**
+    §7.132 concluded the price ratchet survives because `otherOpex` is `rate x revenue`, so two
+    thirds of a firm's cost chases the price down. The obvious fix — overhead as a per-head dollar
+    cost, seeded from the firm's own books and carried at its current headcount — was built and
+    measured: **deflation −18.8% → −28.2% at week 10 and the harness went RED.**
+    - **Why it fails, and it is worth more than the fix would have been.** In exactly the runs
+      where the ratchet bites, headcount is itself collapsing. **Tying a cost to a falling
+      quantity is no better than tying it to a falling price** — the floor fell anyway, and faster,
+      because employment falls faster than revenue. A "sticky" cost has to be anchored to
+      something that is genuinely sticky, and in this model the only such thing is the WAGE
+      (−4.2% over twenty weeks against prices' −30%), not the wage BILL.
+    - **Reverted, and the reasoning left in the code at the site** so the next attempt does not
+      repeat it. This differs from §7.119's reverted-then-restored change: that one fixed a real
+      inconsistency and was reverted to hide a number, which was wrong. This one had no measured
+      benefit, failed its own hypothesis and regressed the harness. **Declining to ship a change
+      that fails its own test is not clamping a symptom.**
+    - **MAC(a) therefore stands where §7.132 left it**, with one candidate eliminated: the answer
+      is not "make overhead sticky". Harness back to green, 0 violations.
