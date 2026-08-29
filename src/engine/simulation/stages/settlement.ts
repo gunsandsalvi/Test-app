@@ -79,6 +79,8 @@ export interface SettlementReport {
   /** Per-bank movement of the corporate deposit line — the liability leg that moves with the
    *  reserves below, so asset and liability never drift apart. */
   corporateDepositDeltaByBank: Map<string, number>;
+  /** Per-bank movement of the institutional deposit line. */
+  institutionalDepositDeltaByBank: Map<string, number>;
   /** Per-bank movement of the named boundary's balance. */
   unmodeledDepositDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
@@ -116,6 +118,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     tgaDeltaByRegion: new Map(),
     unmodeledDeltaByRegion: new Map(),
     corporateDepositDeltaByBank: new Map(),
+    institutionalDepositDeltaByBank: new Map(),
     unmodeledDepositDeltaByBank: new Map(),
     creditCreatedByBank: new Map(),
     unmodeledByReason: new Map(),
@@ -166,7 +169,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         const entity = entityById.get(party.id);
         if (!entity) { report.unresolvedUSD += deltaUSD; return; }
         entity.cashUSD = (entity.cashUSD ?? 0) + deltaUSD;
-        creditBank(report, (entity as { homeBankTicker?: string }).homeBankTicker, deltaUSD);
+        creditBank(report, entity.homeBankTicker, deltaUSD);
+        addTo(report.institutionalDepositDeltaByBank, entity.homeBankTicker ?? '', deltaUSD);
         return;
       }
       case 'HOUSEHOLD': {
@@ -249,6 +253,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       cashReservesUSD: bank.bankBalanceSheet.cashReservesUSD + deltaUSD,
       corporateDepositsUSD: bank.bankBalanceSheet.corporateDepositsUSD
         + (report.corporateDepositDeltaByBank.get(ticker) ?? 0),
+      institutionalDepositsUSD: (bank.bankBalanceSheet.institutionalDepositsUSD ?? 0)
+        + (report.institutionalDepositDeltaByBank.get(ticker) ?? 0),
       unmodeledDepositsUSD: (bank.bankBalanceSheet.unmodeledDepositsUSD ?? 0)
         + (report.unmodeledDepositDeltaByBank.get(ticker) ?? 0),
     };

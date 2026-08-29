@@ -54,6 +54,10 @@ export interface InstitutionalEntity {
   name: string;
   ticker: string;
   region: RegionId;
+  /** SETL5 — the bank this entity's cash sits at. An institution's balance is a bank's liability
+   * like anyone else's; without this its money lived outside the banking system, which is the
+   * blind spot that hid a 64B double-count (§7.90). */
+  homeBankTicker?: string;
   entityType: InstitutionalEntityType;
   totalAssetsUSD: number;
   equityCapitalUSD: number;

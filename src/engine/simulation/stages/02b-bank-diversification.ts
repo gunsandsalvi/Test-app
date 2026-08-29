@@ -100,6 +100,14 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
     // G2 slice 4: corporate deposits ARE the home companies' S5 cash — one representation,
     // derived weekly from the real ledger rather than stored twice.
+    // SETL5: the institutional deposit line, reconciled to the entities' real balances the same
+    // way the corporate one is — settlement maintains it week to week, and this catches cash
+    // moved by stages not yet on instructions, carrying the matching reserve leg.
+    const institutionalDepositsByBank = new Map<string, number>();
+    ctx.updatedInstitutionalEntities.forEach((e) => {
+      if (e.region !== regionId || !e.homeBankTicker) return;
+      institutionalDepositsByBank.set(e.homeBankTicker, (institutionalDepositsByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
+    });
     const corporateDepositsByBank = new Map<string, number>();
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity) return;
@@ -196,11 +204,14 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // the identity cannot drift. The size of this adjustment is the migration's own progress
       // meter: it goes to zero when every stage records instructions.
       const trueCorporateUSD = Number((corporateDepositsByBank.get(bank.ticker) ?? 0).toFixed(0));
-      const reconcileUSD = trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0);
+      const trueInstitutionalUSD = Number((institutionalDepositsByBank.get(bank.ticker) ?? 0).toFixed(0));
+      const reconcileUSD = (trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0))
+        + (trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0));
       const withDeposits: BankingSector = {
         ...lentSheet,
         cashReservesUSD: lentSheet.cashReservesUSD + reconcileUSD,
         corporateDepositsUSD: trueCorporateUSD,
+        institutionalDepositsUSD: trueInstitutionalUSD,
         loanLossProvisionRateAnnualPct: Number(
           (lentSheet.businessLoanBookUSD > 0 ? (lending.loanLossWeeklyUSD * 52) / lentSheet.businessLoanBookUSD : 0).toFixed(4)
         ),

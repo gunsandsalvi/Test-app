@@ -341,11 +341,23 @@ export function evolveBankingSector(
     // the bank went on paying policy-plus-spread on funding it no longer needed (measured: ~200B
     // of phantom wholesale by week 55, on an 826B balance sheet — a large part of §6's negative
     // margin). Same identity as the seed's, applied weekly (bank-lending.ts owns it).
+    // Every REAL balance funds the bank; wholesale money is only what is still uncovered. The
+    // institutional and boundary lines were missing here, so a bank paid policy-plus-spread on
+    // funding its own customers had already provided (measured: NIM breaches 33 → 45 the moment
+    // institutional balances arrived — the deposits were on the sheet and the funding line had
+    // not noticed).
     wholesaleFundingUSD: Number((
       businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD
-      - depositsUSD - corporateDepositsUSD - equityUSD
+      - depositsUSD - corporateDepositsUSD
+      - (prevBanking.institutionalDepositsUSD ?? 0) - (prevBanking.unmodeledDepositsUSD ?? 0)
+      - equityUSD
     ).toFixed(0)),
     corporateDepositsUSD,
+    // This return rebuilds the sheet from a FIXED FIELD LIST, so anything not named here is
+    // silently dropped — these two vanished every week until the identity caught it (804
+    // violations). Same trap stage 08 documents; carried explicitly.
+    institutionalDepositsUSD: prevBanking.institutionalDepositsUSD ?? 0,
+    unmodeledDepositsUSD: prevBanking.unmodeledDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],

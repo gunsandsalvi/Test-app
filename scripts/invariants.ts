@@ -750,7 +750,7 @@ function runInvariantsHarness() {
         // books (stages/settlement.ts), so the line has real reserves behind it and excluding it
         // would leave the ASSET unmatched — the mirror of the error this comment used to record.
         // HH4d: wholesale funding is a real liability line split out of the deposit label.
-        bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + ((bs as any).unmodeledDepositsUSD ?? 0) + (bs.wholesaleFundingUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
+        bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + ((bs as any).institutionalDepositsUSD ?? 0) + ((bs as any).unmodeledDepositsUSD ?? 0) + (bs.wholesaleFundingUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
         - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
         - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0);
       if (Math.abs(residualUSD) > 5e6) {

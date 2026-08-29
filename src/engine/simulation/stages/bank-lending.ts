@@ -695,6 +695,9 @@ export function applyBankFundingSplit(sheet: BankingSector, householdDepositsUSD
   ).toFixed(0));
   sheet.depositsUSD = Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD));
   const afterHouseholdUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
-  const corporateUSD = Math.min(afterHouseholdUSD, Math.max(0, sheet.corporateDepositsUSD ?? 0));
-  sheet.wholesaleFundingUSD = Math.max(0, afterHouseholdUSD - corporateUSD);
+  const realDepositsUSD = Math.max(0, sheet.corporateDepositsUSD ?? 0)
+    + Math.max(0, sheet.institutionalDepositsUSD ?? 0)
+    + Math.max(0, sheet.unmodeledDepositsUSD ?? 0);
+  const otherDepositsUSD = Math.min(afterHouseholdUSD, realDepositsUSD);
+  sheet.wholesaleFundingUSD = Math.max(0, afterHouseholdUSD - otherDepositsUSD);
 }

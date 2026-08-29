@@ -115,6 +115,9 @@ export interface BankingSector {
    * stock that `depositsUSD` carries; total funding = depositsUSD + corporateDepositsUSD.
    */
   corporateDepositsUSD: number;
+  /** SETL5 — institutional balances held here (funds, insurers, pensions, dealers' clients).
+   * A real liability with reserves behind it, maintained by settlement and reconciled weekly. */
+  institutionalDepositsUSD?: number;
   /** SETL2 — the named boundary's balance here: money owed to counterparties the model has not
    * built yet (see settlement.ts's UNMODELED). A real liability with real reserves behind it, so
    * the identity closes; its SIZE is the measure of how much of the payment graph is still

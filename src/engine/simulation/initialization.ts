@@ -827,6 +827,31 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     cb.fxReservesByRegion = book;
   });
 
+  // SETL5: an institution banks like anyone else. Placed here, after every entity exists and
+  // after the bank sheets are built, so the relationship and the reserves behind these balances
+  // open in the shape the weekly engine maintains (§7.4). Until now institutional cash sat
+  // outside the banking system, which is the blind spot that let a 64B double-count pass (§7.90).
+  (Object.keys(regions) as RegionId[]).forEach(regionId => {
+    const reg = regions[regionId];
+    const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    if (regionBanks.length === 0) return;
+    const byBank = new Map<string, number>();
+    institutionalEntities.forEach(e => {
+      if (e.region !== regionId) return;
+      e.homeBankTicker = chooseLeadBank(e.id, regionBanks.map(b => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare })));
+      byBank.set(e.homeBankTicker, (byBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
+    });
+    regionBanks.forEach(b => {
+      const instUSD = Math.round(byBank.get(b.ticker) ?? 0);
+      b.bankBalanceSheet!.institutionalDepositsUSD = instUSD;
+      b.bankBalanceSheet!.cashReservesUSD += instUSD;
+      applyBankFundingSplit(b.bankBalanceSheet!, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+    });
+    reg.bankingSector.institutionalDepositsUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0);
+    reg.bankingSector.depositsUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
+    reg.bankingSector.wholesaleFundingUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
+  });
+
   const commodities = getInitialCommodities();
   const allGeneratedCompanies = companies;
   // Calibrate the working linkage from the FROZEN base shares (§6: the old in-place mutation
