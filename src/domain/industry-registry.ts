@@ -73,7 +73,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Energy: {
     sector: 'Energy',
     smeShareOfActivity: 0.15,
-    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.03, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'upstream_extraction',
@@ -95,12 +95,34 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
+      {
+        // IND5. Electricity is the one input every industry buys and the model had none, which
+        // is part of why its recipes are so thin (§7.111: mean intensity 0.138 against a real
+        // ~0.5, and that thinness is what puts every firm on the cost-of-capital line).
+        //
+        // Its physics do the work here rather than a table: `IN_PLACE` means it is delivered
+        // where it is consumed, so it carries no freight and cannot cross a border — which is
+        // what a grid is — and `isStorable` reads that mode, so electricity is the model's one
+        // genuinely NON-STORABLE good. It must be produced the week it is used. That falls out
+        // of the delivery mode; nothing states it.
+        //
+        // Generated at the margin from gas, so its price moves with the fuel — the real channel
+        // by which an energy shock reaches every other industry's cost base.
+        unitId: 'electricity',
+        label: "Electricity",
+        buyerMix: { HOUSEHOLD: 0.30, GOVERNMENT: 0.05, CORPORATE: 0.65 },
+        deliveryMode: 'IN_PLACE',
+        householdPriceTier: 'STAPLE',
+        linkedCommodities: [{ commodityId: 'NATURAL_GAS', intensityShare: 0.45 }],
+        productionLeadWeeks: 0,
+        revenueMechanism: 'UNIT_SALE',
+      },
     ],
   },
   MaterialsChemicals: {
     sector: 'Industrials',
     smeShareOfActivity: 0.25,
-    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.08, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'industrial_chemicals',
@@ -158,7 +180,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   IndustrialsMachinery: {
     sector: 'Industrials',
     smeShareOfActivity: 0.42,
-    recipeInputs: { upstream_extraction: 0.015, specialty_metals: 0.03, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.025, upstream_extraction: 0.015, specialty_metals: 0.03, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'heavy_equipment',
@@ -185,7 +207,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   AerospaceDefense: {
     sector: 'Industrials',
     smeShareOfActivity: 0.14,
-    recipeInputs: { upstream_extraction: 0.02, specialty_metals: 0.025, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.02, upstream_extraction: 0.02, specialty_metals: 0.025, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'defense_systems',
@@ -210,7 +232,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   AutomotiveTransport: {
     sector: 'Consumer',
     smeShareOfActivity: 0.22,
-    recipeInputs: { upstream_extraction: 0.025, specialty_metals: 0.03, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.025, upstream_extraction: 0.025, specialty_metals: 0.03, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'passenger_vehicles',
@@ -236,7 +258,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   TechHardwareSemis: {
     sector: 'Tech',
     smeShareOfActivity: 0.12,
-    recipeInputs: { upstream_extraction: 0.008, specialty_metals: 0.01, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.05, upstream_extraction: 0.008, specialty_metals: 0.01, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'semiconductors',
@@ -261,7 +283,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   SoftwareDigitalServices: {
     sector: 'Tech',
     smeShareOfActivity: 0.35,
-    recipeInputs: { upstream_extraction: 0.002, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.015, upstream_extraction: 0.002, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'enterprise_software',
@@ -285,7 +307,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Telecommunications: {
     sector: 'Tech',
     smeShareOfActivity: 0.1,
-    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.04, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'network_infrastructure',
@@ -301,7 +323,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   HealthcarePharma: {
     sector: 'Consumer',
     smeShareOfActivity: 0.38,
-    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.02, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'health_services',
@@ -337,7 +359,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   ConsumerStaples: {
     sector: 'Consumer',
     smeShareOfActivity: 0.28,
-    recipeInputs: { upstream_extraction: 0.001, agricultural_commodities: 0.12, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.02, upstream_extraction: 0.001, agricultural_commodities: 0.12, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'food_beverage',
@@ -365,7 +387,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   ConsumerDiscretionaryRetail: {
     sector: 'Consumer',
     smeShareOfActivity: 0.52,
-    recipeInputs: { upstream_extraction: 0.002, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.015, upstream_extraction: 0.002, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'apparel_retail',
@@ -390,7 +412,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   LuxuryGoods: {
     sector: 'Consumer',
     smeShareOfActivity: 0.2,
-    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.01, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'luxury_goods',
@@ -407,7 +429,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   MediaEntertainment: {
     sector: 'Consumer',
     smeShareOfActivity: 0.45,
-    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.015, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         unitId: 'media_content',
@@ -429,7 +451,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   PersonalConsumerServices: {
     sector: 'Consumer',
     smeShareOfActivity: 0.72,
-    recipeInputs: { food_beverage: 0.22, household_essentials: 0.04, facilities_and_logistics: 0.05 },
+    recipeInputs: { electricity: 0.02, food_beverage: 0.22, household_essentials: 0.04, facilities_and_logistics: 0.05 },
     subUnits: [
       {
         unitId: 'food_service',
@@ -467,7 +489,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   BusinessSupportServices: {
     sector: 'Industrials',
     smeShareOfActivity: 0.58,
-    recipeInputs: { enterprise_software: 0.04, refined_products: 0.03 },
+    recipeInputs: { electricity: 0.015, enterprise_software: 0.04, refined_products: 0.03 },
     subUnits: [
       {
         unitId: 'professional_services',
@@ -498,7 +520,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   RealEstateConstruction: {
     sector: 'Industrials',
     smeShareOfActivity: 0.78,
-    recipeInputs: { professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
+    recipeInputs: { electricity: 0.02, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
     subUnits: [
       {
         // SVC: the largest single line in household consumption in every developed economy, and

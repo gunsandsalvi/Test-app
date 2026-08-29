@@ -607,8 +607,15 @@ financingPreference (bond/loan/equity mix), payoutPolicy, hedgingPolicy}`, consu
 slice. **Also where several stated primitives become outcomes:** the ETF expense ratios, the
 underwriting fee schedule, and the research-capacity constant behind who indexes.
 
-**IND5 — Electricity** (#54): a real commodity plus a registry recipe line in every industry at
-those intensities; utilities already exist as producers.
+**IND5 — Electricity.  *(DONE §7.112)*** A real good in the registry, produced by Energy-sector
+firms, with a recipe line in **every** industry at its own energy intensity (0.010 luxury goods →
+0.080 materials and chemicals — a technological primitive, not an outcome). Its physics carry it:
+`IN_PLACE` means it is delivered where it is consumed, so it takes no freight and cannot cross a
+border, which is what a grid is — and `isStorable` reads that mode, making electricity **the
+model's one genuinely non-storable good**, produced the week it is used. Linked to natural gas at
+the margin, so an energy shock now reaches every industry's cost base through a real input rather
+than a correlation. **Mean recipe intensity 0.138 → 0.164** (§7.111's root-cause number), and
+verified: 237 suppliers, USA shares summing to exactly 100%, no firm holding it in inventory.
 
 **IND6 — Share-versus-margin strategy** (#55): a per-company posture expressed ONLY through its
 real stage-05 offer price relative to cost — underpricing within contribution-margin bounds buys
@@ -4108,3 +4115,22 @@ that proved it, the lesson.
       wrong one.
     - **What EMP keeps:** the two symmetries from §7.110, which were genuine defects on their own
       and improved week 1 measurably. What it hands over is a root cause with a number.
+
+112. **IND5 — electricity, and the one non-storable good.** The model had no electricity: the one
+    input every industry buys, missing from a registry whose recipes §7.111 had just measured at
+    0.138 mean intensity against a real ~0.5. It is a registry entry now — produced by
+    Energy-sector firms, with a recipe line in **every** industry at its own energy intensity
+    (0.010 for luxury goods, 0.080 for materials and chemicals; a technological fact, not an
+    equilibrium).
+    - **Its physics do the work, not a table.** `IN_PLACE` says it is delivered where it is
+      consumed, so it carries no freight and cannot cross a border — which is what a grid is —
+      and `isStorable` reads exactly that mode. So electricity is **the model's one genuinely
+      non-storable good** and must be produced the week it is used, without a line anywhere
+      saying so. That is IND1's design paying off: state the physics, derive the behaviour.
+    - **Linked to gas at the margin**, so an energy shock reaches every industry's cost base
+      through a real input rather than a correlation.
+    - **Mean recipe intensity 0.138 → 0.164**, multiplier 1.16x → 1.20x. A real dent in §7.111's
+      root cause and nowhere near closing it — CHAIN still owns the rest.
+    - **Verified:** 237 suppliers, USA supplier shares summing to exactly 100% (GUARD's own
+      invariant, silent), $15.2B of electricity revenue by week 3, and no firm anywhere holding
+      it in inventory. Six-week probe 13 → 12 violations.
