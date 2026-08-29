@@ -217,3 +217,20 @@ evolved by its own formula"; and `unmodeledFinancialAssetsUSD` is a named gap th
 moves with nothing and shrinks as the universe grows — rule 13's standard for a legitimate
 residual, met.
 
+### `src/domain/industry-registry.ts` — one finding, measured
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **D40** | **A, measured** | `industry-registry.ts` → `companyGenerator.ts:766` → `05-unit-bidding.ts` | **Banks and institutions are registered as suppliers of enterprise software, and they offer it into the goods auction.** `FINANCIAL_SECTOR_PROXY_LINES` gives every Financials/Banks firm a product line of `enterprise_software` at `revenueShare: 1.0` as a stage-08 revenue proxy. But a `productLine` is also what registers a firm as a SUPPLIER in stage 05's auction index (`suppliersBySubUnit`), and that index has **no entity-type filter**. **Probed at seed:** 276 suppliers of `enterprise_software`, of which **16 banks and 24 institutions**; that category's market shares sum to **646%** against **400%** (100% × four regions) for every other category — so insurers and pension funds are diluting the real software firms by ~62%. Incoherent with stage 08 as well: a bank routes to `bankProfile`, which computes revenue from its balance sheet and never accounts for producing anything, so the supply is real to the auction and invisible to the producer's own P&L. Rule 17's "a stage may not switch on an entity type" cuts both ways — the stage is right not to switch, and the DATA is wrong. **Owner: IND (3).** |
+
+**Clean — and this is the best-designed file in the codebase.** `annualCarryingCostRateOf` derives
+what holding a good costs from two real physical terms and nothing else: a warehouse charges by
+the tonne, so cost per DOLLAR is the tonne price of space over the good's value density (a dollar
+of gravel occupies hundreds of times the space of a dollar of semiconductors); and a good with a
+shelf life walks to zero at 1/shelfLife whether anyone buys it or not. It replaced a flat 0.02
+that "charged a semiconductor fab and a dairy the same rate to hold their output".
+`purchaseKindOf` routes each purchase to what it physically IS rather than expiring dead lots —
+rule 2 applied correctly again. `smeShareOfActivity` argues its own rule-4 case properly
+(efficient scale is a crew or a fab — a structural fact, not an equilibrium). `SME_POOL_INDUSTRIES`
+derives the roster from the registry so there is no second list to maintain.
+

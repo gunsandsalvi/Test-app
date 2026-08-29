@@ -606,8 +606,24 @@ export function subUnitsByProducingSector(): Record<ProducingSector, { industry:
   return out;
 }
 
-/** The financial sector's stage-08 consumer-revenue proxy (pre-BP1b hardcoded template). A bank
- * does not produce software; IND4 replaces this with real financial P&L lines. */
+/**
+ * The financial sector's stage-08 consumer-revenue proxy (pre-BP1b hardcoded template).
+ *
+ * A bank does not produce software — and this is not merely cosmetic, because a `productLine` is
+ * what registers a firm as a SUPPLIER in stage 05's auction index, which has no entity-type
+ * filter. MEASURED at seed 2026-08-29: 276 suppliers of `enterprise_software`, of which **16
+ * banks and 24 institutions**, and the category's market shares sum to **646%** against **400%**
+ * (100% x four regions) for every other category in the model. Insurers and pension funds are
+ * offering enterprise software into the goods market, and diluting the real software firms'
+ * shares by ~62%.
+ *
+ * Worse, it is incoherent with stage 08: a bank routes to `bankProfile`, which computes its
+ * revenue from its balance sheet and never accounts for producing anything. So the supply is
+ * real to the auction and invisible to the producer's own P&L.
+ *
+ * Owner: IND (3) — replace with real financial P&L lines and give the auction index no financial
+ * suppliers at all.
+ */
 export const FINANCIAL_SECTOR_PROXY_LINES = [
   { industry: 'SoftwareDigitalServices' as Industry, subUnitId: 'enterprise_software', revenueShare: 1.0, competitiveness: 0 },
 ];
