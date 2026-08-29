@@ -69,6 +69,62 @@ export function leverageHeadroomUSD(sheet: BankingSector): number {
   return Math.max(0, sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO - bankTotalAssetsUSD(sheet));
 }
 
+/**
+ * OWN3 — the two REAL bounds on a bank's securities book, both read off its own sheet.
+ *
+ * What they replace: 07c set every bank's sovereign target to
+ * `sovBondOwnership.bankShare x the whole market`, distributed across banks by deposits, and
+ * 07f capped each bill bucket at the same share times the bank's slice. A bank's book was
+ * therefore decided by a number describing the banking SECTOR, not by anything the bank owned.
+ * The comment there recorded the reason the aggregate was imposed — letting each bank take
+ * `deposits x a ratio` implied the sector wanting several times the entire market — and that
+ * reason was right about the formula and wrong about the fix: a liquidity requirement is not a
+ * share of deposits, it is a share of the deposits that could RUN, met by reserves first.
+ *
+ * Runoff rates and a coverage ratio of 1 are posted regulatory primitives (rule 4 permits a
+ * primitive; it is the 22% equilibrium that it forbids).
+ */
+export const RETAIL_DEPOSIT_RUNOFF_RATE = 0.10;
+/** Corporate, institutional and wholesale money leaves far faster than insured retail money. */
+export const WHOLESALE_FUNDING_RUNOFF_RATE = 0.40;
+export const LIQUIDITY_COVERAGE_RATIO = 1.0;
+
+/** Funding that runs in a stress month, weighted by how fast each kind of it runs. */
+export function stressedOutflowUSD(sheet: BankingSector): number {
+  const wholesaleUSD = (sheet.corporateDepositsUSD ?? 0) + (sheet.institutionalDepositsUSD ?? 0)
+    + (sheet.smeDepositsUSD ?? 0) + (sheet.unmodeledDepositsUSD ?? 0) + (sheet.wholesaleFundingUSD ?? 0);
+  return Math.max(0, sheet.depositsUSD) * RETAIL_DEPOSIT_RUNOFF_RATE
+    + Math.max(0, wholesaleUSD) * WHOLESALE_FUNDING_RUNOFF_RATE;
+}
+
+/**
+ * The FLOOR under a bank's sovereign book: the liquidity it must carry that its reserves do not
+ * already cover. Reserves are HQLA too, so a bank flush with cash needs no bonds to be liquid —
+ * which is the reserves-versus-bonds substitution S2 found to be load-bearing (§7.10), now
+ * acting on the size of the book rather than on a scaling factor.
+ */
+export function liquidityDrivenSovereignFloorUSD(sheet: BankingSector): number {
+  const requiredHqlaUSD = stressedOutflowUSD(sheet) * LIQUIDITY_COVERAGE_RATIO;
+  return Math.max(0, requiredHqlaUSD - Math.max(0, sheet.cashReservesUSD));
+}
+
+/**
+ * The CEILING on it: funding the bank has raised and has neither lent out nor kept as cash has
+ * to sit in something that pays. This is a residual of the bank's own balance sheet, so the
+ * sector's appetite sums to whatever the sector's unlent funding is — it cannot exceed the
+ * market several times over the way `deposits x a ratio` did, and it cannot be a share of a
+ * market the bank has never seen.
+ */
+export function investableSurplusUSD(sheet: BankingSector): number {
+  const fundingUSD = Math.max(0, sheet.depositsUSD) + (sheet.corporateDepositsUSD ?? 0)
+    + (sheet.institutionalDepositsUSD ?? 0) + (sheet.smeDepositsUSD ?? 0)
+    + (sheet.unmodeledDepositsUSD ?? 0) + (sheet.wholesaleFundingUSD ?? 0)
+    + Math.max(0, sheet.bankEquityUSD);
+  const deployedUSD = sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD
+    + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0);
+  return Math.max(0, fundingUSD - deployedUSD);
+}
+
 const TENOR_BUCKET_YEARS: Record<string, number> = {
   b13: 0.25, b26: 0.5, b52: 1, t2: 2, t5: 5, t10: 10, t30: 30,
 };

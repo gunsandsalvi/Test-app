@@ -36,7 +36,7 @@ import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nels
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
-import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, investableSurplusUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
@@ -109,7 +109,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         (e) => mandateWeightForIssuer(e.entityType, e.region, regionId, billStockByRegion) > 0
       );
       const totalBillStockUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
-      const totalBankDepositsUSD = regionBanks.reduce((s, c) => s + (c.bankBalanceSheet?.depositsUSD ?? 0), 0) || 1;
+      // OWN3: bills and bonds are one HQLA pool, so both books apportion a bank's single
+      // appetite over the whole sovereign stock rather than each over its own half.
+      const wholeSovStockUSD = (reg.govDebtTranches || [])
+        .filter((t) => t.maturityWeek > ctx.nextWeek)
+        .reduce((s, t) => s + Math.max(0, t.principalUSD), 0) || 1;
 
       const participants: ClearingParticipant[] = [];
 
@@ -120,7 +124,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
         const sheet = bank.bankBalanceSheet!;
-        const bankShareOfBanks = (sheet.depositsUSD ?? 0) / totalBankDepositsUSD;
         // WS6: same funding budget and encumbrance floor as 07c — a bill bid is a claim on
         // real money, and pledged collateral cannot simultaneously be sold. (Bills cleared
         // here share the collateral pool with the bonds.)
@@ -137,16 +140,19 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const encumberedShare = totalBookUSD > 0
           ? Math.min(1, (sheet.repoEncumberedCollateralUSD ?? 0) / totalBookUSD)
           : 0;
+        const appetiteUSD = investableSurplusUSD(sheet);
+        const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet);
         activeBuckets.forEach((b) => {
           const heldUSD = sheet.sovereignBondHoldingsByTenor?.[b.key] ?? 0;
           holdings.set(billInstrumentId(regionId, b.key), heldUSD);
           const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
+          const bucketShareOfSovStock = (outstandingByBucket.get(b.key) ?? 0) / wholeSovStockUSD;
           demand.set(billInstrumentId(regionId, b.key), {
             reservationStat: reg.policyRate * 10000 + BANK_BILL_PICKUP_BPS,
-            maxHoldingUSD: reg.sovBondOwnership.bankShare * (outstandingByBucket.get(b.key) ?? 0) * bankShareOfBanks * 3,
+            maxHoldingUSD: appetiteUSD * bucketShareOfSovStock,
             fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
             maxNetPurchaseUSD: fundableUSD * bucketShare,
-            minHoldingUSD: heldUSD * encumberedShare,
+            minHoldingUSD: Math.max(heldUSD * encumberedShare, liquidityFloorUSD * bucketShareOfSovStock),
           });
         });
         participants.push({ id: `BANK-${bank.ticker}`, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });

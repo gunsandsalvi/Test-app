@@ -44,7 +44,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
-import { distributeRealTargetByWeight, SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
+import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
@@ -54,7 +54,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
-import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD } from '../../macro/banking';
+import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, investableSurplusUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
 const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
@@ -252,14 +252,11 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     );
     // Banks stay DOMESTIC, and that is a mandate rather than an assigned share: a bank holds its
     // own sovereign as the liquidity buffer its regulator recognises, which is why it does not
-    // reach for foreign paper to meet it. The aggregate is still bounded here rather than let
-    // each bank compute deposits x a ratio, which implied the banking sector wanting several
-    // times the entire market. (XB records this as the ownership share that remains imposed.)
-    const rawBankTargetUSD = reg.sovBondOwnership.bankShare * totalOutstandingUSD;
-    const rawBankTargets = distributeRealTargetByWeight(
-      regionBanks.map((b) => ({ id: b.ticker, sizeWeight: b.bankBalanceSheet!.depositsUSD, targetPct: 1 })),
-      rawBankTargetUSD
-    );
+    // reach for foreign paper to meet it. OWN3: how MUCH it holds is now its own number too —
+    // see `investableSurplusUSD` / `liquidityDrivenSovereignFloorUSD`. The bills in 07f share
+    // that one appetite with the bonds here, so both books apportion it over the whole
+    // sovereign stock rather than each over its own half.
+    const wholeSovStockUSD = liveTranches.reduce((s2, t) => s2 + Math.max(0, t.principalUSD), 0) || 1;
 
     /** The instruments THIS auction prices — every other holding passes through untouched. */
     const ownBucketInstrumentIds = new Set(activeBuckets.map((b) => bucketInstrumentId(regionId, b.key)));
@@ -349,16 +346,23 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // bonds-versus-reserves choice that anchors the front end, now expressed as a price rather
       // than as a scaling factor on a quantity target.
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
-      const bankTarget = rawBankTargets.get(bank.ticker) ?? 0;
+      const appetiteUSD = investableSurplusUSD(sheet);
+      const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet);
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
+        const bucketShareOfSovStock = (outstandingByBucket.get(b.key) ?? 0) / wholeSovStockUSD;
         demandByInstrumentId.set(id, {
           reservationStat: reg.policyRate * 10000 + durationPremiumBps(b.years, BANK_PREFERRED_TENOR_YEARS),
-          maxHoldingUSD: bankTarget * bucketShareOfMarket * MAX_OVERWEIGHT_MULTIPLE,
+          maxHoldingUSD: appetiteUSD * bucketShareOfSovStock,
           fullSizeStatRange: SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS,
           maxNetPurchaseUSD: fundableUSD * bucketShareOfMarket,
-          minHoldingUSD: (currentByBucket.get(id) ?? 0) * encumberedShare,
+          // Two floors, whichever binds: collateral already pledged overnight cannot be sold,
+          // and a bank cannot sell below the liquidity its reserves do not already cover.
+          minHoldingUSD: Math.max(
+            (currentByBucket.get(id) ?? 0) * encumberedShare,
+            liquidityFloorUSD * bucketShareOfSovStock
+          ),
         });
       });
 
