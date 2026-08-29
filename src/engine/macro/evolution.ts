@@ -917,6 +917,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       institutionalClaimsUSD: prevHS.institutionalClaimsUSD ?? 0,
       etfShares: prevHS.etfShares ?? [],
       etfHoldingsUSD: prevHS.etfHoldingsUSD ?? 0,
+      // §7.41's trap, third time: this rebuild takes a FIXED FIELD LIST, so anything not named
+      // here is dropped weekly. `mmfSharesUSD` was not named, so the household's money-fund claim
+      // was destroyed every week and recreated from that week's diversion alone — while the fund
+      // kept the cumulative total. Measured: the fund's shares outstanding ran 2.5% above what
+      // every holder together owned by week 6 and growing (§7.126).
+      mmfSharesUSD: prevHS.mmfSharesUSD ?? 0,
       privateBusinessEquityUSD: prevHS.privateBusinessEquityUSD ?? 0,
       unmodeledFinancialAssetsUSD: prevHS.unmodeledFinancialAssetsUSD ?? newEquityHoldingsUSD,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.

@@ -198,6 +198,13 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
  */
 export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   const feeByRegion = new Map<RegionId, number>();
+  // §7.126 — WHO THE NEW SHARES ARE ISSUED TO. This paid the yield by growing
+  // `mmfSharesOutstandingUSD` and credited NO holder, so the fund's liability rose every week
+  // while every holder's asset stood still: a one-sided flow (rule 14), measured at 2.5% of the
+  // fund and compounding (41.39B outstanding against 40.34B held by week 6). The module's own
+  // note says it closed an assets-versus-shares divergence — it closed it on the fund's side and
+  // opened the same hole on the holders'.
+  const issuedByRegion = new Map<RegionId, number>();
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
     const holdingsUSD = (e.itemizedHoldings || []).reduce((a, h) => a + h.quantityOrNotionalUSD, 0);
@@ -206,11 +213,35 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
     const paidToHoldersUSD = (bookUSD * (e.mmfNetYieldAnnual ?? 0)) / 52;
     feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeUSD);
+    issuedByRegion.set(e.region, (issuedByRegion.get(e.region) ?? 0) + paidToHoldersUSD);
     return {
       ...e,
       cashUSD: (e.cashUSD ?? 0) - feeUSD,
       mmfSharesOutstandingUSD: Math.max(0, (e.mmfSharesOutstandingUSD ?? 0) + paidToHoldersUSD),
     };
+  });
+
+  // The other leg: the new shares go to the holders that already own the fund, pro rata — the
+  // region's corporate treasuries by their own `mmfSharesUSD` and the household sector by its.
+  // A stable-NAV fund distributes income as SHARES, so a holder's dollar becomes 1.0004 dollars
+  // of shares; that is a real claim arriving on a real book, not a number growing on the fund's.
+  issuedByRegion.forEach((issuedUSD, regionId) => {
+    if (!(issuedUSD > 0)) return;
+    const reg = ctx.updatedRegions[regionId];
+    const hhSharesUSD = Math.max(0, reg?.householdState?.mmfSharesUSD ?? 0);
+    const corpSharesUSD = ctx.updatedCompanies.reduce(
+      (a, c) => a + (c.region === regionId ? Math.max(0, c.mmfSharesUSD ?? 0) : 0), 0);
+    const totalHeldUSD = hhSharesUSD + corpSharesUSD;
+    if (totalHeldUSD <= 0) return;
+    ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
+      if (c.region !== regionId) return c;
+      const held = Math.max(0, c.mmfSharesUSD ?? 0);
+      if (held <= 0) return c;
+      return Object.assign(c, { mmfSharesUSD: held + issuedUSD * (held / totalHeldUSD) });
+    });
+    if (reg?.householdState && hhSharesUSD > 0) {
+      reg.householdState.mmfSharesUSD = hhSharesUSD + issuedUSD * (hhSharesUSD / totalHeldUSD);
+    }
   });
 
   if (feeByRegion.size === 0) return;

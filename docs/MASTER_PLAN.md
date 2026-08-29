@@ -1993,7 +1993,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | Defect | State and next action |
 |---|---|
 | **SOVEREIGN BOOKS HOLD MORE PAPER THAN EXISTS — introduced 2026-08-29, and it is owed** | **Caused by §7.120's seed-scale slice; not a discovery, a debt.** All four regions: the real books together claim more sovereign bonds than `govDebtTranches` says is outstanding — the harness's "a ledger is minting claims" check, the one that catches a missing leg. **It GROWS week over week** (5 weeks per region in a 10-week run), so it is a FLOW and not a seed sizing: the books accumulate sovereign paper faster than issuance creates it, which points at 07c's float rather than the debt seed. The scale change moved GDP 639.2B → 695.7B and sovereign outstanding is `debtToGdpPctBottomUp x derivedNominalGdpUSD` computed at a different point in the seed than the holdings are built — an ordering SUSPECT, not a diagnosis. **These are the only violations left in the 10-week probe (20 of 20). Fix before anything else.** |
-| **An MMF's shares have no holders** | **Found 2026-08-29 answering a user question about where the funds sit.** An ETF and an MMF are both `InstitutionalEntity` with their own balance sheet, and the ETF's is honest on both sides: assets are real `itemizedHoldings` (it bids in every clearing book like anyone else) and its shares are held by name — households carry `hs.etfShares = [{fundId, shares}]`. The MMF's liability is `mmfSharesOutstandingUSD`, **one scalar that is incremented when household savings divert and when corporates sweep, with nobody named on the other side.** Real assets, aggregate shareholders: rule 13's "a residual with no holder is a defect", and rule 14 — the diversion debits a real deposit and credits a number. **And it is a symptom, not the disease (§7.123):** there are FIVE different ways of saying who
+| ~~**An MMF's shares have no holders**~~ | **CLOSED (§7.126), and the row's own framing was WRONG.** The shares DO have named holders on both sides — each corporate treasury carries `comp.mmfSharesUSD` and the household sector `hs.mmfSharesUSD`; only the fund-side total is a scalar, which is what a share register looks like when every holder keeps its own book. **What was actually broken were two legs:** the fund paid its yield by ISSUING shares and credited nobody (rule 14), and `evolution.ts` rebuilt `householdState` from a fixed field list that did not name `mmfSharesUSD`, so the household's claim was destroyed weekly and recreated from that week's diversion alone (§7.41, third occurrence). Measured: 41.39B outstanding against 40.34B held by week 6, growing ~0.25B a week; after, the ledger closes to **0.00 in every week**. **The lesson kept: I logged this row from the SHAPE of the code without measuring it, and the shape was fine while two flows were not.** |
 owns a pool across seven entity types, and HEDGE_FUND and PENSION_FUND are a manager and a vehicle
 in one object. The target is one FUND shape — itemized assets, units held by named holders, a named
 manager on a fee, a mandate that drives the bidding — with the ETF as the template. **Owner:
@@ -4872,3 +4872,31 @@ that proved it, the lesson.
       `ProfileInput`) — pure refactors now that the contract is right; `CARD_OPERATING_COST_BPS`,
       which is a loan-PRICING input rather than a P&L cost and wants deriving from the bank's own
       measured cost base; and IND-R3, IND4, IND6, IND7, IND10-19.
+
+126. **The money fund's ledger — two missing legs, and a row I logged without measuring.**
+    - **My §6.1 row was wrong in its framing.** It said an MMF's shares have no named holders.
+      They do: each corporate treasury carries `comp.mmfSharesUSD` and the household sector
+      `hs.mmfSharesUSD`. Only the fund-side total is a scalar, which is what a share register
+      looks like when every holder keeps its own book. **I wrote the row from the SHAPE of the
+      code without measuring it** — and the shape was fine while two flows were not.
+    - **Leg one: the fund issued shares to nobody.** `distributeMoneyFundIncome` pays the yield
+      the way a stable-NAV fund does, by growing `mmfSharesOutstandingUSD` — and credited no
+      holder, so the fund's liability rose every week while every holder's asset stood still.
+      Rule 14. The module's own note says it closed an assets-versus-shares divergence; it closed
+      it on the fund's side and opened the same hole on the holders'. New shares now go pro rata
+      to the real holders that own the fund.
+    - **Leg two: §7.41's trap, for the THIRD time.** `evolution.ts` rebuilds `householdState`
+      from a fixed field list, and `mmfSharesUSD` was not in it — so the household's claim was
+      destroyed every week and recreated from that week's diversion alone, while the fund kept
+      the cumulative total. The first two occurrences were `offeredWageIndex` and
+      `recurringRevenueBaseUSD` on the private-firm rebuild (§7.41, §7.114). **A rebuild that
+      enumerates its fields will keep doing this**, and it is now three for three.
+    - **Measured: 41.39B outstanding against 40.34B held at week 6, growing ~0.25B a week →
+      the ledger closes to 0.00 in every week.**
+    - **What is still open on the fund side, and it is NOT this:** `HEDGE_FUND` and
+      `PENSION_FUND` are a manager and a vehicle in one object (§7.123). A manager is a firm with
+      staff that earns a fee; a fund is a pool with units. One entity being both means neither is
+      modelled — the same defect as a second code path, in the type system. Splitting them is its
+      own slice: it creates real management companies, gives each fund a named manager and a fee
+      that reaches that firm's P&L, and gives the vehicle a unit register. **The ETF is already
+      that shape and is the template.** Unassigned; not IND's.
