@@ -149,7 +149,7 @@ function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDeb
  * records; "not numeric data" does not exempt them, since rule 4 names real tickers and company
  * names first. And `sovereignRating` is ASSIGNED here (USA AA, UK AA, JPN A, EUR AAA) when a
  * rating is an OUTCOME of debt and deficit — the same rating `evolution.ts` then walks from a
- * formula debt ratio nobody measures (§6.1). Owner: IDX (7) for the names, MAC (6) for the rating.
+ * formula debt ratio nobody measures (§6.1). Owner: IDX for the names, FRM for the rating.
  */
 const REGION_IDENTITY: Record<RegionId, { name: string; currency: string; symbol: string; centralBank: string; sovereignRating: Region['sovereignRating'] }> = {
   USA: { name: 'United States', currency: 'USD', symbol: '$', centralBank: 'Federal Reserve', sovereignRating: 'AA' },
@@ -170,7 +170,7 @@ const NET_MIGRATION_RATE_ANNUAL = 0.002;
 const EFFECTIVE_TAX_RATE = 0.31;
 // RULE 13: a deficit and a debt ratio are OUTCOMES, and PUB3b already makes the deficit one
 // (`governmentObligationsWeeklyUSD`). These seed a parallel top-down pair that `evolution.ts`
-// then walks and rates the sovereign off — see §6.1. Owner: MAC (6).
+// then walks and rates the sovereign off — see §6.1. Owner: FRM.
 const FISCAL_DEFICIT_PCT_GDP = 0.05;
 const DEBT_TO_GDP_PCT = 1.0;
 const GOV_EMPLOYMENT_SHARE_OF_POPULATION = 0.055;

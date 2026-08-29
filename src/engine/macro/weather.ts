@@ -58,7 +58,7 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
 /**
  * Generate or evolve regional weather systems.
  *
- * THREE THINGS MISSING, all NAT's (15):
+ * THREE THINGS MISSING, all NAT's:
  *  - **No calendar.** `_week` is unused, so there is no seasonality: a heatwave is as likely in
  *    January as in July, and a region's weather is drawn from the same four types regardless of
  *    where it is. JPN can draw a Polar Vortex and the UK a Monsoon.

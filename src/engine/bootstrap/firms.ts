@@ -150,14 +150,14 @@ export function sectorBaselineMarginPct(sector: Sector): number {
  *
  * RULE 13, OPEN, on two of the four columns:
  *   `margin`  — a sector's EBITDA margin is an OUTCOME of its cost structure and how much
- *               competition it faces. IND (3) builds exactly that; until then it is stated, and
+ *               competition it faces. IND builds exactly that; until then it is stated, and
  *               it is stated at recognisably real levels.
  *   `beta`    — a beta is a MEASUREMENT: the covariance of a stock's returns with the market's.
  *               This model produces both series every week and never computes it. Stating beta
  *               and then using it to discount that same stock (`equity-valuation.ts:71`), to
  *               price its cost of capital in the labor decision (`labor-market.ts:159`) and to
  *               set its capital charge at seed is circular — the price is derived from a number
- *               the price should produce. Owner: IDX (7) or 07e, whichever measures returns.
+ *               the price should produce. Owner: IDX or 07e, whichever measures returns.
  */
 const SECTOR_PROFILE: Record<Sector, { margin: number; leverage: number; cashToEbitda: number; beta: number }> = {
   Tech: { margin: 0.42, leverage: 1.1, cashToEbitda: 2.2, beta: 1.30 },

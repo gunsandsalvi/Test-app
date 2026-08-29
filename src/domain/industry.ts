@@ -35,7 +35,7 @@ export const categoryPriceTier = (unitId: string): HouseholdPriceTier =>
  *
  * RULE 13, OPEN: both numbers are invented. `tanh(0.05) x 0.15` is a frozen constant wearing
  * arithmetic, and 2.5/1.0/0.35 are chosen elasticities. A household's willingness to pay is an
- * outcome of its budget and what share of it the good takes — which the cohorts now carry. MAC.
+ * outcome of its budget and what share of it the good takes — which the cohorts now carry. Owner: COH.
  */
 export const HOUSEHOLD_BID_BASE_PREMIUM = Math.tanh(0.05) * 0.15;
 export const HOUSEHOLD_BID_PREMIUM_BY_TIER: Record<HouseholdPriceTier, number> = {

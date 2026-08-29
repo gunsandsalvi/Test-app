@@ -30,7 +30,7 @@ import { InstitutionalEntityType } from './institutions';
  * `mandateWeightForIssuer` below returns it as a WEIGHT that scales demand directly — so the
  * constraint is acting as a preference, and an entity always wants exactly 75% domestic rather
  * than being merely allowed up to 25% abroad. Rule 5: the target is the guide, the actual
- * purchase is tactical. Owner: HF (12), which gives entities real strategies to be tactical with.
+ * purchase is tactical. Owner: HF, which gives entities real strategies to be tactical with.
  */
 export const HOME_BIAS_BY_ENTITY_TYPE: Record<InstitutionalEntityType, number> = {
   PENSION_FUND: 0.75,

@@ -14,7 +14,7 @@
  * seeds ABOVE light crude, where real heavy grades trade at a discount.
  *
  * The honest primitive is what it claims to be: extraction cost and ore grade / energy density,
- * from which a price follows. Owner: NAT (15), which owns commodity supply.
+ * from which a price follows. Owner: NAT, which owns commodity supply.
  */
 
 import { RegionId } from '../../types';

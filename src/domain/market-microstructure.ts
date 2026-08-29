@@ -133,7 +133,7 @@ export const CAPEX_SUPPLIER_WEIGHTS: Record<string, number> = VIEW_CAPEX_SUPPLIE
  * RULE 13, OPEN: this is an imposed supply share — who supplies a buyer is decided by a constant
  * rather than by who bids what. Both tiers already trade in the same auction (SEG), so the pools
  * and the public firms should compete for capex on price and the split should be the RESULT.
- * Same disease OWN removed from the ownership registers. Owner: CAP (4).
+ * Same disease OWN removed from the ownership registers. Owner: CAP.
  */
 export const CAPEX_PUBLIC_SUPPLY_SHARE = 0.65;
 

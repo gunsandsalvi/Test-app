@@ -120,7 +120,7 @@ export function evolveRegionMacro(
   // RULE 13, OPEN: the fiscal stance is a step function on a regime LABEL — +0.15 in a labelled
   // recession above 7% unemployment, -0.10 in a labelled expansion 3pp above target, else decay
   // by 0.95. Five invented numbers deciding fiscal policy, and none of them is the government's
-  // own budget position, which is what actually constrains a real stimulus. Owner: MAC (6).
+  // own budget position, which is what actually constrains a real stimulus. Owner: MAC.
   let newFiscalStanceScore = region.fiscalStanceScore;
   let newStructuralDeficitPctGdp = region.structuralDeficitPctGdp;
   const piStar = region.targetInflation;
@@ -164,7 +164,7 @@ export function evolveRegionMacro(
   // RULE 3, OPEN: stage 11 OVERWRITES this with the real sum of what the bases actually paid
   // (PUB1b/1c). This top-down `GDP x tax rate` survives only to fill the field between stage 02
   // and stage 11, so anything reading government revenue in between sees the formula. Owner:
-  // MAC (6) — delete it and carry last week's measured figure forward, as inflation already does.
+  // MAC — delete it and carry last week's measured figure forward, as inflation already does.
   const newGovernmentRevenueUSD = Math.max(1e8, newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52); // weekly flow
   // PUB1: what the debt stack actually costs. Not added to spending — carved out of it.
   const govInterestWeeklyUSD = weeklyInterestExpenseUSD(region.govDebtTranches);
@@ -227,7 +227,7 @@ export function evolveRegionMacro(
   // coefficient and an expected-inflation coefficient, all invented — survives beside it, and it
   // is THIS one that feeds `realWageGainEffect` (consumption) and `cciEquilibrium` (confidence).
   // So what households are paid and what they spend out of are two different numbers.
-  // Owner: MAC (6). Delete it and read the pools.
+  // Owner: FRM. Delete it and read the pools.
   const taperedSlackEffect = newSmoothedSlackGap > 0.01 ? 0.01 + (newSmoothedSlackGap - 0.01) * 0.3 : newSmoothedSlackGap;
   const newWageGrowth = (0.025 + 0.8 * taperedSlackEffect + 0.1 * region.expectedInflation);
   const { updatedBuffer: newWageGrowthLagBuffer, laggedValue: laggedWageGrowth } = pushAndReadLagged(region.wageGrowthLagBuffer || [], newWageGrowth, 3);
@@ -730,7 +730,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // revenue, and stage 11 computes `debtToGdpPctBottomUp` from the real stack over measured GDP.
   // Nothing reconciles them, and it is THIS one that drives the sovereign rating below — so a
   // rating change, and the spread that follows it, is decided by the number nobody measures.
-  // Owner: MAC (6). Delete this walk and rate the sovereign off the bottom-up ratio.
+  // Owner: FRM. Delete this walk and rate the sovereign off the bottom-up ratio.
   const nominalGdpGrowthWeekly = (newGdpGrowth + newInflation) / 52; // real growth + inflation ≈ nominal growth
   const weeklyDebtToGdpChange = (newFiscalDeficitPctGdp / 52) - (nominalGdpGrowthWeekly * region.debtToGdpPct);
   const newDebtToGdpPct = Number((region.debtToGdpPct + weeklyDebtToGdpChange).toFixed(4));

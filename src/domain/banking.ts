@@ -184,7 +184,7 @@ export interface HouseholdLoanPool {
  * RULE 1, OPEN: this is the PRICE of a bank's own funding, and it is the same 40bps for a
  * well-capitalised bank and one whose capital ratio has left its band. A bank's funding spread is
  * exactly where the market's view of it shows up — and §6.1's USA cohort story is about banks
- * funding ~48% wholesale, so this number is load-bearing there. Owner: G3 (8).
+ * funding ~48% wholesale, so this number is load-bearing there. Owner: G3.
  */
 export const WHOLESALE_FUNDING_SPREAD_BPS = 40;
 
@@ -204,7 +204,7 @@ export const CONSUMER_TERM_SEED_WAM_WEEKS = Math.round(2.5 * 52);
  * documents the correct treatment for business loans — "quoted by the bank's own credit
  * arithmetic at origination, the same expected-loss + capital-cost pricing the bond market uses"
  * — and the household book simply does not do it. Every bank charges every borrower the same
- * 170bps whatever its funding costs or its losses run. Owner: HSG (10).
+ * 170bps whatever its funding costs or its losses run. Owner: HSG.
  */
 export const MORTGAGE_SPREAD_OVER_10Y_BPS = 170;
 /**
@@ -225,7 +225,7 @@ export const CARD_MIN_PRINCIPAL_RATE_WEEKLY = 0.005;
  * Card issuance runs real operating cost (servicing, fraud, rewards) that term credit doesn't.
  *
  * RULE 13, OPEN: one number per product for every bank, so no bank can run its card book more
- * cheaply than another — the same shape as `INSURER_EXPENSE_RATIO`. Owner: IND (3).
+ * cheaply than another — the same shape as `INSURER_EXPENSE_RATIO`. Owner: IND.
  */
 export const CARD_OPERATING_COST_BPS = 500;
 export const CONSUMER_TERM_OPERATING_COST_BPS = 150;
@@ -236,7 +236,7 @@ export const CONSUMER_TERM_OPERATING_COST_BPS = 150;
  * RULE 4/13, OPEN: an observed real-world turnover rate. How many houses change hands is an
  * OUTCOME of households deciding to move against a price, which is precisely what HSG builds; a
  * constant here means origination volume cannot respond to the housing market at all.
- * Owner: HSG (10).
+ * Owner: HSG.
  */
 export const HOUSING_TURNOVER_RATE_ANNUAL = 0.04;
 export const MORTGAGE_LTV_AT_ORIGINATION = 0.80;

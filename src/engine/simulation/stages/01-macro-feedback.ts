@@ -63,7 +63,7 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   // is what its consumers there actually read. `systemicStressFactorGlobal` IS live (stage 08
   // reads it), so the 12bps-per-default and the /500 below are real coefficients on a real
   // channel: rule 1 — a credit spread is a cleared price, and this adds bps to one by formula.
-  // Owner: G5 (14), which owns default and recovery.
+  // Owner: G5, which owns default and recovery.
   ctx.creditContagionBps = ctx.recentDefaultsCount * 12;
   ctx.systemicStressFactorGlobal = Math.min(0.3, ctx.creditContagionBps / 500);
 }

@@ -45,7 +45,7 @@ export function calculateCompositeIndices(
     // RULE 2, OPEN: the index is the cap-weighted move of its own constituents, and this bounds
     // it at +/-15%/wk. Nothing here needs bounding — an index is a STATISTIC, and clamping it
     // only hides §6's equity runaway inside the published number while the constituents run.
-    // Owner: IDX (7), which deletes it in the same commit as the brand names below.
+    // Owner: IDX, which deletes it in the same commit as the brand names below.
     return Math.max(-0.15, Math.min(0.15, avgChange));
   };
 

@@ -86,7 +86,7 @@ export interface PrimaryOffering {
  *
  * RULE 1, OPEN: a fee is a PRICE, and competing desks should bid it down for an easy deal and up
  * for a hard one. One fixed schedule means an issuer's placement cost never responds to how many
- * banks want the mandate or how the deal is going. Owner: G3 (8).
+ * banks want the mandate or how the deal is going. Owner: G3.
  */
 export const UNDERWRITING_FEE_BPS: Record<PrimaryOfferingInstrumentType, number> = {
   CORP_BOND: 50,
@@ -100,7 +100,7 @@ export const UNDERWRITING_FEE_BPS: Record<PrimaryOfferingInstrumentType, number>
  *
  * RULE 13, OPEN: this is a draw, not a relationship. Nothing the bank DID wins it the mandate —
  * not its price, not its balance sheet, not whether it lent to this issuer before — and no
- * issuer ever moves. A real house-bank relationship is won and lost. Owner: G3 (8).
+ * issuer ever moves. A real house-bank relationship is won and lost. Owner: G3.
  */
 export function chooseLeadBank(
   issuerId: string,

@@ -64,7 +64,7 @@ const BANK_MIN_CAPITAL_RATIO = 0.08;
  * equity once its stock clears in 07e post-G2". G2 is closed and bank stock DOES clear in 07e —
  * the book-value carve-out was removed and 07e's own comment records it. So the input exists:
  * risk-free + beta x ERP off the bank's own cleared price. Third file found stating a condition
- * that has since been satisfied (with `national-accounts.ts` and `etf.ts`). Owner: G3 (8).
+ * that has since been satisfied (with `national-accounts.ts` and `etf.ts`). Owner: G3.
  */
 export const BANK_TARGET_ROE = 0.12;
 /** Share of the gap to the serviceable ceiling the SME pools seek to borrow each week when

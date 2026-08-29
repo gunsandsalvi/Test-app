@@ -54,8 +54,8 @@ const privateSegmentOfferId = (regionId: RegionId, industry: string) => `PRIVATE
  *
  * RULE 4/13, OPEN: "real procurement splits roughly this way" is an observed outcome. How much a
  * buyer contracts is a DECISION against the risk it is hedging — supply reliability, price
- * volatility, its own inventory — and CHAIN (21) makes exactly that decision real by sending
- * orders rather than demand upstream. Owner: CHAIN (21).
+ * volatility, its own inventory — and CHAIN makes exactly that decision real by sending
+ * orders rather than demand upstream. Owner: CHAIN.
  */
 const CONTRACTED_DEMAND_SHARE = 0.6;
 

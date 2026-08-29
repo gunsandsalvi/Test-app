@@ -97,7 +97,7 @@ export interface WeatherAnomaly {
    * a weather event stating its own GDP and inflation outcome instead of cutting a real crop
    * yield and letting the commodity book, input costs and the price index do the work.
    * `evolution.ts:75` already deleted the CPI shortcut for exactly this reason. Delete both, and
-   * turn `commodityImpactPct` into a YIELD so the chain runs. Owner: NAT (15).
+   * turn `commodityImpactPct` into a YIELD so the chain runs. Owner: NAT.
    */
   gdpImpactPct: number;
   inflationImpactPct: number;

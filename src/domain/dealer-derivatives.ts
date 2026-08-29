@@ -52,7 +52,7 @@ export const FX_INITIAL_MARGIN_RATE = 0.02;
  * below computes it as `MAX x utilization x (0.35 + 0.65 x oneWayShare)`, where the 150 is an
  * observed crisis-era level (a real-world outcome, rule 4) and the 0.35/0.65 split is invented.
  * A hedger that cannot get a hedge at this price should walk away and the level should rise until
- * someone supplies it — which is exactly what the clearing engine does elsewhere. Owner: DER (13).
+ * someone supplies it — which is exactly what the clearing engine does elsewhere. Owner: DER.
  */
 export const MAX_CROSS_CURRENCY_BASIS_BPS = 150;
 

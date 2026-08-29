@@ -39,7 +39,7 @@
  * market can absorb — which is exactly what the damper above is pinning on. A speculator's
  * reservation should come from its own capital, its own view and the volatility it has actually
  * observed, the way every other participant in this model posts a schedule from its own book.
- * Owner: HF (12), which gives funds real strategies, then XB6.
+ * Owner: HF, which gives funds real strategies, then XB6.
  */
 export const SPECULATOR_RESERVATION_MOVE_PCT = 1.2;
 export const SPECULATOR_FULL_SIZE_RANGE_PCT = 4.0;

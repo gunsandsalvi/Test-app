@@ -104,7 +104,7 @@ const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: number; lux
  * who holds equity is the direct register (OWN4), who holds a house is HSG's buyer, who holds
  * deposits is whose savings accumulated, who owes consumer debt is HH3's pools. Give a cohort a
  * balance sheet and eight of the nine tables become measurements.
- * Owner: MAC (6), with HSG (10) supplying the housing half.
+ * Owner: COH, with HSG supplying the housing half.
  */
 export const TIER_BALANCE_SHEET_WEIGHTS: Record<
   'deposits' | 'equityLike' | 'privateBusiness' | 'institutionalClaims' | 'unmodeled' | 'housing' | 'mortgage' | 'consumerDebt',
@@ -125,7 +125,7 @@ export const TIER_BALANCE_SHEET_WEIGHTS: Record<
  * nearly a dime of a windfall dollar, the top a cent and a half. Replaces HH2's single 0.04.
  * (Stated from the empirical literature; the honest version falls out of a budget constraint —
  * a household near subsistence spends a windfall because it has unmet needs, which the price
- * tiers already express. Owner: MAC.)
+ * tiers already express. Owner: COH.)
  * The tier-weighted blend at the seed wealth shares is ~0.035, so the aggregate effect opens
  * where the constant stood — but a housing move (middle-held, high-MPC) now moves consumption
  * roughly twice as hard as an equity rally of the same dollar size (top-held, low-MPC), which

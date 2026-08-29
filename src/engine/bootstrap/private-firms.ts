@@ -48,7 +48,7 @@ export const PRIVATE_FIRMS_PER_REGION = 300;
  * RULE 13, OPEN: which firms are big enough to name is a structural question, and a Pareto tail
  * already answers it (`PARETO_ALPHA` below). Stating the tail's revenue share SEPARATELY means
  * the share and the distribution can disagree — the cut point should fall out of the
- * distribution, not sit beside it. Owner: DYN (22), which owns firm-size structure.
+ * distribution, not sit beside it. Owner: DYN, which owns firm-size structure.
  */
 export const NAMED_TIER_REVENUE_SHARE = 0.6;
 /** Pareto tail index for firm sizes (~80/20 mass concentration). */

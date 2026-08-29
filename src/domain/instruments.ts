@@ -5,7 +5,7 @@
  *  run real dealer inventories in the clearing books off their own balance sheets. Two
  *  representations of one real thing, and only one of them has a balance sheet. It also carries
  *  presentation fields (`tagline`, `axeBadge`, `color`) on a domain trading entity.
- *  Owner: G3 (8) — "one dealer system" is its name. */
+ *  Owner: G3 — "one dealer system" is its name. */
 
 import { RegionId } from './geography';
 import { VIEW_BASE_COMMODITY_CATEGORY_LINKAGE } from './industry-registry';

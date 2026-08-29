@@ -128,7 +128,7 @@ export function weeklyCapacityTonnes(asset: FreightAsset, distanceNm: number): n
  * `usefulLifeYears`) is booked as PP&E and depreciated on the carrier's P&L, but it is not in
  * this floor — so in a balanced market freight clears at a level that never returns the fleet's
  * capital and no carrier can rationally replace a ship. Correct as a marginal cost; wrong as the
- * only floor a carrier posts. Owner: CAP (4), which gives firms a real production decision.
+ * only floor a carrier posts. Owner: CAP, which gives firms a real production decision.
  *
  * Fuel is a real purchase of refined product at that market's own cleared price, and crew is real
  * labour at the region's real wage. Both are costs the carrier actually books; neither is a

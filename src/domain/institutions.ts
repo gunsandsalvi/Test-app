@@ -30,7 +30,7 @@ export const PREMIUM_TO_SURPLUS_RATIO = 1.2;
  *
  * RULE 13, OPEN: an expense ratio is an OUTCOME of an insurer's own cost structure — its staff,
  * its systems, what it pays for distribution — not a primitive. It is the same 0.20 for every
- * insurer in every region, so no insurer can be better run than another. Owner: IND (3).
+ * insurer in every region, so no insurer can be better run than another. Owner: IND.
  */
 export const INSURER_EXPENSE_RATIO = 0.20;
 

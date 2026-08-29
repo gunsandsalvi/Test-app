@@ -48,7 +48,7 @@ export const ON_RRP_SPREAD_BPS = 20;
  *
  * RULE 13, OPEN: it is still a stated split. Where a household's saving goes is a portfolio
  * choice it should make on the yields it can see — the deposit rate, the money fund, the direct
- * register — and WS7 already models one leg of exactly that choice. Owner: MAC (6).
+ * register — and WS7 already models one leg of exactly that choice. Owner: COH.
  */
 export const HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE = 0.3;
 
@@ -310,7 +310,7 @@ export function evolveBankingSector(
   // same for every bank. It is described as a floor the competitive rate rises above, but it IS
   // the rate in any week the money fund is not taking funding, which is most of them. What a bank
   // pays for deposits should come from its own funding need against the alternatives its
-  // depositors can see. Owner: G3 (8).
+  // depositors can see. Owner: G3.
   const betaFloorRate = policyRate * 0.45;
   const fundingPressure = weeklySavingsInflowUSD > 0
     ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE)))

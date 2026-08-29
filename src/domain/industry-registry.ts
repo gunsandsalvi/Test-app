@@ -621,7 +621,7 @@ export function subUnitsByProducingSector(): Record<ProducingSector, { industry:
  * revenue from its balance sheet and never accounts for producing anything. So the supply is
  * real to the auction and invisible to the producer's own P&L.
  *
- * Owner: IND (3) — replace with real financial P&L lines and give the auction index no financial
+ * Owner: IND — replace with real financial P&L lines and give the auction index no financial
  * suppliers at all.
  */
 export const FINANCIAL_SECTOR_PROXY_LINES = [

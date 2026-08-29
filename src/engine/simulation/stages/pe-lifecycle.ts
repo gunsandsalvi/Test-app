@@ -82,7 +82,7 @@ export function publicComparableEvMultiple(
  * machinery to answer that — 07d clears the loan, WS8 lets the issuer walk away at its own
  * threshold, and the book can decline. So the debt share should be the OUTCOME of what the loan
  * market takes, not an input to it. As written, a sponsor uses 55% debt in a shut market and in
- * a wide-open one alike. Owner: HF (12) or G5 (14), whichever gives sponsors real financing
+ * a wide-open one alike. Owner: HF or G5, whichever gives sponsors real financing
  * decisions.
  */
 const LBO_DEBT_SHARE = 0.55;

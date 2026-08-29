@@ -20,7 +20,7 @@ import { BuyerType } from '../../types';
  * food. The CPI basket is built on these weights, so the price index inherits it.
  *
  * The registry already carries per-good physics (value density, shelf life, delivery mode); a
- * per-sub-unit consumption intensity belongs beside them. Owner: IND (3) via the registry.
+ * per-sub-unit consumption intensity belongs beside them. Owner: IND via the registry.
  */
 const HOUSEHOLD_PER_CAPITA_UNIT_INTENSITY = 0.02;
 const CORPORATE_PER_FIRM_UNIT_INTENSITY = 1.5;
