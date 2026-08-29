@@ -312,7 +312,7 @@ metrics to watch rather than work.
 | — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
-| 2 | foundation | **BP1 — One industry registry + the rule-17 modularity contract** — IN PROGRESS (BP1a 2026-08-29) | none |
+| ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
 | ~ | markets | **XB5 — Central-bank FX reserves** (small; blocks XB's close — see §6) | XB |
@@ -604,10 +604,11 @@ mechanism — with no stage edited. Two structures carry that:
   The 57 `sector ===`/`entityType ===`/`financialStatementProfile ===` switches measured across
   the codebase are the migration backlog.
 
-Slices: **BP1a** registry + views + byte-identical gate (**DONE §7.83** — and its boat probe
-found the generator's hardcoded sector templates); **BP1b** generator reads the registry (line
-assignment as registry data — a declared seed relabel) plus labor-intensity and remaining
-per-industry tables; **BP1c** stage-08 profile dispatch. Foundational because everything
+Slices: **BP1a** registry + views, byte-identical (**DONE §7.83**); **BP1b** the generator deals
+lines from the registry — a declared seed relabel (**DONE §7.84**); **BP1c** stage-08 profile
+dispatch, byte-identical (**DONE §7.84**). **BP1 IS CLOSED.** What remains for later slices, when
+something needs them: labor-intensity by occupation folding in, and the OPERATING path becoming
+profiles (IND2/IND3 own that). Foundational because everything
 in IND10–19 and the 14.x projects writes registry fields or profile modules, the **HC3b**
 handover reads it, and the listed universe's breadth rides on cheap industry entries (§6
 watchlist).
@@ -1447,7 +1448,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **An ETF pays out net assets it does not have** | **Found in PUB1d (§7.65); owner ETF2, not PUB.** `USA_IG_ETF` runs cash 0.04B (w13) → **−47.9B** (w26) against a 14.5B holdings book — **net assets −33.4B**, a fund that owes more than it owns. The signature is a steady ~3.5B/week outflow while holdings barely move and shares outstanding fall 2.3e8 → 1.7e7: redemptions keep paying cash out after `navPerShare` has already gone to 0.0000 because `navUSD` is non-positive. The per-book purchase budgets are sound (`etf-demand.ts` and 07b both cap at `max(0, cashUSD)`), so the leak is on the **redemption** side of `etf-flows.ts`, not the buy side. Present identically before and after PUB1d — do not re-attribute it to sovereign placement. The invariants harness does not assert non-negative fund net assets; adding that assert is the first action. |
 | **The central bank intervenes in FX with its BOND book — a live bug** | **Introduced in XB2d, shipped, must be fixed before XB closes.** `fx-clearing.ts` sizes the central bank's FX participation off `centralBankAssetsUSD(cb)`, which returns its DOMESTIC SOVEREIGN book (100–140B). A central bank does not intervene with its own government bonds; it intervenes with **FX reserves**, which do not exist in this model. Three consequences: the CB bids with the wrong (and large) balance sheet, intervention never changes reserves — buying your own currency should DEPLETE them — and the PUB2a identity `assets = reserves + TGA + currency` has no FX line, so a reserve stock would not close it. See **XB5** in §5. |
 | **Does the treasury optimise issuance on the curve? — A DECISION, not a defect** | **Needs a user answer; do not change it unilaterally.** The model's treasury leans opportunistically in two places: the bill share via `costLean = clamp(±0.05, (2Y − 3M) × 2)`, and the bond tenor mix via `steepnessAdjustment = (30Y − 2Y) × 3` in `11-fiscal-and-sovereign-debt.ts` — so a 1pp steepening shifts ~1.5pp of issuance into the 2Y. Real debt-management offices run "regular and predictable" and explicitly do NOT time the curve, because surprising the market lifts the term premium by more than the tactical saving. So this model's issuer exploits a curve the model itself produces. Options: keep it, damp the coefficients, or replace with a published-calendar rule. |
-| **Bank NIM band** | Was ten breach-weeks; call protection and the ETF work took it to **one** (week 60, 0.0860). Effectively resolved by G2 slice 2 and the free-call fix — keep the harness line, do not open work for it unless it regrows. |
+| **THE USA BANK COHORT IS THE TOP OPEN DEFECT — NIM *and* capital** | **Re-measured at BP1's close (§7.84): 41 of the harness's 47 violations are this one story** — 26 weeks of USA bank NIM out of band (running NEGATIVE from w38, reaching −0.057) and 15 weeks of USA bank capital ratio out of band. This row previously read "effectively resolved, one breach-week at w60, do not open work unless it regrows": it regrew. Two independent measurements now point at it (the FX sweep first, §7.82, then BP1's close-out), and a bank earning a negative interest margin for twenty-three consecutive weeks while its capital ratio leaves its band is a mechanism defect, not a band-tuning question. **Do not widen the bands.** Start from where the margin is earned: G2's transmission gives the loan book its rate, HH3/HH4d the deposit book its cost, and 07f/02b the wholesale funding — find which leg reprices wrongly against the others. First work item of the next session. |
 
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
 
@@ -2818,3 +2819,32 @@ that proved it, the lesson.
       and takes its own slice with its own close-out.
     - New baseline hashes for the gates (the FX sweep relabeled the world): w10
       27fba443aabeee61, w25 abb1d86cc44de4fe.
+84. **BP1 closed: the registry owns the data, profiles own the behavior, and one entry is one
+    product line.** BP1b made the generator DEAL lines from the registry — each industry declares
+    its producing sector, and every firm (largest first) takes the sub-units its sector currently
+    under-serves most, weighted by that region's own seeded category demand. The hardcoded
+    per-sector templates and `SUBUNIT_TO_CATEGORY` are gone; supply is seeded to meet the demand
+    the economy already states (§7.4). BP1c turned stage 08's four-arm
+    `financialStatementProfile ===` chain into `PROFILE_REGISTRY[profileKeyOf(comp)]` over
+    stages/profiles/{bank,insurer,asset-manager,carrier} — bodies moved verbatim, and the
+    `sector === 'Banks'` alias now lives in the keying function instead of a stage condition.
+    The OPERATING path stays inline by decision: IND2/IND3 decompose it into revenue-mechanism
+    and cost-shape profiles as their own work, so cutting it twice would be waste.
+    - **Rule 17 demonstrated end to end.** The boat entry (one `SubUnitSpec`, no other edit) went
+      from 9,102 units/week of demand and ZERO producers under BP1a to **32 named producers
+      supplying 2,179 units/week** at 70,043 in all four regions. That is the charter met:
+      product line, physics, buyer mix, freight and producers from one entry.
+    - **Coverage was a real defect, not just plumbing.** Public-producer coverage went
+      17/28 → **28/28 sub-units in every region**, and USA categories with zero supply at w10
+      went to **0**: the old templates named ~17 sub-units, so a third of the economy's
+      categories had demand, prices and household bids with no domestic producer at all — orphan
+      markets nobody had counted.
+    - **Declared seed relabel** (a new world, as scoped): w10 8babb263cfea0e58, w25
+      8d1b34097f855643. BP1c is byte-identical on top of it.
+    - **Close-out harness: 47 violations**, and the shape is informative rather than alarming —
+      **26 USA bank NIM + 15 USA bank capital ratio**, i.e. 41 of 47 are ONE bank story (the §6
+      NIM watch line, which the FX sweep had already found running negative w38-60), plus the
+      known byte-identical shock test, one equity-demand shock test, and four revenue-growth
+      outliers. The bank cohort is now the top open item: the same USA banks whose NIM the §6 row
+      tracks are now breaching capital too, and that is a real defect list to work rather than a
+      relabel artifact — **next session's first job**, before IND starts.

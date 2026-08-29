@@ -16,9 +16,6 @@ import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
-import { fuelPriceUsdPerTonne, crewAnnualWageUSD } from './freight-clearing';
-import { weeklyCapacityTonnes } from '../../../domain/carrier';
-import { laneDistanceNm } from '../../../domain/geography';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from '../../../domain/market-microstructure';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
@@ -27,13 +24,13 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { PREMIUM_TO_SURPLUS_RATIO, INSURER_EXPENSE_RATIO } from '../../../domain/institutions';
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, payHoldersCash, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
+import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
 import { random } from '../../rng';
 
@@ -264,121 +261,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
 
 
-    if (comp.financialStatementProfile === 'BANK' || comp.sector === 'Banks') {
-      const bs = reg.bankingSector;
-      const share = comp.bankMarketShare ?? 0.25;
-      const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
-      const weeklyNim = bs.netInterestMarginPct / 52;
-      const impliedNimRev = totalAssets * weeklyNim * share;
-      const loanLosses = random() * 0.05 * totalAssets * share / 52;
-      // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
-      // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this
-      // company's original generation-time seed — that seed comes from the same small-scale
-      // Pareto firm curve every company uses and has no relation to the region's actual
-      // banking-sector balance sheet, so anchoring on it made bank revenue climb for years
-      // before converging on its true (much larger) NIM-implied scale, blowing through the
-      // revenue-growth-ceiling invariant on the way.
-      newRevenue = Math.max(10, comp.annualRevenue * 0.85 + (impliedNimRev * 52) * 0.15);
-      newEbitdaMargin = 0.40;
-      newEbitda = newRevenue * newEbitdaMargin - (loanLosses * 52);
-      newEbit = Math.max(1, newEbitda);
-      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-      newEps = perShare(newNetIncome);
-      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
-    } else if (comp.financialStatementProfile === 'INSURER') {
-      // HH1b — ONE INSURER, NOT TWO. This branch used to refuse the entity behind it, on the
-      // reasoning that `instEnt.totalAssetsUSD` was "a macro-level slice meant for
-      // portfolio-composition bookkeeping, not a per-firm P&L input". That was true when it was
-      // written and stopped being true at S11, which made `totalAssetsUSD` a real per-firm book
-      // recomputed weekly from real cash and real holdings — the ASSET_MANAGER branch below reads
-      // it and says so. The refusal outlived its reason, and what it produced was a second insurer:
-      // a shell reporting 0.05B of revenue and 0.10B of market cap beside an entity holding 241.4B,
-      // with `technicalReservesUSD` printing 0.2B against a 221.9B beneficiary liability — the
-      // same obligations represented twice, three orders of magnitude apart (§7.49).
-      const instEnt = entityById.get(comp.id);
-      const floatAssets = instEnt ? instEnt.totalAssetsUSD : comp.annualRevenue * 5;
-      // The reserves ARE the beneficiary liability HH1a records on the entity. One number.
-      comp.technicalReservesUSD = instEnt?.beneficiaryLiabilityUSD ?? floatAssets * 0.85;
-
-      // What an insurer writes is limited by its CAPITAL, not by what it wrote last week: the
-      // premium-to-surplus ratio is the real constraint every regulator supervises, and reading
-      // it off real equity replaces a self-referential premium that grew from its own prior value
-      // at GDP plus a random draw, anchored to nothing.
-      const surplusUSD = instEnt ? Math.max(0, instEnt.equityCapitalUSD) : comp.annualRevenue;
-      const weeklyPremiums = Math.max(10, (surplusUSD * PREMIUM_TO_SURPLUS_RATIO) / 52);
-      comp.insurancePremiumsWrittenUSD = weeklyPremiums * 52;
-
-      // Claims stay stochastic because claims ARE stochastic — that is the business.
-      const lossRatio = 0.70 + (random() - 0.5) * 0.20;
-      comp.insuranceClaimsPaidUSD = weeklyPremiums * lossRatio * 52;
-
-      const underwritingIncome = weeklyPremiums * (1 - lossRatio - INSURER_EXPENSE_RATIO);
-      // The income its OWN portfolio actually earned this week, recorded by
-      // `accrueInstitutionalIncome` when it credited the cash — not a second yield assumption
-      // applied to a different asset base.
-      const investmentIncome = instEnt?.lastWeeklyInvestmentIncomeUSD ?? floatAssets * 0.04 / 52;
-
-      newRevenue = comp.insurancePremiumsWrittenUSD;
-      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
-      newEbitdaMargin = 0.15;
-      newEbitda = (underwritingIncome + investmentIncome) * 52;
-      newEbit = Math.max(1, newEbitda);
-      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-      newEps = perShare(newNetIncome);
-    } else if (comp.financialStatementProfile === 'ASSET_MANAGER') {
-      const instEnt = entityById.get(comp.id);
-      // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
-      // company, its AUM IS that entity's marked book — totalAssetsUSD is recomputed weekly from
-      // real cash and real holdings (institutional-balance-sheet.ts), so the drift-by-index
-      // formula only survives for manager companies with no entity behind them.
-      const equityIndex = comp.region === 'USA' ? state.compositeIndices.us500 : comp.region === 'EUR' ? state.compositeIndices.euStoxx : comp.region === 'UK' ? state.compositeIndices.uk100 : state.compositeIndices.jp225;
-      const marketGrowth = equityIndex.value / Math.max(1, equityIndex.historical[equityIndex.historical.length - 2] ?? equityIndex.value);
-      const flows = (random() - 0.4) * 0.01;
-      comp.aumUSD = instEnt
-        ? instEnt.totalAssetsUSD
-        : (comp.aumUSD ?? comp.annualRevenue * 50) * marketGrowth * (1 + flows);
-      comp.managementFeeRate = comp.managementFeeRate ?? (0.005 + random() * 0.005);
-
-      const weeklyFees = comp.aumUSD * comp.managementFeeRate / 52;
-      newRevenue = Math.max(10, weeklyFees * 52);
-      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
-      newEbitdaMargin = 0.35;
-      newEbitda = newRevenue * newEbitdaMargin;
-      newEbit = Math.max(1, newEbitda);
-      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-      newEps = perShare(newNetIncome);
-    } else if (comp.financialStatementProfile === 'CARRIER') {
-      // XB3a-2: a carrier's revenue is the freight it actually carried this week, at the rate its
-      // lanes cleared at — not units sold into the goods auction, which it does not participate
-      // in. Its costs are the fuel it really burned at the refined-product market's own price and
-      // the crew it really employs at the region's going wage, so a fuel spike or a wage round
-      // lands on its margin the same week.
-      const weeklyFreightUSD = ctx.carrierFreightRevenue[comp.ticker] ?? 0;
-      newRevenue = Math.max(10, weeklyFreightUSD * 52);
-      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
-
-      const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, (state as any).unitMassTonnes ?? {});
-      const wage = crewAnnualWageUSD(reg, comp.region);
-      let weeklyFuelTonnes = 0;
-      let crew = 0;
-      (comp.carrierFleet?.assets ?? []).forEach((asset: any) => {
-        crew += asset.crewCount ?? 0;
-        const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
-        const perWeek = weeklyCapacityTonnes(asset, distanceNm);
-        const voyages = asset.capacityTonnes > 0 ? perWeek / asset.capacityTonnes : 0;
-        weeklyFuelTonnes += voyages * (asset.fuelTonnesPerNm ?? 0) * distanceNm;
-      });
-      const annualFuel = weeklyFuelTonnes * fuelUsdPerTonne * 52;
-      const annualCrew = crew * wage;
-      newEbitda = newRevenue - annualFuel - annualCrew;
-      newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
-      newEbit = newEbitda - (comp.grossPPEUSD ?? 0) / 20;
-      newNetIncome = (newEbit - annualInterest) * (newEbit > 0 ? (1 - taxRate) : 1);
-      newEps = perShare(newNetIncome);
-      if (comp.carrierFleet) {
-        comp.carrierFleet.lastWeekTonneNm = ctx.carrierTonneNm[comp.ticker] ?? 0;
-        comp.carrierFleet.lastWeekFreightRevenueUSD = weeklyFreightUSD;
-      }
+    // BP1c (rule 17): a stage does not switch on a kind — it keys the kind once and calls the
+    // profile. The four financial statement paths live in stages/profiles/; the OPERATING path
+    // below stays inline until IND2/IND3 decompose it into revenue-mechanism and cost-shape
+    // profiles of their own.
+    const profileModule = PROFILE_REGISTRY[profileKeyOf(comp)];
+    if (profileModule) {
+      const pnl = profileModule({ comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare });
+      newRevenue = pnl.newRevenue;
+      newEbitdaMargin = pnl.newEbitdaMargin;
+      newEbitda = pnl.newEbitda;
+      newEbit = pnl.newEbit;
+      newNetIncome = pnl.newNetIncome;
+      newEps = pnl.newEps;
     } else {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
