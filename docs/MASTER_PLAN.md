@@ -315,6 +315,7 @@ metrics to watch rather than work.
 | 1.5 | foundation | **CASH — Corporate cash settles through banks** (found by §7.86; the banks' missing deposit base, and the last big "1$ is 1$" boundary) | none |
 | ✓ | foundation | ~~**SEG — The SME tier, keyed to the registry**~~ *(CLOSED §7.95–97; opened and rescoped 2026-08-29)* — one pool per region × industry, trading in every market, on the settlement rail. Harness 59 → 36. | CASH (SETL1–5), BP1 |
 | ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
+| 2 | foundation | **OWN — Ownership is an outcome** (§6.4 project 2; the largest single distortion — it sets the tradable float of three clearing books) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
 | ~ | markets | **XB5 — Central-bank FX reserves** (small; blocks XB's close — see §6) | XB |
@@ -1436,6 +1437,60 @@ weeks (the composition is an outcome); named + pool employment conserved through
 a newborn firm has product lines and clears in a real auction in its first weeks.
 
 ---
+
+### OWN — Ownership is an outcome  *(§6.4 project 2; IN PROGRESS 2026-08-29)*
+
+**The defect.** `OWNERSHIP_SHARES` in `macro/initialization.ts` assigns, by fiat, that banks hold
+3% of equity / 28% of corporate credit / 22% of sovereigns and institutions hold 42/45/30. Those
+numbers then decide real things: the tradable float of three clearing books (`1 - bankShare`),
+each bank's sovereign target (`bankShare x outstanding`), the 07f holding ceiling, household
+direct equity (`1 - institutionalShare`), and four seed allocations. They drift weekly on
+`(gdpGrowth + inflation) - tenor10Y` and are held inside `[0.10,0.65]` and `[0.01,0.10]`, then
+rescaled whenever the three sum above 0.85.
+
+Two rules break at once. Rule 4: a 28% bank share of corporate credit is a real-world
+*equilibrium*, not a primitive. Rule 13: **the share owns nothing.** Banks in this model hold
+sovereign bonds by tenor, itemized business loans and consumer pools — they hold no corporate
+bonds and no equity as investments; their only corporate-bond presence is the dealer inventory the
+engine already tracks separately. So `1 - 0.28` in 07b and `1 - 0.03` in 07e withhold float from
+holders who do not exist. This is exactly `foreignShare`'s disease (§7.72), one layer down.
+
+**The mechanism that replaces it.** A share is a MEASUREMENT of a register, taken after the books
+are written, and read by nobody who decides anything.
+
+1. **The register is measured** (`stages/holdings-view.ts`). `measuredOwnershipAllRegions(state)`
+   walks the same books `measuredForeignOwnershipAllRegions` already walks plus the banks' own
+   sheets, and returns per region per class `{ bankUSD, institutionalUSD, centralBankUSD,
+   outstandingUSD }`. Stage 11 — the statistics stage — writes the three shares onto the region
+   from it. `computeTargetOwnershipShares`, the 0.05 drift, both bands and the 0.85 rescale go.
+2. **Float is outstanding minus what real holders hold.** Each book subtracts the holdings of
+   parties that do not bid in it, measured per instrument: 07d subtracts each issuer's loans
+   sitting on named banks' itemized business-loan books; 07b and 07e subtract nothing, because
+   nothing is there. A dealer's inventory is not subtracted — it is a participant.
+3. **A bank's sovereign book is its own decision** (07c, 07f). The target stops being
+   `bankShare x outstanding` and becomes the bank's own liquidity requirement against its own
+   funding: a coverage ratio on deposits (a regulatory primitive, which rule 4 permits) net of
+   what it already holds and what is encumbered in repo. A big deposit base buys more bonds
+   because it has more to cover, not because a table says 22%.
+4. **Household direct equity is a residual of the register**, not `1 - institutionalShare`: per
+   listed name, market cap less what institutions, index funds and dealers actually hold. It is a
+   measurement of wealth, not an input to 07e, so nothing here is circular.
+5. **`bankMarketShare` is measured.** `0.35 x 0.72^rank` seeds four cohorts by fiat and is then
+   read as a settlement key and a revenue driver. A bank's share of its region is its own deposits
+   over the region's deposits, recomputed from the sheets each week.
+6. **The seed is bottom-up.** Delete `OWNERSHIP_SHARES`. Each holder's opening book comes from its
+   own balance sheet: banks buy sovereigns to their coverage ratio, institutions allocate their own
+   AUM by mandate, and whatever no named holder takes is the dealer's, sized and reported.
+
+**Slices** (rule 7 — one bounded commit each; rule 12 — measured ONCE at the end, not between):
+OWN1 register + shares become statistics; OWN2 floats; OWN3 the bank sovereign book; OWN4 the
+household residual; OWN5 `bankMarketShare`; OWN6 the seed and the deletion.
+
+**Verify (once, at OWN6).** The harness. Plus the readings the shares were hiding: what each
+measured share actually is once nothing assigns it; that the corporate-bond and equity floats
+opening ~38%/3% wider do not simply re-price the whole book (if they do, that is real information
+about how thin the demand side is, per §7.3); and that no bank's sovereign book is set by anything
+but its own funding.
 
 ### CAL — Payment calendars  *(Tier 3, item 11)*
 
