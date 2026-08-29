@@ -277,3 +277,50 @@ income became the sum of what employers pay, made the number depend on itself.
 *Second case in this review of a comment asserting the opposite of what the code does — after the
 FX damper (D5). Both were load-bearing claims a reader would have trusted.*
 
+### `src/engine/bootstrap/firms.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **B6** | **A** | `bootstrap/firms.ts` | **`beta` is stated per sector and then used to price the very thing that should produce it.** A beta is a MEASUREMENT — the covariance of a stock's returns with the market's — and this model produces both series every week and never computes one. The stated value then discounts that same stock (`equity-valuation.ts:71`), prices its cost of capital in the labor decision (`labor-market.ts:159`, added by LAB) and sets its capital charge at seed (`initialization.ts:797`). Circular: the price is derived from a number the price should produce, so a company whose stock actually became more volatile is still discounted at its sector's opening beta forever. **Owner: IDX (7) or 07e — whichever ends up measuring returns.** |
+| B7 | **A** | `bootstrap/firms.ts` | **`SECTOR_PROFILE.margin` states each sector's EBITDA margin** (Tech 0.42, Energy 0.33, Industrials 0.24, Consumer 0.17) at recognisably real levels. A sector's margin is an outcome of its cost structure and the competition it faces — which is precisely IND's subject. **Owner: IND (3).** |
+| B8 | minor | `bootstrap/firms.ts` | `INTEREST_RATE_ASSUMPTION = 0.045` sets the opening credit rating from an assumed rate, while the bootstrapped curve already exists at that point (`yield-curves.ts`). Should read it. |
+
+**Clean, and unusually well-defended:** the four SME constants. `SME_WAGE_GAP` documents exactly
+why it is load-bearing rather than cosmetic — paying pool workers the economy-wide average
+charged the tier a wage bill sized by its EMPLOYMENT share against income sized by its REVENUE
+share, EUR opens at 58% against 42%, so 82% of pool revenue went out as wages before any other
+cost and the layoff cascade took EUR unemployment past 30% by week 58.
+`SME_PRODUCTIVITY_DISCOUNT` states the direction employment must run in — "a pool employs who it
+can pay, and unemployment is what is left over" — and names what the reverse produced. The name
+generator's sector-biased suffixes are a nice touch and break no rule: generated names, not
+borrowed ones.
+
+**`bootstrap/carriers.ts` — clean, and the strictest application of §7.4 in the codebase.** The
+fleet is seeded by *running the engine's own sourcing intent and freight clearing once* against
+bootstrap prices and sizing capacity to the tonnage it actually books — seed by calling the
+engine's code, not by writing something that resembles its output. Two constants, both real
+lending/structural primitives with the right justification. It also states the right boundary:
+"a starting condition and not a target: from week 1 capacity is an outcome."
+
+**`src/engine/bootstrap` complete — 9 files, 8 findings (B1–B8).**
+
+---
+
+## `src/engine/macro`
+
+### batch 1 (utils, indices)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| M1 | **D** | `macro/indices.ts:57` | **The ±15%/wk equity index clamp**, located precisely: it is inside `getCapWeightedAvgPrice`, so it bounds the *cap-weighted move of the constituents themselves*. An index is a statistic; there is nothing here to bound. Already §6.3-C and IDX's headline clamp — now flagged at the line. **Owner: IDX (7).** |
+| M2 | **A** | `macro/indices.ts:148-165` | **Five real index brands as display names**: 'S&P 500 Composite', 'Euro Stoxx 50', 'FTSE 100', 'Nikkei 225', 'S&P GSCI Commodity Index'. With D1 (the same brands as *field names* in `markets.ts`), IDX has both halves to rename in one commit. Rule 4. |
+| M3 | **B, latent** | `macro/indices.ts` | **The regional indices filter to `listed`; the sector sub-indices do not.** The comment above the regional filter states the reason exactly — "a private firm has no quote and no index membership, so it must not enter a cap-weighted average with a zero market cap" — and then `techFirms`/`finFirms`/`energyFirms`/`indFirms` are built from unfiltered `companies`. Harmless only while a private firm's `marketCap` is 0, so it contributes zero weight. A latent instance of the bug the comment describes. |
+
+### `src/engine/macro/weather.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| M4 | **B** | `macro/weather.ts` | **Weather has no calendar and no geography.** `evolveRegionalWeather(regionId, current, _week)` never reads `_week` — there is no seasonality at all, so a heatwave is as likely in January as in July — and the type is drawn uniformly from all four regardless of region, so JPN can draw a Polar Vortex and the UK a Monsoon. A weather system that is neither seasonal nor located is a random shock generator with weather names on it. **Owner: NAT (15).** |
+| M5 | **A** | `macro/weather.ts` | `commodityImpactPct` states a **price** impact. NAT's whole content is that the chain runs through a real YIELD → the commodity book → input costs → the measured index, which `evolution.ts:75` already states when it deleted the CPI shortcut for the same reason. With D39 (the two dead sibling fields, 14 writes / 0 reads), NAT's scope is now fully specified. |
+| M6 | **A** | `macro/weather.ts` | **Rule-4 place names**: 'Midwest', 'Great Plains', 'North Sea', 'Mediterranean', 'Pacific'. §6.3-D had this; now at the line. Also a small modelling slip — the EUR *heatwave* is wired to `HEAVY_CRUDE_OIL`, where cooling demand is electricity and gas. |
+

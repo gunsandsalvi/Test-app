@@ -56,7 +56,18 @@ export const INITIAL_WEATHER: Record<RegionId, WeatherAnomaly> = {
 };
 
 /**
- * Generate or evolve regional weather systems
+ * Generate or evolve regional weather systems.
+ *
+ * THREE THINGS MISSING, all NAT's (15):
+ *  - **No calendar.** `_week` is unused, so there is no seasonality: a heatwave is as likely in
+ *    January as in July, and a region's weather is drawn from the same four types regardless of
+ *    where it is. JPN can draw a Polar Vortex and the UK a Monsoon.
+ *  - **No yield.** An event states a `commodityImpactPct` — a price impact — where the real chain
+ *    is a cut to a crop or extraction YIELD that the commodity book then prices. `evolution.ts:75`
+ *    already deleted the CPI shortcut for exactly this reason. Its two siblings
+ *    (`gdpImpactPct`, `inflationImpactPct`) are written here and read nowhere.
+ *  - **Rule 4 place names** below: 'Midwest', 'Great Plains', 'North Sea', 'Mediterranean',
+ *    'Pacific'. Generate them from the region, as every ticker and company name already is.
  */
 
 export function evolveRegionalWeather(regionId: RegionId, current: WeatherAnomaly, _week: number): WeatherAnomaly {

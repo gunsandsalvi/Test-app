@@ -42,6 +42,10 @@ export function calculateCompositeIndices(
       const chg = prevP > 0 ? (f.stockPrice - prevP) / prevP : 0;
       return sum + chg * (f.marketCap / Math.max(1, totalCap));
     }, 0);
+    // RULE 2, OPEN: the index is the cap-weighted move of its own constituents, and this bounds
+    // it at +/-15%/wk. Nothing here needs bounding — an index is a STATISTIC, and clamping it
+    // only hides §6's equity runaway inside the published number while the constituents run.
+    // Owner: IDX (7), which deletes it in the same commit as the brand names below.
     return Math.max(-0.15, Math.min(0.15, avgChange));
   };
 
@@ -50,7 +54,11 @@ export function calculateCompositeIndices(
   const ukChange = getCapWeightedAvgPrice(ukFirms, regionIndexBase('UK'));
   const jpChange = getCapWeightedAvgPrice(jpFirms, regionIndexBase('JPN'));
 
-  // Sector-filtered sub-indices
+  // Sector sub-indices. NOTE the inconsistency with the regional ones above, which filter to
+  // `listed` precisely because "a private firm has no quote and no index membership, so it must
+  // not enter a cap-weighted average with a zero market cap" — these do not filter. Harmless only
+  // while a private firm's marketCap is 0 (it contributes zero weight); a latent version of the
+  // bug the comment above describes.
   const techFirms = companies.filter(c => c.sector === 'Tech');
   const finFirms = companies.filter(c => c.sector === 'Financials' || c.sector === 'Banks');
   const energyFirms = companies.filter(c => c.sector === 'Energy');

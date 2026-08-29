@@ -145,6 +145,20 @@ export function sectorBaselineMarginPct(sector: Sector): number {
   return SECTOR_PROFILE[sector]?.margin ?? 0.20;
 }
 
+/**
+ * The rank-0 firm's profile per sector; smaller firms are scaled off it in `buildTemplate`.
+ *
+ * RULE 13, OPEN, on two of the four columns:
+ *   `margin`  — a sector's EBITDA margin is an OUTCOME of its cost structure and how much
+ *               competition it faces. IND (3) builds exactly that; until then it is stated, and
+ *               it is stated at recognisably real levels.
+ *   `beta`    — a beta is a MEASUREMENT: the covariance of a stock's returns with the market's.
+ *               This model produces both series every week and never computes it. Stating beta
+ *               and then using it to discount that same stock (`equity-valuation.ts:71`), to
+ *               price its cost of capital in the labor decision (`labor-market.ts:159`) and to
+ *               set its capital charge at seed is circular — the price is derived from a number
+ *               the price should produce. Owner: IDX (7) or 07e, whichever measures returns.
+ */
 const SECTOR_PROFILE: Record<Sector, { margin: number; leverage: number; cashToEbitda: number; beta: number }> = {
   Tech: { margin: 0.42, leverage: 1.1, cashToEbitda: 2.2, beta: 1.30 },
   Energy: { margin: 0.33, leverage: 1.6, cashToEbitda: 0.9, beta: 1.12 },
@@ -160,6 +174,8 @@ const SECTOR_PROFILE: Record<Sector, { margin: number; leverage: number; cashToE
 // itself a simulation output.
 const FIRM_SCALE_UNIT_USD = 130_000;
 
+// Seed-only, for the opening credit rating. The bootstrapped curve already exists at this point
+// (`yield-curves.ts`), so this could read it rather than assume a rate.
 const INTEREST_RATE_ASSUMPTION = 0.045;
 
 function ratingFor(revBase: number, ebitdaMargin: number, debtBase: number): CreditRating {
