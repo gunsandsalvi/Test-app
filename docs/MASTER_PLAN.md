@@ -313,7 +313,7 @@ metrics to watch rather than work.
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
 | 1.5 | foundation | **CASH — Corporate cash settles through banks** (found by §7.86; the banks' missing deposit base, and the last big "1$ is 1$" boundary) | none |
-| 1.6 | foundation | **SEG — The private tier's own books** (opened 2026-08-29 from §7.94: 47% of employment, 49% of revenue, no cash, no bank, no P&L) | CASH (SETL1–5) |
+| 1.6 | foundation | **SEG — The SME tier, keyed to the registry** (opened 2026-08-29; rescoped same day — the five hardcoded buckets are a parallel taxonomy BP1's registry was built to absorb, and rule 17 fails on them outright) | CASH (SETL1–5), BP1 |
 | ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
@@ -1333,75 +1333,86 @@ wholesale share falls toward its real range; NIM survives a rate cycle with no b
 
 ---
 
-### SEG — The private tier's own books  *(Tier 1, item 1.6; opened 2026-08-29 from §7.94's measurement)*
+### SEG — The SME tier, keyed to the registry  *(Tier 1, item 1.6; opened 2026-08-29, RESCOPED the same day after the first design was rejected)*
 
-**The case, measured (§7.94):** the five private-sector segments are 47% of USA employment
-(4.61M of 9.84M) and 49% of private revenue (323B vs 335B named) — and they have no cash, no
-bank, no P&L. Their revenue walks by `demandSignal × 0.06` (an imposed growth rate, the exact
-shape rule 13 forbids), their wages are paid by the boundary (UNMODELED→HOUSEHOLD, ~143B/12wk —
-the largest line in the settlement boundary), their taxes accrue with no payer, the SME loan
-interest banks book has no payer, and `seg.debtUSD` drifts from the banks' SME_POOL principal
-because the loss leg updates only the bank side (rule 3, live). Found during recon: **stage
-05's aggregate-buyer split bills the segments' own purchases to households and the treasury**
-(segment fills are in `sellerTotalUSD` but in neither `corporatePaidUSD` nor the HH/GOV fill
-claims), so today the tier's capex is paid for by everyone except the tier.
+**The first design was wrong and the rejection was right.** It proposed giving real books to
+`PrivateSegmentType` — five hardcoded buckets (MANUFACTURING, PROFESSIONAL_SERVICES, RETAIL_TRADE,
+CONSTRUCTION_REALESTATE, HEALTHCARE_SERVICES). Banking a fictional object carefully does not make
+it real. The user's three questions, answered with measurements:
 
-The user's charter, verbatim: *"give the private sector segments real books, with depth,
-dynamism, bottom up existence and development."* Half the economy stops being a declared
-statistic and becomes an actor with a balance sheet, on the same settlement rail as everyone
-else. The segments stay AGGREGATES (HC's carve discipline: named firms are born out of them; a
-segment is the mass of small firms below naming resolution) — but an aggregate can still hold
-real deposits, pay real wages, service real debt and die of real cash exhaustion. Rule 17: a
-segment is one entry in the region's segment list; nothing switches on segmentType outside its
-own profile data.
+| Question | Answer |
+|---|---|
+| Is creation based on all available industries? | **No.** The registry carries **14 industries / 36 sub-units**; the SME tier is 5 buckets seeded from three constants each (`PRIVATE_SEGMENT_PROFILE`: employmentShare, revenueToGdp, marginPct × GDP). Births map through `SEGMENT_SECTOR`, collapsing 5 buckets into 3 sectors, and a born firm gets `productLines: []` — **it cannot sell anything in any market**. HEALTHCARE_SERVICES is born as "Consumer" under the comment *"closest fit until BP1 re-keys categories."* BP1 closed; it was never re-keyed. |
+| Does the share change with demand? | **No.** Revenue walks `demandSignal × 0.06`, employment `× 0.05`, both clamped to ±4%/wk. Every bucket gets the same treatment and nothing reallocates *between* them, so the composition at week 500 is the seed composition. CONSTRUCTION_REALESTATE's demand signal is a hardcoded `return 0`. |
+| Are they active producers and consumers? | **Barely.** Of 36 sub-units they sell into **7** (2 supply + 5 capex) and buy in **one** place — MANUFACTURING's recipe inputs — under a comment that the other four are *"deliberately left out… guessing is BP1's job to retire."* Four of five buckets, ≈32% of employment, buy nothing and sell nothing. |
 
-**SEG1 — Books and banking.** `cashUSD` on `PrivateSectorSegment`; new PartyRef kind
-`SEGMENT {region, segmentType}` in the settlement layer; `smeDepositsUSD` on `BankingSector`,
-spread pro-rata across the region's banks by market share (a pool of small firms banks
-everywhere, unlike a corporate with a house bank). Identity gains the line; funding split and
-wholesale residual net it; 02b carries a reconciliation with its own reserve leg; seed backs
-the deposits with reserves, sized by the named private tier's measured cash/revenue ratio
-(carve-consistent — the tier's small firms hold cash like its named ones). HC births carve
-`cashUSD` (and the pool's debt share) with revenue and employment — conservation, extended to
-the balance sheet.
+**The real defect: the SME tier is a parallel taxonomy the registry was built to absorb.** It even
+leaks backwards — `SubUnitSpec` carries `capexPrivateSegment` and `privateSupplySegment` pointing
+sub-units at the five buckets. **Rule 17 fails outright:** add a product line to the registry and
+you get zero SMEs in it, forever. So the object changes before it gets books.
 
-**SEG2 — Every existing flow lands on the books.** (a) `partyOfKey` maps `PRIVATE:` keys →
-SEGMENT: auction sales proceeds arrive as segment cash instead of the boundary. (b) Segment
-purchases (capex bids, MANUFACTURING recipe inputs) pay SEGMENT→seller, and their fills leave
-the HH/GOV aggregate split — the mis-billing fix. (c) The private-tier wage residual in stage
-03 is deleted; each segment pays its own weekly wage bill SEGMENT→HOUSEHOLD from its book
-(employment × the region's occupation-mix wage). (d) SME loan interest becomes
-SEGMENT→BANK payments, excluded from the bank's evolution income credit (the SETL4 pattern —
-one leg, not two derivations). (e) SME origination stops writing `depositsUSD` in place: the
-loan+deposit pair books through `creditEventsThisWeek` at settlement, one statement. (f) The
-loss pass reduces `seg.debtUSD` alongside the pool loan — rule-3 drift closed by making the
-segment's debt the derived sum of the banks' pools each week. (g) The SME tax accrual in
-stage 11 becomes a real SEGMENT→GOVERNMENT payment on the same calendar.
+**The shape.** One SME pool per **(region × industry)**, keyed off `INDUSTRY_REGISTRY` — 14 × 4.
+A pool is *a firm without a name*: the mass below naming resolution in a real industry, holding
+real books, buying its industry's real recipe inputs and selling its industry's real sub-units
+into the same auctions, under the same buyer mixes, as the named firms above it. Adding an
+industry or a sub-unit to the registry gives it an SME tier automatically — rule 17 satisfied by
+construction, not by a mapping table.
 
-**SEG3 — Revenue with real payers.** A book that pays 143B of wages must be paid by somebody.
-Auction receipts (SEG2a) are the measured floor; the rest of the tier's declared revenue gets
-its two honest payers: the share of **company opex** that today posts to UNMODELED (services,
-local suppliers — real firms buy from the tier constantly) routes to SEGMENT by a
-segment-mix; and the share of **household consumption** serving categories the tier supplies
-routes HOUSEHOLD→SEGMENT the same way. What still has no payer after that is not revenue:
-`annualRevenueUSD` converges to 52× trailing measured receipts, and the `demandSignal × 0.06`
-walk is deleted. Bottom-up existence means the number is what was paid, nothing else.
+**What is DELETED, not adapted:** `PrivateSegmentType`, `PRIVATE_SEGMENT_PROFILE`,
+`SEGMENT_SECTOR`, `PRIVATE_SEGMENT_OCCUPATION_MIX`, `getSegmentDemandSignal` and its ±4% walk,
+`PRIVATE_SEGMENT_SUPPLY_CATEGORIES` / `CAPEX_CATEGORY_PRIVATE_SEGMENT` and the `capexPrivateSegment`
+/ `privateSupplySegment` fields they read. One taxonomy, not two.
 
-**SEG4 — Dynamism and development.** The weekly P&L (receipts − wages − inputs − interest −
-tax − capex) lands on cash through settlement automatically, because every leg is a payment.
-Development then reads the book, not a signal: capex pace gated by cash + granted credit
-(the transmission chain G2 built, now with a real budget constraint); employment follows the
-segment's own measured revenue growth and margin; distress is cash-measured (cash below k
-weeks of wages → capex cut, employment shed, pool PD up — the same cash-exhaustion default
-shape named firms have); a cash-rich, high-margin segment hires and invests. Births (HC8)
-keep carving winners out of growing pools — formation driven by measured profitability, not
-a formation-rate formula.
+**New stated primitives — and only these.** Rule 4 allows real-world facts, not equilibria:
+- `smeShareOfActivity` per industry in the registry: SME intensity is a genuine structural fact
+  and it differs enormously by industry (construction and professional services are SME-dominated;
+  semiconductors and aerospace are not). One number per industry, stated once, cited.
+- `SME_PRODUCTIVITY_DISCOUNT` and `SME_MARGIN_DISCOUNT`: small firms really do produce less per
+  worker and earn thinner margins than large ones. Two numbers for the whole model.
+- **Nothing else.** The occupation mix is NOT a new primitive: pools read
+  `SECTOR_OCCUPATION_MIX[registry[industry].sector]` — the exact function named firms use, so one
+  mix serves both tiers and the old five-bucket mix table is deleted outright.
 
-**Verify (once, at close-out):** per-bank identity zero with the new line; the settlement
-boundary's private-tier wage line (~143B/12wk) collapses to zero; unresolvedUSD ≈ 0; segment
-cash stays positive-and-plausible (weeks-of-wages coverage) without any clamp doing the work;
-household/treasury spending no longer carries the segments' purchases; total employment and
-revenue conserved through the cutover week.
+**SEG-A — the registry becomes the taxonomy.** `PrivateSectorSegment` → `SmePool { industry,
+… }`, one per region × industry. Seeded from the region's own **real demand**: a pool's opening
+revenue is its industry's summed sub-unit `demandLevelUSD` × `smeShareOfActivity`, employment
+that revenue at the named tier's measured revenue-per-worker less the productivity discount, and
+margin the named tier's own measured margin in that industry less the margin discount (region-wide
+named margin as the fallback where an industry has no named firm yet). So the composition is an
+outcome of where demand actually is — never five constants. Pool creation moves after
+`categoryDemand` exists in the seed. `privateSegmentType` on `Company` becomes `smePoolIndustry`,
+and the labor market, evolution, WorldScreen and the bank pools re-key with it.
+
+**SEG-B — pools are real market participants.** The seven hardcoded categories go. Each pool
+offers every sub-unit its industry produces into stage 05, sized by its own capacity and priced
+the way a firm prices, and bids for its industry's `recipeInputs` and its capex basket out of its
+own budget. Same registry, same buyer mixes, same auctions as the named tier — so a pool competes
+with the named firms in its industry for the same customers, and demand reaching an industry
+reaches its SMEs.
+
+**SEG-C — books and settlement** *(the first design's SEG1/SEG2, re-pointed at the new object;
+the plumbing survives, its key changes)*. `cashUSD` per pool; the `SEGMENT` PartyRef becomes
+`{region, industry}`; `smeDepositsUSD` on bank sheets pro-rata by market share with the identity,
+funding split, 02b reconciliation and seeded reserves carrying it; pools pay their own wages,
+their own SME-pool loan interest, their own quarterly tax; loans create their deposits through
+`BANK_CREDIT`; `debtUSD` is the derived sum of the banks' pool loans. Already built against the
+five buckets and pushed (f778e2d, d0993bd) — including two defects found on the way and kept: the
+after-cutoff payment rollover (payments recorded after the settlement stage were dropped when the
+week ended, so take-private tender proceeds never landed) and the central-bank TGA double-count
+(every government leg settlement had migrated was being posted twice).
+
+**SEG-D — dynamism, development, births.** Revenue becomes measured receipts, not a walk; capacity
+and hiring are gated by the pool's own cash and granted credit; distress is cash-measured, with the
+same cash-exhaustion shape a named firm has. Births carve from the pool that has outgrown the named
+firms serving its industry, and the newborn is dealt **real product lines from its industry** via
+BP1's existing generator logic instead of `productLines: []`. Formation follows measured returns, so
+the tier's composition moves with demand rather than being frozen at seed.
+
+**Verify (once, at close-out):** per-bank identity zero; the settlement boundary's private-tier wage
+line (~143B/12wk) at zero; unresolvedUSD ≈ 0; every industry in the registry has a pool that both
+buys and sells; the SME share of employment and revenue moves measurably between industries over 60
+weeks (the composition is an outcome); named + pool employment conserved through the cutover week;
+a newborn firm has product lines and clears in a real auction in its first weeks.
 
 ---
 
