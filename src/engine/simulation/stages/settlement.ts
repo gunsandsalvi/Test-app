@@ -44,6 +44,10 @@ export type PartyRef =
    *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
   | { kind: 'BANK_CREDIT'; ticker: string }
   | { kind: 'INSTITUTION'; id: string }
+  /** SEG1 — a private-sector segment pool: the mass of small firms below naming resolution.
+   *  Its balance is `cashUSD` on the region's `PrivateSectorSegment`, held across the region's
+   *  banks pro-rata by market share (small firms bank everywhere; there is no house bank). */
+  | { kind: 'SEGMENT'; region: RegionId; segmentType: string }
   | { kind: 'HOUSEHOLD'; region: RegionId }
   | { kind: 'GOVERNMENT'; region: RegionId }
   | { kind: 'CENTRAL_BANK'; region: RegionId }
@@ -83,6 +87,8 @@ export interface SettlementReport {
   institutionalDepositDeltaByBank: Map<string, number>;
   /** Per-bank movement of the named boundary's balance. */
   unmodeledDepositDeltaByBank: Map<string, number>;
+  /** SEG1 — per-bank movement of the private-sector segment pools' deposit line. */
+  smeDepositDeltaByBank: Map<string, number>;
   /** Payments to/from a bank on its own account — income and expense, so equity moves too. */
   bankEquityDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
@@ -101,7 +107,8 @@ export interface SettlementReport {
 const partyKey = (p: PartyRef): string =>
   p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' ? `${p.kind}:${p.ticker}`
     : p.kind === 'INSTITUTION' ? `INSTITUTION:${p.id}`
-      : `${p.kind}:${p.region}`;
+      : p.kind === 'SEGMENT' ? `SEGMENT:${p.region}:${p.segmentType}`
+        : `${p.kind}:${p.region}`;
 
 /**
  * Execute the week's instructions.
@@ -122,6 +129,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     corporateDepositDeltaByBank: new Map(),
     institutionalDepositDeltaByBank: new Map(),
     unmodeledDepositDeltaByBank: new Map(),
+    smeDepositDeltaByBank: new Map(),
     creditCreatedByBank: new Map(),
     bankEquityDeltaByBank: new Map(),
     unmodeledByReason: new Map(),
@@ -174,6 +182,26 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         entity.cashUSD = (entity.cashUSD ?? 0) + deltaUSD;
         creditBank(report, entity.homeBankTicker, deltaUSD);
         addTo(report.institutionalDepositDeltaByBank, entity.homeBankTicker ?? '', deltaUSD);
+        return;
+      }
+      case 'SEGMENT': {
+        // SEG1: the pool's balance moves, and the liability sits with the region's banks in
+        // proportion to their size — same shape as the boundary's banking, but on a NAMED line
+        // belonging to a real (aggregate) actor rather than to nobody.
+        const seg = ctx.updatedRegions[party.region]?.privateSectorSegments
+          ?.find((s) => s.segmentType === party.segmentType);
+        if (!seg) { report.unresolvedUSD += deltaUSD; return; }
+        seg.cashUSD = (seg.cashUSD ?? 0) + deltaUSD;
+        const segBanks = ctx.updatedCompanies.filter(
+          (c) => c.region === party.region && c.isBankEntity && c.bankBalanceSheet && !c.isDefaulted
+        );
+        const segTotalShare = segBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
+        if (segBanks.length === 0 || !(segTotalShare > 0)) { report.unresolvedUSD += deltaUSD; return; }
+        segBanks.forEach((b) => {
+          const shareUSD = deltaUSD * ((b.bankMarketShare ?? 0) / segTotalShare);
+          addTo(report.depositDeltaByBank, b.ticker, shareUSD);
+          addTo(report.smeDepositDeltaByBank, b.ticker, shareUSD);
+        });
         return;
       }
       case 'HOUSEHOLD': {
@@ -265,6 +293,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         + (report.institutionalDepositDeltaByBank.get(ticker) ?? 0),
       unmodeledDepositsUSD: (bank.bankBalanceSheet.unmodeledDepositsUSD ?? 0)
         + (report.unmodeledDepositDeltaByBank.get(ticker) ?? 0),
+      smeDepositsUSD: (bank.bankBalanceSheet.smeDepositsUSD ?? 0)
+        + (report.smeDepositDeltaByBank.get(ticker) ?? 0),
     };
     const agg = ctx.updatedRegions[bank.region]?.bankingSector;
     if (agg) agg.cashReservesUSD += deltaUSD;

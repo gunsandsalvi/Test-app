@@ -61,6 +61,11 @@ export interface GameState {
     unresolvedUSD: number;
     unmodeledByReason: Record<string, number>;
   };
+  /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender
+   * settlements, birth carves). A real net-settlement system rolls after-cutoff payments into
+   * the next cycle; before this field they were silently dropped when the week's context died,
+   * so a take-private's tender proceeds never actually reached the holders. */
+  pendingPaymentInstructions?: import('../engine/simulation/stages/settlement').PaymentInstruction[];
   regions: Record<RegionId, Region>;
   fxPairs: FxPair[];
   companies: Company[];

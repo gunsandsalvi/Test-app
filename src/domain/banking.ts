@@ -123,6 +123,11 @@ export interface BankingSector {
    * the identity closes; its SIZE is the measure of how much of the payment graph is still
    * unnamed, and it is watched down as each flow gets a real counterparty (§6). */
   unmodeledDepositsUSD?: number;
+  /** SEG1 — the private-sector segment pools' balances here (this bank's market-share slice of
+   * each pool's `cashUSD`). A real liability with reserves behind it, maintained by settlement
+   * and reconciled weekly like the corporate and institutional lines. Mostly transaction
+   * balances of small firms, so it pays nothing — which is what small-business checking pays. */
+  smeDepositsUSD?: number;
   /**
    * HH4d — the funding that is NOT household deposits: bonds, interbank and other wholesale
    * money, split out at seed so `depositsUSD` can be the real household stock (it used to be

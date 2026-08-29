@@ -355,6 +355,7 @@ export function evolveBankingSector(
       businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD
       - depositsUSD - corporateDepositsUSD
       - (prevBanking.institutionalDepositsUSD ?? 0) - (prevBanking.unmodeledDepositsUSD ?? 0)
+      - (prevBanking.smeDepositsUSD ?? 0)
       - equityUSD
     ).toFixed(0)),
     corporateDepositsUSD,
@@ -363,6 +364,7 @@ export function evolveBankingSector(
     // violations). Same trap stage 08 documents; carried explicitly.
     institutionalDepositsUSD: prevBanking.institutionalDepositsUSD ?? 0,
     unmodeledDepositsUSD: prevBanking.unmodeledDepositsUSD ?? 0,
+    smeDepositsUSD: prevBanking.smeDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],

@@ -28,6 +28,7 @@ import { random } from '../../rng';
 import { companyFairValuePerShare } from '../../equity-valuation';
 import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
 import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
+import { pay } from './settlement';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -607,6 +608,22 @@ export function runFirmBirthsForRegion(
   // Conservation: the pool loses exactly what the firm gains.
   seg.annualRevenueUSD = Math.max(0, seg.annualRevenueUSD - revenueUSD);
   seg.employment = Math.max(1, seg.employment - employees);
+  // SEG1: the opening balance too. A born firm's working capital used to be conjured by the
+  // generator; now it is CARVED from the pool's own money, as a payment through settlement
+  // (this stage runs after the week's cutoff, so it lands next cycle — the firm is born with
+  // its opening balance in transit, and the economy's total cash never moved).
+  born.forEach((c) => {
+    const openingCashUSD = Math.min(Math.max(0, c.cash), Math.max(0, seg.cashUSD ?? 0));
+    c.cash = 0;
+    if (openingCashUSD > 0) {
+      pay(ctx, {
+        payer: { kind: 'SEGMENT', region: regionId, segmentType: seg.segmentType },
+        payee: { kind: 'COMPANY', ticker: c.ticker },
+        amountUSD: openingCashUSD,
+        reason: 'firm birth: opening balance carved from pool',
+      });
+    }
+  });
   // Every firm banks somewhere. A company born without a house bank held its cash outside the
   // banking system entirely — its balance never reached any bank's funding, so the money existed
   // on the firm and nowhere else (rule 3's "1$ is 1$"). Measured: 12 unbanked firms at seed

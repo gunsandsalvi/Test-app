@@ -205,5 +205,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       unresolvedUSD: ctx.lastSettlementReport.unresolvedUSD,
       unmodeledByReason: Object.fromEntries(ctx.lastSettlementReport.unmodeledByReason),
     },
+    // SEG1: payments recorded after this week's settlement cutoff settle next cycle instead of
+    // dying with the context (they used to be silently dropped — tender proceeds never landed).
+    pendingPaymentInstructions: ctx.paymentInstructions,
   }, timings };
 }

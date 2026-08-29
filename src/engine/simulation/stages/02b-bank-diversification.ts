@@ -114,6 +114,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       if (!c.homeBankTicker) return;
       corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
     });
+    // SEG1: the segment pools' balances, reconciled the same way — each pool's cash sits across
+    // the region's banks pro-rata by market share (settlement spreads it identically; this
+    // catches share drift and any balance moved outside instructions, with the reserve leg).
+    const segmentCashUSD = (reg.privateSectorSegments || []).reduce((a, s) => a + Math.max(0, s.cashUSD ?? 0), 0);
+    const regionBankShareTotal = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
 
     // HH3: the week's real household-credit flows, per bank, for the region roll-up below.
     const householdFlowsByBank = new Map<string, {
@@ -211,13 +216,18 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // meter: it goes to zero when every stage records instructions.
       const trueCorporateUSD = Number((corporateDepositsByBank.get(bank.ticker) ?? 0).toFixed(0));
       const trueInstitutionalUSD = Number((institutionalDepositsByBank.get(bank.ticker) ?? 0).toFixed(0));
+      const trueSmeUSD = regionBankShareTotal > 0
+        ? Number((segmentCashUSD * ((bank.bankMarketShare ?? 0) / regionBankShareTotal)).toFixed(0))
+        : 0;
       const reconcileUSD = (trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0))
-        + (trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0));
+        + (trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0))
+        + (trueSmeUSD - (lentSheet.smeDepositsUSD ?? 0));
       const withDeposits: BankingSector = {
         ...lentSheet,
         cashReservesUSD: lentSheet.cashReservesUSD + reconcileUSD,
         corporateDepositsUSD: trueCorporateUSD,
         institutionalDepositsUSD: trueInstitutionalUSD,
+        smeDepositsUSD: trueSmeUSD,
         loanLossProvisionRateAnnualPct: Number(
           (lentSheet.businessLoanBookUSD > 0 ? (lending.loanLossWeeklyUSD * 52) / lentSheet.businessLoanBookUSD : 0).toFixed(4)
         ),

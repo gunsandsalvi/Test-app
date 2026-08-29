@@ -439,14 +439,34 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         if (c.isBankEntity || !c.homeBankTicker) return;
         corpDepositsByBank.set(c.homeBankTicker, (corpDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
       });
+      // SEG1: the segment pools get their own money, sized by the named private tier's measured
+      // cash/revenue ratio — the tier's small firms hold working balances like its named ones
+      // do. The balance sits across the region's banks pro-rata by market share (small firms
+      // bank everywhere), and each bank holds the reserves behind it, exactly like the
+      // corporate line below.
+      {
+        const namedPrivate = regionCompanies.filter(c => !c.isBankEntity && c.listingStatus === 'PRIVATE');
+        const tierRevenueUSD = namedPrivate.reduce((a, c) => a + Math.max(0, c.annualRevenue), 0);
+        const tierCashUSD = namedPrivate.reduce((a, c) => a + Math.max(0, c.cash), 0);
+        const cashToRevenue = tierRevenueUSD > 0 ? tierCashUSD / tierRevenueUSD : 0.08;
+        (reg.privateSectorSegments || []).forEach(seg => {
+          seg.cashUSD = Math.round(Math.max(0, seg.annualRevenueUSD) * cashToRevenue);
+        });
+      }
+      const segmentCashTotalUSD = (reg.privateSectorSegments || []).reduce((a, s) => a + (s.cashUSD ?? 0), 0);
+      const bankShareTotal = regionBanksForLending.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
       regionBanksForLending.forEach(b => {
         const corpUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
         b.bankBalanceSheet!.corporateDepositsUSD = corpUSD;
+        const smeUSD = bankShareTotal > 0
+          ? Math.round(segmentCashTotalUSD * ((b.bankMarketShare ?? 0) / bankShareTotal))
+          : Math.round(segmentCashTotalUSD / regionBanksForLending.length);
+        b.bankBalanceSheet!.smeDepositsUSD = smeUSD;
         // SETL2 (§7.4 — the seed must open in the shape the weekly engine maintains): a corporate
         // balance is a real liability now, so the bank holds the real asset behind it. The money
         // its customers deposited is central-bank money, exactly as a week-1 deposit inflow would
         // be. Without this the sheet opens short by the whole corporate line.
-        b.bankBalanceSheet!.cashReservesUSD += corpUSD;
+        b.bankBalanceSheet!.cashReservesUSD += corpUSD + smeUSD;
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).

@@ -199,7 +199,9 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     earningsReportedThisTurn: [],
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
-    paymentInstructions: [],
+    // SEG1: last week's after-cutoff payments (recorded by stages that run after the
+    // settlement stage) roll into this cycle — a real system's next-day settlement.
+    paymentInstructions: [...(state.pendingPaymentInstructions ?? [])],
     creditEventsThisWeek: [],
     companyWagesPaidByRegion: {},
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),

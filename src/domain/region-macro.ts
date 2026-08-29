@@ -238,6 +238,12 @@ export type PrivateSegmentType = 'MANUFACTURING' | 'PROFESSIONAL_SERVICES' | 'RE
 
 export interface PrivateSectorSegment {
   segmentType: PrivateSegmentType;
+  /** SEG1 — the pool's own money: the summed deposit balances of the small firms below naming
+   * resolution. Held at the region's banks pro-rata by market share (a mass of small firms
+   * banks everywhere, unlike a corporate with a house bank) as `smeDepositsUSD`, and moved
+   * ONLY by the settlement layer — the segment is a party (`SEGMENT` PartyRef) like everyone
+   * else. Seeded at the named private tier's measured cash/revenue ratio. */
+  cashUSD?: number;
   debtUSD: number;
   defaultRateAnnualPct: number;
   capexUSD: number;
