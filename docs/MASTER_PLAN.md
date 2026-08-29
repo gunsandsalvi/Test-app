@@ -511,10 +511,12 @@ capital (`simulation/initialization.ts` ~787). Three things then compose:
    break-even loses employment monotonically. **The seed's own comment states the symmetry it
    assumes — "Above it firms are shedding from week 1; below it they are hiring" — and only the
    first half exists in code.**
-3. **Price adjusts slower than quantity.** The wage does respond (`marginShortfall` pulls the
-   offered index down) but as an annual rate applied weekly, while layoffs run at
-   `LAYOFF_SPEED_MULTIPLE`. Employment collapses before the wage can relieve it. Measured: the
-   pooled wage index does not fall at all over the first weeks (1.3173 → 1.3180).
+3. **Price adjusts slower than quantity — and until §7.110 it could not fall at all.**
+   `unfilledShare` ran [0, 1], so the wage was a price on the way up and administered on the way
+   down; that is fixed, and the going rate now falls 4.3% over twenty weeks against 1.9%. But
+   wages are annual-rate sticky and layoffs are weekly-fast, which is real, so **no defensible
+   wage speed outruns a world that opens with half its firms below the line.** Do not tune the
+   coefficient to close it (§6.4).
 
 Then it feeds itself: unemployment distresses the SME pools, their default probability rises, the
 banks' measured loan losses rise with it, bank EBITDA turns negative and the banks shed too.
@@ -529,11 +531,11 @@ week 3 instead of week 2. **Neither moved the non-bank trip count**, which is th
 tuning, which §6.4 forbids. The honest fix is (2): something has to absorb the workers the
 below-the-line firms release, and the candidates are genuinely different models —
 
-- **(a) Affordability caps hiring instead of only forcing layoffs.** A firm above its cost of
+- **(a) *DONE (§7.110) — necessary, not sufficient.* Affordability caps hiring instead of only forcing layoffs.** A firm above its cost of
   capital has headroom and hires toward what its output needs. Needs a per-firm "output need"
   the model can already see (`recentFulfillmentEMA`, unmet demand) so that money constrains
   hiring rather than driving it — a profitable firm must not hire without limit.
-- **(b) The wage clears the labour market at the seed.** Solve the opening index against the
+- **(b) *NEXT, and now the evidence points here (§7.110).* The wage clears the labour market at the seed.** Solve the opening index against the
   engine's own rule (§7.4) rather than against an accounting identity: the index at which the
   headcount firms can afford equals the labour force seeking work, with the seed unemployment
   rate as the OUTCOME. Bigger blast radius — it re-scales the whole firm universe, which is why
@@ -4017,3 +4019,36 @@ that proved it, the lesson.
       disagree and the fix was to derive one of them. That was true and insufficient. The binding
       defect is a one-sided constraint applied to a distribution the seed centres on its own
       threshold, and no amount of re-deriving the seed's revenue share removes it.
+
+110. **EMP, second pass: two one-sided rules made symmetric — necessary, and not sufficient.**
+    On the user's call, the fix taken was **(a) make the constraint two-sided** rather than
+    re-solving the seed. It found a SECOND instance of the identical defect, which is the part
+    worth keeping.
+    - **The affordability rule now hires as well as sheds.** A firm above its cost-of-capital
+      charge has headroom and staffs toward what its output needs — the level target this stage's
+      header has always described (its own annualised output at its own baseline productivity),
+      and money CONSTRAINS that hiring rather than driving it, so a very profitable firm does not
+      hire without limit. **Measured: USA unemployment falls in week 1 for the first time in the
+      model's life (10.6% → 9.7%).**
+    - **THE SAME DEFECT, IN THE WAGE RULE.** `unfilledShare` runs [0, 1]: it can say a firm found
+      hiring hard, never that it found it easy. And the going rate moves by
+      `(avgOffer − 1) × speed + cola`, so with offers anchored at 1 it only ever tracked
+      inflation. **Measured before the fix: at 33.6% unemployment with tightness at 0.000, the
+      employment-weighted average offer was RISING (1.0000 → 1.0181) and the going rate had
+      fallen 1.9% in twenty weeks — all of it composition.** LAB made the wage a price on the way
+      UP and left it administered on the way DOWN. Rule 1, hiding in a `Math.max(0, ...)`.
+    - **The mirror of "could not fill" is "could fill at will",** and this stage already measures
+      it: tightness. At tightness 1 and above nothing changes; below it a firm that filled what it
+      posted is paying more than it needs to, by the margin the market is slack. One coefficient
+      used in both directions, no new parameter. **Measured after: the going rate falls 4.3% over
+      twenty weeks against 1.9%, and offers fall from week 1 instead of rising.**
+    - **And it is not enough. Unemployment still reaches 33.4% by week 20 (against 33.6%).**
+      Said plainly so nobody re-runs this experiment: **price adjusts on an annual timescale and
+      quantity on a weekly one.** That asymmetry is real — wages are sticky and layoffs are fast,
+      which is what a recession IS — so no defensible wage speed outruns a world that opens with
+      half its firms below the line. Raising the coefficient to close the gap would be tuning,
+      which §6.4 forbids.
+    - **This is the evidence for (b).** The two symmetries were necessary and both were genuine
+      defects worth fixing on their own. What remains is the seed LEVEL: §5-EMP's option (b),
+      solving the opening wage index against the engine's own rule so that seed unemployment is
+      an outcome rather than an aggregate accounting identity. **Take that next.**

@@ -167,6 +167,32 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         ? earningsShortfallUSD / annualWagePerWorkerUSD
         : 0;
 
+      // EMP (§7.109/§7.110): THE OTHER SIDE OF THE SAME CONSTRAINT.
+      //
+      // A firm below its cost of capital sheds. A firm above it was doing nothing at all, so a
+      // world seeded at aggregate break-even — which is exactly what the seed solves for — put
+      // half the distribution below the line and had nothing absorbing the workers it released.
+      // Employment fell monotonically from week 1 and never recovered: 10.6% → 19.3% in five
+      // weeks, and every unemployment-band violation in the harness was this.
+      //
+      // The seed's own comment already assumed the symmetry — "Above it firms are shedding from
+      // week 1; below it they are hiring" — and only the shedding half existed.
+      //
+      // Money CONSTRAINS hiring; it does not drive it. So a firm hires the smaller of what its
+      // output needs and what its earnings can carry. The need is the level target this stage's
+      // header has always described — its own annualised output at its own baseline
+      // productivity — which is a measurement off the firm's own books and not a new parameter.
+      const baselineRevPerHeadUSD = (comp.baselineEmployeeCount ?? 0) > 0
+        ? (comp.baselineAnnualRevenue || comp.annualRevenue) / comp.baselineEmployeeCount!
+        : 0;
+      const outputNeedHeads = baselineRevPerHeadUSD > 0
+        ? comp.annualRevenue / baselineRevPerHeadUSD
+        : current;
+      const earningsHeadroomUSD = comp.ebitda - capitalChargeUSD;
+      const affordableHireHeads = (earningsHeadroomUSD > 0 && annualWagePerWorkerUSD > 0)
+        ? earningsHeadroomUSD / annualWagePerWorkerUSD
+        : 0;
+
       let vacancies = 0;
       let layoffs = 0;
       if (desiredWeeklyChange >= 0) {
@@ -180,6 +206,12 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // of capital, in workers, at the speed layoffs actually happen. This is the ordinary
       // response; the cash rule below is the acute one.
       if (affordableCutHeads > 0) layoffs = Math.max(layoffs, affordableCutHeads * LAYOFF_SPEED_MULTIPLE);
+      // ...and it staffs toward what it can afford, when it is short of what its output needs.
+      const understaffedHeads = Math.max(0, outputNeedHeads - current);
+      if (affordableHireHeads > 0 && understaffedHeads > 0) {
+        vacancies = Math.max(vacancies,
+          Math.min(understaffedHeads, affordableHireHeads) * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits);
+      }
       // A firm genuinely out of cash sheds staff regardless of the friction above.
       if (comp.cash < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
 
@@ -324,11 +356,28 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // a firm losing money does not give raises, which is the employer side of the bargain.
       const currentMargin = comp.annualRevenue > 0 ? comp.ebitda / comp.annualRevenue : 0;
       const marginShortfall = Math.max(0, (comp.baselineEbitdaMargin ?? currentMargin) - currentMargin);
+      // EMP (§7.110): AND THE SAME MEASURE, THE OTHER WAY UP.
+      //
+      // `unfilledShare` runs [0, 1]: it can say a firm found hiring hard, never that it found it
+      // easy. So the wage was a price on the way UP and administered on the way DOWN, and the
+      // going rate — which moves by `(avgOffer − 1) × speed + cola` — had nothing to pull it
+      // below the level the seed happened to solve for. **Measured: at 33.6% unemployment with
+      // tightness at 0.000, the employment-weighted average offer was RISING (1.0000 → 1.0181)
+      // and the going rate had fallen 1.9% in twenty weeks, all of it composition.** A wage that
+      // cannot fall under a third of the workforce out of work is not a price (rule 1).
+      //
+      // The mirror of "could not fill" is "could fill at will": how slack the market it is
+      // hiring into actually is, which this stage already measures as tightness. At tightness 1
+      // and above nothing changes — difficulty is the whole signal, exactly as before. Below it,
+      // a firm that filled what it posted is paying more than it needs to, by the margin the
+      // market is slack. One coefficient, used in both directions; no new parameter.
+      const slackEase = Math.max(0, 1 - (reg.laborMarketTightness ?? 1));
+      const hiringPressure = unfilledShare - slackEase;
       // LAB: unbounded. The +25%/-15% band this replaces was the mechanism's substitute — with
       // labor demand now responding to affordability, a firm that offers more than it can fund
       // is cutting its own headcount next week, which is the discipline the band was standing in
       // for. Its own push and pull are the whole decision.
-      const targetChangeAnnual = unfilledShare * WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL
+      const targetChangeAnnual = hiringPressure * WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL
         - marginShortfall * WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL;
       const prevIndex = comp.offeredWageIndex ?? 1.0;
       // The change applies DIRECTLY. An earlier form blended the level against itself
