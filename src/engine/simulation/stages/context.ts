@@ -44,6 +44,13 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** SETL2b — facilities WRITTEN or RETIRED this week, recorded where the tranche is created so
+   * the loan and the deposit it creates appear in the same statement. Consumed by settlement;
+   * bank-lending's level-based reconciliation then finds them already booked and nets to zero. */
+  creditEventsThisWeek: {
+    bankTicker: string; companyId: string; trancheId: string; principalUSD: number;
+    marginBps: number; originationWeek: number; termWeeks: number; retire: boolean;
+  }[];
   /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
    * (see stages/settlement.ts). A stage must not move money any other way. */
   paymentInstructions: import('./settlement').PaymentInstruction[];
@@ -187,6 +194,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
     paymentInstructions: [],
+    creditEventsThisWeek: [],
     g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
     primarySettlements: new Map(),

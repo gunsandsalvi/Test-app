@@ -248,6 +248,40 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (agg) agg.cashReservesUSD += deltaUSD;
   });
 
+  // ---- 4b. SETL2b: a loan and the deposit it creates, in ONE statement. The borrower's balance
+  // was written by the BANK_CREDIT leg above (no reserves moved); here the matching asset appears
+  // on the same bank in the same week. Doing these a week apart is what broke the identity when
+  // this was first attempted (§7.89) — the reconciliation in bank-lending.ts is level-based, so
+  // once the loan is booked here it finds nothing left to do.
+  ctx.creditEventsThisWeek.forEach((event) => {
+    const bank = bankByTicker.get(event.bankTicker);
+    if (!bank?.bankBalanceSheet) { report.unresolvedUSD += event.retire ? -event.principalUSD : event.principalUSD; return; }
+    const sheet = bank.bankBalanceSheet;
+    const loans = [...(sheet.businessLoans || [])];
+    if (event.retire) {
+      const idx = loans.findIndex((l) => l.id === event.trancheId);
+      if (idx >= 0) loans.splice(idx, 1);
+    } else {
+      const existing = loans.findIndex((l) => l.id === event.trancheId);
+      if (existing >= 0) loans[existing] = { ...loans[existing], principalUSD: event.principalUSD };
+      else loans.push({
+        id: event.trancheId,
+        borrowerId: event.companyId,
+        borrowerKind: 'COMPANY_FACILITY',
+        principalUSD: event.principalUSD,
+        marginBps: event.marginBps,
+        originationWeek: event.originationWeek,
+        termWeeks: event.termWeeks,
+        status: 'PERFORMING',
+      });
+    }
+    const bookUSD = loans.reduce((a, l) => a + l.principalUSD, 0);
+    bank.bankBalanceSheet = { ...sheet, businessLoans: loans, businessLoanBookUSD: bookUSD };
+    const agg = ctx.updatedRegions[bank.region]?.bankingSector;
+    if (agg) agg.businessLoanBookUSD += event.retire ? -event.principalUSD : event.principalUSD;
+  });
+  ctx.creditEventsThisWeek = [];
+
   // The treasury banks at the central bank, so its balance is a central-bank liability: what the
   // government collects has left the banking system's reserves, which is why a tax date tightens
   // money markets.

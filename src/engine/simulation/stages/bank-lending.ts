@@ -318,13 +318,13 @@ export function runBankWeeklyLending(
       // funding line the same moment the loan appears — no reserves move, which is endogenous
       // money (the pools bank here; they have no cash ledger of their own until MS).
       depositsUSD: sheet.depositsUSD + smeOriginationUSD,
-      // A corporate FACILITY still moves reserves rather than creating a deposit, and SETL2b
-      // measured exactly why it cannot yet: this stage reconciles the facility book from the
-      // TRANCHES, which stage 08 created a week earlier, while the borrower's draw settles in
-      // the week it is decided. Loan and deposit would appear seven days apart and the identity
-      // breaks in both weeks (measured: 83 balance violations). Deposit creation needs the
-      // origination and the draw to be ONE flow — settlement's BANK_CREDIT leg is built and
-      // verified for it, awaiting that. Until then: loan +X / reserves −X, self-balancing here.
+      // SETL2b: a facility is DEPOSIT CREATION, and both halves happen in one statement at
+      // settlement — the loan is booked there in the same week the borrower draws it, so no
+      // reserve moves and nothing is left for this reconciliation to fund. What remains here is
+      // the sync itself, which is level-based: a tranche settlement already booked is found with
+      // its principal matching and contributes nothing. `facilityNetOriginationUSD` is therefore
+      // the residue of anything settlement did NOT see (a merger moving a book, a default), and
+      // that residue still moves reserves because it is a change with no payment behind it.
       cashReservesUSD: sheet.cashReservesUSD - facilityNetOriginationUSD,
     },
     loanInterestWeeklyUSD,

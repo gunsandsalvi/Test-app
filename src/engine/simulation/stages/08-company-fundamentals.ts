@@ -210,6 +210,21 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const reg = updatedRegions[comp.region];
     const sec = SECTOR_BENCHMARKS[comp.sector];
 
+    // SETL2b: drawing a bank facility is not a payment FROM anyone — the bank writes the loan and
+    // the borrower's balance appears against it, in the same statement (settlement.ts). Naming
+    // the house bank's CREDIT is what tells settlement no reserve should move.
+    const bankCredit: PartyRef | undefined = comp.homeBankTicker
+      ? { kind: 'BANK_CREDIT', ticker: comp.homeBankTicker }
+      : undefined;
+    const recordCredit = (trancheId: string, principalUSD: number, marginBps: number, termWeeks: number, retire: boolean) => {
+      if (!comp.homeBankTicker || !(principalUSD > 0)) return;
+      ctx.creditEventsThisWeek.push({
+        bankTicker: comp.homeBankTicker, companyId: comp.id, trancheId,
+        principalUSD, marginBps, originationWeek: nextWeek, termWeeks, retire,
+      });
+    };
+
+
     // Interest Expense (computed early so Banks can skip or use it if they had standard debt, but they mostly rely on BankingSector)
     const nonMaturingTranches = comp.debtTranches.filter(t => t.maturityWeek !== nextWeek);
     const annualInterest = nonMaturingTranches.reduce((sum, t) => {
@@ -566,6 +581,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         isBankFacility: true,
         facilityBankTicker: comp.homeBankTicker,
       }];
+      recordCredit(maintenanceFundingTranches[0].id, weeklyDebtFundedPortion,
+        maintenanceFundingTranches[0].floatingMarginBps ?? 0, STANDARD_CORP_TENOR_YEARS * 52, false);
     }
 
     // 5. Deferred maintenance compounds into real operational decay
@@ -712,7 +729,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const declaredDividendWeekly = Math.max(0, (comp.dividendYield ?? 0) * comp.marketCap) / 52;
       const maxSustainableWeekly = Math.max(0, newNetIncome) * MAX_DIVIDEND_PAYOUT_RATIO / 52;
       post('dividends paid', -Math.min(declaredDividendWeekly, maxSustainableWeekly));
-      post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion);
+      post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
     }
     let newTotalDebt = comp.totalDebt;
 
@@ -997,10 +1014,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // A term-out retires the bridges it refinances.
       if (o.purpose === 'MAINTENANCE_TERM_OUT' && o.refinancesTrancheIds?.length) {
         const retire = new Set(o.refinancesTrancheIds);
-        const retiredUSD = updatedTranches.filter(t => retire.has(t.id)).reduce((a, t) => a + t.principalUSD, 0);
+        const retiredTranches = updatedTranches.filter(t => retire.has(t.id));
+        const retiredUSD = retiredTranches.reduce((a, t) => a + t.principalUSD, 0);
+        retiredTranches.forEach(t => recordCredit(t.id, t.principalUSD, 0, 0, true));
         updatedTranches = updatedTranches.filter(t => !retire.has(t.id));
         debtRepaymentThisWeek += retiredUSD;
-        post('term-out: maintenance bridges retired', -retiredUSD);
+        post('term-out: maintenance bridges retired', -retiredUSD, bankCredit);
       }
       if (placedUSD > 1000) updatedTranches = [...updatedTranches, newTranche];
       debtIssuanceThisWeek += placedUSD;
@@ -1022,7 +1041,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       };
       updatedTranches = [...updatedTranches, revolverTranche];
       debtIssuanceThisWeek += revolverTranche.principalUSD;
-      post('revolver draw: withdrawn refinancing', revolverTranche.principalUSD);
+      recordCredit(revolverTranche.id, revolverTranche.principalUSD, REVOLVER_MARGIN_BPS,
+        Math.max(1, revolverTranche.maturityWeek - nextWeek), false);
+      post('revolver draw: withdrawn refinancing', revolverTranche.principalUSD, bankCredit);
       refinanceNews.push({
         id: `refi-fail-${comp.ticker}-${nextWeek}`,
         week: nextWeek,

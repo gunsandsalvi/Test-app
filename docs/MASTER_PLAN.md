@@ -1304,9 +1304,8 @@ deposit stock to watch down rather than money appearing from nowhere. A new paym
 instruction and no new plumbing (rule 17).
 
 **Slices:** **SETL1** the layer itself (DONE §7.87); **SETL2** corporate cash routes through it
-(DONE §7.88); **SETL2b** a loan creates a deposit rather than consuming reserves — BLOCKED and
-measured (§7.89): needs facility origination and the borrower's draw to be ONE flow, since they
-are reconciled a week apart today; **SETL3** dividends — today they
+(DONE §7.88); **SETL2b** a loan creates a deposit rather than consuming reserves (DONE §7.89);
+**SETL3** dividends — today they
 leave the payer and arrive nowhere; **SETL4** coupons — today the issuer pays on 100% of
 principal while holders accrue independently off their own books (two derivations of one payment,
 rule 3), so the difference vanishes. Then the remaining flows, stage by stage, with the per-bank
@@ -2999,7 +2998,7 @@ that proved it, the lesson.
       is derived rather than chosen. The seed opens with the reserves behind those balances (§7.4).
     - **Close-out: 68 → 59 violations**, no new families, and the bank story is 56 of them. New
       world (declared): w10 c8d25434f9257792, w25 f8c6f485eda1fa75.
-89. **SETL2b — attempted, measured, reverted, and the blocker is precise.** A loan creates a
+89. **SETL2b — a loan creates a deposit. Attempted, measured, failed, fixed at the root.** A loan creates a
     deposit: the bank writes the asset and the borrower's balance at the same moment and no
     reserve moves. SME and mortgage origination already do this correctly; the corporate FACILITY
     was the exception, and `bank-lending.ts` even carried the note that it would become deposit
@@ -3009,10 +3008,20 @@ that proved it, the lesson.
       settles in the week it is decided. The loan and the deposit therefore appear seven days
       apart and the identity breaks in both weeks — **measured: 83 per-bank balance violations,
       142 total against 59**. Reverted to loan +X / reserves −X, which is self-balancing.
-    - **The prerequisite is now named**: facility origination and the draw must be ONE flow (the
-      tranche's creation records the payment), not two reconciled a week apart. The settlement
-      side is built and verified for it — `BANK_CREDIT` suppresses the reserve leg exactly so a
-      written deposit needs no settlement — and waits on that restructure.
+    - **The fix: the tranche's creation IS the payment.** Stage 08 now records a credit event
+      where it writes the facility, and settlement books the loan on the bank in the same
+      statement that writes the borrower's deposit — `BANK_CREDIT` as the payer, so no reserve
+      moves. The reconciliation in bank-lending.ts needed no change at all, because it is
+      LEVEL-based: it syncs the bank's list to the companies' tranches, so a loan settlement has
+      already booked is found with its principal matching and contributes nothing. What remains
+      there is the residue of changes with no payment behind them (a merger moving a book, a
+      default), and that residue rightly still moves reserves.
+    - **Close-out: 59 violations, ZERO balance-sheet violations** (from 142 / 83 at the failed
+      attempt). Facility loans appear on bank books from week 15 (4 → 36 by w20). The same-seed
+      hashes at w10 and w25 coincide with SETL2's, which is not a no-op but the shape of the
+      change: the difference is a ONE-WEEK timing effect (reserves in then out, versus loan and
+      deposit together) and it has washed out by both sample points.
     - **The lesson (§7.34's family):** two stages owning halves of one event a week apart is not
-      a timing detail, it is the thing that makes the event inexpressible. The identity found it
-      in one run, which is the third time that gate has paid for itself in this session.
+      a timing detail, it is the thing that makes the event inexpressible — and the fix is to
+      record the event where it happens, not to reconcile it afterwards. The identity found it in
+      one run, the third time that gate has paid for itself this session.
