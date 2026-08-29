@@ -12,6 +12,7 @@ import { runUnitBiddingStage } from './stages/05-unit-bidding';
 import { runFxAndTradeStage } from './stages/06-fx-and-trade';
 import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
+import { buildHoldingsStore, finalizeHoldingsStore } from './stages/holdings-store';
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
@@ -117,11 +118,16 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // Income first, so this week's real coupon receipts can fund this week's bids; mark after,
   // so next week's structural shares are sized by this week's actual close (S11).
   run('institutional-income', () => accrueInstitutionalIncome(ctx));
+  // SCALE C1: sweep every entity's holdings ONCE into the shared store; the five books read,
+  // claim and append against it, and the write-back after 07e recomposes the arrays — the same
+  // rows in the same order the old per-book partition-and-rebuild chain produced.
+  run('holdings-store', () => buildHoldingsStore(ctx));
   run('07b-corporate-bond-clearing', () => runCorporateBondClearingStage(state, ctx));
   run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
   run('07f-short-debt-clearing', () => runShortDebtClearingStage(state, ctx));
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
+  run('holdings-writeback', () => finalizeHoldingsStore(ctx));
   run('institutional-marking', () => markInstitutionalBooks(ctx));
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));
   // HC Wave 2: the corporate lifecycle. Settles the deals whose financing priced in this

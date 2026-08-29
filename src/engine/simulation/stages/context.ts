@@ -44,6 +44,11 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** SCALE C1 — the week's holdings, swept once and shared by the five clearing books; present
+   * only between the store's build (before 07b) and its write-back (after 07e). While it is
+   * set, entity `itemizedHoldings` arrays are stale week-start snapshots: read positions
+   * through the store. */
+  holdingsStore?: import('./holdings-store').HoldingsStore;
   /** WS8 — this week's working copy of the offering queue: adapters consume entries they
    * price (recording outcomes below), stage 08 appends new enqueues, core writes the
    * survivors back to state. */

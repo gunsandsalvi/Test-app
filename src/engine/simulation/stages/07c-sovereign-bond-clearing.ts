@@ -184,6 +184,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
   regionIds.forEach((regionId) => {
+    ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
     const liveTranches = reg.govDebtTranches || [];
     if (liveTranches.length === 0) return;
@@ -263,23 +264,20 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     /** The instruments THIS auction prices — every other holding passes through untouched. */
     const ownBucketInstrumentIds = new Set(activeBuckets.map((b) => bucketInstrumentId(regionId, b.key)));
 
-    const otherEntityHoldings = new Map<string, ItemizedHolding[]>();
+    // SCALE C1: positions come off the shared store's GOV_BOND rows. Only the four BOND buckets
+    // this auction actually prices are claimed. Bills are instrumentType GOV_BOND too, and clear
+    // in 07f — sweeping them in here put them in the rebuilt-from-fills set, so this stage
+    // deleted every bill position with no cash leg. Measured as the UK institutional book losing
+    // 4.6B of bills in week 7 while its cash did not move. A stage may only rewrite the
+    // instruments it cleared — unclaimed rows pass through the write-back untouched.
+    const store = ctx.holdingsStore!;
     const entityParticipants: ClearingParticipant[] = biddingEntities.map((entity) => {
       const currentByBucket = new Map<string, number>();
-      const other: ItemizedHolding[] = [];
-      // Only the four BOND buckets this auction actually prices are its own. Bills are
-      // instrumentType GOV_BOND too, and clear in 07f — sweeping them in here put them in the
-      // rebuilt-from-fills set, so this stage deleted every bill position with no cash leg.
-      // Measured as the UK institutional book losing 4.6B of bills in week 7 while its cash did
-      // not move. A stage may only rewrite the instruments it cleared.
-      entity.itemizedHoldings.forEach((h) => {
-        if (h.instrumentType === 'GOV_BOND' && ownBucketInstrumentIds.has(h.instrumentId)) {
-          currentByBucket.set(h.instrumentId, (currentByBucket.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
-        } else {
-          other.push(h);
-        }
+      store.scan(entity.id, 'GOV_BOND', (h) => {
+        if (!ownBucketInstrumentIds.has(h.instrumentId)) return false;
+        currentByBucket.set(h.instrumentId, (currentByBucket.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+        return true;
       });
-      otherEntityHoldings.set(entity.id, other);
 
       // A government bond carries no credit loss, so what a holder needs from it is the real
       // return its liabilities cost plus compensation for the duration it is committing. That is
@@ -403,18 +401,17 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: each entity's real new holdings — foreign holders included, which is what makes
     // the foreign share a measured outcome rather than a parameter.
-    if (biddingEntities.length > 0) {
-      const updated = new Map<string, InstitutionalEntity>();
-      biddingEntities.forEach((entity) => {
-        const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
-        const newGovHoldings: ItemizedHolding[] = [];
-        newHoldings.forEach((usd, instrumentId) => {
-          if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
-        });
-        updated.set(entity.id, { ...entity, cashUSD: (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0), itemizedHoldings: [...(otherEntityHoldings.get(entity.id) ?? []), ...newGovHoldings] });
+    // SCALE C1: the entities are the store's working copies — cash mutates in place, fills are
+    // appended to the store for the single write-back after 07e.
+    biddingEntities.forEach((entity) => {
+      const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
+      const newGovHoldings: ItemizedHolding[] = [];
+      newHoldings.forEach((usd, instrumentId) => {
+        if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
       });
-      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => updated.get(e.id) ?? e);
-    }
+      entity.cashUSD = (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0);
+      store.append(entity.id, newGovHoldings);
+    });
 
     // Apply: each bank's real new holdings, keyed back to plain tenor keys, plus the derived
     // scalar total (sovereignBondHoldingsUSD stays the sum of buckets).

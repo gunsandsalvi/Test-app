@@ -118,6 +118,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
   regionIds.forEach((regionId) => {
+    ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
     // HC2: the named private tier's paper trades here alongside the public universe — the
     // market prices an issuer's credit, not its listing status. Private issuers arrived with
@@ -194,23 +195,20 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     );
     const bookEntities = [...regionEntities, ...regionIndexFunds];
     const issuerIdsThisRegion = new Set(regionCompanies.map((c) => c.id));
-    const otherHoldingsByEntity = new Map<string, ItemizedHolding[]>();
     const currentHoldingByCompanyByEntity = new Map<string, Map<string, number>>();
 
+    // SCALE C1: positions come off the shared store's CORP_BOND rows — one claim-scan per
+    // entity instead of a sweep of its whole book. XB1 / §7.34 still holds: only THIS region's
+    // paper is claimed (a JPN insurer's JPN bonds stay unclaimed and pass through the
+    // write-back untouched, exactly as the old "other holdings" partition carried them).
+    const store = ctx.holdingsStore!;
     bookEntities.forEach((entity) => {
       const currentHoldingByCompany = new Map<string, number>();
-      const otherHoldings: ItemizedHolding[] = [];
-      entity.itemizedHoldings.forEach((h) => {
-        // XB1 / §7.34: only THIS region's paper belongs to this auction. Now that foreign
-        // holders bid here, an unfiltered sweep would pull a JPN insurer's JPN bonds into the
-        // USA book and rewrite them from USA fills — deleting positions with no cash leg.
-        if (h.instrumentType === 'CORP_BOND' && issuerIdsThisRegion.has(h.instrumentId)) {
-          currentHoldingByCompany.set(h.instrumentId, (currentHoldingByCompany.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
-        } else {
-          otherHoldings.push(h);
-        }
+      store.scan(entity.id, 'CORP_BOND', (h) => {
+        if (!issuerIdsThisRegion.has(h.instrumentId)) return false;
+        currentHoldingByCompany.set(h.instrumentId, (currentHoldingByCompany.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+        return true;
       });
-      otherHoldingsByEntity.set(entity.id, otherHoldings);
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
     });
 
@@ -336,7 +334,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       .filter((d) => d.assetClass === 'CORP_BOND' && d.region === regionId)
       .map((d) => d.id);
     const indexFundParticipants: ClearingParticipant[] = indexFundsForBook(
-      regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds
+      regionIndexFunds, ctx.updatedMarketIndexes, bookIndexIds, (e) => store.currentHoldingsUSD(e.id)
     ).map(({ fund, index, investableUSD }) => {
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
       // A CREDIT index fund is a real buyer in the primary, unlike its equity counterpart. A bond
@@ -383,22 +381,18 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: each entity's real new CORP_BOND holdings. Loans are a genuinely different real
     // market (different investor base, different technicals) and get their own real clearing
     // (07d-leveraged-loan-clearing.ts), not a byproduct split of this fill.
-    if (bookEntities.length > 0) {
-      const updatedEntitiesById = new Map<string, InstitutionalEntity>();
-      bookEntities.forEach((entity) => {
-        const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
-        const newCorpHoldings: ItemizedHolding[] = [];
-        newHoldings.forEach((newHoldingUSD, companyId) => {
-          if (newHoldingUSD > 1) newCorpHoldings.push({ instrumentId: companyId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
-        });
-        updatedEntitiesById.set(entity.id, {
-          ...entity,
-          cashUSD: (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0),
-          itemizedHoldings: [...(otherHoldingsByEntity.get(entity.id) ?? []), ...newCorpHoldings],
-        });
+    // SCALE C1: the entities here ARE the store's working copies — cash mutates in place (same
+    // sequence the old per-book spreads produced), and the fill rows are appended to the store
+    // for the single write-back after 07e.
+    bookEntities.forEach((entity) => {
+      const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
+      const newCorpHoldings: ItemizedHolding[] = [];
+      newHoldings.forEach((newHoldingUSD, companyId) => {
+        if (newHoldingUSD > 1) newCorpHoldings.push({ instrumentId: companyId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
       });
-      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => updatedEntitiesById.get(e.id) ?? e);
-    }
+      entity.cashUSD = (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0);
+      store.append(entity.id, newCorpHoldings);
+    });
 
     // Apply: real dealer inventory, and real trading revenue credited to each named bank's own
     // equity by market share — the same per-bank crediting pattern as the SRF/ON RRP facility

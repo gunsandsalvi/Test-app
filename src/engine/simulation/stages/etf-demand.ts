@@ -56,7 +56,11 @@ export function indexFundDemand(
 export function indexFundsForBook(
   entities: InstitutionalEntity[],
   indexes: MarketIndex[],
-  indexIds: string[]
+  indexIds: string[],
+  /** SCALE C1: while the holdings store is live, a fund's book value must be read through it
+   * (the entity's own array is a stale week-start snapshot between the store's build and its
+   * write-back). Callers outside that span omit this and the entity's array is read directly. */
+  holdingsUsdOf?: (e: InstitutionalEntity) => number
 ): { fund: InstitutionalEntity; index: MarketIndex; investableUSD: number }[] {
   const wanted = new Set(indexIds);
   const indexById = new Map(indexes.map((i) => [i.id, i]));
@@ -66,7 +70,9 @@ export function indexFundsForBook(
     const index = indexById.get(e.etf.indexId);
     if (!index || index.constituents.length === 0) return;
     // A fund invests everything it has: its basket plus the cash creations just handed it.
-    const holdingsUSD = e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalUSD ?? 0), 0);
+    const holdingsUSD = holdingsUsdOf
+      ? holdingsUsdOf(e)
+      : e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalUSD ?? 0), 0);
     const investableUSD = holdingsUSD + Math.max(0, e.cashUSD ?? 0);
     if (investableUSD > 0) out.push({ fund: e, index, investableUSD });
   });

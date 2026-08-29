@@ -51,6 +51,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
   regionIds.forEach((regionId) => {
+    ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
     // Only listed companies have a traded price; a private firm's equity is not for sale (HC).
     // Banks and institutions keep their own book-value pricing in stage 08 for now — their equity
@@ -169,22 +170,20 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
           && (d.region === regionId || !d.region))
     );
     const bookEntities = [...regionEntities, ...regionIndexFunds];
-    const otherHoldingsByEntity = new Map<string, ItemizedHolding[]>();
     const currentSharesByEntity = new Map<string, Map<string, number>>();
+    // SCALE C1: positions come off the shared store's EQUITY rows; only THIS region's names are
+    // claimed, everything else passes through the write-back untouched.
+    const store = ctx.holdingsStore!;
     bookEntities.forEach((entity) => {
       const bySharesForCompany = new Map<string, number>();
-      const other: ItemizedHolding[] = [];
-      entity.itemizedHoldings.forEach((h) => {
-        if (h.instrumentType === 'EQUITY' && companyById.has(h.instrumentId)) {
-          const comp = companyById.get(h.instrumentId)!;
-          // Pre-WS4 books stored equity as dollars only; convert once, at the current price.
-          const shares = h.quantityShares ?? (h.quantityOrNotionalUSD / Math.max(0.01, comp.stockPrice));
-          bySharesForCompany.set(h.instrumentId, (bySharesForCompany.get(h.instrumentId) ?? 0) + shares);
-        } else {
-          other.push(h);
-        }
+      store.scan(entity.id, 'EQUITY', (h) => {
+        const comp = companyById.get(h.instrumentId);
+        if (!comp) return false;
+        // Pre-WS4 books stored equity as dollars only; convert once, at the current price.
+        const shares = h.quantityShares ?? (h.quantityOrNotionalUSD / Math.max(0.01, comp.stockPrice));
+        bySharesForCompany.set(h.instrumentId, (bySharesForCompany.get(h.instrumentId) ?? 0) + shares);
+        return true;
       });
-      otherHoldingsByEntity.set(entity.id, other);
       currentSharesByEntity.set(entity.id, bySharesForCompany);
     });
 
@@ -195,7 +194,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const equityIndexIds = INDEX_DEFINITIONS
       .filter((d) => d.assetClass === 'EQUITY' && (d.region === regionId || !d.region))
       .map((d) => d.id);
-    const indexFunds = indexFundsForBook(regionIndexFunds, ctx.updatedMarketIndexes, equityIndexIds);
+    const indexFunds = indexFundsForBook(regionIndexFunds, ctx.updatedMarketIndexes, equityIndexIds, (e) => store.currentHoldingsUSD(e.id));
     const indexFundParticipants: ClearingParticipant[] = indexFunds.map(({ fund, index, investableUSD }) => {
       const currentShares = currentSharesByEntity.get(fund.id) ?? new Map<string, number>();
       const demandByInstrumentId = new Map<string, ParticipantDemand>();
@@ -291,7 +290,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     });
 
     // Apply each entity's real new share register, with its cash leg.
-    const updatedById = new Map(bookEntities.map((e) => [e.id, e]));
+    // SCALE C1: cash mutates in place on the working copies; fills append to the store for the
+    // single write-back after this, the last book.
     bookEntities.forEach((entity) => {
       const newShares = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const equityHoldings: ItemizedHolding[] = [];
@@ -320,12 +320,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const comp = companyById.get(companyId);
         if (comp) cashDeltaUSD += prevShares * comp.stockPrice;
       });
-      updatedById.set(entity.id, {
-        ...entity,
-        cashUSD: (entity.cashUSD ?? 0) + cashDeltaUSD,
-        itemizedHoldings: [...(otherHoldingsByEntity.get(entity.id) ?? []), ...equityHoldings],
-      });
+      entity.cashUSD = (entity.cashUSD ?? 0) + cashDeltaUSD;
+      store.append(entity.id, equityHoldings);
     });
-    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => updatedById.get(e.id) ?? e);
   });
 }

@@ -70,6 +70,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
   regionIds.forEach((regionId) => {
+    ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
 
     // ---- Bills ----
@@ -159,11 +160,16 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
         const sleeveUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.cashPct * CASH_SLEEVE_BILL_SHARE;
-        entity.itemizedHoldings.forEach((h) => {
-          if (h.instrumentType === 'GOV_BOND' && h.issuerRegion === regionId) {
+        // SCALE C1: read-only scan of the store's GOV_BOND rows — nothing is claimed here.
+        // Which rows this auction actually rewrites is decided at apply time, where the
+        // auctioned-bucket predicate lives (a bucket whose last tranche matured is NOT
+        // auctioned this week and its rows must survive).
+        ctx.holdingsStore!.scan(entity.id, 'GOV_BOND', (h) => {
+          if (h.issuerRegion === regionId) {
             const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
             if (key.startsWith('b')) holdings.set(h.instrumentId, (holdings.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
           }
+          return false;
         });
         activeBuckets.forEach((b) => {
           const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
@@ -257,33 +263,25 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       });
 
       // Apply institutional books with the engine's cash leg.
-      const updatedById = new Map<string, InstitutionalEntity>();
+      // SCALE C1: claim only what this auction priced — other regions, bonds, and (the subtle
+      // one) bill buckets not in THIS week's auction all stay unclaimed. A bucket leaves the
+      // auction the week its last tranche matures (`maturityWeek > nextWeek` excludes it), and
+      // rebuilding the book from the auction alone therefore deleted the holder's position in it
+      // with no cash leg, leaving stage 11's redemption nothing to pay out on. Measured as the
+      // institutional book dropping 5-11% on exactly the weeks the seeded 13/26/52-week
+      // programs matured. An entity with no fills is not touched at all.
+      const auctionedIds = new Set(activeBuckets.map((b) => billInstrumentId(regionId, b.key)));
       regionEntities.forEach((entity) => {
         const fills = result.newParticipantHoldings.get(entity.id);
         if (!fills) return;
-        // Keep everything this auction did NOT price: other regions, bonds, and — the subtle one
-        // — bill buckets not in THIS week's auction. A bucket leaves the auction the week its
-        // last tranche matures (`maturityWeek > nextWeek` excludes it), and rebuilding the book
-        // from the auction alone therefore deleted the holder's position in it with no cash leg,
-        // leaving stage 11's redemption nothing to pay out on. Measured as the institutional
-        // book dropping 5-11% on exactly the weeks the seeded 13/26/52-week programs matured.
-        const auctionedIds = new Set(activeBuckets.map((b) => billInstrumentId(regionId, b.key)));
-        const nonBillHoldings = entity.itemizedHoldings.filter((h) => {
-          if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return true;
-          if (!h.instrumentId.replace(`${regionId}-GOV-`, '').startsWith('b')) return true;
-          return !auctionedIds.has(h.instrumentId);
-        });
+        ctx.holdingsStore!.scan(entity.id, 'GOV_BOND', (h) => auctionedIds.has(h.instrumentId));
         const billHoldings: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
           if (usd > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
         });
-        updatedById.set(entity.id, {
-          ...entity,
-          cashUSD: (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0),
-          itemizedHoldings: [...nonBillHoldings, ...billHoldings],
-        });
+        entity.cashUSD = (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0);
+        ctx.holdingsStore!.append(entity.id, billHoldings);
       });
-      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => updatedById.get(e.id) ?? e);
 
       // The desk's bill-market earnings: the clients' cash legs already paid these fees, so
       // dropping the revenue destroyed the money. Credited as cash AND equity to the named
