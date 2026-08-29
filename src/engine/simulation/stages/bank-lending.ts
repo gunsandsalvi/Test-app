@@ -318,10 +318,13 @@ export function runBankWeeklyLending(
       // funding line the same moment the loan appears — no reserves move, which is endogenous
       // money (the pools bank here; they have no cash ledger of their own until MS).
       depositsUSD: sheet.depositsUSD + smeOriginationUSD,
-      // A corporate FACILITY is different in this model: the borrower's cash lives in its own
-      // S5 ledger, outside the banking system, so drawing one is a real cash outflow from the
-      // bank and a repayment is an inflow. Loan +X / reserves −X keeps the sheet balanced;
-      // when MS makes company cash settle through banks this becomes deposit creation too.
+      // A corporate FACILITY still moves reserves rather than creating a deposit, and SETL2b
+      // measured exactly why it cannot yet: this stage reconciles the facility book from the
+      // TRANCHES, which stage 08 created a week earlier, while the borrower's draw settles in
+      // the week it is decided. Loan and deposit would appear seven days apart and the identity
+      // breaks in both weeks (measured: 83 balance violations). Deposit creation needs the
+      // origination and the draw to be ONE flow — settlement's BANK_CREDIT leg is built and
+      // verified for it, awaiting that. Until then: loan +X / reserves −X, self-balancing here.
       cashReservesUSD: sheet.cashReservesUSD - facilityNetOriginationUSD,
     },
     loanInterestWeeklyUSD,

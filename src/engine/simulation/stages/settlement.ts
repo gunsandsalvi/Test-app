@@ -36,6 +36,13 @@ import { WeeklyStepContext } from './context';
 export type PartyRef =
   | { kind: 'COMPANY'; ticker: string }
   | { kind: 'BANK'; ticker: string }
+  /** SETL2b — the bank's own CREDIT, not its reserves. A loan does not move money from anywhere:
+   *  the bank writes a loan on one side and a deposit on the other, and both appear at once. So
+   *  a drawdown paid by BANK_CREDIT creates the borrower's balance WITHOUT any reserve leaving
+   *  the lender — endogenous money, and the reason a banking system can fund itself. Reserves
+   *  move only when the borrower then SPENDS it to a customer of another bank, which happens as
+   *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
+  | { kind: 'BANK_CREDIT'; ticker: string }
   | { kind: 'INSTITUTION'; id: string }
   | { kind: 'HOUSEHOLD'; region: RegionId }
   | { kind: 'GOVERNMENT'; region: RegionId }
@@ -74,6 +81,8 @@ export interface SettlementReport {
   corporateDepositDeltaByBank: Map<string, number>;
   /** Per-bank movement of the named boundary's balance. */
   unmodeledDepositDeltaByBank: Map<string, number>;
+  /** Deposits created by this bank's own lending — they need no reserve settlement. */
+  creditCreatedByBank: Map<string, number>;
   /** Household flows handed to HH4d's T+1 channel — settled by next week's bank pass, not here. */
   householdDeferredUSD: number;
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
@@ -82,7 +91,7 @@ export interface SettlementReport {
 }
 
 const partyKey = (p: PartyRef): string =>
-  p.kind === 'COMPANY' || p.kind === 'BANK' ? `${p.kind}:${p.ticker}`
+  p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' ? `${p.kind}:${p.ticker}`
     : p.kind === 'INSTITUTION' ? `INSTITUTION:${p.id}`
       : `${p.kind}:${p.region}`;
 
@@ -104,6 +113,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     unmodeledDeltaByRegion: new Map(),
     corporateDepositDeltaByBank: new Map(),
     unmodeledDepositDeltaByBank: new Map(),
+    creditCreatedByBank: new Map(),
     householdDeferredUSD: 0,
     unresolvedUSD: 0,
   };
@@ -167,6 +177,12 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         addTo(report.reserveDeltaByBank, party.ticker, deltaUSD);
         return;
       }
+      case 'BANK_CREDIT': {
+        // Nothing to debit: the money did not exist a moment ago. Recorded so the reserve leg
+        // below knows this deposit was written rather than received.
+        addTo(report.creditCreatedByBank, party.ticker, -deltaUSD);
+        return;
+      }
       case 'GOVERNMENT': {
         addTo(report.tgaDeltaByRegion, party.region, deltaUSD);
         return;
@@ -199,8 +215,14 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // deposits and is owed reserves; one whose customers paid out owes them. Same-bank payments
   // have already netted to nothing inside each bank's own delta, so this is exactly the
   // cross-bank residual — which is what settles across the central bank's books.
-  report.depositDeltaByBank.forEach((deltaUSD, ticker) => {
-    addTo(report.reserveDeltaByBank, ticker, deltaUSD);
+  // Deposits a bank WROTE need no settlement; deposits it RECEIVED do. Subtracting its own
+  // credit creation leaves exactly the cross-bank residual — and if a bank lends to someone who
+  // banks elsewhere, the difference is a real reserve payment, which is also correct.
+  const settlingBanks = new Set<string>([...report.depositDeltaByBank.keys(), ...report.creditCreatedByBank.keys()]);
+  settlingBanks.forEach((ticker) => {
+    const received = report.depositDeltaByBank.get(ticker) ?? 0;
+    const written = report.creditCreatedByBank.get(ticker) ?? 0;
+    addTo(report.reserveDeltaByBank, ticker, received - written);
   });
 
   // ---- 4. Apply it. A bank whose customers were paid holds more money and more reserves; the
