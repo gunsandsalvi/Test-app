@@ -330,22 +330,24 @@ function settleContracts(
   const { companyUpdates, nextWeek } = ctx;
   const remainingContracts: SupplyContract[] = [];
 
-  ownContracts.forEach(contract => {
+  // SCALE: for..of — the profiler put ~38 ms/week on this loop's callback dispatch alone at
+  // ~74k live contracts; a plain loop is the same iteration in the same order.
+  for (const contract of ownContracts) {
     const supplier = lookup.byKey.get(contract.supplierCompanyId);
     const customer = lookup.byKey.get(contract.customerCompanyId);
-    if (!supplier || !customer) return;
+    if (!supplier || !customer) continue;
 
     if (!isActiveCompany(supplier)) {
       // Supplier default shock propagates directly to named contract counterparties first
       if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
       const custUp = companyUpdates[customer.ticker];
       custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, 0.70);
-      return;
+      continue;
     }
-    if (!isActiveCompany(customer)) return;
+    if (!isActiveCompany(customer)) continue;
 
     contract.weeksRemaining -= 1;
-    if (contract.weeksRemaining < 0) return;
+    if (contract.weeksRemaining < 0) continue;
 
     const supplierUnits = getOutputInventoryUnits(supplier, subUnitId);
     const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
@@ -383,7 +385,7 @@ function settleContracts(
     }
 
     remainingContracts.push(contract);
-  });
+  }
 
   return remainingContracts;
 }
