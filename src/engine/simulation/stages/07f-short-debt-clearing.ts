@@ -249,6 +249,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           Number(((reg.centralBankSheet.lastOpenMarketPurchasesUSD ?? 0) + filled).toFixed(0));
       }
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} bill`);
 
       // Refit the curve through BOTH the cleared bills and 07c's cleared bonds, so the sub-2Y
       // segment every short-rate consumer reads comes from a market, not an extrapolation.

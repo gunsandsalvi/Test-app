@@ -18,28 +18,26 @@
  */
 
 import { RegionId } from './geography';
+import { defect } from './defect';
 
 /** USD per one unit of each region's money, as the FX market last cleared it. */
 export type FxToUsd = (regionId: RegionId) => number;
 
-/**
- * RULE 3, OPEN (§6.3-F): returning 1 for a non-finite or zero rate is a DEFAULT standing in for a
- * broken read — it silently prices a foreign figure at parity instead of failing where the rate
- * went missing. This is the exact shape §7.94 was found by. Should throw, or the callers should
- * carry a rate they know exists.
- */
-function safeRate(rate: number): number {
-  return Number.isFinite(rate) && rate > 0 ? rate : 1;
+/** GUARD: a rate that is missing or nonsensical is a broken read, not a reason to price a
+ *  foreign figure at parity — the §7.94 shape. It fails here, naming the currency. */
+function requireRate(rate: number, region: RegionId): number {
+  if (Number.isFinite(rate) && rate > 0) return rate;
+  return defect(`no FX rate for ${region} (got ${rate}) — the pair is missing or has not cleared`);
 }
 
 /** A figure held in `from`'s money, expressed in USD. */
 export function localToUsd(amountLocal: number, from: RegionId, fxToUsd: FxToUsd): number {
-  return amountLocal * safeRate(fxToUsd(from));
+  return amountLocal * requireRate(fxToUsd(from), from);
 }
 
 /** A figure held in USD, expressed in `to`'s money. */
 export function usdToLocal(amountUsd: number, to: RegionId, fxToUsd: FxToUsd): number {
-  return amountUsd / safeRate(fxToUsd(to));
+  return amountUsd / requireRate(fxToUsd(to), to);
 }
 
 /**
@@ -54,7 +52,7 @@ export function usdToLocal(amountUsd: number, to: RegionId, fxToUsd: FxToUsd): n
  */
 export function convertLocal(amount: number, from: RegionId, to: RegionId, fxToUsd: FxToUsd): number {
   if (from === to) return amount;
-  return amount * (safeRate(fxToUsd(from)) / safeRate(fxToUsd(to)));
+  return amount * (requireRate(fxToUsd(from), from) / requireRate(fxToUsd(to), to));
 }
 
 /**
@@ -64,10 +62,10 @@ export function convertLocal(amount: number, from: RegionId, to: RegionId, fxToU
  */
 export function snapshotFxToUsd(regionIds: RegionId[], fxToUsd: FxToUsd): Record<string, number> {
   const table: Record<string, number> = {};
-  regionIds.forEach(r => { table[r] = safeRate(fxToUsd(r)); });
+  regionIds.forEach(r => { table[r] = requireRate(fxToUsd(r), r); });
   return table;
 }
 
 export function fromTable(table: Record<string, number>): FxToUsd {
-  return (regionId: RegionId) => safeRate(table[regionId]);
+  return (regionId: RegionId) => requireRate(table[regionId], regionId);
 }

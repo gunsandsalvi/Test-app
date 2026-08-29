@@ -126,6 +126,14 @@ const CB_SRF_SEAT_ID = 'CB-SRF';
 export interface RepoSessionResult {
   repoRateAnnual: number;
   sheetByTicker: Map<string, BankingSector>;
+  /** GUARD — what a borrower could actually fund this week: its shortfall to the buffer bounded
+   *  by its unencumbered collateral. Zero means there was nothing to clear, which is a quiet
+   *  week; positive with `clearedVolumeUSD` at zero means a market with a real borrower and real
+   *  lenders transacted nothing, which is a defect (§7.102: the corridor assertion passed
+   *  VACUOUSLY for eight commits because the early return prints the floor as a literal). */
+  fundableNeedUSD: number;
+  /** What the session actually lent — market repo plus the window. */
+  clearedVolumeUSD: number;
 }
 
 /**
@@ -192,7 +200,7 @@ export function runRegionalRepoSession(
     // No borrower: nothing clears, the overnight complex sits at its floor, and the sleeves
     // earn the RRP rate there.
     creditRrpOnUnlentSleeves(ctx, regionId, overnightSleeveByEntity, new Map(), rrpBps);
-    return { repoRateAnnual: rrpBps / 10000, sheetByTicker };
+    return { repoRateAnnual: rrpBps / 10000, sheetByTicker, fundableNeedUSD: 0, clearedVolumeUSD: 0 };
   }
 
   const instrument: ClearingInstrument = {
@@ -321,7 +329,7 @@ export function runRegionalRepoSession(
     });
   });
 
-  return { repoRateAnnual, sheetByTicker };
+  return { repoRateAnnual, sheetByTicker, fundableNeedUSD: totalNeedUSD, clearedVolumeUSD: totalLentUSD };
 }
 
 /**

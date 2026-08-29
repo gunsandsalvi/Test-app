@@ -176,6 +176,16 @@ export interface ClearingResult {
    * lead bank's real cash).
    */
   primaryOutcomeById: Map<string, { withdrawn: boolean; marketTakeUSD: number; clearedStat: number }>;
+  /**
+   * GUARD — did ANY participant's ceiling leave room above what it already holds?
+   *
+   * A `maxHoldingUSD` that equals the position it is meant to bound is not a constraint, it is
+   * an identity wearing a constraint's name, and the market it governs cannot trade: OWN8's
+   * `investableSurplusUSD` was the balance-sheet identity rearranged, so no bank could ever buy
+   * a bond and the repo market ran at zero volume for eight commits while every check passed.
+   * False here means this book's demand side cannot grow at any price.
+   */
+  anyCeilingAboveHolding: boolean;
 }
 
 /**
@@ -763,6 +773,28 @@ function accumulateShard(
 }
 
 /**
+ * GUARD: does at least one participant have room to grow at least one position? Early-exits on
+ * the first one that does, so in a healthy book this costs a handful of comparisons; it walks
+ * the whole demand set only when the answer is no, which is exactly the case worth knowing.
+ */
+function anyCeilingAboveHolding(
+  instruments: ClearingInstrument[],
+  participants: ClearingParticipant[]
+): boolean {
+  for (const p of participants) {
+    for (let i = 0; i < instruments.length; i++) {
+      const d = p.demandByIndex !== undefined
+        ? p.demandByIndex[i]
+        : p.demandByInstrumentId.get(instruments[i].id);
+      if (!d) continue;
+      const held = p.currentHoldingsByInstrumentId.get(instruments[i].id) ?? 0;
+      if (d.maxHoldingUSD > held + 1) return true;
+    }
+  }
+  return participants.length === 0;
+}
+
+/**
  * The worker pool injects itself here (see clearing-worker-pool.ts). The engine deliberately
  * imports NOTHING at runtime: the worker thread loads this module alone, and tsx's resolver
  * inside workers cannot follow extensionless relative imports — the dependency points the other
@@ -792,6 +824,7 @@ export function clearFinancialAsset(
     dealerNetCashUSD: 0,
     damperBoundInstrumentIds: [],
     primaryOutcomeById: new Map(),
+    anyCeilingAboveHolding: anyCeilingAboveHolding(instruments, participants),
   };
   participants.forEach((p) => {
     result.newParticipantHoldings.set(p.id, new Map<string, number>());

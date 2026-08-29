@@ -191,11 +191,9 @@ export function computeSovereignBookAnnualYield(
 
 export function evolveBankingSector(
   prevBanking: BankingSector,
-  businessLoanBookInputUSD: number,
   estimatedHouseholdIncomeUSD: number,
   savingsRate: number,
   policyRate: number,
-  creditContagionBps: number,
   unemploymentRate: number,
   /** The book-weighted annual yield of THIS bank's real tenor book at the real cleared curve
    * (computeSovereignBookAnnualYield). Rule 9: annualised decimal. */

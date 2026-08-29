@@ -377,6 +377,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} corporate bond`);
     // WS8: settle this week's priced offerings — lead bank pays the unsold residual and takes
     // the fee; stage 08 posts the issuer's proceeds and creates the tranche at cleared terms.
     settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD);

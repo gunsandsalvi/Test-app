@@ -46,10 +46,7 @@ export function evolveRegionMacro(
   globalShock: { gdpShock: number; inflationShock: number },
   microFeedback: {
     capexGdpContribution: number;
-    marginCompression: number;
-    creditContagionBps: number;
     bottomUpUnemploymentDelta: number;
-    businessLoanBookInputUSD: number;
     trackedHealthSignal: number;
     publicCompanyEmployment: number;
     occupationDemand?: Record<OccupationType, number>;
@@ -233,12 +230,11 @@ export function evolveRegionMacro(
   const { updatedBuffer: newWageGrowthLagBuffer, laggedValue: laggedWageGrowth } = pushAndReadLagged(region.wageGrowthLagBuffer || [], newWageGrowth, 3);
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
-  const contagionHit = microFeedback.creditContagionBps > 50 ? (microFeedback.creditContagionBps / 100) * 0.5 : 0;
   const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80 + laggedDemandShock * 1000;
   const cciReversion = (cciEquilibrium - prevHS.consumerConfidence) * 0.08;
   const unempShock = unempDelta > 0 ? cciUnempMultiplier * unempDelta * 100 : 0;
   const boundedEquityReturn = Math.max(-0.5, Math.min(0.5, isFinite(equityReturn) ? equityReturn : 0));
-  const rawCCI = prevHS.consumerConfidence + cciReversion + 0.05 * (boundedEquityReturn * 100) - unempShock - contagionHit;
+  const rawCCI = prevHS.consumerConfidence + cciReversion + 0.05 * (boundedEquityReturn * 100) - unempShock;
   const newCCI = isFinite(rawCCI) ? Math.max(30, Math.min(170, Number(rawCCI.toFixed(2)))) : 100;
 
   // Population Growth & Net Migration Dynamics (Part AG)
@@ -607,13 +603,9 @@ export function evolveRegionMacro(
 
   const newBankingSector = evolveBankingSector(
     region.bankingSector,
-    // G2: the aggregate's business book is the sum of real loans (02b overwrites this
-    // aggregate with the named banks' sum anyway) — no formula target.
-    region.bankingSector.businessLoanBookUSD,
     newEstimatedHouseholdIncomeUSD,
     newSavingsRate,
     region.policyRate,
-    microFeedback.creditContagionBps,
     newUnemployment,
     // The aggregate book's real yield at the real cleared curve — the per-bank truth is
     // recomputed in 02b, which overwrites this aggregate with the sum of named banks.

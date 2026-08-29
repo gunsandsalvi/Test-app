@@ -23,10 +23,16 @@ import { WeeklyStepContext } from './context';
  * ordinary 3-tranche companies into one 6-tranche one).
  */
 function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix: string): DebtTranche[] {
+  // GUARD: the bucket key is everything that makes a tranche a DIFFERENT INSTRUMENT, not just
+  // its rate type and tenor. Keying on those two alone consolidated a bank facility and a
+  // syndicated loan into one tranche and dropped both flags along with the call protection —
+  // so the combined paper appeared in 07d's float (the G2 double-count), and its call regime
+  // was gone, which the call-protection guard caught on the first merger of a 60-week run.
   const buckets = new Map<string, DebtTranche[]>();
   tranches.forEach(t => {
     const tenorBucket = Math.round((t.maturityWeek - nextWeek) / 260); // nearest 5-year bucket
-    const key = `${t.rateType}-${tenorBucket}`;
+    const key = [t.rateType, tenorBucket, t.callProtection ?? 'none', t.seniority,
+      t.isBankFacility ? `F:${t.facilityBankTicker ?? ''}` : '', t.isCommercialPaper ? 'CP' : ''].join('-');
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key)!.push(t);
   });
@@ -49,6 +55,11 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
       originationWeek: nextWeek,
       maturityWeek: weightedMaturityWeek,
       seniority: group[0].seniority,
+      // Identical across the group by construction (they are in the key).
+      callProtection: group[0].callProtection,
+      isBankFacility: group[0].isBankFacility,
+      facilityBankTicker: group[0].facilityBankTicker,
+      isCommercialPaper: group[0].isCommercialPaper,
     });
   });
   return result;

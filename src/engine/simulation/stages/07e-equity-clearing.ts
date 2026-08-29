@@ -268,6 +268,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} equity`);
     // Equity proceeds are shares x the CLEARED price — the one place the conversion differs
     // from credit (where the stat is a spread and the paper prices at par).
     settlePricedOfferings(regionId, 'EQUITY', offeringsByIssuerId, result, ctx,

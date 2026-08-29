@@ -75,11 +75,9 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       {
         capexGdpContribution: boundedGdpContribution,
         bottomUpUnemploymentDelta,
-        businessLoanBookInputUSD: ctx.regionFloatingPrincipal[regionId],
         trackedHealthSignal: ctx.regionTrackedHealthSignal[regionId],
         publicCompanyEmployment: ctx.regionPublicCompanyEmployment[regionId],
         occupationDemand: regionOccDemand,
-        marginCompression: 0, creditContagionBps: 0,
         avgListedDividendYieldAnnual: regionAvgDividendYield,
       },
       ctx.nextWeek,

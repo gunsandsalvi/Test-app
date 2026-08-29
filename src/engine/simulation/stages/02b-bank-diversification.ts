@@ -195,18 +195,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
       const sheet = evolveBankingSector(
         prevSheet,
-        ctx.regionFloatingPrincipal[regionId] * share,
         reg.estimatedHouseholdIncomeUSD * share,
         reg.householdState.savingsRate,
         reg.policyRate,
-        // A higher-risk bank's own business- AND consumer-loan-loss experience both scale with
-        // its real, persistent concentration risk (see bankRiskFactor's doc comment in
-        // domain/company.ts) — the actual reason two banks facing the identical regional credit
-        // cycle diverge, rather than every bank sharing one identical region-wide loss rate on
-        // both books. The household pass below receives the same risk-adjusted unemployment —
-        // a higher-risk bank's book is more exposed to the SAME regional unemployment print,
-        // the way a bank concentrated in subprime/regional consumer lending genuinely would be.
-        ctx.creditContagionBps * riskFactor,
+        // A higher-risk bank's book is more exposed to the SAME regional unemployment print, the
+        // way a bank concentrated in subprime/regional consumer lending genuinely would be (see
+        // bankRiskFactor's doc comment in domain/company.ts) — the actual reason two banks facing
+        // one regional credit cycle diverge.
         reg.unemploymentRate * (0.6 + riskFactor * 0.4),
         // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
         computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByTenor, reg.zeroRates),
@@ -309,6 +304,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const sheetByTicker = new Map<string, BankingSector>(newSheets.map(({ bank, sheet }) => [bank.ticker, sheet]));
     const session = runRegionalRepoSession(regionId, reg, banks, sheetByTicker, ctx);
     reg.repoRateAnnual = Number(session.repoRateAnnual.toFixed(6));
+    // GUARD: what the session had to fund and what it actually lent, so the harness can tell a
+    // quiet week from a dead market — the distinction the corridor assertion cannot make.
+    reg.repoFundableNeedUSD = Number(session.fundableNeedUSD.toFixed(0));
+    reg.repoClearedVolumeUSD = Number(session.clearedVolumeUSD.toFixed(0));
     // The fund's quote for next week's yield-gap decision comes off its post-session book.
     refreshMmfQuotes(regionId, reg, ctx);
     newSheets.forEach((entry) => {

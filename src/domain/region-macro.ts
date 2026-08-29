@@ -466,6 +466,9 @@ export interface Region {
    * sheets carry positions, never a second copy of the rate.
    */
   repoRateAnnual: number;
+  /** GUARD — the repo session's own volume diagnostic (see RepoSessionResult). */
+  repoFundableNeedUSD?: number;
+  repoClearedVolumeUSD?: number;
   neutralRate: number;
   /**
    * PUB2b: what the Taylor rule wanted BEFORE the floor clamped it. The gap between this and the

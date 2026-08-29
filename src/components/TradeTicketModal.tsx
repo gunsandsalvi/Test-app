@@ -37,7 +37,11 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
 
   const dealer = state.dealers.find((d) => d.id === selectedDealerId) || state.dealers[0];
   const region = state.regions[instrument.region];
-  const policyRate = region?.policyRate ?? 0.0475;
+  // GUARD: no fabricated rate. This read used to fall back to 4.75% — a recognisably
+  // real-world number — so a missing region priced the player's financing off a constant that
+  // nothing in the model had set. A UI must not crash on a gap and must not invent one either:
+  // where the rate is absent the carry is not computed and the panel renders an em dash.
+  const policyRate = region?.policyRate;
 
   // Calculate dynamic spread & axe discount
   const { spreadBps, hasAxeDiscount, originalSpreadBps } = useMemo(() => {
@@ -70,6 +74,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
 
   // Compute Expected 1-Week Carry
   const carryEstimate = useMemo(() => {
+    if (policyRate === undefined) return undefined;
     let thetaPerContract: number | undefined;
     if (instrument.assetType === 'OPTION') {
       const weeksToExpiry = instrument.details.expiryWeek !== undefined
@@ -230,7 +235,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
       currentPrice: executionDetails.fillPrice,
       notional: notionalUSD,
       marginRequirement: initialMarginUSD,
-      expectedWeeklyCarryUSD: carryEstimate.weeklyCarryUSD,
+      expectedWeeklyCarryUSD: carryEstimate?.weeklyCarryUSD ?? 0,
       tenorYears: instrument.details.tenorYears,
       maturityWeek: instrument.details.tenorYears ? state.currentWeek + Math.round(instrument.details.tenorYears * 52) : undefined,
       fixedRate: instrument.details.fixedRate ?? instrument.details.couponRate,
@@ -365,9 +370,11 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
         {/* Expected 1-Week Carry Calculator Module */}
         <div
           className={`p-2.5 rounded-xl border transition-colors ${
-            carryEstimate.weeklyCarryUSD >= 0
-              ? 'bg-emerald-950/20 border-emerald-500/30'
-              : 'bg-rose-950/20 border-rose-500/30'
+            !carryEstimate
+              ? 'bg-slate-900/40 border-slate-700/50'
+              : carryEstimate.weeklyCarryUSD >= 0
+                ? 'bg-emerald-950/20 border-emerald-500/30'
+                : 'bg-rose-950/20 border-rose-500/30'
           }`}
         >
           <div className="flex items-center justify-between">
@@ -376,24 +383,30 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
               <span className="text-[11px] font-bold text-slate-200">Expected 1-Week Carry</span>
             </div>
             <div className="text-right font-mono">
-              <span
-                className={`text-xs font-extrabold ${
-                  carryEstimate.weeklyCarryUSD >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                }`}
-              >
-                {carryEstimate.weeklyCarryUSD >= 0 ? '+' : ''}
-                {formatCurrency(carryEstimate.weeklyCarryUSD)}/wk
-              </span>
-              <span className="text-[9px] text-slate-400 block">
-                ({carryEstimate.annualizedCarryPct >= 0 ? '+' : ''}
-                {carryEstimate.annualizedCarryPct.toFixed(2)}% p.a.)
-              </span>
+              {carryEstimate ? (
+                <>
+                  <span
+                    className={`text-xs font-extrabold ${
+                      carryEstimate.weeklyCarryUSD >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {carryEstimate.weeklyCarryUSD >= 0 ? '+' : ''}
+                    {formatCurrency(carryEstimate.weeklyCarryUSD)}/wk
+                  </span>
+                  <span className="text-[9px] text-slate-400 block">
+                    ({carryEstimate.annualizedCarryPct >= 0 ? '+' : ''}
+                    {carryEstimate.annualizedCarryPct.toFixed(2)}% p.a.)
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs font-extrabold text-slate-500">&mdash;</span>
+              )}
             </div>
           </div>
           <div className="text-[9px] text-slate-400 mt-1 font-mono flex items-center justify-between border-t border-slate-800/80 pt-1">
             <span>Carry Flow:</span>
             <span className="text-slate-300 truncate max-w-[240px]">
-              {carryEstimate.components.description}
+              {carryEstimate ? carryEstimate.components.description : 'no policy rate for this region'}
             </span>
           </div>
         </div>

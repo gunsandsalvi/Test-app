@@ -525,6 +525,10 @@ export function generateInitialCompanies(
         name: tmpl.name,
         region,
         sector: tmpl.sector,
+        // GUARD: the seeded universe is the LISTED universe, and it has always relied on
+        // `undefined` reading as PUBLIC. `isPubliclyListed` throws on a missing status now, so
+        // the state every one of these firms is actually in is written down.
+        listingStatus: 'PUBLIC',
         
         baselineAnnualRevenue: tmpl.revBase, annualRevenue: tmpl.revBase,
         employeeCount, previousEmployeeCount: employeeCount, baselineEmployeeCount: employeeCount,

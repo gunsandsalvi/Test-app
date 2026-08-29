@@ -4,6 +4,7 @@
  *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
 import { RegionId } from './geography';
+import { defect } from './defect';
 import { Industry } from './industry';
 import { ItemizedHolding, BankingSector } from './banking';
 
@@ -365,8 +366,8 @@ export interface Company {
    * borrows and defaults through the same stages, gated only where the behaviour is genuinely
    * public-only (equity pricing, consensus/earnings theater, index membership). Going public is a
    * transition of this flag through a real offering (HC7), not the creation of a new object.
-   * Absent on companies generated before this field existed — treat undefined as 'PUBLIC'
-   * (see isPubliclyListed below).
+   * Required at every creation site: `isPubliclyListed` throws on a missing one rather than
+   * defaulting a firm onto the public market.
    */
   listingStatus?: 'PUBLIC' | 'PRIVATE';
   /**
@@ -447,13 +448,16 @@ export interface Company {
   demandShockLagBuffer?: number[];
 }
 /**
- * Public-market membership test. Undefined reads as PUBLIC.
+ * Public-market membership test.
  *
- * There are no "pre-HC companies" — every world is regenerated from seed — so an undefined
- * `listingStatus` means a creation site forgot to set one, and the firm then silently trades on
- * the public market. Same silent-default shape as `safeRate` and `resolveProtection`.
+ * GUARD: undefined used to read as PUBLIC, so a creation site that forgot the field silently
+ * listed the firm on the public market — where it gets a share price, index membership and an
+ * earnings call. It is a required state; a missing one fails here.
  */
-export function isPubliclyListed(c: Pick<Company, 'listingStatus'>): boolean {
+export function isPubliclyListed(c: Pick<Company, 'listingStatus' | 'ticker'>): boolean {
+  if (c.listingStatus === undefined) {
+    return defect(`company ${c.ticker} has no listingStatus — set it where the company is created`);
+  }
   return c.listingStatus !== 'PRIVATE';
 }
 

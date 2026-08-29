@@ -352,6 +352,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} leveraged loan`);
     settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD);
 
     // Apply: real cleared discount margin + derived price-to-par, mutated in place so stage 8

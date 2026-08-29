@@ -44,6 +44,10 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** GUARD — books whose demand side could not grow at any price this week: no participant's
+   * holding ceiling exceeded what it already held. A market that cannot trade is a defect, not
+   * a quiet pass (§7.102's shape). Asserted empty by the harness. */
+  deadCeilingBooks: string[];
   /** SETL3/4 — issuer id → ticker, so the register's payments name a real payer. */
   issuerTickerById: Map<string, string>;
   /** SETL2b — facilities WRITTEN or RETIRED this week, recorded where the tranche is created so
@@ -109,11 +113,8 @@ export interface WeeklyStepContext {
   workingPositions: Position[];
 
   // Stage 01 (macro-feedback) outputs, read by stage 02
-  regionFloatingPrincipal: Record<RegionId, number>;
   regionTrackedHealthSignal: Record<RegionId, number>;
   regionPublicCompanyEmployment: Record<RegionId, number>;
-  avgMargin: number;
-  marginCompression: number;
   recentDefaultsCount: number;
   creditContagionBps: number;
   systemicStressFactorGlobal: number;
@@ -199,6 +200,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     earningsReportedThisTurn: [],
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
+    deadCeilingBooks: [],
     // SEG1: last week's after-cutoff payments (recorded by stages that run after the
     // settlement stage) roll into this cycle — a real system's next-day settlement.
     paymentInstructions: [...(state.pendingPaymentInstructions ?? [])],
@@ -222,11 +224,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     marketVolPremium: state.marketVolPremium || 0,
     workingPositions: [...state.portfolio.positions],
 
-    regionFloatingPrincipal: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     regionTrackedHealthSignal: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     regionPublicCompanyEmployment: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
-    avgMargin: 0,
-    marginCompression: 0,
     recentDefaultsCount: 0,
     creditContagionBps: 0,
     systemicStressFactorGlobal: 0,

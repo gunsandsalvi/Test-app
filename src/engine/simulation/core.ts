@@ -202,7 +202,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
-  return { state: { ...nextState, rngState: getRngState(), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
+  return { state: { ...nextState, rngState: getRngState(), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
     // SETL2: the week's settlement, decomposed. §6 watches the boundary line DOWN, and a number
     // you cannot attribute is a number you cannot watch — this carries what hit it and why.
     lastSettlement: ctx.lastSettlementReport && {

@@ -32,6 +32,7 @@
  */
 
 import { DebtTranche } from './company';
+import { defect } from './defect';
 
 /**
  * The corporate bond dealer's round-trip spread, in bps. Owned here because two things read it:
@@ -124,16 +125,15 @@ export function callPricePerDollar(
 }
 
 /**
- * Fallback for a tranche carrying no kind.
+ * The tranche's call regime. Bank facilities and commercial paper carry none, which is correct
+ * and explicit; anything else without one is a creation site that forgot.
  *
- * There is no such thing as legacy data here — every world is regenerated from seed — so this
- * only fires when a tranche-creating site FORGOT to set `callProtection`. It then silently
- * assigns the most permissive regime (MAKE_WHOLE), which is the cheapest to call out of. A miss
- * is therefore invisible. Every live creation site was checked 2026-08-29 and is either explicit
- * or correctly exempt (bank facility / commercial paper); this stays as a guard, not a migration.
+ * GUARD: this used to fall back to SOFT_CALL/MAKE_WHOLE by rate type — the most permissive
+ * regime, cheapest to call out of — so a miss was invisible and the issuer got a free option
+ * nobody wrote. Set `callProtection` where the tranche is created.
  */
 function resolveProtection(tranche: DebtTranche): CallProtectionKind | undefined {
   if (tranche.isBankFacility || tranche.isCommercialPaper) return undefined;
   if (tranche.callProtection) return tranche.callProtection;
-  return tranche.rateType === 'FLOATING' ? 'SOFT_CALL' : 'MAKE_WHOLE';
+  return defect(`tranche ${tranche.id} carries no callProtection — set it where the tranche is created`);
 }

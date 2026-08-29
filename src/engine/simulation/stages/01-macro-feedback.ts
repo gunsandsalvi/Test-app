@@ -15,17 +15,10 @@ const CONTAGION_WINDOW_WEEKS = 52;
 export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext): void {
   const { prevActiveFirms } = ctx;
 
-  // DEAD, and it costs a full-universe tranche sweep every week. `regionFloatingPrincipal` feeds
-  // `evolveBankingSector`'s `businessLoanBookInputUSD` parameter (02-region-macro:78,
-  // 02b:198) — and that parameter is declared and never read: G2 made business lending the
-  // itemized stage's decision and deleted the target formula that used to consume it
-  // (`macro/banking.ts:298` records the deletion). It also counts `isBankFacility` tranches,
-  // which is the double-count 07d exists to avoid. Delete all three sites together.
-  prevActiveFirms.forEach(f => {
-    const floatingSum = (f.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0);
-    ctx.regionFloatingPrincipal[f.region] += floatingSum;
-  });
-
+  // GUARD deleted `regionFloatingPrincipal` here: a full-universe tranche sweep every week to
+  // feed `evolveBankingSector`'s `businessLoanBookInputUSD`, a parameter declared and never read
+  // since G2 made business lending the itemized stage's decision. It also counted bank
+  // facilities, the double-count 07d exists to avoid.
   (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach(rid => {
     const firms = prevActiveFirms.filter(f => f.region === rid);
     if (firms.length === 0) return;
@@ -36,10 +29,8 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
     ctx.regionPublicCompanyEmployment[rid] = prevActiveFirms.filter(f => f.region === rid).reduce((s, f) => s + f.employeeCount, 0);
   });
 
-  // ALSO DEAD: stage 02 passes `marginCompression: 0` literally, and nothing else reads either
-  // field. The 0.22 is a magic threshold with no owner.
-  ctx.avgMargin = prevActiveFirms.reduce((sum, c) => sum + (c.ebitda / Math.max(1, c.annualRevenue)), 0) / Math.max(1, prevActiveFirms.length);
-  ctx.marginCompression = ctx.avgMargin < 0.22 ? 0.22 - ctx.avgMargin : 0.0;
+  // GUARD also deleted `avgMargin`/`marginCompression`: stage 02 passed the literal 0 and
+  // nothing read either, so the 0.22 threshold was a magic number with no owner and no consumer.
   // Since HC2 the market holds private paper too, so a private default is a real credit event
   // like any other.
   //
@@ -59,11 +50,12 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   });
   const currentlyDistressed = state.companies.filter((c) => !c.isDefaulted && c.creditRating === 'CCC').length;
   ctx.recentDefaultsCount = Math.round(weightedRecentDefaults + currentlyDistressed);
-  // `creditContagionBps` is dead too — stage 02 passes a literal 0 to `evolveRegionMacro`, which
-  // is what its consumers there actually read. `systemicStressFactorGlobal` IS live (stage 08
-  // reads it), so the 12bps-per-default and the /500 below are real coefficients on a real
-  // channel: rule 1 — a credit spread is a cleared price, and this adds bps to one by formula.
-  // Owner: G5, which owns default and recovery.
+  // GUARD: the `creditContagionBps` PARAMETERS are gone (both `evolveRegionMacro`'s, which was
+  // passed a literal 0, and `evolveBankingSector`'s, which was never read). This value survives
+  // because `systemicStressFactorGlobal` IS live — stage 08 reads it — so the 12bps-per-default
+  // and the /500 below are real coefficients on a real channel: rule 1, a credit spread is a
+  // cleared price and this adds bps to one by formula. Owner: G5, which owns default and
+  // recovery.
   ctx.creditContagionBps = ctx.recentDefaultsCount * 12;
   ctx.systemicStressFactorGlobal = Math.min(0.3, ctx.creditContagionBps / 500);
 }

@@ -318,6 +318,64 @@ function checkSettlementClosed(state: GameState, week: number) {
   }
 }
 
+/**
+ * GUARD — the three invariants that would each have caught a defect this project's review found
+ * by hand. They are cheap and they are about SHAPE, not level: a share that does not sum to one,
+ * a market that transacts nothing, a ceiling that cannot be exceeded.
+ */
+function checkGuards(state: GameState, week: number) {
+  // 1. A category's shares sum to one. The 646% enterprise-software category — 40 financial
+  //    firms registered as suppliers into the goods auction — went unseen for the model's whole
+  //    life, and this is the line that sees it the week it appears.
+  const shareBySubUnit = new Map<string, number>();
+  state.companies.forEach((c: any) => {
+    if (c.isDefaulted || c.mergerAcquired) return;
+    (c.productLines || []).forEach((pl: any) => {
+      const key = `${c.region}:${pl.subUnitId}`;
+      shareBySubUnit.set(key, (shareBySubUnit.get(key) ?? 0) + (pl.categoryMarketShare ?? 0));
+    });
+  });
+  shareBySubUnit.forEach((share, key) => {
+    if (share > 1.02 || share < 0.5) {
+      violations.push({
+        week,
+        message: `${key}: supplier market shares sum to ${(share * 100).toFixed(0)}% — a category cannot be more (or much less) than fully supplied`,
+      });
+    }
+  });
+
+  // 2. A market with willing parties on both sides that transacts nothing is a defect, not a
+  //    quiet pass. The repo market ran at ZERO volume in all four regions for ten weeks while
+  //    the corridor assertion below passed VACUOUSLY: with no borrower the session returns the
+  //    ON RRP floor as a literal, and a literal is trivially inside the corridor (§7.102).
+  (['USA', 'EUR', 'UK', 'JPN'] as const).forEach((regionId) => {
+    const reg: any = (state as any).regions[regionId];
+    // Measured BY THE SESSION, not reconstructed from end-of-week sheets: a bank short of its
+    // buffer at the close was not necessarily short when the session ran, and a bank short of
+    // its buffer with no unencumbered collateral cannot borrow at any price — a real constraint,
+    // not a dead market. `fundableNeedUSD` is what a borrower could actually fund.
+    const needUSD = reg?.repoFundableNeedUSD ?? 0;
+    const clearedUSD = reg?.repoClearedVolumeUSD ?? 0;
+    if (needUSD > 0 && !(clearedUSD > 0)) {
+      violations.push({
+        week,
+        message: `${regionId} repo: ${(needUSD / 1e9).toFixed(2)}B of fundable borrowing need and the session cleared ZERO volume — the printed rate is the early-return default, not a market`,
+      });
+    }
+  });
+
+  // 3. A holding CEILING may not equal the position it bounds. `investableSurplusUSD` was the
+  //    balance-sheet identity rearranged, so every bank's `maxHoldingUSD` came out at exactly
+  //    its own book and no bank could buy a bond — a constraint that binds identically on
+  //    everyone, every week, is an identity wearing a constraint's name (§7.102).
+  ((state as any).lastWeekDeadCeilingBooks ?? []).forEach((book: string) => {
+    violations.push({
+      week,
+      message: `${book} book: no participant's holding ceiling exceeds its own position — the ceiling is an identity, and this market cannot trade at any price`,
+    });
+  });
+}
+
 function checkCentralBankIdentity(state: GameState, week: number) {
   (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
     const cb = state.regions[region]?.centralBankSheet;
@@ -1312,6 +1370,7 @@ function runHarness() {
     violations.push(...checkHoldingsLedgerConservation(state, w));
     checkBeneficiaryClaimsHaveHolders(state, w);
     checkSettlementClosed(state, w);
+    checkGuards(state, w);
     prevStateForBookCheck = state;
 
     // 5b. The bank balance-sheet identity, per named bank, every week. Cash moves only by
