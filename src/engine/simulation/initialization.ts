@@ -6,9 +6,32 @@ import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit } from './stages/bank-lending';
+import { leverageHeadroomUSD } from '../macro/banking';
+
+/**
+ * OWN6 — the institutional sector's OPENING BOOK, and the one thing it is not.
+ *
+ * `OWNERSHIP_SHARES` is gone: ownership is measured off the real books each week (OWN1) and
+ * nothing weekly reads a share to decide anything any more. What is left is a cold-start
+ * problem the deletion does not solve. The weekly shape is "an institution holds what it
+ * bought"; at week 0 there is no purchase history, so the opening register has to be placed,
+ * and the size of the institutional sector is what decides how much of it institutions get.
+ *
+ * That size is CIRCULAR in the seed today: an entity's `totalAssetsUSD` is
+ * `institutionalMarketShare x the sector aggregate`, and the sector aggregate is these three
+ * numbers times the market. Breaking it means anchoring an institution on what it OWES — the
+ * pension and insurance claims households hold against it — and `beneficiaryLiabilityUSD` is
+ * currently derived from assets, so that anchor does not exist yet.
+ *
+ * So this stays, named for exactly what it is: a SEED, read once at week 0, never weekly, with
+ * its closing slice recorded in §6. It is not an ownership share and nothing may treat it as
+ * one — `equityOwnership` and its siblings open at zero and are measured at the end of week 1.
+ */
+const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42, corpBond: 0.45, sovBond: 0.30 };
+
 import { isActiveCompany } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
-import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD } from '../../domain/central-bank';
+import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
 import { LABOR_SHARE_OF_OUTPUT } from '../bootstrap/national-accounts';
 import { SME_PRODUCTIVITY_DISCOUNT } from '../bootstrap/firms';
@@ -33,7 +56,7 @@ import { laneTransitWeeks } from '../../domain/carrier';
 import { laneDistanceNm } from '../../domain/geography';
 import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
-import { refreshRegionalHoldingsView } from './stages/holdings-view';
+import { refreshRegionalHoldingsView, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
 import { setSimulationSeed, getRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
@@ -257,9 +280,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const totalCorpDebt = regionCompanies.reduce((s, c) => s + c.totalDebt, 0);
     const totalSovDebt = reg.debtToGdpPct * reg.derivedNominalGdpUSD;
 
-    reg.institutionalSector.equityHoldingsUSD = Number((reg.equityOwnership.institutionalShare * totalMarketCap).toFixed(0));
-    reg.institutionalSector.corpBondHoldingsUSD = Number((reg.corpBondOwnership.institutionalShare * totalCorpDebt).toFixed(0));
-    reg.institutionalSector.sovBondHoldingsUSD = Number((reg.sovBondOwnership.institutionalShare * totalSovDebt).toFixed(0));
+    reg.institutionalSector.equityHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.equity * totalMarketCap).toFixed(0));
+    reg.institutionalSector.corpBondHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.corpBond * totalCorpDebt).toFixed(0));
+    reg.institutionalSector.sovBondHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.sovBond * totalSovDebt).toFixed(0));
 
     // Compile holding candidates for individual institutional entities and macro sectors
     const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies.filter(c => c.listingStatus !== 'PRIVATE').map(c => ({
@@ -372,9 +395,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         }));
 
     // Seed each named bank's real sovereign book across the same tenor buckets the weekly
-    // auction clears, using the same target derivation it uses (the region's real bank ownership
-    // share of the real outstanding stock, split across banks by deposit size) and the same
-    // outstanding-weighted split across tenors.
+    // auction clears, with the same outstanding-weighted split across tenors.
     //
     // This was missing: banks carried a scalar `sovereignBondHoldingsUSD` but an EMPTY
     // `sovereignBondHoldingsByTenor`, and 07c reads the buckets. So every bank opened ~$147B
@@ -384,11 +405,24 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // empty one. Seed shape must match engine shape.
     const regionBanksForSov = regionCompanies.filter(c => c.isBankEntity && c.bankBalanceSheet);
     if (regionBanksForSov.length > 0 && totalSovBucketedUSD > 1) {
-      const bankSovTargetUSD = reg.sovBondOwnership.bankShare * totalSovBucketedUSD;
-      const perBankTargets = distributeRealTargetByWeight(
-        regionBanksForSov.map(b => ({ id: b.ticker, sizeWeight: b.bankBalanceSheet!.depositsUSD, targetPct: 1 })),
-        bankSovTargetUSD
-      );
+      // OWN6: a bank opens with the sovereign book its OWN EQUITY supports under the leverage
+      // floor, not with `sovBondOwnership.bankShare x the market`. Its other assets are already
+      // on the sheet at this point and its funding is derived from the asset side below, so
+      // capital is the constraint that is genuinely available here — and it is the same one
+      // 07c applies from week 1, which is what §7.4 asks of a seed. Banks are the residual
+      // holder of the stock the central bank and the institutions do not take; where the
+      // cohort's headroom cannot absorb that residual it is rationed pro-rata, never forced.
+      const headroomByBank = new Map(regionBanksForSov.map(b =>
+        [b.ticker, leverageHeadroomUSD(b.bankBalanceSheet!)]));
+      const totalHeadroomUSD = Array.from(headroomByBank.values()).reduce((a, v) => a + v, 0);
+      const takenByOthersUSD = (reg.institutionalSector.sovBondHoldingsUSD || 0)
+        + totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
+      const availableToBanksUSD = Math.max(0, totalSovBucketedUSD - takenByOthersUSD);
+      const bankSovTotalUSD = Math.min(totalHeadroomUSD, availableToBanksUSD);
+      const perBankTargets = new Map(regionBanksForSov.map(b => [
+        b.ticker,
+        totalHeadroomUSD > 0 ? bankSovTotalUSD * ((headroomByBank.get(b.ticker) ?? 0) / totalHeadroomUSD) : 0,
+      ]));
       regionBanksForSov.forEach(bank => {
         const targetUSD = perBankTargets.get(bank.ticker) ?? 0;
         const byTenor: Record<string, number> = {};
@@ -577,11 +611,8 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         }),
       reg.institutionalSector.sovBondHoldingsUSD || 0
     );
-    // Same real, bottom-up derivation for leveraged loans — no dedicated region-level loan
-    // ownership share is tracked, so this reuses corpBondOwnership.institutionalShare (the same
-    // institutional-vs-market share that governs the sibling corporate-bond market) as a real,
-    // defensible proxy, applied to the real bottom-up floating-debt float rather than an
-    // independent number. Matches 07d-leveraged-loan-clearing.ts.
+    // Leveraged loans open at the same institutional weight as the sibling bond market, applied
+    // to the real bottom-up floating-debt stock.
     const rawEntityLoanTargetsUSD = distributeRealTargetByWeight(
       regionalInstCompanies
         .filter(comp => comp.institutionalEntityType)
@@ -595,7 +626,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
             (reg.institutionalSector.cashUSD || 0);
           return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: allocationTargets[role].loanPct };
         }),
-      reg.corpBondOwnership.institutionalShare * totalLoanCandidatesUSD
+      INSTITUTIONAL_OPENING_BOOK_SHARE.corpBond * totalLoanCandidatesUSD
     );
 
     regionalInstCompanies.forEach(comp => {
@@ -1164,9 +1195,17 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const reg = regions[regionId];
     const firms = privateFirmsByRegion.get(regionId) ?? [];
     const regionEntities = institutionalEntities.filter(e => e.region === regionId);
-    const fixedOf = (f: Company) => (f.debtTranches || []).filter(t => t.rateType === 'FIXED').reduce((a, t) => a + t.principalUSD, 0);
-    const floatOf = (f: Company) => (f.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((a, t) => a + t.principalUSD, 0);
-    const instShare = reg.corpBondOwnership.institutionalShare;
+    // OWN6 / §7.4: the seed must place exactly the instrument the weekly books clear. 07b
+    // excludes commercial paper (07f's market) and 07d excludes bank facilities (they sit on a
+    // named bank's itemized book), so the placement here excludes them too — and places the
+    // WHOLE remaining stock, which is the float those books now clear (OWN2). It used to place
+    // `corpBondOwnership.institutionalShare` of a ladder that included both, so the private
+    // tier opened with a gap in the paper that IS traded and a double count in the paper that
+    // is not.
+    const fixedOf = (f: Company) => (f.debtTranches || [])
+      .filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((a, t) => a + t.principalUSD, 0);
+    const floatOf = (f: Company) => (f.debtTranches || [])
+      .filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((a, t) => a + t.principalUSD, 0);
     const IG = ['AAA', 'AA', 'A', 'BBB'];
     const sleeve = (t: InstitutionalEntityType, ig: boolean) =>
       ig ? 1 : t === 'INSURER' ? 0.08 : t === 'PENSION_FUND' ? 0.10 : t === 'ASSET_MANAGER' ? 2.0 : 4.0;
@@ -1175,7 +1214,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       (['CORP_BOND', 'LEVERAGED_LOAN'] as const).forEach(kind => {
         const outstanding = kind === 'CORP_BOND' ? fixedOf(f) : floatOf(f);
         if (outstanding <= 0) return;
-        const tradable = outstanding * instShare;
+        const tradable = outstanding;
         const weights = regionEntities.map(e => {
           const pct = kind === 'CORP_BOND' ? e.assetAllocationTarget.corpBondPct : e.assetAllocationTarget.loanPct;
           return e.totalAssetsUSD * pct * sleeve(e.entityType, ig);
@@ -1244,8 +1283,15 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   // notably including the HC private tier, which the share-times-outstanding seeds never saw.
   {
     const seeded = { regions, companies, institutionalEntities } as unknown as GameState;
+    // OWN1: and the ownership register, from the same seeded books — so week 0 shows the same
+    // measurement stage 11 will take at the end of week 1, rather than an empty one.
+    const ownershipByRegion = measuredOwnershipAllRegions(seeded);
     (Object.keys(regions) as RegionId[]).forEach(regionId => {
       refreshRegionalHoldingsView(seeded, regionId, regions[regionId]);
+      const m = ownershipByRegion[regionId];
+      regions[regionId].equityOwnership = ownershipSharesFromRegister(m.equity);
+      regions[regionId].corpBondOwnership = ownershipSharesFromRegister(m.corpBond);
+      regions[regionId].sovBondOwnership = ownershipSharesFromRegister(m.sovBond);
     });
   }
 

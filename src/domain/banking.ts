@@ -29,6 +29,13 @@ export interface ItemizedHolding {
  * is now the residual of what foreign institutions actually bought in the clearing books, which
  * is what ownership is.
  */
+/**
+ * OWN1 — a REPORTED STATISTIC, measured off the real books each week by
+ * `holdings-view.ts:measuredOwnershipAllRegions` and written in stage 11. Nothing in the engine
+ * reads it to decide anything, and nothing may start: it was an input once, and the three books'
+ * tradable float, every bank's sovereign target and household direct equity were all decided by
+ * a number that owned nothing. The household share is the residual: 1 - these three.
+ */
 export interface AssetOwnershipShares {
   bankShare: number;
   institutionalShare: number; // insurers + asset managers
