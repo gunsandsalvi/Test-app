@@ -4982,3 +4982,37 @@ that proved it, the lesson.
       done), the two bases of the commodity market (§7.128, done), the price-versus-volume
       confusion in the seed (§7.127, done), and the capacity response (here, done but
       destabilising without CAP's production decision). **The remaining work is CAP's, not MAC's.**
+
+130. **RULE 15, FOURTH TIME: a seller's reservation price was a fraction of the market price.**
+    `minPriceUSD` was `referencePriceUSD x costRate x (1 + premium)` — the floor below which a
+    firm will not sell, defined as a share of the CURRENT market price. So when the price fell
+    every seller's floor fell with it, which lowered the clearing price, which lowered next week's
+    reference: **a downward ratchet with nothing real underneath it, and the reason a market with
+    8x excess demand could still print a falling price** (§7.127). No shortage can stop a fall
+    when no seller is ever unwilling.
+    - **A cost is a dollar figure.** IND3 made wages, input lots and opex real (§7.121), so the
+      floor is now what it actually costs this plant to make a unit — and a price below it means
+      the firm does not sell, which is CAP's stated mechanism arriving where it belongs, on the
+      offer rather than on the production throttle. The `[0.40, 0.98]` band on the cost rate went
+      with it: it existed because the margin it read was a stated number that could be anything.
+    - **Measured, and the dispersion result is the striking one.** Over twenty weeks the spread of
+      relative prices collapses from **0.01x-14x to 0.13x-2.78x**, and upstream extraction leaves
+      the bottom of the table entirely. Unemployment improves (28.3% → 26.4% at week 10). Harness
+      green.
+    - **AND THE HEADLINE GOT WORSE: −16.3% → −18.8% inflation at week 10**, on top of §7.129's
+      −11.9% → −16.3%. Two correct mechanisms, one metric moving the wrong way, recorded rather
+      than tuned away.
+    - **WHY, and it is the next item.** The floor is `weekly operating cost / units produced`, and
+      units come from `weeklyCapacityUnits`, which is seeded once as `baseline revenue / the price
+      prevailing at first trade`. §7.127 lowered intermediate seed prices — correctly — so the
+      same plants opened with MORE capacity units, which makes unit cost lower, which makes the
+      floor lower. **Capacity is inversely proportional to a seed price, so any change to that
+      price silently rescales the physical economy.** That is a seed-consistency defect of exactly
+      the §7.120 kind and it is now the binding one. Owner: CAP, with IND-R3 — a per-good
+      consumption intensity is what would let capacity be seeded in physical terms instead of
+      backing it out of a price.
+    - **Four changes into this chain, every one principled and harness-green, the measured
+      deflation has gone from −12% to −19%.** That is the honest state, and the lesson is that
+      local correctness does not compose into global calibration: the seed's physical quantities
+      and its prices are still solved separately, and each fix reveals the next place they
+      disagree.

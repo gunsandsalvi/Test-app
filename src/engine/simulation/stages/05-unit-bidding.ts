@@ -508,8 +508,26 @@ function buildRegionSupplyPlans(
     const contractSales = (contractUnitsBySupplier.get(comp.ticker) ?? 0) + (contractUnitsBySupplier.get(comp.id) ?? 0);
     const openOfferUnits = Math.max(0, targetProductionUnits + currentUnits - contractSales);
 
+    // CAP / RULE 15 — THE SELLER'S FLOOR IS ITS COST IN DOLLARS, NOT A FRACTION OF THE MARKET.
+    //
+    // `minPriceUSD` was `referencePriceUSD x costRate x (1 + premium)` — a reservation price
+    // defined as a share of the CURRENT market price. So when the price fell, every seller's
+    // floor fell with it, which lowered the clearing price, which lowered next week's reference:
+    // a downward ratchet with nothing real underneath it. It is why a market with **8x excess
+    // demand still printed a falling price** (§7.127) — the shortage could not stop the fall
+    // because no seller was ever unwilling.
+    //
+    // A firm's cost is a dollar figure: the wages it pays, the input lots it consumed, the opex
+    // it carries. IND3 made all three real (§7.121), so the floor can be what it actually costs
+    // to make a unit — and a price below it means the firm does not sell, which is CAP's stated
+    // mechanism arriving where it belongs, on the offer.
+    //
+    // The [0.40, 0.98] band on the cost rate goes with it: it existed because the margin it read
+    // was a stated number that could be anything, and since IND3 it is the residual of real
+    // costs (rule 2).
     const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
-    const costRate = Math.max(0.40, Math.min(0.98, 1 - baseMargin));
+    const costRate = Math.max(0, 1 - baseMargin);
+    const weeklyOperatingCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52) * (line.revenueShare ?? 1.0);
     const ratingPdMap: Record<string, number> = {
       'AAA': 0.0002, 'AA': 0.001, 'A': 0.003, 'BBB': 0.01, 'BB': 0.03, 'B': 0.08, 'CCC': 0.20
     };
@@ -527,7 +545,11 @@ function buildRegionSupplyPlans(
       targetProductionUSD: targetProductionUnits * referencePriceUSD,
       contractSalesCommittedUnits: contractSales,
       openOfferUnits,
-      minPriceUSD: referencePriceUSD * costRate * (1 + marginPremium),
+      // Cost per unit of what this plant actually makes, in dollars. Falls back to the
+      // reference-anchored form only when the line has no production to divide by.
+      minPriceUSD: targetProductionUnits > 0.0001
+        ? (weeklyOperatingCostUSD / targetProductionUnits) * (1 + marginPremium)
+        : referencePriceUSD * costRate * (1 + marginPremium),
     });
   });
 
