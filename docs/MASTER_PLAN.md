@@ -4654,3 +4654,49 @@ that proved it, the lesson.
       were stated to match the third. **Consistency between numbers you chose is not a
       measurement.** What broke the tie was deriving one of them from something none of the three
       could see.
+
+119. **One headcount rule for all three tiers — and what it exposed: the firm universe's value
+    added is 53% of GDP.** IND-R6's argument, proven with numbers, and then a seed defect that
+    three separate overstatements had been hiding.
+    - **The rule was stated in FOUR places and they disagreed.** Named public: `revenue /
+      (productivity x a stated per-sector multiple)`, fixed by CHAIN-E (§7.118). Named private
+      (`bootstrap/private-firms.ts`): `revenue / productivity` — revenue treated AS value added,
+      the exact defect §7.111 named, still live because **there are two firm generators and the
+      fix landed in one of them**. SME pools: `totalEmployed x SME_TIER_EMPLOYMENT_SHARE`, an
+      imposed share (rule 13) — **which a second derivation in `simulation/initialization.ts`
+      then silently overwrote** with `revenue / (named revenue-per-worker x (1 −
+      SME_PRODUCTIVITY_DISCOUNT))`. Now one exported function, `smePoolEmployment`, and one rule:
+      **value added over output per worker**. Both stated shares deleted; the SME productivity
+      gap becomes an outcome of the pools' own P&L, as §5-SEG always said it should.
+    - **What the private tier's overstatement was costing, measured at seed.** Payroll **61.3% of
+      revenue against the public tier's 35.5%**, both carrying the same ~22% stated margin — so
+      revenue − payroll − inputs left it **1.5%** before any other opex, against a stated 22.9%.
+      Its headcount and its margin were mutually impossible. **That, and not a double-count, is
+      why §7.115's attempt to charge the private tier real wages tipped 1,712 firms below cost of
+      capital.** After: private payroll 42.2% and real-cost EBITDA 20.6% against 22.9%; public
+      39.3% and 30.5% against 20.8%. The two tiers share one definition, which is what the rest
+      of IND-R6 needs.
+    - **AND THE THING UNDERNEATH, now quantified for the first time.** With all three tiers
+      honest, USA at seed: total output **X = 567.4B**, intermediate 226.9B (40.0%), so the firm
+      sector's value added is **F = 340.5B against GDP 639.2B — 53%**. Firm employment can
+      therefore only be `340.5B / 58.0k = 5.87M` against the **11.55M** the seed says are
+      employed. **The firm universe cannot employ the seeded labour force at the seeded
+      productivity, and never could** — each tier's overstatement was covering part of the gap,
+      which is why removing them one at a time walked the harness 2 → 33 → 42 violations and seed
+      unemployment 7.5% → 28.5% → 36%.
+    - **The harness is deliberately red on this, per rule 12 and §6's first row.** The violations
+      are one story: unemployment out of band in all four regions. Nothing else moved.
+    - **This is §6.1's seed-employment row, and it is now a measurement rather than a
+      description.** Its own instruction stands and is now unavoidable: do not fix it by
+      restoring a residual, widening the band, or normalising the multiples — the honest fix is
+      to make the firm universe's scale agree with the labour force it is supposed to employ.
+      **What is newly known is WHERE the disagreement is:** the demand actually seeded into
+      `categoryDemand` is roughly half of the `C + I + G` the seed computes from GDP and
+      household income (household income alone is 91% of GDP, C is 0.94 of that), so the demand
+      the firm universe is sized against and the GDP the labour force is sized against are two
+      different numbers. **One of them has to be derived from the other.** Owner: the seed-scale
+      slice, unstarted.
+    - **The lesson, which is §7.117's and §7.118's a third time:** three tiers "agreeing" on
+      employment meant nothing, because each was stated separately and each was wrong in the
+      direction that hid the same gap. **Consistency you did not derive is not evidence.** The
+      only way this became visible was deriving all three from one thing none of them could see.

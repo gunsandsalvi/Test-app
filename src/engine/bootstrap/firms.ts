@@ -105,16 +105,6 @@ const FIRM_CONCENTRATION_DECAY = 0.80;
  */
 export const SME_MARGIN_DISCOUNT = 0.35;
 
-/**
- * SEG — the SME tier's opening share of total employment, before the named private tier is
- * carved out of it. Small firms employ roughly half of a developed economy's workers; this is
- * that fact. Two things keep it from being load-bearing: its split ACROSS industries is not
- * stated anywhere (it follows each industry's own demand — see the seed in
- * macro/initialization.ts), and the seed's own employment reconciliation then resets the tier's
- * TOTAL to the residual left by the real firms and the government, so this number sets the
- * pools' relative sizes and the named tier's carve basis rather than the final headcount.
- */
-export const SME_TIER_EMPLOYMENT_SHARE = 0.60;
 
 /**
  * SEG — the SME wage gap: how much less a small firm pays per worker than the economy's average
@@ -130,15 +120,6 @@ export const SME_TIER_EMPLOYMENT_SHARE = 0.60;
  */
 export const SME_WAGE_GAP = 0.22;
 
-/**
- * SEG — how much less output an SME pool produces per worker than the named tier. Small firms
- * really are less productive per head: less capital per worker, no scale, thinner specialisation.
- * It is what turns a pool's REVENUE into the headcount that revenue supports, which is the
- * direction employment has to run — a pool employs who it can pay, and unemployment is what is
- * left over. The reverse (fix employment, let income follow) is what produced a tier carrying
- * 3.86M workers against revenue that had been carved down to support far fewer.
- */
-export const SME_PRODUCTIVITY_DISCOUNT = 0.30;
 
 /** The named tier's baseline EBITDA margin for a sector — the SME pools read this too, so one
  *  table serves both tiers. */

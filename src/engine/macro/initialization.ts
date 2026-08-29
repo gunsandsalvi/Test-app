@@ -7,8 +7,8 @@ import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
 import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
-import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFromFinalDemand } from '../../domain/industry-registry';
-import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, SME_TIER_EMPLOYMENT_SHARE } from '../bootstrap/firms';
+import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFromFinalDemand, smePoolEmployment } from '../../domain/industry-registry';
+import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT } from '../bootstrap/firms';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
@@ -595,10 +595,14 @@ function buildRegion(regionId: RegionId): Region {
   // actually is, and an industry added to the registry gets a pool automatically. What this
   // replaces: five buckets whose sizes were `revenueToGdp` constants, frozen forever.
   //
-  // Employment splits the tier's total across pools BY REVENUE — deliberately a neutral split,
-  // not a fabricated per-industry productivity table. Revenue per worker then diverges from the
-  // pools' own measured P&L (SEG-D), which is where a difference in productivity should come
-  // from. Total employment is what matters at the seed and it is conserved exactly.
+  // Employment is VALUE ADDED OVER PRODUCTIVITY, the same rule the named tiers use
+  // (companyGenerator.ts and bootstrap/private-firms.ts). It used to be
+  // `totalEmployed x SME_TIER_EMPLOYMENT_SHARE` split across pools by revenue — an IMPOSED
+  // employment share (rule 13), and the last of the three tiers to state its headcount rather
+  // than derive it. A pool's revenue is gross output like anyone else's, so its value added is
+  // what is left after the inputs its industry consumes, and its headcount is that over output
+  // per worker. One rule for all three tiers means a change to it cannot land in one and miss
+  // the others, which is exactly how the named tiers came to disagree (§7.119).
   //
   // Margin is the named tier's own sector margin less the SME discount — read from the SAME
   // `SECTOR_PROFILE` the company generator uses, so there is one margin primitive, not two.
@@ -609,15 +613,13 @@ function buildRegion(regionId: RegionId): Region {
       const industryDemandUSD = smePoolSubUnits(industry).reduce((a, su) => a + demandOf(su.unitId), 0);
       revenueByIndustry.set(industry, industryDemandUSD * INDUSTRY_REGISTRY[industry].smeShareOfActivity);
     });
-    const totalPoolRevenueUSD = Array.from(revenueByIndustry.values()).reduce((a, v) => a + v, 0) || 1;
-    const tierEmployment = Math.round(totalEmployed * SME_TIER_EMPLOYMENT_SHARE);
     SME_POOL_INDUSTRIES.forEach((industry) => {
       const annualRevenueUSD = Number((revenueByIndustry.get(industry) ?? 0).toFixed(0));
       if (annualRevenueUSD <= 0) return;
       const sector = INDUSTRY_REGISTRY[industry].sector;
       smePools.push({
         industry,
-        employment: Math.max(1, Math.round(tierEmployment * (annualRevenueUSD / totalPoolRevenueUSD))),
+        employment: smePoolEmployment(industry, annualRevenueUSD, productivityPerCapita),
         annualRevenueUSD,
         marginPct: Number((sectorBaselineMarginPct(sector) * (1 - SME_MARGIN_DISCOUNT)).toFixed(4)),
         // No lender yet: the seed migration (bank-lending.ts) itemizes what the banks can

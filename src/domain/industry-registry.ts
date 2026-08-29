@@ -706,6 +706,21 @@ export function industryRecipeIntensity(industry: Industry): number {
 }
 
 /**
+ * Headcount for an SME pool: value added over output per worker — the SAME rule the two named
+ * firm generators use. One function, three tiers, because a headcount rule stated in four places
+ * is how they came to disagree (§7.119): the pool's was `totalEmployed x SME_TIER_EMPLOYMENT_SHARE`
+ * in one file and `revenue / (named revenue-per-worker x (1 - discount))` in another, the second
+ * silently overwriting the first after the carve.
+ *
+ * The SME productivity gap is not stated here and should not be: it is an OUTCOME of the pools'
+ * own measured P&L (rule 13, and §5-SEG says so).
+ */
+export function smePoolEmployment(industry: Industry, annualRevenueUSD: number, productivityPerWorkerUSD: number): number {
+  const valueAddedUSD = annualRevenueUSD * (1 - industryRecipeIntensity(industry));
+  return Math.max(1, Math.round(valueAddedUSD / Math.max(1, productivityPerWorkerUSD)));
+}
+
+/**
  * CHAIN-E — total output implied by a vector of FINAL demand: the Leontief solve `X = F + A X`.
  *
  * The demand seed is `C + I + G` (see `macro/initialization.ts` and `03-category-demand.ts`),

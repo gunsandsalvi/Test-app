@@ -34,7 +34,6 @@ import { restingVacancies } from '../../domain/region-macro';
 import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
 import { LABOR_SHARE_OF_OUTPUT } from '../bootstrap/national-accounts';
-import { SME_PRODUCTIVITY_DISCOUNT } from '../bootstrap/firms';
 import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
@@ -44,7 +43,8 @@ import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
-import { INDUSTRY_REGISTRY } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, smePoolEmployment } from '../../domain/industry-registry';
+import { getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { unitMassTonnes } from '../../domain/goods-physical';
@@ -153,25 +153,19 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         seg.capexUSD = Math.round(Math.max(0, seg.capexUSD - segFirms.reduce((a, f) => a + f.capex, 0)));
       });
 
-      // SEG/HH: a pool employs the headcount its OWN revenue supports, at the tier's own
-      // revenue per worker (the named tier's, less the SME productivity discount). Employment
-      // follows revenue; it is not handed the labor force's leftovers. The residual form this
-      // replaces left the pools carrying every worker the named firms and the government did
-      // not, against revenue the named tier had just been carved out of — measured as a layoff
-      // cascade that took the tier from 3.86M to 1.44M workers in twenty weeks and unemployment
-      // past 30% in all four regions.
-      {
-        const namedTier = companies.filter(c => c.region === regionId && !c.isBankEntity).concat(firms);
-        const namedEmployment = namedTier.reduce((a, c) => a + Math.max(0, c.employeeCount), 0);
-        const namedRevenueUSD = namedTier.reduce((a, c) => a + Math.max(0, c.annualRevenue), 0);
-        const namedRevenuePerWorkerUSD = namedEmployment > 0 ? namedRevenueUSD / namedEmployment : 0;
-        const poolRevenuePerWorkerUSD = namedRevenuePerWorkerUSD * (1 - SME_PRODUCTIVITY_DISCOUNT);
-        if (poolRevenuePerWorkerUSD > 0) {
-          segs.forEach(seg => {
-            seg.employment = Math.max(1, Math.round(seg.annualRevenueUSD / poolRevenuePerWorkerUSD));
-          });
-        }
-      }
+      // SEG/HH: a pool employs the headcount its OWN revenue supports — recomputed here because
+      // the carve above just changed that revenue. It is not handed the labor force's leftovers;
+      // the residual form this replaces left the pools carrying every worker the named firms and
+      // the government did not, against revenue the named tier had just been carved out of,
+      // measured as a layoff cascade from 3.86M to 1.44M workers in twenty weeks.
+      //
+      // §7.119: it now uses the ONE headcount rule (`smePoolEmployment` — value added over output
+      // per worker, the same function the two named generators call) instead of a second
+      // derivation off the named tier's revenue per worker, which silently overwrote the pools'
+      // own and made the seed's headcount rule differ by tier.
+      segs.forEach(seg => {
+        seg.employment = smePoolEmployment(seg.industry, seg.annualRevenueUSD, getRegionProductivityPerCapitaUSD(regionId));
+      });
 
       privateFirmsByRegion.set(regionId, firms);
       companies.push(...firms);
