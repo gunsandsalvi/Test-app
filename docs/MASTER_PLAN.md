@@ -3050,3 +3050,30 @@ that proved it, the lesson.
     - **`unresolvedUSD` is now non-zero and that is correct**: 2.7B in a week, all of it
       institutions, which hold cash but have no bank yet. It is counted rather than dropped, and
       SETL5 (institutional cash) is what closes it. 59 violations, zero balance-sheet.
+91. **SETL5 + SETL3: institutions bank, securities pay their holders — and the settlement layer
+    starts reporting a defect nobody could see before.**
+    - **SETL5 (institutions bank).** Entities get a relationship at seed, their balances open with
+      the reserves behind them, settlement maintains the line and 02b reconciles it weekly with
+      its own reserve leg. This is the CONSERVATION GATE, not plumbing: with institutional cash on
+      a bank sheet, money created out of nothing breaks that bank's identity automatically — the
+      blind spot that hid the 64B sweep double-count (§7.90). **59 → 43 violations.** Two defects
+      found by the identity on the way: the wholesale residual did not net the new deposit lines
+      (banks paying policy+spread on funding their own customers had provided, NIM breaches
+      33 → 45), and the weekly sheet is rebuilt from a FIXED FIELD LIST so both new lines vanished
+      every week (804 balance violations) — the same trap stage 08 documents.
+    - **SETL3 (the register pays).** A dividend used to leave the payer and arrive nowhere. Now
+      the issuer owes the register and the settlement pass pays each holder BY NAME, as a payment
+      with a payer — which also made call premiums and take-private tenders real payments from
+      their issuers rather than cash appearing on holders' books.
+    - **43 → 85, and the cause is not the dividend.** Dividends are 0.08B/week. What the change
+      exposed is that **institutional cash swings 72B → 23B → 32B → 18B week to week** — it is a
+      residual of the clearing books, not a managed balance — and SETL5 ties bank reserves to it.
+      So the banks' reserves now swing by tens of billions weekly, which an already-fragile cohort
+      (§6: no hedging, a fixed-rate book, policy driven to 10% by the inflation escape) cannot
+      absorb. **The volatility was always there; it had nowhere to show until money became
+      somebody's liability.**
+    - **This is the next defect and it blocks the rest of the migration.** Every remaining flow
+      routed through settlement adds more of the same swing into bank reserves. Institutional cash
+      should be a MANAGED balance (a fund holds a cash buffer and settles securities against it),
+      not a weekly residual — that is a real mechanism and it belongs with the entities, not with
+      settlement. Named here so the next slice starts from it rather than from more routing.

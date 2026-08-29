@@ -663,10 +663,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // not have one yet it says so explicitly (`UNMODELED`), and the size of that line is the
     // honest measure of how much of the payment graph is still unnamed — a number to watch down
     // as later slices name each flow, not a plug (rule 13).
-    const post = (label: string, amountUSD: number, counterparty?: PartyRef) => {
+    const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
       cashLedger.push({ label, amountUSD: Number(amountUSD.toFixed(0)) });
       newCash += amountUSD;
+      // `settle: false` = the line is REPORTED here but the money moves elsewhere, itemised. A
+      // dividend is the case: the issuer owes the register, and the register pays each holder by
+      // name — so the payment instructions come from the settlement of that register, and posting
+      // one here as well would move the same money twice.
+      if (!settle) return;
       const other: PartyRef = counterparty ?? { kind: 'UNMODELED', region: comp.region };
       const self: PartyRef = { kind: 'COMPANY', ticker: comp.ticker };
       pay(ctx, amountUSD > 0
@@ -728,7 +733,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // what the company earns; the declared yield stands only when earnings cover it.
       const declaredDividendWeekly = Math.max(0, (comp.dividendYield ?? 0) * comp.marketCap) / 52;
       const maxSustainableWeekly = Math.max(0, newNetIncome) * MAX_DIVIDEND_PAYOUT_RATIO / 52;
-      post('dividends paid', -Math.min(declaredDividendWeekly, maxSustainableWeekly));
+      // SETL3: a dividend is paid to the REGISTER. It used to leave the payer and arrive nowhere
+      // — the one-sided flow §6 half-knew about, listing "institutional dividend passthrough" as
+      // an unbuilt receipt channel. The paying-agent path already exists for call premiums and
+      // takeouts: the issuer says what the holders of its equity are owed, and the settlement
+      // pass distributes it pro rata to whoever the register says holds it. The issuer does not
+      // need to know its holders, which is exactly why real issuers appoint an agent.
+      const dividendWeeklyUSD = Math.min(declaredDividendWeekly, maxSustainableWeekly);
+      post('dividends paid', -dividendWeeklyUSD, undefined, false);
+      payHoldersCash(ctx, comp.id, 'EQUITY', dividendWeeklyUSD);
       post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
     }
     let newTotalDebt = comp.totalDebt;

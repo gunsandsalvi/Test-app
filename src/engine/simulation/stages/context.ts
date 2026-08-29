@@ -44,6 +44,8 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** SETL3/4 — issuer id → ticker, so the register's payments name a real payer. */
+  issuerTickerById: Map<string, string>;
   /** SETL2b — facilities WRITTEN or RETIRED this week, recorded where the tranche is created so
    * the loan and the deposit it creates appear in the same statement. Consumed by settlement;
    * bank-lending's level-based reconciliation then finds them already booked and nets to zero. */
@@ -195,6 +197,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     damperBoundInstrumentIds: [],
     paymentInstructions: [],
     creditEventsThisWeek: [],
+    issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),
     g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
     primarySettlements: new Map(),

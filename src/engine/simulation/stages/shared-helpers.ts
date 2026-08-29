@@ -298,6 +298,10 @@ export function applyPendingCorporateActionSettlements(
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderSettlements: Map<string, number>;
     pendingHolderCashUSD?: Map<string, number>;
+    /** SETL3/4: present once the settlement layer is live — the register's payments become real
+     *  payments from the issuer rather than cash appearing on the holder's book. */
+    paymentInstructions?: import('./settlement').PaymentInstruction[];
+    issuerTickerById?: Map<string, string>;
   }
 ): void {
   const pending = ctx.pendingHolderSettlements;
@@ -357,7 +361,21 @@ export function applyPendingCorporateActionSettlements(
           const owedUSD = pendingCashByType.get(h.instrumentType)?.get(h.instrumentId);
           const totalUSD = preActionTotalByTypeId.get(h.instrumentType)?.get(h.instrumentId) ?? 0;
           if (owedUSD !== undefined && totalUSD > 0) {
-            cashUSD += owedUSD * (h.quantityOrNotionalUSD / totalUSD);
+            // SETL3/4: the holder's share of what the issuer owes. Paid AS A PAYMENT from the
+            // issuer, so the money has a payer and a payee (rule 14) instead of appearing on the
+            // holder's book while the issuer's ledger says it left.
+            const shareUSD = owedUSD * (h.quantityOrNotionalUSD / totalUSD);
+            const issuerTicker = ctx.issuerTickerById?.get(h.instrumentId);
+            if (ctx.paymentInstructions && issuerTicker) {
+              ctx.paymentInstructions.push({
+                payer: { kind: 'COMPANY', ticker: issuerTicker },
+                payee: { kind: 'INSTITUTION', id: entity.id },
+                amountUSD: shareUSD,
+                reason: 'security payment to holder of record',
+              });
+            } else {
+              cashUSD += shareUSD;
+            }
             touched = true;
           }
         }
