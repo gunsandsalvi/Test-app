@@ -361,7 +361,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | # | Tier | Project | Why here |
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
-| 1 | foundation | **EMP — the labour collapse** | **PRIORITY (user, 2026-08-29). ROOT CAUSE FOUND (§7.111): production has no depth.** Revenue per worker is 1.13x value added per worker — 0.92x in Consumer, where the jobs are — because the model's own input recipes carry a mean intensity of 0.138 against a real ~0.5. Payroll is 61% of revenue, so every firm sits on the cost-of-capital line the labor market sheds against. **BLOCKED on CHAIN-E (item 22) — read §7.117 before §7.111, which named the wrong owner: deepening every recipe 2.5x moved the ratio by one part in a thousand, because the demand seed pins it. Original framing: blocked on CHAIN, which owns that primitive; the two labour-market symmetries EMP fixed (§7.110) stand on their own and are all this project can do alone.** Do not attempt the unemployment band again until the recipes are deep — everything else that could be tried here is tuning (§6.4). Original framing: Unemployment runs 10.6% → 19.3% in five weeks from seed and never recovers; every §6 unemployment-band violation is this. Now diagnosed to the exact mechanism (§7.109) rather than described from the seed side. Two of its three causes are fixed; the third is a design decision recorded below. Gates IND3/IND15 ("costs are people", "labor constrains output") and the value of IND-R1. |
+| 1 | foundation | **EMP — the labour collapse** | **PRIORITY (user, 2026-08-29). ROOT CAUSE FOUND (§7.111): production has no depth.** Revenue per worker is 1.13x value added per worker — 0.92x in Consumer, where the jobs are — because the model's own input recipes carry a mean intensity of 0.138 against a real ~0.5. Payroll is 61% of revenue, so every firm sits on the cost-of-capital line the labor market sheds against. **CHAIN-D AND CHAIN-E ARE DONE (§7.117-118) AND THE SEED HALF IS FIXED — seed unemployment 10.5/25.7/17.9/23.5% → 7.5/6.5/3.8/7.8%, harness 18 → 2 on the ten-week probe, and §7.111's two impossible sector ratios (Consumer 0.92x, Industrials 0.93x) are now 1.42x and 1.30x. IT DOES NOT CLOSE: at 60 weeks unemployment still escapes to ~40%, and the A/B says that escape is PRE-EXISTING and shared with the pre-CHAIN tree. BLOCKED NOW ON G1b/MAC — the inflation escape**, which drags employment behind it: a firm whose nominal revenue falls 30% is below its cost of capital however its headcount was derived. Original framing: blocked on CHAIN, which owns that primitive; the two labour-market symmetries EMP fixed (§7.110) stand on their own and are all this project can do alone.** Do not attempt the unemployment band again until the recipes are deep — everything else that could be tried here is tuning (§6.4). Original framing: Unemployment runs 10.6% → 19.3% in five weeks from seed and never recovers; every §6 unemployment-band violation is this. Now diagnosed to the exact mechanism (§7.109) rather than described from the seed side. Two of its three causes are fixed; the third is a design decision recorded below. Gates IND3/IND15 ("costs are people", "labor constrains output") and the value of IND-R1. |
 | 2 | foundation | **IND — industry operating models** | Every non-financial corporate is one model with four coefficients. **Seven slices closed 2026-08-29** (§7.108-109, §7.112-115): IND1 storability, IND2's subscription half, IND5 electricity, IND8 rating generation, IND9 (already done by G2), IND-R1 payroll/capex/inputs common to every firm, IND-R2 the software proxy lines, IND-R4's loan-loss half and IND-R5 bank seed revenue. **What is left is BLOCKED on the same two things as item 1:** IND3 (cost shape), IND-R4's remaining stated ratios and IND-R6 (delete the private/public fork) all need CHAIN's recipe depth first — a margin cannot become an outcome of a recipe that isn't there. IND-R3, IND6-7 and IND10-19 are independent and unstarted. Prereq: BP1 (done). |
 | 3 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | Re-scoped by the review: the EBITDA-margin clamp [2%, 65%] means no firm can report an operating loss, so CAP's own mechanism cannot fire. That clamp goes FIRST. Runs with IND. |
 | 4 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. |
@@ -4583,3 +4583,74 @@ that proved it, the lesson.
       one unused beside the formula — §7.100's FRM shape exactly. **It is why deepening the
       recipes was safe:** input cost does not reach the P&L, so nothing could collapse. It is also
       why depth is currently visible on the demand side only.
+
+118. **CHAIN-E — intermediate demand exists, headcount is value added over productivity, and EMP's
+    symptom went with it.** The slice §7.117 specified, built and measured. Two halves of one
+    accounting truth, and **either alone breaks employment**, which is why they are one entry.
+    - **Demand.** `C + I + G` is a FINAL-demand identity — corporate demand in it is investment
+      only — so a product's demand carried no room for what other producers consume of it. It is
+      now final demand PLUS the intermediate half, solved from the registry's own BOM matrix as
+      `X = F + AX` by iteration; the column sums are each product's own intensity, all well under
+      one, so convergence is asserted rather than assumed. Applied in **both** places that build
+      the identity — the seed and the weekly rebuild — because two copies of an identity is how
+      it drifts (rule 3).
+    - **Headcount.** `regionProductivityPerCapita` is value added per worker and `annualRevenue`
+      is GROSS output, so dividing one by the other needs the ratio between them — which is
+      exactly `1/(1 − a)` for what the firm makes. That replaces the seven stated per-sector
+      `revPerEmployeeMultiple` entries **whose own comment said the multiples "follow the recipes,
+      not the other way round" while nothing derived them**. Employment is now value added over
+      productivity: pinned to what the economy PRODUCES, not to gross output through a separately
+      chosen multiple. The stated table survives only as the fallback for a firm with no product
+      lines (a bank, an insurer) — owner IND3/IND-R4, with the other stated financial ratios.
+    - **Harness 18 → 2 violations, five families → two**, both remaining a single firm's revenue
+      outlier rather than anything systemic.
+    - **EVERY UNEMPLOYMENT VIOLATION IS GONE — 15 of the 18.** Seed unemployment
+      USA/EUR/UK/JPN **10.5/25.7/17.9/23.5% → 7.5/6.5/3.8/7.8%**, in band in all four regions in
+      every week. §6.1's seed-employment row measured those opening rates as the proof that the
+      seed's three employment primitives disagreed; **they agree now because the invented one was
+      deleted, not because anything was reconciled to anything.** Productivity is an independent
+      Zipf primitive, the labour force comes from population and participation, and value added
+      comes from demand — three unrelated derivations that now land in the same place. **The fix
+      was not tautological and it is worth checking why:** had productivity been defined as
+      GDP-over-employment, `employment = valueAdded / productivity` would have been an identity
+      and the result meaningless. It is not.
+    - **§7.111's own criterion, met:** revenue per worker against productivity per worker,
+      **Consumer 0.92x → 1.42x** and **Industrials 0.93x → 1.30x** — the two figures that were
+      below one and therefore impossible by definition. USA all-firm **1.13x → 1.39x**. The
+      aggregate is an OUTCOME of the matrix; it lands below the unweighted 1.70x because
+      employment concentrates in low-intensity services, which is what it should do.
+    - **Deflation is less severe throughout and weeks 4-6 print POSITIVE inflation** (before:
+      −3.90/−2.91/−3.52). The escape is not closed — week 10 still runs −12.50 against −15.42 —
+      and that remains G1b/MAC's, not this.
+    - **WHAT IS NOT FIXED, MEASURED AT HORIZON — AND EMP DOES NOT CLOSE.** The ten-week result
+      does not hold: over a 60-week run with shocks on, unemployment escapes to ~40% and inflation
+      to −36% by week 37, the two moving together monotonically. **A/B against the pre-CHAIN-D
+      tree at the same seed says the escape is PRE-EXISTING, and that CHAIN-E is better or equal
+      at every checkpoint** — u(USA/EUR/UK/JPN) and inflation, baseline against after:
+
+      | wk | baseline u | after u | baseline pi | after pi |
+      |---|---|---|---|---|
+      | 1 | 10.5/25.7/17.9/23.5 | **7.5/6.5/3.8/7.8** | −0.79 | −0.52 |
+      | 7 | 18.7/33.7/28.3/31.4 | **13.4/15.3/12.2/14.5** | −6.70 | −3.53 |
+      | 13 | 23.7/37.4/33.4/33.7 | 19.1/19.0/19.0/19.4 | −22.33 | −19.97 |
+      | 25 | 36.2/47.1/44.6/45.6 | 34.3/33.3/35.2/36.1 | −33.03 | −29.60 |
+      | 43 | 39.1/48.8/48.7/50.4 | 40.0/33.3/43.3/41.0 | −40.31 | −32.89 |
+
+      The two trees start far apart and converge as both drown in the same deflation spiral. **So
+      the seed disagreement is fixed and the early collapse is gone; the horizon escape was never
+      the employment primitives' and is not CHAIN's.** It is §6.1's G1b inflation escape, dragging
+      employment behind it — a firm whose nominal revenue falls 30% is below its cost of capital
+      whatever its headcount was derived from. **EMP's remaining blocker therefore moves from
+      CHAIN to G1b/MAC**, and EMP's own criterion (stable or mean-reverting over 60 weeks) cannot
+      be met until the price level stops escaping. Do not read the ten-week harness figure as EMP
+      closing.
+    - **A process note worth keeping.** Both 60-week runs were killed mid-flight by running
+      `git checkout` on `src/` while they were executing — twice, losing two final summaries and
+      ~10 minutes. **Do not swap the tree under a running probe;** use a separate worktree or wait.
+      The week-by-week rows above survived and were enough, which was luck rather than method.
+    - **The lesson, and it is §7.117's continued one order deeper:** three primitives "agreeing"
+      is not evidence they are right. §7.111 found recipes, demand and revenue-per-worker all
+      consistent at 1.16x and read that as confirmation. They were consistent because two of them
+      were stated to match the third. **Consistency between numbers you chose is not a
+      measurement.** What broke the tie was deriving one of them from something none of the three
+      could see.
