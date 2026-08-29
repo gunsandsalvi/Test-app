@@ -366,6 +366,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 3 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | Re-scoped by the review: the EBITDA-margin clamp [2%, 65%] means no firm can report an operating loss, so CAP's own mechanism cannot fire. That clamp goes FIRST. Runs with IND. |
 | 4 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. |
 | 5 | foundation | **COH — cohorts accumulate: household balance sheets** | New, from the review's sharpest reframing: §6.3's "nine imposed household tables" are ONE missing mechanism — cohorts have no balance sheets. Give them one and eight of the nine become measurements; reverse `beneficiaryLiabilityUSD` and the institutional seed share goes too; retire `national-accounts.ts`, whose own exit condition is met. |
+| — | **PROPOSED** | **DIST — the distribution is the state** | **New 2026-08-29, from a user question; placement undecided and NOT scheduled.** Carry a moment of a distribution only where a decision is NONLINEAR in it — `E[f(x)] = f(E[x])` only for affine `f`, and every nonlinearity here is a threshold. Pools and cohorts become K weighted constituents, each a real object at a population weight, with a named entity as the node of weight one — one representation at two resolutions. **§7.109 was an instance of the defect this fixes.** It REDESIGNS COH (item 5), derives DYN's cut point, changes SCALE's premise, and turns MAC's savings rate and CRD's credit tiers into outcomes. A one-day measurement settles its priority before the argument — see §5. **Recommendation: not first; with or just after CAP.** |
 | 6 | foundation | **MAC — expectations, confidence and the savings rate become outcomes** *(clamps)* | Narrowed: FRM took its fiscal half, COH its household half. What remains: close the §6 inflation escape (G1b), then confidence and saving as outcomes and the bounds go. Gated on G1b. |
 | 7 | markets | **IDX — an index is a statistic** *(clamps)* | An afternoon grown slightly: the ±15% clamp, the $0.10 stock-price floor, the brand names in labels AND type fields AND central banks, and beta becomes a measurement. |
 | 8 | markets | **G3 — one dealer system (all three of them)** | The regional desk copied onto four sheets, the player-facing `Dealer` priced inside a React component, and every fixed bank price the review found: underwriting fees, the wholesale spread, the deposit-beta floor, the hash-drawn lead bank, `BANK_TARGET_ROE`. Also owns the dealer-capacity half of the promoted damper defect (§6.1). |
@@ -868,7 +869,172 @@ retired share; no demographic number re-rolls weekly.
 
 ---
 
+### DIST — The distribution is the state  *(PROPOSED, placement undecided; redesigns COH, changes DYN/SCALE/CRD/MAC/HSG)*
+
+**Origin: a user question, 2026-08-29 — "the household and SME sector is massive and ultimately
+impossible to model bottom up. Is there a way to model it statistically, the way physics does?"**
+Recorded here because the answer is a REPRESENTATION, and a representation gets more expensive to
+change with every mechanism built on the old one. **Nothing below is scheduled. §4 may not be
+resequenced without asking, and the priority question has a one-day measurement attached (bottom
+of this section) that should settle it before anyone argues about the slot.**
+
+**THE PRINCIPLE, AND IT IS THE WHOLE DESIGN.** Coarse-graining is EXACT when the decision being
+aggregated is linear in what you average over, and wrong the moment it is not: `E[f(x)] = f(E[x])`
+only for affine `f`. So **carry a moment of the distribution only where a decision is nonlinear in
+it**; everywhere else the pool's mean is a sufficient statistic and a pool is not an approximation
+at all. Every nonlinearity in this model is a threshold: default (leverage/coverage crossing a
+line), the borrowing constraint (binds or does not), MPC (concave in wealth — the share AT the
+constraint sets the aggregate, not the mean), and the labour affordability rule.
+
+**§7.109 IS AN INSTANCE OF THIS, DISCOVERED THE HARD WAY.** Its own words: *"the solve is
+aggregate; the constraint binds per firm. An aggregate placed exactly ON the threshold puts
+roughly half the distribution below it."* That is `E[f(x)] ≠ f(E[x])` with `f` a step function,
+found empirically after it had already cost a project. The model has been paying for a mean where
+it needed a distribution.
+
+**THE REPRESENTATION: weighted macro-agents.** Plasma physics simulates 10^20 electrons with 10^6
+weighted super-particles coupled through a field solved on a grid (particle-in-cell). Here the
+field is the price vector and the grid is the clearing engine. A pool becomes **K weighted
+constituents (K ~ 10-20), each a real `Company` or household object carrying a population weight**.
+- **A named entity is a node of weight one.** Named tier and pool are ONE scheme at two
+  resolutions, not two types — which is rule 3, and it makes IND-R6's failure mode
+  (§7.115: a second code path that silently eats every change) structurally impossible rather
+  than something to stay vigilant about.
+- **Nonlinear decisions integrate correctly**: `f` evaluated at K points and weighted, not `f` at
+  the mean. A mean-preserving spread in pool leverage then CAUSES defaults, which is the
+  mechanism of a credit cycle and is currently unrepresentable.
+- Cost is a few hundred objects, not tens of thousands.
+
+**TWO KINDS OF MOTION, AND CONFLATING THEM IS THE IMPLEMENTATION TRAP.**
+- **Continuous dimensions: the node MOVES.** Wealth or firm size changes; the node slides through
+  state space carrying its weight.
+- **Discrete dimensions: WEIGHT FLOWS between nodes.** A household does not become unemployed —
+  mass transfers from an employed node to an unemployed one at the same wealth.
+- **The second is a rule-14 flow and the model does not currently have it as one.** Weight moving
+  employed → unemployed is the OTHER LEG of a named firm's layoff, and it must be the same number
+  in the same pass. Two representations of one quantity is rule 3.
+- **Duration cheaply:** long-term unemployment has a different re-employment hazard and a
+  different consumption path. Do not add a continuous duration dimension — add discrete states
+  (employed / short-term / long-term) and let weight flow. Non-exponential durations out of a
+  Markov chain by adding states; two states buys most of the realism at no dimensional cost.
+
+**NODE PLACEMENT IS DERIVED, NOT CHOSEN.** Quadrature on a fitted lognormal would presuppose the
+family, and rule 13 says the distribution is an OUTCOME. Use stratification, and allocate nodes
+in proportion to `stratum population × within-stratum dispersion of what is being aggregated`
+(Neyman). For a Pareto sector the aggregate is tail-dominated, so **the allocation rule itself
+tells you to put nodes in the tail** — nobody chooses to over-resolve it.
+- **DYN's cut point falls out of this.** Refine strata until one contains a single firm and you
+  have a named firm. **The cut is where the allocation rule says a stratum needs one node per
+  constituent** — which is exactly DYN's "the cut point falls out of the Pareto tail instead of
+  sitting beside it", answered by the representation rather than by a rule.
+- **Dimensionality has a cheap answer:** stratify ONLY on dimensions that gate a nonlinearity;
+  carry everything else as an ATTRIBUTE on the node, which costs nothing.
+
+**THE TWO SECTORS ARE THE SAME OBJECT WITH DIFFERENT BOUNDARIES.** Both are multiplicative
+accumulation with a barrier — which is what generates the power laws the seed currently DRAWS.
+- **Households hit a REFLECTING barrier** (the borrowing constraint): you bounce off and stay in
+  the population. **In this model that barrier is currently a CLAMP**, which is why it sits on
+  §6.4's list. A reflecting barrier is not a clamp — it is a mechanism with a second leg: a
+  household at the constraint cannot borrow, so a NAMED BANK does not lend, so a loan does not
+  appear on its book. Rule 2 and rule 14 in one move.
+- **SMEs hit an ABSORBING barrier** (default/exit) **with reinjection at the bottom** (entry) —
+  which is what makes a firm distribution Zipf rather than lognormal.
+- **Design the absorbing barrier FIRST: it is where every ledger bug in this scheme will live.**
+  When a node defaults its weight must go somewhere (exit, acquirer, entry) and its debt must land
+  as a realised loss on a named bank's book IN THE SAME PASS. G5 is the same problem for named
+  firms and should be the same code.
+
+**THIS REDESIGNS COH RATHER THAN COMPETING WITH IT.** COH's plan is to give a cohort a balance
+sheet. **Give it a DISTRIBUTION over balance sheets instead, with the aggregate as its first
+moment.** Then run wealth as the accumulation it already wants to be — drift `(income −
+consumption)`, diffusion from idiosyncratic income and return risk, the constraint as a reflecting
+barrier. **Random growth against a barrier has a power-law-tailed stationary distribution by
+construction**, so the shape is DERIVED from the mechanism instead of imposed by nine tables, and
+it is rule-4 clean because no exponent is fitted — the tail is an outcome, not a datum.
+- **Households need the liquid/illiquid split, and it is not optional.** The high-illiquid /
+  zero-liquid household is why single-asset models get aggregate MPC badly wrong. The asset
+  categories already exist (HH gave households itemized debt on named banks and real claims on
+  institutions); this splits a dimension the model carries, it does not invent one.
+
+**WHAT IT KILLS ELSEWHERE — all current rows, none of it speculative.**
+- **MAC's savings rate** becomes an integral over node behaviour: an outcome by construction,
+  with nothing left to impose.
+- **CRD's consumer credit tiers** ("shares AND rates imposed"): a tier IS a stratum, its share is
+  the mass in it, its rate is what clears against that mass's schedule.
+- **HSG's demand side**: housing is the illiquid asset, the mortgage constraint is the reflecting
+  barrier, and household housing demand becomes a real schedule out of node heterogeneity rather
+  than a drift formula between two bounds.
+- **HH's occupational-mismatch remainder**: occupation as a node attribute makes mismatch a real
+  matching problem over masses instead of a residual.
+- **DYN's cut point**, above.
+
+**AND THE ARGUMENT THAT MAY MATTER MOST — DISPERSION IS THE SLOPE OF A DEMAND CURVE.** The
+clearing engine takes SCHEDULES. A pool with no dispersion posts one step, effectively vertical.
+K dispersed nodes post K schedules whose sum is a smooth aggregate curve. **So thin books, pinned
+prints and §6.1's "the books print their dampers" are partly a RESOLUTION problem, not an
+entity-count problem** — and SCALE's premise is that depth requires more entities. Some of that
+depth is available at 10-20 nodes per pool instead of tens of thousands of firms. **Measure this
+before committing SCALE's wall-clock budget.**
+
+**GRANULARITY COMES OUT DERIVED, NOT TUNED.** A node standing for `n = N/K` constituents carries
+idiosyncratic noise of relative size `~(1/√n) × within-node dispersion`. Tail nodes have small `n`
+and are therefore noisy — which reproduces granular aggregate volatility FROM THE REPRESENTATION
+rather than adding it as a parameter. Both inputs are measured, so rule 4 holds.
+
+**WHAT BREAKS — design against these, do not discover them at week 40.**
+- **Rank-K copulas.** Within a node every attribute is perfectly correlated, so K nodes give a
+  rank-K approximation of the joint. Stratify on what INTERACTS, not on what is individually
+  interesting. This is a real ceiling, not a tuning knob.
+- **Threshold artifacts.** A whole node crosses a default line at once, so aggregates step by
+  `1/K`. **Do not smooth the decision rule to hide it** — that buries the nonlinearity the scheme
+  exists to capture. Choose K from the size of the effect to be resolved, and state it.
+- **Node degeneracy.** Weight concentrates on one node and resolution collapses (the particle-
+  filter disease). Periodic re-stratification, planned in from the start.
+- **Household employment diversification is a consequential modelling choice.** A node holding
+  fractional employment across every firm is perfectly diversified, and the correlation between
+  "my employer failed" and "I lost my job" vanishes — which is what carries a sectoral shock into
+  consumption. Stratifying partly on employer-industry keeps it. **This fails SILENTLY: nothing
+  looks broken, the model is merely too stable.**
+
+**Verify — the first two are worth more than the rest:**
+1. **Aggregation exactness as a bug detector.** For any decision that is genuinely linear, `K=1`
+   and `K=20` must give IDENTICAL aggregates. Divergence means something believed linear is not,
+   and names which mechanism. Cheap, sharp, and the first thing to write.
+2. **Seed flat, get a fat tail.** Initialise every node at equal wealth/size and the stationary
+   distribution must develop a power-law tail on its own. If it stays flat the accumulation
+   mechanism has no multiplicative structure and no amount of resolution will save it. This is
+   §7.4's "seed by the engine's own code" applied to a DISTRIBUTION.
+3. **K-convergence**: aggregates stop moving as K grows.
+4. **Cut-point invariance**: name 200 firms instead of 300 and aggregates do not move (the
+   resolved/subgrid discipline; HC's carve-out already gives the conservation half).
+5. **Conservation**: node weights sum to the population, and the carve-out never double-counts.
+
+**THE MEASUREMENT THAT DECIDES ITS PRIORITY — a day, and it should happen before the argument.**
+For each pool, measure the within-pool dispersion of leverage, margin and size, and **the share of
+constituent mass sitting within ~10% of each threshold** (default, borrowing constraint, labour
+affordability). If the mass near the thresholds is thin, this scheme buys little and belongs in the
+depth tier. If it is thick — which §7.109 found for the NAMED tier, where 89% of employment sat
+below the aggregate index — then dispersion is already driving aggregate outcomes invisibly, and
+this is the highest-value structural project on the board. **Rule 10: measure it, do not argue it.**
+
+**Recommended placement, for the user's decision (§4 may not be resequenced without asking):**
+NOT first. It is a RESOLUTION fix, and item 1's defect is a LEVEL fix (§7.111: production has no
+depth) — resolving a distribution whose location is wrong buys a beautifully-resolved wrong answer,
+and worse, it invites tuning the distribution to fix a level, which is what §6.4 forbids. But it
+should land **before COH (item 5), which it redesigns, and before SCALE and DYN, whose premises it
+changes** — and it interacts with CAP, since "a firm can run a loss" is another threshold and
+profitability dispersion is exactly what makes it bite. Proposed: with or just after CAP.
+
+---
+
 ### COH — Cohorts accumulate: household balance sheets  *(item 5; new from the 2026-08-29 review)*
+
+**READ §5-DIST FIRST — it proposes redesigning this project, not competing with it.** COH's plan
+is to give a cohort a balance sheet; DIST's argument is to give it a DISTRIBUTION over balance
+sheets with the aggregate as its first moment, so the nine tables below become the SHAPE of that
+distribution and the shape becomes an outcome of random growth against the borrowing constraint
+rather than nine imposed allocations. If that argument is accepted, this section is rewritten
+rather than executed. **Undecided; do not start COH without settling it.**
 
 **The reframing that creates this project (§7.100).** §6.3-A lists nine imposed distribution
 tables in `macro/household-cohorts.ts` — occupation mixes, wage/tax multipliers, transfer and
@@ -1618,6 +1784,13 @@ switches on.
 
 ### SCALE — Universe scale-up under a wall-clock budget  *(item 20; wave 2 after IND)*
 
+**DIST CHALLENGES THIS PROJECT'S PREMISE (§5-DIST) — measure before spending the budget.** The
+clearing engine takes SCHEDULES, and a pool with no dispersion posts one step. Depth in a book may
+be partly a RESOLUTION problem rather than an entity-count problem, obtainable at 10-20 weighted
+nodes per pool instead of tens of thousands of firms. That does not make SCALE unnecessary — a
+granular tail needs real names — but it changes how much of the float gap it has to close, and
+therefore how big the universe actually has to get.
+
 **Owns the float half of the promoted damper defect (§6.1):** 2,549 instruments print their
 smoothing constant because the books are thin — §7.18's want/have from the supply side. G3 gives
 the residual a real absorber; SCALE grows the float itself. Re-measure the persistently-bound
@@ -1716,6 +1889,11 @@ terms on offer. The constant dies when orders, not demand, go upstream.
 ---
 
 ### DYN — Entry, exit, and industry structure  *(item 23; needs IND, BP1)*
+
+**DIST derives this project's cut point if it happens first (§5-DIST).** "The named tier's cut
+point falls out of the Pareto tail instead of sitting beside it" is exactly where a stratified
+allocation rule says a stratum needs one node per constituent. Entry is also DIST's reinjection
+at the absorbing barrier — the two projects share that mechanism and should not build it twice.
 
 Concentration as an outcome. Entry: sustained high category margins attract entrants through HC's
 existing birth machinery, aimed at the category. Exit: sustained losses idle capacity (mothballed,
