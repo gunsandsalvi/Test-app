@@ -23,8 +23,14 @@ import { InstitutionalEntityType } from './institutions';
  * because solvency rules charge currency mismatch; an asset manager tracks a benchmark that is
  * itself mostly domestic; a hedge fund has no such constraint and goes where the trade is.
  *
- * This is a MANDATE, not an ownership share. It bounds what an entity may buy abroad; it does not
- * decide what it ends up owning, which is the auction's answer.
+ * This is a MANDATE, not an ownership share: it bounds what an entity may buy abroad, and the
+ * auction decides what it ends up owning.
+ *
+ * RULE 5, OPEN: a real home-bias mandate is a LIMIT ("no more than X% foreign"), but
+ * `mandateWeightForIssuer` below returns it as a WEIGHT that scales demand directly — so the
+ * constraint is acting as a preference, and an entity always wants exactly 75% domestic rather
+ * than being merely allowed up to 25% abroad. Rule 5: the target is the guide, the actual
+ * purchase is tactical. Owner: HF (12), which gives entities real strategies to be tactical with.
  */
 export const HOME_BIAS_BY_ENTITY_TYPE: Record<InstitutionalEntityType, number> = {
   PENSION_FUND: 0.75,

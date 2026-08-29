@@ -35,8 +35,13 @@ export interface FxForward {
 }
 
 /**
- * Share of a cross-border position that gets hedged. Fixed income is hedged as a rule; equity
- * runs partial, which is what real mandates do (published policies cluster between none and half).
+ * Share of a cross-border position that gets hedged. Fixed income at 1.0 is a genuine rule — an
+ * insurer's regulator charges the mismatch, so it has no choice.
+ *
+ * RULE 4/17, OPEN: the equity 0.35 is not a rule, it is an observed average of published
+ * policies — a real-world EQUILIBRIUM, and one constant applied to every entity type alike. A
+ * hedge ratio is a MANDATE property: it belongs on the entity's profile, so a pension fund and a
+ * hedge fund can differ, and so it can respond to what hedging costs. Owner: HF (12).
  */
 export const HEDGE_RATIO_FIXED_INCOME = 1.0;
 export const HEDGE_RATIO_EQUITY = 0.35;

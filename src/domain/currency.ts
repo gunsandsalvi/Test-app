@@ -9,11 +9,6 @@
  * rate is the precise inverse of that ratio — 1/0.6824 = 1.4655, the EUR rate to the digit. The
  * conversion has existed since the bootstrap was written and has never been applied.
  *
- * It did not matter while nothing compared two regions. Within a region every figure is in the
- * same units, so margins, leverage and coverage are all correct. It matters the moment anything
- * crosses a border — and things already do: cross-border portfolios (XB1/XB2), world aggregates,
- * and now landed-cost sourcing, which is simply the first mechanism to fail loudly on it.
- *
  * **Nobody re-denominates their books.** A firm keeps its accounts in its own money and converts
  * at the market rate when it deals abroad, so that is what this does: local money stays local and
  * honestly named, and every crossing converts at the rate the FX market actually cleared. The
@@ -27,6 +22,12 @@ import { RegionId } from './geography';
 /** USD per one unit of each region's money, as the FX market last cleared it. */
 export type FxToUsd = (regionId: RegionId) => number;
 
+/**
+ * RULE 3, OPEN (§6.3-F): returning 1 for a non-finite or zero rate is a DEFAULT standing in for a
+ * broken read — it silently prices a foreign figure at parity instead of failing where the rate
+ * went missing. This is the exact shape §7.94 was found by. Should throw, or the callers should
+ * carry a rate they know exists.
+ */
 function safeRate(rate: number): number {
   return Number.isFinite(rate) && rate > 0 ? rate : 1;
 }

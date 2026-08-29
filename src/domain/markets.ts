@@ -1,8 +1,9 @@
 /**
- * Market Indices & UI Tab Keys Domain Model
+ * The published index set and the UI's tab keys.
  *
- * Models composite equity indices, credit OAS spread benchmarks, commodity baskets, and main UI tab keys.
- * Written and updated by index calculation stages.
+ * RULE 4, OPEN: the field names below (`us500`, `euStoxx`, `uk100`, `jp225`, `gsciCommodity`) are
+ * real-world index brands in the type itself, not only in the labels `macro/indices.ts` prints.
+ * IDX renames both halves together.
  */
 
 export type TabKey = 'macro' | 'indices' | 'equities' | 'commodities' | 'bonds_cds' | 'derivatives' | 'risk';

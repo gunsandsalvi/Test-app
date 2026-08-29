@@ -1,9 +1,14 @@
 /**
- * Global Game State Domain Model
+ * The whole world for one week.
  *
- * Models the complete immutable state tree of the simulation engine for a given week.
- * Encompasses regions, companies, financial institutions, commodities, market indices,
- * portfolio positions, news feeds, UI state, and turn summaries.
+ * NOT immutable, despite what this header used to claim: stage 08 rebuilds each company with
+ * `Object.assign(comp, ...)` and several stages mutate the region objects in place. Treat any
+ * reference you hold as live.
+ *
+ * RULE 3, OPEN: the last four fields are UI state (`isTradeModalOpen`, `selectedInstrument`,
+ * `isNewsDrawerOpen`, and the two game-over flags) carried inside the simulation's own state
+ * tree, so opening a modal touches the object the engine hashes for determinism. They belong in
+ * the UI layer. Owner: AU (27).
  */
 
 import { RegionId, FxPair } from './geography';

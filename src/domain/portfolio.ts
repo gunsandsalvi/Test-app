@@ -1,10 +1,5 @@
-/**
- * User Portfolio & Performance Attribution Domain Model
- *
- * Models user portfolio cash, positions, NAV, margin utilization, risk Greeks (Delta, Gamma, Vega, DV01),
- * and 5-factor performance attribution (carry, rates, credit spread, equity delta, vol theta).
- * Read and updated by trade execution, portfolio valuation, and performance tracking engines.
- */
+/** The player's portfolio: cash, positions, NAV, margin, aggregate Greeks, and the five-factor
+ *  return attribution (carry, rates, credit spread, equity delta, vol theta). */
 
 import { Position } from './instruments';
 

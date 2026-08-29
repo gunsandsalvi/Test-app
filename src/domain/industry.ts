@@ -1,9 +1,5 @@
-/**
- * Industry & Product Category Domain Model
- *
- * Models standard industry taxonomy, sub-unit classifications, buyer mix breakdowns (Household, Government, Corporate),
- * and necessity tiers. Read and used across company product lines and market-clearing bidding stages.
- */
+/** The industry taxonomy's public types, plus the household price tier and its bid premium.
+ *  The DATA all lives in `industry-registry.ts` — these are views onto it (rule 17). */
 
 import { VIEW_CATEGORY_PRICE_TIER, VIEW_INDUSTRY_SUBUNITS } from './industry-registry';
 
@@ -34,10 +30,12 @@ export const categoryPriceTier = (unitId: string): HouseholdPriceTier =>
   CATEGORY_PRICE_TIER[unitId] ?? 'STANDARD';
 
 /**
- * The household bid's willingness-to-pay premium over the current price, per tier — the real
- * shape of demand elasticity: a household pays up for fuel and food when supply tightens and
- * walks away from luxury at the same price move. The base is the old frozen
- * `tanh(0.05) x 0.15` premium, now named; the multipliers make it a tier property.
+ * The household bid's willingness-to-pay premium over the current price, per tier: a household
+ * pays up for fuel when supply tightens and walks away from luxury at the same move.
+ *
+ * RULE 13, OPEN: both numbers are invented. `tanh(0.05) x 0.15` is a frozen constant wearing
+ * arithmetic, and 2.5/1.0/0.35 are chosen elasticities. A household's willingness to pay is an
+ * outcome of its budget and what share of it the good takes — which the cohorts now carry. MAC.
  */
 export const HOUSEHOLD_BID_BASE_PREMIUM = Math.tanh(0.05) * 0.15;
 export const HOUSEHOLD_BID_PREMIUM_BY_TIER: Record<HouseholdPriceTier, number> = {

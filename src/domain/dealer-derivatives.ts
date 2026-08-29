@@ -45,9 +45,14 @@ export const FX_PFE_ADD_ON_RATE = 0.02;
 export const FX_INITIAL_MARGIN_RATE = 0.02;
 
 /**
- * The basis at full utilization, in bps. The desk's quote deviates from CIP by up to this much
- * when its capacity is exhausted — the point at which balance sheet is scarce enough that the
- * cheapest hedger is indifferent. Crisis-era cross-currency bases reached this order.
+ * The basis at full utilization, in bps.
+ *
+ * RULE 1/15, OPEN: the cross-currency basis IS a price — what a hedger pays the desk — and this
+ * makes it a formula with a ceiling instead of something that clears. `crossCurrencyBasisBps`
+ * below computes it as `MAX x utilization x (0.35 + 0.65 x oneWayShare)`, where the 150 is an
+ * observed crisis-era level (a real-world outcome, rule 4) and the 0.35/0.65 split is invented.
+ * A hedger that cannot get a hedge at this price should walk away and the level should rise until
+ * someone supplies it — which is exactly what the clearing engine does elsewhere. Owner: DER (13).
  */
 export const MAX_CROSS_CURRENCY_BASIS_BPS = 150;
 
@@ -94,13 +99,3 @@ export function emptyFxDealerBook(): FxDealerBook {
 }
 
 export type { RegionId };
-
-
-/**
- * How much a week of net spot flow moves a currency, per unit of flow relative to the market's
- * own size. FX is deep, so the coefficient is small — but hedging flow is a large share of real
- * FX volume, and this is the channel by which a hedged foreign bond portfolio weighs on the
- * currency it is invested in. That is a real and well-documented effect with no representation
- * in this model before XB2c: the desks accumulated exposure and only marked it.
- */
-export const FX_SPOT_PRICE_IMPACT_PER_GDP = 0.35;

@@ -1,9 +1,4 @@
-/**
- * Geography Domain Model
- *
- * Models real-world regional identifiers (USA, UK, JPN, EUR) and foreign exchange rate pairs (FxPair).
- * Written to by macro simulation stages during FX evolution and cross-border trade flows.
- */
+/** Regions, the currency each issues, shipping distances between them, and the FX pair type. */
 
 export type RegionId = 'USA' | 'UK' | 'JPN' | 'EUR';
 
@@ -19,17 +14,11 @@ export const CURRENCY_BY_REGION: Record<RegionId, string> = {
 };
 
 /**
- * Shipping distance between regions, in nautical miles, over the routes freight actually takes
- * (XB3a-1). A physical fact about the planet, which is the kind of real-world primitive rule 4
- * allows — unlike a trade share, which is a result.
+ * Shipping distance in nautical miles over the routes freight actually takes. A physical fact,
+ * which is the kind of primitive rule 4 allows — unlike a trade share, which is a result.
  *
- * The diagonal is a region's own average domestic haul, and it is NOT zero: moving goods inside
- * a country costs real money and takes real time, and a domestic supplier that is merely CLOSER
- * than a foreign one is the honest comparison. Setting it to zero would hand every domestic
- * seller a free advantage — an imported assumption dressed as geography.
- *
- * Ocean routes: New York-Rotterdam, New York-Southampton, Los Angeles-Yokohama,
- * Rotterdam-Southampton, and the two Suez runs to Japan.
+ * The diagonal is a region's own average domestic haul and is deliberately NOT zero: zero would
+ * hand every domestic seller a free advantage, an assumption dressed as geography.
  */
 export const LANE_DISTANCE_NM: Record<RegionId, Record<RegionId, number>> = {
   USA: { USA: 800, EUR: 3_300, UK: 3_000, JPN: 4_800 },

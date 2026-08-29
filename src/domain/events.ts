@@ -1,9 +1,4 @@
-/**
- * News, Diagnostic Logging, and Modal Chart Domain Model
- *
- * Models event notifications, news items, structured diagnostic logs, and interactive chart popup payload data.
- * Written by macro event generators, simulation step logging, and UI chart interactions.
- */
+/** News items, diagnostic log rows, and the chart-modal payload. */
 
 import { RegionId } from './geography';
 import { Sector } from './company';

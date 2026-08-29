@@ -1,8 +1,5 @@
-/**
- * Domain Module Entry Point
- *
- * Re-exports all domain models from bounded context files.
- */
+/** Barrel for the most-imported domain models. Not everything in `domain/` is here — the
+ *  registry, government, central-bank, FX and physical-goods modules are imported directly. */
 
 export * from './geography';
 export * from './industry';

@@ -31,16 +31,18 @@
  */
 
 /**
- * A speculator's reservation: how far the currency must move from its recent level before taking
- * the other side is worth the risk. Below that deviation it wants none — the same shape every
- * other book in this model uses, and the reason a price settles rather than sliding on a slope.
+ * The elastic side's schedule: how far the currency must move before taking the other side is
+ * worth the risk, how much further to pull it in at full size, and how much of its book it will
+ * risk in one currency.
+ *
+ * RULE 13, OPEN: all three are chosen numbers, and between them they decide how much flow the FX
+ * market can absorb — which is exactly what the damper above is pinning on. A speculator's
+ * reservation should come from its own capital, its own view and the volatility it has actually
+ * observed, the way every other participant in this model posts a schedule from its own book.
+ * Owner: HF (12), which gives funds real strategies, then XB6.
  */
 export const SPECULATOR_RESERVATION_MOVE_PCT = 1.2;
-
-/** How much further past its reservation it takes to pull a speculator in at full size. */
 export const SPECULATOR_FULL_SIZE_RANGE_PCT = 4.0;
-
-/** Share of its book a hedge fund will risk in one currency — the CAP on its position, not a slope. */
 export const SPECULATOR_FX_RISK_BUDGET = 0.15;
 
 /**
@@ -64,9 +66,14 @@ export const CENTRAL_BANK_FX_INTERVENTION_SHARE = 0.10;
 export const FX_STAT_KIND = 'PRICE_LIKE' as const;
 
 /**
- * The damper on a single week's move — discrete-time smoothing, exactly as the clearing engine
- * uses it elsewhere, and NOT a bound the price is allowed to rest on. When the elastic side
- * cannot absorb the flow the engine clears at the saturation point and the dealers carry the
- * residual; it does not park the rate on this limit and call it a price.
+ * The damper on a single week's move — intended as discrete-time smoothing, not a bound.
+ *
+ * IT IS NOT BEHAVING AS ONE, AND HAS BEEN MEASURED. Over 40 weeks the FX instrument printed
+ * damper-bound in 38-39 of them per pair, with a minimum weekly move of -8.01% — this constant to
+ * the second decimal, in the same direction week after week. The rate being published is the
+ * damper, not a clearing level: "a bound is not a price" for the third time (§7.21, §7.75).
+ * Re-measured after the FX mechanism sweep: still 9-28 pinned weeks per pair over 60. The cause
+ * is that the inelastic float is systematically one-way and the elastic side below cannot absorb
+ * it. Owner XB6. Do NOT widen this number — find the oversized flow.
  */
 export const MAX_WEEKLY_FX_MOVE_PCT = 8;

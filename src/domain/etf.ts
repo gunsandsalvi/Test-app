@@ -58,10 +58,13 @@ export const ETF_EXPENSE_RATIO_ANNUAL: Record<'EQUITY' | 'CORP_BOND' | 'LEVERAGE
  * How much basket a region's dealers can intermediate in a week, as a multiple of their equity.
  *
  * An AP does not WAREHOUSE a creation basket — it buys and delivers inside the settlement cycle,
- * so what its capital limits is turnover, not inventory, and a dealer turns over a large multiple
- * of its equity. Sizing this as a small FRACTION of equity (the first attempt, 2%) made the
- * arbitrage the dominant fact of the whole mechanism: 95-98% of flow went unabsorbed every week
- * forever and the funds never reached their target size.
+ * so what its capital limits is turnover, not inventory. Sizing it at 2% of equity made the
+ * arbitrage the dominant fact of the whole mechanism: 95-98% of flow unabsorbed every week and
+ * the funds never reaching target size.
+ *
+ * NOTE THE NAME AGAINST THE VALUE: 0.25 is a quarter of equity, not a multiple of it, and the
+ * paragraph above argues a desk should turn over several times its equity. Either the value is
+ * an order of magnitude low or the reasoning is wrong; nobody has re-measured which. ETF2 (17).
  *
  * It is also not the constraint that decides where the money actually lands. The fund's basket
  * purchase is executed in the constituent books, where it is already rationed against real float
@@ -89,8 +92,8 @@ export const ETF_INCEPTION_NAV_PER_SHARE = 100;
  * capacity is not a small error — it says a firm with a hundred times the assets has a hundred
  * times the analysts, which no fund complex has ever managed.
  *
- * Stated here with one owner, in the same sense as the underwriting fee schedule; it becomes an
- * outcome when BP2's industry profiles give firms real cost structures.
+ * One owner, in the same sense as the underwriting fee schedule; it becomes an outcome when
+ * IND's profiles give firms real cost structures.
  */
 export const NAMES_COVERED_AT_ONE_BILLION_AUM = 45;
 export const RESEARCH_COVERAGE_SCALING_EXPONENT = 1 / 3;

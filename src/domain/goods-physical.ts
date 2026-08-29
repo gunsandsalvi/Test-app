@@ -15,10 +15,8 @@
  * density a good actually carries in any given week then moves with its own cleared price, which
  * is what makes an expensive good worth shipping further.
  *
- * **This is BP1's table.** The industry registry is specified to own exactly these properties —
- * "storability, carrying cost, revenue mechanism and cost shape… properties of what is being
- * made, not of the firm making it". It lives here only until BP1 absorbs it, and nothing may add
- * a second copy of any of it in the meantime (§7.5, §7.9).
+ * BP1a moved the data itself into the industry registry; what is left here are the TYPES and the
+ * two derivations (mass, shelf life) that read it. Nothing may add a second copy (§7.5, §7.9).
  */
 
 /**
@@ -50,14 +48,11 @@ export interface SubUnitPhysical {
 }
 
 /**
- * Every sub-unit's physics. Value densities are order-of-magnitude facts about the materials —
- * bulk commodities in the hundreds, engineered goods in the tens of thousands, and the
- * information-dense goods in the hundreds of thousands.
- *
- * **These were NOT chosen to reproduce the trade shares the deleted table asserted.** Where the
- * ordering they produce disagrees with that table, the disagreement is the finding.
+ * Every sub-unit's physics, from the registry. Value densities are order-of-magnitude facts about
+ * the materials, and were NOT chosen to reproduce the trade shares the deleted `CATEGORY_
+ * TRADABILITY` table asserted — where the ordering disagrees with it, the disagreement is the
+ * finding.
  */
-// BP1a: the registry absorbed this table, as this file's header always said it would.
 export const SUBUNIT_PHYSICAL: Record<string, SubUnitPhysical> = VIEW_SUBUNIT_PHYSICAL;
 
 export function deliveryModeOf(subUnitId: string): DeliveryMode {
