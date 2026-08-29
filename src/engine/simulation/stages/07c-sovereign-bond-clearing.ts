@@ -50,6 +50,8 @@ import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
+import { pendingSettlementUSD } from './settlement';
+import { settleClearedBook, feeDesksForRegion } from './book-settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
@@ -285,7 +287,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // The entity's real money for this auction (S11), apportioned across tenor buckets by
       // their share of the market. Banks below carry no such cap: their real constraint is the
       // reserve position S2 already built, not a cash budget.
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'GOV_BOND');
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'GOV_BOND', pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
       activeBuckets.forEach((b) => {
         const id = bucketInstrumentId(regionId, b.key);
         const bucketShareOfMarket = (outstandingByBucket.get(b.key) ?? 0) / totalOutstandingUSD;
@@ -328,8 +330,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // fund, AND what its equity supports under the leverage floor — the only capital
       // constraint that sees a zero-risk-weight sovereign book (see BASEL_MIN_LEVERAGE_RATIO's
       // doc for the 260-week runaway that made this necessary).
+      // SETL6: reserves plus what this week's already-agreed securities trades will settle —
+      // the books clear before the settlement pass, so a commitment lives in the unsettled
+      // position until then and a bank cannot fund two books with the same reserves.
+      const settledCashUSD = sheet.cashReservesUSD
+        + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
       const fundableUSD = Math.min(
-        Math.max(0, sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
+        Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
           + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts),
         leverageHeadroomUSD(sheet)
       );
@@ -405,15 +412,14 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: each entity's real new holdings — foreign holders included, which is what makes
     // the foreign share a measured outcome rather than a parameter.
-    // SCALE C1: the entities are the store's working copies — cash mutates in place, fills are
-    // appended to the store for the single write-back after 07e.
+    // SCALE C1: fills are appended to the store for the single write-back after 07e. SETL6: the
+    // cash leg is settled below as payment instructions.
     biddingEntities.forEach((entity) => {
       const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const newGovHoldings: ItemizedHolding[] = [];
       newHoldings.forEach((usd, instrumentId) => {
         if (usd > 1) newGovHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
       });
-      entity.cashUSD = (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0);
       store.append(entity.id, newGovHoldings);
     });
 
@@ -444,13 +450,13 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // bonds cost, and P&L must say so or the balance-sheet identity drifts by the fee.
       const feeUSD = Math.max(0, -(cashDeltaUSD + (newClearedUSD - prevClearedUSD)));
       if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
-      // The cash leg of the bank's own portfolio trading: bonds bought are paid for out of the
-      // bank's reserves, bonds sold return to them. Its securities and its money move together.
+      // The securities and the P&L; the reserves leg settles below (SETL6), so that the bank
+      // that sold and the bank that bought move against each other rather than each moving
+      // alone.
       ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
         ...existingSheet,
         sovereignBondHoldingsByTenor: newBuckets,
         sovereignBondHoldingsUSD: Number(newTotalUSD.toFixed(0)),
-        cashReservesUSD: existingSheet!.cashReservesUSD + cashDeltaUSD,
         bankEquityUSD: existingSheet!.bankEquityUSD - feeUSD,
       };
     });
@@ -471,30 +477,28 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       reg.centralBankSheet.lastOpenMarketPurchasesUSD = Number(filled.toFixed(0));
     }
 
-    // Apply: real dealer inventory + trading revenue, credited to each named bank by market
-    // share — same pattern as the corporate-bond dealer desk.
+    // Apply: real dealer inventory.
     const newDealerInventory: { tenorKey: string; inventoryUSD: number }[] = [];
     result.newDealerInventoryById.forEach((inventoryUSD, instrumentId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ tenorKey: instrumentId.replace(`${regionId}-GOV-`, ''), inventoryUSD });
     });
     reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: newDealerInventory };
 
-    if (result.totalDealerRevenueUSD > 0 && regionBanks.length > 0) {
-      regionBanks.forEach((bank) => {
-        const share = bank.bankMarketShare ?? 1 / Math.max(1, regionBanks.length);
-        const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
-        if (!existingSheet) return;
-        if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
-        ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
-          ...existingSheet,
-          // The desk's earnings are money the clients actually paid (their cash legs already
-          // deduct the fee), so the bank receives CASH, not just a bookkeeping equity credit —
-          // an equity write with no cash leg breaks the balance-sheet identity the invariants
-          // harness now asserts per bank per week.
-          bankEquityUSD: existingSheet.bankEquityUSD + result.totalDealerRevenueUSD * share,
-          cashReservesUSD: existingSheet.cashReservesUSD + result.totalDealerRevenueUSD * share,
-        };
-      });
-    }
+    // SETL6: the book's whole cash side, through the clearing house. The central bank's leg is
+    // named and settles to nothing — it pays with reserves it creates, which is what makes an
+    // open-market purchase grow the monetary base instead of moving money between holders; the
+    // reserves land at the sellers' banks through their own legs above.
+    const entityIds = new Set(biddingEntities.map((e) => e.id));
+    const bankTickers = new Set(regionBanks.map((b) => b.ticker));
+    settleClearedBook(
+      ctx, regionId, 'sovereign bond',
+      result.netCashDeltaByParticipantId,
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
+        : bankTickers.has(id) ? { kind: 'BANK_SECURITIES', ticker: id }
+          : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
+            : undefined),
+      { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+      feeDesksForRegion(ctx, regionId)
+    );
   });
 }

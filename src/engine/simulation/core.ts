@@ -208,6 +208,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     lastSettlement: ctx.lastSettlementReport && {
       grossUSD: ctx.lastSettlementReport.grossUSD,
       unresolvedUSD: ctx.lastSettlementReport.unresolvedUSD,
+      clearingHouseResidualUSD: ctx.lastSettlementReport.clearingHouseResidualUSD,
+      centralBankResidualUSD: ctx.lastSettlementReport.centralBankResidualUSD,
       unmodeledByReason: Object.fromEntries(ctx.lastSettlementReport.unmodeledByReason),
     },
     // SEG1: payments recorded after this week's settlement cutoff settle next cycle instead of

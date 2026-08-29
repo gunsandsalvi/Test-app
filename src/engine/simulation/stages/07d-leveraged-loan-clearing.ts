@@ -39,6 +39,8 @@ import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, CREDIT_R
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
+import { pendingSettlementUSD } from './settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
@@ -262,7 +264,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // issuer's index weight rather than its own size. Measured on an LBO financing: the book
       // could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only FUND
       // 14.0M, so the solve ran past the sponsor's walk-away and every deal was pulled.
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN');
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN', pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -335,7 +337,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         const targetUSD = investableUSD * c.weight + offeringUSD * fundShareOfIndex;
         demandByInstrumentId.set(
           c.instrumentId,
-          indexFundDemand(targetUSD, Math.max(0, fund.cashUSD ?? 0) * c.weight, 'YIELD_LIKE')
+          indexFundDemand(targetUSD, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight, 'YIELD_LIKE')
         );
       });
       return {
@@ -371,42 +373,33 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
 
     // Apply: each entity's real new LEVERAGED_LOAN holdings.
-    // SCALE C1: cash mutates in place on the working copies; fills append to the store for the
-    // single write-back after 07e.
+    // SCALE C1: fills append to the store for the single write-back after 07e. SETL6: the cash
+    // leg is settled below as payment instructions.
     bookEntities.forEach((entity) => {
       const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const newLoanHoldings: ItemizedHolding[] = [];
       newHoldings.forEach((newHoldingUSD, companyId) => {
         if (newHoldingUSD > 1) newLoanHoldings.push({ instrumentId: companyId, instrumentType: 'LEVERAGED_LOAN', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
       });
-      entity.cashUSD = (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0);
       store.append(entity.id, newLoanHoldings);
     });
 
-    // Apply: real dealer inventory + trading revenue, credited to each named bank by market share.
+    // Apply: real dealer inventory.
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
     result.newDealerInventoryById.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });
     });
     reg.bankingSector = { ...reg.bankingSector, loanDealerInventory: newDealerInventory };
 
-    if (result.totalDealerRevenueUSD > 0) {
-      const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity);
-      regionBanks.forEach((bank) => {
-        const share = bank.bankMarketShare ?? 1 / Math.max(1, regionBanks.length);
-        const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
-        if (!existingSheet) return;
-        if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
-        ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
-          ...existingSheet,
-          // The desk's earnings are money the clients actually paid (their cash legs already
-          // deduct the fee), so the bank receives CASH, not just a bookkeeping equity credit —
-          // an equity write with no cash leg breaks the balance-sheet identity the invariants
-          // harness now asserts per bank per week.
-          bankEquityUSD: existingSheet.bankEquityUSD + result.totalDealerRevenueUSD * share,
-          cashReservesUSD: existingSheet.cashReservesUSD + result.totalDealerRevenueUSD * share,
-        };
-      });
-    }
+    // SETL6: the book's whole cash side, through the clearing house.
+    const entityIds = new Set(bookEntities.map((e) => e.id));
+    settleClearedBook(
+      ctx, regionId, 'leveraged loan',
+      result.netCashDeltaByParticipantId,
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : undefined),
+      { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+      feeDesksForRegion(ctx, regionId),
+      primaryTakeUSD(result)
+    );
   });
 }

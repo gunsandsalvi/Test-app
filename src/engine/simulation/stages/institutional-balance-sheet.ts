@@ -33,6 +33,7 @@
 import { Company, InstitutionalEntity, InstitutionalEntityType } from '../../../types';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
+import { pendingSettlementUSD } from './settlement';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 
@@ -64,7 +65,7 @@ const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
  * receivable as spendable would let the entity buy securities with money it had already lent.
  * It is part of the BOOK (markInstitutionalBooks), never of the budget.
  */
-export function availablePurchaseCapacityUSD(entity: InstitutionalEntity): number {
+export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, unsettledUSD = 0): number {
   const allowanceUSD = LEVERAGE_ALLOWANCE[entity.entityType] * Math.max(0, entity.totalAssetsUSD);
   // A fund does not spend to the last dollar: it runs a CASH SLEEVE, and what it invests is the
   // excess over it. The target is the entity's own `cashPct` — already its stated policy, so no
@@ -74,26 +75,31 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity): numbe
   // balances became real bank liabilities (SETL5) that swing went straight into bank reserves
   // (§7.91). Below the sleeve an entity is a net seller, which is what a fund short of cash is.
   const sleeveTargetUSD = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, entity.totalAssetsUSD);
-  const investableCashUSD = Math.max(0, (entity.cashUSD ?? 0) - sleeveTargetUSD);
+  // SETL6: plus what this week's already-agreed trades will settle — negative once the fund has
+  // committed, so the five books cannot each spend the same balance. The clearing legs are
+  // payment instructions now (stages/book-settlement.ts) and the cash moves at the settlement
+  // pass, so the unsettled position is where a commitment lives until then.
+  const investableCashUSD = Math.max(0, (entity.cashUSD ?? 0) + unsettledUSD - sleeveTargetUSD);
   return investableCashUSD + allowanceUSD;
 }
 
 /**
  * The slice of that capacity an entity brings to ONE asset class's auction this week, split by
  * its own allocation targets over the invested classes. The clearing stages run in sequence and
- * each applies its real cash deltas immediately, so the next stage reads capacity net of what
- * the previous one actually spent — the ordering is the settlement reality, not an artifact.
+ * each books its trades as unsettled commitments, so the next stage reads capacity net of what
+ * the previous one actually agreed — the ordering is the settlement reality, not an artifact.
  */
 export function stagePurchaseBudgetUSD(
   entity: InstitutionalEntity,
-  assetClass: 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN'
+  assetClass: 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN',
+  unsettledUSD = 0
 ): number {
   const t = entity.assetAllocationTarget;
   const investedPcts = t.corpBondPct + t.govBondPct + t.loanPct;
   if (investedPcts <= 0) return 0;
   const classPct =
     assetClass === 'CORP_BOND' ? t.corpBondPct : assetClass === 'GOV_BOND' ? t.govBondPct : t.loanPct;
-  return availablePurchaseCapacityUSD(entity) * (classPct / investedPcts);
+  return availablePurchaseCapacityUSD(entity, unsettledUSD) * (classPct / investedPcts);
 }
 
 /**
@@ -204,13 +210,20 @@ export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
         const stakePct = c.ownership?.peSponsorPct ?? 0;
         return a + Math.max(0, evMultiple * c.ebitda - c.totalDebt) * stakePct;
       }, 0);
-      return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0) + (entity.repoLentUSD ?? 0) + portfolioUSD) };
+      return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0)
+        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })
+        + (entity.repoLentUSD ?? 0) + portfolioUSD) };
     }
     const holdingsUSD = entity.itemizedHoldings.reduce(
       (a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+    // SETL6: this stage runs before the settlement pass, so the week's cleared trades are still
+    // unsettled — the securities are on the book and the cash has not moved. The receivable (or
+    // payable) is the other leg, and leaving it out would mark every buyer up and every seller
+    // down by the size of its own week's trading.
+    const unsettledUSD = pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id });
     // Cash lent overnight (WS6) is still the entity's money — a secured claim maturing next
     // session, not a security; leaving it out would mark the book down by the position's size
     // every week and back up the week after.
-    return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + (entity.repoLentUSD ?? 0) + holdingsUSD };
+    return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + unsettledUSD + (entity.repoLentUSD ?? 0) + holdingsUSD };
   });
 }

@@ -64,6 +64,10 @@ export interface GameState {
   lastSettlement?: {
     grossUSD: number;
     unresolvedUSD: number;
+    /** SETL6 — what the cleared books' central counterparty was left holding. Must be zero. */
+    clearingHouseResidualUSD: number;
+    /** SETL6 — reserves + treasury account, net of what the central bank issued. Must be zero. */
+    centralBankResidualUSD: number;
     unmodeledByReason: Record<string, number>;
   };
   /** SEG1 — payments recorded AFTER the week's settlement cutoff (hc-lifecycle's tender

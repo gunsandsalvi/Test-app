@@ -56,6 +56,10 @@ export interface WeeklyStepContext {
   /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
    * (see stages/settlement.ts). A stage must not move money any other way. */
   paymentInstructions: import('./settlement').PaymentInstruction[];
+  /** SETL6 — the running net of those instructions per party: what each has committed to pay or
+   * is due to receive before the settlement pass runs. Read through
+   * `pendingSettlementUSD` (stages/settlement.ts); maintained by `pay`. */
+  pendingNetByParty: Map<string, number>;
   /** What the last settlement run did — read by the invariants harness and the diagnostics. */
   lastSettlementReport?: import('./settlement').SettlementReport;
   /** SCALE C1 — the week's holdings, swept once and shared by the five clearing books; present
@@ -198,6 +202,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     // SEG1: last week's after-cutoff payments (recorded by stages that run after the
     // settlement stage) roll into this cycle — a real system's next-day settlement.
     paymentInstructions: [...(state.pendingPaymentInstructions ?? [])],
+    pendingNetByParty: new Map(),
     creditEventsThisWeek: [],
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),
     g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },

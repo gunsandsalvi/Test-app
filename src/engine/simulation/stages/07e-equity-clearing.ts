@@ -36,6 +36,8 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
+import { pendingSettlementUSD } from './settlement';
+import { settleClearedBook, feeDesksForRegion } from './book-settlement';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
@@ -196,7 +198,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const targetShares = (investableUSD * c.weight) / refPrice;
         demandByInstrumentId.set(
           c.instrumentId,
-          indexFundDemand(targetShares, Math.max(0, fund.cashUSD ?? 0) * c.weight / Math.max(1e-9, refPrice), 'PRICE_LIKE')
+          indexFundDemand(targetShares, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight / Math.max(1e-9, refPrice), 'PRICE_LIKE')
         );
       });
       return { id: fund.id, currentHoldingsByInstrumentId: currentShares, demandByInstrumentId };
@@ -206,7 +208,8 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // Equity is bought with money the entity actually has: its cash, at the weight its mandate
       // puts on equities. Unlike credit, there is no leverage allowance here — nobody in this
       // model runs a levered equity book.
-      const budgetUSD = entity.assetAllocationTarget.equityPct * Math.max(0, entity.cashUSD ?? 0);
+      const budgetUSD = entity.assetAllocationTarget.equityPct * Math.max(0, (entity.cashUSD ?? 0)
+        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
       const entityPoolUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.equityPct
         * mandateWeightForIssuer(entity.entityType, entity.region, regionId, mcapByRegion);
       // Same discipline as the credit books: this week's money goes where shares are actually
@@ -280,8 +283,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     });
 
     // Apply each entity's real new share register, with its cash leg.
-    // SCALE C1: cash mutates in place on the working copies; fills append to the store for the
-    // single write-back after this, the last book.
+    // SCALE C1: fills append to the store for the single write-back after this, the last book.
+    // SETL6: the cash legs are collected here and settled below through the clearing house.
+    const netCashByEntityId = new Map<string, number>();
     bookEntities.forEach((entity) => {
       const newShares = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const equityHoldings: ItemizedHolding[] = [];
@@ -310,8 +314,27 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const comp = companyById.get(companyId);
         if (comp) cashDeltaUSD += prevShares * comp.stockPrice;
       });
-      entity.cashUSD = (entity.cashUSD ?? 0) + cashDeltaUSD;
+      netCashByEntityId.set(entity.id, cashDeltaUSD);
       store.append(entity.id, equityHoldings);
     });
+
+    // SETL6. This book clears in SHARES, so the engine's own money legs are share-denominated
+    // and unusable here; the deltas above are the money ones. The dealer is the counterparty to
+    // all of them, so its leg is their negative — exactly, which is what keeps the clearing
+    // house flat. No fee: the engine's spread is in shares and this adapter has never charged
+    // it, so equity trading is free (§6 carries it).
+    let dealerNetUSD = 0;
+    netCashByEntityId.forEach((v) => { dealerNetUSD -= v; });
+    let primaryUSD = 0;
+    result.primaryOutcomeById.forEach((o) => { if (!o.withdrawn) primaryUSD += o.marketTakeUSD * o.clearedStat; });
+    const entityIds = new Set(bookEntities.map((e) => e.id));
+    settleClearedBook(
+      ctx, regionId, 'equity',
+      netCashByEntityId,
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : undefined),
+      { netCashUSD: dealerNetUSD, feeUSD: 0 },
+      feeDesksForRegion(ctx, regionId),
+      primaryUSD
+    );
   });
 }

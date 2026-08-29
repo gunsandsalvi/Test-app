@@ -23,9 +23,10 @@
  * money quietly appearing (rule 13).
  *
  * **The gate.** Money is conserved by construction here: every instruction debits one account and
- * credits another, and the central bank's liabilities only ever move BETWEEN buckets (bank
- * reserves ↔ the treasury's account). Both are asserted at the end of every settlement run, and a
- * violation throws rather than silently plugging — the discipline §7.86 was found by.
+ * credits another; the central bank's liabilities only move BETWEEN buckets (bank reserves ↔ the
+ * treasury's account) except where the central bank itself issues; and the cleared books'
+ * counterparty is flat. All three residuals are computed at the end of every run, carried on the
+ * report and on the state, and asserted by the harness every week — never plugged.
  */
 
 import { RegionId } from '../../../types';
@@ -43,6 +44,14 @@ export type PartyRef =
    *  move only when the borrower then SPENDS it to a customer of another bank, which happens as
    *  an ordinary payment. (The loan asset stays owned by bank-lending.ts — one writer.) */
   | { kind: 'BANK_CREDIT'; ticker: string }
+  /** SETL6 — a bank settling its OWN securities trade. Reserves move and equity does NOT: the
+   *  security is the other leg and the clearing stage books it in the same pass (rule 14).
+   *  `BANK` above is the income case, where nothing else arrives and equity is the other side. */
+  | { kind: 'BANK_SECURITIES'; ticker: string }
+  /** SETL6 — the central counterparty a cleared book settles through. Every participant, the
+   *  dealer and the fee-earning desks settle against it, so it is flat by construction: a
+   *  non-zero net is a leg some book forgot to name, reported rather than absorbed. */
+  | { kind: 'CLEARING_HOUSE'; region: RegionId }
   | { kind: 'INSTITUTION'; id: string }
   /** SEG1 — a private-sector segment pool: the mass of small firms below naming resolution.
    *  Its balance is `cashUSD` on the region's `SmePool`, held across the region's
@@ -67,6 +76,19 @@ export interface PaymentInstruction {
 export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): void {
   if (!(instruction.amountUSD > 0) || !isFinite(instruction.amountUSD)) return;
   ctx.paymentInstructions.push(instruction);
+  addTo(ctx.pendingNetByParty, partyKey(instruction.payer), -instruction.amountUSD);
+  addTo(ctx.pendingNetByParty, partyKey(instruction.payee), instruction.amountUSD);
+}
+
+/**
+ * SETL6 — what a party has committed to pay or is due to receive at this week's settlement,
+ * before it happens. A trade agreed today is a payable or a receivable until it settles, and
+ * both belong on the balance sheet: a fund's assets include what it is owed, and its spending
+ * power excludes what it has already committed. Without this the five clearing books would each
+ * size their budget off the same unspent balance and buy the same dollar five times.
+ */
+export function pendingSettlementUSD(ctx: WeeklyStepContext, party: PartyRef): number {
+  return ctx.pendingNetByParty.get(partyKey(party)) ?? 0;
 }
 
 export interface SettlementReport {
@@ -109,13 +131,23 @@ export interface SettlementReport {
   unmodeledByReason: Map<string, number>;
   /** Household flows handed to HH4d's T+1 channel — settled by next week's bank pass, not here. */
   householdDeferredUSD: number;
+  /** SETL6 — what the cleared books' central counterparty was left holding. Must be zero. */
+  clearingHouseResidualUSD: number;
+  /** SETL6 — reserves the central bank ISSUED this week by paying for assets with money it
+   *  created (an open-market purchase), less what it extinguished by selling. It is the one
+   *  party whose payments are not funded from a balance, so the reserves that appear at the
+   *  sellers' banks are new — and the identity below has to know that or it reads as a leak. */
+  centralBankIssuanceUSD: number;
+  /** What the central bank's own books were left holding — see `centralBankResidualUSD`. Zero. */
+  centralBankResidualUSD: number;
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
    *  Must be zero. A non-zero value is money leaving the system — the §7.86 defect's shape. */
   unresolvedUSD: number;
 }
 
 const partyKey = (p: PartyRef): string =>
-  p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' ? `${p.kind}:${p.ticker}`
+  p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' || p.kind === 'BANK_SECURITIES'
+    ? `${p.kind}:${p.ticker}`
     : p.kind === 'INSTITUTION' ? `INSTITUTION:${p.id}`
       : p.kind === 'SEGMENT' ? `SEGMENT:${p.region}:${p.industry}`
         : `${p.kind}:${p.region}`;
@@ -146,6 +178,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     bankEquityDeltaByBank: new Map(),
     unmodeledByReason: new Map(),
     householdDeferredUSD: 0,
+    clearingHouseResidualUSD: 0,
+    centralBankIssuanceUSD: 0,
+    centralBankResidualUSD: 0,
     unresolvedUSD: 0,
   };
   if (instructions.length === 0) {
@@ -252,6 +287,17 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         addTo(report.bankEquityDeltaByBank, party.ticker, deltaUSD);
         return;
       }
+      case 'BANK_SECURITIES': {
+        // The bank's own book, not a customer's: reserves out, the security in — and the
+        // clearing stage that recorded this writes the security in the same pass. No equity
+        // leg, because nothing was earned or spent; one asset became another.
+        addTo(report.reserveDeltaByBank, party.ticker, deltaUSD);
+        return;
+      }
+      case 'CLEARING_HOUSE': {
+        report.clearingHouseResidualUSD += deltaUSD;
+        return;
+      }
       case 'BANK_CREDIT': {
         // Nothing to debit: the money did not exist a moment ago. Recorded so the reserve leg
         // below knows this deposit was written rather than received.
@@ -281,7 +327,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         return;
       }
       case 'CENTRAL_BANK':
-        // The central bank settles by issuing or extinguishing its own liability; nothing moves.
+        // The central bank settles by issuing or extinguishing its own liability: it pays with
+        // reserves it creates, so nothing is debited here and the reserves simply appear at the
+        // payee's bank. Recorded because that is money entering the system, not moving within it.
+        report.centralBankIssuanceUSD -= deltaUSD;
         return;
     }
   });
@@ -371,8 +420,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     cb.treasuryAccountUSD += deltaUSD;
   });
 
+  report.centralBankResidualUSD = centralBankResidualUSD(report);
   ctx.lastSettlementReport = report;
   ctx.paymentInstructions = [];
+  ctx.pendingNetByParty.clear();
   return report;
 }
 
@@ -398,30 +449,19 @@ function addTo(map: Map<string, number>, key: string, deltaUSD: number): void {
 }
 
 /**
- * The two things that must be true of any settlement run, asserted rather than assumed.
+ * The central bank's liabilities only move BETWEEN buckets: what the treasury took in came out
+ * of bank reserves, and the central bank's own issuance is the one place new reserves come from.
  *
- *  1. Money is conserved: every instruction moved a dollar from someone to someone.
- *  2. The central bank's liabilities only move between buckets — what leaves bank reserves
- *     arrives in the treasury's account and vice versa.
- *
- * Returns the residuals so a caller (the harness, or a probe) can assert them. Kept here rather
- * than in the harness so the layer carries its own proof.
+ * Household flows are ADDED back, not subtracted: HH4d settles them next week, so this week the
+ * payer's bank has already lost the reserves while the household's balance sits outside any
+ * bank's book — reserves are short by exactly what households were paid, and the identity has to
+ * say so. (This function stood unused from the day it was written, with that sign the other way
+ * round; nothing read it, so nothing caught it. It runs every week now.)
  */
-export function settlementResiduals(report: SettlementReport): {
-  unresolvedUSD: number;
-  centralBankResidualUSD: number;
-} {
-  let deposits = 0;
-  report.depositDeltaByBank.forEach((v) => { deposits += v; });
+function centralBankResidualUSD(report: SettlementReport): number {
   let tga = 0;
   report.tgaDeltaByRegion.forEach((v) => { tga += v; });
   let reserves = 0;
   report.reserveDeltaByBank.forEach((v) => { reserves += v; });
-  return {
-    // Every dollar found an account. Non-zero means money left the system.
-    unresolvedUSD: report.unresolvedUSD,
-    // The central bank's liabilities only moved between buckets: what the treasury took in came
-    // out of bank reserves. Household flows are excluded because HH4d settles them next week.
-    centralBankResidualUSD: reserves + tga - report.householdDeferredUSD,
-  };
+  return reserves + tga + report.householdDeferredUSD - report.centralBankIssuanceUSD;
 }

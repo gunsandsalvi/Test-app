@@ -55,6 +55,8 @@ import {
 } from './asset-allocation';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
+import { pendingSettlementUSD } from './settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
@@ -282,7 +284,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // money. Apportioning it across the whole STOCK instead gave a new issue a slice the size
       // of its issuer's index weight rather than of the deal, which starved the primary market by
       // construction (see the same fix and its measurement in 07d).
-      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND');
+      const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND', pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id }));
       // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
       // walk companyTerms in order, so the id was pure overhead.
       const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
@@ -360,7 +362,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         const targetUSD = investableUSD * c.weight + offeringUSD * fundShareOfIndex;
         demandByInstrumentId.set(
           c.instrumentId,
-          indexFundDemand(targetUSD, Math.max(0, fund.cashUSD ?? 0) * c.weight, 'YIELD_LIKE')
+          indexFundDemand(targetUSD, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight, 'YIELD_LIKE')
         );
       });
       return {
@@ -393,45 +395,34 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: each entity's real new CORP_BOND holdings. Loans are a genuinely different real
     // market (different investor base, different technicals) and get their own real clearing
     // (07d-leveraged-loan-clearing.ts), not a byproduct split of this fill.
-    // SCALE C1: the entities here ARE the store's working copies — cash mutates in place (same
-    // sequence the old per-book spreads produced), and the fill rows are appended to the store
-    // for the single write-back after 07e.
+    // SCALE C1: the entities here ARE the store's working copies, and the fill rows are appended
+    // to the store for the single write-back after 07e. SETL6: the cash leg is settled below as
+    // payment instructions, not mutated here.
     bookEntities.forEach((entity) => {
       const newHoldings = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const newCorpHoldings: ItemizedHolding[] = [];
       newHoldings.forEach((newHoldingUSD, companyId) => {
         if (newHoldingUSD > 1) newCorpHoldings.push({ instrumentId: companyId, instrumentType: 'CORP_BOND', issuerRegion: regionId, quantityOrNotionalUSD: newHoldingUSD });
       });
-      entity.cashUSD = (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0);
       store.append(entity.id, newCorpHoldings);
     });
 
-    // Apply: real dealer inventory, and real trading revenue credited to each named bank's own
-    // equity by market share — the same per-bank crediting pattern as the SRF/ON RRP facility
-    // interest in 02b-bank-diversification.ts.
+    // Apply: real dealer inventory.
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
     result.newDealerInventoryById.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });
     });
     reg.bankingSector = { ...reg.bankingSector, corpBondDealerInventory: newDealerInventory };
 
-    if (result.totalDealerRevenueUSD > 0) {
-      const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity);
-      regionBanks.forEach((bank) => {
-        const share = bank.bankMarketShare ?? 1 / Math.max(1, regionBanks.length);
-        const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
-        if (!existingSheet) return;
-        if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
-        ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
-          ...existingSheet,
-          // The desk's earnings are money the clients actually paid (their cash legs already
-          // deduct the fee), so the bank receives CASH, not just a bookkeeping equity credit —
-          // an equity write with no cash leg breaks the balance-sheet identity the invariants
-          // harness now asserts per bank per week.
-          bankEquityUSD: existingSheet.bankEquityUSD + result.totalDealerRevenueUSD * share,
-          cashReservesUSD: existingSheet.cashReservesUSD + result.totalDealerRevenueUSD * share,
-        };
-      });
-    }
+    // SETL6: the book's whole cash side, through the clearing house.
+    const entityIds = new Set(bookEntities.map((e) => e.id));
+    settleClearedBook(
+      ctx, regionId, 'corporate bond',
+      result.netCashDeltaByParticipantId,
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : undefined),
+      { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+      feeDesksForRegion(ctx, regionId),
+      primaryTakeUSD(result)
+    );
   });
 }

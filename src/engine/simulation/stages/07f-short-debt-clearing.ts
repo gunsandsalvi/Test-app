@@ -38,6 +38,8 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
+import { pay, pendingSettlementUSD, PartyRef } from './settlement';
+import { settleClearedBook, feeDesksForRegion } from './book-settlement';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
 const DEALER_SPREAD_BPS = 2; // the tightest market there is
@@ -123,7 +125,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       regionBanks.forEach((bank) => {
         const holdings = new Map<string, number>();
         const demand = new Map<string, ParticipantDemand>();
-        const sheet = bank.bankBalanceSheet!;
+        // The working sheet, not the week-start one: 02b's repo session and 07c's purchases have
+        // already happened and both wrote here. A bank's bill bid must be sized against the book
+        // it actually has at this point in the week.
+        const sheet: NonNullable<typeof bank.bankBalanceSheet> =
+          ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
         // WS6: same funding budget and encumbrance floor as 07c — a bill bid is a claim on
         // real money, and pledged collateral cannot simultaneously be sold. (Bills cleared
         // here share the collateral pool with the bonds.)
@@ -131,8 +137,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // fund, AND what its equity supports under the leverage floor — the only capital
         // constraint that sees a zero-risk-weight sovereign book (see BASEL_MIN_LEVERAGE_RATIO's
         // doc for the 260-week runaway that made this necessary).
+        // SETL6: reserves plus this week's already-agreed securities settlement — 07c's bids
+        // are commitments that have not settled yet, and the same reserves cannot fund both.
+        const settledCashUSD = sheet.cashReservesUSD
+          + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
         const fundableUSD = Math.min(
-          Math.max(0, sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
+          Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
             + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts),
           leverageHeadroomUSD(sheet)
         );
@@ -181,7 +191,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             reservationStat: reg.policyRate * 10000 + INSTITUTIONAL_BILL_TERM_PREMIUM_BPS_PER_YEAR * b.years,
             maxHoldingUSD: sleeveUSD * bucketShare,
             fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
-            maxNetPurchaseUSD: Math.max(0, entity.cashUSD ?? 0) * CASH_SLEEVE_BILL_SHARE * bucketShare,
+            maxNetPurchaseUSD: Math.max(0, (entity.cashUSD ?? 0)
+              + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })) * CASH_SLEEVE_BILL_SHARE * bucketShare,
           });
         });
         participants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
@@ -235,15 +246,21 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const cleared13w = billPoints.find((p) => p.tenorYears === 0.25);
       reg.zeroRates = { ...reg.zeroRates, tenor3M: cleared13w ? cleared13w.yield : calculateNelsonSiegelZeroRate(0.25, reg.yieldCurveParams) };
 
-      // Apply bank books (their bill buckets live beside the bond buckets in byTenor) with cash.
-      const bankFillById = new Map(regionBanks.map((bank) => [bank.ticker, result.newParticipantHoldings.get(`BANK-${bank.ticker}`)]));
-      ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
-        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
-        const fills = bankFillById.get(c.ticker);
-        if (!fills) return c;
+      // Apply bank books (their bill buckets live beside the bond buckets in byTenor).
+      // The write goes to `companyUpdates`, which is the ONLY bank-sheet write that survives:
+      // stage 08 rebuilds `updatedCompanies` from the week-start array and takes each bank's
+      // sheet from `companyUpdates`. This stage used to write `updatedCompanies` instead, so
+      // every bill fill it cleared for a bank was silently discarded — the fills were priced,
+      // the buckets never moved, and 07c's careful pass-through of the bill buckets was
+      // preserving a position nothing was updating.
+      regionBanks.forEach((bank) => {
+        const fills = result.newParticipantHoldings.get(`BANK-${bank.ticker}`);
+        if (!fills) return;
+        const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
+        if (!existingSheet) return;
         // Only the buckets this auction actually priced are rewritten; a bucket whose last
         // tranche matures this week is left standing for stage 11 to redeem for cash.
-        const byTenor = { ...(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}) };
+        const byTenor: Record<string, number> = { ...(existingSheet.sovereignBondHoldingsByTenor || {}) };
         let faceDeltaUSD = 0;
         activeBuckets.forEach((b) => {
           const newUSD = fills.get(billInstrumentId(regionId, b.key)) ?? 0;
@@ -251,18 +268,17 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           if (newUSD > 1) byTenor[b.key] = newUSD; else delete byTenor[b.key];
         });
         // The engine's cash leg (face plus the dealer fee); the fee part is P&L — an expense the
-        // identity invariant would otherwise report as a missing leg.
-        const cashDeltaUSD = result.netCashDeltaByParticipantId.get(`BANK-${c.ticker}`) ?? -faceDeltaUSD;
+        // identity invariant would otherwise report as a missing leg. SETL6: the reserves leg
+        // settles through the clearing house below, so the buyer and the seller move against
+        // each other rather than each moving alone.
+        const cashDeltaUSD = result.netCashDeltaByParticipantId.get(`BANK-${bank.ticker}`) ?? -faceDeltaUSD;
         const feeUSD = Math.max(0, -(cashDeltaUSD + faceDeltaUSD));
-        return {
-          ...c,
-          bankBalanceSheet: {
-            ...c.bankBalanceSheet,
-            sovereignBondHoldingsByTenor: byTenor,
-            sovereignBondHoldingsUSD: Number(Object.values(byTenor).reduce((s, v) => s + v, 0).toFixed(0)),
-            cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + cashDeltaUSD,
-            bankEquityUSD: c.bankBalanceSheet.bankEquityUSD - feeUSD,
-          },
+        if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
+        ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
+          ...existingSheet,
+          sovereignBondHoldingsByTenor: byTenor,
+          sovereignBondHoldingsUSD: Number(Object.values(byTenor).reduce((s, v) => s + v, 0).toFixed(0)),
+          bankEquityUSD: existingSheet.bankEquityUSD - feeUSD,
         };
       });
 
@@ -283,28 +299,22 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         fills.forEach((usd, instrumentId) => {
           if (usd > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
         });
-        entity.cashUSD = (entity.cashUSD ?? 0) + (result.netCashDeltaByParticipantId.get(entity.id) ?? 0);
         ctx.holdingsStore!.append(entity.id, billHoldings);
       });
 
-      // The desk's bill-market earnings: the clients' cash legs already paid these fees, so
-      // dropping the revenue destroyed the money. Credited as cash AND equity to the named
-      // banks, same as the other clearing desks (the identity invariant catches either leg
-      // missing).
-      if (result.totalDealerRevenueUSD > 0) {
-        ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
-          if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return c;
-          const share = c.bankMarketShare ?? 1 / Math.max(1, regionBanks.length);
-          return {
-            ...c,
-            bankBalanceSheet: {
-              ...c.bankBalanceSheet,
-              bankEquityUSD: c.bankBalanceSheet.bankEquityUSD + result.totalDealerRevenueUSD * share,
-              cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + result.totalDealerRevenueUSD * share,
-            },
-          };
-        });
-      }
+      // SETL6: the book's whole cash side, through the clearing house — participants, the
+      // desks' fees, and the dealer's own inventory leg.
+      const billEntityIds = new Set(regionEntities.map((e) => e.id));
+      settleClearedBook(
+        ctx, regionId, 'bill',
+        result.netCashDeltaByParticipantId,
+        (id) => (billEntityIds.has(id) ? { kind: 'INSTITUTION', id }
+          : id.startsWith('BANK-') ? { kind: 'BANK_SECURITIES', ticker: id.slice(5) }
+            : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
+              : undefined),
+        { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+        feeDesksForRegion(ctx, regionId)
+      );
 
       // Dealer residual: bills live in the same dealer book as bonds, under their own keys.
       const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !p.tenorKey.startsWith('b'));
@@ -419,8 +429,14 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           isCommercialPaper: true,
         } as DebtTranche);
       }
-      // The cash legs are real: new paper is proceeds in, matured paper is principal out.
-      comp.cash = comp.cash + newPaperUSD - maturedUSD;
+      // The cash legs are real, and somebody is on the other side of them: paper sold is money
+      // from its buyer, paper redeemed is money back to its holder. CP has no cleared book yet
+      // (it is issued here at a derived rate, not auctioned), so the holder is the named
+      // boundary — a deposit stock to watch, not cash appearing on the issuer's balance sheet.
+      const cp: PartyRef = { kind: 'UNMODELED', region: regionId };
+      const issuer: PartyRef = { kind: 'COMPANY', ticker: comp.ticker };
+      pay(ctx, { payer: cp, payee: issuer, amountUSD: newPaperUSD, reason: 'commercial paper issued' });
+      pay(ctx, { payer: issuer, payee: cp, amountUSD: maturedUSD, reason: 'commercial paper redeemed' });
       comp.totalDebt = Math.max(0, comp.totalDebt + newPaperUSD - maturedUSD);
     });
   });

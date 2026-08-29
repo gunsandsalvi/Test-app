@@ -154,6 +154,14 @@ export interface ClearingResult {
   totalDealerRevenueUSD: number;
   netCashDeltaByParticipantId: Map<string, number>;
   /**
+   * SETL6 — the DEALER's own cash leg: it is the counterparty to every fill, so it receives
+   * exactly what the participants paid, fees included. Participants + dealer = 0 by
+   * construction, which is what lets the whole book settle through one clearing house whose
+   * residual must be zero. Split by the adapters: the fee half is the desks' revenue, the rest
+   * funds the inventory the dealer was left holding.
+   */
+  dealerNetCashUSD: number;
+  /**
    * §6 damper diagnostic: instrument ids whose printed level was held away from the solved
    * level by `maxWeeklyStatMovePct` this week. The damper is legitimate discrete-time
    * smoothing, but it must never BIND persistently — a name clamped for weeks on end means
@@ -750,6 +758,7 @@ function accumulateShard(
     if (filledUSD > 1) result.newParticipantHoldings.get(p.id)!.set(instruments[shard.fillInst[f]].id, filledUSD);
     result.netCashDeltaByParticipantId.set(p.id, (result.netCashDeltaByParticipantId.get(p.id) ?? 0) - tradedUSD - feeUSD);
     result.totalDealerRevenueUSD += feeUSD;
+    result.dealerNetCashUSD += tradedUSD + feeUSD;
   }
 }
 
@@ -780,6 +789,7 @@ export function clearFinancialAsset(
     newDealerInventoryById: new Map(),
     totalDealerRevenueUSD: 0,
     netCashDeltaByParticipantId: new Map(),
+    dealerNetCashUSD: 0,
     damperBoundInstrumentIds: [],
     primaryOutcomeById: new Map(),
   };

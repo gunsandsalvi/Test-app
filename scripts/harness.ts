@@ -221,6 +221,43 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
  */
 /** PUB2: the central bank's balance sheet must close — assets = reserves + TGA + currency,
  * with the named unbacked residual. And the TGA is a real account: it may not go negative. */
+/**
+ * SETL1/SETL6 — the settlement layer's own two proofs, asserted rather than assumed.
+ *
+ *  - `unresolvedUSD` is money that found no account: a party that does not exist, or a holder
+ *    with no bank. Non-zero means dollars left the system, which is the §7.86 defect's shape.
+ *  - `clearingHouseResidualUSD` is what the cleared books' central counterparty was left
+ *    holding. A CCP is on both sides of every trade, so it is flat by construction; a residual
+ *    means a book settled one side of a session and not the other.
+ *  - `centralBankResidualUSD` is bank reserves plus the treasury account net of what the
+ *    central bank issued: its liabilities move between buckets, and new ones come from one
+ *    place only.
+ *
+ * The layer computed these from the day it existed and nothing ever read them.
+ */
+function checkSettlementClosed(state: GameState, week: number) {
+  const s = (state as any).lastSettlement;
+  if (!s) return;
+  if (Math.abs(s.unresolvedUSD ?? 0) > 1e6) {
+    violations.push({
+      week,
+      message: `settlement left ${((s.unresolvedUSD ?? 0) / 1e9).toFixed(3)}B unresolved — a payment found no account`,
+    });
+  }
+  if (Math.abs(s.clearingHouseResidualUSD ?? 0) > 1e6) {
+    violations.push({
+      week,
+      message: `clearing house left holding ${((s.clearingHouseResidualUSD ?? 0) / 1e9).toFixed(3)}B — a cleared book settled one side only`,
+    });
+  }
+  if (Math.abs(s.centralBankResidualUSD ?? 0) > 1e6) {
+    violations.push({
+      week,
+      message: `central bank liabilities moved by ${((s.centralBankResidualUSD ?? 0) / 1e9).toFixed(3)}B outside its own issuance — reserves and the treasury account did not net`,
+    });
+  }
+}
+
 function checkCentralBankIdentity(state: GameState, week: number) {
   (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
     const cb = state.regions[region]?.centralBankSheet;
@@ -1210,6 +1247,7 @@ function runHarness() {
     checkCentralBankIdentity(state, w);
     violations.push(...checkHoldingsLedgerConservation(state, w));
     checkBeneficiaryClaimsHaveHolders(state, w);
+    checkSettlementClosed(state, w);
     prevStateForBookCheck = state;
 
     // 5b. The bank balance-sheet identity, per named bank, every week. Cash moves only by
