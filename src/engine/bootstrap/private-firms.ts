@@ -21,7 +21,7 @@
 
 import { RegionId } from '../../domain/geography';
 import { Industry } from '../../domain/industry';
-import { INDUSTRY_REGISTRY } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, industryRecipeIntensity } from '../../domain/industry-registry';
 import { sectorBaselineMarginPct } from './firms';
 
 export interface PrivateFirmSeed {
@@ -100,7 +100,20 @@ export function generatePrivateFirmSeeds(
         ebitdaMargin: margin,
         leverage,
         sponsorStyle,
-        employeeCount: Math.max(25, Math.round(revenueUSD / Math.max(50_000, productivityUSD))),
+        // CHAIN-E/IND-R6 — HEADCOUNT IS VALUE ADDED OVER PRODUCTIVITY, here as well.
+        //
+        // This line divided GROSS revenue by value added per worker, i.e. it treated revenue AS
+        // value added — the exact defect §7.111 identified and CHAIN-E fixed for the named tier
+        // (§7.118). It survived here because there are TWO firm generators and the fix landed in
+        // one of them, which is IND-R6's whole argument with a number attached: measured at seed,
+        // private payroll was **61.3% of revenue against the public tier's 35.5%**, both carrying
+        // the same ~22% stated margin — so the private tier could not earn its own stated margin
+        // from its own staff (1.5% left before any other opex), and charging it real wages tipped
+        // 1,712 firms below their cost of capital (§7.115's reverted attempt). That was never a
+        // double-count; the two tiers simply derived headcount by different routes.
+        employeeCount: Math.max(25, Math.round(
+          revenueUSD * (1 - industryRecipeIntensity(seg.industry)) / Math.max(50_000, productivityUSD)
+        )),
       });
     });
   });

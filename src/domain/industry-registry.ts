@@ -693,6 +693,19 @@ export function grossOutputMultiplierOf(unitId: string): number {
 }
 
 /**
+ * The mean intensity of what an industry makes — the industry-level version of
+ * `recipeIntensityOf`, for a producer known only by its industry (the private tier's seed, whose
+ * firms have no product lines yet). Same derivation, one source, so a fix cannot land in one
+ * generator and miss the other — which is exactly what happened between the two firm generators
+ * before IND-R6 (§7.119).
+ */
+export function industryRecipeIntensity(industry: Industry): number {
+  const subUnits = INDUSTRY_REGISTRY[industry].subUnits;
+  if (subUnits.length === 0) return 0;
+  return subUnits.reduce((a, su) => a + recipeIntensityOf(su.unitId), 0) / subUnits.length;
+}
+
+/**
  * CHAIN-E — total output implied by a vector of FINAL demand: the Leontief solve `X = F + A X`.
  *
  * The demand seed is `C + I + G` (see `macro/initialization.ts` and `03-category-demand.ts`),
