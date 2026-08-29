@@ -44,6 +44,10 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** SETL-B — what the named companies actually paid in wages this week, by region. The tier's
+   * wage bill is the REMAINDER of the economy's, so it is derived from this rather than
+   * re-derived from an employment measure of its own (two derivations of one number). */
+  companyWagesPaidByRegion: Record<string, number>;
   /** SETL3/4 — issuer id → ticker, so the register's payments name a real payer. */
   issuerTickerById: Map<string, string>;
   /** SETL2b — facilities WRITTEN or RETIRED this week, recorded where the tranche is created so
@@ -197,6 +201,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     damperBoundInstrumentIds: [],
     paymentInstructions: [],
     creditEventsThisWeek: [],
+    companyWagesPaidByRegion: {},
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),
     g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],

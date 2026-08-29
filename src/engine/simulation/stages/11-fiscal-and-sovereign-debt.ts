@@ -53,6 +53,9 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
   // on the most recently published statistic rather than one that does not exist yet.
   regionIds.forEach((regionId) => {
     const reg = updatedRegions[regionId];
+    // SETL-B: what the named companies paid this week, carried so next week's tier wage bill is
+    // the remainder rather than a second derivation.
+    reg.lastWeekCompanyWagesUSD = ctx.companyWagesPaidByRegion[regionId] ?? 0;
 
     // Rebase annually onto current spending patterns, chain-linked from the current level so the
     // series has no step at the rebase — what a statistical agency does when consumption habits

@@ -12,6 +12,7 @@ import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { decomposeGovernmentSpending } from '../../../domain/government';
+import { pay } from './settlement';
 import { WeeklyStepContext } from './context';
 
 export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -58,6 +59,38 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // Government purchases only — the transfer share of outlays reaches demand through C, not
     // here. PUB1e: ONE owner of the procurement budget, including the fiscal stance, so the
     // goods market cannot bid for a stimulus the treasury never pays for.
+    // SETL-B: THE EMPLOYERS PAY. Household income used to be a derived statistic while the
+    // deposits it implied were credited by a savings formula — two independent quantities for one
+    // thing (rule 3). Companies now pay their payroll (stage 08), and the other two employers pay
+    // here: the government out of its real account, and the private-sector tier from the boundary
+    // until HC gives those segments a ledger of their own. Together these are the economy's wage
+    // bill, and household deposits move by them instead of by a rate applied to an estimate.
+    {
+      const payrollUSD = reg.governmentPayrollWeeklyUSD ?? 0;
+      if (payrollUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'GOVERNMENT', region: regionId },
+          payee: { kind: 'HOUSEHOLD', region: regionId },
+          amountUSD: payrollUSD,
+          reason: 'government payroll',
+        });
+      }
+      // The tier's wage bill is the REMAINDER of the economy's, not a second derivation of it:
+      // total wages less what the government and the named companies already paid. Deriving it
+      // independently (headcount times a per-worker income) is what made deposits explode —
+      // the two employment measures did not agree, and the error compounded weekly.
+      const totalWageBillWeeklyUSD = (reg.estimatedHouseholdIncomeUSD ?? 0) / 52;
+      const segmentWagesUSD = Math.max(0, totalWageBillWeeklyUSD - payrollUSD - (reg.lastWeekCompanyWagesUSD ?? 0));
+      if (segmentWagesUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'UNMODELED', region: regionId },
+          payee: { kind: 'HOUSEHOLD', region: regionId },
+          amountUSD: segmentWagesUSD,
+          reason: 'private-sector tier wages',
+        });
+      }
+    }
+
     const govBudget = decomposeGovernmentSpending(
       reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
       GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,

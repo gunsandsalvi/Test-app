@@ -66,7 +66,16 @@ const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
  */
 export function availablePurchaseCapacityUSD(entity: InstitutionalEntity): number {
   const allowanceUSD = LEVERAGE_ALLOWANCE[entity.entityType] * Math.max(0, entity.totalAssetsUSD);
-  return Math.max(0, (entity.cashUSD ?? 0) + allowanceUSD);
+  // A fund does not spend to the last dollar: it runs a CASH SLEEVE, and what it invests is the
+  // excess over it. The target is the entity's own `cashPct` — already its stated policy, so no
+  // number is invented here — and keeping it is what makes a balance a MANAGED position rather
+  // than the residue of whatever the week's auctions did to it. Without this, entity cash was a
+  // clearing residual swinging 72B → 23B → 32B → 18B week to week, and once institutional
+  // balances became real bank liabilities (SETL5) that swing went straight into bank reserves
+  // (§7.91). Below the sleeve an entity is a net seller, which is what a fund short of cash is.
+  const sleeveTargetUSD = Math.max(0, entity.assetAllocationTarget?.cashPct ?? 0) * Math.max(0, entity.totalAssetsUSD);
+  const investableCashUSD = Math.max(0, (entity.cashUSD ?? 0) - sleeveTargetUSD);
+  return investableCashUSD + allowanceUSD;
 }
 
 /**

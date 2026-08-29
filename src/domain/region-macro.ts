@@ -505,6 +505,9 @@ export interface Region {
   sovereignRating: 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
   laggedPolicyRateEMA: number;
   laborForceParticipation: number;
+  /** SETL-B — last week's measured company payroll, so the private tier pays the REMAINDER of
+   * the economy's wage bill rather than a second derivation of its own. */
+  lastWeekCompanyWagesUSD?: number;
   inflationDeviationStreak: number;
   smoothedSlackGap?: number;
   policyRateLagBuffer: number[];

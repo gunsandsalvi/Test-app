@@ -189,8 +189,13 @@ export function evolveBankingSector(
   // the bank's deposit line and the household stock it claims to be: they are ONE number now,
   // reconciled by the bank-diversification stage every week.
   const weeklySavingsInflowUSD = (savingsRate * estimatedHouseholdIncomeUSD) / 52;
-  const householdDepositFlowUSD = weeklySavingsInflowUSD - householdMmfDiversionUSD
-    - priorHouseholdEtfPurchasesUSD;
+  // SETL-B: the savings inflow is NO LONGER credited here. Households are paid real wages by
+  // real employers and pay for real goods, and both move their deposits through settlement — so
+  // adding a rate-times-estimate on top was the second of two independent quantities for one
+  // balance (rule 3). What remains here are the two flows settlement does not carry: the money
+  // fund's diversion and last week's ETF purchases. `weeklySavingsInflowUSD` survives only as the
+  // funding-pressure signal below, which is what it was always genuinely measuring.
+  const householdDepositFlowUSD = -householdMmfDiversionUSD - priorHouseholdEtfPurchasesUSD;
   depositsUSD += householdDepositFlowUSD;
   cashUSD += householdDepositFlowUSD;
 

@@ -736,7 +736,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         .reduce((a: number, pool: any) => a + (pool?.employedCount ?? 0), 0));
       const weeklyWageBillUSD = (comp.employeeCount * ((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployed)) / 52;
       const wageShare = Math.min(1, Math.max(0, weeklyWageBillUSD / Math.max(1, accruedOutflowsWeekly)));
-      post('wages paid to households', -opexOutflowUSD * wageShare, { kind: 'HOUSEHOLD', region: comp.region });
+      const wagesPaidUSD = opexOutflowUSD * wageShare;
+      post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
+      ctx.companyWagesPaidByRegion[comp.region] = (ctx.companyWagesPaidByRegion[comp.region] ?? 0) + wagesPaidUSD;
       post('other opex beyond auction settlements', -opexOutflowUSD * (1 - wageShare));
       post('inventory carrying cost', -carryingCostUSD);
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
