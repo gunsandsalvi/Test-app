@@ -9,7 +9,7 @@ import { ProfileInput, ProfilePnl } from './types';
 export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
     weeklyPayrollUSD } = input;
-  let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
+  let newRevenue = 0;
 
   // XB3a-2: a carrier's revenue is the freight it actually carried this week, at the rate its
   // lanes cleared at — not units sold into the goods auction, which it does not participate
@@ -32,18 +32,12 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // IND-R1, rule 3: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageUSD` —
   // a second wage bill computed off the fleet spec, which the labor market cannot touch, while
   // `employeeCount` (which it hires and fires, and which pays the households) moved
-  // independently. A carrier builds its costs up rather than stating a margin, so it charges the
-  // whole bill, not the deviation.
-  const annualCrew = weeklyPayrollUSD * 52;
-  newEbitda = newRevenue - annualFuel - annualCrew;
-  newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
-  newEbit = newEbitda - (comp.grossPPEUSD ?? 0) / 20;
-  newNetIncome = (newEbit - annualInterest) * (newEbit > 0 ? (1 - taxRate) : 1);
-  newEps = perShare(newNetIncome);
+  // independently. The crew bill is the common payroll now, charged by the caller; fuel is the
+  // one cost that is genuinely a carrier's own.
   if (comp.carrierFleet) {
     comp.carrierFleet.lastWeekTonneNm = ctx.carrierTonneNm[comp.ticker] ?? 0;
     comp.carrierFleet.lastWeekFreightRevenueUSD = weeklyFreightUSD;
   }
 
-  return { newRevenue, newEbitdaMargin, newEbitda, newEbit, newNetIncome, newEps };
+  return { newRevenue, profileCostsAnnualUSD: annualFuel };
 };

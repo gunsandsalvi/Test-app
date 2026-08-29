@@ -4819,3 +4819,56 @@ that proved it, the lesson.
       never about modelling two different things the same way. §7.122 reached for the first and
       landed on the second, in a document whose whole recent record is about forks that drift —
       which is exactly when the pull to unify everything is strongest.
+
+124. **The sovereign float counted paper nobody was selling — the debt §7.120 owed, paid.** The
+    check that caught it is the one that exists for exactly this: real books together claiming
+    more than the instrument's outstanding.
+    - **OWN7's rule had two carve-outs and needed three.** The float subtracted the central bank
+      on a week it places no order, and corporate treasuries which never bid. It did not subtract
+      **the share no real book holds at all** — measured at seed, the model's books hold ~80% of
+      every region's sovereign stock and the other ~20% sits with households, foreign official and
+      retail, holders this model does not name yet. They are the purest case of "a holder that
+      does not bid keeps its position", and every dollar of it was offered to the bidders. So they
+      bought paper from nobody, and with no passive book to decrement the total held climbed past
+      what exists: **80% at seed → 101% by week 3**, institutions +87B and banks +64B against
+      +28B of actual new issuance.
+    - **The residual is computed, not stated:** outstanding less what every real holder actually
+      has, per bucket. The float is then exactly "what the participants in this book hold between
+      them", which is what OWN7's rule says and what the other two carve-outs already do.
+    - **One trap on the way, worth the line:** an institution holds this book's paper under the
+      BUCKET instrument id and a corporate treasury under a TRANCHE id — two id spaces for one
+      instrument. Reading the wrong one counted the whole institutional book as passive, the float
+      collapsed, and every real holder was forced out into the dealer (institutions 201B → 0,
+      dealer 0 → 99B). **Measured after the fix: 80% → 85% → 80% over six weeks, never above
+      outstanding.**
+
+125. **IND FINISHES AT FIRMS — the profile contract is inverted, financials buy what they consume,
+    and the harness is GREEN.** *(§7.122 steps 3 and 4; steps 1-2 are refactors and remain.)*
+    - **A profile may no longer state a margin.** `ProfilePnl` returned `newEbitdaMargin` and
+      `newEbitda`, and three of the four did state one — bank 0.40, asset manager 0.35, insurer
+      0.15 — while the operating path built EBITDA up from real costs (§7.121). **What a margin
+      MEANT depended on which arm of the dispatch a firm went down**, which is §7.115's drift one
+      level up from the code path that caused it. A profile now returns only how it EARNS and the
+      costs no other kind of firm has (a bank's credit losses, an insurer's claims, a carrier's
+      fuel); **EBITDA is computed in exactly one place for every kind of firm.**
+    - **A firm that sells no product still BUYS.** A recipe is a property of a product (§7.117)
+      and IND-R2 correctly gave financials no product line — but those are the same field, so a
+      bank bought none of the premises, software or professional services it obviously consumes,
+      and its operating cost had nowhere to come from except the stated margin. `PROFILE_INPUT_BASKET`
+      gives a profile its own input intensities against revenue — the same primitive as a BOM —
+      and **one accessor, `firmInputIntensities`, serves stage 05's bidding, stage 08's cost and
+      the supply-relationship graph**, so a firm cannot be charged for an input it never bid for
+      (rule 14). Financials are real buyers in the goods auction now.
+    - **`INSURER_EXPENSE_RATIO = 0.20` is deleted** — every insurer's operating cost as a flat
+      share of premiums, so none could be run better than another, and double-counting besides:
+      the expenses it stood for ARE the staff and premises the caller now charges for real.
+    - **Measured, 10 weeks SHOCKS=0: HARNESS PASSED, 0 violations.** The first green run in this
+      sequence, from 18 → 15 → 2 → 33 → 42 → 30 → 20 → **0**. Every number in that walk was a
+      real defect surfacing as the thing above it was fixed.
+    - **What this does NOT fix, and it is item 1's:** unemployment still drifts to ~30% by week 10
+      and inflation to −15%. The harness passes because those are inside its bands at ten weeks;
+      at horizon they are not, and that is the deflation spiral (§7.118).
+    - **Still open in IND:** §7.122 steps 1-2 (extract OPERATING into a profile module, widen
+      `ProfileInput`) — pure refactors now that the contract is right; `CARD_OPERATING_COST_BPS`,
+      which is a loan-PRICING input rather than a P&L cost and wants deriving from the bank's own
+      measured cost base; and IND-R3, IND4, IND6, IND7, IND10-19.

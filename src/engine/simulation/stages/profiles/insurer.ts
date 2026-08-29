@@ -1,13 +1,12 @@
 /** An insurer's P&L: premiums limited by capital, claims stochastic, investment income its own portfolio's (moved verbatim from stage 08, BP1c). */
 
 import { random } from '../../../rng';
-import { PREMIUM_TO_SURPLUS_RATIO, INSURER_EXPENSE_RATIO } from '../../../../domain/institutions';
+import { PREMIUM_TO_SURPLUS_RATIO } from '../../../../domain/institutions';
 import { ProfileInput, ProfilePnl } from './types';
 
 export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
-  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
-    payrollAboveBaselineAnnualUSD } = input;
-  let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
+  const { comp, entityById } = input;
+  let newRevenue = 0;
 
   // HH1b — ONE INSURER, NOT TWO. This branch used to refuse the entity behind it, on the
   // reasoning that `instEnt.totalAssetsUSD` was "a macro-level slice meant for
@@ -35,7 +34,11 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const lossRatio = 0.70 + (random() - 0.5) * 0.20;
   comp.insuranceClaimsPaidUSD = weeklyPremiums * lossRatio * 52;
 
-  const underwritingIncome = weeklyPremiums * (1 - lossRatio - INSURER_EXPENSE_RATIO);
+  // IND-R4: `INSURER_EXPENSE_RATIO = 0.20` is gone. It was every insurer's operating cost as a
+  // flat share of premiums, so no insurer could be run better than another — and it was
+  // double-counting besides, because the expenses it stood for ARE this firm's staff and
+  // premises, which the caller now charges from the real wage bill and the real input basket.
+  // What remains here is what only an insurer has: the claims it pays.
   // The income its OWN portfolio actually earned this week, recorded by
   // `accrueInstitutionalIncome` when it credited the cash — not a second yield assumption
   // applied to a different asset base.
@@ -43,12 +46,10 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
 
   newRevenue = comp.insurancePremiumsWrittenUSD;
   comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
-  newEbitdaMargin = 0.15;
-  // IND-R1: its staff, at the deviation from the baseline the stated margin already carries.
-  newEbitda = (underwritingIncome + investmentIncome) * 52 - payrollAboveBaselineAnnualUSD;
-  newEbit = Math.max(1, newEbitda);
-  newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-  newEps = perShare(newNetIncome);
 
-  return { newRevenue, newEbitdaMargin, newEbitda, newEbit, newNetIncome, newEps };
+  return {
+    newRevenue,
+    profileCostsAnnualUSD: comp.insuranceClaimsPaidUSD,
+    otherIncomeAnnualUSD: investmentIncome * 52,
+  };
 };

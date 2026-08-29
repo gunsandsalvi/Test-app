@@ -18,7 +18,7 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { recurringRevenueShare, SUBSCRIPTION_WEEKLY_CHURN } from '../../../domain/industry-registry';
-import { industryOfSubUnit, recipeIntensityOf } from '../../../domain/industry-registry';
+import { industryOfSubUnit, firmInputIntensities } from '../../../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
@@ -294,16 +294,31 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // profile. The four financial statement paths live in stages/profiles/; the OPERATING path
     // below stays inline until IND2/IND3 decompose it into revenue-mechanism and cost-shape
     // profiles of their own.
-    const profileModule = PROFILE_REGISTRY[profileKeyOf(comp)];
+    const profileKey = profileKeyOf(comp);
+    const profileModule = PROFILE_REGISTRY[profileKey];
     if (profileModule) {
+      // §7.122 step 3 — EBITDA IS COMPUTED HERE, FOR EVERY KIND OF FIRM, and a profile has no
+      // say in it. A profile returns how it EARNS and the costs no other kind of firm has; the
+      // costs every firm has — its people and what it consumes — are charged in one place.
+      // Three of the four used to return a stated margin (bank 0.40, manager 0.35, insurer 0.15),
+      // so what a margin MEANT depended on which arm of the dispatch a firm went down.
+      //
+      // §7.122 step 4 — and a firm that sells no product still BUYS: a bank's premises, software
+      // and professional services come from its profile's input basket at the same cleared prices
+      // a manufacturer pays for steel. Without it a bank's operating cost had nowhere to come
+      // from except the stated margin this deletes.
+      const profileInputRate = Object.values(firmInputIntensities(comp.productLines, profileKey))
+        .reduce((a, b) => a + b, 0);
       const pnl = profileModule({ comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
-        weeklyPayrollUSD, payrollAboveBaselineAnnualUSD });
+        weeklyPayrollUSD, inputCostAnnualUSD: comp.annualRevenue * profileInputRate });
       newRevenue = pnl.newRevenue;
-      newEbitdaMargin = pnl.newEbitdaMargin;
-      newEbitda = pnl.newEbitda;
-      newEbit = pnl.newEbit;
-      newNetIncome = pnl.newNetIncome;
-      newEps = pnl.newEps;
+      const profileInputCostUSD = newRevenue * profileInputRate;
+      newEbitda = newRevenue + (pnl.otherIncomeAnnualUSD ?? 0)
+        - profileInputCostUSD - weeklyPayrollUSD * 52 - pnl.profileCostsAnnualUSD;
+      newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
+      newEbit = newEbitda - (comp.grossPPEUSD ?? 0) / 20;
+      newNetIncome = (newEbit - annualInterest) * (newEbit > 0 ? (1 - taxRate) : 1);
+      newEps = perShare(newNetIncome);
     } else {
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
@@ -452,8 +467,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // Payroll now enters IN FULL, not as a deviation from baseline: a deviation was only ever
       // needed because the margin it adjusted already contained a wage bill. Nothing here
       // contains anything.
-      const baselineInputRate = (comp.productLines || []).reduce(
-        (r, l) => r + (l.revenueShare ?? 1) * recipeIntensityOf(l.subUnitId), 0);
+      const baselineInputRate = Object.values(firmInputIntensities(comp.productLines, profileKey))
+        .reduce((a, b) => a + b, 0);
       const baselinePayrollRate = (baselineWeeklyPayrollUSD * 52) / Math.max(1, comp.baselineAnnualRevenue || comp.annualRevenue);
       const otherOpexRate = 1 - baselineMargin - baselineInputRate - baselinePayrollRate;
 

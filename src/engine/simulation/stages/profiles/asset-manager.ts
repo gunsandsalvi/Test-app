@@ -5,9 +5,8 @@ import { random } from '../../../rng';
 import { ProfileInput, ProfilePnl } from './types';
 
 export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
-  const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare,
-    payrollAboveBaselineAnnualUSD } = input;
-  let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
+  const { comp, state, entityById } = input;
+  let newRevenue = 0;
 
   const instEnt = entityById.get(comp.id);
   // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
@@ -24,13 +23,9 @@ export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) 
 
   const weeklyFees = comp.aumUSD * comp.managementFeeRate / 52;
   newRevenue = Math.max(10, weeklyFees * 52);
+  // §7.122 step 3: the stated 0.35 margin is gone. A manager's costs are its people and its
+  // technology, both common and both real, and it has no third cost of its own — which is why
+  // its basket is the lightest in the registry and its margin the highest.
   comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
-  newEbitdaMargin = 0.35;
-  // IND-R1: its staff, at the deviation from the baseline the stated margin already carries.
-  newEbitda = newRevenue * newEbitdaMargin - payrollAboveBaselineAnnualUSD;
-  newEbit = Math.max(1, newEbitda);
-  newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
-  newEps = perShare(newNetIncome);
-
-  return { newRevenue, newEbitdaMargin, newEbitda, newEbit, newNetIncome, newEps };
+  return { newRevenue, profileCostsAnnualUSD: 0 };
 };

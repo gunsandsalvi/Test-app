@@ -26,7 +26,8 @@ import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { isStorable, purchaseKindOf } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
-import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs } from '../../../domain/industry-registry';
+import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
+import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
@@ -65,12 +66,12 @@ const CONTRACTED_DEMAND_SHARE = 0.6;
 // slice of aggregate corporate demand) is what makes what a company buys here actually match
 // what it consumes there, rather than two independently-sized, unrelated numbers.
 function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): number {
-  return (comp.productLines || []).reduce((sum, line) => {
-    const reqs = CATEGORY_INPUT_REQUIREMENTS[line.subUnitId];
-    const intensity = reqs?.[inputSubUnitId];
-    if (!intensity) return sum;
-    return sum + (comp.annualRevenue / 52) * (line.revenueShare ?? 1.0) * intensity;
-  }, 0);
+  // §7.122 step 4: a firm that sells no product still buys — a bank's premises, software and
+  // professional services come from its profile's basket. One accessor for both cases, so a firm
+  // cannot be charged for an input in stage 08 that it never bid for here (rule 14).
+  const intensity = firmInputIntensities(comp.productLines, profileKeyOf(comp))[inputSubUnitId];
+  if (!intensity) return 0;
+  return (comp.annualRevenue / 52) * intensity;
 }
 
 /**
@@ -207,17 +208,16 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     (c.productLines || []).forEach((l) => {
       const arr = index.suppliersBySubUnit.get(l.subUnitId);
       if (arr) arr.push(c); else index.suppliersBySubUnit.set(l.subUnitId, [c]);
-      const reqs = CATEGORY_INPUT_REQUIREMENTS[l.subUnitId];
-      if (reqs) {
-        Object.keys(reqs).forEach(inputSubUnitId => {
-          if (!(reqs as any)[inputSubUnitId]) return;
-          const buyers = index.recipeInputBuyersBySubUnit.get(inputSubUnitId);
-          // A firm with two lines needing the same input is one buyer, not two: its need is
-          // summed by computeRecipeInputNeedUSD when it bids.
-          if (buyers) { if (buyers[buyers.length - 1] !== c) buyers.push(c); }
-          else index.recipeInputBuyersBySubUnit.set(inputSubUnitId, [c]);
-        });
-      }
+    });
+    // §7.122 step 4: registered as a BUYER from its own input basket — its products' recipes if
+    // it makes anything, its profile's basket if it does not. Selling and buying were the same
+    // field before, so a bank (correctly given no product line by IND-R2) bought nothing either.
+    // A firm with two lines needing the same input is one buyer, not two: the need is summed by
+    // computeRecipeInputNeedUSD when it bids.
+    Object.keys(firmInputIntensities(c.productLines, profileKeyOf(c))).forEach(inputSubUnitId => {
+      const buyers = index.recipeInputBuyersBySubUnit.get(inputSubUnitId);
+      if (buyers) { if (buyers[buyers.length - 1] !== c) buyers.push(c); }
+      else index.recipeInputBuyersBySubUnit.set(inputSubUnitId, [c]);
     });
   };
   ctx.prevActiveFirms.forEach(walk);

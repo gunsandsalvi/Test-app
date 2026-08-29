@@ -662,6 +662,50 @@ allSubUnits.forEach((su) => {
 });
 
 /**
+ * IND-R4/§7.122 step 4 — WHAT A FIRM BUYS WHEN IT SELLS NO PRODUCT.
+ *
+ * A recipe is a property of a PRODUCT (§7.117), and IND-R2 correctly gave financial firms no
+ * product line — a bank does not SELL enterprise software. But those are the same field, so a
+ * firm that sells nothing also BOUGHT nothing: a bank purchased none of the professional
+ * services, facilities, software or power it obviously consumes, and its operating cost had
+ * nowhere to come from except a stated margin.
+ *
+ * So a firm with no output declares its input basket against its own REVENUE instead, keyed by
+ * the profile that describes what kind of firm it is. Same primitive as a BOM — dollars of input
+ * per dollar of revenue — and the same rule-17 shape: data in the registry, behaviour in the
+ * profile. A bank is staff, premises and technology; an asset manager is staff and technology
+ * and almost nothing else, which is why its cost base is the lightest here.
+ */
+export const PROFILE_INPUT_BASKET: Record<string, Record<string, number>> = {
+  BANK: { professional_services: 0.09, enterprise_software: 0.07, facilities_and_logistics: 0.04, repair_and_maintenance: 0.01, electricity: 0.01 },
+  INSURER: { professional_services: 0.10, enterprise_software: 0.05, facilities_and_logistics: 0.03, repair_and_maintenance: 0.01, electricity: 0.01 },
+  ASSET_MANAGER: { professional_services: 0.08, enterprise_software: 0.06, facilities_and_logistics: 0.02, electricity: 0.01 },
+};
+
+/**
+ * The one accessor for "what does this firm consume per dollar it earns" — its products' BOMs
+ * if it makes anything, its profile's basket if it does not. Stage 05 bids from it, stage 08
+ * charges it, and `shared-helpers` builds supply relationships from it, so a firm cannot be a
+ * buyer in one place and not in another (rule 3).
+ */
+export function firmInputIntensities(
+  productLines: { subUnitId: string; revenueShare?: number }[] | undefined,
+  profileKey: string
+): Record<string, number> {
+  const lines = productLines ?? [];
+  if (lines.length > 0) {
+    const out: Record<string, number> = {};
+    lines.forEach((l) => {
+      Object.entries(byId.get(l.subUnitId)?.recipeInputs ?? {}).forEach(([input, intensity]) => {
+        out[input] = (out[input] ?? 0) + (l.revenueShare ?? 1) * intensity;
+      });
+    });
+    return out;
+  }
+  return { ...(PROFILE_INPUT_BASKET[profileKey] ?? {}) };
+}
+
+/**
  * CHAIN-E — the input-output structure the BOMs now describe, and the two things it derives.
  *
  * `recipeInputs` is a real matrix once every product carries one (§7.117), and two numbers the

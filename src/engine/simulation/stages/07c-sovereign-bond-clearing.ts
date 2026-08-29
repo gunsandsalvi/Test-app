@@ -225,6 +225,15 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     //     On an order week it IS a participant (with `minHoldingUSD` = its book), so it is
     //     inside the float and nothing is subtracted.
     //   - CORPORATE TREASURIES, which park cash in short paper (stage 08) and never bid.
+    // An institution holds this book's paper under the BUCKET instrument id, a corporate treasury
+    // under a TRANCHE id — two id spaces for one instrument. Reading the wrong one silently counts
+    // a whole book as passive: measured when it happened, the float collapsed and every real
+    // holder was forced out into the dealer (institutions 201B -> 0, dealer 0 -> 99B).
+    const bucketKeyByInstrumentId = new Map<string, string>();
+    activeBuckets.forEach((b) => bucketKeyByInstrumentId.set(bucketInstrumentId(regionId, b.key), b.key));
+    const bucketOf = (instrumentId: string): string | undefined =>
+      bucketKeyByInstrumentId.get(instrumentId) ?? bucketKeyByTrancheId.get(instrumentId);
+
     const nonParticipantByBucket = new Map<string, number>();
     const reserveBucket = (key: string | undefined, usd: number) => {
       if (!key || !(usd > 0)) return;
@@ -237,8 +246,50 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     ctx.prevActiveFirms.forEach((c) => {
       if (c.region !== regionId) return;
       (c.treasuryHoldings || []).forEach((h) =>
-        reserveBucket(bucketKeyByTrancheId.get(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
+        reserveBucket(bucketOf(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
     });
+
+    //   - AND THE THIRD, which OWN7 missed: THE SHARE NO REAL BOOK HOLDS AT ALL. Measured at
+    //     seed, the model's real books hold ~80% of every region's sovereign stock; the other
+    //     ~20% sits with households, foreign official and retail — holders this model does not
+    //     name yet. They are the purest case of "a holder that does not bid keeps its position",
+    //     and the float counted every dollar of it as for sale. So the bidders bought paper from
+    //     nobody, and because there is no passive book to decrement, the total held climbed past
+    //     what exists: measured 80% at seed -> 101% by week 3, institutions +87B and banks +64B
+    //     against +28B of actual new issuance (§7.124).
+    //
+    //     The residual is computed from the books themselves rather than stated: whatever the
+    //     outstanding is, less what every real holder actually has. That makes the float exactly
+    //     "what the participants in this book hold between them", which is what OWN7's rule says
+    //     and what the other two carve-outs already implement.
+    const realHoldingsByBucket = new Map<string, number>();
+    const addReal = (key: string | undefined, usd: number) => {
+      if (!key || !(usd > 0)) return;
+      realHoldingsByBucket.set(key, (realHoldingsByBucket.get(key) ?? 0) + usd);
+    };
+    ctx.prevActiveFirms.forEach((c) => {
+      if (c.region === regionId && c.bankBalanceSheet) {
+        Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {})
+          .forEach(([key, usd]) => addReal(key, Number(usd) || 0));
+      }
+      (c.treasuryHoldings || []).forEach((h) =>
+        addReal(bucketOf(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
+    });
+    ctx.updatedInstitutionalEntities.forEach((e) => {
+      if (e.isDefaulted) return;
+      (e.itemizedHoldings || []).forEach((h) => {
+        if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return;
+        addReal(bucketOf(h.instrumentId), h.quantityOrNotionalUSD ?? 0);
+      });
+    });
+    if (reg.centralBankSheet) {
+      Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
+        .forEach(([key, usd]) => addReal(key, Number(usd) || 0));
+    }
+    (reg.bankingSector.sovBondDealerInventory || []).forEach((pos: { bucketKey?: string; inventoryUSD: number }) =>
+      addReal(pos.bucketKey, pos.inventoryUSD));
+    activeBuckets.forEach((b) => reserveBucket(b.key, Math.max(0,
+      (outstandingByBucket.get(b.key) ?? 0) - (realHoldingsByBucket.get(b.key) ?? 0))));
 
     const totalOutstandingUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
     const historyLen = reg.historicalZeroCurves?.length ?? 0;
