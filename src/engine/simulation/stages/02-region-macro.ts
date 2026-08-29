@@ -2,23 +2,17 @@
  * Stage 2: Region Macro Evolution
  *
  * Evolves each region's macro state (GDP, inflation, wages, policy rate, yield curve) via
- * evolveRegionMacro, then drifts equity/corp-bond/sov-bond ownership shares toward their
- * target allocations (computeTargetOwnershipShares) and captures the equity holder-class
- * flow consumed by stage 8's price mechanism.
+ * evolveRegionMacro, and captures the equity holder-class flow consumed by stage 8's price
+ * mechanism.
  */
 
 import { GameState, RegionId } from '../../../types';
 import { getSimulationDate } from '../../formatters';
 import { isActiveCompany } from '../../../domain/company';
 import { evolveRegionMacro } from '../../macro/evolution';
-import { computeOccupationDemand, computeTargetOwnershipShares } from './shared-helpers';
+import { computeOccupationDemand } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { random } from '../../rng';
-
-// Bank/institutional/foreign/central-bank ownership is capped well under 100% so household
-// (the implicit residual everywhere ownership is displayed) always retains a real floor,
-// rather than being squeezed to exactly 0.
-const MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE = 0.85;
 
 export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): void {
   const globalInflationShock = (random() - 0.5) * 0.0008;
@@ -101,33 +95,10 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
     // writer of numbers that are now derived from the real books each week in holdings-view.ts.
     // Two representations of one real thing; the real one survives.
 
-    (['equity', 'corpBond', 'sovBond'] as const).forEach(assetClass => {
-      const fieldName = `${assetClass}Ownership` as 'equityOwnership' | 'corpBondOwnership' | 'sovBondOwnership';
-      const target = computeTargetOwnershipShares(assetClass, regionId, updatedRegion, state.regions);
-      const current = updatedRegion[fieldName];
-      const updatedShares = {
-        bankShare: current.bankShare + (target.bankShare - current.bankShare) * 0.05,
-        institutionalShare: current.institutionalShare + (target.institutionalShare - current.institutionalShare) * 0.05,
-        centralBankShare: current.centralBankShare + (target.centralBankShare - current.centralBankShare) * 0.05,
-      };
+    // OWN1: the three ownership shares are no longer drifted here. They were an input that
+    // decided real things (three books' float, every bank's sovereign target, household direct
+    // equity) while owning nothing; they are now measured off the real books in stage 11.
 
-      // Bank/institutional/central-bank shares are meant to leave a real residual for
-      // household ownership (every other ownership display in the app computes household as
-      // 1 - these four) — only rescale them down when they'd otherwise exceed a cap that
-      // guarantees household keeps a minimum floor, rather than always normalizing to exactly
-      // 1.0. Forcing the sum to 1.0 unconditionally (the previous behavior) made household's
-      // share exactly 0 by construction on every run, and inflated institutional/bank/foreign
-      // shares well above their calibrated starting values (e.g. equity institutionalShare
-      // divided by a pre-normalization sum of ~0.6 jumps to ~0.42/0.6 ≈ 0.70 immediately).
-      const totalSharesSum = updatedShares.bankShare + updatedShares.institutionalShare + updatedShares.centralBankShare;
-      if (totalSharesSum > MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE) {
-        const scale = MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE / totalSharesSum;
-        updatedShares.bankShare *= scale;
-        updatedShares.institutionalShare *= scale;
-        updatedShares.centralBankShare *= scale;
-      }
-      updatedRegion[fieldName] = updatedShares;
-    });
     if (isMeeting) {
       ctx.rateChanges.push({ region: regionId, deltaBps: rateDeltaBps });
     }

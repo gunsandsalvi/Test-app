@@ -22,7 +22,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 
 export interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
@@ -166,4 +166,102 @@ export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId
   // totalAssetsUSD weekly, so this is a live number rather than an accreting formula.
   reg.institutionalSector.sectorEquityUSD = Math.round(view.institutionalTotalAssetsUSD);
   reg.bankingSector.itemizedHoldings = view.bankHoldings;
+}
+
+/**
+ * OWN1: the ownership register, MEASURED. `AssetOwnershipShares` used to be an input —
+ * `OWNERSHIP_SHARES` assigned banks 3% of equity, 28% of corporate credit and 22% of sovereigns,
+ * the shares drifted weekly on `(gdpGrowth + inflation) - tenor10Y` inside two bands, and were
+ * rescaled whenever they summed above 0.85. Every one of those numbers then decided something
+ * real: three books' tradable float, each bank's sovereign target, and household direct equity.
+ *
+ * They are now a statistic taken off the books after the week has cleared. What a bank holds is
+ * what is on its own sheet: sovereigns by tenor, and the corporate FACILITIES on its itemized
+ * business-loan book (syndicated paper it does not hold — 07d already excludes facilities from
+ * the market it clears, so the two halves partition the corporate stock exactly once).
+ */
+export interface MeasuredOwnership {
+  bankUSD: number;
+  institutionalUSD: number;
+  centralBankUSD: number;
+  outstandingUSD: number;
+}
+export type MeasuredOwnershipByClass = {
+  equity: MeasuredOwnership; corpBond: MeasuredOwnership; sovBond: MeasuredOwnership;
+};
+
+const ZERO_OWNERSHIP = (): MeasuredOwnership =>
+  ({ bankUSD: 0, institutionalUSD: 0, centralBankUSD: 0, outstandingUSD: 0 });
+
+/** One pass over every book; a holding contributes to its ISSUER's region, not its holder's. */
+export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, MeasuredOwnershipByClass> {
+  const out = {} as Record<RegionId, MeasuredOwnershipByClass>;
+  const regionIds = Object.keys(state.regions) as RegionId[];
+  regionIds.forEach((r) => {
+    out[r] = { equity: ZERO_OWNERSHIP(), corpBond: ZERO_OWNERSHIP(), sovBond: ZERO_OWNERSHIP() };
+  });
+  const acc = (r: RegionId): MeasuredOwnershipByClass | undefined => out[r];
+
+  state.institutionalEntities.forEach((e) => {
+    if (e.isDefaulted) return;
+    e.itemizedHoldings.forEach((h) => {
+      const a = acc(h.issuerRegion);
+      if (!a) return;
+      const v = h.quantityOrNotionalUSD ?? 0;
+      if (h.instrumentType === 'EQUITY') a.equity.institutionalUSD += v;
+      else if (h.instrumentType === 'GOV_BOND') a.sovBond.institutionalUSD += v;
+      else if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN') a.corpBond.institutionalUSD += v;
+    });
+  });
+
+  const companyRegionById = new Map<string, RegionId>();
+  state.companies.forEach((c) => {
+    if (!isActiveCompany(c)) return;
+    companyRegionById.set(c.id, c.region);
+    const a = acc(c.region);
+    if (!a) return;
+    if (isPubliclyListed(c)) a.equity.outstandingUSD += Math.max(0, c.marketCap ?? 0);
+    a.corpBond.outstandingUSD += (c.debtTranches || [])
+      .reduce((s, t) => s + Math.max(0, t.principalUSD), 0);
+
+    const sheet = c.bankBalanceSheet;
+    if (!sheet) return;
+    Object.values(sheet.sovereignBondHoldingsByTenor || {}).forEach((usd) => {
+      // A bank holds its OWN sovereign as its liquidity buffer (07c's domestic mandate).
+      a.sovBond.bankUSD += Math.max(0, Number(usd) || 0);
+    });
+  });
+  // Second pass: a facility's issuer region comes from the borrower, which may not be the
+  // lender's — resolved only once every company's region is known.
+  state.companies.forEach((c) => {
+    const sheet = c.bankBalanceSheet;
+    if (!sheet || !isActiveCompany(c)) return;
+    (sheet.businessLoans || []).forEach((l) => {
+      const issuerRegion = companyRegionById.get(l.borrowerId) ?? c.region;
+      const a = acc(issuerRegion);
+      if (a) a.corpBond.bankUSD += Math.max(0, l.principalUSD);
+    });
+  });
+
+  regionIds.forEach((r) => {
+    const reg = state.regions[r];
+    const a = out[r];
+    a.sovBond.outstandingUSD = (reg.govDebtTranches || [])
+      .reduce((s, t) => s + Math.max(0, t.principalUSD), 0);
+    Object.values(reg.centralBankSheet?.sovereignHoldingsByTenor || {}).forEach((usd) => {
+      a.sovBond.centralBankUSD += Math.max(0, Number(usd) || 0);
+    });
+  });
+  return out;
+}
+
+/** The register expressed as the three shares the UI reports. Nothing reads these to decide. */
+export function ownershipSharesFromRegister(m: MeasuredOwnership): { bankShare: number; institutionalShare: number; centralBankShare: number } {
+  const o = m.outstandingUSD;
+  if (!(o > 0)) return { bankShare: 0, institutionalShare: 0, centralBankShare: 0 };
+  return {
+    bankShare: m.bankUSD / o,
+    institutionalShare: m.institutionalUSD / o,
+    centralBankShare: m.centralBankUSD / o,
+  };
 }

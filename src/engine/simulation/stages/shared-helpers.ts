@@ -10,9 +10,6 @@ import { SECTOR_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domai
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 
-// Holder-class rebalancing coefficients (see computeTargetOwnershipShares below).
-const EQUITY_ATTRACTIVENESS_SENSITIVITY = 0.6;
-const EQUITY_BANK_SENSITIVITY = 0.10;
 const FOREIGN_GROWTH_SENSITIVITY = 3.0;
 
 /**
@@ -187,30 +184,6 @@ export function formSupplyRelationships(regionId: RegionId, companies: Company[]
   });
 
   return relationships;
-}
-
-/**
- * XB1: `foreignShare` is gone. It was an ownership share imposed on every market and drifted
- * weekly on a growth differential, owning nothing — no entity held it and no coupon reached it.
- * Foreign holdings are now whatever foreign institutions actually buy in the clearing books.
- */
-export function computeTargetOwnershipShares(assetClass: string, regionId: RegionId, region: Region, allRegions: Record<RegionId, Region>): { bankShare: number; institutionalShare: number; centralBankShare: number } {
-  void regionId; void allRegions;
-  if (assetClass !== 'equity') {
-    const current = (region as any)[`${assetClass}Ownership`] ?? region.equityOwnership;
-    return {
-      bankShare: current.bankShare,
-      institutionalShare: current.institutionalShare,
-      centralBankShare: current.centralBankShare,
-    };
-  }
-
-  const current = region.equityOwnership;
-  const equityAttractiveness = (region.gdpGrowth + region.inflation) - region.zeroRates.tenor10Y;
-  const institutionalShare = Math.max(0.10, Math.min(0.65, current.institutionalShare + equityAttractiveness * EQUITY_ATTRACTIVENESS_SENSITIVITY));
-  const bankShare = Math.max(0.01, Math.min(0.10, current.bankShare + equityAttractiveness * EQUITY_BANK_SENSITIVITY));
-
-  return { bankShare, institutionalShare, centralBankShare: current.centralBankShare };
 }
 
 export function distributeRealTargetByWeight(

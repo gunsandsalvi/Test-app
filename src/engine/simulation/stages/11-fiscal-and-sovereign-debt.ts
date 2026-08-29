@@ -20,7 +20,7 @@ import {
 } from '../../../domain/government';
 import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
-import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions } from './holdings-view';
+import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay } from './settlement';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -36,13 +36,20 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
   // Runs here because stage 11 is the statistics stage and every clearing stage (07b/07c/07d)
   // and S11's mark have already written their books by this point in the week.
   {
-    const bookState = { ...state, institutionalEntities: ctx.updatedInstitutionalEntities, companies: updatedCompanies };
+    const bookState = { ...state, regions: updatedRegions, institutionalEntities: ctx.updatedInstitutionalEntities, companies: updatedCompanies };
     // XB1: what foreigners actually own, measured off those same books — all four regions from
     // one pass (SCALE: the per-region call swept every holding four times).
     const foreignByRegion = measuredForeignOwnershipAllRegions(bookState);
+    // OWN1: and what banks, institutions and the central bank own — the three shares that used
+    // to be assigned at seed and drifted weekly, now read off the same books.
+    const ownershipByRegion = measuredOwnershipAllRegions(bookState);
     (Object.keys(updatedRegions) as RegionId[]).forEach(regionId => {
       refreshRegionalHoldingsView(bookState, regionId, updatedRegions[regionId]);
       updatedRegions[regionId].measuredForeignOwnership = foreignByRegion[regionId];
+      const m = ownershipByRegion[regionId];
+      updatedRegions[regionId].equityOwnership = ownershipSharesFromRegister(m.equity);
+      updatedRegions[regionId].corpBondOwnership = ownershipSharesFromRegister(m.corpBond);
+      updatedRegions[regionId].sovBondOwnership = ownershipSharesFromRegister(m.sovBond);
     });
   }
 
