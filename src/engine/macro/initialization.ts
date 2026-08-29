@@ -13,7 +13,7 @@ import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
-import { getRegionPopulation, getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
+import { getRegionPopulation, getRegionProductivityPerCapitaUSD, getRegionBirthRateAnnual, getRegionDeathRateAnnual } from '../bootstrap/population';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import { CPI_BASE_LEVEL, seedCpiHistory } from '../simulation/stages/price-index';
 import {
@@ -185,9 +185,11 @@ const REGION_IDENTITY: Record<RegionId, { name: string; currency: string; symbol
 const LABOR_FORCE_PARTICIPATION = 0.63;
 const NON_EMPLOYABLE_PCT = 0.36;
 const UNEMPLOYMENT_RATE = 0.045;
-const BIRTH_RATE_ANNUAL = 0.010;
-const DEATH_RATE_ANNUAL = 0.0095;
-const NET_MIGRATION_RATE_ANNUAL = 0.002;
+// DEM: birth and death are DERIVED per region (bootstrap/population.ts) — fertility from the
+// demographic transition against the productivity this model generates by Zipf rank, mortality
+// from the region's own retired share. Which region shrinks is an outcome of that draw, not a
+// table. Net migration opens at zero and is the endogenous attractiveness signal's to move.
+const NET_MIGRATION_RATE_ANNUAL = 0.0;
 const EFFECTIVE_TAX_RATE = 0.31;
 /**
  * The size of the opening sovereign stack, as a multiple of nominal GDP. A SEED primitive with
@@ -494,8 +496,8 @@ function buildRegion(regionId: RegionId): Region {
     laborForceParticipation: LABOR_FORCE_PARTICIPATION,
     inflationDeviationStreak: 0, policyRateLagBuffer: [], demandShockLagBuffer: [],
     totalPopulation,
-    birthRateAnnual: BIRTH_RATE_ANNUAL,
-    deathRateAnnual: DEATH_RATE_ANNUAL,
+    birthRateAnnual: getRegionBirthRateAnnual(regionId),
+    deathRateAnnual: getRegionDeathRateAnnual(seedLifeCycle.RETIRED.shareOfPopulation),
     netMigrationRateAnnual: NET_MIGRATION_RATE_ANNUAL,
     nonEmployablePct: NON_EMPLOYABLE_PCT,
     governmentEmployment,

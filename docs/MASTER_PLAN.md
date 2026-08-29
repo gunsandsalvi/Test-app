@@ -5089,3 +5089,29 @@ that proved it, the lesson.
       single-name family that has come and gone through this whole sequence under eight different
       tickers. Deflation improves −24.8% → −22.2% at week 10. **Not attributed and not chased**
       (rule 10); it is the family §6 already tracks, not a new one.
+
+135. **DEM, first half — regions differ in KIND, and the difference is generated, not imported.**
+    - **Both clamps deleted (rule 2).** Population growth was held inside `[−3%, +4%]` and the
+      migration attractiveness signal inside `±1%`, so a region could neither shrink nor boom
+      however its own fertility, mortality and attractiveness moved — which is the entire quantity
+      this project exists to make vary. Only non-negativity remains, which is arithmetic.
+    - **The rule-4 trap in DEM's own brief, and how it is avoided.** §5-DEM said "seeded from
+      real-world shapes: Japan shrinks and ages, the USA grows mostly by migration". **That is a
+      real-world OUTCOME and a table of it would assume the answer** (rule 4's sharper half). What
+      IS a legitimate primitive is the mechanism behind it: **the demographic transition** —
+      fertility falls as income per head rises, a relationship rather than a country's result. So
+      each region's fertility is derived from the productivity this model already generates for it
+      by Zipf rank, and **which region ends up shrinking is an outcome of that draw.** Mortality
+      follows the region's own retired share, so an ageing region's death rate rises on its own
+      instead of sitting at a seeded constant. Net migration opens at zero and is the endogenous
+      attractiveness signal's to move.
+    - **Measured at seed: birth rates now 1.156% (USA) / 1.256% (UK) / 1.291% (JPN) / 1.322%
+      (EUR)** — the highest-productivity region has the lowest fertility, which is the transition
+      doing its work — and populations diverge over 30 weeks (x1.00309 to x1.00408). Harness green.
+    - **Remaining, and it is DEM's second bullet: age structure that DOES something.** Death rates
+      are still identical ACROSS regions (0.600%) because `lifeCycleDistribution` is seeded the
+      same everywhere and drifts the same way; it varies over time but not between regions. Until
+      the age structure itself differs, the dependency ratio cannot drive participation and the
+      pension system's funding need cannot respond to a retired share that is the same everywhere.
+      **Also unstarted:** housing reading demographics (it propagates for free once the above
+      moves) and the 260-week divergence check, which is a long run and waits for a close.

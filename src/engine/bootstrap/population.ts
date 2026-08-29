@@ -36,3 +36,42 @@ export function getRegionPopulation(regionId: RegionId): number {
 export function getRegionProductivityPerCapitaUSD(regionId: RegionId): number {
   return Number((PRODUCTIVITY_UNIT_USD * zipfMultiple(PRODUCTIVITY_RANK[regionId], PRODUCTIVITY_ZIPF_EXPONENT)).toFixed(0));
 }
+
+
+/**
+ * DEM — REGIONS DIFFER IN KIND, and the difference is generated rather than imported.
+ *
+ * All four opened with the same three constants — birth 1.0%, death 0.95%, migration 0.2% — so
+ * populations differed only by their seeded level and every demographic-sensitive number (labour
+ * supply, housing turnover, pension outflows) moved in lockstep. Real regions differ in KIND, not
+ * scale.
+ *
+ * But rule 4 forbids the obvious fix. "Japan shrinks and ages, the USA grows by migration" is a
+ * real-world OUTCOME, and a table of it would assume the answer. What is a legitimate primitive is
+ * the mechanism behind it: **the demographic transition** — fertility falls as income per head
+ * rises, one of the most robust regularities there is, and a relationship rather than a country's
+ * result. So each region's fertility is derived from the productivity this model already generates
+ * for it by Zipf rank, and which region ends up shrinking is an OUTCOME of that draw.
+ *
+ * Mortality is the other side: it follows the share of the population that is old, which
+ * `lifeCycleDistribution` already carries, so an ageing region's death rate rises on its own.
+ */
+export const FERTILITY_AT_REFERENCE_PRODUCTIVITY = 0.0125;
+export const FERTILITY_INCOME_ELASTICITY = -0.35;
+export const MORTALITY_PER_RETIRED_SHARE = 0.030;
+
+/** Region productivity relative to the set's mean — the income term the transition reads. */
+function relativeProductivity(regionId: RegionId): number {
+  const all = (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(getRegionProductivityPerCapitaUSD);
+  const mean = all.reduce((a, b) => a + b, 0) / all.length;
+  return mean > 0 ? getRegionProductivityPerCapitaUSD(regionId) / mean : 1;
+}
+
+export function getRegionBirthRateAnnual(regionId: RegionId): number {
+  const rel = Math.max(0.01, relativeProductivity(regionId));
+  return Number((FERTILITY_AT_REFERENCE_PRODUCTIVITY * Math.pow(rel, FERTILITY_INCOME_ELASTICITY)).toFixed(5));
+}
+
+export function getRegionDeathRateAnnual(retiredShareOfPopulation: number): number {
+  return Number((MORTALITY_PER_RETIRED_SHARE * Math.max(0, retiredShareOfPopulation)).toFixed(5));
+}

@@ -20,6 +20,7 @@ import {
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
+import { getRegionDeathRateAnnual } from '../bootstrap/population';
 
 /**
  * Cents of extra consumption per dollar of extra wealth — the marginal propensity to consume out
@@ -279,11 +280,19 @@ export function evolveRegionMacro(
   const newCCI = isFinite(rawCCI) ? Math.max(30, Math.min(170, Number(rawCCI.toFixed(2)))) : 100;
 
   // Population Growth & Net Migration Dynamics (Part AG)
-  const migrationAttractivenessSignal = Math.max(-0.01, Math.min(0.01, (((newCCI - 100) / 100) * 0.0006)));
+  // DEM — both clamps gone (rule 2). Population growth was held inside [−3%, +4%] and the
+  // migration signal inside ±1%, so a region could neither shrink nor boom however its own
+  // fertility, mortality and attractiveness moved — which is the whole quantity this project
+  // exists to make vary. A population cannot go negative; that is arithmetic and stays below.
+  const migrationAttractivenessSignal = ((newCCI - 100) / 100) * 0.0006;
   const birthRate = region.birthRateAnnual ?? 0.010;
-  const deathRate = region.deathRateAnnual ?? 0.009;
-  const migrationRate = region.netMigrationRateAnnual ?? 0.002;
-  const netAnnualGrowthRate = Math.max(-0.03, Math.min(0.04, birthRate - deathRate + migrationRate + migrationAttractivenessSignal));
+  // DEM: mortality follows the share of the population that is old, which drifts every week, so
+  // an ageing region's death rate rises on its own rather than sitting at a seeded constant.
+  const deathRate = getRegionDeathRateAnnual(
+    (region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.20)
+  );
+  const migrationRate = region.netMigrationRateAnnual ?? 0;
+  const netAnnualGrowthRate = birthRate - deathRate + migrationRate + migrationAttractivenessSignal;
   const netPopulationGrowthRate = netAnnualGrowthRate / 52;
   const newTotalPopulation = Math.max(1, Math.round(region.totalPopulation * (1 + netPopulationGrowthRate)));
   const totalLaborForce = newTotalPopulation * (1 - newNonEmployablePct) * newParticipation;
@@ -872,7 +881,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     unemploymentRate: newUnemployment,
     totalPopulation: newTotalPopulation,
     birthRateAnnual: birthRate,
-    deathRateAnnual: deathRate,
+    deathRateAnnual: Number(deathRate.toFixed(5)),
     netMigrationRateAnnual: migrationRate,
     nonEmployablePct: newNonEmployablePct,
     governmentEmployment: newGovernmentEmployment,
