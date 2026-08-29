@@ -105,10 +105,13 @@ const FIRM_CONCENTRATION_DECAY = 0.80;
 export const SME_MARGIN_DISCOUNT = 0.35;
 
 /**
- * SEG — the SME tier's share of total employment before the named private tier is carved out of
- * it. Small firms employ roughly half of a developed economy's workers; this is that fact, and
- * it is the ONE aggregate the tier takes. Its split ACROSS industries is not stated anywhere —
- * that follows each industry's own demand (see the seed in macro/initialization.ts).
+ * SEG — the SME tier's opening share of total employment, before the named private tier is
+ * carved out of it. Small firms employ roughly half of a developed economy's workers; this is
+ * that fact. Two things keep it from being load-bearing: its split ACROSS industries is not
+ * stated anywhere (it follows each industry's own demand — see the seed in
+ * macro/initialization.ts), and the seed's own employment reconciliation then resets the tier's
+ * TOTAL to the residual left by the real firms and the government, so this number sets the
+ * pools' relative sizes and the named tier's carve basis rather than the final headcount.
  */
 export const SME_TIER_EMPLOYMENT_SHARE = 0.60;
 

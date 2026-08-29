@@ -14,6 +14,7 @@ import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
 import { buildHoldingsStore, finalizeHoldingsStore } from './stages/holdings-store';
 import { runSettlementStage } from './stages/settlement';
+import { runSmePoolStage } from './stages/sme-pools';
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
@@ -139,6 +140,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // migrate more stages onto instructions this moves to the end of the week, where a net
   // settlement system actually runs.
   run('settlement', () => runSettlementStage(ctx));
+  // SEG-D: the SME pools' week, measured from the payments settlement just executed — margin,
+  // the revenue history the labor market hires against, cash-gated investment, and cash-measured
+  // distress. Directly after settlement, because that is where its inputs land.
+  run('sme-pools', () => runSmePoolStage(ctx));
   run('hc-lifecycle', () => {
     settlePeLifecycleDeals(ctx, ctx.nextWeek);
     (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((regionId) => {

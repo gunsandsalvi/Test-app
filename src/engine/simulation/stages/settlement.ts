@@ -89,6 +89,11 @@ export interface SettlementReport {
   unmodeledDepositDeltaByBank: Map<string, number>;
   /** SEG1 — per-bank movement of the private-sector segment pools' deposit line. */
   smeDepositDeltaByBank: Map<string, number>;
+  /** SEG-D — every pool flow this week, keyed `<region>:<industry>` then by the payment's own
+   *  reason, signed from the pool's side. This is the pool's INCOME STATEMENT, and it is free:
+   *  every pool flow is already a payment passing through here, so a new kind of pool flow shows
+   *  up in its P&L without anything being instrumented (rule 17). */
+  smePoolFlowsByPool: Map<string, Map<string, number>>;
   /** Payments to/from a bank on its own account — income and expense, so equity moves too. */
   bankEquityDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
@@ -130,6 +135,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     institutionalDepositDeltaByBank: new Map(),
     unmodeledDepositDeltaByBank: new Map(),
     smeDepositDeltaByBank: new Map(),
+    smePoolFlowsByPool: new Map(),
     creditCreatedByBank: new Map(),
     bankEquityDeltaByBank: new Map(),
     unmodeledByReason: new Map(),
@@ -157,6 +163,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     // Attribute the boundary as it is created, by the flow responsible.
     if (i.payer.kind === 'UNMODELED') addTo(report.unmodeledByReason, i.reason, i.amountUSD);
     if (i.payee.kind === 'UNMODELED') addTo(report.unmodeledByReason, i.reason, -i.amountUSD);
+    // SEG-D: the pools' income statement, built from the payments themselves.
+    if (i.payer.kind === 'SEGMENT') addToPool(report, i.payer.region, i.payer.industry, i.reason, -i.amountUSD);
+    if (i.payee.kind === 'SEGMENT') addToPool(report, i.payee.region, i.payee.industry, i.reason, i.amountUSD);
   });
 
   // ---- 2. Apply each party's net change to the balance it actually holds, and record which
@@ -171,6 +180,17 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       case 'COMPANY': {
         const comp = companyByTicker.get(party.ticker);
         if (!comp) { report.unresolvedUSD += deltaUSD; return; }
+        // A BANK trading on its own account is not a depositor — it has no home bank, because
+        // it IS one. Its money is central-bank reserves and the other side is its own equity,
+        // exactly as the BANK party below. Routing it as an ordinary company dropped every such
+        // payment on the floor: a bank sells real services in the goods market (the financial
+        // sector's proxy product lines), so 14.7B a week was leaving the system unresolved at
+        // the point where `homeBankTicker` came back undefined.
+        if (comp.isBankEntity && comp.bankBalanceSheet) {
+          addTo(report.reserveDeltaByBank, comp.ticker, deltaUSD);
+          addTo(report.bankEquityDeltaByBank, comp.ticker, deltaUSD);
+          return;
+        }
         comp.cash += deltaUSD;
         creditBank(report, comp.homeBankTicker, deltaUSD);
         addTo(report.corporateDepositDeltaByBank, comp.homeBankTicker ?? '', deltaUSD);
@@ -353,6 +373,13 @@ function creditBank(report: SettlementReport, bankTicker: string | undefined, de
   // system exactly the way corporate cash used to (§7.86). Counted, never dropped.
   if (!bankTicker) { report.unresolvedUSD += deltaUSD; return; }
   addTo(report.depositDeltaByBank, bankTicker, deltaUSD);
+}
+
+function addToPool(report: SettlementReport, region: string, industry: string, reason: string, deltaUSD: number): void {
+  const key = `${region}:${industry}`;
+  let inner = report.smePoolFlowsByPool.get(key);
+  if (!inner) { inner = new Map(); report.smePoolFlowsByPool.set(key, inner); }
+  inner.set(reason, (inner.get(reason) ?? 0) + deltaUSD);
 }
 
 function addTo(map: Map<string, number>, key: string, deltaUSD: number): void {

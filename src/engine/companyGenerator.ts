@@ -909,26 +909,27 @@ export function generatePrivateCompanies(
       recoveryRate: 0.40, baselineRecoveryRate: 0.40,
       // Goods-market participation arrives with HC3's conservation-checked handover; until then
       // the segments keep carrying this revenue in stage 05 and this array stays empty.
-      // SEG-D: a born firm enters the world able to SELL. It used to arrive with no product
-      // lines at all — a company that could not participate in any auction, in any category,
-      // ever. Its mix is its pool's own measured mix where one exists, and an even split of its
-      // industry's sub-units at the cold start.
+      // SEG-D: a BORN firm enters the world able to sell — its pool's own product mix, passed
+      // in by the birth (pe-lifecycle.ts). It used to arrive with no product lines at all: a
+      // company that could not participate in any auction, in any category, ever.
+      //
+      // The COLD-START tier deliberately still gets none. That is HC3b's call, made with a
+      // measurement (injecting the whole named private tier's supply into markets sized for
+      // public supply cost 10-22% of growth), and it is not SEG's to reverse in passing.
       productLines: (() => {
-        const subUnits = INDUSTRY_REGISTRY[seed.industry].subUnits;
         const mix = seed.productMixBySubUnit;
-        const mixTotal = mix ? Object.values(mix).reduce((a, v) => a + Math.max(0, v), 0) : 0;
-        if (mix && mixTotal > 0) {
-          return Object.entries(mix)
-            .filter(([, v]) => v > 0)
-            .map(([subUnitId, v]) => ({
-              industry: seed.industry, subUnitId,
-              revenueShare: v / mixTotal, competitiveness: 0,
-            }));
-        }
-        return subUnits.map(su => ({
-          industry: seed.industry, subUnitId: su.unitId,
-          revenueShare: 1 / subUnits.length, competitiveness: 0,
-        }));
+        const mixTotalUSD = mix ? Object.values(mix).reduce((a, v) => a + Math.max(0, v), 0) : 0;
+        if (!mix || mixTotalUSD <= 0) return [];
+        return Object.entries(mix)
+          .filter(([, v]) => v > 0)
+          .map(([subUnitId, v]) => ({
+            industry: seed.industry, subUnitId,
+            revenueShare: v / mixTotalUSD,
+            competitiveness: 0,
+            // Set against the real market by the caller once the firm exists; a line with an
+            // undefined share reads as NaN to every consumer of it.
+            categoryMarketShare: 0,
+          }));
       })(),
       leverage: debtBase / Math.max(1, ebitda),
       interestCoverage: coverage,

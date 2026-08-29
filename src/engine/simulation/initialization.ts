@@ -1112,6 +1112,51 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     });
   });
 
+  // ---- SETL5b: NOTHING is born unbanked. ----
+  //
+  // The two home-bank passes above run in the middle of this function, and three kinds of holder
+  // are created after them: the carriers (freight companies), the money-market funds and the
+  // ETFs. They therefore held their money nowhere. Settlement counts a payment to a holder with
+  // no bank as UNRESOLVED — money leaving the system — which is exactly the §7.86 defect's
+  // shape, and it was measured at 11.7B a WEEK for the money funds alone plus 12 unbanked
+  // carriers, hidden until the SME pools started trading with everyone.
+  //
+  // The relationship is chosen the same way the passes above choose it, and the money is put
+  // where it now sits: on the bank's own funding line, with the reserves behind it.
+  (Object.keys(regions) as RegionId[]).forEach(regionId => {
+    const reg = regions[regionId];
+    const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    if (regionBanks.length === 0) return;
+    const bankRefs = regionBanks.map(b => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare }));
+    const lateCorporateByBank = new Map<string, number>();
+    const lateInstitutionalByBank = new Map<string, number>();
+    companies.forEach(c => {
+      if (c.region !== regionId || c.isBankEntity || c.homeBankTicker) return;
+      c.homeBankTicker = chooseLeadBank(c.id, bankRefs);
+      lateCorporateByBank.set(c.homeBankTicker, (lateCorporateByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
+    });
+    institutionalEntities.forEach(e => {
+      if (e.region !== regionId || e.homeBankTicker) return;
+      e.homeBankTicker = chooseLeadBank(e.id, bankRefs);
+      lateInstitutionalByBank.set(e.homeBankTicker, (lateInstitutionalByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
+    });
+    if (lateCorporateByBank.size === 0 && lateInstitutionalByBank.size === 0) return;
+    regionBanks.forEach(b => {
+      const sheet = b.bankBalanceSheet!;
+      const corpUSD = Math.round(lateCorporateByBank.get(b.ticker) ?? 0);
+      const instUSD = Math.round(lateInstitutionalByBank.get(b.ticker) ?? 0);
+      sheet.corporateDepositsUSD += corpUSD;
+      sheet.institutionalDepositsUSD = (sheet.institutionalDepositsUSD ?? 0) + instUSD;
+      sheet.cashReservesUSD += corpUSD + instUSD;
+      applyBankFundingSplit(sheet, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanks.length)));
+    });
+    reg.bankingSector.corporateDepositsUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0);
+    reg.bankingSector.institutionalDepositsUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0);
+    reg.bankingSector.depositsUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
+    reg.bankingSector.wholesaleFundingUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
+    reg.bankingSector.cashReservesUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0);
+  });
+
   // S7: project the real seeded books onto the sector aggregates before the first week runs, so
   // week 0's displayed numbers are the same derivation every later week uses. The aggregates
   // written earlier in this function are the SEEDS the entity targets were sized against (they

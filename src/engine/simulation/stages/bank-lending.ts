@@ -303,12 +303,12 @@ export function runBankWeeklyLending(
     // deposit sits in the bank's household/SME funding line (segments are not yet cash-ledger
     // actors — MS's item); no reserves move, which is the point.
     seg.debtUSD += grantedUSD;
-    // And the pool SPENDS it. This is the last link in the transmission chain: borrowed money
-    // funds real capex, which stage 05 turns into real bids in the capital-goods markets, so a
-    // policy hike reaches the goods market through the credit it suppresses rather than
-    // stopping at a debt number nobody spends. (Annualised: capexUSD is an annual figure and
-    // grantedUSD is one week's origination — rule 9.)
-    seg.capexUSD += grantedUSD * 52;
+    // SEG-D: the pool SPENDS it — but through its BOOK, not by having its capex number
+    // incremented here. The origination arrives as a real deposit (the BANK_CREDIT payment 02b
+    // issues), which raises the pool's cash, which raises what the SME-pool stage will let it
+    // invest. Same transmission chain, now with a budget constraint in the middle: a pool that
+    // is short of payroll spends the money on payroll instead, which is what a real small firm
+    // does with a credit line when it is squeezed.
   });
 
   const businessLoanBookUSD = Number(loans.reduce((a, l) => a + l.principalUSD, 0).toFixed(0));

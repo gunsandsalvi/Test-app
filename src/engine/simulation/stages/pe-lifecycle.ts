@@ -29,6 +29,7 @@ import { companyFairValuePerShare } from '../../equity-valuation';
 import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
 import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
 import { pay } from './settlement';
+import { smePoolSubUnits } from '../../../domain/industry-registry';
 
 /**
  * The lowest required return any liquid-market holder runs — the pension fund's. A buyer of the
@@ -595,8 +596,19 @@ export function runFirmBirthsForRegion(
   const employees = Math.max(10, Math.round(seg.employment * (revenueUSD / Math.max(1, seg.annualRevenueUSD))));
   const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
   const names = new Set(ctx.updatedCompanies.map((c) => c.name));
+  // SEG-D: the newborn sells what its pool sells — the pool's own measured mix by sub-unit, or
+  // (before the pool has measured receipts) its industry's sub-units weighted by the region's
+  // real demand for each, so a new firm opens where there is business to win.
+  const measuredMix = seg.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
+  const measuredTotalUSD = Object.values(measuredMix).reduce((a, v) => a + Math.max(0, v), 0);
+  const productMixBySubUnit: Record<string, number> = measuredTotalUSD > 0
+    ? { ...measuredMix }
+    : Object.fromEntries(smePoolSubUnits(seg.industry)
+      .map((su) => [su.unitId, reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0]));
+
   const born = generate(regionId, [{
     industry: seg.industry,
+    productMixBySubUnit,
     annualRevenueUSD: revenueUSD,
     ebitdaMargin: seg.marginPct,
     leverage: 2.5,
@@ -632,6 +644,24 @@ export function runFirmBirthsForRegion(
   const banksForRelationship = ctx.updatedCompanies
     .filter((b) => b.region === regionId && b.isBankEntity && isActiveCompany(b))
     .map((b) => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare }));
+  // Its real share of each market it entered, measured against what the region's firms already
+  // sell there — the weekly evolution scales this number, so a firm starting at zero could never
+  // gain any share at all.
+  const regionSalesBySubUnit = new Map<string, number>();
+  ctx.updatedCompanies.forEach((c) => {
+    if (c.region !== regionId || !isActiveCompany(c)) return;
+    (c.productLines || []).forEach((l) => {
+      regionSalesBySubUnit.set(l.subUnitId, (regionSalesBySubUnit.get(l.subUnitId) ?? 0) + l.revenueShare * c.annualRevenue);
+    });
+  });
+  born.forEach((c) => {
+    (c.productLines || []).forEach((l) => {
+      const lineUSD = l.revenueShare * c.annualRevenue;
+      const marketUSD = (regionSalesBySubUnit.get(l.subUnitId) ?? 0) + lineUSD;
+      l.categoryMarketShare = marketUSD > 0 ? Number((lineUSD / marketUSD).toFixed(6)) : 0;
+    });
+  });
+
   born.forEach((c) => {
     (c as any).bornWeek = nextWeek;
     if (!c.homeBankTicker && banksForRelationship.length > 0) {

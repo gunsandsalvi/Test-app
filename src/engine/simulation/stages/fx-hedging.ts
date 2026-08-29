@@ -67,7 +67,9 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
   const desks = new Map<string, DeskState>();
   ctx.updatedCompanies.forEach((c: any) => {
     if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
-    const sheet = ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet;
+    // The LIVE sheet, not a snapshot some earlier stage parked in companyUpdates: the desk's
+    // capacity is what the bank's book leaves it right now (see the note at the write below).
+    const sheet = c.bankBalanceSheet;
     desks.set(c.ticker, {
       book: sheet.fxDealerBook ? { ...sheet.fxDealerBook, netNotionalByRegion: { ...sheet.fxDealerBook.netNotionalByRegion } } : emptyFxDealerBook(),
       headroomUSD: leverageHeadroomUSD(sheet),
@@ -184,7 +186,17 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     if (!desk || !bank.bankBalanceSheet) return bank;
     const markUSD = bankMarkByTicker.get(ticker) ?? 0;
     if (markUSD === 0 && desk.marginReceivedUSD === 0 && desk.book.grossNotionalUSD === 0) return bank;
-    const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
+    // THE LIVE SHEET. This used to prefer `ctx.companyUpdates[ticker].bankBalanceSheet` — a
+    // SNAPSHOT parked there by stage 08, which runs BEFORE settlement. Rebuilding from it and
+    // writing the result back silently reverted every balance-sheet line settlement had moved
+    // since: the whole week's deposit and reserve legs, on every bank that runs an FX desk.
+    //
+    // It was invisible while a stage wrote both halves of a flow together — reverting a balanced
+    // pair leaves a balanced sheet. SEG split one such pair across stages (an SME loan is booked
+    // in 02b and the deposit it creates is written at settlement), so the revert started keeping
+    // the asset and dropping the liability: measured at exactly the week's SME origination,
+    // -160.5M on the largest dealer in week 1, on 11 banks, growing every week.
+    const sheet = bank.bankBalanceSheet;
     if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
     const nextSheet = {
       ...sheet,
