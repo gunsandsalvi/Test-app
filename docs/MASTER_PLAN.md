@@ -1993,7 +1993,11 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | Defect | State and next action |
 |---|---|
 | **SOVEREIGN BOOKS HOLD MORE PAPER THAN EXISTS — introduced 2026-08-29, and it is owed** | **Caused by §7.120's seed-scale slice; not a discovery, a debt.** All four regions: the real books together claim more sovereign bonds than `govDebtTranches` says is outstanding — the harness's "a ledger is minting claims" check, the one that catches a missing leg. **It GROWS week over week** (5 weeks per region in a 10-week run), so it is a FLOW and not a seed sizing: the books accumulate sovereign paper faster than issuance creates it, which points at 07c's float rather than the debt seed. The scale change moved GDP 639.2B → 695.7B and sovereign outstanding is `debtToGdpPctBottomUp x derivedNominalGdpUSD` computed at a different point in the seed than the holdings are built — an ordering SUSPECT, not a diagnosis. **These are the only violations left in the 10-week probe (20 of 20). Fix before anything else.** |
-| **An MMF's shares have no holders** | **Found 2026-08-29 answering a user question about where the funds sit.** An ETF and an MMF are both `InstitutionalEntity` with their own balance sheet, and the ETF's is honest on both sides: assets are real `itemizedHoldings` (it bids in every clearing book like anyone else) and its shares are held by name — households carry `hs.etfShares = [{fundId, shares}]`. The MMF's liability is `mmfSharesOutstandingUSD`, **one scalar that is incremented when household savings divert and when corporates sweep, with nobody named on the other side.** Real assets, aggregate shareholders: rule 13's "a residual with no holder is a defect", and rule 14 — the diversion debits a real deposit and credits a number. Small and self-contained. **Owner: unassigned; it belongs with COH (the household leg) or G3.** |
+| **An MMF's shares have no holders** | **Found 2026-08-29 answering a user question about where the funds sit.** An ETF and an MMF are both `InstitutionalEntity` with their own balance sheet, and the ETF's is honest on both sides: assets are real `itemizedHoldings` (it bids in every clearing book like anyone else) and its shares are held by name — households carry `hs.etfShares = [{fundId, shares}]`. The MMF's liability is `mmfSharesOutstandingUSD`, **one scalar that is incremented when household savings divert and when corporates sweep, with nobody named on the other side.** Real assets, aggregate shareholders: rule 13's "a residual with no holder is a defect", and rule 14 — the diversion debits a real deposit and credits a number. **And it is a symptom, not the disease (§7.123):** there are FIVE different ways of saying who
+owns a pool across seven entity types, and HEDGE_FUND and PENSION_FUND are a manager and a vehicle
+in one object. The target is one FUND shape — itemized assets, units held by named holders, a named
+manager on a fee, a mandate that drives the bidding — with the ETF as the template. **Owner:
+unassigned, and not IND's; IND finishes at firms.** |
 | ~~**THE REPO MARKET IS DEAD, AND A CEILING IS AN IDENTITY**~~ | **CLOSED by OWN8 (§7.102).** `investableSurplusUSD` deleted; the sovereign ceiling is now `sovereignBookCapacityUSD` — current book plus the balance sheet the bank's equity supports under the leverage floor, a bound that can exceed the position it bounds. Repo: zero volume in all four regions -> 3 of 4 USA banks borrowing, 46.7B outstanding, interbank lending live and the SRF drawn (18.4B USA, 4.1B JPN) for the first time; the rate now moves inside the corridor instead of printing the early-return floor. USA sovereign book 78B->350B (pre-OWN was 285B), cash/deposits 47-68% -> 7%. **Two things it surfaced, both recorded rather than chased (rule 10):** 46 new `sovBondOwnership` conservation violations — OWN7's defect appearing in a second asset class now that the sovereign book is large, which strengthens the case that OWN7's harness fix comes first; and 16 weeks of USA bank capital ratio out of band, because a bank shifting cash into ZERO-risk-weight bonds grows equity on the carry while RWA (loans only) does not move, and the payout valve is cash-constrained so it cannot bleed off. That second one is a real mechanism, not a bug — it is why the leverage floor exists — but the harness band on a risk-weighted ratio is a poor test of it. Owner: G3, with the §6 USA bank-cohort row. |
 | **THE BOOKS PRINT THEIR DAMPERS — promoted from §6.2, 2026-08-29** | The clearing engine states its own failure condition: the damper "must never BIND persistently — a name clamped for weeks on end means the posted schedules disagree with the printed level and the print is the damper, not the market." The watchlist row set the same test ("only wrong if it stays there") at 1,961 bound; the harness now prints **2,549 persistently bound, worst streak 60 weeks in a 60-week run**. The condition is met. This is ONE defect wearing many prints: the FX rate pinning at −8.01% (its damper to the second decimal) 38–39 weeks in 40, and the five books' `MAX_WEEKLY_*_MOVE_PCT` binding across 2,549 instruments — the posted demand does not reach the float it is asked to clear (§7.18's want/have from the demand side). The engine is not the defect; the thin side is. **Owners: G3 (dealer capacity, G3d), SCALE (float), XB6 (the FX flow), HF (the FX elastic side).** Do not widen any damper. |
 | **A SHOCK TEST STOPPED MOVING ITS PRICE** | **New 2026-08-29 (§7.107).** `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an otherwise identical control world — no longer moves the name's price. Same signature the sovereign-auction shock test already shows (§6.1's XB row: "demand so far below the enlarged float that both A/B worlds pin at the same bound"), and 07e is the book where that is most likely: its `tradableFloatUSD` is the ENTIRE share count while the only bidders are institutions whose mandates cap them far below it, and the dealer residual that should absorb the rest is dropped unapplied (**G3e**). **Do not weaken the test.** Re-measure when G3e gives the equity book a real float and a real absorber; if it still does not move then, the demand side is the defect. |
@@ -4757,9 +4761,9 @@ that proved it, the lesson.
       should hold no P&L at all; (2) widen `ProfileInput` from payroll to the other common cost
       primitives (real input cost, capex), which that file already commits to; (3) invert
       `ProfilePnl` as above; (4) give financials an input basket; (5) extend past the P&L to the
-      asset side (capex, PP&E, depreciation); (6) resolve the `Company` / `InstitutionalEntity`
-      duality, §6.1's own row — **the same argument as IND-R6 one level up: a second TYPE drifts
-      for the same reason a second code path does.**
+      asset side (capex, PP&E, depreciation); (6) ~~resolve the `Company` / `InstitutionalEntity`
+      duality~~ — **WRONG AS WRITTEN; see §7.123.** A fund is not a firm and must not be pushed
+      through the operating model. Steps 1-5 finish the FIRM side, which is where IND ends.
     - **Step 4 is a blocker CHAIN-D created, and it is worth naming.** A recipe is now a property
       of a PRODUCT (§7.117), and IND-R2 correctly gave financial firms no product line — a bank
       does not SELL enterprise software. But those are the same field, so a firm that sells
@@ -4779,3 +4783,39 @@ that proved it, the lesson.
       corporates sweep, with nobody named on the other side.** Real assets, aggregate
       shareholders: rule 13's residual-with-no-holder, and rule 14 — the diversion debits a real
       deposit and credits a number.
+
+123. **CORRECTION to §7.122's step 6 — a fund is not a firm, and "one build" needs TWO shapes.**
+    *(User, 2026-08-29, immediately: "but then ETFs and MMFs will be corporates? doesn't make
+    sense, they are funds managed by an AM.")* Correct, and §7.122 was written the same day it is
+    corrected, which is why it is worth recording rather than quietly editing.
+    - **What step 6 got wrong.** It read §6.1's "the institutional Company and the
+      InstitutionalEntity are two firms" as an argument for one entity type. That row is
+      NARROWER: an insurer existed as both a `Company` shell and an `InstitutionalEntity` — the
+      same real thing represented twice (§7.51 closed that half). Generalising it to funds turns
+      a duplication defect into a category error.
+    - **The axis is FIRM vs FUND, not `Company` vs `InstitutionalEntity`.** A firm has staff,
+      produces or intermediates, earns revenue and pays wages — operating corporates, banks,
+      insurers, asset managers — and those belong in the one operating model IND-R6 built. **A
+      fund has no staff and no production:** it is a pool of assets whose liability is units, run
+      by a firm for a fee. Pushing an ETF through the operating model would invent exactly the
+      kind of ad hoc branch IND-R6 just deleted.
+    - **`InstitutionalEntityType` mixes the two axes, and the fund side is where the ad hoc
+      categories actually are.** INSURER and ASSET_MANAGER are FIRMS. ETF, MONEY_MARKET_FUND and
+      PRIVATE_EQUITY are FUNDS. **HEDGE_FUND and PENSION_FUND are a manager and a vehicle in one
+      entity** — the same mistake as the listing fork in different clothes: a manager is a firm, a
+      fund is a pool, and one object being both means neither is modelled.
+    - **Five different ways of saying who owns a pool**, across seven types: ETF —
+      `sharesOutstanding` + `sponsorEntityId`, with households holding by NAME (`hs.etfShares`),
+      the only complete one; MMF — `mmfSharesOutstandingUSD`, a scalar, **and no manager link at
+      all**; PE — `peFund.lpCommitments[]`, named LPs but the entity IS its own sponsor; PENSION —
+      `beneficiaryLiabilityUSD`, a scalar derived from households; HEDGE_FUND — no unitholder
+      representation whatever. §6.1's MMF row is a symptom of this, not the disease.
+    - **So the target is TWO shapes, not one.** Every firm → the one operating model. Every fund →
+      one fund shape: assets are itemized holdings, liability is units held by NAMED holders, a
+      named manager charging a fee, and a mandate that drives its bidding. **The ETF is already
+      that shape and is the template**; nothing else is. Owner: unassigned, and it is not IND's —
+      IND finishes at firms.
+    - **The lesson:** "one representation" is a rule about not modelling ONE thing twice (rule 3),
+      never about modelling two different things the same way. §7.122 reached for the first and
+      landed on the second, in a document whose whole recent record is about forks that drift —
+      which is exactly when the pull to unify everything is strongest.
