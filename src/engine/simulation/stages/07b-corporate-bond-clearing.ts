@@ -148,11 +148,12 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
 
-    // The float genuinely in play is what the bidders below can hold between them. The rest of
-    // each issue sits with holders who do not bid in this auction, and was never for sale.
-    // XB1: the float is everything a bank is not holding in its banking book. The share this
-    // used to subtract included `foreignShare`, an owner that did not exist.
-    const tradableShare = 1 - reg.corpBondOwnership.bankShare;
+    // OWN2: the float is the outstanding, because the instrument this book prices is ALREADY
+    // net of what does not trade in it. `fixedDebtUSD` excludes commercial paper (07f's market),
+    // and a bank's corporate exposure in this model is a FACILITY on its itemized business-loan
+    // book, never a bond in an investment portfolio — its only presence here is the dealer
+    // inventory, which is a participant and not a subtraction. The `1 - corpBondOwnership
+    // .bankShare` this replaces withheld 28% of every issue from an owner that did not exist.
     // WS8: this week's primary offerings in THIS book — new fixed-rate paper priced alongside
     // the outstanding stock. The issuer's walk-away rides on the instrument; the engine
     // re-solves without the offering when it is pulled.
@@ -167,18 +168,15 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // new supply at any spread (see the same fix in 07d, where it withdrew every LBO financing).
     // The cash constraint is untouched: `maxNetPurchaseUSD` still decides whether the market can
     // actually pay for the deal, which is the honest reason for one to fail.
-    // The offering enters at FULL size: `tradableShare` describes passive holders of the
-    // OUTSTANDING stock, and a new issue has none — all of it is for sale to the bidders here,
-    // which is exactly what the engine adds to the float it must clear (see 07d).
     const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
-    const liveTradableFloatUSD = (c: Company) => fixedDebtOf(c) * tradableShare + offeringSizeUSD(c);
+    const liveTradableFloatUSD = (c: Company) => fixedDebtOf(c) + offeringSizeUSD(c);
     const totalOutstandingUSD =
       regionCompanies.reduce((s, c) => s + fixedDebtOf(c) + offeringSizeUSD(c), 0) || 1;
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: fixedDebtOf(c),
-      tradableFloatUSD: fixedDebtOf(c) * tradableShare,
+      tradableFloatUSD: fixedDebtOf(c),
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
       durationYears: creditDurationYears(c),

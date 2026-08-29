@@ -85,14 +85,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
     const activeBuckets = SOV_BILL_BUCKETS.filter((b) => (outstandingByBucket.get(b.key) ?? 0) > 0);
     if (activeBuckets.length > 0) {
-      // XB1: the whole bill stock is tradable — every holder is real (banks, institutions at
-      // home and abroad, the central bank since PUB2b). The share this used to subtract was
-      // `foreignShare`, an owner that did not exist.
-      const tradableShare = 1;
+      // The whole bill stock is tradable — every holder is real (banks, institutions at home
+      // and abroad, the central bank since PUB2b) and every one of them bids here.
       const instruments: ClearingInstrument[] = activeBuckets.map((b) => ({
         id: billInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        tradableFloatUSD: (outstandingByBucket.get(b.key) ?? 0) * tradableShare,
+        tradableFloatUSD: outstandingByBucket.get(b.key) ?? 0,
         currentStat: Math.max(1, calculateNelsonSiegelZeroRate(b.years, reg.yieldCurveParams) * 10000),
         statKind: 'YIELD_LIKE',
         durationYears: b.years,

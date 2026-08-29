@@ -100,9 +100,10 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     );
     if (regionEntities.length === 0) return;
 
-    // XB1: the float is the register less what banks hold — the deleted `foreignShare` was an
-    // owner that did not exist, and households reach equity through funds, which bid here.
-    const tradableShare = 1 - reg.equityOwnership.bankShare;
+    // OWN2: the float is the register. Banks hold no equity as an investment anywhere in this
+    // model — the measured register says so — and households reach listed equity through the
+    // funds that bid here, so there is no passive holder to carve out. `1 - equityOwnership
+    // .bankShare` withheld 3% of every register from one.
     const riskFreeRate = reg.zeroRates?.tenor10Y ?? 0.04;
 
     /** The book's reference: a listed name's last cleared print, a debut's own price talk. */
@@ -120,22 +121,13 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       if (o?.postIssueSharesOutstanding) return o.postIssueSharesOutstanding;
       return c.sharesOutstanding + (o?.sizeUSD ?? 0);
     };
-    /**
-     * The shares this book must actually find owners for: the institutional slice of the existing
-     * register plus ALL of the offering. `tradableShare` describes passive holders of shares
-     * already issued; a listing has none — every share of it is for sale here, which is what the
-     * engine adds to the float it clears (see 07d for what the mismatch did to loan financings).
-     */
-    const liveTradableSharesOf = (c: Company) => {
-      const o = offeringsByIssuerId.get(c.id);
-      const offeredShares = o?.sizeUSD ?? 0;
-      return Math.max(0, liveSharesOf(c) - offeredShares) * tradableShare + offeredShares;
-    };
+    /** The shares this book must find owners for: the register that will exist once a deal prices. */
+    const liveTradableSharesOf = (c: Company) => liveSharesOf(c);
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: c.sharesOutstanding,
-      tradableFloatUSD: c.sharesOutstanding * tradableShare,
+      tradableFloatUSD: c.sharesOutstanding,
       currentStat: refPriceOf(c),
       statKind: 'PRICE_LIKE',
       durationYears: 0,

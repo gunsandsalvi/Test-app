@@ -140,9 +140,11 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     );
     if (regionCompanies.length === 0) return;
 
-    // XB1: everything a bank is not holding in its banking book — the deleted `foreignShare`
-    // was an owner that did not exist.
-    const tradableShare = 1 - reg.corpBondOwnership.bankShare;
+    // OWN2: the float is the outstanding. `floatingDebtUSD` above already removes every bank
+    // FACILITY from the instrument this book prices — that is precisely "what a bank holds in
+    // its banking book", subtracted once, per issuer, from the real ladder. Multiplying by
+    // `1 - corpBondOwnership.bankShare` on top of it withheld another 28% of every loan from
+    // nobody, and did so at a flat regional rate rather than at each issuer's own bank mix.
     // WS8: primary loan offerings priced alongside the outstanding stock (HC6's LBO/recap
     // financings arrive through this same gate).
     const offeringsByIssuerId = new Map<string, import('../../../types').PrimaryOffering>();
@@ -160,14 +162,8 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // reweights when a new issue enters it. What the book still cannot do is pay with money it
     // does not have: `maxNetPurchaseUSD` is untouched, so a deal the market cannot fund is still
     // pulled — which is the honest reason for a deal to fail.
-    // The offering enters at FULL size, not at the institutional share. `tradableShare` exists
-    // because part of the OUTSTANDING stock sits with passive holders who never bid; a new issue
-    // has no such holders — every dollar of it is for sale to the bidders in this book, and the
-    // engine adds all of it to the float it must clear. Sizing the demand side at only a fraction
-    // of what the engine asks it to absorb left a gap that only the distressed fund's reservation
-    // could close, so the solve printed ~1365bps on deals whose issuers walk at 900.
     const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
-    const liveTradableFloatUSD = (c: Company) => floatingDebtOf(c) * tradableShare + offeringSizeUSD(c);
+    const liveTradableFloatUSD = (c: Company) => floatingDebtOf(c) + offeringSizeUSD(c);
 
     const totalOutstandingUSD =
       regionCompanies.reduce((s, c) => s + floatingDebtOf(c) + offeringSizeUSD(c), 0) || 1;
@@ -175,7 +171,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
       outstandingUSD: floatingDebtOf(c),
-      tradableFloatUSD: floatingDebtOf(c) * tradableShare,
+      tradableFloatUSD: floatingDebtOf(c),
       currentStat: c.leveragedLoan!.discountMarginBps,
       statKind: 'YIELD_LIKE',
       durationYears: loanCreditDurationYears(c),
