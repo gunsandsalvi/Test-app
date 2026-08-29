@@ -1,5 +1,23 @@
+/**
+ * THE HARNESS — the one test script (§1.10). One simulation run; every check, battery and
+ * profile reads it. Prints one line per week so a run can be watched live.
+ *
+ *   npm run verify                    # hygiene + this, 60 weeks (~1 min)
+ *   WEEKS=10 SHOCKS=0 npm run verify  # quick wiring probe
+ *   WEEKS=260 npm run verify          # section close — ASK FIRST (§1.10)
+ *   npm run profile                   # same run with per-stage timings (PROFILE=1)
+ *   VERBOSE=1 npm run verify          # full violation dump at the end, not just the summary
+ *
+ * HOW TO ADD A CHECK OR A MEASUREMENT: add one entry to MODULES below — `week()` for a per-week
+ * invariant (push into `violations`), `report()` for end-of-run measured numbers (the battery
+ * pattern: report, judge nothing), `shock()` for an A/B test against the mid-run snapshot.
+ * Do not add a second script; scripts/check-hygiene.sh fails the build if one appears.
+ *
+ * Violations print inline the week they happen (capped per week), and the end prints a grouped
+ * summary. Exit code 1 on any violation.
+ */
 import { createInitialGameState } from '../src/engine/simulation/initialization';
-import { DEFAULT_SIMULATION_SEED } from '../src/engine/rng';
+import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
 
 // Same seed, same world. Pass SEED=<n> to check a result against a genuinely different economy
 // rather than against the noise an unseeded run used to produce.
@@ -7,13 +25,29 @@ const SEED = Number(process.env.SEED ?? DEFAULT_SIMULATION_SEED);
 
 // How long to run. 60 weeks is the working default — every real finding in this project has come
 // from the first sixty, and a change can be checked in a minute instead of half an hour. The full
-// 260-week run belongs at the close of a section, where the long-horizon degradation items
-// (#67 bank capital, #18 revenue runaway) actually live: WEEKS=260 npm run verify
+// 260-week run belongs at the close of a section: WEEKS=260 npm run verify (ask first, §1.10).
 const WEEKS = Number(process.env.WEEKS ?? 60);
-import { advanceWeeklyStep } from '../src/engine/simulation/core';
+/** A/B mechanism tests (extra simulations). On by default; SHOCKS=0 for fast iteration. */
+const SHOCKS = process.env.SHOCKS !== '0';
+/** PROFILE=1: per-stage timings on the same run, reported at the end. */
+const PROFILE = process.env.PROFILE === '1';
+/** VERBOSE=1: dump every violation at the end (they also print live, capped per week). */
+const VERBOSE = process.env.VERBOSE === '1';
+
+import { advanceWeeklyStep, advanceWeeklyStepProfiled } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
+import { sovereignCouponByBucket, weeklyInterestExpenseUSD, decomposeGovernmentSpending } from '../src/domain/government';
+import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/central-bank';
+import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
+import { sovBucketKey } from '../src/engine/simulation/stages/shared-helpers';
+import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
+import { SUBUNIT_PHYSICAL, deliveryModeOf } from '../src/domain/goods-physical';
+import { laneDistanceNm } from '../src/domain/geography';
+import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
+import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
+import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
 
 interface Violation {
   week: number;
@@ -25,6 +59,32 @@ let damperBindStreak = new Map<string, number>();
 const damperPersistentBinds = new Set<string>();
 let damperWorstStreak = 0;
 let prevStateForBookCheck: GameState | null = null;
+
+// ---- shared helpers (used by checks, modules and the live line) ----
+const REGIONS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+const B = (x: number) => (x / 1e9).toFixed(1) + 'B';
+const pct = (x: number) => (x * 100).toFixed(2) + '%';
+const corr = (a: number[], b: number[]) => {
+  const n = Math.min(a.length, b.length);
+  const ma = a.slice(0, n).reduce((x, y) => x + y, 0) / n;
+  const mb = b.slice(0, n).reduce((x, y) => x + y, 0) / n;
+  let s = 0, da = 0, db = 0;
+  for (let i = 0; i < n; i++) { const x = a[i] - ma, y = b[i] - mb; s += x * y; da += x * x; db += y * y; }
+  return s / Math.sqrt(Math.max(1e-12, da * db));
+};
+const spearman = (a: number[], b: number[]) => {
+  const rank = (arr: number[]) => {
+    const idx = arr.map((v, i) => [v, i] as [number, number]).sort((x, y) => x[0] - y[0]);
+    const out = new Array(arr.length);
+    idx.forEach(([, i], k) => { out[i] = k; });
+    return out;
+  };
+  const ra = rank(a), rb = rank(b), n = a.length;
+  if (n < 3) return NaN;
+  const d2 = ra.reduce((s, v, i) => s + (v - rb[i]) ** 2, 0);
+  return 1 - (6 * d2) / (n * (n * n - 1));
+};
+const clone = (s: GameState): GameState => structuredClone(s);
 
 /**
  * Securities do not change hands for free. Every fill in a clearing stage has a cash leg, so an
@@ -551,40 +611,444 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   return null;
 }
 
-function runInvariantsHarness() {
-  console.log(`--- STARTING INVARIANTS HARNESS (${WEEKS} WEEKS, seed ${SEED}) ---`);
+// NEW: Trade Fee Conservation Check
+function checkTradeFeeConservation(state: GameState): Violation | null {
+  
+  // Take a snapshot of pre-trade balances
+  const preCash = state.portfolio.cashUSD;
+  const preBankEquity = state.regions['USA']?.bankingSector.bankEquityUSD || 0;
+
+  // Let's create a fake position
+  const posData = {
+    assetType: 'EQUITY' as any,
+    symbol: 'TEST',
+    name: 'Test Equity',
+    region: 'USA' as RegionId,
+    dealerId: 'alpha',
+    direction: 'LONG' as any,
+    quantity: 1000,
+    entryPrice: 100,
+    currentPrice: 100,
+    notional: 100000,
+    marginRequirement: 20000,
+    expectedWeeklyCarryUSD: 0
+  };
+
+  const executionDetails = {
+    fillPrice: 100.15,
+    counterpartyFeeUSD: 150,
+    sourcedFrom: 'Bank intermediated (sourced externally)',
+    spreadCostUSD: 150
+  };
+
+  const postState = executeTrade(state, posData, executionDetails);
+
+  const postCash = postState.portfolio.cashUSD;
+  const postBankEquity = postState.regions['USA']?.bankingSector.bankEquityUSD || 0;
+
+  const userDebit = preCash - postCash;
+  const bankCredit = postBankEquity - preBankEquity;
+
+  if (Math.abs(userDebit - executionDetails.spreadCostUSD) > 0.01) {
+    return { week: state.currentWeek, message: `Trade Fee mismatch: user debited ${userDebit} but spreadCostUSD was ${executionDetails.spreadCostUSD}` };
+  }
+  
+  const expectedBankCredit = executionDetails.spreadCostUSD + executionDetails.counterpartyFeeUSD;
+  if (Math.abs(bankCredit - expectedBankCredit) > 0.01) {
+    return { week: state.currentWeek, message: `Trade Fee mismatch: bank credited ${bankCredit} but expected ${expectedBankCredit}` };
+  }
+  
+  return null;
+}
+
+// =============================================================================================
+// MODULES — the one place to add a check or a measurement. Everything below runs off the SAME
+// single simulation pass the core checks run off; nothing spawns its own world except `shock`
+// tests, which A/B from the shared mid-run snapshot.
+// =============================================================================================
+interface HarnessModule {
+  name: string;
+  /** Once, on the seed state, before week 1. */
+  init?(state0: GameState): void;
+  /** Every week after the step and the core checks. Sample freely; push violations. */
+  week?(prev: GameState, state: GameState, w: number): void;
+  /** End of run: measured numbers in the battery pattern — report, judge nothing. */
+  report?(final: GameState, weeks: number): string[];
+  /** A/B mechanism test from the shared mid-run snapshot. Skipped when SHOCKS=0. */
+  shock?(snapshot: GameState, rngState: number, shockWeek: number, weeks: number): string[];
+}
+
+/** HH close-out battery (§7.60), as a module on the shared run. */
+const hhModule: HarnessModule = (() => {
+  const series: Record<string, number[]> = { u: [], v: [], wage: [], tight: [], unmodeled: [], netWorth: [], consumption: [], infl: [] };
+  let seedUnmodeledUSD = 0;
+  return {
+    name: 'HH battery',
+    init(s0) { seedUnmodeledUSD = s0.regions.USA.householdState.unmodeledFinancialAssetsUSD ?? 0; },
+    week(_prev, s) {
+      const reg = s.regions.USA; const hs = reg.householdState;
+      const pools: any = reg.occupationPools;
+      series.u.push(reg.unemploymentRate);
+      series.v.push(reg.vacancyRate ?? 0);
+      series.tight.push(reg.laborMarketTightness ?? 0);
+      series.wage.push((Object.values(pools) as any[]).reduce((a: number, p: any) => a + p.wageGrowthAnnual, 0) / 5);
+      series.unmodeled.push(hs.unmodeledFinancialAssetsUSD ?? 0);
+      series.netWorth.push(hs.netWorthUSD ?? 0);
+      series.infl.push(reg.inflation);
+      series.consumption.push((hs.cohorts ?? []).reduce((a, c) => a + c.consumptionBudgetUSD, 0));
+    },
+    report(s, weeks) {
+      const out: string[] = [];
+      out.push('--- scoreboard: unmodeled financial assets (must fall, never rise) ---');
+      out.push(`  seed: ${B(seedUnmodeledUSD)}`);
+      [1, 10, 40, Math.floor(weeks / 2), weeks].forEach(w => {
+        const idx = w - 1;
+        if (idx >= 0 && idx < series.unmodeled.length) out.push(`  w${String(w).padStart(3)}: ${B(series.unmodeled[idx])}`);
+      });
+      let rose = 0;
+      for (let i = 1; i < series.unmodeled.length; i++) if (series.unmodeled[i] > series.unmodeled[i - 1] + 1) rose++;
+      out.push(`  weeks it ROSE: ${rose} (must be 0 — a placeholder only shrinks)`);
+      const hsU = s.regions.USA.householdState;
+      out.push(`  final share of household financial assets: ${pct((hsU.unmodeledFinancialAssetsUSD ?? 0) / Math.max(1, hsU.equityHoldingsUSD ?? 1))}`);
+      out.push(`  residual capital-receipt share of income: ${pct(hsU.unmodeledCapitalReceiptShareOfIncome ?? 0)}`);
+      out.push('--- claims reconcile (both directions) ---');
+      REGIONS.forEach(r => {
+        const reg = s.regions[r]; const hs = reg.householdState;
+        const instLiab = s.institutionalEntities.filter(e => e.region === r && !e.isDefaulted)
+          .reduce((a, e) => a + (e.beneficiaryLiabilityUSD ?? 0), 0);
+        const held = hs.institutionalClaimsUSD ?? 0;
+        const gap = Math.abs(instLiab - held) / Math.max(1, instLiab);
+        const nwParts = (hs.depositsUSD ?? 0) + (hs.mmfSharesUSD ?? 0) + (hs.equityHoldingsUSD ?? 0)
+          + (hs.housingStockUSD ?? 0)
+          - ((hs.mortgageDebtUSD ?? 0) + (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0));
+        const nwGap = Math.abs(nwParts - (hs.netWorthUSD ?? 0)) / Math.max(1, Math.abs(hs.netWorthUSD ?? 1));
+        const tierSum = Object.values(reg.wealthDistribution).reduce((a: number, t: any) => a + t.shareOfNetWorthUSD, 0);
+        const tierGap = Math.abs(tierSum - (hs.netWorthUSD ?? 0)) / Math.max(1, Math.abs(hs.netWorthUSD ?? 1));
+        const bankDeposits = s.companies
+          .filter(c => c.region === r && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+          .reduce((a, c) => a + c.bankBalanceSheet!.depositsUSD, 0);
+        const depGap = Math.abs(((hs.depositsUSD ?? 0) - (hs.pendingBankSettlementUSD ?? 0)) - bankDeposits) / Math.max(1, bankDeposits);
+        out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
+      });
+      out.push('--- labor market relations ---');
+      const du = series.u.slice(1).map((x, i) => x - series.u[i]);
+      const dv = series.v.slice(1).map((x, i) => x - series.v[i]);
+      out.push(`  Beveridge (u vs v): levels=${corr(series.u, series.v).toFixed(3)}  changes=${corr(du, dv).toFixed(3)}`);
+      out.push(`  wage growth vs tightness: ${corr(series.wage, series.tight).toFixed(3)}`);
+      out.push(`  u range ${pct(Math.min(...series.u))}-${pct(Math.max(...series.u))}   v range ${pct(Math.min(...series.v))}-${pct(Math.max(...series.v))}`);
+      const realWage = series.wage.map((x, i) => x - series.infl[i]);
+      out.push(`  mean nominal wage growth ${pct(series.wage.reduce((a, x) => a + x, 0) / series.wage.length)}, mean real ${pct(realWage.reduce((a, x) => a + x, 0) / realWage.length)}`);
+      out.push(`  net worth / income (USA): ${((s.regions.USA.householdState.netWorthUSD ?? 0) / s.regions.USA.estimatedHouseholdIncomeUSD).toFixed(2)}x`);
+      return out;
+    },
+    shock(snapshot, rngState, shockWeek, weeks) {
+      const out: string[] = [];
+      const horizon = Math.min(30, weeks - shockWeek);
+      if (horizon < 4) return out;
+      const run = (st: GameState, kill: boolean) => {
+        setRngState(rngState);
+        let x = clone(st);
+        let killedName = '', killedJobs = 0;
+        if (kill) {
+          const target = x.companies
+            .filter(c => c.region === 'USA' && isActiveCompany(c))
+            .sort((a, b) => b.employeeCount - a.employeeCount)[0];
+          if (target) {
+            killedName = `${target.ticker} (${target.sector})`;
+            killedJobs = target.employeeCount;
+            target.isDefaulted = true; target.employeeCount = 0; target.stockPrice = 0;
+          }
+        }
+        const o: { u: number[]; c: number[]; inc: number[] } = { u: [], c: [], inc: [] };
+        for (let i = 0; i < horizon; i++) {
+          x = advanceWeeklyStep(x);
+          const reg = x.regions.USA;
+          o.u.push(reg.unemploymentRate);
+          o.c.push((reg.householdState.cohorts ?? []).reduce((a, ch) => a + ch.consumptionBudgetUSD, 0));
+          o.inc.push(reg.estimatedHouseholdIncomeUSD);
+        }
+        return { o, killedName, killedJobs };
+      };
+      const ctl = run(snapshot, false);
+      const trt = run(snapshot, true);
+      const lf = snapshot.regions.USA.totalPopulation * (1 - snapshot.regions.USA.nonEmployablePct) * snapshot.regions.USA.laborForceParticipation;
+      out.push(`recession transmission — killed at week ${shockWeek}: ${trt.killedName}, ${(trt.killedJobs / 1e3).toFixed(1)}k jobs (${pct(trt.killedJobs / lf)} of the labor force)`);
+      out.push(`  wk | unemployment (ctl -> shock)      | consumption budget (ctl -> shock)   | household income`);
+      [1, 2, 4, 8, 16, horizon].filter((x, i, a) => x <= horizon && a.indexOf(x) === i).forEach(k => {
+        const i = k - 1;
+        out.push(`  +${String(k).padStart(2)} | ${pct(ctl.o.u[i])} -> ${pct(trt.o.u[i])}  (${((trt.o.u[i] - ctl.o.u[i]) * 100).toFixed(2)}pp) | ${B(ctl.o.c[i])} -> ${B(trt.o.c[i])} (${(((trt.o.c[i] / ctl.o.c[i]) - 1) * 100).toFixed(2)}%) | ${(((trt.o.inc[i] / ctl.o.inc[i]) - 1) * 100).toFixed(2)}%`);
+      });
+      return out;
+    },
+  };
+})();
+
+/** PUB close-out battery (§7.68), as a module on the shared run. */
+function couponReceipts(s: GameState, region: RegionId) {
+  const reg: any = s.regions[region];
+  const cb = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
+  const rate = (id: string) => cb[id.replace(`${region}-GOV-`, '')] ?? 0;
+  const banks = s.companies
+    .filter((c: any) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+    .reduce((a: number, c: any) => a + Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {})
+      .reduce((x: number, [k, v]: any) => x + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0), 0);
+  const insts = s.institutionalEntities
+    .filter((e: any) => e.region === region && !e.isDefaulted)
+    .reduce((a: number, e: any) => a + (e.itemizedHoldings || [])
+      .filter((h: any) => h.instrumentType === 'GOV_BOND' && h.issuerRegion === region)
+      .reduce((x: number, h: any) => x + ((h.quantityOrNotionalUSD ?? 0) * rate(h.instrumentId)) / 52, 0), 0);
+  const central = Object.entries(reg.centralBankSheet?.sovereignHoldingsByTenor || {})
+    .reduce((a: number, [k, v]: any) => a + ((Number(v) || 0) * (cb[k] ?? 0)) / 52, 0);
+  const paid = weeklyInterestExpenseUSD(reg.govDebtTranches);
+  return { paid, banks, insts, central, unmodeled: reg.governmentInterestToUnmodeledHoldersUSD ?? 0 };
+}
+
+const pubModule: HarnessModule = (() => {
+  const series: Record<string, number[]> = {
+    interestShare: [], procShare: [], procSpent: [], unspentProc: [], stance: [],
+    tga: [], cbBook: [], reinvest: [], remit: [], policy: [], portYield: [],
+    unbacked: [], unmodeledTax: [], revenue: [], outlays: [], debtGdp: [], cmb: [],
+  };
+  let negativeTga = 0, negativeYield = 0;
+  return {
+    name: 'PUB battery',
+    week(_prev, s) {
+      const reg: any = s.regions.USA;
+      const cb = reg.centralBankSheet;
+      const dec = decomposeGovernmentSpending(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+        GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore);
+      series.interestShare.push(dec.interestUSD / Math.max(1, reg.governmentSpendingUSD));
+      series.procShare.push(dec.procurementBudgetUSD / Math.max(1, reg.governmentSpendingUSD));
+      series.procSpent.push(reg.governmentProcurementSpentUSD ?? 0);
+      series.unspentProc.push(reg.unspentProcurementBudgetUSD ?? 0);
+      series.stance.push(reg.fiscalStanceScore);
+      series.tga.push(cb?.treasuryAccountUSD ?? 0);
+      series.cbBook.push(centralBankAssetsUSD(cb));
+      series.reinvest.push(cb?.reinvestmentShare ?? 1);
+      series.remit.push(cb?.lastRemittanceUSD ?? 0);
+      series.policy.push(reg.policyRate);
+      series.unbacked.push(cb?.unbackedBankCashUSD ?? 0);
+      series.unmodeledTax.push(reg.unmodeledTaxRevenueUSD ?? 0);
+      series.revenue.push(reg.governmentRevenueUSD);
+      series.outlays.push(reg.governmentOutlaysUSD ?? 0);
+      series.cmb.push(reg.cashBridgeBillIssuanceUSD ?? 0);
+      series.debtGdp.push(reg.debtToGdpPctBottomUp ?? 0);
+      const cbCoupon = couponReceipts(s, 'USA').central * 52;
+      series.portYield.push(centralBankAssetsUSD(cb) > 0 ? cbCoupon / centralBankAssetsUSD(cb) : 0);
+      REGIONS.forEach(r => {
+        const rr: any = s.regions[r];
+        if ((rr.centralBankSheet?.treasuryAccountUSD ?? 0) < 0) negativeTga++;
+        if (rr.zeroRates.tenor2Y < 0 || rr.zeroRates.tenor10Y < 0) negativeYield++;
+      });
+    },
+    report(s, weeks) {
+      const out: string[] = [];
+      out.push('--- the coupon reaches a holder, and the government pays it ---');
+      REGIONS.forEach(r => {
+        const c = couponReceipts(s, r);
+        const attributed = c.banks + c.insts + c.central;
+        out.push(`  ${r}: paid ${B(c.paid)}/wk = banks ${B(c.banks)} + institutions ${B(c.insts)} + CB ${B(c.central)} = ${B(attributed)} (${pct(attributed / Math.max(1, c.paid))}), unmodeled (foreign) ${B(c.unmodeled)} [residual ${B(c.paid - attributed - c.unmodeled)}]`);
+      });
+      out.push('--- the named gaps (each must fall, none may be assumed away) ---');
+      const at = (a: number[], w: number) => (w >= 1 && w <= a.length ? B(a[w - 1]) : 'n/a');
+      const marks = [13, 52, weeks].filter((w, i, arr) => w <= weeks && arr.indexOf(w) === i);
+      out.push(`  unmodeledTaxRevenueUSD:   w1 ${at(series.unmodeledTax, 1)} -> w${weeks} ${at(series.unmodeledTax, weeks)}`);
+      out.push(`  unbackedBankCashUSD:      ${marks.map(w => `w${w} ${at(series.unbacked, w)}`).join('  ')}`);
+      out.push(`  unspentProcurementBudget: ${marks.map(w => `w${w} ${at(series.unspentProc, w)}/wk`).join('  ')}`);
+      const fill = series.procSpent.map((v, i) => v / Math.max(1, v + series.unspentProc[i]));
+      out.push(`  procurement fill ratio:   mean ${pct(fill.reduce((a, x) => a + x, 0) / fill.length)}, range ${pct(Math.min(...fill))}-${pct(Math.max(...fill))}`);
+      out.push('--- crowding out ---');
+      const stanceFlat = series.stance.every(v => Math.abs(v - series.stance[0]) < 1e-9);
+      out.push(`  corr(interest share, procurement share) = ${corr(series.interestShare, series.procShare).toFixed(3)}${stanceFlat ? '  [ARITHMETIC, not evidence: flat stance]' : ''}`);
+      out.push(`  corr(interest share, REALIZED procurement) = ${corr(series.interestShare, series.procSpent).toFixed(3)}`);
+      out.push(`  interest share range ${pct(Math.min(...series.interestShare))}-${pct(Math.max(...series.interestShare))}, debt/GDP ${pct(Math.min(...series.debtGdp))}-${pct(Math.max(...series.debtGdp))}`);
+      out.push('--- central bank: remittances, regimes, the book ---');
+      const excess = series.policy.map((p, i) => p - series.portYield[i]);
+      const dd = (a: number[]) => a.slice(1).map((x, i) => x - a[i]);
+      out.push(`  corr(policy, remittance): levels ${corr(series.policy, series.remit).toFixed(3)} changes ${corr(dd(series.policy), dd(series.remit)).toFixed(3)}`);
+      out.push(`  corr(policy - portfolio yield, remittance): levels ${corr(excess, series.remit).toFixed(3)} changes ${corr(dd(excess), dd(series.remit)).toFixed(3)} (negative = the real post-hiking phenomenon)`);
+      out.push(`  remittance negative in ${series.remit.filter(v => v < 0).length}/${weeks} weeks; CB book ${B(series.cbBook[0])} -> ${B(series.cbBook[series.cbBook.length - 1])}; QT weeks ${series.reinvest.filter(v => v < 0.999).length}/${weeks}`);
+      out.push('--- the treasury account ---');
+      out.push(`  TGA range ${B(Math.min(...series.tga))}..${B(Math.max(...series.tga))}; negative in ${negativeTga} region-weeks (must be 0); negative nominal yields in ${negativeYield} region-weeks`);
+      const rev = series.revenue;
+      const meanDeficit = series.outlays.reduce((a, v, i) => a + (v - rev[i]), 0) / series.outlays.length;
+      out.push(`  mean weekly deficit ${B(meanDeficit)}; dry weeks (<0.1B collected) ${rev.filter(v => v < 1e8).length}/${weeks}, peak ${B(Math.max(...rev))} — the swing a TGA exists to absorb`);
+      if (weeks >= 104) {
+        const trail = (a: number[], end: number, n = 52) => a.slice(Math.max(0, end - n), end).reduce((x, y) => x + y, 0);
+        const half = Math.floor(weeks / 2);
+        const rg = trail(rev, weeks) / Math.max(1, trail(rev, half));
+        const og = trail(series.outlays, weeks) / Math.max(1, trail(series.outlays, half));
+        out.push(`  trailing-52wk revenue ${B(trail(rev, weeks))} vs outlays ${B(trail(series.outlays, weeks))} = ${(trail(rev, weeks) / Math.max(1, trail(series.outlays, weeks))).toFixed(2)}x; growth x${rg.toFixed(1)} vs x${og.toFixed(1)}`);
+        out.push(`  bridge bills: ${B(series.cmb.reduce((a, v) => a + v, 0))} total, ${series.cmb.filter(v => v > 0).length}/${weeks} weeks (PUB3c)`);
+      }
+      out.push('--- stability at horizon ---');
+      REGIONS.forEach(r => {
+        const reg: any = s.regions[r]; const cb = reg.centralBankSheet;
+        const bad: string[] = [];
+        const chk = (n: string, v: number | undefined) => { if (v === undefined || !isFinite(v)) bad.push(n); };
+        chk('revenue', reg.governmentRevenueUSD); chk('outlays', reg.governmentOutlaysUSD);
+        chk('interest', reg.governmentInterestWeeklyUSD); chk('tga', cb?.treasuryAccountUSD);
+        chk('cbBook', centralBankAssetsUSD(cb)); chk('2Y', reg.zeroRates.tenor2Y); chk('10Y', reg.zeroRates.tenor10Y);
+        out.push(`  ${r}: rev ${B(reg.governmentRevenueUSD)} outlays ${B(reg.governmentOutlaysUSD ?? 0)} interest ${B(reg.governmentInterestWeeklyUSD ?? 0)} tga ${B(cb?.treasuryAccountUSD ?? 0)} 2Y ${pct(reg.zeroRates.tenor2Y)} 10Y ${pct(reg.zeroRates.tenor10Y)} ${bad.length ? 'NON-FINITE: ' + bad.join(',') : 'all finite'}`);
+      });
+      return out;
+    },
+    shock(snapshot, rngState, shockWeek, weeks) {
+      const out: string[] = [];
+      const horizon = Math.min(40, weeks - shockWeek);
+      if (horizon < 4) return out;
+      const run = (st: GameState, shocked: boolean) => {
+        setRngState(rngState);
+        let x = clone(st);
+        if (shocked) {
+          const reg: any = x.regions.USA;
+          (reg.govDebtTranches || []).forEach((t: any) => { t.couponRate = (t.couponRate ?? 0) * 4 + 0.04; });
+        }
+        const o = { interest: [] as number[], proc: [] as number[], transfers: [] as number[], debt: [] as number[] };
+        for (let i = 0; i < horizon; i++) {
+          x = advanceWeeklyStep(x);
+          const reg: any = x.regions.USA;
+          const dec = decomposeGovernmentSpending(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+            GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore);
+          o.interest.push(dec.interestUSD); o.transfers.push(dec.transfersUSD);
+          o.proc.push(reg.governmentProcurementSpentUSD ?? 0);
+          o.debt.push(reg.debtToGdpPctBottomUp ?? 0);
+        }
+        return o;
+      };
+      const ctl = run(snapshot, false);
+      const trt = run(snapshot, true);
+      out.push(`debt spiral — coupon quadrupled on the whole USA stack at week ${shockWeek}. wk | interest/wk (ctl -> shock) | REAL procurement | transfers | debt/GDP`);
+      [1, 4, 8, 16, horizon].filter((x, i, a) => x <= horizon && a.indexOf(x) === i).forEach(k => {
+        const i = k - 1;
+        out.push(`  +${String(k).padStart(2)} | ${B(ctl.interest[i])} -> ${B(trt.interest[i])} | ${B(ctl.proc[i])} -> ${B(trt.proc[i])} (${(((trt.proc[i] / Math.max(1, ctl.proc[i])) - 1) * 100).toFixed(1)}%) | ${B(ctl.transfers[i])} -> ${B(trt.transfers[i])} | ${pct(ctl.debt[i])} -> ${pct(trt.debt[i])}`);
+      });
+      return out;
+    },
+  };
+})();
+
+/** XB close-out battery (§7.72-77), as a module on the shared run. */
+const xbModule: HarnessModule = (() => {
+  const history: { week: number; rates: Record<string, number> }[] = [];
+  return {
+    name: 'XB battery',
+    week(_prev, s, w) {
+      history.push({ week: w, rates: { ...s.freightRatePerTonneLaneMoneyByLane } });
+    },
+    report(s) {
+      const out: string[] = [];
+      out.push('--- trade reconciles to who bought from whom ---');
+      const totX = REGIONS.reduce((a, r) => a + (s.regions[r].exportsUSD ?? 0), 0);
+      const totM = REGIONS.reduce((a, r) => a + (s.regions[r].importsUSD ?? 0), 0);
+      out.push(`  world exports ${B(totX)}  imports ${B(totM)}  gap ${pct(Math.abs(totX - totM) / Math.max(1, totX))}`);
+      REGIONS.forEach(r => {
+        const reg = s.regions[r];
+        out.push(`  ${r.padEnd(4)} X ${B(reg.exportsUSD ?? 0)}  M ${B(reg.importsUSD ?? 0)}  balance ${B(reg.tradeBalance ?? 0)}`);
+      });
+      out.push('--- trade share against the physics that should drive it ---');
+      const density: number[] = []; const imported: number[] = [];
+      Object.values(INDUSTRY_SUBUNITS).flat().forEach(su => {
+        const phys = SUBUNIT_PHYSICAL[su.unitId];
+        if (!phys || phys.deliveryMode !== 'PHYSICAL' || !phys.baselineValueDensityUsdPerTonne) return;
+        const mass = s.unitMassTonnes[su.unitId] ?? 0;
+        if (!(mass > 0)) return;
+        const rate = s.freightRatePerTonneLaneMoneyByLane[laneKey('EUR', 'USA')] ?? 0;
+        const price = Number((s.regions.USA.categoryDemand[su.unitId] as any)?.unitPriceUSD) || 1;
+        density.push(phys.baselineValueDensityUsdPerTonne);
+        imported.push(-(mass * rate) / price);
+      });
+      out.push(`  Spearman(value density, -freight share of value) = ${spearman(density, imported).toFixed(3)}  (n=${density.length}) [1.000 = physics deciding tradability]`);
+      out.push('--- carriers and the freight market ---');
+      const carriers = s.companies.filter(isCarrier);
+      const alive = carriers.filter(c => isActiveCompany(c));
+      out.push(`  carriers ${alive.length} alive of ${carriers.length}   fleet ${carriers.reduce((a, c) => a + (c.carrierFleet?.assets.length ?? 0), 0)} assets`);
+      out.push(`  logistics revenue ${B(carriers.reduce((a, c) => a + c.annualRevenue, 0))} = ${pct(carriers.reduce((a, c) => a + c.annualRevenue, 0) / Math.max(1, REGIONS.reduce((a, r) => a + (s.regions[r].derivedNominalGdpUSD ?? 0), 0)))} of world GDP [real: 5-6%]`);
+      const rateStart = history[0]?.rates ?? {}; const rateEnd = history[history.length - 1]?.rates ?? {};
+      Object.keys(rateEnd).sort().slice(0, 8).forEach(k => {
+        const [from, to] = k.split('>') as [RegionId, RegionId];
+        const t = laneTransitWeeks(from, to, laneDistanceNm(from, to));
+        const a = rateStart[k] ?? 0, b = rateEnd[k] ?? 0;
+        out.push(`  ${k.padEnd(12)} transit ${t.toFixed(2)}wk  rate w1 ${a.toFixed(2)} -> ${b.toFixed(2)} (${a > 0 ? ((b / a - 1) * 100).toFixed(0) + '%' : 'n/a'})`);
+      });
+      const withRevenue = carriers.filter(c => (c.carrierFleet?.lastWeekFreightRevenueUSD ?? 0) > 0);
+      out.push(`  carriers earning freight this week: ${withRevenue.length} of ${alive.length}; tonne-miles ${carriers.reduce((a, c) => a + (c.carrierFleet?.lastWeekTonneNm ?? 0), 0).toExponential(2)}`);
+      out.push('--- transit, the currency boundary, reserves ---');
+      const inTransit = s.goodsInTransit ?? [];
+      out.push(`  consignments in transit ${inTransit.length}  value ${B(inTransit.reduce((a, sh) => a + sh.units * sh.landedCostPerUnit, 0))}; in-place goods ever imported: ${inTransit.filter(sh => deliveryModeOf(sh.subUnitId) === 'IN_PLACE').length} (must be 0)`);
+      REGIONS.forEach(r => {
+        const fx = getFxToUsd(s.fxPairs, r);
+        const mean = Object.values(INDUSTRY_SUBUNITS).flat().reduce((acc, su) => {
+          const p = Number((s.regions[r].categoryDemand[su.unitId] as any)?.unitPriceUSD) || 0;
+          const pu = Number((s.regions.USA.categoryDemand[su.unitId] as any)?.unitPriceUSD) || 0;
+          return p > 0 && pu > 0 ? { n: acc.n + 1, sum: acc.sum + (p * fx) / pu } : acc;
+        }, { n: 0, sum: 0 });
+        const cb = s.regions[r].centralBankSheet;
+        out.push(`  ${r.padEnd(4)} fx ${fx.toFixed(4)}  mean converted price vs USA ${(mean.sum / Math.max(1, mean.n)).toFixed(3)} [1.000 = law of one price]  fxReserves ${B(cb ? centralBankFxReservesUSD(cb) : 0)}`);
+      });
+      const mfo = (s.regions.USA as any).measuredForeignOwnership;
+      out.push(`  USA measured foreign ownership: ${mfo ? JSON.stringify(mfo) : '(not published)'}`);
+      return out;
+    },
+  };
+})();
+
+// ---- ADD NEW MODULES HERE, and nowhere else. ----
+const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule];
+
+// =============================================================================================
+// THE RUN
+// =============================================================================================
+function weekLine(s: GameState, w: number, newViol: number, totalViol: number, ms: number): string {
+  const r = s.regions;
+  const u = (id: RegionId) => ((r[id]?.unemploymentRate ?? 0) * 100).toFixed(1);
+  const bound = ((s as any).lastWeekDamperBoundIds ?? []).length;
+  const gdp = (r.USA as any).derivedNominalGdpUSD ?? 0;
+  return `w${String(w).padStart(3)} | viol +${String(newViol).padStart(2)} S${String(totalViol).padStart(4)}`
+    + ` | u ${u('USA')}/${u('EUR')}/${u('UK')}/${u('JPN')}`
+    + ` | pi ${((r.USA.inflation ?? 0) * 100).toFixed(2)}`
+    + ` | GDP ${(gdp / 1e12).toFixed(2)}T`
+    + ` | 10Y ${((r.USA.zeroRates?.tenor10Y ?? 0) * 100).toFixed(2)}`
+    + ` | bound ${String(bound).padStart(4)}`
+    + ` | ${String(ms).padStart(4)}ms`;
+}
+
+function runHarness() {
+  console.log(`=== THE HARNESS — ${WEEKS} weeks, seed ${SEED}, shocks ${SHOCKS ? 'on' : 'off'}${PROFILE ? ', profiling' : ''} ===`);
   let state = createInitialGameState(SEED);
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
   let knownTickers = new Set(state.companies.map(c => c.ticker));
+  MODULES.forEach(m => { try { m.init?.(state); } catch (e) { violations.push({ week: 0, message: `[harness:${m.name}] init threw: ${e}` }); } });
 
-  // Assert trade fee conservation invariant on initial state
-  const tradeFeeViolation = checkTradeFeeConservation(state);
-  if (tradeFeeViolation) {
-    violations.push(tradeFeeViolation);
+  if (SHOCKS) {
+    // Pre-run mechanism tests (each builds its own world; violations land in the same pool).
+    const tradeFeeViolation = checkTradeFeeConservation(state);
+    if (tradeFeeViolation) violations.push(tradeFeeViolation);
+    const frozenPortfolioViolation = checkMarkToMarketUnfreezesPortfolio();
+    if (frozenPortfolioViolation) violations.push(frozenPortfolioViolation);
+    const equityFlowViolation = checkSustainedEquityDemandMovesPriceBeyondEps();
+    if (equityFlowViolation) violations.push(equityFlowViolation);
+    const auctionViolation = checkUndersubscribedSovereignAuctionRaisesYield();
+    if (auctionViolation) violations.push(auctionViolation);
+    if (violations.length) violations.forEach(v => console.log(`  ! [pre-run] ${v.message}`));
+    // NOTE deliberately NOT re-seeding here: the old harness ran these tests (each of which
+    // creates and advances its own worlds, moving the global RNG) and then advanced the main
+    // state from wherever the stream landed. Preserved exactly, so violation counts stay
+    // comparable across the rewrite. SHOCKS=0 therefore runs a DIFFERENT (clean-stream) world.
   }
 
-  // Assert mark-to-market flows through to NAV/positions after a weekly advance
-  const frozenPortfolioViolation = checkMarkToMarketUnfreezesPortfolio();
-  if (frozenPortfolioViolation) {
-    violations.push(frozenPortfolioViolation);
-  }
+  const SHOCK_WEEK = Math.min(40, Math.floor(WEEKS / 3));
+  let shockSnapshot: GameState | null = null;
+  let shockRng = 0;
 
-  // Assert the equity holder-class rebalancing flow visibly moves price beyond EPS
-  const equityFlowViolation = checkSustainedEquityDemandMovesPriceBeyondEps();
-  if (equityFlowViolation) {
-    violations.push(equityFlowViolation);
-  }
-
-  // Assert an under-subscribed sovereign auction raises the following week's yield
-  const auctionViolation = checkUndersubscribedSovereignAuctionRaisesYield();
-  if (auctionViolation) {
-    violations.push(auctionViolation);
-  }
+  // PROFILE accumulators (same method as the old scripts/profile.ts: warm-up discarded).
+  const WARMUP_WEEKS = 3;
+  const totalMsByStage = new Map<string, number>();
+  const worstMsByStage = new Map<string, number>();
+  let profiledWeeks = 0, profiledMs = 0;
 
   for (let w = 1; w <= WEEKS; w++) {
-    if (w % 10 === 0) {
-      console.log(`[Invariants Harness] Week ${w}...`);
-    }
+    const violBefore = violations.length;
     // Inject scripted trades at week 5 to test NAV with IRS, CDS, and leveraged positions
     if (w === 5) {
       const testIrs: Position = {
@@ -656,11 +1120,24 @@ function runInvariantsHarness() {
       };
     }
 
-
-
     let preState = state;
-    state = advanceWeeklyStep(state);
-    
+    const t0 = Date.now();
+    if (PROFILE) {
+      const { state: next, timings } = advanceWeeklyStepProfiled(state, { profile: true });
+      state = next;
+      if (w > WARMUP_WEEKS) {
+        profiledWeeks++;
+        timings.forEach(({ stage, ms }) => {
+          totalMsByStage.set(stage, (totalMsByStage.get(stage) ?? 0) + ms);
+          worstMsByStage.set(stage, Math.max(worstMsByStage.get(stage) ?? 0, ms));
+          profiledMs += ms;
+        });
+      }
+    } else {
+      state = advanceWeeklyStep(state);
+    }
+    const stepMs = Date.now() - t0;
+
     // Track Sovereign Debt Issuance
     ['USA', 'EUR', 'ASIA'].forEach(rId => {
        const preBankSov = preState.regions[rId]?.bankingSector.sovereignBondHoldingsUSD || 0;
@@ -845,6 +1322,19 @@ function runInvariantsHarness() {
         }
       }
     });
+
+    // Module hooks — one shared run, every module reads it.
+    MODULES.forEach(m => {
+      try { m.week?.(preState, state, w); }
+      catch (e) { violations.push({ week: w, message: `[harness:${m.name}] week() threw: ${e}` }); }
+    });
+    if (SHOCKS && w === SHOCK_WEEK) { shockSnapshot = clone(state); shockRng = getRngState(); }
+
+    // The live line, one per week, plus this week's new violations (capped).
+    const newViols = violations.slice(violBefore);
+    console.log(weekLine(state, w, newViols.length, violations.length, stepMs));
+    newViols.slice(0, 6).forEach(v => console.log(`     ! ${v.message}`));
+    if (newViols.length > 6) console.log(`     ! ...+${newViols.length - 6} more this week`);
   }
 
   // 2. Revenue > 20x baseline check. Growth BY ACQUISITION is not organic growth: an acquirer
@@ -871,66 +1361,61 @@ function runInvariantsHarness() {
     }
   });
 
+  // ---- module reports: measured numbers, judged by nobody (the battery pattern) ----
+  MODULES.forEach(m => {
+    try {
+      const lines = m.report?.(state, WEEKS);
+      if (lines && lines.length) {
+        console.log(`\n=== ${m.name} ===`);
+        lines.forEach(l => console.log(l));
+      }
+    } catch (e) { console.log(`\n=== ${m.name} === report threw: ${e}`); }
+  });
+
+  // ---- module A/B shocks off the shared mid-run snapshot ----
+  if (SHOCKS && shockSnapshot) {
+    MODULES.forEach(m => {
+      try {
+        const lines = m.shock?.(shockSnapshot!, shockRng, SHOCK_WEEK, WEEKS);
+        if (lines && lines.length) {
+          console.log(`\n=== ${m.name} — A/B shock ===`);
+          lines.forEach(l => console.log(l));
+        }
+      } catch (e) { console.log(`\n=== ${m.name} — A/B shock === threw: ${e}`); }
+    });
+  }
+
+  // ---- per-stage profile (PROFILE=1) ----
+  if (PROFILE && profiledWeeks > 0) {
+    const rows = Array.from(totalMsByStage.entries())
+      .map(([stage, totalMs]) => ({ stage, meanMs: totalMs / profiledWeeks, worstMs: worstMsByStage.get(stage) ?? 0, sharePct: (totalMs / profiledMs) * 100 }))
+      .sort((a, b) => b.meanMs - a.meanMs);
+    console.log(`\n=== profile — ${profiledWeeks} measured weeks (first ${WARMUP_WEEKS} discarded as warm-up) ===`);
+    console.log(`${'stage'.padEnd(30)}${'mean ms'.padStart(9)}${'worst ms'.padStart(10)}${'share'.padStart(8)}`);
+    rows.forEach(r => console.log(`${r.stage.padEnd(30)}${r.meanMs.toFixed(1).padStart(9)}${r.worstMs.toFixed(1).padStart(10)}${r.sharePct.toFixed(1).padStart(7)}%`));
+    console.log(`per-week mean: ${(profiledMs / profiledWeeks).toFixed(0)} ms`);
+  }
+
+  console.log(`\n[damper] instruments persistently bound (3+ consecutive weeks): ${damperPersistentBinds.size}; worst streak ${damperWorstStreak} weeks — §6.1's promoted defect; watch it DOWN`);
+
+  // ---- verdict: grouped summary (violations already printed live, week by week) ----
   if (violations.length === 0) {
-    console.log(`[damper] instruments persistently bound (3+ consecutive weeks): ${damperPersistentBinds.size}; worst streak ${damperWorstStreak} weeks — watch this DOWN as the wides get a real buyer base (§6)`);
-    console.log(`✅ INVARIANTS HARNESS PASSED — ${WEEKS} weeks, all assertions satisfied!`);
+    console.log(`\nOK - HARNESS PASSED — ${WEEKS} weeks, all assertions satisfied`);
     process.exit(0);
-  } else {
-    console.log(`[damper] instruments persistently bound (3+ consecutive weeks): ${damperPersistentBinds.size}; worst streak ${damperWorstStreak} weeks — watch this DOWN as the wides get a real buyer base (§6)`);
-    console.error(`❌ INVARIANTS HARNESS FAILED — ${violations.length} violation(s):`);
+  }
+  const familyOf = (m: string) => m.replace(/[-+]?\d[\d,.]*/g, '#').slice(0, 110);
+  const families = new Map<string, number>();
+  violations.forEach(v => families.set(familyOf(v.message), (families.get(familyOf(v.message)) ?? 0) + 1));
+  console.error(`\nFAIL - HARNESS FAILED — ${violations.length} violation(s) in ${families.size} families:`);
+  Array.from(families.entries()).sort((a, b) => b[1] - a[1])
+    .forEach(([f, n]) => console.error(`  ${String(n).padStart(5)}x  ${f}`));
+  if (VERBOSE) {
+    console.error(`\nfull list (VERBOSE=1):`);
     violations.forEach(v => console.error(`  [Week ${v.week}] ${v.message}`));
-    process.exit(1);
+  } else {
+    console.error(`\n(each violation printed live in its week above; VERBOSE=1 for the full list here)`);
   }
+  process.exit(1);
 }
 
-runInvariantsHarness();
-
-// NEW: Trade Fee Conservation Check
-function checkTradeFeeConservation(state: GameState): Violation | null {
-  
-  // Take a snapshot of pre-trade balances
-  const preCash = state.portfolio.cashUSD;
-  const preBankEquity = state.regions['USA']?.bankingSector.bankEquityUSD || 0;
-
-  // Let's create a fake position
-  const posData = {
-    assetType: 'EQUITY' as any,
-    symbol: 'TEST',
-    name: 'Test Equity',
-    region: 'USA' as RegionId,
-    dealerId: 'alpha',
-    direction: 'LONG' as any,
-    quantity: 1000,
-    entryPrice: 100,
-    currentPrice: 100,
-    notional: 100000,
-    marginRequirement: 20000,
-    expectedWeeklyCarryUSD: 0
-  };
-
-  const executionDetails = {
-    fillPrice: 100.15,
-    counterpartyFeeUSD: 150,
-    sourcedFrom: 'Bank intermediated (sourced externally)',
-    spreadCostUSD: 150
-  };
-
-  const postState = executeTrade(state, posData, executionDetails);
-
-  const postCash = postState.portfolio.cashUSD;
-  const postBankEquity = postState.regions['USA']?.bankingSector.bankEquityUSD || 0;
-
-  const userDebit = preCash - postCash;
-  const bankCredit = postBankEquity - preBankEquity;
-
-  if (Math.abs(userDebit - executionDetails.spreadCostUSD) > 0.01) {
-    return { week: state.currentWeek, message: `Trade Fee mismatch: user debited ${userDebit} but spreadCostUSD was ${executionDetails.spreadCostUSD}` };
-  }
-  
-  const expectedBankCredit = executionDetails.spreadCostUSD + executionDetails.counterpartyFeeUSD;
-  if (Math.abs(bankCredit - expectedBankCredit) > 0.01) {
-    return { week: state.currentWeek, message: `Trade Fee mismatch: bank credited ${bankCredit} but expected ${expectedBankCredit}` };
-  }
-  
-  return null;
-}
+runHarness();

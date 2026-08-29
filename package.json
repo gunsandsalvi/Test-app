@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "verify": "bash scripts/check-hygiene.sh && tsx scripts/invariants.ts",
-    "profile": "tsx scripts/profile.ts"
+    "verify": "bash scripts/check-hygiene.sh && tsx scripts/harness.ts",
+    "profile": "bash scripts/check-hygiene.sh && PROFILE=1 tsx scripts/harness.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

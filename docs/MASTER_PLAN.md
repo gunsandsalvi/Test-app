@@ -137,26 +137,36 @@ These are standing user directives. They are not suggestions.
 
 ### 1.10 Verification ladder (every work item)
 
+**There is ONE test script: `scripts/harness.ts`** (user directive 2026-08-29, §7.101). One
+simulation run; every check, every battery and the profiler read it as MODULES; it prints one
+line per week (violations, unemployment, inflation, GDP, 10Y, damper-bound count, ms) so a run
+can be watched live, with new violations inline under the week they happen. `check-hygiene.sh`
+FAILS if any other file appears in `scripts/` — a new check or measurement is a module added to
+`MODULES` in `harness.ts`, never a new script.
+
 ```
 npx tsc --noEmit                   # typecheck — safe at any time
 npm run build                      # build — safe at any time
-bash scripts/check-hygiene.sh      # no root-level scratch files
-npm run verify                     # hygiene + 60-week invariants harness (~1 min)
-                                   # END OF PROJECT ONLY — see rule 12
-npm run profile                    # per-stage runtime. Baseline after §7.81: ~850 ms/week
-                                   # serial (machine noise ±20 — measure 3 runs), workers
-                                   # byte-identical. 05 ~32%, 08 ~19%, books ~22%, GC ~12%.
-                                   # ~70 ms/week of that is the §6 lot leak's tax (IND will
-                                   # delete it). NOTE: §7.79's exact solve relabeled the world
-                                   # (gently — hashes identical through week 10, divergent by
-                                   # 25). CLEARING_WORKERS=6 speeds up verify/batteries free.
-npx tsx scripts/hh-battery.ts 120  # household close-out battery (~2 min)
-npx tsx scripts/pub-battery.ts 120 # public-sector close-out battery (~2 min)
+bash scripts/check-hygiene.sh      # no root scratch files; ONE script in scripts/
+npm run verify                     # hygiene + THE HARNESS: 60 weeks, checks + batteries +
+                                   # A/B shocks (~2 min). END OF PROJECT ONLY — see rule 12.
+WEEKS=10 SHOCKS=0 npm run verify   # quick wiring probe (structural, rule-12-safe). NOTE:
+                                   # SHOCKS=0 runs a clean RNG stream — counts are not
+                                   # comparable with the SHOCKS=1 baseline (dirty stream,
+                                   # preserved from the old harness for continuity).
+npm run profile                    # the same run with per-stage timings (PROFILE=1).
+                                   # Baseline after §7.81: ~850 ms/week serial (±20 noise),
+                                   # 05 ~32%, 08 ~19%, books ~22%, GC ~12%; ~70 ms/week is
+                                   # the §6 lot leak's tax (IND deletes it).
+                                   # CLEARING_WORKERS=6 speeds any run up free.
+VERBOSE=1 npm run verify           # full violation dump at the end (they print live anyway)
 WEEKS=260 npm run verify           # ASK THE USER FIRST — long run, section close only
 ```
 
-Every project ends with its own close-out battery on this pattern: every verify criterion in its
-§5 entry, measured once, reporting numbers and judging nothing by itself.
+A project's close-out battery is a `report()` module in the harness: every verify criterion in
+its §5 entry, measured on the shared run, reporting numbers and judging nothing by itself. The
+HH, PUB and XB batteries already live there; a closing project adds its own module in the same
+commit that closes it.
 
 Scratch scripts live in the session scratchpad, never in the repo. Delete all debug
 `console.log` blocks before committing (grep for `DEBUG` and `console.log` in `src/engine/`).
@@ -252,7 +262,7 @@ schedule, AP capacity, the research-capacity primitive behind who indexes).
 ### 2.4 UI (`src/components/`) and invariants
 
 UI reads `GameState` only. Several components still contain second price-setters/fabricated
-numbers — see §5-G3 and §6. Invariants harness: `scripts/invariants.ts` via `npm run verify`
+numbers — see §5-G3 and §6. The one harness: `scripts/harness.ts` via `npm run verify` (§1.10)
 (NaN purity, ownership conservation, NAV identity, fee conservation, MTM unfreezing, policy
 rate stability, default/merger disjointness, bank capital & NIM bands, IPO EPS, revenue 20x
 ceiling, sovereign absorption, equity-demand-moves-price, auction-moves-yields). Known harness state, measured at the WS5 close (§7.32/§7.34): **60 weeks, seed default —
@@ -474,10 +484,10 @@ exists. Both read ZERO before OWN, verified by an A/B against 86817cb, so this i
 not a revealed disease. Two candidate causes, and the ORDER matters:
 
 1. **Fix BOTH harness checks first — the review proved both red invariants measure the wrong
-   thing.** (a) `checkHoldingsLedgerConservation` (`invariants.ts:59-67`) filters holders on
+   thing.** (a) `checkHoldingsLedgerConservation` (`harness.ts`) filters holders on
    `e.region === regionId` then counts every position regardless of `h.issuerRegion` — a region's
    entities' FOREIGN paper is scored against DOMESTIC outstanding, wrong since XB1. (b)
-   `checkOwnershipConservation` (`invariants.ts:392`) excludes foreign holdings from its sum on a
+   `checkOwnershipConservation` (`harness.ts`) excludes foreign holdings from its sum on a
    premise OWN1 invalidated: its comment says foreign ownership "is not part of this conservation
    sum" because it is measured separately, but `measuredOwnershipAllRegions` attributes every
    holding by ISSUER region, so foreign funds are now INSIDE `institutionalShare`. Re-key both to
@@ -548,7 +558,7 @@ household residual; OWN5 `bankMarketShare`; OWN6 the seed and the deletion.
 row (improved from 81) and 357 are one new family — the corporate books holding ~13% more paper
 than exists. Both of its invariants read ZERO before OWN, so the widened floats are over-placing
 rather than revealing. **OWN7 closes it**, in this order: first fix the harness check itself
-(`invariants.ts:59-67` sums a region's entities' FOREIGN holdings against DOMESTIC outstanding,
+(`checkHoldingsLedgerConservation` sums a region's entities' FOREIGN holdings against DOMESTIC outstanding,
 which since XB1 is the wrong comparison), then find where a corporate tranche is repaid without
 the holder's book shrinking — the corporate twin of §7.10. **Do not reinstate a float carve to
 make the numbers fit.** Full write-up in §6.1.
@@ -581,7 +591,7 @@ UI, render an absence (an em dash), never a fabricated number.
   exists to avoid. `marginCompression` and `creditContagionBps` are passed as literal zeros by
   stage 02. Delete all three with their call sites and the dead parameter.
 - **The missing invariant that would have caught the 646% category** (§7.100): assert per region
-  per sub-unit that `Σ categoryMarketShare ≈ 1`. A few lines in `scripts/invariants.ts`; catches
+  per sub-unit that `Σ categoryMarketShare ≈ 1`. A few lines in `scripts/harness.ts`; catches
   the next mis-assigned product line the week it appears.
 
 **Verify:** `tsc` + the harness — the new assertions pass on the current world; a deliberately
@@ -1244,8 +1254,7 @@ book — the competitiveness channel, mechanical rather than a formula. This is 
 it touches wages, household income and the labor market. Deferred deliberately: trade credit
 (30–90 day payables) and hedging those payables belong with the forward book, not faked here.
 
-**XB4 — Close-out battery.** `scripts/xb-battery.ts`, on the pattern of `hh-battery.ts` and
-`pub-battery.ts`. Every criterion below, measured once, at the END. Include: do the three empty
+**XB4 — Close-out battery.** The XB `report()` module in `scripts/harness.ts` (§1.10). Every criterion below, measured once, at the END. Include: do the three empty
 `GLOBAL_EQ_*` index funds fill? Which currency became the vehicle, and what drove it?
 
 **Verify:** hedged-yield-pickup, not raw yield, predicts bond flows; a home rate cut pushes
@@ -1663,7 +1672,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | Defect | State and next action |
 |---|---|
 | **THE BOOKS PRINT THEIR DAMPERS — promoted from §6.2, 2026-08-29** | The clearing engine states its own failure condition: the damper "must never BIND persistently — a name clamped for weeks on end means the posted schedules disagree with the printed level and the print is the damper, not the market." The watchlist row set the same test ("only wrong if it stays there") at 1,961 bound; the harness now prints **2,549 persistently bound, worst streak 60 weeks in a 60-week run**. The condition is met. This is ONE defect wearing many prints: the FX rate pinning at −8.01% (its damper to the second decimal) 38–39 weeks in 40, and the five books' `MAX_WEEKLY_*_MOVE_PCT` binding across 2,549 instruments — the posted demand does not reach the float it is asked to clear (§7.18's want/have from the demand side). The engine is not the defect; the thin side is. **Owners: G3 (dealer capacity, G3d), SCALE (float), XB6 (the FX flow), HF (the FX elastic side).** Do not widen any damper. |
-| **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the goods market, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). **XB3a widened this further**: the goods auction was repartitioned and the RNG stream relabelled, so every count taken before it describes a different world. Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3b, then run the harness and `scripts/xb-battery.ts` ONCE and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
+| **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the goods market, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). **XB3a widened this further**: the goods auction was repartitioned and the RNG stream relabelled, so every count taken before it describes a different world. Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3b, then run the harness ONCE (its XB module reports the battery) and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
 | ~~**Invoicing locks to 100% USD by week 5**~~ | **The mechanism was DELETED, not fixed (§7.76 correction).** The lock-in was arithmetic between three weights I invented — a weighted score with an argmax is not how anyone chooses an invoice currency, and reporting its corner solution as a finding about the world was wrong. Invoice currency is now owned by **XB3a-5**, gated on **XB6**: while USD is the FX numéraire the cheapest vehicle currency is decided by the model's plumbing, so the question is not askable yet. |
 | **Freight rates run away on some lanes** | **Found by the XB battery (§7.77).** Over 40 weeks EUR>UK goes 6.28 -> 292,929 per tonne and JPN>USA 7.63 -> 704, while EUR>EUR falls 59% and JPN>UK falls 94%. Freight as a share of cargo value then prints above 100% for the bulk goods (upstream_extraction at 58,255%), which is not a price, it is a market that has come apart. Two candidates and they interact: capacity on a lane is a physical stock that cannot respond inside a week, so a demand spike has nothing to meet it; and the rate is quoted in the ORIGIN's money, so a collapsing origin currency inflates it mechanically (see the row below, which is probably the root). **Do not cap the rate** — a bound is not a price (§7.21, §7.75). Diagnose which of the two dominates by holding FX fixed in an A/B, then fix the one that is real. |
 | **THE FX RATE IS PRINTING ITS DAMPER, NOT CLEARING — 'a bound is not a price' for the THIRD time** | **Found by the XB battery and then pinned exactly (§7.77).** Measured over 40 weeks: the FX instrument is damper-bound in **39 of 40 weeks for EUR and UK and 38 of 40 for JPN**, and the minimum weekly move is **−8.01% — `MAX_WEEKLY_FX_MOVE_PCT` to the second decimal** — hit again and again in the same direction. Mean move −4%/week, compounding to EUR 1.4655 → 0.2415, UK 1.2650 → 0.2457, JPN 1.3708 → 0.2122: every non-USD currency losing six-sevenths of its value. Converted price levels end at 0.62–0.70 of the USA's instead of converging on 1.000, so the law of one price fails and the competitiveness channel runs one way only. **The number being published is the damper, not a clearing level** — §7.21 recorded this error, §7.75 recorded making it a second time in the FX market, and this is the third. The cause is structural rather than a sign error: the inelastic float (`dealerNetUSD − portfolioUSD − tradeUSD`) systematically exceeds what the elastic side will take, so the solve pins every week. The trade leg's sign is correct (a surplus reduces selling pressure); the candidates are the size of the cross-border settlement flow XB2e registers and the speculators' risk budget against it. **Do not widen the damper and do not cap the float** — find which flow is oversized and why. Owner: **XB6**, which reopens this stage anyway; it is also almost certainly the root of the freight-rate runaway above, since a lane is quoted in its origin's money. **Re-measured 2026-08-29 after the FX mechanism sweep (§7.82):** the pinning persists — 9–28 damper-pinned weeks per pair over 60 — but the direction has moved (EUR now ESCAPES upward, EUR/USA 1.09 → 2.68 by w60, where the XB battery had it collapsing). The reaction function no longer masks the imbalance (the central banks now defend rarely and only past private absorption), so what remains is the float itself: the inelastic flow the elastic side must absorb is still systematically one-way. Root unchanged, owner unchanged. |
@@ -1684,7 +1693,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **THE USA BANK COHORT — DIAGNOSED (§7.86): NOT A BANK DEFECT** | **Re-measured at BP1's close (§7.84): 41 of the harness's 47 violations are this one story** — 26 weeks of USA bank NIM out of band (running NEGATIVE from w38, reaching −0.057) and 15 weeks of USA bank capital ratio out of band. This row previously read "effectively resolved, one breach-week at w60, do not open work unless it regrows": it regrew. Two independent measurements now point at it (the FX sweep first, §7.82, then BP1's close-out), and a bank earning a negative interest margin for twenty-three consecutive weeks while its capital ratio leaves its band is a mechanism defect, not a band-tuning question. **Do not widen the bands.** **Diagnosed 2026-08-29 (§7.86) — the bank arithmetic is largely right; the collapse is produced by three things none of which the bank owns.** (1) **Corporate cash lives outside the banking system**: a company payment moves the payer's and payee's S5 ledgers and no bank's book, so `corporateDepositsUSD` is a VIEW with no matching asset — proven by attempting the opposite, which broke the per-bank identity by exactly that line's size (1,012 violations, reverted). Households are therefore the ONLY deposit base, covering ~52% of assets, so the banks run ~48% wholesale funding against a real-world ~10-20%. (2) **That wholesale funding reprices instantly with policy while the asset book cannot** — 506B of household loans at fixed WAC plus ~290B of sovereigns at old coupons — so the margin inverts as soon as policy passes the book's yield: a real unhedged duration mismatch, and the model has no hedging (**DER**). (3) **Policy reaches 7-10% only because of the §6 inflation escape** (G1b); at the seed's 3.8% the margin is healthy (0.028). **The fix is the corporate-cash boundary, not the bank** — see §5-CASH. Do not touch NIM until it lands. |
 
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
-| **The corporate books hold more paper than exists** | **Opened by OWN, measured at its close (2026-08-29).** Harness 88 → 488, and 357 of the increase is ONE finding wearing two invariants: `Ownership conservation violated (corpBondOwnership): accounted≈1.13, impliedHousehold≈−0.13` (216) and `real books hold B against B outstanding (2–8% over) — a ledger is minting claims` (141). Both were at **zero** before OWN, verified by an A/B against 86817cb. Not a pre-existing disease the clamp was hiding — the conservation check genuinely passed. Two candidate causes, not yet separated: (a) OWN2 widened the corporate floats from `1 − 0.28` to the whole outstanding, so the slack that used to absorb any lag between a tranche being repaid and the HOLDER's book shrinking is gone — the corporate twin of §7.10's maturing-sovereign defect, where tranches left the issuer's books but not their holders'; (b) the harness's own check sums a region's entities' holdings of FOREIGN paper against DOMESTIC outstanding (`invariants.ts:59-67` filters `e.region === regionId` and then counts every holding regardless of `h.issuerRegion`), which since XB1 is not the right comparison. **(b) must be fixed first, and the review widened it**: `checkOwnershipConservation` (`invariants.ts:392`) has the same disease — it excludes foreign holdings on a premise OWN1 invalidated, while `measuredOwnershipAllRegions` attributes by ISSUER region. Both red invariants measure something other than what they say; fix both, then attribute. Then close (a) at the root: find where a corporate tranche is repaid or matures without the holder's book moving with it. **Do not reinstate a float carve to make the numbers fit.** Owner: OWN7. |
+| **The corporate books hold more paper than exists** | **Opened by OWN, measured at its close (2026-08-29).** Harness 88 → 488, and 357 of the increase is ONE finding wearing two invariants: `Ownership conservation violated (corpBondOwnership): accounted≈1.13, impliedHousehold≈−0.13` (216) and `real books hold B against B outstanding (2–8% over) — a ledger is minting claims` (141). Both were at **zero** before OWN, verified by an A/B against 86817cb. Not a pre-existing disease the clamp was hiding — the conservation check genuinely passed. Two candidate causes, not yet separated: (a) OWN2 widened the corporate floats from `1 − 0.28` to the whole outstanding, so the slack that used to absorb any lag between a tranche being repaid and the HOLDER's book shrinking is gone — the corporate twin of §7.10's maturing-sovereign defect, where tranches left the issuer's books but not their holders'; (b) the harness's own check sums a region's entities' holdings of FOREIGN paper against DOMESTIC outstanding (`checkHoldingsLedgerConservation` filters `e.region === regionId` and then counts every holding regardless of `h.issuerRegion`), which since XB1 is not the right comparison. **(b) must be fixed first, and the review widened it**: `checkOwnershipConservation` has the same disease — it excludes foreign holdings on a premise OWN1 invalidated, while `measuredOwnershipAllRegions` attributes by ISSUER region. Both red invariants measure something other than what they say; fix both, then attribute. Then close (a) at the root: find where a corporate tranche is repaid or matures without the holder's book moving with it. **Do not reinstate a float carve to make the numbers fit.** Owner: OWN7. |
 | **Bank employees are paid by nobody** | **Found 2026-08-29 while answering why banks sit outside the corporate scaffolding.** `labor-market.ts:495` filters employers on region and active status only, so banks hire, fire, lose quits and count toward `employedByOcc` and the region's unemployment rate exactly like any other firm. But stage 08 sends a bank to `profiles/bank.ts` and SKIPS the whole operating branch (`08-company-fundamentals.ts:314-322`), and `weeklyPayrollUSD` is computed at line 565 INSIDE that branch — so it stays 0 from line 271, no payroll is charged against bank EBITDA, and `wagesPaidUSD` at line 789 posts **no wage payment instruction at all**. Headcount with no wage leg: a rule-14 one-sided flow that inflates measured employment against measured household income, and it does so in the same statistic LAB just made bottom-up. Small, self-contained and worth doing before the next measurement of either. |
 | **The dealer desk is one regional book pretending to be four** | **Found 2026-08-29.** `corpBondDealerInventory` / `sovBondDealerInventory` / `loanDealerInventory` are written ONLY on `reg.bankingSector` (07b:416, 07c:480, 07d:391, 07f:315), and `02b-bank-diversification.ts:369-374` then copies that same regional array onto every bank's sheet — four banks each carrying an identical book that is actually one. The P&L is split by `bankMarketShare` (07b:421, 07c:484, 07d:396, 07f:293). Two rules at once: rule 3, one real thing with two representations and nothing reconciling them; rule 13, no bank DECIDED to take that inventory and no bank's capital constrains it — the same "a share owning nothing" pattern OWN spent six slices removing from the ownership registers. Note the split itself is right and must survive: an investment book (`sovereignBondHoldingsByTenor`) and a market-maker's inventory are genuinely different businesses, and rule 15's saturation clearing needs somewhere to put the residual. What is wrong is that the desk has no owner. **Owner: G3 — this is its opening finding.** |
 | **Banks opt out of the corporate operating model, not just its P&L** | **Found 2026-08-29.** `profileKeyOf` routes a bank to `profiles/bank.ts`, which returns the whole P&L and bypasses the operating branch entirely. What a bank therefore never gets: payroll (row above), capex, PP&E, depreciation, inventory, product lines, and any purchase of inputs — so a bank buys none of the professional services, facilities or repair that SEG just made real inputs for every other firm. Its margin is a hardcoded `newEbitdaMargin = 0.40` regardless of what its book earns or its funding costs, and loan losses are `random() * 0.05 * assets` rather than the defaults its own named `businessLoans` borrowers actually experience. OWN5 fixed the worst of it (the P&L reads the bank's own sheet instead of the region's aggregate scaled by a constant) but the profile is still a REPLACEMENT for the operating model rather than a specialisation of it. Rule 17's intent is that a profile varies the revenue MECHANISM and cost SHAPE while payroll, capex, inputs and settlement stay common to every firm. **Owner: IND**, as the slice that decomposes the operating path into profiles — banks join it rather than skipping it. |
@@ -3622,3 +3631,20 @@ that proved it, the lesson.
       thin-demand defect (promoted to §6.1). The review's net effect on §4: three new projects
       (GUARD, FRM, COH), CAP re-scoped around the margin clamp that gates it, G3 doubled, MAC
       halved.
+
+101. **One harness.** (User directive, 2026-08-29: "remove any testing script, create just one
+    and enforce that one, one that stuff can be added to, that's efficient, that prints every
+    week.") `invariants.ts`, `hh-battery.ts`, `pub-battery.ts`, `xb-battery.ts` and `profile.ts`
+    collapsed into `scripts/harness.ts`: one simulation pass that every check, battery and the
+    profiler read as MODULES (`week()` / `report()` / `shock()` — adding a measurement is one
+    entry, and `check-hygiene.sh` fails if a second script appears). One line prints per week —
+    violations inline the week they occur — so a run is watchable live instead of a 500-line
+    dump at the end. **Fidelity proven before trusting it:** the rewrite reproduced the baseline
+    exactly — 488 violations in 18 families, 2,549 persistently damper-bound, worst streak 60 —
+    because the check bodies were moved verbatim AND the old harness's dirty-RNG quirk was kept
+    deliberately (the pre-run A/B tests advance the global RNG stream before the main loop;
+    re-seeding would have relabelled the world and made every historical count incomparable).
+    The batteries now measure the shared run rather than each paying for their own 120-week
+    world, so `npm run verify` carries what used to take four commands. Lesson: a harness quirk
+    that the baseline depends on is part of the baseline — document it and keep it, or reset it
+    and re-baseline everything, but never change it silently mid-series.
