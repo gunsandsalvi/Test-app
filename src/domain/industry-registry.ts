@@ -44,9 +44,9 @@ export interface SubUnitSpec {
   capexPrivateSegment?: PrivateSegmentType;
   privateSupplySegment?: PrivateSegmentType;
   linkedCommodities?: { commodityId: string; intensityShare: number }[];
-  // ---- IND's dials, at today's implicit values until IND turns them (see §5-IND). ----
-  storable: boolean;
-  carryingCostRate: number;
+  // ---- IND's dials. Storability and carrying cost are DERIVED from the physics above
+  // (see isStorable / annualCarryingCostRateOf) rather than stated twice; these two are not
+  // derivable from anything and are stated. ----
   productionLeadWeeks: number;
   revenueMechanism: RevenueMechanism;
 }
@@ -71,8 +71,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 400,
         privateSupplySegment: 'MANUFACTURING',
         linkedCommodities: [{ commodityId: 'CRUDE_OIL', intensityShare: 0.35 }, { commodityId: 'HEAVY_CRUDE_OIL', intensityShare: 0.3 }, { commodityId: 'NATURAL_GAS', intensityShare: 0.2 }],
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -83,8 +81,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 800,
         householdPriceTier: 'STAPLE',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -99,8 +95,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0, CORPORATE: 1 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 1_500,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -112,8 +106,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 3_000,
         shelfLifeWeeks: 104,
         householdPriceTier: 'STAPLE',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -123,8 +115,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 700,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -136,8 +126,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 5_000,
         privateSupplySegment: 'MANUFACTURING',
         linkedCommodities: [{ commodityId: 'GOLD', intensityShare: 0.05 }, { commodityId: 'SILVER', intensityShare: 0.08 }, { commodityId: 'COPPER', intensityShare: 0.15 }],
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -150,8 +138,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         shelfLifeWeeks: 26,
         householdPriceTier: 'STAPLE',
         linkedCommodities: [{ commodityId: 'WHEAT', intensityShare: 0.04 }, { commodityId: 'CORN', intensityShare: 0.04 }, { commodityId: 'SOYBEANS', intensityShare: 0.03 }],
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -169,8 +155,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 12_000,
         capexBasketWeight: 0.3,
         capexPrivateSegment: 'MANUFACTURING',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -182,8 +166,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 40_000,
         capexBasketWeight: 0.2,
         capexPrivateSegment: 'MANUFACTURING',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -199,8 +181,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.9, CORPORATE: 0.1 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 150_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -210,8 +190,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.05, GOVERNMENT: 0.1, CORPORATE: 0.85 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 800_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -227,8 +205,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.8, GOVERNMENT: 0.05, CORPORATE: 0.15 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 25_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -240,8 +216,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 15_000,
         capexBasketWeight: 0.1,
         capexPrivateSegment: 'MANUFACTURING',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -257,8 +231,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.1, GOVERNMENT: 0.05, CORPORATE: 0.85 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 500_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -268,8 +240,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.85, GOVERNMENT: 0.02, CORPORATE: 0.13 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 150_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -286,8 +256,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'DIGITAL',
         capexBasketWeight: 0.15,
         capexPrivateSegment: 'PROFESSIONAL_SERVICES',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -296,8 +264,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         label: "Consumer Software & Subscriptions",
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0, CORPORATE: 0.1 },
         deliveryMode: 'DIGITAL',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -312,8 +278,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.55, GOVERNMENT: 0.1, CORPORATE: 0.35 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 60_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -330,8 +294,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 400_000,
         shelfLifeWeeks: 104,
         householdPriceTier: 'STAPLE',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -341,8 +303,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.15, GOVERNMENT: 0.5, CORPORATE: 0.35 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 200_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -360,8 +320,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 2_500,
         shelfLifeWeeks: 8,
         householdPriceTier: 'STAPLE',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -372,8 +330,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 4_000,
         householdPriceTier: 'STAPLE',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -389,8 +345,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.95, GOVERNMENT: 0, CORPORATE: 0.05 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 20_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -400,8 +354,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0, CORPORATE: 0.1 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 4_000,
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -417,8 +369,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 200_000,
         householdPriceTier: 'LUXURY',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -432,8 +382,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         label: "Media & Content",
         buyerMix: { HOUSEHOLD: 0.85, GOVERNMENT: 0, CORPORATE: 0.15 },
         deliveryMode: 'DIGITAL',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -447,8 +395,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         label: "Residential Construction",
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0.05, CORPORATE: 0.05 },
         deliveryMode: 'IN_PLACE',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -459,8 +405,6 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'IN_PLACE',
         capexBasketWeight: 0.25,
         capexPrivateSegment: 'CONSTRUCTION_REALESTATE',
-        storable: true,
-        carryingCostRate: 0.02,
         productionLeadWeeks: 0,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -539,3 +483,75 @@ export function subUnitsByProducingSector(): Record<ProducingSector, { industry:
 export const FINANCIAL_SECTOR_PROXY_LINES = [
   { industry: 'SoftwareDigitalServices' as Industry, subUnitId: 'enterprise_software', revenueShare: 1.0, competitiveness: 0 },
 ];
+
+// ---------------------------------------------------------------------------------------------
+// IND1 — what a good physically is, on the holding side.
+
+/**
+ * What a year of warehouse costs per tonne held: rent, handling, insurance. The one stated
+ * primitive here — a real-world cost, not a real-world outcome (rule 4) — and everything below
+ * derives from it plus the physics each registry entry already carries.
+ */
+export const WAREHOUSE_USD_PER_TONNE_YEAR = 40;
+
+/**
+ * Can this good be held at all? Only a separable physical object can sit in a warehouse. Software
+ * and media are copied on demand; a building is made where it stands. Neither has an inventory to
+ * carry, and both were carrying one — measured: enterprise software held 159 units worth 5.9M,
+ * spoiling like steel (§7.50).
+ */
+export function isStorable(unitId: string): boolean {
+  return (byId.get(unitId)?.deliveryMode ?? 'PHYSICAL') === 'PHYSICAL';
+}
+
+/**
+ * What holding a dollar of this good costs for a year, as a share of its value. Two real physical
+ * terms, neither of them a chosen number:
+ *
+ *   STORAGE — a warehouse charges by the TONNE, so the cost per DOLLAR is the tonne price of
+ *   space divided by the good's value density. A dollar of gravel occupies hundreds of times the
+ *   space of a dollar of semiconductors, and now costs hundreds of times as much to hold. This is
+ *   why bulk goods move to the buyer and dense goods sit in inventory.
+ *
+ *   SPOILAGE — a good with a shelf life is walking to zero at 1/shelfLife per week whether anyone
+ *   buys it or not. That is what makes fresh food impossible to stockpile and is the physical
+ *   reason those supply chains run to order.
+ *
+ * The flat 0.02 this replaces charged a semiconductor fab and a dairy the same rate to hold
+ * their output.
+ */
+export function annualCarryingCostRateOf(unitId: string): number {
+  const su = byId.get(unitId);
+  if (!su || su.deliveryMode !== 'PHYSICAL') return 0;
+  const density = su.baselineValueDensityUsdPerTonne;
+  const storage = density && density > 0 ? WAREHOUSE_USD_PER_TONNE_YEAR / density : 0;
+  const spoilage = su.shelfLifeWeeks && su.shelfLifeWeeks > 0 ? 52 / su.shelfLifeWeeks : 0;
+  return storage + spoilage;
+}
+
+/**
+ * What a purchase of this good IS to the firm buying it — the question the model never asked.
+ *
+ * Every corporate purchase used to be written as an input LOT, but only recipe inputs are ever
+ * drawn down (stage 08 consumes what an industry's recipe names). Capital goods and general
+ * operating purchases therefore accumulated forever: ~12k dead lots a week, 1.05M by week 120,
+ * counted into the buyer's inventory line and consumed by nobody (§6, §7.81). The fix is not to
+ * expire them; it is to route each purchase to what it physically is.
+ *
+ *   RECIPE_INPUT  — material that will be consumed making something. Held as a lot, drawn FIFO.
+ *   CAPITAL_GOOD  — a machine, a building, a fleet, a system. Not inventory: it becomes PP&E on
+ *                   delivery and depreciates over its life.
+ *   OPERATING     — everything else a business buys and uses. Expensed; its cost already lives
+ *                   in the operating margin and its cash in settled purchases.
+ */
+export type PurchaseKind = 'RECIPE_INPUT' | 'CAPITAL_GOOD' | 'OPERATING';
+
+const recipeInputIds = new Set<string>(
+  Object.values(INDUSTRY_REGISTRY).flatMap(spec => Object.keys(spec.recipeInputs ?? {}))
+);
+
+export function purchaseKindOf(unitId: string): PurchaseKind {
+  if (recipeInputIds.has(unitId)) return 'RECIPE_INPUT';
+  if (byId.get(unitId)?.capexBasketWeight !== undefined) return 'CAPITAL_GOOD';
+  return 'OPERATING';
+}

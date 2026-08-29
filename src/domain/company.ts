@@ -259,6 +259,8 @@ export interface Company {
   growthCapex: number;
   grossPPEUSD: number;
   accumulatedDepreciationUSD: number;
+  /** IND1: capital goods that actually ARRIVED last week, at landed cost. Real net investment. */
+  capexDeliveredLastWeekUSD?: number;
   rndExpense?: number;
   baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;
@@ -420,7 +422,6 @@ export interface Company {
   // contract-settlement and open-market, the latter via an explicit buyer/seller lot allocation,
   // not just an aggregate total), consumed oldest-lot-first in 08-company-fundamentals.ts.
   inputInventoryBySubUnit?: Record<string, InputLot[]>;
-  inventoryCarryingCostRate: number;
   recentFulfillmentEMA: number;
   _targetProductionUSD?: number;
   // 1$ is 1$ Phase 6: this week's real settled sales/purchases (from 05-unit-bidding.ts's

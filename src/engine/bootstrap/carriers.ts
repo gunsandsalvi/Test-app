@@ -338,7 +338,6 @@ function buildCarrierCompany(
     institutionalRole: null,
     inputSupplyConstraintFactor: 1.0,
     outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
-    inventoryCarryingCostRate: 0.02,
     recentFulfillmentEMA: 1.0,
     treasuryHoldings: [],
     demandShockLagBuffer: [],

@@ -15,6 +15,7 @@
 import { GameState } from '../../../types';
 import { InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
+import { purchaseKindOf } from '../../../domain/industry-registry';
 
 /** A consignment bought, paid for, and still on its way. */
 export interface InTransitShipment {
@@ -55,6 +56,16 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     if (!buyer) return;
     // Copy once on first touch, append in place after — same list, none of the per-shipment
     // whole-array rebuilds (the GC was 10% of the weekly step before this pass).
+    // IND1: what arrives is routed by what it IS — a machine crossing an ocean becomes PP&E the
+    // week it lands, not a lot nobody consumes.
+    const kind = purchaseKindOf(shipment.subUnitId);
+    if (kind !== 'RECIPE_INPUT') {
+      if (kind === 'CAPITAL_GOOD') {
+        update.capexDeliveredUSD = (update.capexDeliveredUSD ?? 0) + shipment.units * shipment.landedCostPerUnit;
+      }
+      arrivedUnits += shipment.units;
+      return;
+    }
     let lots: InputLot[] | undefined = update.inputInventoryBySubUnit[shipment.subUnitId];
     if (!lots) {
       lots = [...(buyer.inputInventoryBySubUnit?.[shipment.subUnitId] ?? [])];

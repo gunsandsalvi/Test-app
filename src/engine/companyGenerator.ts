@@ -637,7 +637,6 @@ export function generateInitialCompanies(
         inputSupplyConstraintFactor: 1.0,
         outputInventoryBySubUnit: {},
         inputInventoryBySubUnit: {},
-        inventoryCarryingCostRate: 0.02,
         recentFulfillmentEMA: 1.0,
         treasuryHoldings: [],
         producedCommodityId: (tmpl as any).producedCommodityId,
@@ -925,7 +924,6 @@ export function generatePrivateCompanies(
       institutionalRole: null,
       inputSupplyConstraintFactor: 1.0,
       outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
-      inventoryCarryingCostRate: 0.02,
       recentFulfillmentEMA: 1.0,
       treasuryHoldings: [],
     } as unknown as Company;

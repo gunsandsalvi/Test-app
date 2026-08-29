@@ -31,6 +31,7 @@ import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market'
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
+import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
 import { random } from '../../rng';
 
@@ -230,14 +231,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let targetProductionUSD = 0;
     let productionCostUSD = 0;
     let costDriversUSD: CogsCostDrivers | undefined;
-    // Carrying-cost decay applies per sub-unit — each line's own held inventory decays against
-    // its own value, rather than one shared scalar standing in for a multi-line company's
-    // entire output inventory (see domain/company.ts's outputInventoryBySubUnit).
-    const carryingCostRate = (comp.inventoryCarryingCostRate ?? 0.02) / 52;
+    // IND1: what it costs to hold a good is a property of THE GOOD, not of the firm — warehouse
+    // space per tonne divided by its value density, plus its own spoilage. The company-level
+    // `inventoryCarryingCostRate` it replaces was one flat 0.02 charging a fab and a dairy alike
+    // (rule 3: one representation, and it belongs on the thing being held).
     let carryingCostUSD = 0;
     const newOutputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = {};
     Object.entries(comp.outputInventoryBySubUnit || {}).forEach(([su, inv]) => {
-      const costThisSubUnit = inv.valueUSD * carryingCostRate;
+      const costThisSubUnit = inv.valueUSD * (annualCarryingCostRateOf(su) / 52);
       carryingCostUSD += costThisSubUnit;
       newOutputInventoryBySubUnit[su] = { unitsHeld: inv.unitsHeld, valueUSD: Math.max(0, inv.valueUSD - costThisSubUnit) };
     });
@@ -620,7 +621,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const priorAccumulatedDepreciation = comp.accumulatedDepreciationUSD ?? (priorGrossPPE * 0.45);
     const usefulLifeYears = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
     const weeklyDepreciation = priorGrossPPE / (usefulLifeYears * 52);
-    const newGrossPPEUSD = priorGrossPPE + newCapex / 52;
+    // IND1: the plant grows by what was actually DELIVERED, not by what was budgeted. A machine
+    // ordered is not PP&E — capex is a bid into a real market that can go unfilled or arrive
+    // weeks later by ship, and investment showing up after the demand that justified it is the
+    // mechanism behind every capacity cycle. (`newCapex / 52` capitalised the intention.)
+    const capexDeliveredThisWeekUSD = companyUpdates[comp.ticker]?.capexDeliveredUSD ?? 0;
+    const newGrossPPEUSD = priorGrossPPE + capexDeliveredThisWeekUSD;
     const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
 
     // ---- S5: the weekly cash walk is an explicit ledger ----
@@ -663,8 +669,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // ...and the costs of running the whole business beyond what was bought as real units:
       // wages, services, and the unsettled share of capex. Settled purchases already left as
       // real cash above, so only the excess of total accrued outflows over them posts here.
-      const accruedOutflowsWeekly = (newRevenue - newEbitda) / 52 + newCapex / 52;
-      post('wages, other opex & capex beyond auction settlements', -Math.max(0, accruedOutflowsWeekly - settledPurchasesUSD));
+      // IND1: capex left as REAL CASH in `settled purchases` above, so accruing it again here
+      // paid for the same machine twice. What accrues is the operating side, and it nets only
+      // against the operating share of what really settled.
+      const accruedOutflowsWeekly = (newRevenue - newEbitda) / 52;
+      const capexSettledUSD = update?.capexPurchasesUSD ?? 0;
+      post('wages & other opex beyond auction settlements', -Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD)));
       post('inventory carrying cost', -carryingCostUSD);
       post('interest paid', -weeklyInterest);
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
@@ -1448,6 +1458,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       maintenanceCapex: Number(newMaintenanceCapex.toFixed(1)),
       growthCapex: Number(newGrowthCapex.toFixed(1)),
       grossPPEUSD: Number(newGrossPPEUSD.toFixed(1)),
+      // IND1: read by stage 05's capacity growth — real net investment is what arrived.
+      capexDeliveredLastWeekUSD: Number(capexDeliveredThisWeekUSD.toFixed(1)),
       accumulatedDepreciationUSD: Number(newAccumulatedDepreciationUSD.toFixed(1)),
       rndExpense: Number(newRndExpense.toFixed(1)),
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,
@@ -1467,7 +1479,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // inventory, since this stage (not stage05) is the one authoritative writer of the
       // post-consumption balance.
       inputInventoryBySubUnit: newInputInventoryBySubUnit,
-      inventoryCarryingCostRate: comp.inventoryCarryingCostRate ?? 0.02,
       recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),

@@ -23,6 +23,7 @@ import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Compan
 import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY_TIER } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
+import { isStorable, purchaseKindOf } from '../../../domain/industry-registry';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
@@ -65,7 +66,11 @@ function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): numbe
 
 function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, unitPriceUSD: number) {
   if (!update.outputInventoryBySubUnit) update.outputInventoryBySubUnit = {};
-  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld, valueUSD: unitsHeld * unitPriceUSD };
+  // IND1: a good that cannot be held is never held. Software is copied on demand and a building
+  // is made where it stands — neither has a warehouse, so unsold capacity is capacity that went
+  // unused, not stock. (It used to accumulate as inventory and decay like steel, §7.50.)
+  const held = isStorable(subUnitId) ? unitsHeld : 0;
+  update.outputInventoryBySubUnit[subUnitId] = { unitsHeld: held, valueUSD: held * unitPriceUSD };
 }
 
 // 1$ is 1$ Phase 2/6: credit a real purchase onto the buyer's persisted input inventory as a
@@ -76,6 +81,15 @@ function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, u
 // InputLot doc comment) rather than collapsing them the moment they're credited.
 function addInputInventory(update: any, baseComp: Company, subUnitId: string, sellerId: string, addedUnits: number, addedValueUSD: number, week: number) {
   if (addedUnits <= 0.0001) return;
+  // IND1: only material that will be CONSUMED is inventory. A machine delivered is capital; a
+  // general operating purchase is used and expensed. Writing all three as lots is what made a
+  // third of the world's purchases immortal (§6's lot leak).
+  const kind = purchaseKindOf(subUnitId);
+  if (kind === 'CAPITAL_GOOD') {
+    update.capexDeliveredUSD = (update.capexDeliveredUSD ?? 0) + addedValueUSD;
+    return;
+  }
+  if (kind === 'OPERATING') return;
   if (!update.inputInventoryBySubUnit) update.inputInventoryBySubUnit = {};
   // Copy the persisted lots ONCE on first touch, then push into the week-local array in place.
   // The old form rebuilt the whole array per lot — O(k²) copying for a buyer credited k lots in a
@@ -377,6 +391,7 @@ function settleContracts(
     const custUp = companyUpdates[customer.ticker];
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
+    if (purchaseKindOf(subUnitId) === 'CAPITAL_GOOD') custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentUSD;
     addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
     if (fillRate < 0.95) {
@@ -441,7 +456,9 @@ function buildRegionSupplyPlans(
       const grossPPE = comp.grossPPEUSD ?? 0;
       const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationUSD ?? 0));
       const weeklyDepreciationUSD = grossPPE / ((SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12) * 52);
-      const netInvestmentRate = ((comp.growthCapex ?? 0) / 52 - weeklyDepreciationUSD) / netPPE;
+      // IND1: real net investment is capital DELIVERED less depreciation — a plant grows when
+      // machines arrive, not when a budget is approved.
+      const netInvestmentRate = ((comp.capexDeliveredLastWeekUSD ?? 0) - weeklyDepreciationUSD) / netPPE;
       line.weeklyCapacityUnits = Math.max(
         0.0001,
         line.weeklyCapacityUnits! * (1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate)))
@@ -1049,6 +1066,7 @@ function runSubUnitMarkets(
     const custUp = companyUpdates[comp.ticker];
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + units;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + landedCost;
+    if (purchaseKindOf(subUnitId) === 'CAPITAL_GOOD') custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + landedCost;
     const owed = deferredPurchaseUSD.get(plan.key!) ?? 0;
     if (owed > 0) custUp.tradePayableBookedUSD = (custUp.tradePayableBookedUSD ?? 0) + owed;
   });
