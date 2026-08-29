@@ -61,6 +61,14 @@ export interface AuctionResult {
 /** A quantity small enough that carrying it costs more than it is worth. Not a floor on a price. */
 const NEGLIGIBLE = 0.0001;
 
+/** Ascending stable sort of `arr` by the parallel `keys`, permuting `arr` in place. */
+function sortInPlaceByKey<T>(arr: T[], keys: number[]): void {
+  const idx = arr.map((_, i) => i);
+  idx.sort((a, b) => (keys[a] - keys[b]) || (a - b));
+  const copy = arr.slice();
+  for (let i = 0; i < arr.length; i++) arr[i] = copy[idx[i]];
+}
+
 export function emptyAuctionResult(anchorPrice: number): AuctionResult {
   return {
     clearedPrice: anchorPrice,
@@ -87,8 +95,12 @@ export function clearDoubleAuction(
 ): AuctionResult {
   if (bids.length === 0 || offers.length === 0) return emptyAuctionResult(anchorPrice);
 
-  bids.sort((a, b) => b.maxPrice - a.maxPrice);
-  offers.sort((a, b) => a.minPrice - b.minPrice);
+  // SCALE: sort through a numeric key array instead of a property-loading comparator (the
+  // profiler put these two sorts at ~10 ms/week across the books). The index tiebreak
+  // reproduces the stable sort's equal-price order exactly, and the arrays are permuted in
+  // place so callers still see the sorted originals.
+  sortInPlaceByKey(bids, bids.map(b => -b.maxPrice));
+  sortInPlaceByKey(offers, offers.map(o => o.minPrice));
 
   // Discovery only: this walk finds the price and the volume, never who gets how much.
   let clearedPrice = anchorPrice;

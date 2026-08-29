@@ -38,6 +38,21 @@ import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from 
 import { random } from '../../rng';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
+
+// SCALE: the fundamentals snapshot re-summed every input lot of every company every week —
+// ~33 ms/week of it over arrays that mostly had not changed (a lot array is copy-on-first-touch:
+// a week that touches one replaces it with a NEW array and never mutates lots in place, so array
+// identity implies identical contents). Cache the sum by the array object itself; a hit returns
+// the very bits the reduce would have produced.
+const lotValueCache = new WeakMap<InputLot[], number>();
+function lotArrayValueUSD(lots: InputLot[]): number {
+  let v = lotValueCache.get(lots);
+  if (v === undefined) {
+    v = lots.reduce((s2, lot) => s2 + lot.unitsHeld * lot.unitPriceUSD, 0);
+    lotValueCache.set(lots, v);
+  }
+  return v;
+}
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
 const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
 
@@ -1450,7 +1465,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       costDriversUSD,
       newShortTermDebtUSD,
       annualInterest,
-      Object.values(newInputInventoryBySubUnit).reduce((s, lots) => s + lots.reduce((s2, lot) => s2 + lot.unitsHeld * lot.unitPriceUSD, 0), 0)
+      Object.values(newInputInventoryBySubUnit).reduce((s, lots) => s + lotArrayValueUSD(lots), 0)
     );
     const histFundamentals = isReportingThisWeek
       ? [...(comp.historicalFundamentals || []).slice(-7), currentSnapshot]

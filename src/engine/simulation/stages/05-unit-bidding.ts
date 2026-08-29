@@ -125,6 +125,10 @@ interface RegionMarketIndex {
 interface GlobalFirmLookup {
   byTicker: Map<string, Company>;
   byId: Map<string, Company>;
+  /** SCALE: one probe for a key that may be a ticker OR an id (contracts store either).
+   * Ids are inserted first and tickers after, so on any collision the ticker wins — exactly
+   * the `byTicker.get(k) ?? byId.get(k)` resolution this replaces, at half the probes. */
+  byKey: Map<string, Company>;
 }
 
 function buildMarketIndexes(ctx: WeeklyStepContext): {
@@ -140,7 +144,7 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
       capexBuyers: [],
     };
   });
-  const lookup: GlobalFirmLookup = { byTicker: new Map(), byId: new Map() };
+  const lookup: GlobalFirmLookup = { byTicker: new Map(), byId: new Map(), byKey: new Map() };
 
   // HC3: the goods market has never cared who owns a supplier's equity — public and private
   // firms bid and offer in the same real auction.
@@ -150,6 +154,8 @@ function buildMarketIndexes(ctx: WeeklyStepContext): {
     if (!index) return;
     lookup.byTicker.set(c.ticker, c);
     lookup.byId.set(c.id, c);
+    if (!lookup.byTicker.has(c.id)) lookup.byKey.set(c.id, c);
+    lookup.byKey.set(c.ticker, c);
     index.activeFirms.push(c);
     if ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0) > 0) index.capexBuyers.push(c);
     (c.productLines || []).forEach((l) => {
@@ -325,8 +331,8 @@ function settleContracts(
   const remainingContracts: SupplyContract[] = [];
 
   ownContracts.forEach(contract => {
-    const supplier = lookup.byTicker.get(contract.supplierCompanyId) ?? lookup.byId.get(contract.supplierCompanyId);
-    const customer = lookup.byTicker.get(contract.customerCompanyId) ?? lookup.byId.get(contract.customerCompanyId);
+    const supplier = lookup.byKey.get(contract.supplierCompanyId);
+    const customer = lookup.byKey.get(contract.customerCompanyId);
     if (!supplier || !customer) return;
 
     if (!isActiveCompany(supplier)) {
@@ -1074,6 +1080,12 @@ function runSubUnitMarkets(
   formContracts(subUnitId, results, supplyPlans, demandPlans, publishedPrice, survivingContracts);
 
   // --- 12. Publish the week's prices and metrics.
+  // SCALE: one pass over the plans instead of a filtered reduce per region — each plan belongs
+  // to exactly one region, so every region's total receives the same additions in the same order.
+  const demandUnitsByRegion = new Map<RegionId, number>();
+  demandPlans.forEach(p => {
+    demandUnitsByRegion.set(p.regionId, (demandUnitsByRegion.get(p.regionId) ?? 0) + p.demandUnits);
+  });
   MARKET_REGION_IDS.forEach(regionId => {
     const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId] as any;
     if (!demandState) return;
@@ -1083,8 +1095,7 @@ function runSubUnitMarkets(
     const contracts = survivingContracts[regionId];
     const contractUnits = contracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
     demandState.totalUnitsSuppliedThisWeek = results[regionId].clearedUnits + contractUnits;
-    demandState.totalUnitsDemandedThisWeek =
-      demandPlans.reduce((s, p) => s + (p.regionId === regionId ? p.demandUnits : 0), 0) + contractUnits;
+    demandState.totalUnitsDemandedThisWeek = (demandUnitsByRegion.get(regionId) ?? 0) + contractUnits;
     if (!(demandState.baseUnitPriceUSD > 0)) demandState.baseUnitPriceUSD = demandState.unitPriceUSD;
     demandState.clearedInputPriceIndex = Number((demandState.unitPriceUSD / demandState.baseUnitPriceUSD).toFixed(4));
   });
