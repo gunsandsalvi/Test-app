@@ -39,19 +39,6 @@
 import { CreditRating, InstitutionalEntityType, InstitutionalEntity } from '../../../types';
 
 /**
- * What holding a dollar of each asset class costs an institution in regulatory capital. The
- * ordering and rough magnitudes are the real structure every capital regime shares — government
- * bonds are treated as riskless and cost almost nothing, investment-grade credit costs a little,
- * high yield a lot, and secured loans somewhat less than the unsecured paper of the same issuer
- * because the collateral is real. These are structural modelling choices, not a copied rulebook.
- */
-export const CAPITAL_CHARGE_BY_ASSET_CLASS = {
-  GOV_BOND: 0.01,
-  CORP_BOND: 0.08, // legacy flat charge — superseded for credit by the rating x duration schedule below
-  LEVERAGED_LOAN: 0.06,
-} as const;
-
-/**
  * Spread-risk capital per notch, PER YEAR OF DURATION — the real structure every capital regime
  * shares (Solvency-style spread SCR, NAIC C1, ratings-based RWA all step the charge by rating
  * and scale it with duration). This is what gives the investment-grade ladder its slope: the

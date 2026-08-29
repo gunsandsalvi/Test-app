@@ -32,6 +32,53 @@ record only where it was actively misleading.
 
 ## Findings
 
+---
+
+## Consolidated so far — the patterns, not the list
+
+Four shapes account for most of the 78 findings. Each is one fix repeated, not N fixes.
+
+**1. A formula outlived the mechanism that replaced it, and the formula is what a decision
+reads.** Every one of these has a real, measured counterpart sitting beside it unused.
+
+| the formula | replaced by | but still drives |
+|---|---|---|
+| deficit + `debtToGdpPct` walk (D31) | PUB3b's real obligations; stage 11's `debtToGdpPctBottomUp` | **the sovereign rating → spreads** |
+| `governmentRevenueUSD = GDP × taxRate` (D32) | PUB1b/1c's real bases | anything reading revenue between stages 02 and 11 |
+| Phillips-curve `wageGrowth` (M14) | LAB's real offered wages | **consumption and consumer confidence** |
+| `sovereignRating` assigned at seed (M11) | — | the credit spread from week 0 |
+
+**2. A file states its own retirement condition and the condition has been met.** Three so far,
+all still live: `national-accounts.ts` (B3 — "replaced by the flows themselves once households
+are real agents"; they are), `bank-lending.ts`'s `BANK_TARGET_ROE` (S16 — "once its stock clears
+in 07e"; it does), `etf.ts` (D17 — pointed at a project that no longer exists). **Grepping for
+this phrasing is a cheap way to find the rest.**
+
+**3. A silent default substitutes a plausible value for a missing write.** Four, each hiding a
+different class of failure, none of which can occur in a world regenerated from seed — so every
+one of them is dead-code justification protecting a live bug: `safeRate → 1` (D8),
+`resolveProtection → MAKE_WHOLE` (D20), `isPubliclyListed → PUBLIC` (D37), `getFxToUsd → 1.0`
+(S3). The last one sits directly below a comment describing the outage that exact fallback
+already caused once.
+
+**4. A comment asserts the opposite of what the code does.** Two load-bearing cases, both of
+which would have steered a reader away from a real defect: the FX damper documented as "NOT a
+bound the price is allowed to rest on" while binding 38 weeks in 40 (D5), and commodity prices
+documented as "entirely synthetic: no real-world observed prices" while seeding crude at $76,
+gold at $2,730 and wheat at $6.00 (B5).
+
+**And two findings that change the shape of planned work:**
+
+- **CAP cannot be built as specified (S4).** A firm's EBITDA margin is clamped to [2%, 65%], so
+  no firm can report a loss at the EBITDA line, so "a firm that cannot cover unit cost stops
+  producing" has nothing to fire on. The margin floor has to go first, and it is not in §6.4's
+  inventory.
+- **`household-cohorts.ts` is one defect, not nine (M7).** §6.3-A treats its nine stated tables
+  as nine primitives. They are one missing mechanism — cohorts have no balance sheets — and the
+  pieces to derive eight of them now exist.
+
+---
+
 ### `src/domain` — batch 1 (index, events, markets, portfolio, industry, geography)
 
 | # | Sev | File | Finding |
@@ -430,4 +477,21 @@ leaving the lender, and reserves move only when it is *spent* to another bank's 
 real cleared prices, chain-linked, with the explicit refusal to add a wage-push or money-growth
 term because "adding a separate formula term for them would be counting the same economics twice
 — once through the market and once around it."
+
+### stages batch 5 (bank-lending, asset-allocation, corporate-financing, insurance)
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| **S15** | **Dead code — DELETED** | `asset-allocation.ts:48` | **`CAPITAL_CHARGE_BY_ASSET_CLASS` is exported and referenced nowhere** in the entire `src/` tree, and its own comment marks one member "legacy flat charge — superseded". Second dead export found by this review (after `FX_SPOT_PRICE_IMPACT_PER_GDP`, D15). Deleted with its now-orphaned doc comment. |
+| **S16** | **A — third met exit condition** | `bank-lending.ts:62` | **`BANK_TARGET_ROE = 0.12` prices every loan a bank writes** (through `quoteLoanMarginBps`), and its own comment said the hurdle should come "from its own cost of equity once its stock clears in 07e post-G2". **G2 is closed and bank stock does clear in 07e** — the carve-out was removed and 07e records it (S13). The input exists: risk-free + beta × ERP off the bank's own cleared price. **Third file in this review stating a condition that has since been satisfied**, after `national-accounts.ts` (B3) and `etf.ts` (D17). **Owner: G3 (8).** |
+| S17 | **A** | `insurance-and-pensions.ts:43,49` | `PENSION_CONTRIBUTION_RATE = 0.09` and `PENSION_BENEFIT_RATE_ANNUAL = 0.05`. Both comments already name the fix — "it becomes an outcome in HH4, where cohorts have ages and a contribution is something a working cohort does" — and HH4's cohorts exist. Same shape as M7: give a cohort an age and a balance sheet and both become measurements. **Owner: MAC (6) / DEM (5).** |
+| S18 | minor | `bank-lending.ts:74` | `quoteLoanMarginBps` floors at 25bps — a floor on a price, small but rule 15. *The function itself is the right derivation and is what `banking.ts`'s mortgage spread (D27) should be doing.* |
+
+**Clean:** `asset-allocation.ts`'s spread-risk capital schedule is a genuinely good rule-4
+argument — capital charges stepping by rating and scaling with duration is the structure *every*
+real regime shares, and the comment explains why the flat within-IG version broke the ladder ("a
+flat charge made every IG reservation identical… the fix is the real regulatory structure, not a
+fitted curve"). `equity-valuation.ts`'s no-earnings branch retires a formula that priced a BIGGER
+loss HIGHER. `corporate-financing.ts`'s `DEPLOYMENT_MULTIPLE` is well-reasoned: "cheap debt does
+not create projects."
 

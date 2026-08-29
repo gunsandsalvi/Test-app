@@ -56,9 +56,16 @@ export const SME_SERVICEABLE_LEVERAGE = 3.0;
  * breaching the floor itself is where the bank declines outright. */
 export const BANK_WORKING_CAPITAL_RATIO = 0.11;
 const BANK_MIN_CAPITAL_RATIO = 0.08;
-/** Return the bank needs on the equity a loan consumes — a structural primitive like the
- * institutional hurdles (G6 derives those from real liabilities; a bank's from its own cost
- * of equity once its stock clears in 07e post-G2). */
+/**
+ * Return the bank needs on the equity a loan consumes — and therefore, through
+ * `quoteLoanMarginBps`, the price of every loan it writes.
+ *
+ * ITS OWN EXIT CONDITION IS MET. This said a bank's hurdle should come "from its own cost of
+ * equity once its stock clears in 07e post-G2". G2 is closed and bank stock DOES clear in 07e —
+ * the book-value carve-out was removed and 07e's own comment records it. So the input exists:
+ * risk-free + beta x ERP off the bank's own cleared price. Third file found stating a condition
+ * that has since been satisfied (with `national-accounts.ts` and `etf.ts`). Owner: G3 (8).
+ */
 export const BANK_TARGET_ROE = 0.12;
 /** Share of the gap to the serviceable ceiling the SME pools seek to borrow each week when
  * credit is free — the pace of a real investment pipeline (MS/BP make segment investment
