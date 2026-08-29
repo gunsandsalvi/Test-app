@@ -12,6 +12,9 @@ import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashU
 import { reconcileEmploymentView } from './stages/labor-market';
 import { LABOR_SHARE_OF_OUTPUT } from '../bootstrap/national-accounts';
 import { SME_PRODUCTIVITY_DISCOUNT } from '../bootstrap/firms';
+import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
+import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
+import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
 import { chooseLeadBank } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
@@ -731,31 +734,44 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // saw zero vacancies and would otherwise leave tightness reading 0.00 at week 0).
     reconcileEmploymentView(reg, regionCompanies.filter(c => isActiveCompany(c)));
 
-    // HH — reconcile the WAGE LEVEL to the employment that must be paid at it (§7.4: the seed
+    // LAB — the seed wage level is the one the region's employers can AFFORD (§7.4: the seed
     // opens in the shape the engine maintains).
     //
-    // `getBaseAnnualWageUSD` scales its table so that paying it across the BASELINE OCCUPATION
-    // MIX costs the labor share of output — a per-capita construction. It is then paid per
-    // EMPLOYED WORKER, and the two differ by the participation and employment rates, so the
-    // table implies a wage bill the region's employers do not have the output to fund. Nothing
-    // exposed that while household income was itself derived from the same table; once every
-    // employer pays its own payroll out of its own cash, the gap became mass layoffs — measured
-    // at 30% unemployment by week 17 and 50% by week 60, in all four regions.
+    // The wage table is scaled so that paying it across the BASELINE OCCUPATION MIX costs the
+    // labor share of output — a per-capita accounting construction. It is then paid per EMPLOYED
+    // WORKER by firms whose earnings are their own, and the two do not agree: the table implied a
+    // payroll the firms did not have the output to fund. That was invisible while wages were not
+    // a real cost; once they were, it became a layoff cascade.
     //
-    // The index the labor market already uses IS the wage level's degree of freedom, so the
-    // reconciliation lands there: open it where the implied bill equals the labor share of the
-    // region's real output, and let the market move it from week 1 like any other price.
+    // So the level is solved from the employers' own books instead. Payroll scales linearly in
+    // the wage index, so the index at which the region's firms exactly earn their cost of capital
+    // has a closed form:
+    //
+    //     w = [ SUM ebitda + SUM basePayroll - SUM capitalCharge ] / SUM basePayroll
+    //
+    // Above it firms are shedding from week 1; below it they are hiring. The labor market moves
+    // it from there like any other price — this only decides where the world opens.
     const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
     {
-      const impliedBillUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce(
-        (sum, occ) => sum + baseAnnualWageUSD[occ] * reg.occupationPools[occ].employed, 0
-      );
-      const affordableBillUSD = LABOR_SHARE_OF_OUTPUT * Math.max(1, reg.estimatedNominalGdpUSD);
-      if (impliedBillUSD > 0) {
-        const scale = affordableBillUSD / impliedBillUSD;
-        (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
-          reg.occupationPools[occ].wageIndex = Number((reg.occupationPools[occ].wageIndex * scale).toFixed(5));
-        });
+      const unitPools = Object.fromEntries((Object.keys(reg.occupationPools) as OccupationType[])
+        .map(o => [o, { wageIndex: 1 }])) as Record<OccupationType, { wageIndex: number }>;
+      let ebitdaUSD = 0; let basePayrollUSD = 0; let capitalChargeUSD = 0;
+      regionCompanies.filter(c => !c.isBankEntity && isActiveCompany(c)).forEach(c => {
+        ebitdaUSD += c.ebitda;
+        basePayrollUSD += weeklyWageBillUSD(
+          c.employeeCount, SECTOR_OCCUPATION_MIX[c.sector] ?? { GENERAL: 1.0 },
+          baseAnnualWageUSD, unitPools, 1.0
+        ) * 52;
+        const netPpeUSD = Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0));
+        capitalChargeUSD += netPpeUSD * Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (c.beta ?? 1) * EQUITY_RISK_PREMIUM);
+      });
+      if (basePayrollUSD > 0) {
+        const affordableIndex = (ebitdaUSD + basePayrollUSD - capitalChargeUSD) / basePayrollUSD;
+        if (affordableIndex > 0 && isFinite(affordableIndex)) {
+          (Object.keys(reg.occupationPools) as OccupationType[]).forEach((occ) => {
+            reg.occupationPools[occ].wageIndex = Number(affordableIndex.toFixed(5));
+          });
+        }
       }
     }
     const realWageIncomeUSD = (Object.keys(reg.occupationPools) as OccupationType[]).reduce(

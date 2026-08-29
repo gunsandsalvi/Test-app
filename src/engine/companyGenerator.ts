@@ -416,6 +416,11 @@ export function generateInitialCompanies(
         Healthcare: 2.0,
         Utilities: 6.0,
       };
+      // The multiples are RELATIVE capital intensity, and their ~2.5 average is load-bearing in
+      // its own right: revenue is gross output while `regionProductivityPerCapita` is value added
+      // per worker, and gross output runs a bit over twice value added in any real economy. So
+      // the level is right and normalizing it away (tried, reverted) puts employment 68% above
+      // the labor force.
       const revPerEmployee = regionProductivityPerCapita * (revPerEmployeeMultiple[tmpl.sector] ?? 2.5);
       const employeeCount = Math.max(100, Math.round(tmpl.revBase / revPerEmployee));
       

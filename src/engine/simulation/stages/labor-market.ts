@@ -42,13 +42,14 @@ import {
   VACANCY_WITHDRAWAL_RATE_WEEKLY,
   WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL, WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL,
   COST_OF_LIVING_PASS_THROUGH,
-  MARKET_WAGE_CATCHUP_SPEED_WEEKLY, MAX_FIRM_WAGE_CHANGE_ANNUAL, MIN_FIRM_WAGE_CHANGE_ANNUAL,
-  MIN_FIRM_WAGE_INDEX, MAX_FIRM_WAGE_INDEX,
+  MARKET_WAGE_CATCHUP_SPEED_WEEKLY,
   QUIT_ELASTICITY_TO_RELATIVE_WAGE, QUIT_ELASTICITY_TO_EXECUTION, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
+import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 
 const OCCUPATIONS: OccupationType[] = [
   'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
@@ -86,9 +87,11 @@ function desiredEmploymentGrowthAnnual(
   if (!(past > 0) || !(currentRevenueUSD > 0)) return 0;
   const nominalGrowthAnnual = (currentRevenueUSD / past - 1) * (52 / window);
   const realGrowthAnnual = nominalGrowthAnnual - inflationAnnual;
-  // Labor demand grows with real output net of what productivity delivers for free, bounded so
-  // one wild revenue print cannot order a hiring spree.
-  return Math.max(-0.25, Math.min(0.25, realGrowthAnnual - LABOR_PRODUCTIVITY_GROWTH_ANNUAL));
+  // Labor demand grows with real output net of what productivity delivers for free. UNBOUNDED:
+  // the +/-25% clamp that stood here was doing the work an affordability constraint should do —
+  // it stopped a wild revenue print ordering a hiring spree, but it equally stopped a collapsing
+  // one ordering the layoffs. What limits hiring now is whether the firm can pay for it (below).
+  return realGrowthAnnual - LABOR_PRODUCTIVITY_GROWTH_ANNUAL;
 }
 
 export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -108,10 +111,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
 
     // Real output growth is what hiring follows, so the revenue signal is deflated.
     const inflationAnnual = reg.inflation ?? 0.02;
+    // LAB: the occupation wage table this region's employers pay against.
+    const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
 
     // Last week's tightness sets this week's quit rate: a worker with options uses them.
     const priorTightness = reg.laborMarketTightness ?? 1.0;
-    const quitRateWeekly = BASELINE_QUIT_RATE_WEEKLY * Math.max(0.3, Math.min(2.5, priorTightness));
+    // A rate cannot exceed 1 — that is arithmetic. The [0.3, 2.5] band that used to bound
+    // TIGHTNESS instead was a behavioural clamp: it kept quits alive in a market with no
+    // vacancies, where nobody in fact quits.
+    const quitRateWeekly = Math.min(1, BASELINE_QUIT_RATE_WEEKLY * Math.max(0, priorTightness));
 
     interface Posting { comp: Company; vacancies: number; layoffs: number; quits: number }
     const postings: Posting[] = [];
@@ -127,11 +135,38 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // above keeps them, which is what makes a raise do something rather than just cost money.
       // Execution quality retains too — a well-run firm loses fewer of them.
       const wageIndex = comp.offeredWageIndex ?? 1.0;
-      const firmQuitMultiplier = Math.max(0.25, Math.min(3.0,
+      const firmQuitMultiplier = Math.max(0,
         1 - (wageIndex - 1) * QUIT_ELASTICITY_TO_RELATIVE_WAGE
           - ((comp.executionQuality ?? 1.0) - 1) * QUIT_ELASTICITY_TO_EXECUTION
-      ));
-      const quits = current * quitRateWeekly * firmQuitMultiplier;
+      );
+      // Bounded where a quit rate is really bounded: nobody can quit twice, and a firm paying
+      // far above the market simply loses nobody.
+      const quits = current * Math.min(1, quitRateWeekly * firmQuitMultiplier);
+
+      // ---- LAB: WHAT THE FIRM CAN AFFORD. ----
+      //
+      // Output growth says how many workers the firm WANTS. This says how many it can PAY FOR,
+      // and it is the constraint the model never had. A firm's earnings have to cover the return
+      // its capital requires — its own beta against the region's own risk-free rate, the same
+      // cost of capital its equity is valued at — and payroll is what it can cut when they do
+      // not. A firm short by X dollars a year is short X/wage workers.
+      //
+      // Without this, wages were a price with no quantity response: a wage the firms could not
+      // fund did not reduce hiring, it just accumulated as an unpayable payroll, and the entire
+      // adjustment fell on cash-exhaustion layoffs that arrived too late and cascaded (measured:
+      // 30-50% unemployment in all four regions, hidden by the 50% clamp on the print).
+      const netPpeUSD = Math.max(0, (comp.grossPPEUSD ?? 0) - (comp.accumulatedDepreciationUSD ?? 0));
+      const costOfCapital = Math.max(0, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (comp.beta ?? 1) * EQUITY_RISK_PREMIUM);
+      const capitalChargeUSD = netPpeUSD * costOfCapital;
+      const earningsShortfallUSD = capitalChargeUSD - comp.ebitda;
+      const annualWagePerWorkerUSD = current > 0
+        ? (weeklyWageBillUSD(current, occupationMixFor(comp.sector), baseAnnualWageUSD, reg.occupationPools,
+          comp.offeredWageIndex ?? 1.0) * 52) / current
+        : 0;
+      const affordableCutHeads = (earningsShortfallUSD > 0 && annualWagePerWorkerUSD > 0)
+        ? earningsShortfallUSD / annualWagePerWorkerUSD
+        : 0;
+
       let vacancies = 0;
       let layoffs = 0;
       if (desiredWeeklyChange >= 0) {
@@ -141,6 +176,10 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         // Shrinking: attrition does the work first (it is free), layoffs only for the rest.
         layoffs = Math.max(0, -desiredWeeklyChange * LAYOFF_SPEED_MULTIPLE - quits);
       }
+      // LAB: and it sheds toward what it can afford — the gap between its earnings and its cost
+      // of capital, in workers, at the speed layoffs actually happen. This is the ordinary
+      // response; the cash rule below is the acute one.
+      if (affordableCutHeads > 0) layoffs = Math.max(layoffs, affordableCutHeads * LAYOFF_SPEED_MULTIPLE);
       // A firm genuinely out of cash sheds staff regardless of the friction above.
       if (comp.cash < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
 
@@ -285,18 +324,20 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // a firm losing money does not give raises, which is the employer side of the bargain.
       const currentMargin = comp.annualRevenue > 0 ? comp.ebitda / comp.annualRevenue : 0;
       const marginShortfall = Math.max(0, (comp.baselineEbitdaMargin ?? currentMargin) - currentMargin);
-      const targetChangeAnnual = Math.max(MIN_FIRM_WAGE_CHANGE_ANNUAL, Math.min(MAX_FIRM_WAGE_CHANGE_ANNUAL,
-        unfilledShare * WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL
-        - marginShortfall * WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL));
+      // LAB: unbounded. The +25%/-15% band this replaces was the mechanism's substitute — with
+      // labor demand now responding to affordability, a firm that offers more than it can fund
+      // is cutting its own headcount next week, which is the discipline the band was standing in
+      // for. Its own push and pull are the whole decision.
+      const targetChangeAnnual = unfilledShare * WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL
+        - marginShortfall * WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL;
       const prevIndex = comp.offeredWageIndex ?? 1.0;
       // The change applies DIRECTLY. An earlier form blended the level against itself
       // (`prev*inertia + prev*(1+t/52)*(1-inertia)`), which algebraically delivers t x 0.06 —
       // six percent of the intended move, so no firm's wage ever went anywhere. Stickiness
       // belongs in the size of the target and in the market's catch-up speed below, not in a
       // blend of a level with a scaled copy of itself.
-      const nextIndex = Math.max(MIN_FIRM_WAGE_INDEX, Math.min(MAX_FIRM_WAGE_INDEX,
-        prevIndex * (1 + targetChangeAnnual / 52)
-      ));
+      // A wage cannot be negative; nothing else bounds what a firm offers.
+      const nextIndex = Math.max(0, prevIndex * (1 + targetChangeAnnual / 52));
       ctx.companyUpdates[comp.ticker].offeredWageIndex = Number(nextIndex.toFixed(5));
       ctx.companyUpdates[comp.ticker].unfilledVacancyShare = Number(unfilledShare.toFixed(4));
     });
@@ -346,12 +387,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const catchup = (avgOffer - 1) * MARKET_WAGE_CATCHUP_SPEED_WEEKLY + colaWeekly;
       marketCatchupByOcc[occ] = catchup;
       const prev = pools[occ]?.wageIndex ?? 1.0;
-      const next = Math.max(0.1, Math.min(20, prev * (1 + catchup)));
+      // LAB: the going rate is a price and carries no band. It used to sit in [0.1, 20] with its
+      // growth held to [-20%, +35%] — bounds that could only bind by disagreeing with what
+      // employers were actually offering, which is the one thing the going rate IS.
+      const next = Math.max(0, prev * (1 + catchup));
       pools[occ] = {
         ...pools[occ],
         wageIndex: Number(next.toFixed(5)),
         // The going rate's own growth, annualized — what household income is paid at.
-        wageGrowthAnnual: Number(Math.max(-0.20, Math.min(0.35, catchup * 52)).toFixed(4)),
+        wageGrowthAnnual: Number((catchup * 52).toFixed(4)),
       };
     });
     // Each firm's premium is relative to a rate that just moved, so renormalize it: a firm that
@@ -361,9 +405,9 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       if (!upd || upd.offeredWageIndex === undefined) return;
       const mix = occupationMixFor(comp.sector);
       const catchup = OCCUPATIONS.reduce((a, occ) => a + (mix[occ] ?? 0) * marketCatchupByOcc[occ], 0);
-      upd.offeredWageIndex = Number(Math.max(MIN_FIRM_WAGE_INDEX, Math.min(MAX_FIRM_WAGE_INDEX,
-        upd.offeredWageIndex / (1 + catchup)
-      )).toFixed(5));
+      // A premium relative to the market, with no band: how far a firm sits from the going rate
+      // is its own decision and its own cost.
+      upd.offeredWageIndex = Number(Math.max(0, upd.offeredWageIndex / (1 + catchup)).toFixed(5));
     });
 
     // ---- 5. The pools and the rate are DERIVED from the employers' books — by the exported
@@ -431,8 +475,13 @@ export function reconcileEmploymentView(
     };
   });
 
+  // LAB: the real reading. The 50% ceiling this replaces was not a modelling choice — it was
+  // hiding its own inputs: the harness printed "reported 50.00% is not the reading of its own
+  // employment stock (53.19%)" for weeks while the cap held the published number still. A rate
+  // cannot be negative (that would mean more employed than the labor force, which is a defect
+  // worth seeing, not smoothing).
   reg.unemploymentRate = Number(
-    Math.max(0, Math.min(0.5, (totalLaborForce - totalEmployed) / totalLaborForce)).toFixed(4)
+    Math.max(0, (totalLaborForce - totalEmployed) / totalLaborForce).toFixed(4)
   );
   reg.laborMarketTightness = Number((totalSeekers > 0 ? totalVacancies / totalSeekers : 1.0).toFixed(4));
   reg.vacancyRate = Number((totalVacancies / totalLaborForce).toFixed(4));

@@ -55,6 +55,17 @@ function lotArrayValueUSD(lots: InputLot[]): number {
   return v;
 }
 
+/**
+ * LAB — the wage pools at their reference level. A firm's BASELINE payroll is its baseline
+ * headcount at the wage table's own level, with no market premium and no firm premium: the wage
+ * bill already sitting inside its baseline margin. Only the deviation from it is a new cost.
+ */
+const BASELINE_WAGE_POOLS = {
+  GENERAL: { wageIndex: 1 }, SKILLED_TRADES: { wageIndex: 1 },
+  TECHNICAL_ENGINEERING: { wageIndex: 1 }, SPECIALIZED_PROFESSIONAL: { wageIndex: 1 },
+  MANAGERIAL_FINANCIAL: { wageIndex: 1 },
+} as Record<import('../../../types').OccupationType, { wageIndex: number }>;
+
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
 const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
 
@@ -255,6 +266,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     let newEbitdaMargin = 0;
     let newEbitda = 0;
+    // LAB: the firm's real payroll for the week — charged against EBITDA below and paid as cash
+    // to households further down. One number, one owner.
+    let weeklyPayrollUSD = 0;
     let newEbit = 0;
     let newNetIncome = 0;
     let newEps = 0;
@@ -322,7 +336,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
       const compOccMix = SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 };
       const compWageGrowth = getBlendedWageGrowth(compOccMix, reg.occupationPools);
-      const wageCompression = Math.max(0, compWageGrowth - 0.025) * 0.15 * wageSensitivity;
+      // LAB: the wage no longer compresses the margin here. It is a real payroll line against
+      // EBITDA below, so docking the margin for wage growth as well would charge it twice.
+      // `wageSensitivity` survives as the sector's own labor intensity, which is what decides
+      // how much a wage move actually costs a firm — expressed through its headcount, not a
+      // margin haircut.
+      const wageCompression = 0;
       const avgCrowdingIntensity = (comp.productLines || []).reduce((s, l) => {
         const catDemand = reg.categoryDemand[l.subUnitId as any];
         return s + (catDemand?.crowdingIntensity ?? 0) * l.revenueShare;
@@ -534,7 +553,32 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       newRevenue = Math.max(10, newRevenue + revenueAdjustmentForUnsold);
       comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
 
-      newEbitda = newRevenue * newEbitdaMargin;
+      // LAB: PAYROLL IS A REAL COST. `newEbitdaMargin` carries the firm's non-labor cost
+      // structure — input prices, competition, capacity — and the wage bill is now its own line
+      // on top, measured from the firm's real headcount at the wage it really offers. Only the
+      // DEVIATION from its baseline payroll adjusts EBITDA, because the baseline margin already
+      // contains a baseline wage bill; charging the whole payroll again would count it twice.
+      //
+      // This is what makes a wage a price rather than a charge. Before it, the going rate could
+      // move and no firm's earnings noticed, so labor demand had nothing to respond to and the
+      // entire adjustment fell on cash exhaustion (measured: a 30-50% unemployment cascade).
+      weeklyPayrollUSD = weeklyWageBillUSD(
+        comp.employeeCount,
+        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+        getBaseAnnualWageUSD(comp.region),
+        reg.occupationPools,
+        comp.offeredWageIndex ?? 1.0
+      );
+      const baselineWeeklyPayrollUSD = weeklyWageBillUSD(
+        comp.baselineEmployeeCount ?? comp.employeeCount,
+        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+        getBaseAnnualWageUSD(comp.region),
+        BASELINE_WAGE_POOLS,
+        1.0
+      );
+      const payrollAboveBaselineAnnualUSD = (weeklyPayrollUSD - baselineWeeklyPayrollUSD) * 52;
+
+      newEbitda = newRevenue * newEbitdaMargin - payrollAboveBaselineAnnualUSD;
       const da = newRevenue * 0.05;
       newEbit = Math.max(1, newEbitda - da);
 
@@ -741,13 +785,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // A firm pays its staff in full. What is left of the week's operating outflow is the rest
       // of running the business; it cannot be negative, and a payroll larger than the accrued
       // operating cost is a firm whose cash falls faster than its P&L — which is what that is.
-      const wagesPaidUSD = weeklyWageBillUSD(
-        comp.employeeCount,
-        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-        getBaseAnnualWageUSD(comp.region),
-        reg.occupationPools,
-        comp.offeredWageIndex ?? 1.0
-      );
+      // The same payroll the P&L above was charged — one number, computed once (rule 3).
+      const wagesPaidUSD = weeklyPayrollUSD;
       post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
       // SVC: services are a real market now — professional, facilities and repair sub-units sit
       // in the registry, this firm's recipe includes them, and it BIDS for them in stage 05

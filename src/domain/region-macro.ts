@@ -363,11 +363,7 @@ export const WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL = 0.45;
  */
 export const MARKET_WAGE_CATCHUP_SPEED_WEEKLY = 0.15;
 /** Bounds on the annual pace at which one firm re-rates its own offer. */
-export const MAX_FIRM_WAGE_CHANGE_ANNUAL = 0.25;
-export const MIN_FIRM_WAGE_CHANGE_ANNUAL = -0.15;
 /** Bounds on how far one firm's offer can drift from its occupations' going rate. */
-export const MIN_FIRM_WAGE_INDEX = 0.75;
-export const MAX_FIRM_WAGE_INDEX = 1.60;
 /**
  * How much a firm's relative pay changes its quit rate. A firm paying 10% below market loses
  * people faster; one paying above keeps them. This is what makes a raise DO something, and it

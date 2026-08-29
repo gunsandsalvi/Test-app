@@ -449,7 +449,11 @@ export function evolveRegionMacro(
   // residual's construction; from week 1 the two move apart with rates and payouts, and that
   // differential is the household rate channel.
   const annualCapitalReceiptsUSD = {
-    depositInterestUSD: (prevHS.depositsUSD ?? 0) * (region.policyRate * 0.6),
+    // HH: what the banks MEASURABLY paid their household depositors last week, at their own
+    // competitive deposit rates (02b sums it). The `deposits x policyRate x 0.6` this replaces
+    // was a second derivation of a flow the banks already compute and post — rule 3, and it
+    // disagreed with them by whatever the deposit competition was doing.
+    depositInterestUSD: (region.householdDepositInterestWeeklyUSD ?? 0) * 52,
     dividendsUSD: (prevHS.directEquityUSD ?? 0) * (microFeedback.avgListedDividendYieldAnnual ?? 0),
     // HH: a LEVEL carried forward, not a share of the income it is an input to — the share form
     // made income depend on itself the moment income became the measured sum. It shrinks only
