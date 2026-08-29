@@ -721,7 +721,23 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // against the operating share of what really settled.
       const accruedOutflowsWeekly = (newRevenue - newEbitda) / 52;
       const capexSettledUSD = update?.capexPurchasesUSD ?? 0;
-      post('wages & other opex beyond auction settlements', -Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD)));
+      // SETL-B: wages are paid to HOUSEHOLDS, who exist and hold deposits. The rest of the line
+      // is services and inputs bought outside the modelled auction, which keeps the boundary
+      // until those sellers exist. The split is the company's own wage bill against its other
+      // operating costs — not a chosen ratio.
+      const opexOutflowUSD = Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD));
+      // The wage share of operating cost, from the company's OWN wage bill — its headcount at
+      // the region's wage level against the week's operating outflow.
+      // The wage share of this week's operating outflow, from the company's own payroll: its
+      // headcount at the region's per-worker income. A firm that employs more of the region's
+      // workers pays more of its costs to households, which is the relationship being expressed.
+      // Everyone the region's own labour pools say is employed — HH5's measure, not a proxy.
+      const regionEmployed = Math.max(1, Object.values(reg.occupationPools ?? {})
+        .reduce((a: number, pool: any) => a + (pool?.employedCount ?? 0), 0));
+      const weeklyWageBillUSD = (comp.employeeCount * ((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployed)) / 52;
+      const wageShare = Math.min(1, Math.max(0, weeklyWageBillUSD / Math.max(1, accruedOutflowsWeekly)));
+      post('wages paid to households', -opexOutflowUSD * wageShare, { kind: 'HOUSEHOLD', region: comp.region });
+      post('other opex beyond auction settlements', -opexOutflowUSD * (1 - wageShare));
       post('inventory carrying cost', -carryingCostUSD);
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.

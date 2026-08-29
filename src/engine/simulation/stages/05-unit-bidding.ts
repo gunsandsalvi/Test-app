@@ -1121,6 +1121,37 @@ function runSubUnitMarkets(
       (companyUpdates[seller.ticker].tradeReceivableBookedUSD ?? 0) + amount;
   });
 
+  // SETL-C: the AGGREGATE buyers pay too. A seller's revenue includes what households and the
+  // government took, and routing only the company buyers' payments left those sellers credited
+  // with revenue nobody had paid. Households and the treasury are real account holders, so each
+  // book's non-corporate fills are paid to its sellers pro rata by what each actually sold.
+  MARKET_REGION_IDS.forEach(origin => {
+    const book = results[origin];
+    const sellerTotalUSD = Array.from(book.salesByKey.values()).reduce((a, v) => a + v.amount, 0);
+    if (!(sellerTotalUSD > 0)) return;
+    let corporatePaidUSD = 0;
+    book.purchasesByKey.forEach((buy, key) => {
+      if (lookup.byKey.get(key)) corporatePaidUSD += buy.amount;
+    });
+    const aggregateUSD = Math.max(0, sellerTotalUSD - corporatePaidUSD);
+    if (!(aggregateUSD > 0)) return;
+    // Split what remains between the two aggregate buyers by what each actually took.
+    const hhUnitsAll = MARKET_REGION_IDS.reduce((a, r) => a + (book.householdFillUnitsByRegion[r] ?? 0), 0);
+    const govUsdAll = MARKET_REGION_IDS.reduce((a, r) => a + (book.governmentSpendUSDByRegion[r] ?? 0), 0);
+    const hhUsdAll = hhUnitsAll * book.clearedPriceUSD;
+    const claimUSD = hhUsdAll + govUsdAll;
+    if (!(claimUSD > 0)) return;
+    book.salesByKey.forEach((sale, sellerKey) => {
+      const sellerShare = sale.amount / sellerTotalUSD;
+      MARKET_REGION_IDS.forEach(buyerRegion => {
+        const hhUSD = ((book.householdFillUnitsByRegion[buyerRegion] ?? 0) * book.clearedPriceUSD / claimUSD) * aggregateUSD * sellerShare;
+        const govUSD = ((book.governmentSpendUSDByRegion[buyerRegion] ?? 0) / claimUSD) * aggregateUSD * sellerShare;
+        pay(ctx, { payer: { kind: 'HOUSEHOLD', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: hhUSD, reason: 'household goods purchase' });
+        pay(ctx, { payer: { kind: 'GOVERNMENT', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: govUSD, reason: 'government procurement' });
+      });
+    });
+  });
+
   // --- 10. Aggregate buyers: the household durable stock and the treasury's realized spend.
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
