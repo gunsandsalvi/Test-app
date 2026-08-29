@@ -508,3 +508,35 @@ floor — *"a floor on holdings, not on price: it says WHAT a mandate forces the
 leaves WHERE it clears entirely to the auction."* Saturation clearing plus a dealer residual is
 exactly rule 15. The defect is upstream of it, in how thin the demand side is.
 
+### `stages/pe-lifecycle.ts`
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| S20 | **A** | `pe-lifecycle.ts:78` | **`LBO_DEBT_SHARE = 0.55` decides a deal's capital structure before the market prices it.** A real sponsor levers as far as lenders will fund at a margin it will accept — and this model has every piece needed to answer that: 07d clears the loan, WS8 lets the issuer walk at its own threshold, the book can decline. So the debt share should be the *outcome* of what the loan market takes. As written a sponsor uses 55% debt in a shut market and a wide-open one alike. **Owner: HF (12) / G5 (14).** |
+
+**Clean, and `IPO_PREMIUM_OVER_ENTRY` is a model of how to justify a constant:** it states the
+comparison that matters to a fund (does the market pay more than *it* paid, not an abstract
+discount to comps), and records that the previous version "never fired once" with the measurement
+that proved it — public comps at 4.4–7.9x against an 8x private mark, so on that test no sponsor
+would ever list. `DRY POWDER` is right too: capital a sponsor can deploy is what its named LPs
+have committed and not paid in, capped by what those LPs can actually fund.
+
+---
+
+## `src/components` + `simulation/trade.ts` — the player's own trades
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| **C1** | **A, rule 1** | `components/TradeTicketModal.tsx:193` | **The player's fill price is set by a formula inside a React component.** `fillPrice = instrument.price × (1 + sideSign × 0.0015)` — an intermediation fee that moves the price the player transacts at, computed in the UI layer where no engine stage can see it. The books that price every other participant are not consulted. This is the player-facing half of D25's second dealer system, and worse than recorded, because the pricing does not merely bypass the clearing engine — it lives outside the engine entirely. |
+| **C2** | **B, rule 14** | `simulation/trade.ts:63` | **The desk's earnings on a player trade credit `bankEquityUSD` with no cash leg.** 07b does this correctly for its own dealer revenue and says why: *"The desk's earnings are money the clients actually paid… so the bank receives CASH, not just a bookkeeping equity credit — an equity write with no cash leg breaks the balance-sheet identity the invariants harness now asserts per bank per week."* `trade.ts` writes equity alone. It also credits the REGIONAL `bankingSector`, not a named bank — §6.1's regional-desk row again. |
+| **C3** | **B** | `simulation/trade.ts:56-67` | **Only corporate bonds and loans move any real inventory.** A player buying equity, sovereigns, CDS, options or FX spot moves nothing: no dealer inventory, no float, no price. The comment says trades work "through the inventory that already exists, not through a bespoke impact formula" — true for two asset classes out of eight. |
+| C4 | **B, latent** | `components/TradeTicketModal.tsx:40` | `policyRate = region?.policyRate ?? 0.0475` — a hardcoded policy rate in the UI, and the **fifth** silent default. 4.75% is also a recognisably real-world rate. |
+| C5 | note | `components/CommoditiesScreen.tsx:11,17` | Same shape: `policyRate ?? 0.04` and `convenienceYield ?? 0.03` as display fallbacks. |
+
+**Clean:** the UI reads measured state almost everywhere — `WorldScreen` reads
+`reg.unemploymentRate` and the occupation pools' real `wageGrowthAnnual`, `BriefingScreen`
+watches real thresholds crossing, `EconomyDashboard` reads the measured ownership register
+(which OWN1 made honest). `trade.ts`'s core insight is right and worth keeping: a player trade
+should move the same dealer inventory every other participant trades against. The defect is that
+it only does so for two asset classes, credits one leg, and lets the UI set the price.
+

@@ -74,7 +74,17 @@ export function publicComparableEvMultiple(
   pool.sort((a, b) => a - b);
   return pool[Math.floor(pool.length / 2)];
 }
-/** Share of the purchase price funded with new leveraged debt — the defining feature of an LBO. */
+/**
+ * Share of the purchase price funded with new leveraged debt — the defining feature of an LBO.
+ *
+ * RULE 13, OPEN: the deal's capital structure is decided BEFORE the market prices it. A real
+ * sponsor levers as far as lenders will fund at a margin it will accept, and this model has the
+ * machinery to answer that — 07d clears the loan, WS8 lets the issuer walk away at its own
+ * threshold, and the book can decline. So the debt share should be the OUTCOME of what the loan
+ * market takes, not an input to it. As written, a sponsor uses 55% debt in a shut market and in
+ * a wide-open one alike. Owner: HF (12) or G5 (14), whichever gives sponsors real financing
+ * decisions.
+ */
 const LBO_DEBT_SHARE = 0.55;
 /** Leverage a sponsor will not exceed on a target, in debt/EBITDA — the lenders' covenant. */
 const LBO_MAX_LEVERAGE = 6.0;

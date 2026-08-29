@@ -61,6 +61,10 @@ export function executeTrade(
         bankingSector: {
           ...region.bankingSector,
           // The desk's real earnings on the flow it facilitated.
+          // RULE 14, OPEN: equity is credited with NO CASH LEG, and to the REGIONAL aggregate
+          // rather than a named bank. 07b does the same thing correctly and says why — "an
+          // equity write with no cash leg breaks the balance-sheet identity the invariants
+          // harness now asserts per bank per week". Owner: G3 (8).
           bankEquityUSD: region.bankingSector.bankEquityUSD + executionDetails.counterpartyFeeUSD + executionDetails.spreadCostUSD,
           ...(isCorpBond ? { corpBondDealerInventory: applyToInventory(region.bankingSector.corpBondDealerInventory) } : {}),
           ...(isLoan ? { loanDealerInventory: applyToInventory(region.bankingSector.loanDealerInventory) } : {}),
