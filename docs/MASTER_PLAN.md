@@ -589,11 +589,18 @@ derive from each registry entry's own physics (value density, shelf life); softw
 hold no inventory. `purchaseKindOf` routes purchases to lots / PP&E-on-delivery / expensed,
 closing §6's lot leak at the root and making investment supply-constrained.
 
-**IND2 — Revenue mechanism.** How a sale becomes revenue, from the registry: a **unit sale** (what
-everything does today), a **subscription** that recurs until it churns, a **project** booked to
-backlog and recognised as delivered, a **royalty** on someone else's volume. This is the largest
-number in the model and it currently has one shape. Stage 05 keeps clearing the transaction; what
-changes is how the transaction becomes revenue on the seller's books.
+**IND2 — Revenue mechanism.  *(SUBSCRIPTION done §7.114; PROJECT/ROYALTY deferred to IND10/11)***
+How a cleared transaction becomes REVENUE is a property of what was sold, from the registry.
+`UNIT_SALE` is recognised on delivery and production that did not sell is not revenue — which was
+every good in the model, whatever it was. `SUBSCRIPTION` buys a CONTRACT: it keeps paying until
+it churns, so the seller carries a real `recurringRevenueBaseUSD` that survives a quarter with no
+new sales, and a week it cannot ship does not cost it the contract. Eight sub-units are contracts
+(enterprise and consumer software, network infrastructure, media, education, rental, facilities,
+repair). **Verified: over a quarter a subscription seller's revenue moves −1.2% against a unit
+seller's −6.5%**, which is the criterion this slice was written for. **PROJECT** (booked to
+backlog, recognised as delivered) and **ROYALTY** (a share of someone else's volume) need a
+backlog STOCK to live on: they land with **IND10/IND11**, which build it, so the stock has one
+owner rather than two.
 
 **IND3 — Cost structure.** The fixed/variable split and the COGS-versus-opex balance by industry:
 a software firm's marginal cost is near zero and its costs are people; a smelter's are inputs and
@@ -1070,6 +1077,29 @@ short is visibly squeezed when the curve moves.
 ---
 
 ### CRD — Credit prices cleared, ratings handle zero earnings  *(item 10, clamp programme; CDS half needs G3)*
+
+**CRD-R1 — A RATING IS NOT TWO RATIOS.** *(User, 2026-08-29, on IND8's close.)*
+`determineCreditRating(leverage, coverage)` is the whole rater, seed and week. Real credit
+analysis weighs far more, and **the model already measures most of it and throws it away**:
+
+- **Scale.** A $50B issuer and a $500M one at identical leverage are not the same credit. The
+  model has `annualRevenue` and `marketCap`.
+- **Customer diversification.** `09-concentration-risk.ts` computes >40% supplier and customer
+  concentration flags **every week, at 8.5% of total run time (§7.107), and nothing prices off
+  them.** This is the consumer that stage has never had — and wiring it retires the "cheapest
+  large win on the table" note in §5-SCALE by making the work load-bearing instead of deleting it.
+- **Refinancing ability.** The maturity wall is right there in `debtTranches`: a firm with its
+  whole ladder due in a year is a different credit from one with it spread over ten, at the same
+  leverage. Cash, the committed revolver and CP market access (07f already gates that on rating —
+  make it two-way) are all present.
+- **Earnings volatility and cyclicality.** `revenueHistory` and `historicalFundamentals` carry
+  twelve quarters; the variance is a measurement nobody takes.
+
+**Shape:** keep leverage and coverage as the spine and make the rest NOTCH ADJUSTMENTS off
+measurements the model already produces — not a new table of stated weights. Then IND8's seed
+rater inherits it for free, because seed and week share one function (§7.4). **Verify:** two firms
+with identical leverage and coverage but different scale, customer concentration and maturity
+profile must rate differently, and the notch gap must be attributable to a named measurement.
 
 **Clamps it deletes:** CDS spread [10, 5000] bps (`08:1301`), leverage [0, 100] and coverage
 [±50] (`08:830/835`), consumer tier rates set by `creditConditionsIndex × 0.05/0.03/0.01/0.005`
@@ -4169,3 +4199,25 @@ that proved it, the lesson.
       what stops a firm ISSUING its way into high yield; HY arrives by DETERIORATION (the
       dynamics already deliver BBB 39% / HY 16% by week 40) and from HC's sponsor-owned tier,
       measured at p50 3.8x and p90 6.0x. Six-week probe 12 → 9 violations.
+
+114. **IND2 — a subscription is not a unit, and the hidden tier proved §7.41 again.** How a
+    cleared transaction becomes REVENUE is a property of what was sold, and every good in the
+    model recognised it the same way: on delivery, with unsold production docking revenue.
+    - **`SUBSCRIPTION` is now a registry mechanism.** The sale buys a CONTRACT, so it keeps
+      paying until it churns: the seller carries a real `recurringRevenueBaseUSD` that decays at
+      its own churn and is renewed by what actually cleared, and a week it could not ship does
+      not cost it the contract. Eight sub-units are contracts. One primitive
+      (`SUBSCRIPTION_WEEKLY_CHURN`) — a subscription is *defined* by ending unless renewed, and
+      how fast is what separates an enterprise contract from a month-to-month one.
+    - **Verified on the criterion this slice was written for:** over a quarter, a subscription
+      seller's revenue moves **−1.2%** against a unit seller's **−6.5%**.
+    - **§7.41's trap, caught by measuring instead of assuming.** The first implementation looked
+      correct and the probe said **240 listed firms carried a base and 0 private ones** — the
+      private path rebuilds each firm from a fixed field list, so the base was written and
+      silently dropped every week. The hidden tier is ~1,200 firms and it was behaving as pure
+      unit sellers. **1068 firms carry a base now.** This is the third time that fixed list has
+      swallowed a new field (headcount and wage were the last); anything added to a company must
+      be checked on BOTH paths.
+    - **PROJECT and ROYALTY are deferred to IND10/IND11 on purpose.** Both need a backlog STOCK
+      to live on, and IND11 builds it. Implementing a second backlog here to delete it there is
+      the wasted motion the profiles' own header warns about. Six-week probe 9 → 8 violations.

@@ -424,6 +424,10 @@ export interface Company {
   // A pool seller's id is "PRIVATE:<region>:<industry>" since SEG keyed the tier to the registry.
   inputInventoryBySubUnit?: Record<string, InputLot[]>;
   recentFulfillmentEMA: number;
+  /** IND2 — the annualised CONTRACTED revenue base a subscription seller carries. It survives a
+   *  week with no sales and decays only by churn, which is what makes a software firm's revenue
+   *  behave differently from a steel mill's. Absent on pure unit sellers. */
+  recurringRevenueBaseUSD?: number;
   _targetProductionUSD?: number;
   // 1$ is 1$ Phase 6: this week's real settled sales/purchases (from 05-unit-bidding.ts's
   // actual bid/offer clearing — open-market plus active-contract volume) — persisted onto the

@@ -17,6 +17,7 @@ import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
+import { recurringRevenueShare, SUBSCRIPTION_WEEKLY_CHURN } from '../../../domain/industry-registry';
 import { industryOfSubUnit } from '../../../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
@@ -175,8 +176,20 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // no product lines holds its baseline — penalising it for not selling in markets it is
       // not in was measured to collapse the whole tier.
       const unsoldP = hasMarketPresence ? Math.max(0, targetProductionP - salesP) : 0;
-      const revenue = Math.max(10,
-        comp.annualRevenue * 0.98 + comp.baselineAnnualRevenue * 0.02 - unsoldP * 0.5);
+      // IND2: the hidden tier recognises revenue the same way the named one does — a private
+      // software or facilities firm sells contracts too. Only the UNIT share loses revenue to
+      // production it could not sell; the contracted share carries on its own base.
+      const recurringShareP = recurringRevenueShare(comp.productLines || []);
+      const priorBaseP = comp.recurringRevenueBaseUSD ?? comp.annualRevenue * recurringShareP;
+      const nextBaseP = recurringShareP > 0
+        ? priorBaseP * (1 - SUBSCRIPTION_WEEKLY_CHURN)
+          + salesP * recurringShareP * 52 * SUBSCRIPTION_WEEKLY_CHURN
+        : undefined;
+      const unitRevenueP = Math.max(10,
+        comp.annualRevenue * 0.98 + comp.baselineAnnualRevenue * 0.02 - unsoldP * 0.5 * (1 - recurringShareP));
+      const revenue = nextBaseP === undefined
+        ? unitRevenueP
+        : Math.max(10, nextBaseP + unitRevenueP * (1 - recurringShareP));
       const ebitda = revenue * (comp.baselineEbitdaMargin ?? 0.12);
       const da = revenue * 0.045;
       const ebit = Math.max(1, ebitda - da);
@@ -208,6 +221,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         isDefaulted: defaulted,
         creditRating: rating,
         ratingHistory: comp.creditRating === rating ? comp.ratingHistory : [...(comp.ratingHistory || []).slice(-12), rating],
+        // IND2, and §7.41's trap again: this path rebuilds from a fixed field list, so the
+        // contracted base was silently dropped every week and the whole hidden tier behaved as
+        // pure unit sellers (measured: 240 listed firms carried a base, 0 private ones).
+        recurringRevenueBaseUSD: nextBaseP === undefined ? undefined : Number(nextBaseP.toFixed(0)),
         // HH5/HH6: a private firm is an employer like any other — it posts vacancies, consumes
         // real matches and pays a real wage. This path rebuilds from a fixed field list too,
         // so its headcount and wage were being silently dropped: the whole hidden tier hired
@@ -305,6 +322,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let newEps = 0;
     let newInputSupplyConstraintFactor = comp.inputSupplyConstraintFactor ?? 1.0;
     let newRecentFulfillmentEMA = comp.recentFulfillmentEMA ?? 1.0;
+    /** IND2 — the contracted base a subscription seller carries into next week. */
+    let newRecurringBaseUSD = comp.recurringRevenueBaseUSD;
     let targetProductionUSD = 0;
     let productionCostUSD = 0;
     let costDriversUSD: CogsCostDrivers | undefined;
@@ -587,8 +606,32 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           ?? { unitsHeld: 0, valueUSD: 0 };
       }
 
-      const revenueAdjustmentForUnsold = -unsoldThisWeekUSD * 0.5;
+      // IND2 — REVENUE RECOGNITION IS A PROPERTY OF WHAT IS SOLD.
+      //
+      // A unit sale is recognised on delivery, so production that did not sell is not revenue:
+      // that is the line below and it was every good in the model, whatever it was.
+      //
+      // A SUBSCRIPTION is not a unit. The sale bought a contract, so it keeps paying until it
+      // churns, and a week the seller could not ship does not cost it the contract. The
+      // contracted share of the firm is therefore carried as a real base: it survives on its own
+      // and is topped up by what this week actually cleared. **This is the whole difference
+      // between a software company and a steel mill, and the model could not express it** — the
+      // verify criterion is that a subscription business's revenue survives a quarter with no
+      // new sales while a unit seller's does not.
+      const recurringShare = recurringRevenueShare(comp.productLines || []);
+      const unitShare = 1 - recurringShare;
+      // Unsold production only costs the UNIT half its revenue.
+      const revenueAdjustmentForUnsold = -unsoldThisWeekUSD * 0.5 * unitShare;
       newRevenue = Math.max(10, newRevenue + revenueAdjustmentForUnsold);
+      if (recurringShare > 0) {
+        // The base decays at its own churn and is renewed by the contracted share of what
+        // cleared. Seeded from the firm's own opening revenue the first time it is read.
+        const priorBaseUSD = comp.recurringRevenueBaseUSD ?? comp.annualRevenue * recurringShare;
+        newRecurringBaseUSD = priorBaseUSD * (1 - SUBSCRIPTION_WEEKLY_CHURN)
+          + salesUSD * recurringShare * 52 * SUBSCRIPTION_WEEKLY_CHURN;
+        // The firm's revenue is its contracted base plus whatever its unit lines sold.
+        newRevenue = Math.max(10, newRecurringBaseUSD + newRevenue * unitShare);
+      }
       comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
 
       // LAB: PAYROLL IS A REAL COST. `newEbitdaMargin` carries the firm's non-labor cost
@@ -1665,6 +1708,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // post-consumption balance.
       inputInventoryBySubUnit: newInputInventoryBySubUnit,
       recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
+      recurringRevenueBaseUSD: newRecurringBaseUSD === undefined
+        ? undefined : Number(newRecurringBaseUSD.toFixed(0)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,

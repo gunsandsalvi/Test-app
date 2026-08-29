@@ -27,8 +27,22 @@ import type { DeliveryMode } from './goods-physical';
  * to carry put 40 financial firms into the enterprise-software market. Their revenue comes from
  * their stage-08 profiles. */
 export type ProducingSector = 'Tech' | 'Energy' | 'Industrials' | 'Consumer';
-/** IND2 will add SUBSCRIPTION | PROJECT | ROYALTY as profile modules; UNIT_SALE is today's world. */
-export type RevenueMechanism = 'UNIT_SALE';
+/**
+ * IND2 — how a cleared transaction becomes REVENUE on the seller's books. Stage 05 keeps clearing
+ * the transaction; this decides what the seller may recognise from it, and when.
+ *
+ * - `UNIT_SALE` — recognised on delivery, and what is not sold this week is not revenue this
+ *   week. Every good in the model behaved this way, whatever it was.
+ * - `SUBSCRIPTION` — the sale buys a CONTRACT, not a unit. It keeps paying until it churns, so
+ *   the seller carries a recurring base (`recurringRevenueBaseUSD`) that survives a quarter with
+ *   no new sales, and a week it cannot ship does not cost it the contract. This is the whole
+ *   difference between a software company and a steel mill, and the model could not express it.
+ *
+ * PROJECT (booked to backlog, recognised as delivered) and ROYALTY (a share of someone else's
+ * volume) need a backlog STOCK to live on, which is IND10/IND11's; they land there rather than
+ * here so the stock has one owner.
+ */
+export type RevenueMechanism = 'UNIT_SALE' | 'SUBSCRIPTION';
 
 export interface SubUnitSpec {
   unitId: string;
@@ -292,7 +306,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'DIGITAL',
         capexBasketWeight: 0.15,
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
       {
         unitId: 'consumer_software',
@@ -300,7 +314,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0, CORPORATE: 0.1 },
         deliveryMode: 'DIGITAL',
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
     ],
   },
@@ -316,7 +330,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 60_000,
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
     ],
   },
@@ -437,7 +451,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.85, GOVERNMENT: 0, CORPORATE: 0.15 },
         deliveryMode: 'DIGITAL',
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
     ],
   },
@@ -477,7 +491,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.42, GOVERNMENT: 0.55, CORPORATE: 0.03 },
         deliveryMode: 'IN_PLACE',
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
     ],
   },
@@ -505,7 +519,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.04, GOVERNMENT: 0.12, CORPORATE: 0.84 },
         deliveryMode: 'IN_PLACE',
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
       {
         unitId: 'repair_and_maintenance',
@@ -513,7 +527,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.50, GOVERNMENT: 0.08, CORPORATE: 0.42 },
         deliveryMode: 'IN_PLACE',
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
     ],
   },
@@ -532,7 +546,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'IN_PLACE',
         householdPriceTier: 'STAPLE',
         productionLeadWeeks: 0,
-        revenueMechanism: 'UNIT_SALE',
+        revenueMechanism: 'SUBSCRIPTION',
       },
       {
         unitId: 'residential_construction',
@@ -646,6 +660,29 @@ export const WAREHOUSE_USD_PER_TONNE_YEAR = 40;
  * carry, and both were carrying one — measured: enterprise software held 159 units worth 5.9M,
  * spoiling like steel (§7.50).
  */
+/**
+ * IND2 — the share of a firm's revenue that is CONTRACTED rather than sold by the unit,
+ * weighted by its own product lines. A firm with no subscription line gets 0 and behaves exactly
+ * as it always has.
+ */
+export function recurringRevenueShare(lines: { subUnitId: string; revenueShare: number }[]): number {
+  let recurring = 0, total = 0;
+  lines.forEach((l) => {
+    const share = Math.max(0, l.revenueShare);
+    total += share;
+    if (byId.get(l.subUnitId)?.revenueMechanism === 'SUBSCRIPTION') recurring += share;
+  });
+  return total > 0 ? recurring / total : 0;
+}
+
+/**
+ * IND2 — what share of a contracted base is lost per week. The one primitive the mechanism
+ * needs: a subscription is defined by the fact that it ENDS unless renewed, and how fast it does
+ * so is what separates a sticky enterprise contract from a month-to-month one. Stated once, at a
+ * rate that implies a multi-year average contract life.
+ */
+export const SUBSCRIPTION_WEEKLY_CHURN = 0.006;
+
 export function isStorable(unitId: string): boolean {
   return (byId.get(unitId)?.deliveryMode ?? 'PHYSICAL') === 'PHYSICAL';
 }
