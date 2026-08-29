@@ -418,11 +418,26 @@ export function generateInitialCompanies(
         Healthcare: 2.0,
         Utilities: 6.0,
       };
-      // The multiples are RELATIVE capital intensity, and their ~2.5 average is load-bearing in
-      // its own right: revenue is gross output while `regionProductivityPerCapita` is value added
-      // per worker, and gross output runs a bit over twice value added in any real economy. So
-      // the level is right and normalizing it away (tried, reverted) puts employment 68% above
-      // the labor force.
+      // The multiples are RELATIVE capital intensity. Their ~2.5 unweighted average USED to be
+      // described here as load-bearing — revenue is gross output, `regionProductivityPerCapita`
+      // is value added per worker, and gross output runs a bit over twice value added in a real
+      // economy — and normalizing them away (tried, reverted) puts employment 68% above the
+      // labor force, which is still true.
+      //
+      // EMP (§7.111) measured what the mean actually is where the workers are, and it is not
+      // 2.5. Employment concentrates in the LOW multiples (headcount = revenue / multiple), so
+      // the employment-weighted ratio is **1.13x in the USA** — and for Consumer (3.86M jobs) and
+      // Industrials (1.71M) it is **0.92x and 0.93x**, i.e. gross output BELOW value added,
+      // which is impossible by definition.
+      //
+      // The model is internally consistent at that level, which is the real finding: its own
+      // input recipes carry a mean intensity of **0.138**, implying a gross-output multiplier of
+      // 1/(1−0.138) = **1.16x**. Production has almost no depth, so almost all of a firm's cost
+      // is labour — payroll is 61% of revenue against a real 30% — and every firm sits on the
+      // cost-of-capital knife edge the labor market sheds against. **Owner: CHAIN (multi-tier
+      // supply chains) with IND3; the multiples follow the recipes, not the other way round.**
+      // Do NOT rescale these to hit 2.5 while the recipes still say 1.16 — that would move the
+      // seed off the one thing it currently agrees with.
       const revPerEmployee = regionProductivityPerCapita * (revPerEmployeeMultiple[tmpl.sector] ?? 2.5);
       const employeeCount = Math.max(100, Math.round(tmpl.revBase / revPerEmployee));
       

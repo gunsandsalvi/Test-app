@@ -357,7 +357,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | # | Tier | Project | Why here |
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
-| 1 | foundation | **EMP — the labour collapse** | **PRIORITY (user, 2026-08-29).** Unemployment runs 10.6% → 19.3% in five weeks from seed and never recovers; every §6 unemployment-band violation is this. Now diagnosed to the exact mechanism (§7.109) rather than described from the seed side. Two of its three causes are fixed; the third is a design decision recorded below. Gates IND3/IND15 ("costs are people", "labor constrains output") and the value of IND-R1. |
+| 1 | foundation | **EMP — the labour collapse** | **PRIORITY (user, 2026-08-29). ROOT CAUSE FOUND (§7.111): production has no depth.** Revenue per worker is 1.13x value added per worker — 0.92x in Consumer, where the jobs are — because the model's own input recipes carry a mean intensity of 0.138 against a real ~0.5. Payroll is 61% of revenue, so every firm sits on the cost-of-capital line the labor market sheds against. **The remaining work is CHAIN's and IND3's**; the two labour-market symmetries EMP fixed (§7.110) stand on their own. Original framing: Unemployment runs 10.6% → 19.3% in five weeks from seed and never recovers; every §6 unemployment-band violation is this. Now diagnosed to the exact mechanism (§7.109) rather than described from the seed side. Two of its three causes are fixed; the third is a design decision recorded below. Gates IND3/IND15 ("costs are people", "labor constrains output") and the value of IND-R1. |
 | 2 | foundation | **IND — industry operating models** | Every non-financial corporate is one model with four coefficients — and banks skip even that: no payroll (a live rule-14 defect), no capex, no inputs, while 40 financial firms supply enterprise software into the goods auction (646% market share, measured). Prereq: BP1 (done). |
 | 3 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | Re-scoped by the review: the EBITDA-margin clamp [2%, 65%] means no firm can report an operating loss, so CAP's own mechanism cannot fire. That clamp goes FIRST. Runs with IND. |
 | 4 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. |
@@ -526,6 +526,14 @@ loan losses became the bank's OWN measured rate on the books that actually carry
 and a bank's seed revenue became what its opening balance sheet earns rather than a Pareto draw
 (IND-R5). Banks now open at 7% payroll-to-revenue and $644k revenue per employee, and survive to
 week 3 instead of week 2. **Neither moved the non-bank trip count**, which is the real driver.
+
+**RE-TARGETED 2026-08-29 by §7.111 — read that first.** The decision below was investigated and
+BOTH candidates were aimed at the wrong primitive. The binding one is that **revenue per worker
+is 1.13x value added per worker** (0.92x in Consumer, where the jobs are), because the model's own
+input recipes carry a mean intensity of 0.138 — production has no depth, so payroll is 61% of
+revenue and every firm sits on the cost-of-capital line however the wage index is solved.
+**EMP's remaining work is therefore CHAIN's and IND3's, not the labour market's or the seed
+wage's.** What is left below is kept as the record of what was ruled out.
 
 **THE OPEN DECISION — do not guess this one.** Fixing (1) alone by moving the seed index is
 tuning, which §6.4 forbids. The honest fix is (2): something has to absorb the workers the
@@ -1592,6 +1600,18 @@ move changes a multinational's consolidated earnings through both channels.
 ---
 
 ### CHAIN — Multi-tier supply chains  *(item 22; needs BP1, IND10/11)*
+
+**CHAIN INHERITS EMP's ROOT CAUSE (§7.111), and it is the largest measured defect in the model.**
+`recipeInputs` — "what a producer consumes per dollar of output" — has a **mean intensity of
+0.138** across the sixteen industries that carry one, implying a gross-output-to-value-added
+multiplier of **1.16x**. A real economy's intermediate share is 50-60%, giving 2.0-2.5x. So firms
+barely buy from each other, there is almost nothing between revenue and payroll, **payroll is 61%
+of revenue against a real ~30%**, and every firm sits on the cost-of-capital line the labor market
+sheds against — which is the whole of §5-EMP's unemployment collapse. Deepening the recipes is
+this project, and the capital-intensity multiples in `companyGenerator.ts` follow them afterwards
+(they currently assert 2.5x in a world that runs at 1.13x; the comment there records it). **Verify
+by re-measuring revenue per worker against productivity per worker: it must land at the recipes'
+own multiplier, and Consumer must stop printing gross output BELOW value added.**
 
 Recipes are one tier deep; real chains are graphs. BP1's registry carries a real BOM (components
 made from components); ORDERS — not final demand — propagate upstream through lead times and
@@ -4052,3 +4072,39 @@ that proved it, the lesson.
       defects worth fixing on their own. What remains is the seed LEVEL: §5-EMP's option (b),
       solving the opening wage index against the engine's own rule so that seed unemployment is
       an outcome rather than an aggregate accounting identity. **Take that next.**
+
+111. **EMP, third pass: the labour collapse is a PRODUCTION-STRUCTURE defect, and neither
+    candidate fix was aimed at it.** Option (b) — re-solve the seed wage index — was approved and
+    investigated. The investigation disproved it, which is the result.
+    - **The aggregate solve is a mean applied to a skewed distribution.** The seed sets
+      `w = [Σebitda + Σpayroll − Σcharge] / Σpayroll` = 1.280 (USA), but the employment-weighted
+      MEDIAN firm breaks even at 1.22, and **89% of employment sits at firms below the aggregate
+      index.** EBITDA is Pareto-distributed, so the sum is carried by a handful of giants while
+      the workers sit well underneath. That is a real defect in the solve — and fixing it is not
+      the answer either, because the level it would move to is set by something upstream.
+    - **THE ROOT: revenue per worker is 1.13x value added per worker.** Measured USA:
+      productivity $58.0k, revenue per employee $65.7k. For **Consumer (3.86M jobs) it is 0.92x
+      and Industrials (1.71M) 0.93x — gross output BELOW value added, which is impossible by
+      definition.** Payroll is therefore **61% of revenue** against a real ~30%, and a firm whose
+      labour bill is nearly its whole cost structure sits on the cost-of-capital line by
+      construction. That is why half the universe is below it however the wage index is solved.
+    - **And the model is INTERNALLY CONSISTENT at that level, which is the finding.** Its own
+      input recipes carry a mean intensity of **0.138** — `recipeInputs` is "what a producer
+      consumes per dollar of output" — implying a gross-output multiplier of
+      1/(1−0.138) = **1.16x**, which is the 1.13x measured. The seed's demand, its recipes and
+      its revenue-per-worker all agree. **The only thing claiming 2.5x was a comment**, and it
+      has been corrected in place to state the measurement instead (review shape 4: a comment
+      asserting the opposite of a measurement).
+    - **So the defect is that production has no DEPTH.** A real economy's intermediate share is
+      ~50-60%; this one's is 14%. Firms barely buy from each other, so there is almost nothing
+      between revenue and payroll. **Owner: CHAIN (multi-tier supply chains, §4) with IND3's cost
+      shapes** — and the capital-intensity multiples follow the recipes, not the other way round.
+    - **Explicitly NOT done, and why.** Rescaling the multiples to hit 2.5 while the recipes still
+      say 1.16 would move the seed off the one thing it currently agrees with. Scaling the demand
+      seed does nothing on its own — headcount is derived as `revenue / revPerEmployee`, so both
+      sides move and the ratio is invariant. And deepening every recipe IS CHAIN, not a seed
+      slice. **Neither §6.1's stated fix (derive the 0.35 demand share) nor §5-EMP's option (b)
+      touches the binding primitive**; that row stood for the model's whole life pointing at the
+      wrong one.
+    - **What EMP keeps:** the two symmetries from §7.110, which were genuine defects on their own
+      and improved week 1 measurably. What it hands over is a root cause with a number.
