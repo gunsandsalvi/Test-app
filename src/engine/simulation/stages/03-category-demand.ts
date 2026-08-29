@@ -16,7 +16,7 @@ import { pay } from './settlement';
 import { SME_WAGE_GAP } from '../../bootstrap/firms';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
-import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, totalOutputFromFinalDemand } from '../../../domain/industry-registry';
 import { WeeklyStepContext } from './context';
 
 export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -199,6 +199,19 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         else smoothingByCategory[su.unitId] = 0.08;
       });
     });
+
+    // CHAIN-E — everything above is FINAL demand (C + I + G, corporate = investment only). A
+    // product's real demand is that PLUS what other producers consume of it, and until this solve
+    // existed the intermediate half had nowhere to live: firms bid for their inputs in stage 05
+    // against a demand level that had no room for those bids (§7.117). Solved from the registry's
+    // own BOM matrix, so it moves when a recipe does and cannot drift from it (rule 3).
+    //
+    // Capex categories keep their carried-forward level as their FINAL demand here — their final
+    // half comes from real per-company capex bids in stage 05, not from this stage — but they are
+    // inputs to other products too (heavy equipment into repair, enterprise software into several),
+    // so they take the intermediate half like everything else.
+    const totalOutputTargets = totalOutputFromFinalDemand(allTargets);
+    Object.keys(allTargets).forEach((cat) => { allTargets[cat] = totalOutputTargets[cat] ?? allTargets[cat]!; });
 
     Object.keys(allTargets).forEach((cat) => {
       const target = allTargets[cat]!;

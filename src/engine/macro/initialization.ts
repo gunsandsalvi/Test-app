@@ -7,7 +7,7 @@ import { weeklyInterestExpenseUSD } from '../../domain/government';
 import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../../domain/central-bank';
 import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
-import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFromFinalDemand } from '../../domain/industry-registry';
 import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, SME_TIER_EMPLOYMENT_SHARE } from '../bootstrap/firms';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
@@ -119,13 +119,25 @@ export function createInitialCategoryDemand(
     });
   });
 
+  // CHAIN-E — C + I + G is FINAL demand, and a product's demand is final demand PLUS what other
+  // producers consume of it. Corporate demand above is investment only; without the second term
+  // gross output equals final demand by construction and no recipe can change it (§7.117). The
+  // registry's BOMs are a real matrix now, so the intermediate half is solved rather than stated.
+  const finalDemand: Record<string, number> = {};
+  Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+    subUnits.forEach(su => {
+      finalDemand[su.unitId] =
+        (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
+        + (totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0)
+        + (totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0);
+    });
+  });
+  const totalOutput = totalOutputFromFinalDemand(finalDemand);
+
   const cd: Record<string, any> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
-      const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
-      const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
-      const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
-      const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
+      const demandLevelUSD = totalOutput[su.unitId] ?? finalDemand[su.unitId];
       const unitPriceUSD = deriveSubUnitUnitPrice(demandLevelUSD, su.buyerMix, population, firmCount);
 
       cd[su.unitId] = createSeedCategoryDemandState(demandLevelUSD, gdpGrowth, unitPriceUSD);

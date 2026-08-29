@@ -1,5 +1,5 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
-import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector } from '../domain/industry-registry';
+import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf } from '../domain/industry-registry';
 import { callProtectionForIssue } from '../domain/call-protection';
 import { isInvestmentGrade } from './simulation/stages/asset-allocation';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
@@ -409,6 +409,11 @@ export function generateInitialCompanies(
       // primitive (not a fixed real-world dollar figure) via a structural per-sector
       // capital-intensity multiple, so headcount stays consistent with the population/labor
       // primitives regardless of the region's absolute economic scale.
+      // CHAIN-E: these are now the FALLBACK for a firm with no product lines — a bank, an
+      // insurer, an asset manager. A firm that produces something has its multiple DERIVED from
+      // what it produces, below, where its lines are known. A firm with no recipe has no derivable
+      // one, so these stay stated and are the last of this table. **Owner: IND3/IND-R4**, with the
+      // other stated financial ratios.
       const revPerEmployeeMultiple: Record<string, number> = {
         Tech: 4.0,
         Financials: 5.0,
@@ -418,26 +423,11 @@ export function generateInitialCompanies(
         Healthcare: 2.0,
         Utilities: 6.0,
       };
-      // The multiples are RELATIVE capital intensity. Their ~2.5 unweighted average USED to be
-      // described here as load-bearing — revenue is gross output, `regionProductivityPerCapita`
-      // is value added per worker, and gross output runs a bit over twice value added in a real
-      // economy — and normalizing them away (tried, reverted) puts employment 68% above the
-      // labor force, which is still true.
-      //
-      // EMP (§7.111) measured what the mean actually is where the workers are, and it is not
-      // 2.5. Employment concentrates in the LOW multiples (headcount = revenue / multiple), so
-      // the employment-weighted ratio is **1.13x in the USA** — and for Consumer (3.86M jobs) and
-      // Industrials (1.71M) it is **0.92x and 0.93x**, i.e. gross output BELOW value added,
-      // which is impossible by definition.
-      //
-      // The model is internally consistent at that level, which is the real finding: its own
-      // input recipes carry a mean intensity of **0.138**, implying a gross-output multiplier of
-      // 1/(1−0.138) = **1.16x**. Production has almost no depth, so almost all of a firm's cost
-      // is labour — payroll is 61% of revenue against a real 30% — and every firm sits on the
-      // cost-of-capital knife edge the labor market sheds against. **Owner: CHAIN (multi-tier
-      // supply chains) with IND3; the multiples follow the recipes, not the other way round.**
-      // Do NOT rescale these to hit 2.5 while the recipes still say 1.16 — that would move the
-      // seed off the one thing it currently agrees with.
+      // CHAIN-E — this comment used to end "the multiples follow the recipes, not the other way
+      // round", with nothing deriving them. They do now: see the headcount pass after product
+      // lines are assigned, which replaces this opening figure for every firm that produces
+      // something. What is left here is the opening estimate a firm needs before its lines exist,
+      // and the permanent value only for firms that never get any.
       const revPerEmployee = regionProductivityPerCapita * (revPerEmployeeMultiple[tmpl.sector] ?? 2.5);
       const employeeCount = Math.max(100, Math.round(tmpl.revBase / revPerEmployee));
       
@@ -835,6 +825,30 @@ export function generateInitialCompanies(
       });
       if (maxLine) {
         c.primarySubUnitId = maxLine.subUnitId;
+      }
+
+      // CHAIN-E — HEADCOUNT IS VALUE ADDED OVER PRODUCTIVITY, and now it can be.
+      //
+      // `regionProductivityPerCapita` is value added per worker; `annualRevenue` is GROSS output.
+      // Dividing one by the other needs the ratio between them, which is exactly
+      // `1 / (1 - recipe intensity)` for what this firm actually makes — so the seven stated
+      // per-sector multiples above were a guess at a number the registry now knows per product
+      // (§7.117). Deriving it makes employment equal `Σ line revenue x (1 - a_line) /
+      // productivity` — the firm's real value added over output per worker — so total employment
+      // is pinned to what the economy PRODUCES rather than to gross output through a separate
+      // multiple, and the two can no longer disagree.
+      //
+      // This is the half that makes CHAIN-E's demand change safe: intermediate demand raises
+      // every producer's revenue, and without this headcount would rise with it and put
+      // employment above the labour force (§6.1 records that exact failure from an earlier
+      // attempt). Revenue rises, value added does not, and employment follows value added.
+      const lines = c.productLines || [];
+      if (lines.length > 0) {
+        const productivityPerWorkerUSD = getRegionProductivityPerCapitaUSD(_regionId as RegionId);
+        const valueAddedUSD = lines.reduce((sum, line) =>
+          sum + c.annualRevenue * (line.revenueShare ?? 1) * (1 - recipeIntensityOf(line.subUnitId)), 0);
+        c.employeeCount = Math.max(100, Math.round(valueAddedUSD / Math.max(1, productivityPerWorkerUSD)));
+        c.baselineEmployeeCount = c.employeeCount;
       }
     });
   });

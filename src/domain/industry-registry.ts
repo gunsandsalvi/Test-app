@@ -661,6 +661,77 @@ allSubUnits.forEach((su) => {
   });
 });
 
+/**
+ * CHAIN-E — the input-output structure the BOMs now describe, and the two things it derives.
+ *
+ * `recipeInputs` is a real matrix once every product carries one (§7.117), and two numbers the
+ * model previously STATED fall out of it directly. Both were stated beside it, and disagreed
+ * with it, which is why §7.111 could measure three primitives "agreeing" at a level none of them
+ * actually set.
+ */
+
+/** What one dollar of this product consumes in total — the product's own intermediate share. */
+export function recipeIntensityOf(unitId: string): number {
+  return Object.values(byId.get(unitId)?.recipeInputs ?? {}).reduce((a, b) => a + b, 0);
+}
+
+/**
+ * Gross output per dollar of VALUE ADDED for this product, which is `1 / (1 - a)` and nothing
+ * else: value added is what is left of a dollar of output after the inputs it consumed, so
+ * `VA = X(1 - a)` and `X / VA = 1/(1 - a)`.
+ *
+ * This is the number `companyGenerator.ts` used to state as a seven-entry per-sector
+ * `revPerEmployeeMultiple` table whose own comment said the multiples "follow the recipes, not
+ * the other way round" while nothing derived them. Deriving it is what makes headcount equal
+ * `value added / productivity` — so total employment is pinned to what the economy actually
+ * produces, instead of to gross output through a multiple picked separately.
+ */
+export function grossOutputMultiplierOf(unitId: string): number {
+  const a = recipeIntensityOf(unitId);
+  if (!(a < 1)) defect(`recipe for ${unitId} consumes ${a.toFixed(3)} per dollar of output — a product cannot consume its own output entirely`);
+  return 1 / (1 - a);
+}
+
+/**
+ * CHAIN-E — total output implied by a vector of FINAL demand: the Leontief solve `X = F + A X`.
+ *
+ * The demand seed is `C + I + G` (see `macro/initialization.ts` and `03-category-demand.ts`),
+ * which is a FINAL-demand identity: corporate demand there is investment only, and **intermediate
+ * demand does not appear at all**. So gross output was pinned to final demand and the
+ * gross-output-to-value-added ratio was ~1 by construction, whatever any recipe said — which is
+ * why deepening every recipe 2.5x moved it by one part in a thousand (§7.117). Firms bid for
+ * their real inputs in stage 05, but the demand LEVEL those bids landed in had no room for them.
+ *
+ * Solved by iteration rather than inversion: `A`'s column sums are each product's own intensity,
+ * all well below 1, so the series converges geometrically and a fixed point exists. It is
+ * asserted rather than assumed.
+ */
+export function totalOutputFromFinalDemand(finalDemandBySubUnit: Record<string, number>): Record<string, number> {
+  const ids = allSubUnits.map(su => su.unitId);
+  const X: Record<string, number> = {};
+  ids.forEach(id => { X[id] = Math.max(0, finalDemandBySubUnit[id] ?? 0); });
+
+  for (let iter = 0; iter < 200; iter++) {
+    const next: Record<string, number> = {};
+    ids.forEach(id => { next[id] = Math.max(0, finalDemandBySubUnit[id] ?? 0); });
+    allSubUnits.forEach((producer) => {
+      const output = X[producer.unitId];
+      if (output <= 0) return;
+      Object.entries(producer.recipeInputs ?? {}).forEach(([input, intensity]) => {
+        next[input] += output * intensity;
+      });
+    });
+    let maxRelChange = 0;
+    ids.forEach(id => {
+      const denom = Math.max(1, Math.abs(next[id]));
+      maxRelChange = Math.max(maxRelChange, Math.abs(next[id] - X[id]) / denom);
+      X[id] = next[id];
+    });
+    if (maxRelChange < 1e-10) return X;
+  }
+  defect('the input-output matrix did not converge — some product consumes more than a dollar per dollar of output');
+}
+
 const CAPEX_ORDER = ['heavy_equipment', 'industrial_automation', 'commercial_construction', 'enterprise_software', 'commercial_fleet'];
 export const VIEW_CAPEX_SUPPLIER_WEIGHTS: Record<string, number> =
   Object.fromEntries(CAPEX_ORDER.map(id => [id, byId.get(id)!.capexBasketWeight!]));
