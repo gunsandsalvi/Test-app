@@ -78,6 +78,25 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // how initial seeding works in companyGenerator.ts.
     const priorAggregate = reg.bankingSector;
 
+    // OWN5: a bank's market share is the deposits it actually won, measured off the sheets at
+    // the start of this week. It was `0.35 x 0.72^rank`, fixed at seed and never revisited, and
+    // it decided real things: which bank a borrower's cash settles at, how the segment pools'
+    // balances are spread, and each bank's cut of dealer revenue. A bank that lost deposits kept
+    // its share of all three. The seed value survives only until the first week runs.
+    {
+      const depositsOf = (b: Company) => {
+        const sh = b.bankBalanceSheet;
+        if (!sh) return 0;
+        return Math.max(0, sh.depositsUSD) + Math.max(0, sh.corporateDepositsUSD ?? 0)
+          + Math.max(0, sh.institutionalDepositsUSD ?? 0) + Math.max(0, sh.smeDepositsUSD ?? 0)
+          + Math.max(0, sh.unmodeledDepositsUSD ?? 0);
+      };
+      const regionDepositsUSD = banks.reduce((a, b) => a + depositsOf(b), 0);
+      if (regionDepositsUSD > 0) {
+        banks.forEach((b) => { b.bankMarketShare = Number((depositsOf(b) / regionDepositsUSD).toFixed(6)); });
+      }
+    }
+
     // WS7: the household savings flow chooses between deposits and the money fund on last
     // week's real yield gap, BEFORE the banks' deposit flow posts — the deposits simply never
     // arrive at the banks. This is the funding competition WS7 exists to create.

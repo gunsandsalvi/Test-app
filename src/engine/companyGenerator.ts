@@ -374,6 +374,8 @@ export function generateInitialCompanies(
       let derivedRevBase = deriveInitialRevenueUSD(primaryCat, regionDemandSeed, rankInCategory >= 0 ? rankInCategory : 0, totalInCategory || 1);
 
       if (rawTmpl.sector === 'Banks') {
+        // OWN5: the seed share is the cohort's own firm-size curve (bootstrap/firms.ts) and it
+        // survives only until 02b measures the deposits each bank actually holds.
         const bankShare = rawTmpl.bankMarketShare ?? 0.25;
         const initReg = initialRegions[region];
         if (initReg?.bankingSector) {

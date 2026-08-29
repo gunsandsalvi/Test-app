@@ -1,4 +1,13 @@
-/** A bank's P&L: the region's banking sector scaled to this bank's own market share (moved verbatim from stage 08, BP1c). */
+/**
+ * A bank's P&L, off its OWN balance sheet.
+ *
+ * OWN5: it used to be the REGION's banking aggregate scaled by `bankMarketShare` — the sector's
+ * loan book, sovereign holdings and NIM, times a share fixed at seed. A bank whose own book had
+ * grown or shrunk earned the sector's average anyway, and the one thing this stage is supposed
+ * to distinguish (which bank is doing well) could not vary except through that constant.
+ * Every input below is now on `comp.bankBalanceSheet`, which 02b evolves per bank from real
+ * flows; the aggregate is only the fallback for a bank that somehow carries no sheet.
+ */
 
 import { random } from '../../../rng';
 
@@ -8,12 +17,18 @@ export const bankProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   const { comp, reg, state, ctx, entityById, annualInterest, taxRate, perShare } = input;
   let newRevenue = 0, newEbitdaMargin = 0, newEbitda = 0, newEbit = 0, newNetIncome = 0, newEps = 0;
 
-  const bs = reg.bankingSector;
   const share = comp.bankMarketShare ?? 0.25;
-  const totalAssets = bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD;
+  const own = comp.bankBalanceSheet;
+  const bs = own ?? reg.bankingSector;
+  const sovUSD = own
+    ? Object.values(own.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0)
+    : reg.bankingSector.sovereignBondHoldingsUSD * share;
+  const totalAssets = own
+    ? own.businessLoanBookUSD + own.consumerLoanBookUSD + sovUSD
+    : (bs.businessLoanBookUSD + bs.consumerLoanBookUSD) * share + sovUSD;
   const weeklyNim = bs.netInterestMarginPct / 52;
-  const impliedNimRev = totalAssets * weeklyNim * share;
-  const loanLosses = random() * 0.05 * totalAssets * share / 52;
+  const impliedNimRev = totalAssets * weeklyNim;
+  const loanLosses = random() * 0.05 * totalAssets / 52;
   // Smooth against last week's OWN revenue for noise damping (85/15, same order as other
   // week-to-week smoothing in this file) rather than a 98/2 blend anchored on this
   // company's original generation-time seed — that seed comes from the same small-scale

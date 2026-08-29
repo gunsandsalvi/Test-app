@@ -271,11 +271,17 @@ export function generateFirmSeeds(
     institutionalMarketShare: 0.07,
   }));
 
-  const bankShareRank0 = 0.35;
-  const bankShareDecay = 0.72;
+  // OWN5: a bank's opening share of its region is its own size on the SAME firm-size curve
+  // every other sector is generated from, normalised across the cohort. It replaces a private
+  // table, `0.35 x 0.72^rank`, which used a second concentration decay and summed to 0.914 —
+  // so 8.6% of every regional banking aggregate was carved out to no bank at all (rule 13).
+  // From week 1 the share is not this number at all: it is measured off the deposits each bank
+  // actually holds (02b).
+  const bankScaleSum = Array.from({ length: BANKS_PER_REGION },
+    (_, rank) => Math.pow(FIRM_CONCENTRATION_DECAY, rank)).reduce((a, b) => a + b, 0);
   for (let rank = 0; rank < BANKS_PER_REGION; rank++) {
     seeds.push(buildTemplate(region, 'Banks', rank, existingTickers, existingNames, {
-      bankMarketShare: Number((bankShareRank0 * Math.pow(bankShareDecay, rank)).toFixed(2)),
+      bankMarketShare: Number((Math.pow(FIRM_CONCENTRATION_DECAY, rank) / bankScaleSum).toFixed(4)),
     }));
   }
 
