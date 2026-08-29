@@ -495,3 +495,16 @@ fitted curve"). `equity-valuation.ts`'s no-earnings branch retires a formula tha
 loss HIGHER. `corporate-financing.ts`'s `DEPLOYMENT_MULTIPLE` is well-reasoned: "cheap debt does
 not create projects."
 
+### `stages/financial-clearing-engine.ts` — the engine states its own failure condition, and it is being met
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| **S19** | **A — promotes a §6.2 watch to a defect on the watch's own test** | `financial-clearing-engine.ts:157` + `MASTER_PLAN` §6.2 | The engine defines exactly when its damper stops being legitimate: *"it must never BIND persistently — a name clamped for weeks on end means the posted schedules disagree with the printed level and **the print is the damper, not the market**."* It ships the diagnostic to detect it. §6.2's watchlist row sets the same test in the same words — "not a defect on its own — a print held away from its solve is only wrong if **it stays there**" — and records 1,961 bound. **The harness now prints 2,549 persistently bound with a worst streak of 60 weeks in a 60-week run.** A streak covering the entire run is "it stays there". The row's own condition for promotion has been satisfied by the measurement printed beside it, and D5 is the same failure caught independently in the one market where somebody measured a specific number. **This is not five separate damper problems (S12) plus an FX problem (D5) plus a watchlist row — it is one finding: the books' posted demand does not reach the float they are asked to clear, so five markets print their smoothing constant instead of a price.** §7.18's want/have (institutional appetite ~6x the credit that exists, since narrowed to 3.8x) is the same shortage seen from the demand side. **Owner: G3 (8) for dealer capacity and SCALE (19) for float, with XB6 (11) for the FX leg.** |
+
+**Clean, and the engine itself is not the problem.** Its doctrine is right and stated: a
+reservation level below which a participant holds none, a `fullSizeStatRange` to scale in over, a
+`maxHoldingUSD` policy ceiling, a `maxNetPurchaseUSD` cash budget and a `minHoldingUSD` mandate
+floor — *"a floor on holdings, not on price: it says WHAT a mandate forces the holder to own, and
+leaves WHERE it clears entirely to the auction."* Saturation clearing plus a dealer residual is
+exactly rule 15. The defect is upstream of it, in how thin the demand side is.
+
