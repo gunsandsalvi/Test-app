@@ -313,6 +313,7 @@ metrics to watch rather than work.
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
 | 1.5 | foundation | **CASH — Corporate cash settles through banks** (found by §7.86; the banks' missing deposit base, and the last big "1$ is 1$" boundary) | none |
+| 1.6 | foundation | **SEG — The private tier's own books** (opened 2026-08-29 from §7.94: 47% of employment, 49% of revenue, no cash, no bank, no P&L) | CASH (SETL1–5) |
 | ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
@@ -1329,6 +1330,78 @@ the shortcut (§7.86).
 
 **Verify:** the identity holds per bank per week; deposits ≈ households + corporates; the
 wholesale share falls toward its real range; NIM survives a rate cycle with no band touched.
+
+---
+
+### SEG — The private tier's own books  *(Tier 1, item 1.6; opened 2026-08-29 from §7.94's measurement)*
+
+**The case, measured (§7.94):** the five private-sector segments are 47% of USA employment
+(4.61M of 9.84M) and 49% of private revenue (323B vs 335B named) — and they have no cash, no
+bank, no P&L. Their revenue walks by `demandSignal × 0.06` (an imposed growth rate, the exact
+shape rule 13 forbids), their wages are paid by the boundary (UNMODELED→HOUSEHOLD, ~143B/12wk —
+the largest line in the settlement boundary), their taxes accrue with no payer, the SME loan
+interest banks book has no payer, and `seg.debtUSD` drifts from the banks' SME_POOL principal
+because the loss leg updates only the bank side (rule 3, live). Found during recon: **stage
+05's aggregate-buyer split bills the segments' own purchases to households and the treasury**
+(segment fills are in `sellerTotalUSD` but in neither `corporatePaidUSD` nor the HH/GOV fill
+claims), so today the tier's capex is paid for by everyone except the tier.
+
+The user's charter, verbatim: *"give the private sector segments real books, with depth,
+dynamism, bottom up existence and development."* Half the economy stops being a declared
+statistic and becomes an actor with a balance sheet, on the same settlement rail as everyone
+else. The segments stay AGGREGATES (HC's carve discipline: named firms are born out of them; a
+segment is the mass of small firms below naming resolution) — but an aggregate can still hold
+real deposits, pay real wages, service real debt and die of real cash exhaustion. Rule 17: a
+segment is one entry in the region's segment list; nothing switches on segmentType outside its
+own profile data.
+
+**SEG1 — Books and banking.** `cashUSD` on `PrivateSectorSegment`; new PartyRef kind
+`SEGMENT {region, segmentType}` in the settlement layer; `smeDepositsUSD` on `BankingSector`,
+spread pro-rata across the region's banks by market share (a pool of small firms banks
+everywhere, unlike a corporate with a house bank). Identity gains the line; funding split and
+wholesale residual net it; 02b carries a reconciliation with its own reserve leg; seed backs
+the deposits with reserves, sized by the named private tier's measured cash/revenue ratio
+(carve-consistent — the tier's small firms hold cash like its named ones). HC births carve
+`cashUSD` (and the pool's debt share) with revenue and employment — conservation, extended to
+the balance sheet.
+
+**SEG2 — Every existing flow lands on the books.** (a) `partyOfKey` maps `PRIVATE:` keys →
+SEGMENT: auction sales proceeds arrive as segment cash instead of the boundary. (b) Segment
+purchases (capex bids, MANUFACTURING recipe inputs) pay SEGMENT→seller, and their fills leave
+the HH/GOV aggregate split — the mis-billing fix. (c) The private-tier wage residual in stage
+03 is deleted; each segment pays its own weekly wage bill SEGMENT→HOUSEHOLD from its book
+(employment × the region's occupation-mix wage). (d) SME loan interest becomes
+SEGMENT→BANK payments, excluded from the bank's evolution income credit (the SETL4 pattern —
+one leg, not two derivations). (e) SME origination stops writing `depositsUSD` in place: the
+loan+deposit pair books through `creditEventsThisWeek` at settlement, one statement. (f) The
+loss pass reduces `seg.debtUSD` alongside the pool loan — rule-3 drift closed by making the
+segment's debt the derived sum of the banks' pools each week. (g) The SME tax accrual in
+stage 11 becomes a real SEGMENT→GOVERNMENT payment on the same calendar.
+
+**SEG3 — Revenue with real payers.** A book that pays 143B of wages must be paid by somebody.
+Auction receipts (SEG2a) are the measured floor; the rest of the tier's declared revenue gets
+its two honest payers: the share of **company opex** that today posts to UNMODELED (services,
+local suppliers — real firms buy from the tier constantly) routes to SEGMENT by a
+segment-mix; and the share of **household consumption** serving categories the tier supplies
+routes HOUSEHOLD→SEGMENT the same way. What still has no payer after that is not revenue:
+`annualRevenueUSD` converges to 52× trailing measured receipts, and the `demandSignal × 0.06`
+walk is deleted. Bottom-up existence means the number is what was paid, nothing else.
+
+**SEG4 — Dynamism and development.** The weekly P&L (receipts − wages − inputs − interest −
+tax − capex) lands on cash through settlement automatically, because every leg is a payment.
+Development then reads the book, not a signal: capex pace gated by cash + granted credit
+(the transmission chain G2 built, now with a real budget constraint); employment follows the
+segment's own measured revenue growth and margin; distress is cash-measured (cash below k
+weeks of wages → capex cut, employment shed, pool PD up — the same cash-exhaustion default
+shape named firms have); a cash-rich, high-margin segment hires and invests. Births (HC8)
+keep carving winners out of growing pools — formation driven by measured profitability, not
+a formation-rate formula.
+
+**Verify (once, at close-out):** per-bank identity zero with the new line; the settlement
+boundary's private-tier wage line (~143B/12wk) collapses to zero; unresolvedUSD ≈ 0; segment
+cash stays positive-and-plausible (weeks-of-wages coverage) without any clamp doing the work;
+household/treasury spending no longer carries the segments' purchases; total employment and
+revenue conserved through the cutover week.
 
 ---
 
