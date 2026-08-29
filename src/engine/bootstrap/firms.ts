@@ -115,6 +115,20 @@ export const SME_MARGIN_DISCOUNT = 0.35;
  */
 export const SME_TIER_EMPLOYMENT_SHARE = 0.60;
 
+/**
+ * SEG — the SME wage gap: how much less a small firm pays per worker than the economy's average
+ * employer. A robust, well-documented fact in every developed economy (roughly a fifth to a
+ * quarter), and the same structural reason as the margin discount above — lower value added per
+ * worker, less scale, weaker bargaining position on both sides of the firm.
+ *
+ * It is load-bearing, not cosmetic. Paying every pool worker the economy-wide average income
+ * charged the tier a wage bill sized by its EMPLOYMENT share while it earns its REVENUE share,
+ * and those differ a lot by region: EUR's pools open with 58% of employment against 42% of
+ * revenue, so 82% of their revenue went out as wages before any other cost, they were insolvent
+ * from week 0, and the resulting layoff cascade took EUR unemployment past 30% by week 58.
+ */
+export const SME_WAGE_GAP = 0.22;
+
 /** The named tier's baseline EBITDA margin for a sector — the SME pools read this too, so one
  *  table serves both tiers. */
 export function sectorBaselineMarginPct(sector: Sector): number {

@@ -13,6 +13,7 @@ import { formSupplyRelationships } from './shared-helpers';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { decomposeGovernmentSpending } from '../../../domain/government';
 import { pay } from './settlement';
+import { SME_WAGE_GAP } from '../../bootstrap/firms';
 import { WeeklyStepContext } from './context';
 
 export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -85,7 +86,10 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       // deposits explosion was the FIELD-NAME bug plus a math guard, §7.94 — not this form).
       const regionEmployedForWages = Math.max(1, Object.values(reg.occupationPools ?? {})
         .reduce((a: number, pool: any) => a + (pool?.employed ?? 0), 0));
-      const perWorkerWeeklyUSD = ((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployedForWages) / 52;
+      // SEG3: at the SME tier's own wage level, which is really lower than the economy's average
+      // employer pays (SME_WAGE_GAP) — the same structural difference as its thinner margin.
+      const perWorkerWeeklyUSD = (((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployedForWages) / 52)
+        * (1 - SME_WAGE_GAP);
       (reg.smePools || []).forEach((seg) => {
         const wagesUSD = seg.employment * perWorkerWeeklyUSD;
         if (wagesUSD > 0) {

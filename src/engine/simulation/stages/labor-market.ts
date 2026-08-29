@@ -169,9 +169,14 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const vacancies = desiredWeeklyChange >= 0
         ? desiredWeeklyChange * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits
         : quits;
-      const layoffs = desiredWeeklyChange < 0
+      let layoffs = desiredWeeklyChange < 0
         ? Math.max(0, -desiredWeeklyChange * LAYOFF_SPEED_MULTIPLE - quits)
         : 0;
+      // SEG-D: a pool out of cash sheds staff, exactly as a named firm does above. Without this
+      // a pool whose costs outran its receipts kept its entire headcount indefinitely, financed
+      // by nothing — and the workers never reached the pools that could actually pay them, which
+      // is the reallocation that makes the tier's composition move at all.
+      if ((seg.cashUSD ?? 0) < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
       OCCUPATIONS.forEach((occ) => {
         const w = (mix as Partial<Record<OccupationType, number>>)[occ] ?? 0;
         if (w <= 0) return;

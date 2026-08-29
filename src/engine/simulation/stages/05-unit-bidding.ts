@@ -553,7 +553,10 @@ function buildRegionSupplyPlans(
         const demandTotal = siblings.reduce((a, su) => a + demandOf(su.unitId), 0);
         mixShare = demandTotal > 0 ? demandOf(subUnitId) / demandTotal : 1 / Math.max(1, siblings.length);
       }
-      const poolOfferUnits = ((pool.annualRevenueUSD / 52) * mixShare) / referencePriceUSD;
+      // Capacity is sized off the pool's GOODS revenue — what it actually sells in these books —
+      // not its total, which includes services that never pass through an auction.
+      const goodsRevenueUSD = measuredTotal > 0 ? measuredTotal : pool.annualRevenueUSD;
+      const poolOfferUnits = ((goodsRevenueUSD / 52) * mixShare) / referencePriceUSD;
       if (poolOfferUnits > 0.001) {
         plans.push({
           key: privateSegmentOfferId(regionId, owningIndustry),
@@ -995,9 +998,11 @@ function runSubUnitMarkets(
     if (pool && owningIndustry) {
       const amountUSD = results[regionId].salesByKey.get(privateSegmentOfferId(regionId, owningIndustry))?.amount ?? 0;
       const newAnnualizedUSD = amountUSD * 52;
+      // The BOOK is this pool's goods mix and its goods revenue. The pool's TOTAL revenue is
+      // owned by the sme-pools stage, which measures it from every receipt — a pool sells
+      // services too, and crediting only its auction sales here made the same number mean two
+      // different things depending on which stage last wrote it (rule 3).
       const book = pool.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
-      const priorUSD = book[subUnitId] ?? 0;
-      pool.annualRevenueUSD = Math.max(1, pool.annualRevenueUSD - priorUSD + newAnnualizedUSD);
       book[subUnitId] = newAnnualizedUSD;
       pool.salesDerivedAnnualRevenueUSDBySubUnit = book;
     }
@@ -1174,6 +1179,9 @@ function runSubUnitMarkets(
         const hhUSD = ((book.householdFillUnitsByRegion[buyerRegion] ?? 0) * book.clearedPriceUSD / claimUSD) * aggregateUSD * sellerShare;
         const govUSD = ((book.governmentSpendUSDByRegion[buyerRegion] ?? 0) / claimUSD) * aggregateUSD * sellerShare;
         pay(ctx, { payer: { kind: 'HOUSEHOLD', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: hhUSD, reason: 'household goods purchase' });
+        // SEG3: what households really spent on auctioned goods, so the sme-pools stage can tell
+        // it apart from the rest of their consumption budget — which is spent on services.
+        if (hhUSD > 0) ctx.householdGoodsSpendByRegion[buyerRegion] = (ctx.householdGoodsSpendByRegion[buyerRegion] ?? 0) + hhUSD;
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: govUSD, reason: 'government procurement' });
       });
     });

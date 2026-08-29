@@ -48,6 +48,10 @@ export interface WeeklyStepContext {
    * wage bill is the REMAINDER of the economy's, so it is derived from this rather than
    * re-derived from an employment measure of its own (two derivations of one number). */
   companyWagesPaidByRegion: Record<string, number>;
+  /** SEG3 — what households actually paid for auctioned goods this week, per region. The rest of
+   * their consumption budget is spent on services the taxonomy does not auction, which is the
+   * SME tier's largest real customer (see stages/sme-pools.ts). */
+  householdGoodsSpendByRegion: Record<string, number>;
   /** SETL3/4 — issuer id → ticker, so the register's payments name a real payer. */
   issuerTickerById: Map<string, string>;
   /** SETL2b — facilities WRITTEN or RETIRED this week, recorded where the tranche is created so
@@ -204,6 +208,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     paymentInstructions: [...(state.pendingPaymentInstructions ?? [])],
     creditEventsThisWeek: [],
     companyWagesPaidByRegion: {},
+    householdGoodsSpendByRegion: {},
     issuerTickerById: new Map(state.companies.map((c) => [c.id, c.ticker])),
     g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],

@@ -53,6 +53,29 @@ function lotArrayValueUSD(lots: InputLot[]): number {
   }
   return v;
 }
+
+/**
+ * SEG3 — which SME pool a firm buys its non-auctioned services from. Deterministic in the firm's
+ * ticker (no RNG draw, so the stream is untouched) and weighted by pool revenue, so the aggregate
+ * split across firms follows the real size of each industry's small-firm tier.
+ */
+function servicesSupplierParty(
+  ticker: string,
+  pools: { industry: string; annualRevenueUSD: number }[],
+  region: import('../../../types').RegionId
+): PartyRef {
+  const totalUSD = pools.reduce((a, p) => a + Math.max(0, p.annualRevenueUSD), 0);
+  if (!(totalUSD > 0)) return { kind: 'UNMODELED', region };
+  let h = 2166136261;
+  for (let i = 0; i < ticker.length; i++) { h ^= ticker.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let pick = ((h >>> 0) / 4294967296) * totalUSD;
+  for (const p of pools) {
+    pick -= Math.max(0, p.annualRevenueUSD);
+    if (pick <= 0) return { kind: 'SEGMENT', region, industry: p.industry };
+  }
+  return { kind: 'SEGMENT', region, industry: pools[pools.length - 1].industry };
+}
+
 /** The most of its earnings a board will pay out as dividends — real payout discipline. */
 const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
 
@@ -745,7 +768,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const wagesPaidUSD = opexOutflowUSD * wageShare;
       post('wages paid to households', -wagesPaidUSD, { kind: 'HOUSEHOLD', region: comp.region });
       ctx.companyWagesPaidByRegion[comp.region] = (ctx.companyWagesPaidByRegion[comp.region] ?? 0) + wagesPaidUSD;
-      post('other opex beyond auction settlements', -opexOutflowUSD * (1 - wageShare));
+      // SEG3: the rest of a firm's operating cost is SERVICES AND LOCAL SUPPLY — accountants,
+      // logistics, maintenance, contractors — and in every real economy the sector that sells
+      // them is the small-firm tier. It used to post to the boundary (measured: -55.6B over 24
+      // weeks with no payee), while the same tier was paying a full wage bill out of auction
+      // receipts alone and running its cash negative. Both halves were the same missing flow.
+      //
+      // The supplier is ONE pool, picked by the firm's own ticker weighted by pool size, rather
+      // than a fourteenth of the spend to each: a real firm buys its services from particular
+      // suppliers, and across two thousand firms the weights reproduce the sector split anyway.
+      post('other opex beyond auction settlements', -opexOutflowUSD * (1 - wageShare),
+        servicesSupplierParty(comp.ticker, reg.smePools ?? [], comp.region));
       post('inventory carrying cost', -carryingCostUSD);
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.
