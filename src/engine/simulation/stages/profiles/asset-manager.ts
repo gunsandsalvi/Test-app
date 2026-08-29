@@ -13,7 +13,7 @@ export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) 
   // company, its AUM IS that entity's marked book — totalAssetsUSD is recomputed weekly from
   // real cash and real holdings (institutional-balance-sheet.ts), so the drift-by-index
   // formula only survives for manager companies with no entity behind them.
-  const equityIndex = comp.region === 'USA' ? state.compositeIndices.us500 : comp.region === 'EUR' ? state.compositeIndices.euStoxx : comp.region === 'UK' ? state.compositeIndices.uk100 : state.compositeIndices.jp225;
+  const equityIndex = comp.region === 'USA' ? state.compositeIndices.usaComposite : comp.region === 'EUR' ? state.compositeIndices.eurComposite : comp.region === 'UK' ? state.compositeIndices.ukComposite : state.compositeIndices.jpnComposite;
   const marketGrowth = equityIndex.value / Math.max(1, equityIndex.historical[equityIndex.historical.length - 2] ?? equityIndex.value);
   const flows = (random() - 0.4) * 0.01;
   comp.aumUSD = instEnt

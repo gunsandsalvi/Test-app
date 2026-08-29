@@ -1,7 +1,7 @@
 /**
  * The published index set and the UI's tab keys.
  *
- * RULE 4, OPEN: the field names below (`us500`, `euStoxx`, `uk100`, `jp225`, `gsciCommodity`) are
+ * RULE 4, OPEN: the field names below (`usaComposite`, `eurComposite`, `ukComposite`, `jpnComposite`, `commodityComposite`) are
  * real-world index brands in the type itself, not only in the labels `macro/indices.ts` prints.
  * IDX renames both halves together.
  */
@@ -18,24 +18,24 @@ export interface IndexMetric {
 }
 
 export interface CompositeBenchmarkIndices {
-  us500: IndexMetric;
+  usaComposite: IndexMetric;
   usIgOas: IndexMetric;
   usHyOas: IndexMetric;
   
-  euStoxx: IndexMetric;
+  eurComposite: IndexMetric;
   euIgOas: IndexMetric;
   euHyOas: IndexMetric;
   
-  uk100: IndexMetric;
+  ukComposite: IndexMetric;
   ukIgOas: IndexMetric;
   ukHyOas: IndexMetric;
   
-  jp225: IndexMetric;
+  jpnComposite: IndexMetric;
   jpIgOas: IndexMetric;
   jpHyOas: IndexMetric;
   
   global10YBenchmark: IndexMetric;
-  gsciCommodity: IndexMetric;
+  commodityComposite: IndexMetric;
   
   techIndex: IndexMetric;
   financialsIndex: IndexMetric;

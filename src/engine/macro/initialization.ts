@@ -159,20 +159,24 @@ function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDeb
 }
 
 /**
- * RULE 4, OPEN: the names are real institutions — 'Federal Reserve', 'Bank of England', 'Bank of
- * Japan', 'European Central Bank', and the four countries — which §6.3-D records; "not numeric
- * data" does not exempt them, since rule 4 names real tickers and company names first.
- * Owner: IDX.
+ * IDX / RULE 4 — the institution and country NAMES are generated from the region code, the way
+ * every ticker and company name in this model already is. What stood here was 'Federal Reserve',
+ * 'Bank of England', 'Bank of Japan', 'European Central Bank' and four real countries: rule 4
+ * names real tickers and company names first, and "not numeric data" does not exempt a brand.
  *
- * FRM removed the second count: `sovereignRating` was ASSIGNED here (USA AA, UK AA, JPN A,
+ * The CURRENCY CODE and SYMBOL stay. They are identifiers the whole model keys on — `FxPair`,
+ * every conversion, every quote — and a currency code is a label for a unit of account, not an
+ * imported equilibrium. Renaming them would be a sweep with no rule-4 content.
+ *
+ * FRM removed the second count here: `sovereignRating` was ASSIGNED (USA AA, UK AA, JPN A,
  * EUR AAA), which is a real-world outcome. It is derived below from the seeded stack's own debt
  * ratio and deficit, through the same thresholds the weekly review uses.
  */
 const REGION_IDENTITY: Record<RegionId, { name: string; currency: string; symbol: string; centralBank: string }> = {
-  USA: { name: 'United States', currency: 'USD', symbol: '$', centralBank: 'Federal Reserve' },
-  UK: { name: 'United Kingdom', currency: 'GBP', symbol: '£', centralBank: 'Bank of England' },
-  JPN: { name: 'Japan', currency: 'JPY', symbol: '¥', centralBank: 'Bank of Japan' },
-  EUR: { name: 'Eurozone', currency: 'EUR', symbol: '€', centralBank: 'European Central Bank' },
+  USA: { name: 'USA', currency: 'USD', symbol: '$', centralBank: 'USA Central Bank' },
+  UK: { name: 'UK', currency: 'GBP', symbol: '£', centralBank: 'UK Central Bank' },
+  JPN: { name: 'JPN', currency: 'JPY', symbol: '¥', centralBank: 'JPN Central Bank' },
+  EUR: { name: 'EUR', currency: 'EUR', symbol: '€', centralBank: 'EUR Central Bank' },
 };
 
 // Structural fiscal/demographic/ownership coefficients shared across regions. These are

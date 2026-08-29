@@ -22,10 +22,10 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
 
   (Object.keys(state.regions) as RegionId[]).forEach((regionId) => {
     let equityRet = 0;
-    if (regionId === 'USA') equityRet = (state.compositeIndices.us500.change1W / Math.max(1, state.compositeIndices.us500.value)) || 0;
-    if (regionId === 'EUR') equityRet = (state.compositeIndices.euStoxx.change1W / Math.max(1, state.compositeIndices.euStoxx.value)) || 0;
-    if (regionId === 'UK') equityRet = (state.compositeIndices.uk100.change1W / Math.max(1, state.compositeIndices.uk100.value)) || 0;
-    if (regionId === 'JPN') equityRet = (state.compositeIndices.jp225.change1W / Math.max(1, state.compositeIndices.jp225.value)) || 0;
+    if (regionId === 'USA') equityRet = (state.compositeIndices.usaComposite.change1W / Math.max(1, state.compositeIndices.usaComposite.value)) || 0;
+    if (regionId === 'EUR') equityRet = (state.compositeIndices.eurComposite.change1W / Math.max(1, state.compositeIndices.eurComposite.value)) || 0;
+    if (regionId === 'UK') equityRet = (state.compositeIndices.ukComposite.change1W / Math.max(1, state.compositeIndices.ukComposite.value)) || 0;
+    if (regionId === 'JPN') equityRet = (state.compositeIndices.jpnComposite.change1W / Math.max(1, state.compositeIndices.jpnComposite.value)) || 0;
 
     const regionFirms = ctx.prevActiveFirms.filter(f => f.region === regionId);
 

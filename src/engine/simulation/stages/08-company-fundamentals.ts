@@ -33,6 +33,7 @@ import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market'
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
+import { measureBeta, regionIndexOf } from '../../macro/indices';
 import { pay, PartyRef } from './settlement';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
@@ -1505,11 +1506,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // maintained rather than used. An earnings surprise already moves the price through the
     // earnings it reports, and a downgrade through the cleared spread — the narrative is an
     // output of real mechanisms, not an input beside them.
-    // RULE 15, OPEN: `comp.stockPrice` arrives here as 07e's CLEARED price, and this floors it at
-    // $0.10. A bound is not a price. A company whose equity the market has decided is worthless
-    // prints ten cents instead of approaching zero, which then feeds market cap, index levels and
-    // the take-private arithmetic. Owner: IDX, with the index clamp.
-    let newStockPrice = isDefaulted ? 0.0 : Math.max(0.10, Number(comp.stockPrice.toFixed(2)));
+    // IDX / rule 15: no floor. `comp.stockPrice` arrives here as 07e's CLEARED price, and a
+    // company whose equity the market has decided is worthless approaches zero — the endgame is
+    // delisting and default, not a ten-cent bound that then feeds market cap, index levels and
+    // the take-private arithmetic. Only the non-negativity remains, which is arithmetic.
+    let newStockPrice = isDefaulted ? 0.0 : Math.max(0, Number(comp.stockPrice.toFixed(2)));
+    // IDX: beta is measured off this name's own cleared returns against its region's index —
+    // both series this model publishes every week — instead of being read from its sector label.
+    const newBeta = isPubliclyListed(comp)
+      ? measureBeta(comp.historicalPrices, regionIndexOf(state.compositeIndices, comp.region).historical, comp.beta ?? 1)
+      : (comp.beta ?? 1);
     const newForwardPE = newEps > 0 ? Number((newStockPrice / newEps).toFixed(2)) : comp.forwardPE;
     // The book-value x cycle-P/B branch that used to price banks and institutions here is GONE.
     // It was the last formula price setter for a listed cohort: a multiple looked up from the
@@ -1762,6 +1768,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       historicalFundamentals: histFundamentals,
       isDefaulted,
       stockPrice: newStockPrice,
+      beta: newBeta,
       historicalPrices: hist,
       marketCap: newMarketCap,
       oasSpreadBps: newOasBps,

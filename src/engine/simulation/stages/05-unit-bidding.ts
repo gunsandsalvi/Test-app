@@ -1439,7 +1439,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   if (!state.tradeInvoices) state.tradeInvoices = [];
   for (const inv of ctx.tradeInvoicesBooked) state.tradeInvoices.push(inv);
 
-  const realizedIndexVol = computeRealizedVol(state.compositeIndices.us500.historical ?? [], 13);
+  const realizedIndexVol = computeRealizedVol(state.compositeIndices.usaComposite.historical ?? [], 13);
   const baselineVol = 0.16;
   const usaRegime = ctx.updatedRegions.USA.cycleRegime;
   const regimeVolPremium = usaRegime === 'Recession' ? 0.08 : usaRegime === 'Slowdown' ? 0.03 : 0;
