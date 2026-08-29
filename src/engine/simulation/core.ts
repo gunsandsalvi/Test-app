@@ -13,6 +13,7 @@ import { runFxAndTradeStage } from './stages/06-fx-and-trade';
 import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
 import { buildHoldingsStore, finalizeHoldingsStore } from './stages/holdings-store';
+import { runSettlementStage } from './stages/settlement';
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
 import { runSovereignBondClearingStage } from './stages/07c-sovereign-bond-clearing';
 import { runLeveragedLoanClearingStage } from './stages/07d-leveraged-loan-clearing';
@@ -188,6 +189,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
   // After stage 11 so every treasury flow of the week has posted.
   run('central-bank', () => runCentralBankStage(state, ctx));
+  // CASH/SETL1: the week's payments settle. Every stage above has RECORDED what it owes and is
+  // owed; this is where deposits actually move and the banks square up in central-bank reserves.
+  // Last, because a week's payments settle at the end of the week — and because a stage reading a
+  // balance should see last week's settled position, not a half-settled one.
+  run('settlement', () => runSettlementStage(ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 

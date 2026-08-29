@@ -1291,7 +1291,26 @@ investment timing responds to depreciation treatment.
 
 ---
 
-### CASH — Corporate cash settles through banks  *(Tier 1; found by §7.86)*
+### CASH — One settlement layer, and money that is somebody's liability  *(Tier 1; found by §7.86; IN PROGRESS)*
+
+**Rescoped 2026-08-29 on the user's question — "would it make sense to have cash settlement as a
+step by itself?"** Yes, and it is the better architecture. Cash movement was scattered across ~15
+stages each mutating its own field, which is precisely how corporate cash sat outside the banking
+system undetected for the model's whole life. Now stages RECORD payment instructions
+(`payer, payee, amount, reason`) and one settlement stage executes them: deposits move, each
+bank's net position settles in central-bank reserves, the government banks at the CB (so tax
+dates drain reserves), and any counterparty the model lacks is named `UNMODELED` — a visible
+deposit stock to watch down rather than money appearing from nowhere. A new payment type is one
+instruction and no new plumbing (rule 17).
+
+**Slices:** **SETL1** the layer itself (DONE §7.87); **SETL2** corporate cash routes through it,
+with a loan creating a deposit rather than consuming reserves; **SETL3** dividends — today they
+leave the payer and arrive nowhere; **SETL4** coupons — today the issuer pays on 100% of
+principal while holders accrue independently off their own books (two derivations of one payment,
+rule 3), so the difference vanishes. Then the remaining flows, stage by stage, with the per-bank
+identity as the gate at every step.
+
+
 
 **The boundary:** a company's cash is a number on the company. When one firm pays another, both
 S5 ledgers move and no bank's balance sheet does — so `corporateDepositsUSD` reports a stock the
@@ -2933,3 +2952,25 @@ that proved it, the lesson.
       corporate-cash boundary, the absence of hedging (DER) and the §6 inflation escape driving
       policy to 10%. **Do not tune the bank.** §7.34's lesson again: a number that looks like one
       sector's defect can be another sector's missing mechanism, and the identity tells you which.
+87. **SETL1 — the settlement layer exists, and securities payments turn out to be the next
+    defect.** `stages/settlement.ts`: instructions in, netting, deposits moved on named banks,
+    each bank's residual settled in central-bank reserves, the treasury banking at the CB, and
+    the boundary sector holding its balances at banks pro-rata so it cannot punch a hole in the
+    CB's identity. Two residuals are computed rather than assumed — unresolved money (a party
+    with no account) and the central-bank identity — and both are zero.
+    - **Proven on a four-payment probe:** a same-bank payment nets to nothing inside the bank and
+      moves NO reserves; a cross-bank payment settles in reserves exactly; a tax payment drains
+      reserves into the treasury's account; a boundary payment lands as bank deposits pro-rata.
+    - **What the sweep found on the way (SETL3/SETL4's charter).** There is already a
+      paying-agent pattern — `payHoldersCash` records "the holders of X are owed Y" and a pass
+      distributes it pro rata — but it is wired only for call premiums and take-private takeouts.
+      **Dividends leave the payer and arrive nowhere** (no equity branch in
+      `accrueInstitutionalIncome`; §6 half-knows, listing "institutional dividend passthrough" as
+      an unbuilt channel). **Coupons are computed twice**: the issuer pays interest off its own
+      ladder while holders accrue off their holdings — and the issuer pays on 100% of principal
+      while holders receive only on what they hold, so the difference goes nowhere. The
+      government side names exactly this residual; the corporate side does not.
+    - **The real-world shape being reproduced**: issuer → paying agent → CSD → custodians →
+      holders, with a record date fixing who is paid and the cash leg settling in central-bank
+      money, DvP. The agents exist because an issuer does not know its holders; here the register
+      does, which is what makes the pro-rata distribution honest rather than assumed.

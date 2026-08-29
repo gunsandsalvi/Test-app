@@ -44,6 +44,11 @@ export interface WeeklyStepContext {
    * invariants harness can alert on PERSISTENT binding (a print that is the damper, not the
    * market). */
   damperBoundInstrumentIds: string[];
+  /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
+   * (see stages/settlement.ts). A stage must not move money any other way. */
+  paymentInstructions: import('./settlement').PaymentInstruction[];
+  /** What the last settlement run did — read by the invariants harness and the diagnostics. */
+  lastSettlementReport?: import('./settlement').SettlementReport;
   /** SCALE C1 — the week's holdings, swept once and shared by the five clearing books; present
    * only between the store's build (before 07b) and its write-back (after 07e). While it is
    * set, entity `itemizedHoldings` arrays are stale week-start snapshots: read positions
@@ -181,6 +186,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     earningsReportedThisTurn: [],
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
+    paymentInstructions: [],
     g2DeclinedOriginationUSD: { USA: 0, EUR: 0, UK: 0, JPN: 0 },
     primaryOfferingsWorking: [...(state.primaryOfferings ?? [])],
     primarySettlements: new Map(),
