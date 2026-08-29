@@ -4935,3 +4935,26 @@ that proved it, the lesson.
       test of whether you found the thing. Deflation was the SYMPTOM measured for a year; the
       cause is a physical shortage two stages upstream, and it only became visible once the
       recipes were deep enough to make the shortage bite.
+
+128. **The commodity market had two different bases for its two sides.** §7.127's supply famine,
+    one layer down and partly fixed.
+    - **Demand** for a commodity was `intensityShare x the whole category's output, summed over
+      four regions`. **Supply** was `the entire annual revenue of the two firms tagged with that
+      `producedCommodityId``. Two bases for one market (rule 3) — invisible while recipes were
+      shallow, and structural once CHAIN-D tripled intermediate demand: demand moved with the
+      category, supply stayed with two firms.
+    - **What the linkage actually says** is that a commodity is a SHARE OF A SUB-UNIT'S VALUE. So
+      both sides are now that share of the same sub-unit: its real cleared supply and its demand.
+      Whoever makes the good brings the commodity to market, not only the firms carrying the tag,
+      which now serve as the week-1 fallback before the market has ever cleared. Rule 9 held
+      carefully here — `totalUnitsSuppliedThisWeek` is weekly and `demandLevelUSD` annual.
+    - **Measured: upstream extraction's weekly supply 2,458 → 9,853 units** at week 12, and its
+      price collapse eases from **0.01x to 0.10x** of seed over twenty weeks. Harness stays green.
+    - **NOT CLOSED, and this is the honest remainder.** The input market still drains: upstream
+      extraction and refined products run inventory 0 and stage-04 fulfilment 0.00 from about
+      week 8, with demand still ~1.6x supply, and inflation still reaches −11.9% by week 10. **The
+      chain is now diagnosed end to end and two of its links are fixed; the third is that physical
+      capacity does not grow toward a market that is permanently short.** `weeklyCapacityUnits`
+      grows only with delivered net investment, which cannot answer a shortage of this size.
+      **Owner: CAP (item 4) for the capacity decision, NAT for extraction as an outcome of cost
+      and ore grade.** MAC(a) is blocked behind them; it was never about expectations or policy.

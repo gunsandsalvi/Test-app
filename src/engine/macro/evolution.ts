@@ -1018,16 +1018,42 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
 }
 
 function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyUSD: number): { ratio: number; supplyUnits: number; demandUnits: number } {
-  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
-  const publicWeeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
-  const weeklySupplyUSD = publicWeeklySupplyUSD + privateSegmentSupplyUSD;
-
   const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
-  const totalCategoryDemandUSD = linkage ? (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
-    const catDemand = (regions[r].categoryDemand as any)[linkage.subUnitId];
-    return s + (catDemand?.demandLevelUSD ?? 0);
-  }, 0) : 0;
-  const baselineWeeklyDemandUSD = (totalCategoryDemandUSD * (linkage?.intensityShare ?? 0)) / 52;
+  const intensityShare = linkage?.intensityShare ?? 0;
+
+  // §7.128 — BOTH SIDES OF THIS MARKET ON THE SAME BASE.
+  //
+  // Demand was `intensityShare x the whole category's output, summed over four regions`; supply
+  // was `the entire annual revenue of the two firms tagged with this commodityId`. Two different
+  // bases for the two sides of one market (rule 3), and the gap was invisible while recipes were
+  // shallow. CHAIN-D tripled intermediate demand for extraction, refining, chemicals and power,
+  // demand moved with it, supply did not, and the input market drained: measured USA week 12,
+  // upstream extraction supplying 2,458 units against 20,954 demanded, inventory zero, stage 04
+  // fulfilment 0.00 and its price down 92% — read as deflation for the model's whole life
+  // (§7.127).
+  //
+  // What the linkage actually says is that a commodity is a SHARE OF A SUB-UNIT'S VALUE. So its
+  // supply is that share of the sub-unit's real cleared supply and its demand is that share of
+  // the sub-unit's demand — whoever makes the good brings the commodity to market, not only the
+  // two firms carrying the tag. The elasticities below then move a ratio that means something.
+  const perRegion = (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).reduce((acc, r) => {
+    const catDemand = linkage ? (regions[r].categoryDemand as any)[linkage.subUnitId] : undefined;
+    if (!catDemand) return acc;
+    acc.demandAnnualUSD += catDemand.demandLevelUSD ?? 0;
+    // Rule 9: `totalUnitsSuppliedThisWeek` is WEEKLY and `demandLevelUSD` is ANNUAL.
+    acc.supplyWeeklyUSD += (catDemand.totalUnitsSuppliedThisWeek ?? 0) * (catDemand.unitPriceUSD ?? 0);
+    return acc;
+  }, { demandAnnualUSD: 0, supplyWeeklyUSD: 0 });
+
+  // Before this market has ever cleared (week 1) there is no supplied figure yet, so fall back to
+  // the tagged producers' own output, which is what the seed had.
+  const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
+  const taggedWeeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
+  const weeklySupplyUSD = perRegion.supplyWeeklyUSD > 0
+    ? perRegion.supplyWeeklyUSD * intensityShare
+    : taggedWeeklySupplyUSD + privateSegmentSupplyUSD;
+
+  const baselineWeeklyDemandUSD = (perRegion.demandAnnualUSD * intensityShare) / 52;
 
   const baselineHistoricalPrice = comm.historicalPrices.length > 0 ? comm.historicalPrices[0] : comm.spotPrice;
   const referencePrice = baselineHistoricalPrice > 0 ? baselineHistoricalPrice : comm.spotPrice;
