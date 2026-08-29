@@ -273,14 +273,16 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // of its issuer's index weight rather than of the deal, which starved the primary market by
       // construction (see the same fix and its measurement in 07d).
       const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'CORP_BOND');
-      const cashDemandWeightByCompany = new Map<string, number>();
+      // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
+      // walk companyTerms in order, so the id was pure overhead.
+      const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
       let totalCashDemandWeightUSD = 0;
-      companyTerms.forEach((t) => {
+      companyTerms.forEach((t, ti) => {
         const f = t.subIG ? entitySubIGFactor : 1;
         const structuralUSD = t.liveFloatUSD * entityShare * f;
         const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(t.id) ?? 0));
         const weightUSD = t.offeringUSD + gapToTargetUSD;
-        cashDemandWeightByCompany.set(t.id, weightUSD);
+        cashDemandWeightByIndex[ti] = weightUSD;
         totalCashDemandWeightUSD += weightUSD;
       });
 
@@ -316,7 +318,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
           maxNetPurchaseUSD:
             classBudgetUSD *
             (totalCashDemandWeightUSD > 0
-              ? (cashDemandWeightByCompany.get(t.id) ?? 0) / totalCashDemandWeightUSD
+              ? cashDemandWeightByIndex[ti] / totalCashDemandWeightUSD
               : 0),
         };
       });

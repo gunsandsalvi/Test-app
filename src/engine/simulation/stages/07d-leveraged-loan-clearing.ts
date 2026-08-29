@@ -258,13 +258,15 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // could HOLD it (53.7M of capacity against a 40.1M post-issue float) but could only FUND
       // 14.0M, so the solve ran past the sponsor's walk-away and every deal was pulled.
       const classBudgetUSD = stagePurchaseBudgetUSD(entity, 'LEVERAGED_LOAN');
-      const cashDemandWeightByCompany = new Map<string, number>();
+      // SCALE: indexed by companyTerms position, not a Map keyed by id — both loops already
+      // walk companyTerms in order, so the id was pure overhead.
+      const cashDemandWeightByIndex = new Float64Array(companyTerms.length);
       let totalCashDemandWeightUSD = 0;
-      companyTerms.forEach((t) => {
+      companyTerms.forEach((t, ti) => {
         const structuralUSD = t.liveFloatUSD * entityShare;
         const gapToTargetUSD = Math.max(0, structuralUSD - (currentHoldingByCompany.get(t.id) ?? 0));
         const weightUSD = t.offeringUSD + gapToTargetUSD;
-        cashDemandWeightByCompany.set(t.id, weightUSD);
+        cashDemandWeightByIndex[ti] = weightUSD;
         totalCashDemandWeightUSD += weightUSD;
       });
 
@@ -296,7 +298,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
           maxNetPurchaseUSD:
             classBudgetUSD *
             (totalCashDemandWeightUSD > 0
-              ? (cashDemandWeightByCompany.get(t.id) ?? 0) / totalCashDemandWeightUSD
+              ? cashDemandWeightByIndex[ti] / totalCashDemandWeightUSD
               : 0),
         };
       });

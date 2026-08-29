@@ -97,6 +97,38 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
   const companyById = new Map<string, Company>(
     [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c]));
 
+  // SCALE: every one of these is a pure function of one issuer's (or one region's) ladder, and
+  // was being recomputed once per HOLDING — the same ladder walked once per holder of the same
+  // paper, and the whole sovereign ladder once per gov-bond row. Same arithmetic once, memoized
+  // for the week; every holding then reads the identical number it always did.
+  const avgFixedCouponByIssuer = new Map<string, number | null>();
+  const avgFloatMarginBpsByIssuer = new Map<string, number | null>();
+  const sovCouponByRegion = new Map<string, Record<string, number>>();
+  const avgFixedCouponOf = (issuer: Company): number | null => {
+    let memo = avgFixedCouponByIssuer.get(issuer.id);
+    if (memo === undefined) {
+      const fixed = (issuer.debtTranches || []).filter((t) => t.rateType === 'FIXED');
+      const principal = fixed.reduce((a, t) => a + t.principalUSD, 0);
+      memo = principal <= 0 ? null
+        : fixed.reduce((a, t) => a + t.principalUSD * (t.couponRate ?? 0.05), 0) / principal;
+      avgFixedCouponByIssuer.set(issuer.id, memo);
+    }
+    return memo;
+  };
+  const avgFloatMarginBpsOf = (issuer: Company): number | null => {
+    let memo = avgFloatMarginBpsByIssuer.get(issuer.id);
+    if (memo === undefined) {
+      // G2: bank facilities pay their interest to the lending BANK, not to loan-market
+      // holders — excluded here exactly as they are from 07d's float.
+      const floating = (issuer.debtTranches || []).filter((t) => t.rateType === 'FLOATING' && !t.isBankFacility);
+      const principal = floating.reduce((a, t) => a + t.principalUSD, 0);
+      memo = principal <= 0 ? null
+        : floating.reduce((a, t) => a + t.principalUSD * (t.floatingMarginBps ?? 200), 0) / principal;
+      avgFloatMarginBpsByIssuer.set(issuer.id, memo);
+    }
+    return memo;
+  };
+
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let weeklyIncomeUSD = 0;
     entity.itemizedHoldings.forEach((h) => {
@@ -105,18 +137,12 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       const issuer = companyById.get((h as { instrumentId?: string }).instrumentId ?? '');
       if (!issuer) return;
       if (h.instrumentType === 'CORP_BOND') {
-        const fixed = (issuer.debtTranches || []).filter((t) => t.rateType === 'FIXED');
-        const principal = fixed.reduce((a, t) => a + t.principalUSD, 0);
-        if (principal <= 0) return;
-        const avgCoupon = fixed.reduce((a, t) => a + t.principalUSD * (t.couponRate ?? 0.05), 0) / principal;
+        const avgCoupon = avgFixedCouponOf(issuer);
+        if (avgCoupon === null) return;
         weeklyIncomeUSD += (notional * avgCoupon) / 52;
       } else if (h.instrumentType === 'LEVERAGED_LOAN') {
-        // G2: bank facilities pay their interest to the lending BANK, not to loan-market
-        // holders — excluded here exactly as they are from 07d's float.
-        const floating = (issuer.debtTranches || []).filter((t) => t.rateType === 'FLOATING' && !t.isBankFacility);
-        const principal = floating.reduce((a, t) => a + t.principalUSD, 0);
-        if (principal <= 0) return;
-        const avgMarginBps = floating.reduce((a, t) => a + t.principalUSD * (t.floatingMarginBps ?? 200), 0) / principal;
+        const avgMarginBps = avgFloatMarginBpsOf(issuer);
+        if (avgMarginBps === null) return;
         const regionPolicyRate = ctx.updatedRegions[entity.region]?.policyRate ?? 0.03;
         weeklyIncomeUSD += (notional * (regionPolicyRate + avgMarginBps / 10000)) / 52;
       }
@@ -130,7 +156,9 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       const issuerReg = ctx.updatedRegions[h.issuerRegion];
       if (!issuerReg) return;
       const bucket = h.instrumentId.replace(`${h.issuerRegion}-GOV-`, '');
-      const coupon = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey)[bucket] ?? 0;
+      let cb = sovCouponByRegion.get(h.issuerRegion);
+      if (!cb) { cb = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
+      const coupon = cb[bucket] ?? 0;
       weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * coupon) / 52;
     });
     if (weeklyIncomeUSD <= 0) return entity;

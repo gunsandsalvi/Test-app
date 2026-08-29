@@ -305,35 +305,63 @@ export function applyPendingCorporateActionSettlements(
   const hasCash = !!pendingCash && pendingCash.size > 0;
   if (pending.size === 0 && !hasCash) return;
 
+  // SCALE: the pending keys are `${instrumentType}:${instrumentId}` strings; the walk below used
+  // to REBUILD that string for every holding of every entity (two full passes of ~70k rows) just
+  // to probe a map that holds a handful of actions. Split the keys apart once instead and probe
+  // by the fields the row already carries — same lookups, no per-row strings. instrumentType
+  // never contains ':', so splitting at the first colon inverts the key exactly.
+  const splitKeys = (m: Map<string, number> | undefined): Map<string, Map<string, number>> => {
+    const out = new Map<string, Map<string, number>>();
+    m?.forEach((v, key) => {
+      const at = key.indexOf(':');
+      const type = key.slice(0, at);
+      let inner = out.get(type);
+      if (!inner) { inner = new Map(); out.set(type, inner); }
+      inner.set(key.slice(at + 1), v);
+    });
+    return out;
+  };
+  const pendingByType = splitKeys(pending);
+  const pendingCashByType = splitKeys(pendingCash);
+
   // Holders OF RECORD — the books as they stand before this week's actions scale them. A call
   // premium belongs to whoever owned the paper when it was called, so the shares are taken from
-  // the pre-action notionals and the scaling happens after.
-  const preActionTotalByKey = new Map<string, number>();
+  // the pre-action notionals and the scaling happens after. Keyed by the same (type, id) pair.
+  const preActionTotalByTypeId = new Map<string, Map<string, number>>();
   if (hasCash) {
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       entity.itemizedHoldings.forEach((h) => {
-        const key = `${h.instrumentType}:${h.instrumentId}`;
-        if (!pendingCash!.has(key)) return;
-        preActionTotalByKey.set(key, (preActionTotalByKey.get(key) ?? 0) + h.quantityOrNotionalUSD);
+        const inner = pendingCashByType.get(h.instrumentType);
+        if (!inner || !inner.has(h.instrumentId)) return;
+        let totals = preActionTotalByTypeId.get(h.instrumentType);
+        if (!totals) { totals = new Map(); preActionTotalByTypeId.set(h.instrumentType, totals); }
+        totals.set(h.instrumentId, (totals.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
       });
     });
   }
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
+    // Cheap pre-scan: an entity holding none of the touched instruments is returned as-is —
+    // the old path built (and threw away) a full copy of its holdings array to find that out.
+    let anyHit = false;
+    for (const h of entity.itemizedHoldings) {
+      if (pendingByType.get(h.instrumentType)?.has(h.instrumentId)
+        || pendingCashByType.get(h.instrumentType)?.has(h.instrumentId)) { anyHit = true; break; }
+    }
+    if (!anyHit) return entity;
     let touched = false;
     let cashUSD = 0;
     const newHoldings = entity.itemizedHoldings
       .map((h) => {
-        const key = `${h.instrumentType}:${h.instrumentId}`;
         if (hasCash) {
-          const owedUSD = pendingCash!.get(key);
-          const totalUSD = preActionTotalByKey.get(key) ?? 0;
+          const owedUSD = pendingCashByType.get(h.instrumentType)?.get(h.instrumentId);
+          const totalUSD = preActionTotalByTypeId.get(h.instrumentType)?.get(h.instrumentId) ?? 0;
           if (owedUSD !== undefined && totalUSD > 0) {
             cashUSD += owedUSD * (h.quantityOrNotionalUSD / totalUSD);
             touched = true;
           }
         }
-        const ratio = pending.get(key);
+        const ratio = pendingByType.get(h.instrumentType)?.get(h.instrumentId);
         if (ratio === undefined) return h;
         touched = true;
         // THE PRINCIPAL'S CASH LEG. A redemption is money: the issuer pays its lenders back and

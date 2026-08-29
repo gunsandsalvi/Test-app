@@ -296,7 +296,12 @@ function solveClearingStat(
   if (demandAtU(uLo) > targetUSD) return toStat(uLo); // oversubscribed even at the extreme
 
   // Slope-change events: where each entry's ramp rises out of its core, and where it caps.
-  const events: { u: number; dSlope: number }[] = [];
+  // Parallel number arrays sorted through an index, not an array of {u, dSlope} objects — the
+  // profiler put the object sort's comparator at ~24 ms/week across the books (SCALE). The
+  // index tiebreak reproduces the stable sort's order exactly, so equal-u events add their
+  // slope deltas in the same sequence and every solve returns the identical bits.
+  const evU: number[] = [];
+  const evD: number[] = [];
   let slopeAtLo = 0;
   for (let i = 0; i < n; i++) {
     const maxH = colMaxHolding[i];
@@ -314,17 +319,20 @@ function solveClearingStat(
       continue; // fully outside the bracket: contributes a constant across it
     }
     if (uRiseStart <= uLo) slopeAtLo += slope;
-    else events.push({ u: uRiseStart, dSlope: slope });
-    if (uRiseEnd < uHi) events.push({ u: uRiseEnd, dSlope: -slope });
+    else { evU.push(uRiseStart); evD.push(slope); }
+    if (uRiseEnd < uHi) { evU.push(uRiseEnd); evD.push(-slope); }
   }
-  events.sort((a, b) => a.u - b.u);
+  const evCount = evU.length;
+  const order: number[] = new Array(evCount);
+  for (let k = 0; k < evCount; k++) order[k] = k;
+  order.sort((a, b) => (evU[a] - evU[b]) || (a - b));
 
   // Walk the segments from the low end until the target falls inside one, then solve linearly.
   let uCur = uLo;
   let dCur = demandAtU(uLo);
   let slope = slopeAtLo;
-  for (let k = 0; k <= events.length; k++) {
-    const uNext = k < events.length ? events[k].u : uHi;
+  for (let k = 0; k <= evCount; k++) {
+    const uNext = k < evCount ? evU[order[k]] : uHi;
     if (uNext > uCur) {
       const dNext = dCur + slope * (uNext - uCur);
       if (dNext >= targetUSD && slope > 0) {
@@ -334,7 +342,7 @@ function solveClearingStat(
       dCur = dNext;
       uCur = uNext;
     }
-    if (k < events.length) slope += events[k].dSlope;
+    if (k < evCount) slope += evD[order[k]];
   }
   // Numerically flat all the way (target met only at the wide end): the saturation point is there.
   return toStat(uHi);
