@@ -318,6 +318,12 @@ metrics to watch rather than work.
 | 12 | depth | **ETF2 — A real price for ETF shares** | G3 |
 | 13 | depth | **HC3b — The product-market handover** | BP1 |
 | 14 | depth | **SCALE — Universe scale-up under a wall-clock budget** | profiling first (rule: measure) |
+| 14.1 | depth | **MNC — Multinational production** (added 2026-08-29; intra-firm trade is a third of the real thing and zero here) | IND, XB |
+| 14.2 | depth | **CHAIN — Multi-tier supply chains** (real BOM graph; orders, not demand, go upstream — the bullwhip becomes producible) | BP1, IND10/11 |
+| 14.3 | depth | **DYN — Entry, exit, and industry structure** (concentration as an outcome; capacity scrapping; make-vs-buy from measured contract failure) | IND, BP1 |
+| 14.4 | depth | **PROD — Firm productivity and innovation** (R&D buys real outcomes; reallocation as the growth engine) | IND |
+| 14.5 | depth | **CRE — Commercial property and leases** (space, landlords, lease liabilities, CRE loans on named banks) | HH, G2 |
+| 14.6 | depth | **TAXR — Corporate tax, really** (tax vs book depreciation, carryforwards; transfer pricing after MNC) | PUB; MNC for cross-border |
 | 15 | last | **S-final — Validation gate** | everything above |
 | 16 | last | **AU — Aurora, the UI rebuild** | everything above |
 
@@ -578,7 +584,7 @@ broad-market indexing meaningful (§6 watchlist).
 
 ---
 
-### IND — Industry operating models  *(Tier 1, item 3; needs BP1)*
+### IND — Industry operating models  *(Tier 1, item 3; needs BP1; slices IND10–19 added 2026-08-29 from the user's fulfilment/backlog/contract-breaks direction)*
 
 **The problem, stated plainly: every non-financial corporate in this model is the same firm.**
 
@@ -644,6 +650,64 @@ generator's own distribution. Re-measure first, then fix at source.
 on the private sector in aggregate, which no real balance sheet services. G2 itemized the bank
 book, so segment debt can be recalibrated to what real SME leverage on segment EBITDA and real
 bank capital can carry. Re-measure §7.18's want/have afterwards.
+
+**IND10 — Production time and WIP.** Fulfilment time as a stock: an order in production is
+work-in-progress between input lots and finished output, with a per-sub-unit production lead time
+in BP1's registry. XB3a priced the shipping half of delivery time; this is the making half, and
+for long-cycle industries (machinery, aerospace, construction) WIP IS the balance sheet.
+Verify: order-to-delivery = production + transit; WIP scales with lead time x throughput; quoted
+delivery lengthens as backlog grows.
+
+**IND11 — Backlog, cancellations, and contract breaks.** One mechanism, three sides. Stage 05's
+unfilled demand stops evaporating: a committed order persists on the seller's backlog AND as the
+buyer's commitment (rule 14), ages, and can be cancelled at a real cost — backlog cancellation in
+downturns is the amplifier that makes capital-goods cycles violent, so it must be able to happen.
+Chronic under-delivery lets the buyer terminate for non-performance and re-source through the
+merit order; damages are a real payable; renewal reprices at the current market; long contracts
+carry escalation/indexation so input costs pass through instead of silently assigning the
+inflation risk to one side. Verify: backlog reconciles orders − deliveries − cancellations; a
+demand shock shows cancellations, not just missing new orders; a chronic under-deliverer loses
+its contracts.
+
+**IND12 — Domestic trade credit: the working-capital cycle.** XB3a-5's invoices and payment terms
+extend inward: every B2B sale on terms, receivables and payables on both books, the
+cash-conversion cycle as each firm's real liquidity constraint — trade credit outstanding exceeds
+bank credit in reality — and a customer default hitting its suppliers' receivables, the real
+cascade channel. Follow-on once real: factoring / supply-chain finance / inventory finance.
+Verify: aggregate receivables = aggregate payables; a default propagates measured losses to named
+suppliers; long-cycle firms carry visibly more short-term funding.
+
+**IND13 — Assets under construction: capex lead time.** Completes §6's capex-becomes-capital
+design: a capital good ordered is construction-in-progress until it enters service quarters
+later — PP&E and the capacity it adds arrive AFTER the demand that justified them, which is the
+mechanism of every capacity cycle. Verify: capacity responds to investment at the registry's
+lead; an overbuild is producible.
+
+**IND14 — Reliability is a supplier attribute.** A stockout does not lose a week's sale, it loses
+the relationship: buyers re-source after repeated failure and STAY re-sourced, and reliability is
+priced into sourcing beside landed cost (half of §6's logistics-share gap). Verify: the
+supply-relationship graph rewires after sustained failure and does not rewire back on one good
+week.
+
+**IND15 — Labor constrains output.** Production = what the plant AND the staffed hours allow; a
+firm that cannot hire cannot produce — without this, HH5/6's labor market is decorative and
+IND3's "costs are people" industries are not real. Verify: an unfilled-vacancy firm's output
+measurably binds on labor, not only on PP&E.
+
+**IND16 — The distribution tier.** Wholesale/retail between the factory gate and the final buyer:
+a margin chain, minimum order sizes, local stocking — the rest of §6's logistics-share gap. May
+land as BP1 buyer-mix structure rather than new firms.
+
+**IND17 — Prepayments and deposits.** The other sign of IND2's deferred revenue: customers pay
+ahead (progress payments, annual subscriptions) — negative working capital as a real funding
+source, with the obligation on the seller's book.
+
+**IND18 — Seasonality.** Registry profiles for production (harvests) and demand (retail peaks);
+what makes commodity storage and the classical inventory cycle real rather than flat.
+
+**IND19 — Corporates buy insurance.** Property and business-interruption premiums paid to the
+real insurers; a loss event has a payer on both sides. Small; connects two sectors that already
+exist.
 
 **Verify:** a software firm holds no inventory and carries no inventory cost; a subscription
 business's revenue survives a quarter with no new sales while a unit seller's does not; operating
@@ -1116,6 +1180,82 @@ portfolio flow abroad and the pair moves in the carry direction; the global fund
 open interest matches the hedged cross-border bond stock; every foreign position has a cash leg in
 the right currency; the emergent foreign ownership share is stable and explicable; trade flows
 reconcile to who bought from whom.
+
+---
+
+### MNC — Multinational production  *(depth, item 14.1; needs IND, XB)*
+
+Every firm is single-region while intra-firm trade is roughly a third of real world trade — here
+it is zero. The FDI decision (build abroad vs export, priced off the landed-cost machinery XB3a
+already runs), foreign subsidiaries as real plants with local costs and labor, intra-firm trade
+at transfer prices, structural FX exposure (transaction and translation) making the hedging
+desks' client book real demand, and profit repatriation through the FX books. TAXR's rate
+differences later make location a priced choice.
+**Verify:** FDI responds to landed-cost differentials; an intra-firm trade share EMERGES; one FX
+move changes a multinational's consolidated earnings through both channels.
+
+---
+
+### CHAIN — Multi-tier supply chains  *(depth, item 14.2; needs BP1, IND10/11)*
+
+Recipes are one tier deep; real chains are graphs. BP1's registry carries a real BOM (components
+made from components); ORDERS — not final demand — propagate upstream through lead times and
+per-tier inventories, which is what makes the bullwhip producible instead of assumed; supplier
+concentration becomes chain-deep exposure (09 today sees only direct counterparties).
+**Verify:** upstream order volatility exceeds downstream demand volatility (the measured
+bullwhip); one supplier failure propagates through named tiers at the chain's own lead times.
+
+---
+
+### DYN — Entry, exit, and industry structure  *(depth, item 14.3; needs IND, BP1)*
+
+Concentration as an outcome. Entry: sustained high category margins attract entrants through HC's
+existing birth machinery, aimed at the category. Exit: sustained losses idle capacity (mothballed,
+restartable), then scrap it — the missing half of every capacity cycle. Structure as strategy: a
+firm repeatedly burned by contract breaks (IND11's measured record) integrates upstream — the
+hold-up problem, priced by experience; conglomerates divest what they cannot run, giving stage
+10's M&A its logic; IND7's antitrust is this project's regulator.
+**Verify:** category margins mean-revert through entry/exit rather than assertion; capacity
+leaves in downturns and its absence is visible in supply; integration follows measured contract
+failure.
+
+---
+
+### PROD — Firm productivity and innovation  *(depth, item 14.4; needs IND)*
+
+`rndExpense` buys nothing today. R&D becomes a real investment with uncertain outcomes — process
+(unit cost falls) or product (a new or better line through the registry) — and diffusion erodes
+any lead: temporary advantage, never a permanent monopoly (rule 4: import no equilibrium).
+Firm-level productivity DISPERSION plus reallocation of share to the productive (through IND6's
+real price competition) becomes the model's growth engine — which is what aggregate productivity
+growth mostly is.
+**Verify:** R&D intensity predicts margin/share outcomes noisily, not deterministically;
+aggregate productivity growth decomposes into within-firm and reallocation terms; cutting all R&D
+flattens growth over years, not weeks.
+
+---
+
+### CRE — Commercial property and leases  *(depth, item 14.5; needs HH, G2)*
+
+Firms occupy space nothing produces. A commercial property market: space as a produced,
+long-lived asset (the construction sector builds it), owned by landlords, rented on multi-year
+leases that are real tenant liabilities, financed by CRE loans on named banks' books — the
+classic systemic channel (vacancy → landlord default → bank capital) the model cannot express
+today.
+**Verify:** rents clear on vacancy; lease obligations sit on tenant books; a CRE bust marks bank
+capital through named loans.
+
+---
+
+### TAXR — Corporate tax, really  *(depth, item 14.6; needs PUB (done); MNC for the cross-border half)*
+
+A flat 21% on (EBIT − interest) prices no decision. Tax depreciation schedules vs book (the
+investment incentive), loss carryforwards (tax receipts fall FASTER than profits in downturns, so
+PUB's revenue finally feels recessions properly, and a recovering firm pays nothing for years),
+and — after MNC — profit booked where rates are lower, which is what makes transfer pricing
+matter.
+**Verify:** tax receipts are more cyclical than profits; carryforwards revive and expire;
+investment timing responds to depreciation treatment.
 
 ---
 
