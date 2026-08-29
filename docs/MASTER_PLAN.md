@@ -1697,6 +1697,41 @@ distances, value densities, tax and replacement rates, regulatory ratios (Basel 
 weights), the administered corridor spreads, or the seed-shape constants §7.4 sanctions — those
 were checked and left. The list above is what decides an outcome the model should produce.
 
+### 6.4 The clamp-removal programme — proposed 2026-08-29
+
+**The discipline, first.** A clamp is a missing mechanism wearing a number. Removing one without
+building its mechanism is not a fix — it was tried this afternoon on the wage and produced a
+30-50% unemployment cascade in all four regions, which the unemployment clamp then hid. So:
+**no clamp is deleted except in the same commit as the system that makes it unnecessary**, and
+every clamp still standing names the project that will delete it.
+
+**Not in scope — genuine mathematical guards (rule 2 permits these).** `Math.max(0, x)` on a
+quantity that cannot be negative; a probability held to [0,1]; `Math.min(matches, vacancies,
+seekers)` (a hire cannot exceed either stock — an accounting identity); `Math.max(1, divisor)`
+where the divisor is structurally positive. These were checked and are left. Everything below
+decides an outcome.
+
+| # | Project | Clamps it deletes | The system it adds |
+|---|---|---|---|
+| 1 | **LAB — labor demand, and the wage as a price** | unemployment [0,0.5]; wage index [0.1,20]; wage growth [−20%,+35%]; firm wage change MIN/MAX; desired employment growth ±25%; quit rate ×[0.3,2.5]; firm quit multiplier [0.25,3.0] | A firm hires while the revenue a worker adds exceeds the wage it must pay, and sheds when it does not — labor DEMAND responds to affordability. The wage then clears: excess demand raises the going rate, excess supply lowers it, and the quantity adjusts, so no bound is needed on either. The wage LEVEL anchor moves off `productivity × LABOR_SHARE_OF_OUTPUT` onto each firm's own value added per worker. |
+| 2 | **OWN — ownership is an outcome** | institutionalShare [0.10,0.65]; bankShare [0.01,0.10]; non-household ownership cap 0.85; the three-share rescale-to-1 | Delete `OWNERSHIP_SHARES`. Banks and institutions hold what they actually bought in the five clearing books; **tradable float = outstanding − what real holders hold**, not `1 − an imposed bankShare`. Household direct equity becomes the residual of a real register rather than `1 − institutionalShare`. Also retires `bankMarketShare = 0.35 × 0.72^rank`: a bank's share of deposits is the deposits it won. |
+| 3 | **IDX — an index is a statistic** | equity index change ±15%/wk | Nothing to build: the index is the cap-weighted move of its own constituents, whatever that is. Removing it makes §6's equity runaway visible in the published index instead of masked. Same commit renames the real-world brands (rule 4). |
+| 4 | **CAP — production and capacity decisions** | production throttle [0.3,1.0]; production response ×[0.5,2.0]; capacity growth ±2%/wk; cost rate [0.40,0.98] | Production is decided by the firm's own inventory position, the cleared price against its own measured unit cost (it already carries per-lot input provenance), and its cash. Capacity is DERIVED from PP&E, which IND1 already grows by delivered capex — so it stops being a rate that is walked and clamped. A firm that cannot cover unit cost stops producing rather than throttling to 30%. |
+| 5 | **CRD — credit prices cleared, ratings handle zero earnings** | CDS spread [10,5000] bps; leverage [0,100]; coverage [±50]; consumer tier rates by `cci × 0.05` | CDS becomes a real traded instrument in a book (needs G3's dealer). Leverage and coverage are clamped only because EBITDA can pass through zero — the honest fix is in `determineCreditRating`: a firm with no earnings is a distressed rating by definition, not a ratio held at 100. Consumer credit is priced per pool by the lending bank, as HH3's pools already allow. |
+| 6 | **HSG — a housing market that clears** | house price index [0.5,3.0]; credit factor [0.5,1.5]; the `\|\| 400000` price fallback | Houses clear in a book like everything else: households bid out of real income and the mortgage credit banks actually grant, against the real stock HH2 already put on the balance sheet, and the price is what clears. The `(1 − supplyDemandRatio) × 0.002` drift goes. |
+| 7 | **MAC — expectations and policy without bounds** | expected inflation [−20%,+50%]; Taylor output/inflation gaps ±10%; policy rate ceiling 0.20; effective tax [10%,50%]; consumer confidence [30,170]; savings cap 90% of disposable | Two halves. (a) Close §6's inflation escape (G1b) at its root — these bounds exist to survive it. (b) Make consumer confidence and the savings rate OUTCOMES: saving is what cohorts do not spend once budgets are real receipts, and confidence is a statistic read off measured unemployment and real income rather than a driver with coefficients 150/200/80/1000. **The effective lower bound stays** — a posted policy floor is the real-world mechanism (rule 1's named exception); the 0.20 ceiling is not. |
+| 8 | **NAT — nature transmits, it does not impose** | commodity supply drift ±4%; inventory [0,100]; population growth [−3%,+4%]; migration ±1% | Weather's stated `gdpImpactPct` and `inflationImpactPct` are deleted: a drought cuts a real crop YIELD, the commodity book prices it, input costs rise, and the price index measures it — the chain `macro/evolution.ts:75` already says is the real one. Commodity supply comes from real producer capacity. Population growth is DEM's. |
+
+**Ordering and why.** 1 first: it unblocks the work in flight and its clamp is actively hiding
+today's defect. 2 next: it is the largest single distortion, feeding the tradable float of all
+five clearing books. 3 is an afternoon and can go any time. 4-6 are real market builds, each
+independent. 7 waits for the inflation escape. 8 is small and last.
+
+**Verification, per project:** the harness measured ONCE at each project's close (rule 12), plus
+the specific reading that the deleted clamp used to hide — for LAB, that unemployment prints as
+an outcome and stays plausible without a bound; for IDX, what the index does when nothing holds
+it; for CAP, that a loss-making firm stops rather than throttles.
+
 ## 7. Record & lessons (do not re-learn)
 
 Numbering is referenced from §5 and §6 — never renumber. Each entry: what was wrong, the number
