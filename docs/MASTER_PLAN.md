@@ -315,7 +315,7 @@ metrics to watch rather than work.
 | 1.5 | foundation | **CASH — Corporate cash settles through banks** (found by §7.86; the banks' missing deposit base, and the last big "1$ is 1$" boundary) | none |
 | ✓ | foundation | ~~**SEG — The SME tier, keyed to the registry**~~ *(CLOSED §7.95–97; opened and rescoped 2026-08-29)* — one pool per region × industry, trading in every market, on the settlement rail. Harness 59 → 36. | CASH (SETL1–5), BP1 |
 | ✓ | foundation | ~~**BP1 — One industry registry + the rule-17 modularity contract**~~ *(CLOSED §7.83-84)* — leaves one named follow-up: the USA bank cohort's NIM+capital breaches (§6) | none |
-| 2 | foundation | **OWN — Ownership is an outcome** (§6.4 project 2; the largest single distortion — it sets the tradable float of three clearing books) | none |
+| ~ | foundation | **OWN — Ownership is an outcome** (§6.4 project 2) — OWN1–OWN6 done (§7.98); **OWN7 open**: the corporate over-holding the deleted clamp exposed (§6.1) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
 | ~ | markets | **XB5 — Central-bank FX reserves** (small; blocks XB's close — see §6) | XB |
@@ -1486,11 +1486,14 @@ are written, and read by nobody who decides anything.
 OWN1 register + shares become statistics; OWN2 floats; OWN3 the bank sovereign book; OWN4 the
 household residual; OWN5 `bankMarketShare`; OWN6 the seed and the deletion.
 
-**Verify (once, at OWN6).** The harness. Plus the readings the shares were hiding: what each
-measured share actually is once nothing assigns it; that the corporate-bond and equity floats
-opening ~38%/3% wider do not simply re-price the whole book (if they do, that is real information
-about how thin the demand side is, per §7.3); and that no bank's sovereign book is set by anything
-but its own funding.
+**Verified once at OWN6 (§7.98).** Harness 88 → 488 against 86817cb; 73 are the §6 seed-employment
+row (improved from 81) and 357 are one new family — the corporate books holding ~13% more paper
+than exists. Both of its invariants read ZERO before OWN, so the widened floats are over-placing
+rather than revealing. **OWN7 closes it**, in this order: first fix the harness check itself
+(`invariants.ts:59-67` sums a region's entities' FOREIGN holdings against DOMESTIC outstanding,
+which since XB1 is the wrong comparison), then find where a corporate tranche is repaid without
+the holder's book shrinking — the corporate twin of §7.10. **Do not reinstate a float carve to
+make the numbers fit.** Full write-up in §6.1.
 
 ### CAL — Payment calendars  *(Tier 3, item 11)*
 
@@ -1653,6 +1656,11 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 | **THE USA BANK COHORT — DIAGNOSED (§7.86): NOT A BANK DEFECT** | **Re-measured at BP1's close (§7.84): 41 of the harness's 47 violations are this one story** — 26 weeks of USA bank NIM out of band (running NEGATIVE from w38, reaching −0.057) and 15 weeks of USA bank capital ratio out of band. This row previously read "effectively resolved, one breach-week at w60, do not open work unless it regrows": it regrew. Two independent measurements now point at it (the FX sweep first, §7.82, then BP1's close-out), and a bank earning a negative interest margin for twenty-three consecutive weeks while its capital ratio leaves its band is a mechanism defect, not a band-tuning question. **Do not widen the bands.** **Diagnosed 2026-08-29 (§7.86) — the bank arithmetic is largely right; the collapse is produced by three things none of which the bank owns.** (1) **Corporate cash lives outside the banking system**: a company payment moves the payer's and payee's S5 ledgers and no bank's book, so `corporateDepositsUSD` is a VIEW with no matching asset — proven by attempting the opposite, which broke the per-bank identity by exactly that line's size (1,012 violations, reverted). Households are therefore the ONLY deposit base, covering ~52% of assets, so the banks run ~48% wholesale funding against a real-world ~10-20%. (2) **That wholesale funding reprices instantly with policy while the asset book cannot** — 506B of household loans at fixed WAC plus ~290B of sovereigns at old coupons — so the margin inverts as soon as policy passes the book's yield: a real unhedged duration mismatch, and the model has no hedging (**DER**). (3) **Policy reaches 7-10% only because of the §6 inflation escape** (G1b); at the seed's 3.8% the margin is healthy (0.028). **The fix is the corporate-cash boundary, not the bank** — see §5-CASH. Do not touch NIM until it lands. |
 
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
+| **The corporate books hold more paper than exists** | **Opened by OWN, measured at its close (2026-08-29).** Harness 88 → 488, and 357 of the increase is ONE finding wearing two invariants: `Ownership conservation violated (corpBondOwnership): accounted≈1.13, impliedHousehold≈−0.13` (216) and `real books hold B against B outstanding (2–8% over) — a ledger is minting claims` (141). Both were at **zero** before OWN, verified by an A/B against 86817cb. Not a pre-existing disease the clamp was hiding — the conservation check genuinely passed. Two candidate causes, not yet separated: (a) OWN2 widened the corporate floats from `1 − 0.28` to the whole outstanding, so the slack that used to absorb any lag between a tranche being repaid and the HOLDER's book shrinking is gone — the corporate twin of §7.10's maturing-sovereign defect, where tranches left the issuer's books but not their holders'; (b) the harness's own check sums a region's entities' holdings of FOREIGN paper against DOMESTIC outstanding (`invariants.ts:59-67` filters `e.region === regionId` and then counts every holding regardless of `h.issuerRegion`), which since XB1 is not the right comparison. **(b) must be fixed first** — it is a measurement bug and until it is out of the way neither number means anything. Then close (a) at the root: find where a corporate tranche is repaid or matures without the holder's book moving with it. **Do not reinstate a float carve to make the numbers fit.** Owner: OWN7. |
+| **Bank employees are paid by nobody** | **Found 2026-08-29 while answering why banks sit outside the corporate scaffolding.** `labor-market.ts:495` filters employers on region and active status only, so banks hire, fire, lose quits and count toward `employedByOcc` and the region's unemployment rate exactly like any other firm. But stage 08 sends a bank to `profiles/bank.ts` and SKIPS the whole operating branch (`08-company-fundamentals.ts:314-322`), and `weeklyPayrollUSD` is computed at line 565 INSIDE that branch — so it stays 0 from line 271, no payroll is charged against bank EBITDA, and `wagesPaidUSD` at line 789 posts **no wage payment instruction at all**. Headcount with no wage leg: a rule-14 one-sided flow that inflates measured employment against measured household income, and it does so in the same statistic LAB just made bottom-up. Small, self-contained and worth doing before the next measurement of either. |
+| **The dealer desk is one regional book pretending to be four** | **Found 2026-08-29.** `corpBondDealerInventory` / `sovBondDealerInventory` / `loanDealerInventory` are written ONLY on `reg.bankingSector` (07b:416, 07c:480, 07d:391, 07f:315), and `02b-bank-diversification.ts:369-374` then copies that same regional array onto every bank's sheet — four banks each carrying an identical book that is actually one. The P&L is split by `bankMarketShare` (07b:421, 07c:484, 07d:396, 07f:293). Two rules at once: rule 3, one real thing with two representations and nothing reconciling them; rule 13, no bank DECIDED to take that inventory and no bank's capital constrains it — the same "a share owning nothing" pattern OWN spent six slices removing from the ownership registers. Note the split itself is right and must survive: an investment book (`sovereignBondHoldingsByTenor`) and a market-maker's inventory are genuinely different businesses, and rule 15's saturation clearing needs somewhere to put the residual. What is wrong is that the desk has no owner. **Owner: G3 — this is its opening finding.** |
+| **Banks opt out of the corporate operating model, not just its P&L** | **Found 2026-08-29.** `profileKeyOf` routes a bank to `profiles/bank.ts`, which returns the whole P&L and bypasses the operating branch entirely. What a bank therefore never gets: payroll (row above), capex, PP&E, depreciation, inventory, product lines, and any purchase of inputs — so a bank buys none of the professional services, facilities or repair that SEG just made real inputs for every other firm. Its margin is a hardcoded `newEbitdaMargin = 0.40` regardless of what its book earns or its funding costs, and loan losses are `random() * 0.05 * assets` rather than the defaults its own named `businessLoans` borrowers actually experience. OWN5 fixed the worst of it (the P&L reads the bank's own sheet instead of the region's aggregate scaled by a constant) but the profile is still a REPLACEMENT for the operating model rather than a specialisation of it. Rule 17's intent is that a profile varies the revenue MECHANISM and cost SHAPE while payroll, capex, inputs and settlement stay common to every firm. **Owner: IND**, as the slice that decomposes the operating path into profiles — banks join it rather than skipping it. |
+| **The institutional sector's opening size is still assigned** | **Named by OWN6 (2026-08-29), with its size and its closing slice.** `INSTITUTIONAL_OPENING_BOOK_SHARE = { equity 0.42, corpBond 0.45, sovBond 0.30 }` in `simulation/initialization.ts` — read once at week 0, never weekly, and NOT an ownership share (the registers are measured; nothing in the engine reads one to decide anything any more). It survives because the seed is circular: an entity's `totalAssetsUSD` is `institutionalMarketShare × the sector aggregate`, and the sector aggregate is these three numbers times the market. Breaking it means anchoring an institution on what it OWES — the pension and insurance claims households hold against it — and `beneficiaryLiabilityUSD` is today derived FROM assets (`household-balance-sheet.ts:73`), so that anchor does not exist yet. **Closing slice:** make `beneficiaryLiabilityUSD` a real claim built from the household side, then size the entity from it. Until then this is a named gap with a size, an owner and a scheduled close, which is what rule 13 requires of one. |
 
 ### 6.2 Watchlist — measure, do not fix
 
@@ -1690,9 +1698,9 @@ context of each hit read. Ordered by how much they decide.
 | `bootstrap/labor-and-wages.ts:70` | `getBaseAnnualWageUSD` = productivity × labor share. **The wage LEVEL is an accounting identity**, not a market outcome — the root of the employment collapse when wages became real payments. | 13 |
 | `macro/household-cohorts.ts` | **Nine** imposed distribution tables (`TIER_OCCUPATION_MIXES`, `TIER_WAGE_MULTIPLIER`, `TIER_TAX_RATE_MULTIPLIER`, `TIER_TRANSFER_WEIGHT`, `TIER_RESIDUAL_RECEIPT_WEIGHT`, `TIER_DEBT_SERVICE_WEIGHT`, `TIER_SPEND_MIX`, `TIER_BALANCE_SHEET_WEIGHTS`, `TIER_WEALTH_MPC`). The whole household cross-section — who earns, owns, pays tax and spends on what — is stated. `TIER_BALANCE_SHEET_WEIGHTS` is documented "US SCF-shaped": an observed real-world distribution. `TIER_SPEND_MIX` is "calibrated so the blend reproduces" a target. | 4, 13 |
 | `macro/initialization.ts:29` | `createWealthDistribution` — income and net-worth shares per tier, savings rates, equity exposure, `netWorth = income × 3.5`. The wealth distribution is an input. | 4, 13 |
-| `macro/initialization.ts:183` | **`OWNERSHIP_SHARES`** (equity/corp/sov × bank/institutional/central-bank). Consumed as `tradableShare = 1 − bankShare` in **07b, 07d, 07e** and as `bankShare × outstanding` in **07c** — an imposed share decides how much of every instrument can be traded and what banks target. This is the surviving twin of `foreignShare`, which rule 13 names as deleted for exactly this. | 13 |
-| `bootstrap/firms.ts:245-279` | `institutionalMarketShare` (.42/.17/.10/.06/.18/.07) and `bankMarketShare = 0.35 × 0.72^rank`. Market shares imposed by rank and never moved by performance — and `bankMarketShare` is then the ALLOCATION KEY for deposits, SME pool cash, the unmodeled boundary and FX desk capacity. | 13 |
-| `stages/shared-helpers.ts:210-211` | Ownership shares drift toward targets and are clamped (`institutionalShare` [0.10,0.65], `bankShare` [0.01,0.10]); `02-region-macro.ts:21` caps non-household ownership at 0.85 and rescales the three shares to sum to 1. | 2, 5, 13 |
+| ~~`macro/initialization.ts:183`~~ | ~~**`OWNERSHIP_SHARES`**~~ **CLOSED by OWN1–OWN6 (§7.98).** Deleted. The registers are measured off the real books each week and nothing in the engine reads one to decide anything. What the deletion left behind is recorded in §6.1 (the corporate over-holding it exposed, and the institutional opening size that is still assigned). | 13 |
+| `bootstrap/firms.ts:245-279` | `institutionalMarketShare` (.42/.17/.10/.06/.18/.07) imposed by rank and never moved by performance — still open, and the sibling of §6.1's institutional-opening-size row. **`bankMarketShare` CLOSED by OWN5 (§7.98):** measured weekly in 02b as the deposits the bank actually holds over its region's; the seed value is the cohort's own firm-size curve. The old `0.35 × 0.72^rank` used a second private concentration decay and summed to **0.914**, so 8.6% of every regional banking aggregate was carved out to no bank at all. | 13 |
+| ~~`stages/shared-helpers.ts:210-211`~~ | **CLOSED by OWN1 (§7.98).** `computeTargetOwnershipShares`, its two sensitivity coefficients, the 0.05 drift, both bands and `MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE` are deleted. Worth recording why the 0.85 rescale mattered: it made the harness's ownership-conservation check pass BY CONSTRUCTION, which is why removing it turned up §6.1's over-holding immediately. | 2, 5, 13 |
 
 **B. Prices and rates set by formula rather than cleared**
 
@@ -1770,7 +1778,7 @@ decides an outcome.
 | # | Project | Clamps it deletes | The system it adds |
 |---|---|---|---|
 | 1 | **LAB — labor demand, and the wage as a price** | unemployment [0,0.5]; wage index [0.1,20]; wage growth [−20%,+35%]; firm wage change MIN/MAX; desired employment growth ±25%; quit rate ×[0.3,2.5]; firm quit multiplier [0.25,3.0] | A firm hires while the revenue a worker adds exceeds the wage it must pay, and sheds when it does not — labor DEMAND responds to affordability. The wage then clears: excess demand raises the going rate, excess supply lowers it, and the quantity adjusts, so no bound is needed on either. The wage LEVEL anchor moves off `productivity × LABOR_SHARE_OF_OUTPUT` onto each firm's own value added per worker. |
-| 2 | **OWN — ownership is an outcome** | institutionalShare [0.10,0.65]; bankShare [0.01,0.10]; non-household ownership cap 0.85; the three-share rescale-to-1 | Delete `OWNERSHIP_SHARES`. Banks and institutions hold what they actually bought in the five clearing books; **tradable float = outstanding − what real holders hold**, not `1 − an imposed bankShare`. Household direct equity becomes the residual of a real register rather than `1 − institutionalShare`. Also retires `bankMarketShare = 0.35 × 0.72^rank`: a bank's share of deposits is the deposits it won. |
+| ~~2~~ | ~~**OWN — ownership is an outcome**~~ **BUILT 2026-08-29 (§7.98); OWN7 open — see §6.1.** | institutionalShare [0.10,0.65]; bankShare [0.01,0.10]; non-household ownership cap 0.85; the three-share rescale-to-1 | Delete `OWNERSHIP_SHARES`. Banks and institutions hold what they actually bought in the five clearing books; **tradable float = outstanding − what real holders hold**, not `1 − an imposed bankShare`. Household direct equity becomes the residual of a real register rather than `1 − institutionalShare`. Also retires `bankMarketShare = 0.35 × 0.72^rank`: a bank's share of deposits is the deposits it won. |
 | 3 | **IDX — an index is a statistic** | equity index change ±15%/wk | Nothing to build: the index is the cap-weighted move of its own constituents, whatever that is. Removing it makes §6's equity runaway visible in the published index instead of masked. Same commit renames the real-world brands (rule 4). |
 | 4 | **CAP — production and capacity decisions** | production throttle [0.3,1.0]; production response ×[0.5,2.0]; capacity growth ±2%/wk; cost rate [0.40,0.98] | Production is decided by the firm's own inventory position, the cleared price against its own measured unit cost (it already carries per-lot input provenance), and its cash. Capacity is DERIVED from PP&E, which IND1 already grows by delivered capex — so it stops being a rate that is walked and clamped. A firm that cannot cover unit cost stops producing rather than throttling to 30%. |
 | 5 | **CRD — credit prices cleared, ratings handle zero earnings** | CDS spread [10,5000] bps; leverage [0,100]; coverage [±50]; consumer tier rates by `cci × 0.05` | CDS becomes a real traded instrument in a book (needs G3's dealer). Leverage and coverage are clamped only because EBITDA can pass through zero — the honest fix is in `determineCreditRating`: a firm with no earnings is a distressed rating by definition, not a ratio held at 100. Consumer credit is priced per pool by the lending bank, as HH3's pools already allow. |
@@ -1782,6 +1790,11 @@ decides an outcome.
 today's defect. 2 next: it is the largest single distortion, feeding the tradable float of all
 five clearing books. 3 is an afternoon and can go any time. 4-6 are real market builds, each
 independent. 7 waits for the inflation escape. 8 is small and last.
+
+**Status 2026-08-29.** 1 (LAB) closed, harness 405 → 88. 2 (OWN) built in six slices and pushed;
+its close-out measurement is in §7.98 and the defect it exposed is §6.1's first new row, owned by
+OWN7. **3 (IDX) is the next one to take** — it is an afternoon and now cheaper, since deleting the
+index clamp and the rule-4 brand names is one commit.
 
 **Verification, per project:** the harness measured ONCE at each project's close (rule 12), plus
 the specific reading that the deleted clamp used to hide — for LAB, that unemployment prints as
@@ -3505,3 +3518,67 @@ that proved it, the lesson.
     share against income sized by its REVENUE share, and those differ by region — EUR opens at
     58% of employment against 42% of revenue, so its pools were insolvent from week 0 and the
     layoff cascade took EUR unemployment past 30% by week 58.
+
+98. **OWN — ownership stopped being an input, and the clamp that was hiding a defect fell out.**
+    `OWNERSHIP_SHARES` assigned banks 3% of equity / 28% of corporate credit / 22% of sovereigns
+    and institutions 42/45/30; stage 02 drifted all three weekly on
+    `(gdpGrowth + inflation) - tenor10Y` inside `[0.10,0.65]` and `[0.01,0.10]`, rescaling
+    whenever they summed past 0.85. Six slices, one bounded commit each:
+    - **OWN1** `measuredOwnershipAllRegions` walks the real books in one pass; stage 11 writes the
+      three shares from it. No engine file reads them any more — verified by grep, they are
+      write-only. `computeTargetOwnershipShares`, both coefficients, the drift, both bands and
+      `MAX_NON_HOUSEHOLD_OWNERSHIP_SHARE` deleted.
+    - **OWN2** a book's float is its outstanding, because **the instrument already excludes what
+      does not trade in it.** `floatingDebtUSD` removes every bank FACILITY from the loan ladder
+      (that IS what a bank holds in its banking book, subtracted once, per issuer, at each
+      issuer's real mix) and `fixedDebtUSD` removes commercial paper; banks hold no equity and no
+      corporate bonds as investments, only dealer inventory, which is a participant and not a
+      subtraction. `1 - bankShare` was withholding another 28%/28%/3% from nobody.
+    - **OWN3** a bank's sovereign book is bounded by `investableSurplusUSD` (funding neither lent
+      nor kept as cash) above and `liquidityDrivenSovereignFloorUSD` (stressed outflows at posted
+      runoff rates, less the reserves that already count as HQLA) below. 07c's old comment said
+      the aggregate had to be imposed because `deposits x a ratio` implied the sector wanting
+      several times the market — right about the formula, wrong about the fix: a liquidity
+      requirement is a share of the deposits that could RUN, met by reserves first. Bills and
+      bonds share the one appetite across 07c and 07f.
+    - **OWN4** household direct equity is a name-by-name residual of the real register, not
+      `marketCap x (1 - institutionalShare)` applied to every company alike.
+    - **OWN5** `bankMarketShare` is measured weekly from deposits; `profiles/bank.ts` reads the
+      bank's OWN sheet instead of the region's aggregate scaled by a constant.
+    - **OWN6** `OWNERSHIP_SHARES` deleted; the bank sovereign seed is the book its own equity
+      supports under the leverage floor; the private tier is seeded with the same two tranche
+      definitions the books clear.
+
+    **The measurement, taken once at the close (rule 12), with a single A/B for attribution
+    (rule 10).** Harness **88 → 488** against 86817cb. 73 of the 488 are the §6 seed-employment
+    row, *improved* from 81. 357 of the increase is ONE new family in two invariants:
+    corporate books holding ~13% more paper than exists. **Both invariants read zero before OWN**,
+    so this is not a pre-existing disease revealed — but the 0.85 rescale had made the
+    ownership-conservation check pass BY CONSTRUCTION, which is why it surfaced the same day the
+    rescale died. Owner OWN7, written up in §6.1 with both candidate causes and the order to take
+    them in.
+
+    **The lessons.**
+    - **A carve and an exclusion are the same subtraction, and doing both is a double count.**
+      Three books multiplied by `1 - bankShare` on top of an instrument definition that had
+      already removed exactly what that share described. The float was the correct question; the
+      answer was already in the code, one function up.
+    - **Check what a passing invariant is actually asserting.** Ownership conservation passed for
+      the model's whole life because a rescale guaranteed the sum. An invariant a clamp satisfies
+      is testing the clamp.
+    - **A share owning nothing is not only an ownership defect.** The same shape turned up in the
+      dealer desk (one regional book copied onto four sheets, P&L split by market share) while
+      answering an unrelated question about banks. §6.1 records it for G3.
+
+99. **Banks are not firms here, and the gap has an accounting error in it.** Found while
+    answering why banks look like they sit outside the corporate scaffolding. `profileKeyOf`
+    sends a bank to `profiles/bank.ts`, which returns the whole P&L and SKIPS the operating
+    branch of stage 08 — so a bank has no capex, no PP&E, no depreciation, no inventory, no
+    product lines and buys no inputs, its margin is a hardcoded 0.40 whatever its book earns, and
+    its loan losses are `random() * 0.05 * assets` rather than the defaults its own named
+    borrowers experience. That is missing depth, and IND owns it. **The part that is a defect
+    rather than depth:** `weeklyPayrollUSD` lives inside that skipped branch, while the labor
+    market filters employers on region and active status only — so banks hire, fire and count
+    toward the unemployment rate while paying no wage bill and posting no wage instruction.
+    Headcount with no wage leg, in the same statistic LAB had just made bottom-up. Rule 14 does
+    not only apply to flows you wrote; it applies to flows a dispatch table let you skip.
