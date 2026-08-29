@@ -149,19 +149,36 @@ npx tsc --noEmit                   # typecheck — safe at any time
 npm run build                      # build — safe at any time
 bash scripts/check-hygiene.sh      # no root scratch files; ONE script in scripts/
 npm run verify                     # hygiene + THE HARNESS: 60 weeks, checks + batteries +
-                                   # A/B shocks (~2 min). END OF PROJECT ONLY — see rule 12.
-WEEKS=10 SHOCKS=0 npm run verify   # quick wiring probe (structural, rule-12-safe). NOTE:
+                                   # A/B shocks. **~5 min** — see the cost table below.
+                                   # END OF PROJECT ONLY — see rule 12.
+WEEKS=10 SHOCKS=0 npm run verify   # quick wiring probe, ~15 s (structural, rule-12-safe). NOTE:
                                    # SHOCKS=0 runs a clean RNG stream — counts are not
                                    # comparable with the SHOCKS=1 baseline (dirty stream,
                                    # preserved from the old harness for continuity).
 npm run profile                    # the same run with per-stage timings (PROFILE=1).
-                                   # Baseline after §7.81: ~850 ms/week serial (±20 noise),
-                                   # 05 ~32%, 08 ~19%, books ~22%, GC ~12%; ~70 ms/week is
-                                   # the §6 lot leak's tax (IND deletes it).
+                                   # Baseline 2026-08-29 (§7.107): 1,139 ms/week,
+                                   # 05 46.8%, 08 11.9%, 09-concentration 8.5%, books ~14%.
                                    # CLEARING_WORKERS=6 speeds any run up free.
 VERBOSE=1 npm run verify           # full violation dump at the end (they print live anyway)
 WEEKS=260 npm run verify           # ASK THE USER FIRST — long run, section close only
 ```
+
+**What a run actually costs, measured (§7.107).** A week is ~1.1 s, but `npm run verify` runs
+**243 weeks, not 60** — most of the wall clock is the A/B shock worlds, and each one is a second
+full simulation:
+
+| | weeks | wall clock |
+|---|---|---|
+| fixed cost (tsx startup + one seed build) | — | ~2 s |
+| the 60-week run itself | 60 | **69 s** |
+| pre-run A/B mechanism tests (equity demand 2×20, auction 2×1, mark-to-market 1) | 43 | |
+| HH recession battery (control + shocked, 30 each) | 60 | |
+| PUB debt-spiral battery (control + shocked, 40 each) | 80 | |
+| **`npm run verify` / `npm run profile` total** | **243** | **~315 s** |
+
+So `SHOCKS=0` is not a small saving — it is **69 s against 315 s**, because the shock batteries
+are three-quarters of the work. Use `WEEKS=10 SHOCKS=0` while iterating and pay the full run
+once, at the end, as rule 12 says.
 
 A project's close-out battery is a `report()` module in the harness: every verify criterion in
 its §5 entry, measured on the shared run, reporting numbers and judging nothing by itself. The
@@ -3837,5 +3854,16 @@ that proved it, the lesson.
       SEG, OWN, CASH and the settlement layer — every one of which added real flows. The number
       to hold is the FRONTIER, not the level: SCALE wave 2 is sequenced after IND for the reason
       recorded there, and stage 05 at 46.8% is where it will spend its effort.
+    - **Where the OTHER four minutes go, since a week is only ~1.1 s.** `npm run verify` runs
+      **243 weeks, not 60**: 60 for the run itself (measured directly at **69 s** with
+      `SHOCKS=0`), 43 in the pre-run A/B mechanism tests (the equity-demand test alone builds two
+      20-week worlds), 60 in the HH recession battery and 80 in the PUB debt-spiral battery —
+      every battery is a control world AND a shocked world, each a second full simulation. At
+      ~1.1 s a week that is ~277 s of simulation plus seven seed builds and the snapshot clones.
+      **The shock batteries are three-quarters of the wall clock**, which is why `SHOCKS=0` costs
+      69 s and the full run costs 315. §1.10 carries the table.
+    - **Measured directly, not inferred:** `WEEKS=1 SHOCKS=0` = 3 s, `WEEKS=60 SHOCKS=0` = 69 s,
+      so (69−3)/59 = **1,118 ms/week** — within noise of the profiler's own 1,139, from a
+      completely separate clock.
     - **The measurement itself is now one command** — `npm run profile` prints the table above,
       so the next person does not have to build it.
