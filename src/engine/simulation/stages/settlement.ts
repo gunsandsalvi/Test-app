@@ -83,6 +83,10 @@ export interface SettlementReport {
   unmodeledDepositDeltaByBank: Map<string, number>;
   /** Deposits created by this bank's own lending — they need no reserve settlement. */
   creditCreatedByBank: Map<string, number>;
+  /** The boundary, decomposed by the flow that hit it. §6 wants this line watched DOWN; you
+   *  cannot watch down a number you cannot attribute, and each entry names a flow still missing
+   *  its counterparty. Signed from the modelled economy's side: negative = paid out to nobody. */
+  unmodeledByReason: Map<string, number>;
   /** Household flows handed to HH4d's T+1 channel — settled by next week's bank pass, not here. */
   householdDeferredUSD: number;
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
@@ -114,6 +118,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     corporateDepositDeltaByBank: new Map(),
     unmodeledDepositDeltaByBank: new Map(),
     creditCreatedByBank: new Map(),
+    unmodeledByReason: new Map(),
     householdDeferredUSD: 0,
     unresolvedUSD: 0,
   };
@@ -135,6 +140,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     report.grossUSD += i.amountUSD;
     add(i.payer, -i.amountUSD);
     add(i.payee, i.amountUSD);
+    // Attribute the boundary as it is created, by the flow responsible.
+    if (i.payer.kind === 'UNMODELED') addTo(report.unmodeledByReason, i.reason, i.amountUSD);
+    if (i.payee.kind === 'UNMODELED') addTo(report.unmodeledByReason, i.reason, -i.amountUSD);
   });
 
   // ---- 2. Apply each party's net change to the balance it actually holds, and record which

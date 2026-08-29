@@ -25,7 +25,7 @@ import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, payHoldersCash, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
-import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks } from './money-market-fund';
+import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks, findRegionMmf } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
@@ -1470,7 +1470,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     if (!comp.isBankEntity && !comp.isInstitutionalEntity && !isDefaulted && comp.listingStatus !== 'PRIVATE') {
       const sweep = corporateSweepDecision(comp, newCash, mmfSweepBooks.get(comp.region));
       if (sweep.cashDeltaUSD !== 0) {
-        post(sweep.cashDeltaUSD < 0 ? 'treasury sweep into money fund shares' : 'money fund share redemption', sweep.cashDeltaUSD);
+        // The counterparty is a named fund that exists — routing it to the boundary would have
+        // the fund credited by its own stage AND the money appear at the boundary, which creates
+        // it (measured: 64B over 12 weeks; the bank identity could not see it because the
+        // institutional sector is not in the settlement layer yet).
+        const sweepFund = findRegionMmf(ctx.updatedInstitutionalEntities, comp.region);
+        post(sweep.cashDeltaUSD < 0 ? 'treasury sweep into money fund shares' : 'money fund share redemption',
+          sweep.cashDeltaUSD,
+          sweepFund ? { kind: 'INSTITUTION', id: sweepFund.id } : undefined);
         newMmfSharesUSD = Math.max(0, newMmfSharesUSD + sweep.shareDeltaUSD);
       }
     }

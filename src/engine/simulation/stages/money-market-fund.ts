@@ -171,9 +171,12 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
     if (e.entityType !== 'MONEY_MARKET_FUND') return e;
     const book = books.get(e.region);
     if (!book || book.netInflowUSD === 0) return e;
+    // SETL2: the CASH leg is settlement's now — the sweeping company names this fund as its
+    // counterparty, so the money moves once. Crediting it here as well credited the fund and
+    // left the payment at the boundary too, creating the amount twice over. What belongs here
+    // is the SHARE register: the fund issues shares against the money it received.
     return {
       ...e,
-      cashUSD: (e.cashUSD ?? 0) + book.netInflowUSD,
       mmfSharesOutstandingUSD: Math.max(0, (e.mmfSharesOutstandingUSD ?? 0) + book.netInflowUSD),
     };
   });

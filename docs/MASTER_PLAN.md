@@ -3025,3 +3025,28 @@ that proved it, the lesson.
       a timing detail, it is the thing that makes the event inexpressible — and the fix is to
       record the event where it happens, not to reconcile it afterwards. The identity found it in
       one run, the third time that gate has paid for itself this session.
+90. **"Where is the residual coming from?" — the boundary, decomposed, and a double-count it was
+    hiding.** The unmodeled line read about −1B and that was not an answer, so it now reports
+    itself: every instruction that names `UNMODELED` is attributed to the FLOW responsible
+    (`lastSettlement.unmodeledByReason`), because §6 asks for this line to be watched down and a
+    number you cannot attribute cannot be watched.
+    - **The net is small because the gross nearly cancels.** Twelve weeks: 323B settled gross,
+      against a boundary net of 28B. The traffic is `settled sales` +62.6B against `wages & other
+      opex` −62.0B, `treasury purchase (sovereign)` −40.8B against `treasury sale` +33.5B, and
+      `non-auction operating receipts` +38.0B.
+    - **It was hiding a double-count SETL2 introduced.** The largest single line was the money
+      market sweep at −64B/12wk — and the fund was ALREADY credited by its own stage, so the
+      money arrived at the fund AND at the boundary: created, 64B in twelve weeks. The bank
+      identity could not see it because the institutional sector is not in the settlement layer
+      yet. Fixed: the sweeping company names the fund as its counterparty and
+      `settleCorporateSweepBooks` keeps only the SHARE register, which is what belonged to it.
+      **The lesson: a flow whose counterparty is credited by another stage must NAME it — routing
+      it to the boundary does not defer the problem, it duplicates the money.**
+    - **What the boundary actually is, now that it is honest.** Only `non-auction operating
+      receipts` (+38B) is a true boundary — revenue from customers the model does not have. The
+      rest have counterparties that already exist and are simply not named yet: households for
+      wages, the sovereign market for treasury purchases, stage 05's buyers for settled sales.
+      Those are the migration list, in size order, and each one shrinks this line.
+    - **`unresolvedUSD` is now non-zero and that is correct**: 2.7B in a week, all of it
+      institutions, which hold cash but have no bank yet. It is counted rather than dropped, and
+      SETL5 (institutional cash) is what closes it. 59 violations, zero balance-sheet.
