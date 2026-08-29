@@ -1,11 +1,7 @@
 
-/**
- * Company & Corporate Fundamentals Domain Model
- *
- * Models corporate entities, product lines, debt tranches, 3-statement financial snapshots,
- * consensus estimates, credit ratings, and segment reporting.
- * Owned and updated by company fundamentals, bidding, and M&A/IPO simulation stages.
- */
+/** The firm: one model for every company in the world — listed or private, operating or
+ *  financial. Product lines, debt tranches, the three statements, credit, and the real input and
+ *  output inventories it holds. No parallel firm type anywhere (§7.33). */
 
 import { RegionId } from './geography';
 import { Industry } from './industry';
@@ -384,8 +380,11 @@ export interface Company {
     acquiredWeek?: number;
     /** HC7: the EV/EBITDA the sponsor PAID — the basis an exit is measured against. */
     entryEvMultiple?: number };
-  // Mirrors InstitutionalEntityType in domain/institutions.ts; inlined because that module
-  // already imports from this one and a type import here would close the cycle.
+  // RULE 3, OPEN: this was inlined to mirror `InstitutionalEntityType` (a type import would
+  // close a module cycle) and the two have since DRIFTED — that union also carries
+  // PRIVATE_EQUITY, MONEY_MARKET_FUND and ETF, which cannot be expressed here. So a PE fund or a
+  // money fund's listed shell has `institutionalRole: null`. Exactly §7.5's duplicated-shape
+  // defect: a value added to one copy and not the other. Break the cycle instead.
   /** Week this company first defaulted — lets credit contagion decay out of a rolling window
    *  instead of counting every default that ever happened (S8). */
   defaultedWeek?: number;
@@ -417,10 +416,11 @@ export interface Company {
   // sits in inventory until P buys it at L price" (the project's founding ask) means a company
   // holding units bought from three different real sellers at three different prices should be
   // able to say so, not report one indistinguishable average cost. Each lot remembers who it was
-  // bought from (a real company ticker, or a private-segment id like "PRIVATE:MANUFACTURING")
+  // bought from (a real company ticker, or an SME pool id — see below)
   // and the real price paid — credited in 05-unit-bidding.ts when a purchase clears (both
   // contract-settlement and open-market, the latter via an explicit buyer/seller lot allocation,
   // not just an aggregate total), consumed oldest-lot-first in 08-company-fundamentals.ts.
+  // A pool seller's id is "PRIVATE:<region>:<industry>" since SEG keyed the tier to the registry.
   inputInventoryBySubUnit?: Record<string, InputLot[]>;
   recentFulfillmentEMA: number;
   _targetProductionUSD?: number;
@@ -446,7 +446,13 @@ export interface Company {
   producedCommodityId?: string;
   demandShockLagBuffer?: number[];
 }
-/** Public-market membership test. Undefined (pre-HC companies) reads as PUBLIC. */
+/**
+ * Public-market membership test. Undefined reads as PUBLIC.
+ *
+ * There are no "pre-HC companies" — every world is regenerated from seed — so an undefined
+ * `listingStatus` means a creation site forgot to set one, and the firm then silently trades on
+ * the public market. Same silent-default shape as `safeRate` and `resolveProtection`.
+ */
 export function isPubliclyListed(c: Pick<Company, 'listingStatus'>): boolean {
   return c.listingStatus !== 'PRIVATE';
 }

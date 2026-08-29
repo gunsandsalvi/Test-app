@@ -185,3 +185,35 @@ counted twice in household income. `SOCIAL_BENEFIT_REPLACEMENT_RATE` is derived 
 own bases and checked against a real band rather than imported from one. `primaryShare` flooring
 at zero with "that is a debt spiral, and it is allowed to happen" is rule 2 applied correctly.
 
+### `src/domain/company.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| D36 | **C** | `company.ts` | **`institutionalRole` was inlined to "mirror `InstitutionalEntityType`" and the two have drifted.** The union in `institutions.ts` carries `PRIVATE_EQUITY`, `MONEY_MARKET_FUND` and `ETF`; the copy here does not, so a PE fund's or a money fund's listed shell has `institutionalRole: null`. This is §7.5's duplicated-shape defect exactly — a value added to one copy and not the other — and it was inlined to avoid a module cycle, which is a fixable problem rather than a reason. |
+| D37 | **B, latent** | `company.ts` | **`isPubliclyListed` treats undefined as PUBLIC "for pre-HC companies"** — which cannot exist, since every world regenerates from seed. An undefined `listingStatus` therefore means a creation site forgot one, and the firm silently trades publicly. Third instance of the same silent-default shape (`safeRate` D8, `resolveProtection` D20). Worth one sweep: these three defaults each hide a *different* class of missing write. |
+| D38 | E | `company.ts` | The input-lot comment still gave `"PRIVATE:MANUFACTURING"` as the example seller id — one of the five hardcoded buckets SEG deleted when it keyed the SME tier to the registry. Corrected to the live `"PRIVATE:<region>:<industry>"`. |
+
+**Clean, and the single best comment in the codebase** is on `ProductLine.weeklyCapacityUnits`:
+capacity is a physical stock in UNITS, "a plant that makes 100 units a week makes 100 when the
+price doubles" — and it records the defect that forced it, production sized in dollars and
+converted at the CURRENT price, which made supply FALL as price rose. That positive feedback loop
+was the inflation runaway of §7.28. `DebtTranche`'s `isCommercialPaper` / `isBankFacility` flags
+each say precisely which markets must skip them and what the double-count was. `InputLot` keeping
+per-lot provenance rather than a blended average is the founding "1$ is 1$" ask, honoured.
+
+### `src/domain/region-macro.ts` (+ `macro/weather.ts`, counted)
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| D39 | **A, now with a count** | `region-macro.ts` / `macro/weather.ts` | **`WeatherAnomaly.gdpImpactPct` and `inflationImpactPct` are written at 14 sites and read at NONE.** §6.4's NAT row called them dead; this is the exact count. They are rule 13 in its purest form — an event stating its own macro outcome — and `evolution.ts:75` already deleted the CPI shortcut for precisely this reason. Only `commodityImpactPct` is live (`evolution.ts:1031`), and it is a stated impact on a PRICE where NAT's whole point is that it should be a cut to a real YIELD. So NAT is: delete two dead fields, convert the third. **Owner: NAT (15).** |
+
+**Clean, and the household balance sheet is the strongest section of the domain layer.** Every
+line records what it replaced and why: `equityHoldingsUSD` was a stock appreciating by a formula
+return, owned in no register, measured at 2,224B against a real market cap of 1,052B;
+`housingStockUSD` is built from physical units rather than backed out of the mortgage, so a price
+move actually moves wealth; `priorNetWorthUSD` exists because a LEVEL in a growth rate is a units
+error; the HH3 debt lines are explicitly DERIVED views of the banks' books, "never a second stock
+evolved by its own formula"; and `unmodeledFinancialAssetsUSD` is a named gap that earns nothing,
+moves with nothing and shrinks as the universe grows — rule 13's standard for a legitimate
+residual, met.
+

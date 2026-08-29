@@ -1,10 +1,5 @@
-/**
- * Regional Macroeconomy Domain Model
- *
- * Models regional macroeconomic aggregates, labor markets, wealth & income tiers, demographic life cycles,
- * housing markets, government debt, fiscal stance, central banking dot plots, and weather anomalies.
- * Written and updated by macro evolution, labor, and fiscal/monetary policy simulation stages.
- */
+/** A region: its macro aggregates, its households (cohorts, balance sheet, credit), its labor
+ *  market, its housing stock, its government's debt, its banks and institutions, and its weather. */
 
 import { RegionId } from './geography';
 import { Industry } from './industry';
@@ -95,7 +90,15 @@ export interface WeatherAnomaly {
   tempDeltaC: number;
   economicImpact: string;
   affectedCommodityId?: string;
+  /** The only impact field anything reads (`evolution.ts`, the commodity supply/demand balance). */
   commodityImpactPct: number;
+  /**
+   * DEAD: written at 14 sites in `macro/weather.ts`, read at NONE. Rule 13 in its purest form —
+   * a weather event stating its own GDP and inflation outcome instead of cutting a real crop
+   * yield and letting the commodity book, input costs and the price index do the work.
+   * `evolution.ts:75` already deleted the CPI shortcut for exactly this reason. Delete both, and
+   * turn `commodityImpactPct` into a YIELD so the chain runs. Owner: NAT (15).
+   */
   gdpImpactPct: number;
   inflationImpactPct: number;
   weeksActive: number;
