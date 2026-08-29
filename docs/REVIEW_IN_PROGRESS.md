@@ -324,3 +324,27 @@ lending/structural primitives with the right justification. It also states the r
 | M5 | **A** | `macro/weather.ts` | `commodityImpactPct` states a **price** impact. NAT's whole content is that the chain runs through a real YIELD → the commodity book → input costs → the measured index, which `evolution.ts:75` already states when it deleted the CPI shortcut for the same reason. With D39 (the two dead sibling fields, 14 writes / 0 reads), NAT's scope is now fully specified. |
 | M6 | **A** | `macro/weather.ts` | **Rule-4 place names**: 'Midwest', 'Great Plains', 'North Sea', 'Mediterranean', 'Pacific'. §6.3-D had this; now at the line. Also a small modelling slip — the EUR *heatwave* is wired to `HEAVY_CRUDE_OIL`, where cooling demand is electricity and gas. |
 
+### `src/engine/macro/household-cohorts.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| **M7** | **A — restates §6.3-A row 3 as one defect, not nine** | `macro/household-cohorts.ts` | The audit lists **nine** imposed tables here (occupation mix, wage multiplier, tax multiplier, transfer weight, residual-receipt weight, debt-service weight, spend mix, balance-sheet weights, wealth MPC) and treats them as nine primitives to argue about. **They are one missing mechanism: cohorts have no balance sheets.** `region-macro.ts` says so outright in `HouseholdCohort`'s own doc — cohorts do not "hold per-cohort balance sheets" — so their wealth must be ALLOCATED across tiers rather than accumulated by them. The pieces to derive it now exist: who holds equity is the real direct register (OWN4), who holds a house is HSG's buyer, who holds deposits is whose savings accumulated, who owes consumer debt is HH3's itemized pools. **Give a cohort a balance sheet and eight of the nine tables become measurements.** That is a far smaller and more definite piece of work than the audit row implies. **Owner: MAC (6), with HSG (10) for the housing half.** |
+| M8 | **A** | `macro/household-cohorts.ts` | Two of the nine are explicit real-world imports rather than modelling choices: `TIER_BALANCE_SHEET_WEIGHTS` is documented "US SCF-shaped" (an observed wealth distribution — an equilibrium, rule 4's sharper half) and `TIER_WEALTH_MPC` is justified as "what the empirical literature finds". Both are the *outputs* a model like this exists to produce. |
+
+### `src/engine/macro/banking.ts`
+
+| # | Sev | File | Finding |
+|---|---|---|---|
+| M9 | **C — FIXED in this pass** | `macro/banking.ts` + `02b-bank-diversification.ts` | **The same unnamed `0.3` in two files**: the share of household saving that reaches a bank deposit. In `banking.ts` it sizes the funding-pressure *denominator*; in 02b it sizes the *inflow* the money fund competes for. Changing one and not the other would have made the diverted amount and the amount it is measured against disagree — §7.5's duplicated-constant shape, the same defect as the 0.35 procurement literal that existed in three copies. **Named once as `HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE` and imported.** It remains a stated split (rule 13): where a household's saving goes is a portfolio choice against the yields it can see, and WS7 already models one leg of it. **Owner: MAC (6).** |
+| M10 | **A** | `macro/banking.ts:298` | **`betaFloorRate = policyRate × 0.45` is an observed deposit beta**, identical for every bank. It is documented as a floor the competitive rate rises above — but it IS the rate in any week the money fund is not taking funding, which is most weeks. What a bank pays for deposits should come from its own funding need against the alternatives its depositors can see. §6.3-B has it; now flagged at the line with the reason it binds. **Owner: G3 (8).** |
+
+**Clean, and this file is a model of how to record a deletion.** Every removed formula is named
+where it used to be: the 0.999-decay deposit target ("and with it the drift between the bank's
+deposit line and the household stock it claims to be: they are ONE number now"), the savings
+inflow that was credited here *and* by settlement ("the second of two independent quantities for
+one balance"), the consumer-loan target formula, the business-lending target that double-counted
+07d's loan market, and PUB2b's "monetized amount" with the reason it was wrong (*a central bank
+buying bonds pays the seller, it does not print deposits into household accounts*). The corporate
+deposit rate is genuinely derived — the model already simulates the alternative a treasurer would
+take, so the rate a corporate balance commands is the money fund's own yield.
+

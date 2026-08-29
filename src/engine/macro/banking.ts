@@ -39,6 +39,19 @@ export const SRF_SPREAD_BPS = 25;
  * bank has no business at the RRP window) — it is the NON-bank cash floor: the WS6 lenders'
  * outside option, and WS7's money funds are its real users. */
 export const ON_RRP_SPREAD_BPS = 20;
+/**
+ * Share of a household's weekly saving that reaches a BANK DEPOSIT rather than any other
+ * destination. One owner: it was a bare `0.3` in two files (here, sizing the funding-pressure
+ * denominator, and in 02b, sizing the inflow the money fund competes for), so changing one and
+ * not the other would have made the diverted amount and the amount it is measured against
+ * disagree — §7.5's duplicated-constant shape, the same defect as the 0.35 procurement literal.
+ *
+ * RULE 13, OPEN: it is still a stated split. Where a household's saving goes is a portfolio
+ * choice it should make on the yields it can see — the deposit rate, the money fund, the direct
+ * register — and WS7 already models one leg of exactly that choice. Owner: MAC (6).
+ */
+export const HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE = 0.3;
+
 /** Share of deposits a bank's own treasury keeps as ready cash — its operating-buffer policy.
  * Below it the bank funds itself (repo, then the SRF); this is a behavioural policy choice,
  * not a regulatory formula. */
@@ -293,9 +306,14 @@ export function evolveBankingSector(
   // funding the fund is actually taking (the WS7 diversion, as a share of this bank's own
   // savings inflow). A bank that ignores a better-paying fund loses its deposits — the real
   // discipline WS7's liability side exists to impose.
+  // RULE 1, OPEN: 0.45 is an observed deposit beta — a real-world pass-through — and it is the
+  // same for every bank. It is described as a floor the competitive rate rises above, but it IS
+  // the rate in any week the money fund is not taking funding, which is most of them. What a bank
+  // pays for deposits should come from its own funding need against the alternatives its
+  // depositors can see. Owner: G3 (8).
   const betaFloorRate = policyRate * 0.45;
   const fundingPressure = weeklySavingsInflowUSD > 0
-    ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * 0.3)))
+    ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE)))
     : 0;
   const depositRate = Math.max(betaFloorRate, betaFloorRate + (competingMmfYieldAnnual - betaFloorRate) * fundingPressure);
   // Reserves earn the policy rate — the floor-system IOR. The 0.85 "tiering" haircut and the

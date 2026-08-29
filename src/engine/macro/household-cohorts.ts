@@ -92,11 +92,19 @@ const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: number; lux
 };
 
 /**
- * HH4c — where each component of the REAL household balance sheet sits across the wealth
- * tiers. Stated primitives (US SCF-shaped) until ownership itemizes further; what they
- * allocate is already real — every line is marked from cleared prices by the balance-sheet
- * stage, and tier net worth is the SUM of these splits, replacing the equity-gain/savings-gain/
- * retired-drawdown drift that used to walk `shareOfNetWorthUSD` beside the real books.
+ * HH4c — where each component of the REAL household balance sheet sits across the wealth tiers.
+ * What they allocate is already real: every line is marked from cleared prices, and tier net
+ * worth is the SUM of these splits rather than a drift walked beside the real books.
+ *
+ * RULE 4/13, OPEN, AND IT IS ONE DEFECT NOT NINE. This table is documented "US SCF-shaped" — an
+ * observed real-world wealth distribution, which is an equilibrium and not a primitive — and it
+ * is the largest of the nine stated cross-section tables in this file. But they are all the same
+ * missing mechanism: **cohorts have no balance sheets** (`region-macro.ts` says so outright), so
+ * their wealth must be ALLOCATED rather than accumulated. The pieces to derive it now exist —
+ * who holds equity is the direct register (OWN4), who holds a house is HSG's buyer, who holds
+ * deposits is whose savings accumulated, who owes consumer debt is HH3's pools. Give a cohort a
+ * balance sheet and eight of the nine tables become measurements.
+ * Owner: MAC (6), with HSG (10) supplying the housing half.
  */
 export const TIER_BALANCE_SHEET_WEIGHTS: Record<
   'deposits' | 'equityLike' | 'privateBusiness' | 'institutionalClaims' | 'unmodeled' | 'housing' | 'mortgage' | 'consumerDebt',
@@ -115,6 +123,9 @@ export const TIER_BALANCE_SHEET_WEIGHTS: Record<
 /**
  * HH4c — cents of extra consumption per dollar of extra wealth, PER TIER: the bottom spends
  * nearly a dime of a windfall dollar, the top a cent and a half. Replaces HH2's single 0.04.
+ * (Stated from the empirical literature; the honest version falls out of a budget constraint —
+ * a household near subsistence spends a windfall because it has unmet needs, which the price
+ * tiers already express. Owner: MAC.)
  * The tier-weighted blend at the seed wealth shares is ~0.035, so the aggregate effect opens
  * where the constant stood — but a housing move (middle-held, high-MPC) now moves consumption
  * roughly twice as hard as an equity rally of the same dollar size (top-held, low-MPC), which
