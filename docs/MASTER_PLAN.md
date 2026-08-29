@@ -5045,3 +5045,30 @@ that proved it, the lesson.
       whether the CPI's fixed seed basket can carry a cross-section whose dispersion changes this
       much. **Do not attack it with another mechanism fix in the goods market; five of those are
       now recorded and the level moved against all of them.**
+
+132. **MAC(a) diagnosed to one line — and §7.131's "no anchor" conclusion is WRONG.** Measured
+    over twenty weeks, USA, in the current tree.
+    - **The anchors all hold.** Nominal wages fall **4.2%** (sticky, as they should be). Bank
+      deposits — the money stock — **+1.3%**. Nominal demand **+17%**. Household income **flat**.
+      Government spending **+36%**. Physical capacity **−5%**, gross PP&E flat. **And prices fall
+      30%.** So the level is not drifting for want of an anchor, and §7.131's conclusion —
+      written from four data points without measuring wages or money — was wrong.
+    - **Prices falling into FLAT NOMINAL DEMAND and a SHORTAGE is backwards.** Demand in dollars
+      is up, supply in units is short (§7.127), and the price falls anyway. Nothing about
+      expectations, confidence or the policy rule can produce that. It is price FORMATION.
+    - **THE LINE.** §7.130 anchored the seller's floor to cost in dollars, which was right, but
+      the cost it anchors to is still mostly PROPORTIONAL TO REVENUE. `revenue − ebitda` is
+      `inputs + payroll + opex`, and of those only payroll is sticky: inputs are
+      `intensity x revenue` for anything not drawn from real lots, and `otherOpex` is
+      `otherOpexRate x revenue` by construction (§7.121). So when the price falls, revenue falls,
+      two thirds of "cost" falls with it, the floor falls, and the price can fall again. **The
+      ratchet survived the fix because the cost it was anchored to still chases the price.**
+    - **The next slice, and it is IND3's remaining half:** opex must be a real dollar cost — what
+      the firm actually pays for things — rather than a share of revenue, in the same way IND3
+      already made input lots real. Until then no floor can hold, because every floor is a
+      fraction of the number it is supposed to bound (rule 15, in its subtlest form yet: the bound
+      LOOKS like dollars and is a percentage wearing dollars' clothes).
+    - **Five goods-market fixes preceded this diagnosis and none of them was wrong** — dispersion
+      went 0.01x-14x → 0.13x-3.4x and the sovereign, commodity and profile ledgers all closed.
+      But the level kept falling because the one line above was never touched. **Recorded so the
+      sixth fix is the right one.**
