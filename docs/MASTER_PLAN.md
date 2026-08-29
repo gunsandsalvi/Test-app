@@ -3077,3 +3077,34 @@ that proved it, the lesson.
       should be a MANAGED balance (a fund holds a cash buffer and settles securities against it),
       not a weekly residual — that is a real mechanism and it belongs with the entities, not with
       settlement. Named here so the next slice starts from it rather than from more routing.
+92. **The migration, carried through: SETL4 and the two boundary categories.** On the user's
+    call, the institutional-cash-volatility fix (§7.91) was DEFERRED and the migration finished
+    first, to see the end state whole.
+    - **SETL4 — coupons paid once.** Interest was derived twice: the issuer expensed it off its
+      own ladder while holders accrued it off their holdings, and since the issuer pays on 100%
+      of principal while holders own only part, the difference went nowhere. The issuer's cash
+      walk now reports one aggregate line and pays three real payees — the house bank for its
+      facilities, the register for market fixed and floating paper — and
+      `accrueInstitutionalIncome` stops deriving corporate coupons in the same commit. **A
+      payment to a bank on its own account moves reserves AND equity**: it is the bank's income,
+      not a customer deposit, so crediting reserves alone would leave an asset unbacked.
+      **85 → 67.**
+    - **Category C — the goods market.** The auction always knew which buyer took which seller's
+      lot; stage 08 only ever saw weekly totals. Stage 05 now pays per lot and per contract, and
+      the aggregate buyers pay too — routing only the company buyers had left sellers credited
+      with revenue nobody paid, a gap this migration created and the next commit closed. The
+      buyer pays landed cost while the seller receives ex-works, so freight is named separately
+      for the carriers. **67 → 54.**
+    - **Category B — wages.** The largest single boundary line now reaches households, split from
+      other opex by the company's OWN payroll (headcount at the region's per-worker income from
+      the labour pools), not a chosen ratio. **54 → 61.**
+    - **The boundary, finally, is what it should be.** From 19 flows down to: `non-auction
+      operating receipts` (+37B — the true boundary, revenue from customers the model does not
+      contain), the securities cash legs (`treasury purchase/sale (sovereign)` −40/+33B and
+      `primary proceeds` +4B), and small cross-border timing. **Every remaining item except the
+      first is one tranche: the clearing books' own cash legs (07b–07f), which move participant
+      cash directly rather than as instructions.** That is the last migration, and it is also
+      what will let §7.91's institutional volatility be seen properly, since those legs ARE the
+      volatility.
+    - **61 violations, zero balance-sheet, throughout.** The identity held at every step of a
+      six-commit migration, which is the whole argument for having built the gate first.
