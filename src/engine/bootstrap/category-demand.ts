@@ -9,21 +9,19 @@
  */
 
 import { BuyerType } from '../../types';
+import { subUnitSpecOf } from '../../domain/industry-registry';
 
 /**
- * Physical units of a sub-unit good consumed per person and per firm per week.
+ * IND-R3 — the per-good intensities now live on the registry entry beside the physics
+ * (`SubUnitSpec.householdUnitsPerCapitaAnnual` / `corporateUnitsPerFirmAnnual`), which is where
+ * this comment always said they belonged. What stood here was ONE number for every good, so a
+ * household consumed as many units of aerospace as of food, every baseline price landed at the
+ * same order of magnitude, and a "unit" was an abstract bundle rather than a thing.
  *
- * ONE NUMBER FOR EVERY GOOD, which is why every sub-unit's baseline price lands at the same
- * order of magnitude (~$70k) and a "unit" is an abstract bundle rather than a loaf or a car
- * (see `goods-physical.ts:unitMassTonnes`). Internally consistent, but it means the model has no
- * notion of RELATIVE physical consumption: a household consumes as many units of aerospace as of
- * food. The CPI basket is built on these weights, so the price index inherits it.
- *
- * The registry already carries per-good physics (value density, shelf life, delivery mode); a
- * per-sub-unit consumption intensity belongs beside them. Owner: IND via the registry.
+ * These are the fallbacks for a sub-unit that declares neither, kept so the function is total.
  */
-const HOUSEHOLD_PER_CAPITA_UNIT_INTENSITY = 0.02;
-const CORPORATE_PER_FIRM_UNIT_INTENSITY = 1.5;
+const FALLBACK_HOUSEHOLD_UNITS_PER_CAPITA_ANNUAL = 0.02;
+const FALLBACK_CORPORATE_UNITS_PER_FIRM_ANNUAL = 1.5;
 
 /** Rough interim firm-count estimate used only before real companies exist (see firms.ts). */
 export const TARGET_FIRMS_PER_REGION = 200;
@@ -46,14 +44,17 @@ export function deriveSubUnitUnitPrice(
   finalDemandUSD: number,
   buyerMix: Record<BuyerType, number>,
   population: number,
-  firmCount: number
+  firmCount: number,
+  unitId?: string
 ): number {
   const householdWeight = buyerMix.HOUSEHOLD + buyerMix.GOVERNMENT; // government spending also serves the population
   const corporateWeight = buyerMix.CORPORATE;
+  const spec = unitId ? subUnitSpecOf(unitId) : undefined;
+  const hhIntensity = spec?.householdUnitsPerCapitaAnnual ?? FALLBACK_HOUSEHOLD_UNITS_PER_CAPITA_ANNUAL;
+  const corpIntensity = spec?.corporateUnitsPerFirmAnnual ?? FALLBACK_CORPORATE_UNITS_PER_FIRM_ANNUAL;
   const physicalVolumeUnits = Math.max(
     1,
-    population * HOUSEHOLD_PER_CAPITA_UNIT_INTENSITY * householdWeight +
-      firmCount * CORPORATE_PER_FIRM_UNIT_INTENSITY * corporateWeight
+    population * hhIntensity * householdWeight + firmCount * corpIntensity * corporateWeight
   );
   return Number((finalDemandUSD / physicalVolumeUnits).toFixed(2));
 }

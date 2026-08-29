@@ -280,7 +280,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
           demandLevelUSD,
           reg.gdpGrowth ?? 0.02,
           // §7.127: FINAL demand prices the good; total output is the quantity behind it.
-          deriveSubUnitUnitPrice(finalDemandBySubUnit[su.unitId] ?? 0, su.buyerMix, reg.totalPopulation, regionFirmCount)
+          deriveSubUnitUnitPrice(finalDemandBySubUnit[su.unitId] ?? 0, su.buyerMix, reg.totalPopulation, regionFirmCount, su.unitId)
         );
       });
     });

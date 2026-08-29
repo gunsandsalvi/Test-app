@@ -140,7 +140,7 @@ export function createInitialCategoryDemand(
       const demandLevelUSD = totalOutput[su.unitId] ?? finalDemand[su.unitId];
       // §7.127: the price is FINAL demand over final-buyer volume. The demand LEVEL is total
       // output; the PRICE is not, or intermediate demand becomes price instead of quantity.
-      const unitPriceUSD = deriveSubUnitUnitPrice(finalDemand[su.unitId] ?? 0, su.buyerMix, population, firmCount);
+      const unitPriceUSD = deriveSubUnitUnitPrice(finalDemand[su.unitId] ?? 0, su.buyerMix, population, firmCount, su.unitId);
 
       cd[su.unitId] = createSeedCategoryDemandState(demandLevelUSD, gdpGrowth, unitPriceUSD);
     });

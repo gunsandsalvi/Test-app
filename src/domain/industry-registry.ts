@@ -65,6 +65,23 @@ export interface SubUnitSpec {
   productionLeadWeeks: number;
   revenueMechanism: RevenueMechanism;
   /**
+   * IND-R3 — how much of this good a person consumes in a year, RELATIVE to every other good.
+   *
+   * There used to be one number for all 37 (`HOUSEHOLD_PER_CAPITA_UNIT_INTENSITY = 0.02`), so a
+   * household consumed as many units of aerospace as of food, every baseline price landed at the
+   * same order of magnitude, and a "unit" was an abstract bundle rather than a thing. The CPI
+   * basket is built on these weights, so the price index inherited it.
+   *
+   * The absolute scale is a free choice — it only sets what one unit means — so what is stated
+   * here is RELATIVE frequency, which is a real technological and behavioural primitive (rule 4
+   * allows the primitive; it forbids the equilibrium). Food is bought constantly, a vehicle
+   * rarely, an airliner almost never. Absent = the corporate-only goods below, which no household
+   * buys directly.
+   */
+  householdUnitsPerCapitaAnnual?: number;
+  /** IND-R3, the corporate side: units a firm consumes a year, relative across goods. */
+  corporateUnitsPerFirmAnnual?: number;
+  /**
    * CHAIN-D — this product's BILL OF MATERIALS: what one dollar of it consumes, by sub-unit.
    *
    * **It lives on the PRODUCT, not the industry, and that is the whole point of this field.**
@@ -112,6 +129,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'upstream_extraction',
+        corporateUnitsPerFirmAnnual: 40.0,
         recipeInputs: { refined_products: 0.04, industrial_chemicals: 0.02, specialty_metals: 0.02, electricity: 0.03, professional_services: 0.04, facilities_and_logistics: 0.05, repair_and_maintenance: 0.06 },
         label: "Upstream Extraction",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
@@ -123,6 +141,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'refined_products',
+        householdUnitsPerCapitaAnnual: 6.0, corporateUnitsPerFirmAnnual: 60.0,
         recipeInputs: { upstream_extraction: 0.55, industrial_chemicals: 0.02, electricity: 0.03, professional_services: 0.02, facilities_and_logistics: 0.04, repair_and_maintenance: 0.04 },
         label: "Refined Products",
         buyerMix: { HOUSEHOLD: 0.35, GOVERNMENT: 0.1, CORPORATE: 0.55 },
@@ -146,6 +165,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         // Generated at the margin from gas, so its price moves with the fuel — the real channel
         // by which an energy shock reaches every other industry's cost base.
         unitId: 'electricity',
+        householdUnitsPerCapitaAnnual: 20.0, corporateUnitsPerFirmAnnual: 120.0,
         recipeInputs: { upstream_extraction: 0.22, refined_products: 0.06, specialty_metals: 0.01, professional_services: 0.02, facilities_and_logistics: 0.02, repair_and_maintenance: 0.06 },
         label: "Electricity",
         buyerMix: { HOUSEHOLD: 0.30, GOVERNMENT: 0.05, CORPORATE: 0.65 },
@@ -163,6 +183,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'industrial_chemicals',
+        corporateUnitsPerFirmAnnual: 45.0,
         recipeInputs: { refined_products: 0.30, upstream_extraction: 0.08, specialty_metals: 0.01, electricity: 0.09, professional_services: 0.03, facilities_and_logistics: 0.05, repair_and_maintenance: 0.05 },
         label: "Industrial Chemicals",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0, CORPORATE: 1 },
@@ -173,6 +194,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'household_chemicals',
+        householdUnitsPerCapitaAnnual: 8.0, corporateUnitsPerFirmAnnual: 4.0,
         recipeInputs: { industrial_chemicals: 0.28, electricity: 0.05, professional_services: 0.04, facilities_and_logistics: 0.06, repair_and_maintenance: 0.03 },
         label: "Household Chemicals",
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0, CORPORATE: 0.1 },
@@ -185,6 +207,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'agricultural_chemicals',
+        corporateUnitsPerFirmAnnual: 12.0,
         recipeInputs: { industrial_chemicals: 0.25, upstream_extraction: 0.06, electricity: 0.08, professional_services: 0.03, facilities_and_logistics: 0.05, repair_and_maintenance: 0.04 },
         label: "Agricultural Chemicals",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
@@ -195,6 +218,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'specialty_metals',
+        corporateUnitsPerFirmAnnual: 35.0,
         recipeInputs: { upstream_extraction: 0.30, industrial_chemicals: 0.04, electricity: 0.12, professional_services: 0.02, facilities_and_logistics: 0.05, repair_and_maintenance: 0.05 },
         label: "Specialty Metals & Mining",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
@@ -206,6 +230,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'agricultural_commodities',
+        householdUnitsPerCapitaAnnual: 4.0, corporateUnitsPerFirmAnnual: 30.0,
         recipeInputs: { agricultural_chemicals: 0.14, refined_products: 0.05, electricity: 0.02, professional_services: 0.02, facilities_and_logistics: 0.05, repair_and_maintenance: 0.04 },
         label: "Agricultural Commodities",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
@@ -225,6 +250,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'heavy_equipment',
+        corporateUnitsPerFirmAnnual: 1.2,
         recipeInputs: { specialty_metals: 0.26, industrial_automation: 0.06, semiconductors: 0.03, industrial_chemicals: 0.03, electricity: 0.03, professional_services: 0.04, facilities_and_logistics: 0.04, repair_and_maintenance: 0.03 },
         label: "Heavy Equipment",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.2, CORPORATE: 0.8 },
@@ -236,6 +262,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'industrial_automation',
+        corporateUnitsPerFirmAnnual: 1.5,
         recipeInputs: { semiconductors: 0.14, specialty_metals: 0.10, enterprise_software: 0.05, industrial_chemicals: 0.02, electricity: 0.02, professional_services: 0.06, facilities_and_logistics: 0.03, repair_and_maintenance: 0.02 },
         label: "Industrial Automation",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
@@ -253,6 +280,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'defense_systems',
+        corporateUnitsPerFirmAnnual: 0.15,
         recipeInputs: { specialty_metals: 0.14, semiconductors: 0.10, industrial_automation: 0.05, enterprise_software: 0.04, industrial_chemicals: 0.03, electricity: 0.02, professional_services: 0.08, facilities_and_logistics: 0.03, repair_and_maintenance: 0.03 },
         label: "Defense Systems",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.9, CORPORATE: 0.1 },
@@ -263,6 +291,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'commercial_aerospace',
+        corporateUnitsPerFirmAnnual: 0.1,
         recipeInputs: { specialty_metals: 0.20, semiconductors: 0.07, industrial_automation: 0.04, industrial_chemicals: 0.04, electricity: 0.02, professional_services: 0.07, facilities_and_logistics: 0.04, repair_and_maintenance: 0.03 },
         label: "Commercial Aerospace",
         buyerMix: { HOUSEHOLD: 0.05, GOVERNMENT: 0.1, CORPORATE: 0.85 },
@@ -279,6 +308,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'passenger_vehicles',
+        householdUnitsPerCapitaAnnual: 0.08, corporateUnitsPerFirmAnnual: 0.8,
         recipeInputs: { specialty_metals: 0.22, semiconductors: 0.08, industrial_chemicals: 0.07, consumer_devices: 0.03, industrial_automation: 0.03, electricity: 0.02, professional_services: 0.03, facilities_and_logistics: 0.05, repair_and_maintenance: 0.03 },
         label: "Passenger Vehicles",
         buyerMix: { HOUSEHOLD: 0.8, GOVERNMENT: 0.05, CORPORATE: 0.15 },
@@ -289,6 +319,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'commercial_fleet',
+        corporateUnitsPerFirmAnnual: 0.6,
         recipeInputs: { specialty_metals: 0.24, semiconductors: 0.06, industrial_chemicals: 0.06, industrial_automation: 0.03, electricity: 0.02, professional_services: 0.03, facilities_and_logistics: 0.05, repair_and_maintenance: 0.03 },
         label: "Commercial Fleet & Logistics Equipment",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.1, CORPORATE: 0.9 },
@@ -306,6 +337,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'semiconductors',
+        corporateUnitsPerFirmAnnual: 20.0,
         recipeInputs: { industrial_chemicals: 0.12, specialty_metals: 0.05, industrial_automation: 0.04, enterprise_software: 0.03, electricity: 0.06, professional_services: 0.04, facilities_and_logistics: 0.03, repair_and_maintenance: 0.05 },
         label: "Semiconductors",
         buyerMix: { HOUSEHOLD: 0.1, GOVERNMENT: 0.05, CORPORATE: 0.85 },
@@ -316,6 +348,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'consumer_devices',
+        householdUnitsPerCapitaAnnual: 0.6, corporateUnitsPerFirmAnnual: 3.0,
         recipeInputs: { semiconductors: 0.28, specialty_metals: 0.06, industrial_chemicals: 0.04, consumer_software: 0.02, electricity: 0.02, professional_services: 0.03, facilities_and_logistics: 0.05, repair_and_maintenance: 0.02 },
         label: "Consumer Devices",
         buyerMix: { HOUSEHOLD: 0.85, GOVERNMENT: 0.02, CORPORATE: 0.13 },
@@ -332,6 +365,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'enterprise_software',
+        corporateUnitsPerFirmAnnual: 8.0,
         recipeInputs: { network_infrastructure: 0.05, semiconductors: 0.01, electricity: 0.02, professional_services: 0.08, facilities_and_logistics: 0.02, repair_and_maintenance: 0.01 },
         label: "Enterprise Software & Cloud",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.1, CORPORATE: 0.9 },
@@ -342,6 +376,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'consumer_software',
+        householdUnitsPerCapitaAnnual: 3.0, corporateUnitsPerFirmAnnual: 1.0,
         recipeInputs: { network_infrastructure: 0.06, media_content: 0.04, electricity: 0.02, professional_services: 0.05, facilities_and_logistics: 0.01, repair_and_maintenance: 0.01 },
         label: "Consumer Software & Subscriptions",
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0, CORPORATE: 0.1 },
@@ -357,6 +392,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'network_infrastructure',
+        householdUnitsPerCapitaAnnual: 2.0, corporateUnitsPerFirmAnnual: 6.0,
         recipeInputs: { consumer_devices: 0.08, semiconductors: 0.05, enterprise_software: 0.04, specialty_metals: 0.03, electricity: 0.06, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.07 },
         label: "Network Infrastructure",
         buyerMix: { HOUSEHOLD: 0.55, GOVERNMENT: 0.1, CORPORATE: 0.35 },
@@ -373,6 +409,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'health_services',
+        householdUnitsPerCapitaAnnual: 6.0, corporateUnitsPerFirmAnnual: 1.0,
         recipeInputs: { pharmaceuticals: 0.14, medtech_devices: 0.08, household_essentials: 0.03, electricity: 0.02, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
         label: "Health Services",
         buyerMix: { HOUSEHOLD: 0.55, GOVERNMENT: 0.43, CORPORATE: 0.02 },
@@ -383,6 +420,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'pharmaceuticals',
+        householdUnitsPerCapitaAnnual: 9.0, corporateUnitsPerFirmAnnual: 0.5,
         recipeInputs: { industrial_chemicals: 0.16, agricultural_chemicals: 0.02, industrial_automation: 0.02, electricity: 0.03, professional_services: 0.07, facilities_and_logistics: 0.04, repair_and_maintenance: 0.03 },
         label: "Pharmaceuticals",
         buyerMix: { HOUSEHOLD: 0.4, GOVERNMENT: 0.45, CORPORATE: 0.15 },
@@ -395,6 +433,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'medtech_devices',
+        householdUnitsPerCapitaAnnual: 0.4, corporateUnitsPerFirmAnnual: 0.8,
         recipeInputs: { semiconductors: 0.09, specialty_metals: 0.08, industrial_chemicals: 0.05, industrial_automation: 0.03, electricity: 0.02, professional_services: 0.06, facilities_and_logistics: 0.04, repair_and_maintenance: 0.02 },
         label: "Medical Devices",
         buyerMix: { HOUSEHOLD: 0.15, GOVERNMENT: 0.5, CORPORATE: 0.35 },
@@ -411,6 +450,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'food_beverage',
+        householdUnitsPerCapitaAnnual: 120.0, corporateUnitsPerFirmAnnual: 8.0,
         recipeInputs: { agricultural_commodities: 0.34, industrial_chemicals: 0.03, household_chemicals: 0.02, specialty_metals: 0.02, electricity: 0.03, professional_services: 0.02, facilities_and_logistics: 0.06, repair_and_maintenance: 0.03 },
         label: "Food & Beverage",
         buyerMix: { HOUSEHOLD: 0.95, GOVERNMENT: 0.02, CORPORATE: 0.03 },
@@ -423,6 +463,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'household_essentials',
+        householdUnitsPerCapitaAnnual: 40.0, corporateUnitsPerFirmAnnual: 6.0,
         recipeInputs: { household_chemicals: 0.18, industrial_chemicals: 0.08, agricultural_commodities: 0.05, specialty_metals: 0.02, electricity: 0.03, professional_services: 0.02, facilities_and_logistics: 0.06, repair_and_maintenance: 0.02 },
         label: "Household Essentials",
         buyerMix: { HOUSEHOLD: 0.95, GOVERNMENT: 0.02, CORPORATE: 0.03 },
@@ -440,6 +481,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'apparel_retail',
+        householdUnitsPerCapitaAnnual: 10.0, corporateUnitsPerFirmAnnual: 1.0,
         recipeInputs: { household_essentials: 0.10, agricultural_commodities: 0.06, luxury_goods: 0.04, industrial_chemicals: 0.04, housing_rental_services: 0.05, electricity: 0.02, professional_services: 0.03, facilities_and_logistics: 0.09, repair_and_maintenance: 0.01 },
         label: "Apparel & General Retail",
         buyerMix: { HOUSEHOLD: 0.95, GOVERNMENT: 0, CORPORATE: 0.05 },
@@ -450,6 +492,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'home_furnishings',
+        householdUnitsPerCapitaAnnual: 1.5, corporateUnitsPerFirmAnnual: 1.5,
         recipeInputs: { specialty_metals: 0.08, industrial_chemicals: 0.07, agricultural_commodities: 0.04, consumer_devices: 0.04, housing_rental_services: 0.04, electricity: 0.02, professional_services: 0.02, facilities_and_logistics: 0.08, repair_and_maintenance: 0.02 },
         label: "Home Furnishings",
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0, CORPORATE: 0.1 },
@@ -466,6 +509,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'luxury_goods',
+        householdUnitsPerCapitaAnnual: 0.5, corporateUnitsPerFirmAnnual: 0.2,
         recipeInputs: { specialty_metals: 0.16, apparel_retail: 0.04, household_chemicals: 0.02, housing_rental_services: 0.03, electricity: 0.01, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.01 },
         label: "Luxury Goods",
         buyerMix: { HOUSEHOLD: 1, GOVERNMENT: 0, CORPORATE: 0 },
@@ -483,6 +527,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'media_content',
+        householdUnitsPerCapitaAnnual: 15.0, corporateUnitsPerFirmAnnual: 1.0,
         recipeInputs: { network_infrastructure: 0.05, consumer_software: 0.03, electricity: 0.02, professional_services: 0.09, facilities_and_logistics: 0.02, repair_and_maintenance: 0.01 },
         label: "Media & Content",
         buyerMix: { HOUSEHOLD: 0.85, GOVERNMENT: 0, CORPORATE: 0.15 },
@@ -505,6 +550,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'food_service',
+        householdUnitsPerCapitaAnnual: 30.0, corporateUnitsPerFirmAnnual: 3.0,
         recipeInputs: { food_beverage: 0.30, household_essentials: 0.03, housing_rental_services: 0.06, electricity: 0.03, professional_services: 0.01, facilities_and_logistics: 0.03, repair_and_maintenance: 0.02 },
         label: "Food Service & Hospitality",
         buyerMix: { HOUSEHOLD: 0.92, GOVERNMENT: 0.02, CORPORATE: 0.06 },
@@ -515,6 +561,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'personal_care_services',
+        householdUnitsPerCapitaAnnual: 8.0, corporateUnitsPerFirmAnnual: 0.5,
         recipeInputs: { household_chemicals: 0.06, household_essentials: 0.03, housing_rental_services: 0.06, electricity: 0.02, professional_services: 0.02, facilities_and_logistics: 0.02, repair_and_maintenance: 0.01 },
         label: "Personal & Household Services",
         buyerMix: { HOUSEHOLD: 0.96, GOVERNMENT: 0.02, CORPORATE: 0.02 },
@@ -525,6 +572,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'education_services',
+        householdUnitsPerCapitaAnnual: 3.0, corporateUnitsPerFirmAnnual: 1.0,
         recipeInputs: { housing_rental_services: 0.05, enterprise_software: 0.03, consumer_devices: 0.02, electricity: 0.02, professional_services: 0.03, facilities_and_logistics: 0.02, repair_and_maintenance: 0.02 },
         label: "Education & Training",
         buyerMix: { HOUSEHOLD: 0.42, GOVERNMENT: 0.55, CORPORATE: 0.03 },
@@ -545,6 +593,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'professional_services',
+        householdUnitsPerCapitaAnnual: 1.0, corporateUnitsPerFirmAnnual: 14.0,
         recipeInputs: { enterprise_software: 0.05, housing_rental_services: 0.05, consumer_devices: 0.02, network_infrastructure: 0.02, electricity: 0.01, facilities_and_logistics: 0.02, repair_and_maintenance: 0.01 },
         label: "Professional & Advisory Services",
         buyerMix: { HOUSEHOLD: 0.06, GOVERNMENT: 0.14, CORPORATE: 0.80 },
@@ -554,6 +603,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'facilities_and_logistics',
+        householdUnitsPerCapitaAnnual: 2.0, corporateUnitsPerFirmAnnual: 18.0,
         recipeInputs: { refined_products: 0.14, commercial_fleet: 0.05, housing_rental_services: 0.05, enterprise_software: 0.02, electricity: 0.03, professional_services: 0.02, repair_and_maintenance: 0.05 },
         label: "Facilities & Logistics Services",
         buyerMix: { HOUSEHOLD: 0.04, GOVERNMENT: 0.12, CORPORATE: 0.84 },
@@ -563,6 +613,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'repair_and_maintenance',
+        householdUnitsPerCapitaAnnual: 2.0, corporateUnitsPerFirmAnnual: 10.0,
         recipeInputs: { specialty_metals: 0.09, heavy_equipment: 0.04, industrial_chemicals: 0.04, refined_products: 0.04, electricity: 0.02, professional_services: 0.02, facilities_and_logistics: 0.04 },
         label: "Repair & Maintenance",
         buyerMix: { HOUSEHOLD: 0.50, GOVERNMENT: 0.08, CORPORATE: 0.42 },
@@ -581,6 +632,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         // the model had no market for it — rent was inside a consumption budget that only ever
         // bid for goods.
         unitId: 'housing_rental_services',
+        householdUnitsPerCapitaAnnual: 12.0, corporateUnitsPerFirmAnnual: 4.0,
         recipeInputs: { repair_and_maintenance: 0.10, household_chemicals: 0.01, electricity: 0.05, professional_services: 0.03, facilities_and_logistics: 0.02 },
         label: "Housing & Rental Services",
         buyerMix: { HOUSEHOLD: 0.90, GOVERNMENT: 0.04, CORPORATE: 0.06 },
@@ -591,6 +643,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'residential_construction',
+        householdUnitsPerCapitaAnnual: 0.05, corporateUnitsPerFirmAnnual: 0.4,
         recipeInputs: { specialty_metals: 0.16, industrial_chemicals: 0.10, home_furnishings: 0.05, heavy_equipment: 0.04, refined_products: 0.03, electricity: 0.02, professional_services: 0.06, facilities_and_logistics: 0.05, repair_and_maintenance: 0.03 },
         label: "Residential Construction",
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0.05, CORPORATE: 0.05 },
@@ -600,6 +653,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'commercial_construction',
+        corporateUnitsPerFirmAnnual: 0.5,
         recipeInputs: { specialty_metals: 0.19, industrial_chemicals: 0.10, heavy_equipment: 0.05, industrial_automation: 0.03, refined_products: 0.03, electricity: 0.02, professional_services: 0.07, facilities_and_logistics: 0.05, repair_and_maintenance: 0.03 },
         label: "Commercial & Infrastructure Construction",
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.45, CORPORATE: 0.55 },

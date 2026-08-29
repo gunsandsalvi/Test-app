@@ -5016,3 +5016,32 @@ that proved it, the lesson.
       local correctness does not compose into global calibration: the seed's physical quantities
       and its prices are still solved separately, and each fix reveals the next place they
       disagree.
+
+131. **IND-R3 done — every good has its own consumption intensity — and the five-fix pattern says
+    the price LEVEL has no anchor.**
+    - **IND-R3.** `HOUSEHOLD_PER_CAPITA_UNIT_INTENSITY = 0.02` was one number for all 37 goods, so
+      a household consumed as many units of aerospace as of food, every baseline price landed at
+      the same order of magnitude, and a "unit" was an abstract bundle rather than a thing — with
+      the CPI basket inheriting the whole of it. Each sub-unit now declares
+      `householdUnitsPerCapitaAnnual` and `corporateUnitsPerFirmAnnual` on its registry entry,
+      beside the physics, exactly where `category-demand.ts`'s own comment said they belonged.
+      The absolute scale is a free choice — it only sets what one unit means — so what is stated
+      is RELATIVE frequency: food constantly, a vehicle rarely, an airliner almost never.
+    - **AND THE THING THIS SEQUENCE HAS ESTABLISHED, which matters more than any one fix.** Five
+      changes into the price chain — final-demand pricing (§7.127), one base for the commodity
+      market (§7.128), investment responding to shortfall (§7.129), a cost-anchored reservation
+      price (§7.130), per-good intensities (here) — **every one principled, every one
+      harness-green, and the measured deflation has gone −12% → −25% at week 10.** Relative-price
+      dispersion improved enormously (0.01x-14x → 0.13x-3.4x); the LEVEL got steadily worse.
+    - **A metric that moves the wrong way under five independent correct fixes is not being
+      caused by any of them.** The conclusion is structural: **nothing in this model anchors the
+      nominal price level.** Every price is relative and cleared, money is endogenous (a loan
+      creates a deposit), and the policy rate does not reach nominal demand — so the level is free
+      to drift and the mechanisms above only decide how fast. That is MAC's real content, and it
+      is not in §5-MAC's current three parts (expectations, confidence, the fiscal stance), which
+      all presume a level that is anchored and merely mis-forecast.
+    - **So MAC(a) is re-scoped by measurement:** before confidence or the stance, the question is
+      what pins the level at all — the transmission from the policy rate to nominal spending, and
+      whether the CPI's fixed seed basket can carry a cross-section whose dispersion changes this
+      much. **Do not attack it with another mechanism fix in the goods market; five of those are
+      now recorded and the level moved against all of them.**
