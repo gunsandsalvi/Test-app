@@ -244,6 +244,9 @@ export interface PrivateSectorSegment {
    * ONLY by the settlement layer — the segment is a party (`SEGMENT` PartyRef) like everyone
    * else. Seeded at the named private tier's measured cash/revenue ratio. */
   cashUSD?: number;
+  /** SEG2g — tax accrued weekly on the pool's earnings and REMITTED quarterly as a real
+   * SEGMENT → GOVERNMENT payment (stage 11), replacing the payer-less revenue statistic. */
+  accruedTaxUSD?: number;
   debtUSD: number;
   defaultRateAnnualPct: number;
   capexUSD: number;

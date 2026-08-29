@@ -76,7 +76,7 @@ export function quoteLoanMarginBps(params: {
   return Math.max(25, Math.round(expectedLossBps + capitalCostBps));
 }
 
-const smePoolId = (regionId: RegionId, segmentType: string) => `${regionId}_SEG_${segmentType}`;
+export const smePoolId = (regionId: RegionId, segmentType: string) => `${regionId}_SEG_${segmentType}`;
 
 /** The pool's PD from its own real default experience — the segment's annual default rate. */
 function smePoolAnnualPd(seg: PrivateSectorSegment): number {
@@ -170,6 +170,10 @@ export interface WeeklyLendingResult {
   /** Net facility money created (+) / destroyed (−) this week — excluded from the reserve
    * settlement of the corporate-deposit view. */
   facilityNetOriginationUSD: number;
+  /** SEG2e — this week's SME origination per segmentType. The caller (02b) books the deposit
+   * half through settlement (BANK_CREDIT → SEGMENT), so the pool's new money lands on its own
+   * line with no reserve move; the loan half was already written in place here. */
+  smeOriginationBySegment: Map<string, number>;
 }
 
 /**
@@ -249,7 +253,7 @@ export function runBankWeeklyLending(
   // ---- SME origination: priced, capital-gated. Demand is a slow reach toward the pool's
   // serviceable ceiling; supply is whatever keeps the bank above its regulatory floor. ----
   let declinedOriginationUSD = 0;
-  let smeOriginationUSD = 0;
+  const smeOriginationBySegment = new Map<string, number>();
   const equityUSD = sheet.bankEquityUSD;
   (reg.privateSectorSegments || []).forEach((seg) => {
     const poolId = smePoolId(regionId, seg.segmentType);
@@ -282,7 +286,7 @@ export function runBankWeeklyLending(
     declinedOriginationUSD += demandUSD - grantedUSD;
     if (grantedUSD <= 0) return;
 
-    smeOriginationUSD += grantedUSD;
+    smeOriginationBySegment.set(seg.segmentType, (smeOriginationBySegment.get(seg.segmentType) ?? 0) + grantedUSD);
     const marginBps = quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0 });
     if (poolLoan) {
       poolLoan.principalUSD += grantedUSD;
@@ -314,10 +318,11 @@ export function runBankWeeklyLending(
       businessLoans: loans,
       businessLoanBookUSD,
       bankEquityUSD: sheet.bankEquityUSD - loanLossWeeklyUSD,
-      // Loans create deposits: an SME origination puts the pool's new money on the bank's own
-      // funding line the same moment the loan appears — no reserves move, which is endogenous
-      // money (the pools bank here; they have no cash ledger of their own until MS).
-      depositsUSD: sheet.depositsUSD + smeOriginationUSD,
+      // SEG2e: loans still create deposits, but the pool's new money now lands on ITS OWN line
+      // through settlement — the caller pays BANK_CREDIT → SEGMENT with the per-segment map
+      // below, so the deposit appears on `smeDepositsUSD` (and the pool's cash) with no reserve
+      // move, instead of being quietly folded into the household deposit line here.
+      depositsUSD: sheet.depositsUSD,
       // SETL2b: a facility is DEPOSIT CREATION, and both halves happen in one statement at
       // settlement — the loan is booked there in the same week the borrower draws it, so no
       // reserve moves and nothing is left for this reconciliation to fund. What remains here is
@@ -331,6 +336,7 @@ export function runBankWeeklyLending(
     loanLossWeeklyUSD,
     declinedOriginationUSD,
     facilityNetOriginationUSD,
+    smeOriginationBySegment,
   };
 }
 

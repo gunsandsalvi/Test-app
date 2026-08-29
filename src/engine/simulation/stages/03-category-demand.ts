@@ -75,20 +75,28 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           reason: 'government payroll',
         });
       }
-      // The tier's wage bill is the REMAINDER of the economy's, not a second derivation of it:
-      // total wages less what the government and the named companies already paid. Deriving it
-      // independently (headcount times a per-worker income) is what made deposits explode —
-      // the two employment measures did not agree, and the error compounded weekly.
-      const totalWageBillWeeklyUSD = (reg.estimatedHouseholdIncomeUSD ?? 0) / 52;
-      const segmentWagesUSD = Math.max(0, totalWageBillWeeklyUSD - payrollUSD - (reg.lastWeekCompanyWagesUSD ?? 0));
-      if (segmentWagesUSD > 0) {
-        pay(ctx, {
-          payer: { kind: 'UNMODELED', region: regionId },
-          payee: { kind: 'HOUSEHOLD', region: regionId },
-          amountUSD: segmentWagesUSD,
-          reason: 'private-sector tier wages',
-        });
-      }
+      // SEG2c: the tier's employers pay their own wage bills now — each segment pays its
+      // headcount at the region's per-worker income (the SAME convention stage 08 uses for the
+      // named firms, so one wage level prices every employer), from its own book through
+      // settlement. The residual-from-a-statistic form this replaces was the right bridge while
+      // the tier had no ledger: a payer with no book could only ever be the remainder of a
+      // top-down total. With books, an over-derived wage bill drains the segment's cash and
+      // shows up as measurable distress instead of compounding into a statistic (the 4e16
+      // deposits explosion was the FIELD-NAME bug plus a math guard, §7.94 — not this form).
+      const regionEmployedForWages = Math.max(1, Object.values(reg.occupationPools ?? {})
+        .reduce((a: number, pool: any) => a + (pool?.employed ?? 0), 0));
+      const perWorkerWeeklyUSD = ((reg.estimatedHouseholdIncomeUSD ?? 0) / regionEmployedForWages) / 52;
+      (reg.privateSectorSegments || []).forEach((seg) => {
+        const wagesUSD = seg.employment * perWorkerWeeklyUSD;
+        if (wagesUSD > 0) {
+          pay(ctx, {
+            payer: { kind: 'SEGMENT', region: regionId, segmentType: seg.segmentType },
+            payee: { kind: 'HOUSEHOLD', region: regionId },
+            amountUSD: wagesUSD,
+            reason: 'private-sector tier wages',
+          });
+        }
+      });
     }
 
     const govBudget = decomposeGovernmentSpending(

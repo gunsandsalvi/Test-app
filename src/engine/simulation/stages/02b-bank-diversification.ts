@@ -29,8 +29,9 @@ import {
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
-import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual } from './bank-lending';
+import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId } from './bank-lending';
 import { WeeklyStepContext } from './context';
+import { pay } from './settlement';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -145,6 +146,24 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const priorFacilityInterestWeeklyUSD = (prevSheet.businessLoans || [])
         .filter((l) => l.status === 'PERFORMING' && l.borrowerKind === 'COMPANY_FACILITY')
         .reduce((a, l) => a + (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52, 0);
+      // SEG2d: the SME slice is a real payment now too — each pool pays its own interest from
+      // its own book (SEGMENT → BANK through settlement), on the same prior-week basis the
+      // facility exclusion uses, so the evolution must not credit it either.
+      let priorSmeInterestWeeklyUSD = 0;
+      (prevSheet.businessLoans || [])
+        .filter((l) => l.status === 'PERFORMING' && l.borrowerKind === 'SME_POOL')
+        .forEach((l) => {
+          const seg = (reg.privateSectorSegments || []).find((s) => smePoolId(regionId, s.segmentType) === l.borrowerId);
+          if (!seg) return;
+          const interestUSD = (l.principalUSD * (reg.policyRate + l.marginBps / 10000)) / 52;
+          priorSmeInterestWeeklyUSD += interestUSD;
+          pay(ctx, {
+            payer: { kind: 'SEGMENT', region: regionId, segmentType: seg.segmentType },
+            payee: { kind: 'BANK', ticker: bank.ticker },
+            amountUSD: interestUSD,
+            reason: 'SME pool interest to the lending bank',
+          });
+        });
 
       // HH3: the household books' real accrual on the same prior-week basis — each pool at its
       // own terms (a mortgage pool at its fixed WAC, card/term at policy plus their margins).
@@ -177,7 +196,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         prevSheet.repoBorrowedUSD ?? 0,
         prevSheet.repoLentUSD ?? 0,
         reg.repoRateAnnual ?? reg.policyRate,
-        priorLoanInterestWeeklyUSD - priorFacilityInterestWeeklyUSD,
+        priorLoanInterestWeeklyUSD - priorFacilityInterestWeeklyUSD - priorSmeInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
         // PUB1: real coupons on this bank's own sovereign book.
         Object.entries(prevSheet.sovereignBondHoldingsByTenor || {}).reduce(
@@ -195,6 +214,17 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // G2: the itemized book's own week — facility reconciliation, real interest accrual
       // basis, real SME write-offs, and priced origination under the real capital constraint.
       const lending = runBankWeeklyLending(bank, sheet, reg, regionId, facilityTranchesByBank, ctx.nextWeek);
+      // SEG2e: a loan creates a deposit — the pool's new money is written by this bank's own
+      // credit (no reserve moves) and lands on the pool's cash and this bank's smeDepositsUSD
+      // line at settlement, in the same week the loan appeared on the book above.
+      lending.smeOriginationBySegment.forEach((grantedUSD, segmentType) => {
+        pay(ctx, {
+          payer: { kind: 'BANK_CREDIT', ticker: bank.ticker },
+          payee: { kind: 'SEGMENT', region: regionId, segmentType },
+          amountUSD: grantedUSD,
+          reason: 'SME loan origination creates the pool deposit',
+        });
+      });
       // HH3: the household books' own week — derived amortization, measured losses, and
       // priced, capital-gated origination (mortgage demand off the real housing turnover).
       const household = runBankHouseholdLending(
@@ -235,6 +265,22 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       ctx.g2DeclinedOriginationUSD[regionId] = (ctx.g2DeclinedOriginationUSD[regionId] ?? 0) + lending.declinedOriginationUSD;
       return { bank, sheet: withDeposits };
     });
+
+    // SEG2f: the pool's debt is the DERIVED SUM of the loans the banks actually hold against it
+    // — one representation (rule 3). The in-place `debtUSD += granted` during origination only
+    // sequences demand across banks within the pass; this write is the record, and it now
+    // carries the loss leg too (write-offs used to shrink the banks' books while the segment's
+    // number never noticed).
+    {
+      const poolTotals = new Map<string, number>();
+      newSheets.forEach(({ sheet }) => (sheet.businessLoans || []).forEach((l) => {
+        if (l.borrowerKind !== 'SME_POOL') return;
+        poolTotals.set(l.borrowerId, (poolTotals.get(l.borrowerId) ?? 0) + l.principalUSD);
+      }));
+      (reg.privateSectorSegments || []).forEach((seg) => {
+        seg.debtUSD = Number((poolTotals.get(smePoolId(regionId, seg.segmentType)) ?? 0).toFixed(0));
+      });
+    }
 
     // WS6: the weekly money-market session. Every real flow has posted; banks short of their
     // buffer now fund against their collateral, surplus banks and institutional idle cash

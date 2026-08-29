@@ -55,8 +55,17 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // market really supplied — not by the spending BUDGET. Falls back to the budget only before
     // stage 11 has run once.
     const outlaysUSD = reg.governmentOutlaysUSD ?? reg.governmentSpendingUSD;
+    // SEG2g/CASH: the government legs that now settle as real payments (corporate and SME tax
+    // remittances in, payroll and procurement out) have ALREADY moved the TGA this week, at
+    // settlement, with their reserve legs. They are also inside `governmentRevenueUSD` and
+    // `outlaysUSD` — the treasury's flow statement — so posting the statement unadjusted
+    // credited and debited those legs a second time (found wiring the SME tax leg: the
+    // settlement migration and this statement were double-counting every migrated flow).
+    // The statement remains the treasury's week; what settlement executed is subtracted from it.
+    const settledTgaUSD = ctx.lastSettlementReport?.tgaDeltaByRegion.get(regionId) ?? 0;
     const tgaFlowUSD = reg.governmentRevenueUSD - outlaysUSD + remitUSD
-      + (reg.lastIssuanceProceedsUSD ?? 0) - (reg.lastRedemptionPaidUSD ?? 0);
+      + (reg.lastIssuanceProceedsUSD ?? 0) - (reg.lastRedemptionPaidUSD ?? 0)
+      - settledTgaUSD;
     cb.treasuryAccountUSD = Number((cb.treasuryAccountUSD + tgaFlowUSD).toFixed(0));
     cb.lastRemittanceUSD = Number(remitUSD.toFixed(0));
 

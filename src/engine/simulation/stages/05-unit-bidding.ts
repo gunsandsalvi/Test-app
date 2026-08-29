@@ -76,8 +76,15 @@ function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): 
   if (comp) return { kind: 'COMPANY', ticker: comp.ticker };
   if (key.startsWith('HOUSEHOLD')) return { kind: 'HOUSEHOLD', region: regionId };
   if (key.startsWith('GOVERNMENT') || key.startsWith('GOV')) return { kind: 'GOVERNMENT', region: regionId };
-  // Private-sector segments and seed suppliers are real sellers with no cash ledger of their
-  // own yet — named to the boundary until HC gives the tier one.
+  // SEG2a: a segment key is a real party now — its sales proceeds land on the pool's own book
+  // instead of the boundary. The key embeds the segment's OWN region (it can sell into another
+  // region's book), so parse it rather than trusting the market's origin.
+  if (key.startsWith('PRIVATE:')) {
+    const [, segRegion, segmentType] = key.split(':');
+    return { kind: 'SEGMENT', region: segRegion as RegionId, segmentType };
+  }
+  // Seed suppliers are real sellers with no cash ledger of their own yet — named to the
+  // boundary until a project gives them one.
   return { kind: 'UNMODELED', region: regionId };
 }
 
@@ -1130,10 +1137,31 @@ function runSubUnitMarkets(
     const sellerTotalUSD = Array.from(book.salesByKey.values()).reduce((a, v) => a + v.amount, 0);
     if (!(sellerTotalUSD > 0)) return;
     let corporatePaidUSD = 0;
+    // SEG2b: the segments pay for what THEY buy (capex bids, recipe inputs), pro rata to the
+    // book's sellers like the other aggregate buyers. Their fills used to sit inside the
+    // household/government remainder below — in `sellerTotalUSD` but in nobody's claim — so the
+    // two real aggregate buyers were billed for the tier's purchases on top of their own.
+    let segmentPaidUSD = 0;
+    const segmentBuysByKey = new Map<string, number>();
     book.purchasesByKey.forEach((buy, key) => {
-      if (lookup.byKey.get(key)) corporatePaidUSD += buy.amount;
+      if (lookup.byKey.get(key)) { corporatePaidUSD += buy.amount; return; }
+      if (key.startsWith('PRIVATE:')) {
+        segmentPaidUSD += buy.amount;
+        segmentBuysByKey.set(key, (segmentBuysByKey.get(key) ?? 0) + buy.amount);
+      }
     });
-    const aggregateUSD = Math.max(0, sellerTotalUSD - corporatePaidUSD);
+    segmentBuysByKey.forEach((amountUSD, segKey) => {
+      const segParty = partyOfKey(segKey, origin, lookup);
+      book.salesByKey.forEach((sale, sellerKey) => {
+        pay(ctx, {
+          payer: segParty,
+          payee: partyOfKey(sellerKey, origin, lookup),
+          amountUSD: amountUSD * (sale.amount / sellerTotalUSD),
+          reason: 'segment goods purchase',
+        });
+      });
+    });
+    const aggregateUSD = Math.max(0, sellerTotalUSD - corporatePaidUSD - segmentPaidUSD);
     if (!(aggregateUSD > 0)) return;
     // Split what remains between the two aggregate buyers by what each actually took.
     const hhUnitsAll = MARKET_REGION_IDS.reduce((a, r) => a + (book.householdFillUnitsByRegion[r] ?? 0), 0);

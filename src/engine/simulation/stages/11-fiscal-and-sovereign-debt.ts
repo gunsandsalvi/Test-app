@@ -21,6 +21,7 @@ import {
 import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions } from './holdings-view';
+import { pay } from './settlement';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -287,9 +288,26 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const isQuarterEnd = currentWeekMod13 === 13;
     const isMonthEnd = nextWeek % 4 === 0;
 
-    const smeAccrualWeeklyUSD = (reg.privateSectorSegments || []).reduce(
-      (a, sg) => a + Math.max(0, sg.annualRevenueUSD * sg.marginPct) * (reg.effectiveTaxRate ?? 0.21) / 52, 0
-    );
+    // SEG2g: the tier's tax has a payer now. Each segment accrues on its own earnings and
+    // remits its own balance at quarter end, as a real payment from its book (this stage runs
+    // after the week's settlement cutoff, so the money lands next cycle — a remittance date's
+    // cash arriving a settlement day later). The regional accrual below stays as the statement's
+    // smooth expectation; the PAYMENT is per segment.
+    let smeAccrualWeeklyUSD = 0;
+    (reg.privateSectorSegments || []).forEach((sg) => {
+      const accrualUSD = Math.max(0, sg.annualRevenueUSD * sg.marginPct) * (reg.effectiveTaxRate ?? 0.21) / 52;
+      smeAccrualWeeklyUSD += accrualUSD;
+      sg.accruedTaxUSD = (sg.accruedTaxUSD ?? 0) + accrualUSD;
+      if (isQuarterEnd && (sg.accruedTaxUSD ?? 0) > 0) {
+        pay(ctx, {
+          payer: { kind: 'SEGMENT', region: regionId, segmentType: sg.segmentType },
+          payee: { kind: 'GOVERNMENT', region: regionId },
+          amountUSD: sg.accruedTaxUSD!,
+          reason: 'SME tax (quarterly remittance)',
+        });
+        sg.accruedTaxUSD = 0;
+      }
+    });
     const householdAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + c.taxUSD, 0) / 52;
     const consumptionAccrualWeeklyUSD = (reg.householdState.cohorts ?? []).reduce((a, c) => a + (c.consumptionTaxUSD ?? 0), 0) / 52;
     const payrollAccrualWeeklyUSD = reg.employerPayrollTaxWeeklyUSD ?? 0;
