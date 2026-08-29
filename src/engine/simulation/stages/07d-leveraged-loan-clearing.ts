@@ -74,6 +74,20 @@ function loanCreditDurationYears(comp: Company): number {
 export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
+  // SCALE: same per-run memo and hoist as 07b — floatingDebtUSD walks the ladder per call and
+  // nothing in this stage changes a ladder.
+  const floatingDebtById = new Map<string, number>();
+  const floatingDebtOf = (c: Company): number => {
+    let v = floatingDebtById.get(c.id);
+    if (v === undefined) { v = floatingDebtUSD(c); floatingDebtById.set(c.id, v); }
+    return v;
+  };
+  const loanStockByRegion: Record<string, number> = {};
+  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+    loanStockByRegion[r] = ctx.prevActiveFirms
+      .filter((c) => c.region === r).reduce((a, c) => a + floatingDebtOf(c), 0);
+  });
+
   regionIds.forEach((regionId) => {
     ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
@@ -96,7 +110,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     );
     [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].forEach((c) => {
       if (c.region !== regionId || !isActiveCompany(c)) return;
-      const hasLoan = floatingDebtUSD(c) > 0 || debutIssuerIds.has(c.id);
+      const hasLoan = floatingDebtOf(c) > 0 || debutIssuerIds.has(c.id);
       if (!hasLoan) {
         if (c.leveragedLoan) c.leveragedLoan = undefined;
         return;
@@ -122,7 +136,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // MOSTLY private, sponsor-owned issuers; the public-only version was the anomaly.
     const regionCompanies = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
       (c) => c.region === regionId && isActiveCompany(c) && !!c.leveragedLoan
-        && (floatingDebtUSD(c) > 0 || debutIssuerIds.has(c.id))
+        && (floatingDebtOf(c) > 0 || debutIssuerIds.has(c.id))
     );
     if (regionCompanies.length === 0) return;
 
@@ -153,15 +167,15 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // of what the engine asks it to absorb left a gap that only the distressed fund's reservation
     // could close, so the solve printed ~1365bps on deals whose issuers walk at 900.
     const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
-    const liveTradableFloatUSD = (c: Company) => floatingDebtUSD(c) * tradableShare + offeringSizeUSD(c);
+    const liveTradableFloatUSD = (c: Company) => floatingDebtOf(c) * tradableShare + offeringSizeUSD(c);
 
     const totalOutstandingUSD =
-      regionCompanies.reduce((s, c) => s + floatingDebtUSD(c) + offeringSizeUSD(c), 0) || 1;
+      regionCompanies.reduce((s, c) => s + floatingDebtOf(c) + offeringSizeUSD(c), 0) || 1;
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
-      outstandingUSD: floatingDebtUSD(c),
-      tradableFloatUSD: floatingDebtUSD(c) * tradableShare,
+      outstandingUSD: floatingDebtOf(c),
+      tradableFloatUSD: floatingDebtOf(c) * tradableShare,
       currentStat: c.leveragedLoan!.discountMarginBps,
       statKind: 'YIELD_LIKE',
       durationYears: loanCreditDurationYears(c),
@@ -175,11 +189,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // weight at whatever the market asks — so they are excluded from the allocator population here
     // and given their own demand below.
     // XB1: cross-border loan buyers, bounded by mandate rather than by an assigned share.
-    const loanStockByRegion: Record<string, number> = {};
-    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
-      loanStockByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + floatingDebtUSD(c), 0);
-    });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.entityType !== 'ETF'
         && mandateWeightForIssuer(e.entityType, e.region, regionId, loanStockByRegion) > 0

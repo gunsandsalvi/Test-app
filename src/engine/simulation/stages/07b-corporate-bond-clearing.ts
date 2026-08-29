@@ -117,6 +117,23 @@ function clamp(v: number, min: number, max: number): number {
 export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
+  // SCALE: fixedDebtUSD filters and reduces a company's whole ladder per call, and the stage
+  // used to call it ~14k times a week (four full-universe region sweeps included). Nothing in
+  // this stage changes a ladder, so one computation per company per run is the same number.
+  const fixedDebtById = new Map<string, number>();
+  const fixedDebtOf = (c: Company): number => {
+    let v = fixedDebtById.get(c.id);
+    if (v === undefined) { v = fixedDebtUSD(c); fixedDebtById.set(c.id, v); }
+    return v;
+  };
+  // Loop-invariant for the same reason — hoisted from the per-region iteration (it was four
+  // identical full-universe sweeps per region, sixteen a week).
+  const corpStockByRegion: Record<string, number> = {};
+  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+    corpStockByRegion[r] = ctx.prevActiveFirms
+      .filter((c) => c.region === r).reduce((a, c) => a + fixedDebtOf(c), 0);
+  });
+
   regionIds.forEach((regionId) => {
     ctx.holdingsStore!.nextEpoch();
     const reg = ctx.updatedRegions[regionId];
@@ -125,7 +142,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // their tradable float already seeded onto these same holders (initialization), so their
     // first clearing week opens with genuine small gaps, not a systemic buy-in.
     const regionCompanies = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
-      (c) => c.region === regionId && isActiveCompany(c) && fixedDebtUSD(c) > 0
+      (c) => c.region === regionId && isActiveCompany(c) && fixedDebtOf(c) > 0
     );
     if (regionCompanies.length === 0) return;
 
@@ -154,14 +171,14 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // OUTSTANDING stock, and a new issue has none — all of it is for sale to the bidders here,
     // which is exactly what the engine adds to the float it must clear (see 07d).
     const offeringSizeUSD = (c: Company) => offeringsByIssuerId.get(c.id)?.sizeUSD ?? 0;
-    const liveTradableFloatUSD = (c: Company) => fixedDebtUSD(c) * tradableShare + offeringSizeUSD(c);
+    const liveTradableFloatUSD = (c: Company) => fixedDebtOf(c) * tradableShare + offeringSizeUSD(c);
     const totalOutstandingUSD =
-      regionCompanies.reduce((s, c) => s + fixedDebtUSD(c) + offeringSizeUSD(c), 0) || 1;
+      regionCompanies.reduce((s, c) => s + fixedDebtOf(c) + offeringSizeUSD(c), 0) || 1;
 
     const instruments: ClearingInstrument[] = regionCompanies.map((c) => ({
       id: c.id,
-      outstandingUSD: fixedDebtUSD(c),
-      tradableFloatUSD: fixedDebtUSD(c) * tradableShare,
+      outstandingUSD: fixedDebtOf(c),
+      tradableFloatUSD: fixedDebtOf(c) * tradableShare,
       currentStat: c.oasSpreadBps,
       statKind: 'YIELD_LIKE',
       durationYears: creditDurationYears(c),
@@ -180,11 +197,6 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // and given their own demand below.
     // XB1: every region's institutions bid, bounded by their own mandate rather than by an
     // ownership share assigned to their region.
-    const corpStockByRegion: Record<string, number> = {};
-    (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
-      corpStockByRegion[r] = ctx.prevActiveFirms
-        .filter((c) => c.region === r).reduce((a, c) => a + fixedDebtUSD(c), 0);
-    });
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.entityType !== 'ETF'
         && mandateWeightForIssuer(e.entityType, e.region, regionId, corpStockByRegion) > 0
