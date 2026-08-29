@@ -111,7 +111,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const evMultiple = publicComparableEvMultiple(region, ctx.updatedCompanies);
     const etfHoldingsUSD = householdEtfHoldingsUSD({ etfShares }, ctx.updatedInstitutionalEntities);
     const directEquityUSD = householdDirectEquityUSD(
-      region, ctx.updatedCompanies, reg.equityOwnership.institutionalShare
+      region, ctx.updatedCompanies, ctx.updatedInstitutionalEntities
     );
     const privateBusinessEquityUSD = householdPrivateBusinessEquityUSD(region, ctx.updatedCompanies, evMultiple);
 

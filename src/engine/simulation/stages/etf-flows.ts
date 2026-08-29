@@ -30,7 +30,7 @@ import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain
 import { AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
-import { householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
+import { householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 
 /** An entity's money for one asset class, from its own mandate weights. */

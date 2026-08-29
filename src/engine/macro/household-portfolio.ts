@@ -46,19 +46,38 @@ export function householdPrivateBusinessEquityUSD(
 }
 
 /**
- * The listed float households hold: what institutions do not. `equityOwnership.institutionalShare`
- * is the same number 07e uses to decide how much of each name is genuinely in play, so the two
- * sides of the register agree by construction rather than by coincidence.
+ * OWN4 — the listed shares households hold directly: the residual of a REAL register, name by
+ * name. Every share of a listed company is either on some institution's book (funds, insurers,
+ * pensions and the index funds, all of which bid in 07e and settle their cash there) or it is
+ * held directly, and this counts the second kind by subtracting the first from the register.
+ *
+ * What it replaces: `marketCap x (1 - equityOwnership.institutionalShare)`, a flat regional
+ * fraction of every company alike, taken from a share that was assigned at seed and drifted
+ * inside a band. A name institutions have crowded into and a name they have never bought were
+ * reported as equally household-owned.
+ *
+ * Nothing circular: 07e clears the whole register (OWN2), so this is a measurement of who ended
+ * up holding it, never an input to what the book may trade.
  */
 export function householdDirectEquityUSD(
   regionId: RegionId,
   companies: Company[],
-  institutionalShare: number
+  entities: InstitutionalEntity[]
 ): number {
-  const householdShare = Math.max(0, 1 - institutionalShare);
+  const institutionallyHeldUSD = new Map<string, number>();
+  entities.forEach((e) => {
+    if (e.isDefaulted) return;
+    e.itemizedHoldings.forEach((h) => {
+      if (h.instrumentType !== 'EQUITY' || h.issuerRegion !== regionId) return;
+      institutionallyHeldUSD.set(
+        h.instrumentId,
+        (institutionallyHeldUSD.get(h.instrumentId) ?? 0) + (h.quantityOrNotionalUSD ?? 0)
+      );
+    });
+  });
   return companies.reduce((sum, c) => {
     if (c.region !== regionId || !isActiveCompany(c) || !isPubliclyListed(c)) return sum;
-    return sum + Math.max(0, c.marketCap) * householdShare;
+    return sum + Math.max(0, Math.max(0, c.marketCap) - (institutionallyHeldUSD.get(c.id) ?? 0));
   }, 0);
 }
 
