@@ -1441,6 +1441,12 @@ smoothing constant because the books are thin — §7.18's want/have from the su
 the residual a real absorber; SCALE grows the float itself. Re-measure the persistently-bound
 count at close.
 
+**The current baseline, measured 2026-08-29 (§7.107):** **1,139 ms/week**, and the distribution
+is one stage and then everything else — `05-unit-bidding` **46.8%** (538 ms mean, 803 worst),
+`08-company-fundamentals` 11.9%, `09-concentration-risk` 8.5%, then nothing above 5%. Stage 05 is
+where wave 2 spends its effort. **`09-concentration-risk` is the odd one out and the cheapest
+win on the table:** 98 ms a week to compute concentration FLAGS that nothing prices off.
+
 **The question, stated as a measurement:** how many public and private non-SME companies can the
 simulation carry before week-time becomes unacceptable — and what breaks first? The answer is a
 FRONTIER (names vs seconds/week), not a feeling.
@@ -1617,6 +1623,7 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 |---|---|
 | ~~**THE REPO MARKET IS DEAD, AND A CEILING IS AN IDENTITY**~~ | **CLOSED by OWN8 (§7.102).** `investableSurplusUSD` deleted; the sovereign ceiling is now `sovereignBookCapacityUSD` — current book plus the balance sheet the bank's equity supports under the leverage floor, a bound that can exceed the position it bounds. Repo: zero volume in all four regions -> 3 of 4 USA banks borrowing, 46.7B outstanding, interbank lending live and the SRF drawn (18.4B USA, 4.1B JPN) for the first time; the rate now moves inside the corridor instead of printing the early-return floor. USA sovereign book 78B->350B (pre-OWN was 285B), cash/deposits 47-68% -> 7%. **Two things it surfaced, both recorded rather than chased (rule 10):** 46 new `sovBondOwnership` conservation violations — OWN7's defect appearing in a second asset class now that the sovereign book is large, which strengthens the case that OWN7's harness fix comes first; and 16 weeks of USA bank capital ratio out of band, because a bank shifting cash into ZERO-risk-weight bonds grows equity on the carry while RWA (loans only) does not move, and the payout valve is cash-constrained so it cannot bleed off. That second one is a real mechanism, not a bug — it is why the leverage floor exists — but the harness band on a risk-weighted ratio is a poor test of it. Owner: G3, with the §6 USA bank-cohort row. |
 | **THE BOOKS PRINT THEIR DAMPERS — promoted from §6.2, 2026-08-29** | The clearing engine states its own failure condition: the damper "must never BIND persistently — a name clamped for weeks on end means the posted schedules disagree with the printed level and the print is the damper, not the market." The watchlist row set the same test ("only wrong if it stays there") at 1,961 bound; the harness now prints **2,549 persistently bound, worst streak 60 weeks in a 60-week run**. The condition is met. This is ONE defect wearing many prints: the FX rate pinning at −8.01% (its damper to the second decimal) 38–39 weeks in 40, and the five books' `MAX_WEEKLY_*_MOVE_PCT` binding across 2,549 instruments — the posted demand does not reach the float it is asked to clear (§7.18's want/have from the demand side). The engine is not the defect; the thin side is. **Owners: G3 (dealer capacity, G3d), SCALE (float), XB6 (the FX flow), HF (the FX elastic side).** Do not widen any damper. |
+| **A SHOCK TEST STOPPED MOVING ITS PRICE** | **New 2026-08-29 (§7.107).** `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an otherwise identical control world — no longer moves the name's price. Same signature the sovereign-auction shock test already shows (§6.1's XB row: "demand so far below the enlarged float that both A/B worlds pin at the same bound"), and 07e is the book where that is most likely: its `tradableFloatUSD` is the ENTIRE share count while the only bidders are institutions whose mandates cap them far below it, and the dealer residual that should absorb the rest is dropped unapplied (**G3e**). **Do not weaken the test.** Re-measure when G3e gives the equity book a real float and a real absorber; if it still does not move then, the demand side is the defect. |
 | **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the goods market, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). **XB3a widened this further**: the goods auction was repartitioned and the RNG stream relabelled, so every count taken before it describes a different world. Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3b, then run the harness ONCE (its XB module reports the battery) and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
 | ~~**Invoicing locks to 100% USD by week 5**~~ | **The mechanism was DELETED, not fixed (§7.76 correction).** The lock-in was arithmetic between three weights I invented — a weighted score with an argmax is not how anyone chooses an invoice currency, and reporting its corner solution as a finding about the world was wrong. Invoice currency is now owned by **XB3a-5**, gated on **XB6**: while USD is the FX numéraire the cheapest vehicle currency is decided by the model's plumbing, so the question is not askable yet. |
 | **Freight rates run away on some lanes** | **Found by the XB battery (§7.77).** Over 40 weeks EUR>UK goes 6.28 -> 292,929 per tonne and JPN>USA 7.63 -> 704, while EUR>EUR falls 59% and JPN>UK falls 94%. Freight as a share of cargo value then prints above 100% for the bulk goods (upstream_extraction at 58,255%), which is not a price, it is a market that has come apart. Two candidates and they interact: capacity on a lane is a physical stock that cannot respond inside a week, so a demand spike has nothing to meet it; and the rate is quoted in the ORIGIN's money, so a collapsing origin currency inflates it mechanically (see the row below, which is probably the root). **Do not cap the rate** — a bound is not a price (§7.21, §7.75). Diagnose which of the two dominates by holding FX fixed in an A/B, then fix the one that is real. |
@@ -3804,7 +3811,31 @@ that proved it, the lesson.
     - **Deliberately left standing:** the fiscal-stance step function (D33). `fiscalStanceScore`
       still moves on a regime label and still drifts the tax rate. Deleting it needs a government
       that reads its own budget position, which is behaviour, not a deletion. **Owner: MAC.**
-    - **Not re-measured at 60 weeks.** The short probe is unchanged (no new families in six
-      weeks) and `tsc`, the build and the hygiene check are clean. The full run was deliberately
-      deferred; expect moved numbers when it is taken — the sovereign spread and consumption read
-      real inputs for the first time — and attribute them once (rule 10).
+    - **Measured after the fact (§7.107): 331 violations in 18 families, of which 240 are
+      GUARD's brand-new category-share invariant firing on a defect that was always there.**
+      Excluding it, the pre-existing count went **107 → 91** across GUARD and FRM together: EUR
+      unemployment 23 → 9, the USA bank capital band 15 → 9, the "reported unemployment is not
+      the reading of its own employment stock" row gone, JPN corporate-bond over-holding gone.
+      One new failure, recorded not chased: the sustained-equity-demand shock test stopped moving
+      its name's price (§6.1).
+
+107. **The week's cost, measured — 1,139 ms mean, and stage 05 is half of it.** Run on the tree
+    as of FRM's close, `npm run profile`, 60 weeks with the shock worlds: **315 s wall clock in
+    total, 1,139 ms per week (profiled mean 1,151 ms over 57 weeks after warm-up), worst week
+    1,660 ms.** The first weeks run ~900 ms and the run settles around 1.2 s.
+    - **The distribution is one stage and then everything else.** `05-unit-bidding` **538 ms mean
+      / 803 ms worst — 46.8%** of the week, on its own, more than the next six stages combined.
+      Then `08-company-fundamentals` 137 ms (11.9%), `09-concentration-risk` **98 ms (8.5%)**,
+      `07d` 56 ms, `settlement` 55 ms (worst 197 ms), `07b` 51 ms, `07e` 42 ms. Everything below
+      that is under 3% and the tail is noise: eighteen stages are under 5 ms.
+    - **Two things worth naming.** `09-concentration-risk` computes supplier/customer
+      concentration FLAGS and costs 98 ms a week — 8.5% of the run for a diagnostic nothing
+      prices off. It is the cheapest large win on this table and it is not SCALE's hard part.
+      And `settlement`'s worst week is 3.5x its mean (197 vs 55), which is the netting pass
+      meeting a heavy week — expected, and worth watching as more flows migrate onto it.
+    - **Against §7.81's ~850 ms/week.** The week has grown by ~290 ms since SCALE wave 1, across
+      SEG, OWN, CASH and the settlement layer — every one of which added real flows. The number
+      to hold is the FRONTIER, not the level: SCALE wave 2 is sequenced after IND for the reason
+      recorded there, and stage 05 at 46.8% is where it will spend its effort.
+    - **The measurement itself is now one command** — `npm run profile` prints the table above,
+      so the next person does not have to build it.
