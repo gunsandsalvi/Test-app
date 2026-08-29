@@ -31,6 +31,7 @@
  *   is NOT modelled (named gap, §5-XB3a).
  */
 export type DeliveryMode = 'PHYSICAL' | 'DIGITAL' | 'IN_PLACE';
+import { VIEW_SUBUNIT_PHYSICAL } from './industry-registry';
 
 export interface SubUnitPhysical {
   deliveryMode: DeliveryMode;
@@ -56,49 +57,8 @@ export interface SubUnitPhysical {
  * **These were NOT chosen to reproduce the trade shares the deleted table asserted.** Where the
  * ordering they produce disagrees with that table, the disagreement is the finding.
  */
-export const SUBUNIT_PHYSICAL: Record<string, SubUnitPhysical> = {
-  // Bulk extraction and refining: heavy, cheap, and the reason these move by sea at all.
-  upstream_extraction: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 400 },
-  refined_products: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 800 },
-  industrial_chemicals: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 1_500 },
-  agricultural_chemicals: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 700 },
-  agricultural_commodities: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 300, shelfLifeWeeks: 26 },
-  specialty_metals: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 5_000 },
-
-  // Engineered goods: the value is in the fabrication, so a tonne is worth far more.
-  heavy_equipment: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 12_000 },
-  industrial_automation: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 40_000 },
-  commercial_fleet: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 15_000 },
-  passenger_vehicles: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 25_000 },
-  defense_systems: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 150_000 },
-  commercial_aerospace: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 800_000 },
-  network_infrastructure: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 60_000 },
-
-  // Information-dense manufactures: light enough that freight is a rounding error on the price,
-  // which is the physical reason their supply chains span the world.
-  semiconductors: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 500_000 },
-  consumer_devices: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 150_000 },
-  pharmaceuticals: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 400_000, shelfLifeWeeks: 104 },
-  medtech_devices: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 200_000 },
-  luxury_goods: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 200_000 },
-
-  // Consumer goods: bulky relative to their value, which is why so much of this is made near
-  // where it is sold — an outcome the old table asserted and this has to produce.
-  food_beverage: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 2_500, shelfLifeWeeks: 8 },
-  household_chemicals: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 3_000, shelfLifeWeeks: 104 },
-  household_essentials: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 4_000 },
-  home_furnishings: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 4_000 },
-  apparel_retail: { deliveryMode: 'PHYSICAL', baselineValueDensityUsdPerTonne: 20_000 },
-
-  // Weightless.
-  enterprise_software: { deliveryMode: 'DIGITAL' },
-  consumer_software: { deliveryMode: 'DIGITAL' },
-  media_content: { deliveryMode: 'DIGITAL' },
-
-  // Built where it stands.
-  residential_construction: { deliveryMode: 'IN_PLACE' },
-  commercial_construction: { deliveryMode: 'IN_PLACE' },
-};
+// BP1a: the registry absorbed this table, as this file's header always said it would.
+export const SUBUNIT_PHYSICAL: Record<string, SubUnitPhysical> = VIEW_SUBUNIT_PHYSICAL;
 
 export function deliveryModeOf(subUnitId: string): DeliveryMode {
   return SUBUNIT_PHYSICAL[subUnitId]?.deliveryMode ?? 'PHYSICAL';

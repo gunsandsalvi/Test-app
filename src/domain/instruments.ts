@@ -7,6 +7,7 @@
  */
 
 import { RegionId } from './geography';
+import { VIEW_BASE_COMMODITY_CATEGORY_LINKAGE } from './industry-registry';
 import { Sector, CreditRating } from './company';
 
 export type AssetType = 
@@ -107,17 +108,9 @@ export const COMMODITY_QUANTITY_UNIT: Record<string, CommodityQuantityUnit> = {
 // whose supply and demand clear in stages 04/05 like any other; the pseudo-commodity entry and
 // its bespoke branches in evolution.ts pretended it was a tradable spot commodity, which it
 // never was.
-export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; intensityShare: number }> = {
-  CRUDE_OIL: { subUnitId: 'upstream_extraction', intensityShare: 0.35 },
-  HEAVY_CRUDE_OIL: { subUnitId: 'upstream_extraction', intensityShare: 0.30 },
-  NATURAL_GAS: { subUnitId: 'upstream_extraction', intensityShare: 0.20 },
-  GOLD: { subUnitId: 'specialty_metals', intensityShare: 0.05 },
-  SILVER: { subUnitId: 'specialty_metals', intensityShare: 0.08 },
-  COPPER: { subUnitId: 'specialty_metals', intensityShare: 0.15 },
-  WHEAT: { subUnitId: 'agricultural_commodities', intensityShare: 0.04 },
-  CORN: { subUnitId: 'agricultural_commodities', intensityShare: 0.04 },
-  SOYBEANS: { subUnitId: 'agricultural_commodities', intensityShare: 0.03 },
-};
+// BP1a: the WORKING copy, initialized from the registry-derived base below; init calibrates it.
+export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; intensityShare: number }> =
+  JSON.parse(JSON.stringify(VIEW_BASE_COMMODITY_CATEGORY_LINKAGE));
 
 /**
  * §6 "copy, don't mutate": the pristine generation-time shares, frozen. Init calibrates the
@@ -125,7 +118,7 @@ export const COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: string; int
  * the base rather than compounding on an already-calibrated value.
  */
 export const BASE_COMMODITY_CATEGORY_LINKAGE: Readonly<Record<string, { subUnitId: string; intensityShare: number }>> =
-  Object.freeze(JSON.parse(JSON.stringify(COMMODITY_CATEGORY_LINKAGE)));
+  Object.freeze(JSON.parse(JSON.stringify(VIEW_BASE_COMMODITY_CATEGORY_LINKAGE)));
 
 export interface Commodity {
   id: string;

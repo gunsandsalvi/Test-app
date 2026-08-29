@@ -6,6 +6,7 @@
  */
 
 import { RegionId } from './geography';
+import { VIEW_CATEGORY_INPUT_REQUIREMENTS, VIEW_CAPEX_SUPPLIER_WEIGHTS, VIEW_CAPEX_CATEGORY_PRIVATE_SEGMENT, VIEW_PRIVATE_SEGMENT_SUPPLY_CATEGORIES } from './industry-registry';
 
 export interface UnitBid {
   companyId?: string;
@@ -111,19 +112,8 @@ export function createSeedCategoryDemandState(
   } as any;
 }
 
-export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = {
-  TechHardwareSemis: { upstream_extraction: 0.008, specialty_metals: 0.010 },
-  SoftwareDigitalServices: { upstream_extraction: 0.002 },
-  AutomotiveTransport: { upstream_extraction: 0.025, specialty_metals: 0.030 },
-  AerospaceDefense: { upstream_extraction: 0.020, specialty_metals: 0.025 },
-  IndustrialsMachinery: { upstream_extraction: 0.015, specialty_metals: 0.030 },
-  // 1$ is 1$: food/beverage production's real dominant input is raw crops, not energy — the
-  // agricultural_commodities entry is the literal recipe requirement fed by real WHEAT/CORN/
-  // SOYBEANS producer companies (see COMMODITY_CATEGORY_LINKAGE); upstream_extraction stays as
-  // the (much smaller) energy cost of processing/transport.
-  ConsumerStaples: { upstream_extraction: 0.001, agricultural_commodities: 0.12 },
-  ConsumerDiscretionaryRetail: { upstream_extraction: 0.002 },
-};
+// BP1a: derived from the industry registry (recipeInputs per producing industry).
+export const CATEGORY_INPUT_REQUIREMENTS: Record<string, Partial<Record<string, number>>> = VIEW_CATEGORY_INPUT_REQUIREMENTS;
 
 export interface SupplyRelationship {
   supplierCompanyId: string;
@@ -136,24 +126,14 @@ export interface SupplyRelationship {
 // Every company's capex (equipment, automation/software, fleet, construction) is a purchase
 // from real capital-goods-producing sub-units, not an abstract demand signal — this is the
 // basket weighting used to split any buyer's weekly capex dollars across those categories.
-export const CAPEX_SUPPLIER_WEIGHTS: Record<string, number> = {
-  heavy_equipment: 0.30,
-  industrial_automation: 0.20,
-  commercial_construction: 0.25,
-  enterprise_software: 0.15,
-  commercial_fleet: 0.10,
-};
+// BP1a: derived from the industry registry (capexBasketWeight per capital-goods sub-unit).
+export const CAPEX_SUPPLIER_WEIGHTS: Record<string, number> = VIEW_CAPEX_SUPPLIER_WEIGHTS;
 
 // Real, non-public counterparty for the share of capex a region's public companies can't supply
 // (insufficient in-region public capacity in a given category) — private/non-traded firms in
 // this segment are a genuine seller of the same goods, not a residual write-off.
-export const CAPEX_CATEGORY_PRIVATE_SEGMENT: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = {
-  heavy_equipment: 'MANUFACTURING',
-  industrial_automation: 'MANUFACTURING',
-  commercial_construction: 'CONSTRUCTION_REALESTATE',
-  enterprise_software: 'PROFESSIONAL_SERVICES',
-  commercial_fleet: 'MANUFACTURING',
-};
+// BP1a: derived from the industry registry.
+export const CAPEX_CATEGORY_PRIVATE_SEGMENT: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = VIEW_CAPEX_CATEGORY_PRIVATE_SEGMENT;
 
 // Share of each capex category's demand met by real in-region public companies before falling
 // back to the private-sector segment above — public capital-goods producers are typically the
@@ -168,10 +148,8 @@ export const CAPEX_PUBLIC_SUPPLY_SHARE = 0.65;
 // every company whose recipe needs them. Distinct from CAPEX_CATEGORY_PRIVATE_SEGMENT above
 // (that's for capital-goods purchases settled in 08b-capex-settlement.ts; this is a real named
 // seller inside the actual per-unit auction).
-export const PRIVATE_SEGMENT_SUPPLY_CATEGORIES: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = {
-  upstream_extraction: 'MANUFACTURING',
-  specialty_metals: 'MANUFACTURING',
-};
+// BP1a: derived from the industry registry.
+export const PRIVATE_SEGMENT_SUPPLY_CATEGORIES: Record<string, 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES'> = VIEW_PRIVATE_SEGMENT_SUPPLY_CATEGORIES;
 
 // Share of the segment's real annual revenue treated as this category's real weekly production
 // capacity when it participates as a seller — modest, since a segment plausibly does many

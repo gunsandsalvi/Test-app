@@ -124,6 +124,15 @@ These are standing user directives. They are not suggestions.
     model identifiers in any committed artifact** (commit messages, PR bodies, code comments).
     Do not open a PR unless asked.
 
+17. **The targeted-change test.** (User directive, 2026-08-29.) Adding a new product line, a
+    production lead time for a boat, a revenue-recognition rule for one profile, a new hedge-fund
+    type — each must be ONE targeted change: a registry entry, or one profile module, never an
+    edit across the codebase. The structure that enforces it: all DATA about what is made or who
+    is acting lives in a registry (BP1); all BEHAVIOR that varies by kind lives in a profile
+    module behind a dispatch table. **A stage may not switch on an industry, sector, or entity
+    type — it asks the registry or calls the profile.** A new `if (sector === ...)` or
+    `entityType === ...` branch in a stage is a defect under this rule even when it works.
+
 ### 1.10 Verification ladder (every work item)
 
 ```
@@ -303,7 +312,7 @@ metrics to watch rather than work.
 | — | standing | **P1 — Periodicity & units sweep** (alongside anything) | none |
 | ✓ | foundation | ~~**L — Ledger integrity batch**~~ *(CLOSED §7.46)* | — |
 | ✓ | foundation | ~~**HH — The household sector, to corporate depth**~~ *(CLOSED §7.60)* | — |
-| 2 | foundation | **BP1 — One industry registry** | none |
+| 2 | foundation | **BP1 — One industry registry + the rule-17 modularity contract** — IN PROGRESS (BP1a 2026-08-29) | none |
 | 3 | foundation | **IND — Industry operating models** (every corporate is currently the same firm) | BP1 |
 | ✓ | foundation | ~~**PUB — The public sector: treasury + central bank**~~ *(CLOSED §7.68)* — leaves one named follow-up: the spending PATH is still a formula while revenue is bottom-up (§6) | HH (household taxes) |
 | ~ | markets | **XB5 — Central-bank FX reserves** (small; blocks XB's close — see §6) | XB |
@@ -568,19 +577,40 @@ issuer; unemployment, wage growth and the vacancy rate move together in a Beveri
 big employer's failure raises regional unemployment and cuts real stage-05 consumption — the
 recession transmission the simulation exists to have.
 
-### BP1 — One industry registry  *(Tier 1, item 2)*
+### BP1 — One industry registry, and the modularity contract  *(Tier 1, item 2; IN PROGRESS 2026-08-29)*
 
-A single `domain/industry-registry.ts` typed table: category → sub-units, buyer mix, input
-recipes, capex weights, commodity links, labor intensity by occupation — and, for **IND**, each
-sub-unit's **storability** (can its output be held at all?), its **carrying cost** if so, its
-**revenue mechanism** and its **cost shape**. Those four are properties of what is being made, not
-of the firm making it, which is why they belong here rather than on the Company. `INDUSTRY_SUBUNITS`,
-`CATEGORY_INPUT_REQUIREMENTS` and `COMMODITY_CATEGORY_LINKAGE` become views of it and then die as
-separate definitions. Adding an industry becomes one entry.
+**The charter is rule 17: one new thing = one targeted change.** A boat becomes a product line by
+writing one registry entry; the world then auctions it, freights its mass, buys it per its buyer
+mix and (once IND lands) produces it over its lead time and recognises its revenue by its named
+mechanism — with no stage edited. Two structures carry that:
 
-Foundational because three things wait on it: every industry specialization in **IND**, the
-**HC3b** product-market handover, and the listed universe's breadth — which is what makes
-broad-market indexing meaningful (§6 watchlist).
+- **The registry (data).** `domain/industry-registry.ts`: one `INDUSTRY_REGISTRY` whose
+  `SubUnitSpec` carries everything about a good — label, buyer mix, household price tier,
+  physical (delivery mode, value density, shelf life), capex-basket weight and private-segment
+  fallbacks, commodity links — and per industry its recipe inputs. It also carries IND's dials
+  from day one at today's implicit values (`storable`, `carryingCostRate` 0.02,
+  `productionLeadWeeks` 0, `revenueMechanism` 'UNIT_SALE'), so IND's slices become value edits
+  plus one mechanism each. `INDUSTRY_SUBUNITS`, `SUBUNIT_PHYSICAL`, `CATEGORY_INPUT_REQUIREMENTS`,
+  `CAPEX_SUPPLIER_WEIGHTS`, `CAPEX_CATEGORY_PRIVATE_SEGMENT`, `PRIVATE_SEGMENT_SUPPLY_CATEGORIES`,
+  `CATEGORY_PRICE_TIER` and `BASE_COMMODITY_CATEGORY_LINKAGE` become DERIVED VIEWS re-exported
+  under their old names — zero consumer edits, and the world must hash byte-identical (key
+  ITERATION ORDER is load-bearing: stage 05's auction order and 04's demander order carry the RNG
+  lanes, so views materialise in the exact legacy order, stated explicitly where the registry's
+  own order differs). Consumers then migrate opportunistically and the views die.
+- **Profiles (behavior).** Where KIND changes behavior, a typed profile module behind a dispatch
+  table replaces the branch chain: stage 08's `financialStatementProfile` if/else becomes
+  `PROFILE_REGISTRY[profile].weeklyPnl(...)` (BP1c, byte-identical move); IND2's revenue
+  mechanisms, IND3's cost shapes and HF's strategies are born as profiles, never as branches.
+  The 57 `sector ===`/`entityType ===`/`financialStatementProfile ===` switches measured across
+  the codebase are the migration backlog.
+
+Slices: **BP1a** registry + views + byte-identical gate (**DONE §7.83** — and its boat probe
+found the generator's hardcoded sector templates); **BP1b** generator reads the registry (line
+assignment as registry data — a declared seed relabel) plus labor-intensity and remaining
+per-industry tables; **BP1c** stage-08 profile dispatch. Foundational because everything
+in IND10–19 and the 14.x projects writes registry fields or profile modules, the **HC3b**
+handover reads it, and the listed universe's breadth rides on cheap industry entries (§6
+watchlist).
 
 ---
 
@@ -2769,3 +2799,22 @@ that proved it, the lesson.
       look), plus the byte-identical shock test and two revenue outliers. Reserve seeding was
       checked and left alone: three months of import cover split by sourcing shares is the real
       adequacy standard (§7.4-clean).
+83. **BP1a: the industry registry exists, and the boat probe found the next wall.** One
+    `INDUSTRY_REGISTRY` (domain/industry-registry.ts) now owns label, buyer mix, price tier,
+    physics, capex basket, private-segment fallbacks and commodity links per sub-unit, plus
+    recipe inputs per industry — and IND's dials (`storable`, `carryingCostRate`,
+    `productionLeadWeeks`, `revenueMechanism`) at today's implicit values, so IND slices become
+    value edits plus one mechanism each. The eight legacy tables are derived views re-exported
+    under their old names (key order preserved where iteration is RNG-bearing; the registry data
+    body was GENERATED from the live tables, so no value could be mistranscribed) — world
+    byte-identical: w10 27fba443aabeee61, w25 abb1d86cc44de4fe, equal before and after.
+    - **The rule-17 acceptance probe:** one temporary `recreational_marine` entry, ten weeks.
+      Demand side passes whole — all four regions carry the category, households bid 9,102
+      units/week at 62,577 USD on the LUXURY tier, freight prices its 30k USD/tonne mass —
+      but ZERO producers: companyGenerator assigns product lines from HARDCODED per-sector
+      templates (plus its own private `industryBySubUnit` map), so the supply side never learns
+      a new good exists. That is BP1b's charter: line assignment reads the registry (producing
+      sectors and line weights become registry data), which is a SEED RELABEL — a new world —
+      and takes its own slice with its own close-out.
+    - New baseline hashes for the gates (the FX sweep relabeled the world): w10
+      27fba443aabeee61, w25 abb1d86cc44de4fe.
