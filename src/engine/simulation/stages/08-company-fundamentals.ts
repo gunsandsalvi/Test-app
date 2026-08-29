@@ -700,8 +700,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     } else {
       const settledSalesUSD = update?.salesUSD ?? 0;
       const settledPurchasesUSD = update?.purchasesUSD ?? 0;
-      post('settled sales (real auction receipts)', settledSalesUSD);
-      post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD);
+      post('settled sales (real auction receipts)', settledSalesUSD, undefined, false);
+      post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD, undefined, false);
       // XB3a-5: a cross-border sale is delivered and INVOICED, not collected. Revenue is
       // recognised in full at delivery above; the cash is backed out here and posted when the
       // invoice falls due, at whatever the invoice currency is then worth. The gap between the

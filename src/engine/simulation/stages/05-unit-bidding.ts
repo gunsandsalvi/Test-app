@@ -24,6 +24,7 @@ import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { isStorable, purchaseKindOf } from '../../../domain/industry-registry';
+import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, PRIVATE_SEGMENT_SUPPLY_CATEGORIES, PRIVATE_SEGMENT_SUPPLY_SHARE, CAPEX_SUPPLIER_WEIGHTS, CAPEX_CATEGORY_PRIVATE_SEGMENT, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
@@ -62,6 +63,22 @@ function computeRecipeInputNeedUSD(comp: Company, inputSubUnitId: string): numbe
     if (!intensity) return sum;
     return sum + (comp.annualRevenue / 52) * (line.revenueShare ?? 1.0) * intensity;
   }, 0);
+}
+
+/**
+ * SETL-C: who a settlement key actually is. The goods auction has always known the pairing —
+ * which buyer took which seller's lot — and stage 08 only ever saw each side's weekly total, so
+ * the payment lost its counterparty on the way (§7.90's category C). This turns a key back into
+ * the party that holds the money.
+ */
+function partyOfKey(key: string, regionId: RegionId, lookup: GlobalFirmLookup): PartyRef {
+  const comp = lookup.byKey.get(key);
+  if (comp) return { kind: 'COMPANY', ticker: comp.ticker };
+  if (key.startsWith('HOUSEHOLD')) return { kind: 'HOUSEHOLD', region: regionId };
+  if (key.startsWith('GOVERNMENT') || key.startsWith('GOV')) return { kind: 'GOVERNMENT', region: regionId };
+  // Private-sector segments and seed suppliers are real sellers with no cash ledger of their
+  // own yet — named to the boundary until HC gives the tier one.
+  return { kind: 'UNMODELED', region: regionId };
 }
 
 function setOutputInventory(update: any, subUnitId: string, unitsHeld: number, unitPriceUSD: number) {
@@ -392,6 +409,13 @@ function settleContracts(
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
     custUp.purchasesUSD = (custUp.purchasesUSD ?? 0) + paymentUSD;
     if (purchaseKindOf(subUnitId) === 'CAPITAL_GOOD') custUp.capexPurchasesUSD = (custUp.capexPurchasesUSD ?? 0) + paymentUSD;
+    // SETL-C: a contract delivery is a payment between two named firms.
+    pay(ctx, {
+      payer: { kind: 'COMPANY', ticker: customer.ticker },
+      payee: { kind: 'COMPANY', ticker: supplier.ticker },
+      amountUSD: paymentUSD,
+      reason: 'contract delivery',
+    });
     addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);
 
     if (fillRate < 0.95) {
@@ -1004,6 +1028,23 @@ function runSubUnitMarkets(
       const arrivalWeek = nextWeek + Math.round(transit);
       (book.lotsByBuyer.get(plan.key!) ?? []).forEach(l => {
         if (!companyUpdates[comp.ticker]) companyUpdates[comp.ticker] = {};
+        // SETL-C: the auction knows exactly who bought whose lot, so the payment keeps its
+        // counterparty instead of both sides netting through the boundary.
+        // The buyer pays LANDED cost; the seller receives only ex-works. The difference is the
+        // freight, which belongs to the carriers — paid on shipped tonnage further down this
+        // stage, so it is named here rather than handed to the seller.
+        pay(ctx, {
+          payer: { kind: 'COMPANY', ticker: comp.ticker },
+          payee: partyOfKey(l.sellerKey, origin, lookup),
+          amountUSD: l.units * exWorksBuyerMoney,
+          reason: 'goods purchase (ex-works)',
+        });
+        pay(ctx, {
+          payer: { kind: 'COMPANY', ticker: comp.ticker },
+          payee: { kind: 'UNMODELED', region: plan.regionId },
+          amountUSD: l.units * (perUnit - exWorksBuyerMoney),
+          reason: 'freight on goods purchase',
+        });
         if (arrivalWeek <= nextWeek) {
           addInputInventory(companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
         } else {
