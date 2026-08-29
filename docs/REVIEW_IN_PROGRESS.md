@@ -540,3 +540,36 @@ watches real thresholds crossing, `EconomyDashboard` reads the measured ownershi
 should move the same dealer inventory every other participant trades against. The defect is that
 it only does so for two asset classes, credits one leg, and lets the UI set the price.
 
+---
+
+## `scripts/invariants.ts` — what the harness checks, and the two gaps this review found
+
+| # | Sev | Where | Finding |
+|---|---|---|---|
+| **X1** | **B — blocks OWN7** | `invariants.ts:392` | **`checkOwnershipConservation` excludes foreign holdings from its sum on a premise OWN1 invalidated.** Its comment says foreign ownership "is no longer a share in this object — it is measured from `measuredForeignOwnership`, so it is not part of this conservation sum." But `measuredOwnershipAllRegions` attributes every institutional holding by **issuer** region, so a foreign fund holding this region's paper is now *inside* `institutionalShare`. The check and the measurement disagree about what they are counting. Combined with the holder-region/issuer-region conflation in `checkHoldingsLedgerConservation` (OWN7 step 1), **both of the invariants that fired after OWN are measuring something other than what they say.** Fix both definitions before attributing a single dollar of the 1.13. |
+| **X2** | **Gap — would have caught D40 for free** | `invariants.ts` | **Nothing checks that a category's market shares sum to 1.** D40 (financial firms supplying enterprise software) was found by reading a comment and confirmed by an ad-hoc probe; the harness ran green past a category summing to **646%** against 400% for its peers. A per-region, per-sub-unit `Σ categoryMarketShare ≈ 1` assertion is a few lines and would have caught it on the week it appeared — and would catch the next mis-assigned product line automatically. |
+
+**Clean, and the harness's design is sound:** it asserts identities rather than levels wherever it
+can (central bank, labor market, cohorts, NAV, per-bank balance sheet, trade fees), and its band
+checks carry the reason the band exists. `checkBeneficiaryClaimsHaveHolders` is the rule-13
+discipline expressed as a test. The per-bank balance-sheet identity (`:738`) is the gate CASH was
+built behind and it holds.
+
+---
+
+## Sweep status
+
+| Directory | Files | Read | Findings |
+|---|---|---|---|
+| `src/domain` | 29 | 29 | D1–D40 |
+| `src/engine/bootstrap` | 9 | 9 | B1–B8 |
+| `src/engine/macro` | 8 | 8 | M1–M15 |
+| `src/engine/simulation/stages` | 53 | 53 scanned, ~30 read in full | S1–S20 |
+| `src/components` + `trade.ts` | 20 | scanned, 4 read in full | C1–C5 |
+| `scripts` | 5 | 2 read, 3 scanned | X1–X2 |
+
+**Comments corrected in the same pass** wherever they were stale, self-contradicting, or asserting
+the opposite of the code — and trimmed to what the code cannot say throughout. Two dead exports
+deleted (`FX_SPOT_PRICE_IMPACT_PER_GDP`, `CAPITAL_CHARGE_BY_ASSET_CLASS`); one duplicated constant
+named once (`HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE`). `tsc` and `build` clean at every commit.
+
