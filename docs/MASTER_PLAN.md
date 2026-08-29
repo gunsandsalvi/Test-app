@@ -4700,3 +4700,40 @@ that proved it, the lesson.
       employment meant nothing, because each was stated separately and each was wrong in the
       direction that hid the same gap. **Consistency you did not derive is not evidence.** The
       only way this became visible was deriving all three from one thing none of them could see.
+
+120. **The seed-scale slice — the identity lived in THREE places and the one that wins had no
+    solve; and the tiers never partitioned demand.** Two defects, both rule 3, both invisible
+    because the duplication hid them.
+    - **Three copies of `C + I + G`.** `macro/initialization.ts` (placeholders from GDP shares),
+      `simulation/initialization.ts` (the authoritative one — it runs after firms and the
+      government exist, so its G is the real procurement budget and its I the firms' real capex,
+      and it OVERWRITES the first), and `03-category-demand.ts` (weekly). CHAIN-E's
+      intermediate-demand solve was added to the first and third and **missed the second — the
+      only one that survives.** So the model ran on final demand alone regardless: measured, the
+      placeholder seed produced **1,481B** of USA total output and the authoritative one replaced
+      it with **567B**, sizing every firm against a market 2.6x larger than the one it then sold
+      into. **The fix had to be made three times, and that is itself the defect.**
+    - **The tiers each took a share; nothing made them add up.** The named tier's cut was a flat
+      `0.35`, the SME segment took its industry's `smeShareOfActivity`, and the private tier
+      carved out of that — three independent claims on one pot. Measured: named firms **93%** of
+      total output and the pools another **36%**, 129% between them. The registry already states
+      the one structural split, so the named tier's share is now its exact complement
+      (`1 - smeShareOfActivity`) and the three partition output by construction.
+    - **Measured, USA at seed:** firm-sector value added against GDP **0.533 → 0.888**; implied
+      firm employment **5.87M → 9.78M** against 11.55M employed, the remaining 1.77M being
+      government (1.65M) and financials — which is what it should be. Tier claims 129% → 95%.
+      Seed employment 7.72M → 9.64M. **Harness 42 → 30, seed unemployment 36% → 20.3%**
+      (UK 10.6%).
+    - **NOT CLOSED, and honestly.** Unemployment still climbs to ~40% by week 5 before settling
+      near 32%, so the seed is much closer but the dynamics are not fixed — and the deflation
+      escape (§6.1 G1b) is still there and still owns the horizon (§7.118).
+    - **One new family, introduced by this slice and not yet diagnosed:** sovereign bonds over-held
+      in three regions ("a ledger is minting claims"). GDP moved 639.2B → 695.7B with the scale
+      change and sovereign outstanding is `debtToGdpPctBottomUp x derivedNominalGdpUSD`, computed
+      at a different point in the seed than the holdings are built — an ordering suspect, not a
+      diagnosis. **Owner: this slice's follow-up; it is a real defect and it is mine.**
+    - **The lesson, and it is the fourth time in four records:** §7.117, §7.118 and §7.119 each
+      ended with "consistency you did not derive is not evidence." This one is the structural
+      cause of all three — **the same identity written three times will diverge, and the copy you
+      did not know about is the one that decides.** Every number those records chased was a
+      symptom of one pot being claimed by parties that never had to add up to it.

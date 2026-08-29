@@ -1,5 +1,6 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
-import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf } from '../domain/industry-registry';
+import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
+import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
 import { isInvestmentGrade } from './simulation/stages/asset-allocation';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
@@ -55,8 +56,23 @@ export function getCategoryDemandSeedUSD(
   }
 }
 
+/**
+ * CHAIN-E — THE TIERS PARTITION DEMAND; THEY DO NOT EACH TAKE A SHARE OF IT.
+ *
+ * The named tier's cut used to be a flat `0.35` while the SME segment took its industry's
+ * `smeShareOfActivity` and the private tier carved out of THAT. Three independent claims on one
+ * pot, summing to whatever they summed to: measured at seed, named firms took 93% of total output
+ * and the pools another 36% — **129% between them** — because nothing made them add up.
+ *
+ * The registry already states the only split that is a structural fact: `smeShareOfActivity`, how
+ * much of an industry is carried by firms too small to name. So the named tier's share is its
+ * complement, exactly, and the private tier's carve happens inside the SME half where HC always
+ * put it. The three tiers then partition total output by construction and cannot over- or
+ * under-claim it (rule 13 — a share is an outcome of the one structural primitive, not a fourth
+ * stated number).
+ */
 export function deriveInitialRevenueUSD(
-  _category: ProductCategory,
+  category: ProductCategory,
   regionCategoryDemandSeedUSD: number,
   companyRankInCategory: number,
   totalCompaniesInCategory: number
@@ -67,7 +83,14 @@ export function deriveInitialRevenueUSD(
     : 1;
   const rankWeight = Math.pow(decayBase, companyRankInCategory);
   const totalRankWeight = Array.from({ length: totalCompaniesInCategory }, (_, i) => Math.pow(decayBase, i)).reduce((a, b) => a + b, 0);
-  return regionCategoryDemandSeedUSD * (rankWeight / totalRankWeight) * 0.35;
+  // `category` is an INDUSTRY key here and a sub-unit id at other call sites; accept either
+  // rather than making the caller know which (it is the same question: whose industry is this).
+  const industry = (INDUSTRY_REGISTRY as any)[category as string]
+    ? (category as unknown as Industry)
+    : industryOfSubUnit(category as string);
+  if (!industry) defect(`deriveInitialRevenueUSD: ${String(category)} is neither an industry nor a sub-unit`);
+  const namedTierShare = 1 - INDUSTRY_REGISTRY[industry].smeShareOfActivity;
+  return regionCategoryDemandSeedUSD * (rankWeight / totalRankWeight) * namedTierShare;
 }
 
 

@@ -43,7 +43,7 @@ import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
-import { INDUSTRY_REGISTRY, smePoolEmployment } from '../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
 import { getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
@@ -247,14 +247,35 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const regionFirmCount = companies.filter(c => c.region === regionId).length;
     const govBudgetByCategory: Record<string, number> = {};
 
+    // CHAIN-E — THE THIRD COPY OF THE C + I + G IDENTITY, and the one that wins.
+    //
+    // This is the authoritative seed: it runs after firms and the government exist, so its G is
+    // the real procurement budget and its I the firms' real capex, where `macro/initialization.ts`
+    // could only use GDP-share placeholders. It then OVERWRITES that earlier seed wholesale.
+    //
+    // The identity therefore lives in three places — the placeholder seed, here, and the weekly
+    // rebuild in `03-category-demand.ts` — and the intermediate-demand solve was added to the
+    // other two and missed here (§7.120). Because this copy is the one that survives, the model
+    // ran on FINAL demand only regardless: measured, the placeholder seed produced 1,481B of
+    // total output for the USA and this line replaced it with 567B, so every firm was sized
+    // against a market 2.6x larger than the one it then had to sell into. Rule 3, and the reason
+    // the same fix has to be made three times is itself the defect.
+    const finalDemandBySubUnit: Record<string, number> = {};
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
-        const suHhDemand = totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0;
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
         govBudgetByCategory[su.unitId] = suGovDemand / 52;
-        const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
-        const demandLevelUSD = suHhDemand + suGovDemand + suCorpDemand;
+        finalDemandBySubUnit[su.unitId] =
+          (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
+          + suGovDemand
+          + (totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0);
+      });
+    });
+    const totalOutputBySubUnit = totalOutputFromFinalDemand(finalDemandBySubUnit);
 
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        const demandLevelUSD = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
         (regions[regionId].categoryDemand as any)[su.unitId] = createSeedCategoryDemandState(
           demandLevelUSD,
           reg.gdpGrowth ?? 0.02,
