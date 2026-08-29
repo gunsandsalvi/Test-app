@@ -3108,3 +3108,34 @@ that proved it, the lesson.
       volatility.
     - **61 violations, zero balance-sheet, throughout.** The identity held at every step of a
       six-commit migration, which is the whole argument for having built the gate first.
+93. **The two independent quantities, and where the migration actually ends.**
+    - **Institutional cash is a managed position now.** A fund runs a CASH SLEEVE and invests the
+      excess over it — the target being the entity's own stated `cashPct`, so nothing is invented.
+      What changes is that a balance stops being the residue of whatever the week's auctions did
+      to it. (The swing narrows but does not vanish; the books still deploy the excess promptly.)
+    - **Household income was two quantities, and the fix is the residual form.** Deposits were
+      credited by a savings rate applied to a derived income estimate WHILE real wages and real
+      goods purchases moved the same balance through settlement. The derived inflow is gone and
+      every employer pays: companies, the government from its real account, and the private tier.
+      **The tier's wage bill is the REMAINDER** — total wages less government payroll less what
+      the named companies actually paid last week. Deriving it independently (segment headcount
+      times a per-worker income) made household deposits reach **4e16** in sixty weeks, because
+      two employment measures disagreed and the error compounded weekly. A residual cannot do
+      that: it is defined as what is left, so it cannot disagree with the total. **61 → 53.**
+    - **THE LAST TRANCHE CANNOT BE INSTRUCTIONS, and this is a design finding rather than a
+      shortfall.** The clearing books apply each participant's cash delta IMMEDIATELY, because
+      the next book must read capacity net of what the previous one spent — defer them to
+      end-of-week settlement and a fund spends the same dollar in five books. They are not
+      outside the banking system: 02b's institutional-deposit reconciliation carries every one of
+      them with its matching reserve leg, so the identity holds and no dollar escapes. They are
+      settled T+1 rather than instructed, and that is the correct answer for a market whose
+      participants must see their own cash within the week.
+    - **The boundary now reads honestly**, and is dominated by one deliberate entry: the private
+      tier's wages (143B/12wk) — the employer the model does not keep books for, paying real
+      households real money. Beside it, `non-auction operating receipts` (+38B, the true
+      boundary), the corporate treasury's sovereign purchases and sales (−40B/+33B, securities
+      bought from a dealer whose inventory legs are not real yet), and small timing items.
+    - **53 violations, ZERO balance-sheet, across a nine-commit migration.** Every dollar a
+      company, a household, a fund, a bank or the government moves is now either an instruction
+      through the settlement layer or a reconciled leg with its reserve counterpart. What remains
+      un-instructed is named, sized, and on a balance sheet the harness checks.
