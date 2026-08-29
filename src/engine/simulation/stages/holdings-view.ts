@@ -107,26 +107,46 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
 export function measuredForeignOwnership(state: GameState, regionId: RegionId): {
   equity: number; corpBond: number; sovBond: number;
 } {
-  const held = { equity: 0, corpBond: 0, sovBond: 0 };
-  const foreign = { equity: 0, corpBond: 0, sovBond: 0 };
+  return measuredForeignOwnershipAllRegions(state)[regionId];
+}
+
+/**
+ * All four regions' measures from ONE pass over the books. The per-region version swept every
+ * entity's whole holdings array once per region (the SCALE profile put the four sweeps at
+ * ~11 ms/week); a row contributes to exactly one region — its issuer's — so a single pass sees
+ * every (region, class) accumulator receive the same additions in the same order.
+ */
+export function measuredForeignOwnershipAllRegions(state: GameState): Record<RegionId, {
+  equity: number; corpBond: number; sovBond: number;
+}> {
+  type Acc = { equity: number; corpBond: number; sovBond: number };
+  const held: Partial<Record<RegionId, Acc>> = {};
+  const foreign: Partial<Record<RegionId, Acc>> = {};
+  const accFor = (table: Partial<Record<RegionId, Acc>>, r: RegionId): Acc =>
+    table[r] ?? (table[r] = { equity: 0, corpBond: 0, sovBond: 0 });
   state.institutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     e.itemizedHoldings.forEach((h) => {
-      if (h.issuerRegion !== regionId) return;
       const v = h.quantityOrNotionalUSD ?? 0;
       const key = h.instrumentType === 'EQUITY' ? 'equity'
         : h.instrumentType === 'GOV_BOND' ? 'sovBond'
         : (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN') ? 'corpBond' : null;
       if (!key) return;
-      held[key] += v;
-      if (e.region !== regionId) foreign[key] += v;
+      accFor(held, h.issuerRegion)[key] += v;
+      if (e.region !== h.issuerRegion) accFor(foreign, h.issuerRegion)[key] += v;
     });
   });
-  return {
-    equity: held.equity > 0 ? foreign.equity / held.equity : 0,
-    corpBond: held.corpBond > 0 ? foreign.corpBond / held.corpBond : 0,
-    sovBond: held.sovBond > 0 ? foreign.sovBond / held.sovBond : 0,
-  };
+  const out = {} as Record<RegionId, Acc>;
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => {
+    const hr = accFor(held, r);
+    const fr = accFor(foreign, r);
+    out[r] = {
+      equity: hr.equity > 0 ? fr.equity / hr.equity : 0,
+      corpBond: hr.corpBond > 0 ? fr.corpBond / hr.corpBond : 0,
+      sovBond: hr.sovBond > 0 ? fr.sovBond / hr.sovBond : 0,
+    };
+  });
+  return out;
 }
 
 export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId, reg: {

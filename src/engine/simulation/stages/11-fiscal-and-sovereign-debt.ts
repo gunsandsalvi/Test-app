@@ -20,7 +20,7 @@ import {
 } from '../../../domain/government';
 import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuanceUSD } from '../../../domain/central-bank';
 import { WeeklyStepContext } from './context';
-import { refreshRegionalHoldingsView, measuredForeignOwnership } from './holdings-view';
+import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions } from './holdings-view';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -34,12 +34,16 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
   //
   // Runs here because stage 11 is the statistics stage and every clearing stage (07b/07c/07d)
   // and S11's mark have already written their books by this point in the week.
-  (Object.keys(updatedRegions) as RegionId[]).forEach(regionId => {
+  {
     const bookState = { ...state, institutionalEntities: ctx.updatedInstitutionalEntities, companies: updatedCompanies };
-    refreshRegionalHoldingsView(bookState, regionId, updatedRegions[regionId]);
-    // XB1: what foreigners actually own, measured off those same books.
-    updatedRegions[regionId].measuredForeignOwnership = measuredForeignOwnership(bookState, regionId);
-  });
+    // XB1: what foreigners actually own, measured off those same books — all four regions from
+    // one pass (SCALE: the per-region call swept every holding four times).
+    const foreignByRegion = measuredForeignOwnershipAllRegions(bookState);
+    (Object.keys(updatedRegions) as RegionId[]).forEach(regionId => {
+      refreshRegionalHoldingsView(bookState, regionId, updatedRegions[regionId]);
+      updatedRegions[regionId].measuredForeignOwnership = foreignByRegion[regionId];
+    });
+  }
 
   // Measure this week's real consumer price level from the prices stage 05's auction actually
   // cleared, and derive inflation as its year-over-year change. This is the only place inflation

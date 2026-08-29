@@ -217,6 +217,20 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     navPerShare: number; wantDelta: Map<string, number>; grossCreateUSD: number; grossRedeemUSD: number;
     householdUSD: number;
   }>();
+  // One pass over the investors' books instead of a `.find` per investor PER FUND — the same
+  // first-match-wins row each per-fund scan used to stop at (per-item scans in per-item loops:
+  // the §7.32 anti-pattern, found here by the SCALE profile at ~17 ms/week).
+  const etfShareRowByInvestor = new Map<string, Map<string, { quantityShares?: number }>>();
+  const investorById = new Map(investors.map((i) => [i.id, i]));
+  investors.forEach((inv) => {
+    let rows: Map<string, { quantityShares?: number }> | undefined;
+    inv.itemizedHoldings.forEach((x) => {
+      if (x.instrumentType !== 'ETF_SHARE') return;
+      if (!rows) { rows = new Map(); etfShareRowByInvestor.set(inv.id, rows); }
+      if (!rows.has(x.instrumentId)) rows.set(x.instrumentId, x);
+    });
+  });
+
   funds.forEach((fund) => {
     const desired = desiredByFund.get(fund.id)!;
     const navUSD = navByFundId.get(fund.id) ?? 0;
@@ -228,7 +242,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // What each investor holds today, in dollars at the current NAV.
     const heldByInvestor = new Map<string, number>();
     investors.forEach((inv) => {
-      const h = inv.itemizedHoldings.find((x) => x.instrumentType === 'ETF_SHARE' && x.instrumentId === fund.id);
+      const h = etfShareRowByInvestor.get(inv.id)?.get(fund.id);
       if (h) heldByInvestor.set(inv.id, (h.quantityShares ?? 0) * navPerShare);
     });
 
@@ -238,7 +252,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const wantDeltaByInvestor = new Map<string, number>();
     const ids = new Set([...desired.keys(), ...heldByInvestor.keys()]);
     ids.forEach((id) => {
-      const investor = investors.find((i) => i.id === id);
+      const investor = investorById.get(id);
       if (!investor) return;
       const wantUSD = desired.get(id) ?? 0;
       const haveUSD = heldByInvestor.get(id) ?? 0;
