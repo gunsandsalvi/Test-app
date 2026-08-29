@@ -680,8 +680,8 @@ export function runBankHouseholdLending(
  * Who funds this bank's assets, in the order reality fills them: real household deposits, then
  * real corporate deposits, and wholesale money for whatever is still uncovered.
  *
- * Corporate deposits are deliberately absent: company cash does not settle through bank books in
- * this model, so that line is a view with no matching asset (see macro/banking.ts and §6).
+ * SETL2: corporate deposits fund the bank like any other real balance — company payments settle
+ * through bank books now, so the line has reserves behind it.
  *
  * Idempotent: derived from the assets and equity actually present, so re-applying is safe.
  */
@@ -691,5 +691,7 @@ export function applyBankFundingSplit(sheet: BankingSector, householdDepositsUSD
     sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
   ).toFixed(0));
   sheet.depositsUSD = Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD));
-  sheet.wholesaleFundingUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
+  const afterHouseholdUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
+  const corporateUSD = Math.min(afterHouseholdUSD, Math.max(0, sheet.corporateDepositsUSD ?? 0));
+  sheet.wholesaleFundingUSD = Math.max(0, afterHouseholdUSD - corporateUSD);
 }

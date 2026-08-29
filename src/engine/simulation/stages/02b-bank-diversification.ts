@@ -190,9 +190,17 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       });
       const lentSheet = household.sheet;
       // Slice 4: the corporate-deposit line is the derived view of the borrowers' real cash.
+      // SETL2: settlement maintains this line week to week with its reserve leg. This is the
+      // RECONCILIATION to the companies' actual cash — it catches balances moved by stages not
+      // yet migrated onto payment instructions, and carries the matching reserve leg with it so
+      // the identity cannot drift. The size of this adjustment is the migration's own progress
+      // meter: it goes to zero when every stage records instructions.
+      const trueCorporateUSD = Number((corporateDepositsByBank.get(bank.ticker) ?? 0).toFixed(0));
+      const reconcileUSD = trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0);
       const withDeposits: BankingSector = {
         ...lentSheet,
-        corporateDepositsUSD: Number((corporateDepositsByBank.get(bank.ticker) ?? 0).toFixed(0)),
+        cashReservesUSD: lentSheet.cashReservesUSD + reconcileUSD,
+        corporateDepositsUSD: trueCorporateUSD,
         loanLossProvisionRateAnnualPct: Number(
           (lentSheet.businessLoanBookUSD > 0 ? (lending.loanLossWeeklyUSD * 52) / lentSheet.businessLoanBookUSD : 0).toFixed(4)
         ),

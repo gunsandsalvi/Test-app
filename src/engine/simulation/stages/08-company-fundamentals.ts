@@ -31,6 +31,7 @@ import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market'
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
+import { pay, PartyRef } from './settlement';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
 import { random } from '../../rng';
@@ -639,10 +640,21 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // costs; capex beyond what was bought as real units). EBITDA is a reporting figure.
     const cashLedger: { label: string; amountUSD: number }[] = [];
     let newCash = comp.cash;
-    const post = (label: string, amountUSD: number) => {
+    // SETL2: a ledger entry IS a payment instruction. The S5 walk already named every flow and
+    // its amount; what it never named was the OTHER SIDE, which is why corporate cash could move
+    // without any bank knowing (§7.86). Each post now names a counterparty; where the model does
+    // not have one yet it says so explicitly (`UNMODELED`), and the size of that line is the
+    // honest measure of how much of the payment graph is still unnamed — a number to watch down
+    // as later slices name each flow, not a plug (rule 13).
+    const post = (label: string, amountUSD: number, counterparty?: PartyRef) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
       cashLedger.push({ label, amountUSD: Number(amountUSD.toFixed(0)) });
       newCash += amountUSD;
+      const other: PartyRef = counterparty ?? { kind: 'UNMODELED', region: comp.region };
+      const self: PartyRef = { kind: 'COMPANY', ticker: comp.ticker };
+      pay(ctx, amountUSD > 0
+        ? { payer: other, payee: self, amountUSD, reason: label }
+        : { payer: self, payee: other, amountUSD: -amountUSD, reason: label });
     };
 
     const update = companyUpdates[comp.ticker];
@@ -676,6 +688,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const capexSettledUSD = update?.capexPurchasesUSD ?? 0;
       post('wages & other opex beyond auction settlements', -Math.max(0, accruedOutflowsWeekly - Math.max(0, settledPurchasesUSD - capexSettledUSD)));
       post('inventory carrying cost', -carryingCostUSD);
+      // The lenders: bank facilities are paid to the house bank, market paper to its holders.
+      // Splitting the two is SETL4's (the register decides who receives); until then the whole
+      // leg names the boundary rather than paying the wrong counterparty.
       post('interest paid', -weeklyInterest);
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
@@ -684,7 +699,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       ctx.taxAccruedByRegion[comp.region] = (ctx.taxAccruedByRegion[comp.region] ?? 0) + weeklyAccrualUSD;
       // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.
       if (currentWeekMod13 === 13 && accruedTaxUSD > 0) {
-        post('cash taxes (quarterly remittance)', -accruedTaxUSD);
+        post('cash taxes (quarterly remittance)', -accruedTaxUSD, { kind: 'GOVERNMENT', region: comp.region });
         ctx.taxCollectedByRegion[comp.region] = (ctx.taxCollectedByRegion[comp.region] ?? 0) + accruedTaxUSD;
         accruedTaxUSD = 0;
       }
@@ -1503,7 +1518,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       managementFeeRate: comp.managementFeeRate,
       insurancePremiumsWrittenUSD: comp.insurancePremiumsWrittenUSD,
       insuranceClaimsPaidUSD: comp.insuranceClaimsPaidUSD,
-      cash: Number(newCash.toFixed(1)),
+      // SETL2: `cash` is NOT written here any more. Every flow above was recorded as a payment
+      // instruction and the settlement stage (which runs immediately after this one) applies the
+      // net to this company's balance AND to its bank's deposits and reserves. One mover.
+      // `newCash` above stays the stage's own running view, which is what settlement will produce.
       mmfSharesUSD: newMmfSharesUSD,
       lastOpportunisticOfferingWeek: newLastOpportunisticOfferingWeek,
       lastCashLedger: cashLedger,

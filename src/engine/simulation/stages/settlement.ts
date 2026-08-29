@@ -69,6 +69,11 @@ export interface SettlementReport {
   tgaDeltaByRegion: Map<string, number>;
   /** What flowed to (positive) or from (negative) counterparties that do not exist yet. */
   unmodeledDeltaByRegion: Map<string, number>;
+  /** Per-bank movement of the corporate deposit line — the liability leg that moves with the
+   *  reserves below, so asset and liability never drift apart. */
+  corporateDepositDeltaByBank: Map<string, number>;
+  /** Per-bank movement of the named boundary's balance. */
+  unmodeledDepositDeltaByBank: Map<string, number>;
   /** Household flows handed to HH4d's T+1 channel — settled by next week's bank pass, not here. */
   householdDeferredUSD: number;
   /** Money that could not be applied: a party that does not exist, or a holder with no bank.
@@ -97,6 +102,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     reserveDeltaByBank: new Map(),
     tgaDeltaByRegion: new Map(),
     unmodeledDeltaByRegion: new Map(),
+    corporateDepositDeltaByBank: new Map(),
+    unmodeledDepositDeltaByBank: new Map(),
     householdDeferredUSD: 0,
     unresolvedUSD: 0,
   };
@@ -134,6 +141,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         if (!comp) { report.unresolvedUSD += deltaUSD; return; }
         comp.cash += deltaUSD;
         creditBank(report, comp.homeBankTicker, deltaUSD);
+        addTo(report.corporateDepositDeltaByBank, comp.homeBankTicker ?? '', deltaUSD);
         return;
       }
       case 'INSTITUTION': {
@@ -175,7 +183,9 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0);
         if (banks.length === 0 || !(totalShare > 0)) { report.unresolvedUSD += deltaUSD; return; }
         banks.forEach((b) => {
-          addTo(report.depositDeltaByBank, b.ticker, deltaUSD * ((b.bankMarketShare ?? 0) / totalShare));
+          const shareUSD = deltaUSD * ((b.bankMarketShare ?? 0) / totalShare);
+          addTo(report.depositDeltaByBank, b.ticker, shareUSD);
+          addTo(report.unmodeledDepositDeltaByBank, b.ticker, shareUSD);
         });
         return;
       }
@@ -191,6 +201,38 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // cross-bank residual — which is what settles across the central bank's books.
   report.depositDeltaByBank.forEach((deltaUSD, ticker) => {
     addTo(report.reserveDeltaByBank, ticker, deltaUSD);
+  });
+
+  // ---- 4. Apply it. A bank whose customers were paid holds more money and more reserves; the
+  // one whose customers paid holds less of both. This is the leg that was missing entirely: the
+  // deposit stock moved on the companies' books and no bank's balance sheet ever knew (§7.86).
+  const bankByTicker = new Map(
+    ctx.updatedCompanies.filter((c) => c.isBankEntity && c.bankBalanceSheet).map((c) => [c.ticker, c])
+  );
+  report.reserveDeltaByBank.forEach((deltaUSD, ticker) => {
+    const bank = bankByTicker.get(ticker);
+    if (!bank?.bankBalanceSheet) { report.unresolvedUSD += deltaUSD; return; }
+    // Asset and liability move in the same statement: the reserves that arrived ARE the balance
+    // the customer now holds. Splitting these across stages is how they drift.
+    bank.bankBalanceSheet = {
+      ...bank.bankBalanceSheet,
+      cashReservesUSD: bank.bankBalanceSheet.cashReservesUSD + deltaUSD,
+      corporateDepositsUSD: bank.bankBalanceSheet.corporateDepositsUSD
+        + (report.corporateDepositDeltaByBank.get(ticker) ?? 0),
+      unmodeledDepositsUSD: (bank.bankBalanceSheet.unmodeledDepositsUSD ?? 0)
+        + (report.unmodeledDepositDeltaByBank.get(ticker) ?? 0),
+    };
+    const agg = ctx.updatedRegions[bank.region]?.bankingSector;
+    if (agg) agg.cashReservesUSD += deltaUSD;
+  });
+
+  // The treasury banks at the central bank, so its balance is a central-bank liability: what the
+  // government collects has left the banking system's reserves, which is why a tax date tightens
+  // money markets.
+  report.tgaDeltaByRegion.forEach((deltaUSD, region) => {
+    const cb = ctx.updatedRegions[region as RegionId]?.centralBankSheet;
+    if (!cb) { report.unresolvedUSD += deltaUSD; return; }
+    cb.treasuryAccountUSD += deltaUSD;
   });
 
   ctx.lastSettlementReport = report;

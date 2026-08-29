@@ -134,6 +134,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // HC Wave 2: the corporate lifecycle. Settles the deals whose financing priced in this
   // week's clearing books, then decides next week's — so a deal is always announced, priced,
   // and settled through the real markets rather than executed on announcement.
+  // CASH/SETL2: the week's payments settle. It sits here, directly after the stage that records
+  // them, because a balance must be settled before the stages below read it. As later slices
+  // migrate more stages onto instructions this moves to the end of the week, where a net
+  // settlement system actually runs.
+  run('settlement', () => runSettlementStage(ctx));
   run('hc-lifecycle', () => {
     settlePeLifecycleDeals(ctx, ctx.nextWeek);
     (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((regionId) => {
@@ -189,11 +194,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
   // After stage 11 so every treasury flow of the week has posted.
   run('central-bank', () => runCentralBankStage(state, ctx));
-  // CASH/SETL1: the week's payments settle. Every stage above has RECORDED what it owes and is
-  // owed; this is where deposits actually move and the banks square up in central-bank reserves.
-  // Last, because a week's payments settle at the end of the week — and because a stage reading a
-  // balance should see last week's settled position, not a half-settled one.
-  run('settlement', () => runSettlementStage(ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 

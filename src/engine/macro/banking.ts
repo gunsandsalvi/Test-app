@@ -201,13 +201,16 @@ export function evolveBankingSector(
   cashUSD -= wholesaleInterestUSD;
   equityUSD -= wholesaleInterestUSD;
 
-  // Corporate deposits are NOT funding here, and the reason is a real boundary rather than an
-  // oversight: company cash does not settle through banks in this model (a payment moves the
-  // payer's and payee's S5 ledgers and no bank's book), so `corporateDepositsUSD` is a VIEW of
-  // that cash with no matching asset behind it. Funding the bank with it, or paying interest on
-  // it, breaks the balance-sheet identity by exactly its own size — measured, 1,012 violations.
-  // It becomes real funding when corporate payments settle through bank books (§6).
+  // SETL2: corporate balances ARE funding now — company payments settle through bank books, so
+  // the line has real reserves behind it (settlement.ts moves them, the seed opens with them).
+  // And funding costs money: what a corporate treasurer is owed is not a chosen number, because
+  // this model already simulates the alternative it would take — sweeping to the money fund the
+  // moment the bank underpays — so the rate a corporate balance commands is the fund's own yield.
   const corporateDepositsUSD = prevBanking.corporateDepositsUSD ?? 0;
+  const corporateDepositRateAnnual = Math.max(0, competingMmfYieldAnnual);
+  const corporateDepositInterestUSD = (corporateDepositsUSD * corporateDepositRateAnnual) / 52;
+  cashUSD -= corporateDepositInterestUSD;
+  equityUSD -= corporateDepositInterestUSD;
 
   // ---- 3. Lending: loans create deposits, repayment destroys them — the actual mechanism
   // (both sides of the sheet move together; reserves do not move at origination). Sizes are
@@ -264,7 +267,7 @@ export function evolveBankingSector(
   // real equity raise exists, WS8/G2), and a hard rescale `equity = RWA × 0.140` that deleted
   // equity with nothing on the other side (a rule-2 rescale; now a real special dividend paid
   // at the pace real cash allows). ----
-  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD;
+  const weeklyNetIncomeUSD = weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD - corporateDepositInterestUSD;
   const consumerRwaUSD = (prevBanking.householdLoans && prevBanking.householdLoans.length > 0)
     ? householdBookRwaUSD(prevBanking.householdLoans)
     : consumerLoanUSD * CONSUMER_CREDIT_RISK_WEIGHT;
@@ -287,7 +290,7 @@ export function evolveBankingSector(
   // rule 2): if the margin is wrong, its inputs are wrong, and those are G2's to make real. ----
   const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + priorRepoLentUSD;
   const netInterestMarginPct = totalAssetsUSD > 0
-    ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD) * 52) / totalAssetsUSD
+    ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD - corporateDepositInterestUSD) * 52) / totalAssetsUSD
     : 0.025;
   const newBankCapitalRatio = riskWeightedAssetsUSD > 0 ? equityUSD / riskWeightedAssetsUSD : 0.13;
   const capitalGap = 0.12 - newBankCapitalRatio;
@@ -339,7 +342,8 @@ export function evolveBankingSector(
     // of phantom wholesale by week 55, on an 826B balance sheet — a large part of §6's negative
     // margin). Same identity as the seed's, applied weekly (bank-lending.ts owns it).
     wholesaleFundingUSD: Number((
-      businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD - depositsUSD - equityUSD
+      businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD
+      - depositsUSD - corporateDepositsUSD - equityUSD
     ).toFixed(0)),
     corporateDepositsUSD,
     // Dealer inventories and the tenor book persist across weeks — only real fills change

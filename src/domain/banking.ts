@@ -115,6 +115,11 @@ export interface BankingSector {
    * stock that `depositsUSD` carries; total funding = depositsUSD + corporateDepositsUSD.
    */
   corporateDepositsUSD: number;
+  /** SETL2 — the named boundary's balance here: money owed to counterparties the model has not
+   * built yet (see settlement.ts's UNMODELED). A real liability with real reserves behind it, so
+   * the identity closes; its SIZE is the measure of how much of the payment graph is still
+   * unnamed, and it is watched down as each flow gets a real counterparty (§6). */
+  unmodeledDepositsUSD?: number;
   /**
    * HH4d — the funding that is NOT household deposits: bonds, interbank and other wholesale
    * money, split out at seed so `depositsUSD` can be the real household stock (it used to be

@@ -1303,8 +1303,8 @@ dates drain reserves), and any counterparty the model lacks is named `UNMODELED`
 deposit stock to watch down rather than money appearing from nowhere. A new payment type is one
 instruction and no new plumbing (rule 17).
 
-**Slices:** **SETL1** the layer itself (DONE §7.87); **SETL2** corporate cash routes through it,
-with a loan creating a deposit rather than consuming reserves; **SETL3** dividends — today they
+**Slices:** **SETL1** the layer itself (DONE §7.87); **SETL2** corporate cash routes through it
+(DONE §7.88); **SETL2b** a loan creates a deposit rather than consuming reserves; **SETL3** dividends — today they
 leave the payer and arrive nowhere; **SETL4** coupons — today the issuer pays on 100% of
 principal while holders accrue independently off their own books (two derivations of one payment,
 rule 3), so the difference vanishes. Then the remaining flows, stage by stage, with the per-bank
@@ -2974,3 +2974,26 @@ that proved it, the lesson.
       holders, with a record date fixing who is paid and the cash leg settling in central-bank
       money, DvP. The agents exist because an issuer does not know its holders; here the register
       does, which is what makes the pro-rata distribution honest rather than assumed.
+88. **SETL2 — corporate cash is somebody's liability now, and §7.86's boundary is closed.** Every
+    entry in stage 08's S5 ledger is a payment instruction: the walk already named each flow and
+    its amount, and what it never named was the OTHER SIDE. `post(label, amount, counterparty)`
+    names it; stage 08 no longer writes `cash` at all, and the settlement stage — which runs
+    directly after it, because a balance must settle before later stages read it — applies the net
+    to the company's balance, its bank's deposits and the reserves between banks.
+    - **Asset and liability move in the same statement.** The first attempt moved reserves at
+      settlement while the corporate-deposit line was recomputed early in the week from stale
+      cash, and the identity drifted 430M / −95M / 2,628M. Both legs now move together, and 02b's
+      recompute became a RECONCILIATION carrying its own reserve leg — which also catches balances
+      moved by stages not yet migrated. **Measured: per-bank identity residual 0.0M across all 16
+      banks, every week**, against the 1,012 violations the same idea produced before the asset
+      existed (§7.86). The size of that reconciliation is the migration's own progress meter.
+    - **The boundary is a named account with real reserves behind it.** `unmodeledDepositsUSD` —
+      what the modelled economy owes counterparties that do not exist yet — runs −0.9B to −1.6B
+      against 57B of corporate cash. Negative means the model has RECEIVED more from unnamed
+      sources than it paid them; it shrinks as each flow gets a real counterparty, and it can no
+      longer hide because it sits on a balance sheet the harness checks.
+    - **Corporate balances now fund the banks and pay for it**, at the yield the money-market
+      sweep competes with — the model already simulates the treasurer's alternative, so the rate
+      is derived rather than chosen. The seed opens with the reserves behind those balances (§7.4).
+    - **Close-out: 68 → 59 violations**, no new families, and the bank story is 56 of them. New
+      world (declared): w10 c8d25434f9257792, w25 f8c6f485eda1fa75.

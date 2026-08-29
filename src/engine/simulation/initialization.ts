@@ -440,7 +440,13 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         corpDepositsByBank.set(c.homeBankTicker, (corpDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
       });
       regionBanksForLending.forEach(b => {
-        b.bankBalanceSheet!.corporateDepositsUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
+        const corpUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
+        b.bankBalanceSheet!.corporateDepositsUSD = corpUSD;
+        // SETL2 (§7.4 — the seed must open in the shape the weekly engine maintains): a corporate
+        // balance is a real liability now, so the bank holds the real asset behind it. The money
+        // its customers deposited is central-bank money, exactly as a week-1 deposit inflow would
+        // be. Without this the sheet opens short by the whole corporate line.
+        b.bankBalanceSheet!.cashReservesUSD += corpUSD;
         // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
         // the residual AFTER real deposits, not a plug carrying money the companies already
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
