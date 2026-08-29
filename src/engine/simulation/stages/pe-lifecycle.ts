@@ -607,6 +607,19 @@ export function runFirmBirthsForRegion(
   // Conservation: the pool loses exactly what the firm gains.
   seg.annualRevenueUSD = Math.max(0, seg.annualRevenueUSD - revenueUSD);
   seg.employment = Math.max(1, seg.employment - employees);
-  born.forEach((c) => { (c as any).bornWeek = nextWeek; });
+  // Every firm banks somewhere. A company born without a house bank held its cash outside the
+  // banking system entirely — its balance never reached any bank's funding, so the money existed
+  // on the firm and nowhere else (rule 3's "1$ is 1$"). Measured: 12 unbanked firms at seed
+  // growing with every birth cohort. The relationship is chosen the same way the seed chooses
+  // it, so a born firm enters the world banked like every other.
+  const banksForRelationship = ctx.updatedCompanies
+    .filter((b) => b.region === regionId && b.isBankEntity && isActiveCompany(b))
+    .map((b) => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare }));
+  born.forEach((c) => {
+    (c as any).bornWeek = nextWeek;
+    if (!c.homeBankTicker && banksForRelationship.length > 0) {
+      c.homeBankTicker = chooseLeadBank(c.id, banksForRelationship);
+    }
+  });
   return born;
 }

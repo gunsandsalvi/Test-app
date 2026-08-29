@@ -201,6 +201,14 @@ export function evolveBankingSector(
   cashUSD -= wholesaleInterestUSD;
   equityUSD -= wholesaleInterestUSD;
 
+  // Corporate deposits are NOT funding here, and the reason is a real boundary rather than an
+  // oversight: company cash does not settle through banks in this model (a payment moves the
+  // payer's and payee's S5 ledgers and no bank's book), so `corporateDepositsUSD` is a VIEW of
+  // that cash with no matching asset behind it. Funding the bank with it, or paying interest on
+  // it, breaks the balance-sheet identity by exactly its own size — measured, 1,012 violations.
+  // It becomes real funding when corporate payments settle through bank books (§6).
+  const corporateDepositsUSD = prevBanking.corporateDepositsUSD ?? 0;
+
   // ---- 3. Lending: loans create deposits, repayment destroys them — the actual mechanism
   // (both sides of the sheet move together; reserves do not move at origination). Sizes are
   // formula targets until G2 itemizes the borrowers. ----
@@ -324,9 +332,16 @@ export function evolveBankingSector(
     businessLoans: prevBanking.businessLoans || [],
     // HH3: the household pools are owned by the household lending pass; carried untouched.
     householdLoans: prevBanking.householdLoans || [],
-    // HH4d: a seed-split stock until bank liability issuance is real.
-    wholesaleFundingUSD: Number(wholesaleUSD.toFixed(0)),
-    corporateDepositsUSD: prevBanking.corporateDepositsUSD ?? 0,
+    // Wholesale money is the RESIDUAL, re-derived every week from the identity — the one
+    // funding line a treasurer actually chooses, so it is what moves when the others do. It used
+    // to be frozen at its seed value forever while deposits grew and the asset book shrank, so
+    // the bank went on paying policy-plus-spread on funding it no longer needed (measured: ~200B
+    // of phantom wholesale by week 55, on an 826B balance sheet — a large part of §6's negative
+    // margin). Same identity as the seed's, applied weekly (bank-lending.ts owns it).
+    wholesaleFundingUSD: Number((
+      businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD - depositsUSD - equityUSD
+    ).toFixed(0)),
+    corporateDepositsUSD,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],

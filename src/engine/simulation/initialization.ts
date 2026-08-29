@@ -5,7 +5,7 @@ import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
-import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed } from './stages/bank-lending';
+import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit } from './stages/bank-lending';
 import { isActiveCompany } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
 import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD } from '../../domain/central-bank';
@@ -441,8 +441,14 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       });
       regionBanksForLending.forEach(b => {
         b.bankBalanceSheet!.corporateDepositsUSD = Math.round(corpDepositsByBank.get(b.ticker) ?? 0);
+        // Now that the corporate leg is known, the funding identity is re-derived: wholesale is
+        // the residual AFTER real deposits, not a plug carrying money the companies already
+        // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
+        applyBankFundingSplit(b.bankBalanceSheet!, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
       });
       reg.bankingSector.corporateDepositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0);
+      reg.bankingSector.depositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
+      reg.bankingSector.wholesaleFundingUSD = regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
     }
 
     reg.institutionalSector.itemizedHoldings = [

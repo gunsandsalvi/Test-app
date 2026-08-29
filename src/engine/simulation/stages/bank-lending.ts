@@ -433,12 +433,7 @@ export function migrateHouseholdDebtAtSeed(
     const fundingNeedUSD = Number((
       sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
     ).toFixed(0));
-    // HH4d: the funding splits into what households actually hold (this bank's share of the
-    // REAL household deposit stock) and wholesale money for the rest — the balancing item
-    // stops wearing a deposit label it never earned.
-    const householdDepositsUSD = Math.round((hs.depositsUSD ?? 0) * share);
-    sheet.depositsUSD = Math.min(fundingNeedUSD, householdDepositsUSD);
-    sheet.wholesaleFundingUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
+    applyBankFundingSplit(sheet, Math.round((hs.depositsUSD ?? 0) * share));
     sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
   });
 
@@ -678,4 +673,23 @@ export function runBankHouseholdLending(
     consumerCreditOriginationUSD,
     declinedOriginationUSD,
   };
+}
+
+
+/**
+ * Who funds this bank's assets, in the order reality fills them: real household deposits, then
+ * real corporate deposits, and wholesale money for whatever is still uncovered.
+ *
+ * Corporate deposits are deliberately absent: company cash does not settle through bank books in
+ * this model, so that line is a view with no matching asset (see macro/banking.ts and §6).
+ *
+ * Idempotent: derived from the assets and equity actually present, so re-applying is safe.
+ */
+export function applyBankFundingSplit(sheet: BankingSector, householdDepositsUSD: number): void {
+  const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a: number, v) => a + (Number(v) || 0), 0);
+  const fundingNeedUSD = Number((
+    sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
+  ).toFixed(0));
+  sheet.depositsUSD = Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD));
+  sheet.wholesaleFundingUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
 }

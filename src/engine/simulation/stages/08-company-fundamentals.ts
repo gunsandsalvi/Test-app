@@ -939,7 +939,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
           : REVOLVER_MARGIN_BPS,
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
-        leadBankTicker: chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+        leadBankTicker: comp.homeBankTicker ?? chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
         announcedWeek: nextWeek,
       });
     });
@@ -1060,7 +1060,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             : REVOLVER_MARGIN_BPS,
           rateType: asFixed ? 'FIXED' : 'FLOATING',
           refinancesTrancheIds: bridges.map(t => t.id),
-          leadBankTicker: chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+          leadBankTicker: comp.homeBankTicker ?? chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
           announcedWeek: nextWeek,
         });
       }
@@ -1153,7 +1153,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         sizeUSD: dealSizeUSD,
         walkAwayStat: walkAwayOasBps,
         rateType: 'FIXED',
-        leadBankTicker: chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+        leadBankTicker: comp.homeBankTicker ?? chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
         announcedWeek: nextWeek,
       });
       newLastOpportunisticOfferingWeek = nextWeek;
