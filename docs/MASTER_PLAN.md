@@ -361,7 +361,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | # | Tier | Project | Why here |
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
-| 1 | foundation | **EMP — the labour collapse** | **PRIORITY (user, 2026-08-29). ROOT CAUSE FOUND (§7.111): production has no depth.** Revenue per worker is 1.13x value added per worker — 0.92x in Consumer, where the jobs are — because the model's own input recipes carry a mean intensity of 0.138 against a real ~0.5. Payroll is 61% of revenue, so every firm sits on the cost-of-capital line the labor market sheds against. **BLOCKED on CHAIN (item 22), which owns that primitive; the two labour-market symmetries EMP fixed (§7.110) stand on their own and are all this project can do alone.** Do not attempt the unemployment band again until the recipes are deep — everything else that could be tried here is tuning (§6.4). Original framing: Unemployment runs 10.6% → 19.3% in five weeks from seed and never recovers; every §6 unemployment-band violation is this. Now diagnosed to the exact mechanism (§7.109) rather than described from the seed side. Two of its three causes are fixed; the third is a design decision recorded below. Gates IND3/IND15 ("costs are people", "labor constrains output") and the value of IND-R1. |
+| 1 | foundation | **EMP — the labour collapse** | **PRIORITY (user, 2026-08-29). ROOT CAUSE FOUND (§7.111): production has no depth.** Revenue per worker is 1.13x value added per worker — 0.92x in Consumer, where the jobs are — because the model's own input recipes carry a mean intensity of 0.138 against a real ~0.5. Payroll is 61% of revenue, so every firm sits on the cost-of-capital line the labor market sheds against. **BLOCKED on CHAIN-E (item 22) — read §7.117 before §7.111, which named the wrong owner: deepening every recipe 2.5x moved the ratio by one part in a thousand, because the demand seed pins it. Original framing: blocked on CHAIN, which owns that primitive; the two labour-market symmetries EMP fixed (§7.110) stand on their own and are all this project can do alone.** Do not attempt the unemployment band again until the recipes are deep — everything else that could be tried here is tuning (§6.4). Original framing: Unemployment runs 10.6% → 19.3% in five weeks from seed and never recovers; every §6 unemployment-band violation is this. Now diagnosed to the exact mechanism (§7.109) rather than described from the seed side. Two of its three causes are fixed; the third is a design decision recorded below. Gates IND3/IND15 ("costs are people", "labor constrains output") and the value of IND-R1. |
 | 2 | foundation | **IND — industry operating models** | Every non-financial corporate is one model with four coefficients. **Seven slices closed 2026-08-29** (§7.108-109, §7.112-115): IND1 storability, IND2's subscription half, IND5 electricity, IND8 rating generation, IND9 (already done by G2), IND-R1 payroll/capex/inputs common to every firm, IND-R2 the software proxy lines, IND-R4's loan-loss half and IND-R5 bank seed revenue. **What is left is BLOCKED on the same two things as item 1:** IND3 (cost shape), IND-R4's remaining stated ratios and IND-R6 (delete the private/public fork) all need CHAIN's recipe depth first — a margin cannot become an outcome of a recipe that isn't there. IND-R3, IND6-7 and IND10-19 are independent and unstarted. Prereq: BP1 (done). |
 | 3 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | Re-scoped by the review: the EBITDA-margin clamp [2%, 65%] means no firm can report an operating loss, so CAP's own mechanism cannot fire. That clamp goes FIRST. Runs with IND. |
 | 4 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. |
@@ -383,7 +383,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 19 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
 | 20 | depth | **SCALE — universe scale-up under a wall-clock budget** | Wave 2 after IND. Owns the float half of the promoted damper defect: thin books are why prints pin. |
 | 21 | depth | **MNC — multinational production** | Prereqs IND, XB. |
-| 22 | depth | **CHAIN — multi-tier supply chains** | **NOW GATES ITEMS 1 AND 2 (§7.111, §7.116).** It owns the root cause of EMP's labour collapse and the recipe depth IND3 needs, so two foundation items sit behind a depth-tier row. Prereqs BP1, IND10/11. Adds: `CONTRACTED_DEMAND_SHARE` becomes the buyer's own hedging decision. **OPEN QUESTION FOR THE USER — the table may not be reordered without asking:** promote CHAIN (or the recipe-depth slice of it) into the foundation tier beside IND, or leave items 1 and 2 parked until the depth tier is reached? |
+| 22 | depth | **CHAIN — multi-tier supply chains** | **CHAIN-D DONE (§7.117); CHAIN-E is what items 1 and 2 actually wait on.** The recipe-depth slice was split out and run first (user decision, 2026-08-29): mean intensity 0.164 → 0.412, harness 18 → 15, five families → two. **It did not move §7.111's ratio (0.878 → 0.879), and that is the finding** — the gross-output ratio is pinned by the DEMAND SEED (`C + I + G`, a final-demand identity with no intermediate demand in it), not by the recipes. **CHAIN-E — put intermediate demand in the seed, from the now-real recipe matrix — is the unblocking slice.** Earlier framing (§7.111, §7.116): It owns the root cause of EMP's labour collapse and the recipe depth IND3 needs, so two foundation items sit behind a depth-tier row. Prereqs BP1, IND10/11. Adds: `CONTRACTED_DEMAND_SHARE` becomes the buyer's own hedging decision. **OPEN QUESTION FOR THE USER — the table may not be reordered without asking:** promote CHAIN (or the recipe-depth slice of it) into the foundation tier beside IND, or leave items 1 and 2 parked until the depth tier is reached? |
 | 23 | depth | **DYN — entry, exit, and industry structure** | Prereqs IND, BP1. Adds: the named tier's cut point falls out of the Pareto tail instead of sitting beside it. |
 | 24 | depth | **PROD — firm productivity and innovation** | Prereq IND. |
 | 25 | depth | **CRE — commercial property and leases** | Prereqs HH, G2 (both done). |
@@ -647,7 +647,19 @@ backlog, recognised as delivered) and **ROYALTY** (a share of someone else's vol
 backlog STOCK to live on: they land with **IND10/IND11**, which build it, so the stock has one
 owner rather than two.
 
-**IND3 — Cost structure.** The fixed/variable split and the COGS-versus-opex balance by industry:
+**IND3 — Cost structure. *(Now also owns a live rule-3 defect, found by CHAIN-D — §7.117.)***
+`realInputConsumptionCostUSD` in stage 08 is the real dollar cost of the real lots a firm actually
+consumed, at the prices it actually paid — **and it reaches only the display COGS breakdown.**
+EBITDA is `revenue x newEbitdaMargin − payrollAboveBaseline`, where the margin is a walked stated
+number nudged by `inputPriceDrag * 0.03`, an INDEX. So input cost has two representations, and the
+measured one sits unused beside the formula — §7.100's FRM shape. **This is why deepening the
+recipes was safe** (input cost cannot reach the P&L, so nothing could collapse) **and why depth is
+currently visible on the demand side only.** Charging the real cost is not an addition: the stated
+margin already implicitly contains COGS, so this is a DECOMPOSITION — revenue − inputs − payroll −
+opex — and adding the real cost on top of the stated margin is the §7.115 double-count trap in a
+new place. Do it as part of this slice, not before it.
+
+The rest of IND3: the fixed/variable split and the COGS-versus-opex balance by industry:
 a software firm's marginal cost is near zero and its costs are people; a smelter's are inputs and
 energy. Both are currently the same decomposition with different coefficients. Operating leverage —
 which is what makes a downturn hurt some industries far more than others — is not expressible
@@ -1861,7 +1873,35 @@ move changes a multinational's consolidated earnings through both channels.
 
 ### CHAIN — Multi-tier supply chains  *(item 22; needs BP1, IND10/11)*
 
-**CHAIN INHERITS EMP's ROOT CAUSE (§7.111), and it is the largest measured defect in the model.**
+**CHAIN-D — DONE (§7.117). The recipes are deep, and it proved the depth was not the binding
+thing.** `recipeInputs` moved from `IndustrySpec` to `SubUnitSpec` — a bill of materials is a
+property of a PRODUCT, and at industry granularity a real one is unwriteable, which is why all
+sixteen recipes had collapsed to the same overhead line. All 37 products now carry a real BOM:
+**mean intensity 0.164 → 0.412, dispersed for the first time** (refining 0.70, industrial
+chemicals 0.61, enterprise software 0.19, professional services 0.18). Harness **18 → 15, five
+families → two**; deflation falls every week. **But the gross-output ratio moved 0.878 → 0.879 —
+no effect — which falsifies §7.111's attribution rather than its measurements.**
+
+**CHAIN-E — PUT INTERMEDIATE DEMAND IN THE SEED. This is what items 1 and 2 are actually blocked
+on, and it is a seed slice (§7.117).** `macro/initialization.ts:106-108` seeds all demand as
+`C = household income x 0.94`, `G = GDP x 0.35`, `I = GDP x 0.15` — **C + I + G, a final-demand
+identity**, in which corporate demand is investment ONLY and intermediate demand does not exist.
+So gross output is pinned to final demand and the ratio is ~1 by construction however deep any
+recipe is. The recipe matrix is now real, so the seed can solve for what it implies instead of
+stating it beside it: **X = (I − A)⁻¹ F** — each sub-unit's demand level is its row of the total-
+output vector, and the CORPORATE share of it becomes an outcome, `(X − F)/X`, retiring
+`buyerMix.CORPORATE` as a stated number (rule 3: two representations of intermediate demand, and
+the stated one currently wins because it sizes the pot). **Revenue-per-employee's sector multiple
+must come out of the SAME solve** — it is the gross-output-to-value-added ratio wearing another
+name (§6.1 records that normalising it independently put employment 68% above the labour force,
+and §7.112 corrected its comment from an asserted 2.5x to a measured 1.13x). One solve, both
+numbers, or they disagree again.
+**Verify:** the ratio lands at the recipe matrix's own multiplier; Consumer stops printing gross
+output below value added; employment stays inside the labour force without any multiple being
+tuned; and the seed's category demand equals what the recipes say is consumed plus final demand.
+
+**Original framing, kept because its measurements stand (§7.111) — but read §7.117 first, which
+corrects its owner assignment:**
 `recipeInputs` — "what a producer consumes per dollar of output" — has a **mean intensity of
 0.138** across the sixteen industries that carry one, implying a gross-output-to-value-added
 multiplier of **1.16x**. A real economy's intermediate share is 50-60%, giving 2.0-2.5x. So firms
@@ -4489,3 +4529,57 @@ that proved it, the lesson.
       capex, inputs, loan losses and seed revenue are all real for banks now; what is left is one
       stated margin. The private tier took its place on that list, which is the honest shape of
       the model today.
+
+117. **CHAIN-D — the recipes were shallow because of their GRANULARITY; and deepening them proved
+    §7.111 had the causality backwards.** Two findings, and the second matters more than the work.
+    - **A bill of materials is a property of a PRODUCT, and it was stated per INDUSTRY.** At
+      industry granularity a real BOM is unwriteable: the only honest statement about crude
+      extraction, refining and power generation at the same time is what they have in COMMON, so
+      all sixteen recipes had collapsed to the same overhead line — professional services 0.05,
+      facilities 0.04, repair 0.02, **identical in 13 of 16** — with almost no materials in them.
+      Refining bought no crude, a fab no process chemicals, construction no steel or cement,
+      retail none of the goods it sells. `recipeInputs` now sits on `SubUnitSpec` beside the other
+      two IND dials, all 37 products carry a real BOM, and **mean intensity 0.164 → 0.412 with
+      dispersion for the first time**: refining 0.70 and industrial chemicals 0.61 against
+      enterprise software 0.19 and professional services 0.18. Each coefficient is a technological
+      primitive; the aggregate is an outcome and none was chosen to hit it.
+    - **Stage 04's demander is a sub-unit too now**, which deletes an approximation it was forced
+      into: one industry-wide cost pressure and fulfilment ratio fanned onto every product of the
+      industry whether or not it needed the scarce input. And two load-time assertions: a recipe
+      may not name its own product (a self-loop puts a firm on both sides of its own auction —
+      **unavoidable at industry granularity**, since refining consumes crude and both are Energy,
+      which is a second reason the recipes had to stay shallow), nor an input that does not exist.
+    - **Measured, 10 weeks SHOCKS=0, same seed: harness 18 → 15, five families → two.** Three
+      runaway-revenue firms gone, nothing added. **Deflation falls every week** (w1 −0.79 → −0.06,
+      w9 −13.37 → −12.03): firms buying from each other is a demand floor under producer goods
+      that simply was not there.
+    - **AND THE RATIO §7.111 OWNS DID NOT MOVE: 0.878 → 0.879.** A 2.5x deepening of every recipe
+      in the model changed the gross-output-to-value-added ratio by one part in a thousand. That
+      is not a small effect, it is NO effect, and it falsifies the attribution rather than the fix.
+    - **THE REAL ROOT, and it is in the demand seed, not the recipes.**
+      `macro/initialization.ts:106-108` seeds every sub-unit's demand from
+      `C = household income x 0.94`, `G = GDP x 0.35`, **`I = GDP x 0.15`** — and `buyerMix`
+      merely distributes those three pots across sub-units. That is C + I + G: a **FINAL-DEMAND
+      identity**. Corporate demand in this model is INVESTMENT ONLY. **There is no intermediate
+      demand in the seed at all**, so gross output is pinned to final demand and the ratio is ~1
+      BY CONSTRUCTION, whatever any recipe says. The recipes only decide who bids inside an
+      envelope already fixed without them.
+    - **So §7.111's consistency was real and its causality was inverted.** It found recipes,
+      demand and revenue-per-worker all agreeing at 1.16x and concluded the recipes were binding.
+      They were not: the demand seed pins the ratio, and the recipes were shallow enough to agree
+      with it. **Read §7.111 with this attached** — its measurements stand, its owner assignment
+      does not. Rule 10 in its sharpest form: the number that moves when you fix a thing is the
+      test of whether you had found the thing.
+    - **What this leaves EMP:** the unblocking slice is CHAIN-E, and it is a SEED slice after all.
+      §7.111 ruled that out — "scaling the demand seed does nothing on its own, headcount is
+      derived as revenue/revPerEmployee so both sides move and the ratio is invariant" — which is
+      true of SCALING and false of COMPOSITION. Intermediate demand is a component that exists in
+      gross output and not in value added; adding it is exactly what moves a ratio scaling cannot.
+    - **One more defect found on the way, not fixed, owner IND3:** `realInputConsumptionCostUSD`
+      in stage 08 is the real dollar cost of the real lots a firm consumed, computed from real
+      prices — **and it reaches only the display COGS breakdown.** EBITDA is
+      `revenue x newEbitdaMargin − payrollAboveBaseline`, a walked stated margin nudged by
+      `inputPriceDrag * 0.03`, an INDEX. Two representations of one cost (rule 3), the measured
+      one unused beside the formula — §7.100's FRM shape exactly. **It is why deepening the
+      recipes was safe:** input cost does not reach the P&L, so nothing could collapse. It is also
+      why depth is currently visible on the demand side only.
