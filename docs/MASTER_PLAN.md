@@ -4900,3 +4900,38 @@ that proved it, the lesson.
       own slice: it creates real management companies, gives each fund a named manager and a fee
       that reaches that firm's P&L, and gives the vehicle a unit register. **The ETF is already
       that shape and is the template.** Unassigned; not IND's.
+
+127. **G1b diagnosed: it is not a deflation, it is a SUPPLY FAMINE in the intermediate goods
+    CHAIN-D created demand for.** *(MAC part (a), item 1.)* Two findings — one fixed, one logged
+    with its owner.
+    - **FIXED: the seed priced total output against a final-buyer volume.** `deriveSubUnitUnitPrice`
+      divides demand by `population x 0.02 + firmCount x 1.5` — a proxy for FINAL buyers. CHAIN-E
+      made `demandLevelUSD` the total output X, so every dollar of intermediate demand became
+      PRICE instead of quantity, worst for the most intermediate-heavy goods. The consistent
+      answer is `price = F / finalVolume`, with intermediate quantity following as `(X − F)/price`
+      — the algebra closes exactly. Now passed final demand at both seed sites. Measured: the
+      dispersion narrows (defense systems 14x → 5x over twenty weeks), and the harness stays
+      green.
+    - **AND THE REAL ONE: an 8x shortage printing a FALLING price.** Measured USA, week 12:
+      `upstream_extraction` supply **2,458 units against demand 20,954**, inventory **0**, stage
+      04 fulfilment **0.00** — and its price down **92%** from seed. `refined_products` the same:
+      35,864 against 76,346. This is not excess supply and never was; **reading the falling price
+      as deflation is what made it look like one for the model's whole life.**
+    - **The chain, end to end.** CHAIN-D gave every product a real bill of materials, so
+      intermediate demand for extraction, refining, chemicals and power is now several times what
+      it was. **The SUPPLY of those goods was never scaled to match:** stage 04 sizes an input
+      category's real weekly production from its LINKED COMMODITIES' `weeklySupplyUnits`, which
+      are seeded against the old shallow recipes. So the input market drains to zero inventory,
+      `physicalFulfillment` collapses in stage 08, firms cannot make what they sold, revenue
+      falls, and the price level follows it down. **Unemployment tracks it because a firm that
+      cannot produce cannot pay staff** — which is why the two moved together and monotonically
+      (§7.118) and why no coefficient in the labour market or the price index could have fixed it.
+    - **Owner: NAT with CHAIN.** A commodity's weekly supply is currently a seeded quantity; NAT's
+      slice makes it an outcome of extraction cost and ore grade, which is exactly the mechanism
+      that would let it respond to a demand that tripled. CHAIN owns the demand side that
+      tripled. **This is now the binding item for MAC(a), EMP and the whole horizon**, and it is
+      not a clamp, an expectation or a policy rule — the three things §5-MAC is otherwise about.
+    - **The lesson, and it is §7.117's again:** the number that moves when you fix a thing is the
+      test of whether you found the thing. Deflation was the SYMPTOM measured for a year; the
+      cause is a physical shortage two stages upstream, and it only became visible once the
+      recipes were deep enough to make the shortage bite.
