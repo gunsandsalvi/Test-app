@@ -1,4 +1,5 @@
 import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
+import { INDUSTRY_REGISTRY, subUnitsByProducingSector, FINANCIAL_SECTOR_PROXY_LINES, ProducingSector } from '../domain/industry-registry';
 import { callProtectionForIssue } from '../domain/call-protection';
 import { isInvestmentGrade } from './simulation/stages/asset-allocation';
 import { RATING_OAS_SPREADS, SECTOR_BENCHMARKS } from './pricing';
@@ -318,35 +319,6 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
 }
 
 
-const SUBUNIT_TO_CATEGORY: Record<string, string> = {
-  food_beverage: 'StapleHousehold',
-  household_essentials: 'StapleHousehold',
-  agricultural_commodities: 'CorporateIndustrial',
-  apparel_retail: 'StandardHousehold',
-  home_furnishings: 'StandardHousehold',
-  consumer_devices: 'StandardHousehold',
-  consumer_software: 'StandardHousehold',
-  passenger_vehicles: 'StandardHousehold',
-  residential_construction: 'StandardHousehold',
-  luxury_goods: 'LuxuryHousehold',
-  media_content: 'LuxuryHousehold',
-  heavy_equipment: 'CorporateIndustrial',
-  industrial_automation: 'CorporateIndustrial',
-  industrial_chemicals: 'CorporateIndustrial',
-  agricultural_chemicals: 'CorporateIndustrial',
-  specialty_metals: 'CorporateIndustrial',
-  refined_products: 'CorporateIndustrial',
-  upstream_extraction: 'CorporateIndustrial',
-  commercial_aerospace: 'CorporateIndustrial',
-  commercial_fleet: 'CorporateIndustrial',
-  enterprise_software: 'CorporateTech',
-  semiconductors: 'CorporateTech',
-  network_infrastructure: 'CorporateTech',
-  defense_systems: 'GovernmentDefense',
-  pharmaceuticals: 'GovernmentHealthcare',
-  medtech_devices: 'GovernmentHealthcare',
-  commercial_construction: 'GovernmentInfrastructure',
-};
 
 /**
  * Generate the full initial company roster: each region's seed firms come from the
@@ -752,77 +724,59 @@ export function generateInitialCompanies(
 
     sectorComps.forEach((comps, sector) => {
       comps.sort((a, b) => b.baselineAnnualRevenue - a.baselineAnnualRevenue);
+
+      // BP1b (rule 17): lines are DEALT from the registry, weighted by this region's own seeded
+      // demand — supply seeded to meet the demand the economy states (§7.4), so a new sub-unit
+      // in the registry gets producers with no generator edit. Deterministic greedy: each firm
+      // (largest first) takes the sub-units its sector currently under-serves most, so every
+      // category's producer base converges to its demand share and coverage is an outcome.
+      const regionDemand = initialRegions[_regionId as RegionId]?.categoryDemand ?? {};
+      const sectorSubUnits = (subUnitsByProducingSector()[sector as ProducingSector] ?? [])
+        .map(({ industry, su }) => ({
+          industry, unitId: su.unitId,
+          weightUSD: Math.max(0, Number((regionDemand[su.unitId] as any)?.demandLevelUSD) || 0),
+        }))
+        .filter(x => x.weightUSD > 0);
+      const totalWeightUSD = sectorSubUnits.reduce((a, x) => a + x.weightUSD, 0);
+      const assignedUSD = new Map<string, number>();
+      let assignedTotalUSD = 0;
+
       comps.forEach((c) => {
         let lines: any[] = [];
 
-        // 1$ is 1$: a producedCommodityId-tagged company (see bootstrap/firms.ts) was seeded
-        // specifically to be a real producer of one of the modeled commodities — it must carry
-        // the MATCHING industry productLines entry, not the generic per-sector template, or it
-        // never actually shows up as a real supplier in the industry input-output pipeline
-        // (04/05) even though it's a real, named seller on the commodity trading desk. Without
-        // this, a whole commodity category (e.g. specialty_metals, whose dedicated producers all
-        // fell into Industrials' generic template) can end up with ZERO real industrial
-        // suppliers, guaranteed by generation, regardless of any auction/pooling fix.
+        // A producedCommodityId-tagged company was seeded to be a real producer of one modeled
+        // commodity — it carries the matching line (from the registry's own linkage) or it never
+        // shows up as a real supplier in 04/05 despite being a named seller on the trading desk.
         const commodityLinkage = c.producedCommodityId ? COMMODITY_CATEGORY_LINKAGE[c.producedCommodityId] : undefined;
         if (commodityLinkage) {
-          const industryBySubUnit: Record<string, Industry> = {
-            upstream_extraction: 'Energy',
-            specialty_metals: 'MaterialsChemicals',
-            agricultural_commodities: 'MaterialsChemicals',
-          };
-          const industry = industryBySubUnit[commodityLinkage.subUnitId];
-          if (industry) {
-            lines = [{ industry, subUnitId: commodityLinkage.subUnitId, revenueShare: 1.0, competitiveness: 0 }];
+          const parent = (Object.entries(INDUSTRY_REGISTRY) as [Industry, { subUnits: { unitId: string }[] }][])
+            .find(([, spec]) => spec.subUnits.some(su => su.unitId === commodityLinkage.subUnitId));
+          if (parent) {
+            lines = [{ industry: parent[0], subUnitId: commodityLinkage.subUnitId, revenueShare: 1.0, competitiveness: 0 }];
           }
         }
 
-        if (lines.length > 0) {
-          // dedicated commodity-producer lines assigned above — skip the generic sector switch
-        } else if (sector === 'Tech') {
-          lines = [
-            { industry: 'SoftwareDigitalServices', subUnitId: 'enterprise_software', revenueShare: 0.55, competitiveness: 0 },
-            { industry: 'TechHardwareSemis', subUnitId: 'semiconductors', revenueShare: 0.30, competitiveness: 0 },
-            { industry: 'TechHardwareSemis', subUnitId: 'consumer_devices', revenueShare: 0.15, competitiveness: 0 }
-          ];
-        } else if (sector === 'Energy') {
-          lines = [
-            { industry: 'Energy', subUnitId: 'upstream_extraction', revenueShare: 0.60, competitiveness: 0 },
-            { industry: 'Energy', subUnitId: 'refined_products', revenueShare: 0.40, competitiveness: 0 }
-          ];
-        } else if (sector === 'Industrials') {
-          if (comps.indexOf(c) % 2 === 1) {
-            lines = [
-              { industry: 'AerospaceDefense', subUnitId: 'defense_systems', revenueShare: 0.50, competitiveness: 0 },
-              { industry: 'AerospaceDefense', subUnitId: 'commercial_aerospace', revenueShare: 0.30, competitiveness: 0 },
-              { industry: 'IndustrialsMachinery', subUnitId: 'heavy_equipment', revenueShare: 0.20, competitiveness: 0 }
-            ];
-          } else {
-            lines = [
-              { industry: 'IndustrialsMachinery', subUnitId: 'heavy_equipment', revenueShare: 0.50, competitiveness: 0 },
-              { industry: 'IndustrialsMachinery', subUnitId: 'industrial_automation', revenueShare: 0.30, competitiveness: 0 },
-              { industry: 'MaterialsChemicals', subUnitId: 'industrial_chemicals', revenueShare: 0.20, competitiveness: 0 }
-            ];
-          }
-        } else if (sector === 'Consumer') {
-          // §6: `baselineAnnualRevenue > 100000` was a stale-scale test — revenues are dollars,
-          // so every company passed it and the "else" mix was dead. One mix, the one every run
-          // has actually used (behaviour-preserving deletion).
-          lines = [
-            { industry: 'ConsumerStaples', subUnitId: 'food_beverage', revenueShare: 0.40, competitiveness: 0 },
-            { industry: 'HealthcarePharma', subUnitId: 'pharmaceuticals', revenueShare: 0.30, competitiveness: 0 },
-            { industry: 'AutomotiveTransport', subUnitId: 'passenger_vehicles', revenueShare: 0.15, competitiveness: 0 },
-            { industry: 'ConsumerDiscretionaryRetail', subUnitId: 'apparel_retail', revenueShare: 0.15, competitiveness: 0 }
-          ];
-        } else if (sector === 'Financials' || sector === 'Banks') {
-          lines = [
-            { industry: 'SoftwareDigitalServices', subUnitId: 'enterprise_software', revenueShare: 1.0, competitiveness: 0 }
-          ];
+        if (lines.length === 0 && (sector === 'Financials' || sector === 'Banks')) {
+          lines = FINANCIAL_SECTOR_PROXY_LINES.map(l => ({ ...l }));
+        } else if (lines.length === 0 && sectorSubUnits.length > 0 && totalWeightUSD > 0) {
+          const k = Math.min(3, sectorSubUnits.length);
+          const scored = sectorSubUnits.map((x, idx) => ({
+            x, idx,
+            deficitUSD: (x.weightUSD / totalWeightUSD) * (assignedTotalUSD + c.baselineAnnualRevenue) - (assignedUSD.get(x.unitId) ?? 0),
+          }));
+          scored.sort((a, b) => (b.deficitUSD - a.deficitUSD) || (a.idx - b.idx));
+          const picked = scored.slice(0, k);
+          const pickedWeightUSD = picked.reduce((a, e) => a + e.x.weightUSD, 0) || 1;
+          lines = picked.map(e => ({
+            industry: e.x.industry, subUnitId: e.x.unitId,
+            revenueShare: e.x.weightUSD / pickedWeightUSD, competitiveness: 0,
+          }));
+          picked.forEach(e => assignedUSD.set(e.x.unitId,
+            (assignedUSD.get(e.x.unitId) ?? 0) + (e.x.weightUSD / pickedWeightUSD) * c.baselineAnnualRevenue));
+          assignedTotalUSD += c.baselineAnnualRevenue;
         }
 
-        c.productLines = lines.map(line => ({
-          ...line,
-          category: SUBUNIT_TO_CATEGORY[line.subUnitId]
-        }));
+        c.productLines = lines;
       });
     });
 

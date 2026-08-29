@@ -22,6 +22,10 @@ import type { Industry, BuyerType, HouseholdPriceTier } from './industry';
 import type { DeliveryMode } from './goods-physical';
 
 export type PrivateSegmentType = 'MANUFACTURING' | 'CONSTRUCTION_REALESTATE' | 'PROFESSIONAL_SERVICES';
+/** The producing sector whose companies carry an industry's lines — a GICS-style taxonomy
+ * primitive. Financials and Banks produce no goods (their stage-08 consumer-revenue proxy line
+ * is FINANCIAL_SECTOR_PROXY_LINES below, and IND4 owns retiring it). */
+export type ProducingSector = 'Tech' | 'Energy' | 'Industrials' | 'Consumer';
 /** IND2 will add SUBSCRIPTION | PROJECT | ROYALTY as profile modules; UNIT_SALE is today's world. */
 export type RevenueMechanism = 'UNIT_SALE';
 
@@ -48,6 +52,8 @@ export interface SubUnitSpec {
 }
 
 export interface IndustrySpec {
+  /** Which sector's companies produce this industry's goods (BP1b: line assignment reads this). */
+  sector: ProducingSector;
   /** What a producer in this industry consumes per dollar of output (absent = no recipe). */
   recipeInputs?: Record<string, number>;
   subUnits: SubUnitSpec[];
@@ -55,6 +61,7 @@ export interface IndustrySpec {
 
 export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Energy: {
+    sector: 'Energy',
     subUnits: [
       {
         unitId: 'upstream_extraction',
@@ -84,6 +91,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   MaterialsChemicals: {
+    sector: 'Industrials',
     subUnits: [
       {
         unitId: 'industrial_chemicals',
@@ -150,6 +158,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   IndustrialsMachinery: {
+    sector: 'Industrials',
     recipeInputs: { upstream_extraction: 0.015, specialty_metals: 0.03 },
     subUnits: [
       {
@@ -181,6 +190,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   AerospaceDefense: {
+    sector: 'Industrials',
     recipeInputs: { upstream_extraction: 0.02, specialty_metals: 0.025 },
     subUnits: [
       {
@@ -208,6 +218,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   AutomotiveTransport: {
+    sector: 'Consumer',
     recipeInputs: { upstream_extraction: 0.025, specialty_metals: 0.03 },
     subUnits: [
       {
@@ -237,6 +248,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   TechHardwareSemis: {
+    sector: 'Tech',
     recipeInputs: { upstream_extraction: 0.008, specialty_metals: 0.01 },
     subUnits: [
       {
@@ -264,6 +276,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   SoftwareDigitalServices: {
+    sector: 'Tech',
     recipeInputs: { upstream_extraction: 0.002 },
     subUnits: [
       {
@@ -291,6 +304,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   Telecommunications: {
+    sector: 'Tech',
     subUnits: [
       {
         unitId: 'network_infrastructure',
@@ -306,6 +320,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   HealthcarePharma: {
+    sector: 'Consumer',
     subUnits: [
       {
         unitId: 'pharmaceuticals',
@@ -334,6 +349,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   ConsumerStaples: {
+    sector: 'Consumer',
     recipeInputs: { upstream_extraction: 0.001, agricultural_commodities: 0.12 },
     subUnits: [
       {
@@ -364,6 +380,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   ConsumerDiscretionaryRetail: {
+    sector: 'Consumer',
     recipeInputs: { upstream_extraction: 0.002 },
     subUnits: [
       {
@@ -391,6 +408,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   LuxuryGoods: {
+    sector: 'Consumer',
     subUnits: [
       {
         unitId: 'luxury_goods',
@@ -407,6 +425,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   MediaEntertainment: {
+    sector: 'Consumer',
     subUnits: [
       {
         unitId: 'media_content',
@@ -421,6 +440,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     ],
   },
   RealEstateConstruction: {
+    sector: 'Industrials',
     subUnits: [
       {
         unitId: 'residential_construction',
@@ -501,3 +521,21 @@ export const VIEW_BASE_COMMODITY_CATEGORY_LINKAGE: Record<string, { subUnitId: s
     flat.set(l.commodityId, { subUnitId: su.unitId, intensityShare: l.intensityShare })));
   return Object.fromEntries(LINKAGE_ORDER.map(c => [c, flat.get(c)!]));
 })();
+
+/** BP1b: every sub-unit a sector's companies can produce, with its parent industry, in registry
+ * order. The generator deals lines from this, weighted by each region's own seeded demand. */
+export function subUnitsByProducingSector(): Record<ProducingSector, { industry: Industry; su: SubUnitSpec }[]> {
+  const out: Record<ProducingSector, { industry: Industry; su: SubUnitSpec }[]> = {
+    Tech: [], Energy: [], Industrials: [], Consumer: [],
+  };
+  (Object.entries(INDUSTRY_REGISTRY) as [Industry, IndustrySpec][]).forEach(([industry, spec]) => {
+    spec.subUnits.forEach(su => out[spec.sector].push({ industry, su }));
+  });
+  return out;
+}
+
+/** The financial sector's stage-08 consumer-revenue proxy (pre-BP1b hardcoded template). A bank
+ * does not produce software; IND4 replaces this with real financial P&L lines. */
+export const FINANCIAL_SECTOR_PROXY_LINES = [
+  { industry: 'SoftwareDigitalServices' as Industry, subUnitId: 'enterprise_software', revenueShare: 1.0, competitiveness: 0 },
+];
