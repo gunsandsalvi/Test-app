@@ -18,7 +18,7 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { recurringRevenueShare, SUBSCRIPTION_WEEKLY_CHURN } from '../../../domain/industry-registry';
-import { industryOfSubUnit } from '../../../domain/industry-registry';
+import { industryOfSubUnit, recipeIntensityOf } from '../../../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
@@ -152,93 +152,54 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       return Object.assign(comp, { previousEmployeeCount: 0, employeeCount: 0 });
     }
 
-    // HC Wave 1: a PRIVATE company runs the reduced weekly path — the real balance-sheet walk
-    // (interest at its real ladder terms, cash, coverage, rating, the same default trigger as
-    // everyone else) with none of the public-market machinery (no equity pricing, no consensus,
-    // no earnings reporting — real private firms publish none of that). Its revenue holds at
-    // baseline with real drift arriving in HC3, when it takes over its slice of the goods
-    // economy from the segment aggregates.
-    if (!isPubliclyListed(comp)) {
-      const regP = updatedRegions[comp.region];
-      const interestAnnual = comp.debtTranches.reduce((sum, t) => t.rateType === 'FIXED'
-        ? sum + t.principalUSD * (t.couponRate ?? 0.05)
-        : sum + t.principalUSD * (regP.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0);
-      // HC3: revenue anchors to the same real settled sales the public path reads — stage 05
-      // has already run this firm's real auction. Unsold production hurts revenue exactly as it
-      // does for a public firm; a slow drift re-anchors toward baseline capacity. What private
-      // firms skip is the public-market machinery, not the real economy.
-      const hasMarketPresence = (comp.productLines || []).length > 0;
-      const updateP = companyUpdates[comp.ticker];
-      const salesP = updateP?.salesUSD ?? 0;
-      const targetProductionP = updateP?._targetProductionUSD ?? comp.annualRevenue / 52;
-      // The unsold-production signal only exists for a firm that actually offers into a modeled
-      // market. Until HC3b gives the hidden tier's products real categories, a private firm with
-      // no product lines holds its baseline — penalising it for not selling in markets it is
-      // not in was measured to collapse the whole tier.
-      const unsoldP = hasMarketPresence ? Math.max(0, targetProductionP - salesP) : 0;
-      // IND2: the hidden tier recognises revenue the same way the named one does — a private
-      // software or facilities firm sells contracts too. Only the UNIT share loses revenue to
-      // production it could not sell; the contracted share carries on its own base.
-      const recurringShareP = recurringRevenueShare(comp.productLines || []);
-      const priorBaseP = comp.recurringRevenueBaseUSD ?? comp.annualRevenue * recurringShareP;
-      const nextBaseP = recurringShareP > 0
-        ? priorBaseP * (1 - SUBSCRIPTION_WEEKLY_CHURN)
-          + salesP * recurringShareP * 52 * SUBSCRIPTION_WEEKLY_CHURN
-        : undefined;
-      const unitRevenueP = Math.max(10,
-        comp.annualRevenue * 0.98 + comp.baselineAnnualRevenue * 0.02 - unsoldP * 0.5 * (1 - recurringShareP));
-      const revenue = nextBaseP === undefined
-        ? unitRevenueP
-        : Math.max(10, nextBaseP + unitRevenueP * (1 - recurringShareP));
-      const ebitda = revenue * (comp.baselineEbitdaMargin ?? 0.12);
-      const da = revenue * 0.045;
-      const ebit = Math.max(1, ebitda - da);
-      const netIncome = (ebit - interestAnnual) * (1 - 0.21); // same flat rate the public path uses; BP5 makes it real
-      // Same S5 ledger discipline as the public path — smaller book, same honesty.
-      const privLedger: { label: string; amountUSD: number }[] = [
-        { label: 'operating cash flow (EBITDA accrual)', amountUSD: Math.round(ebitda / 52) },
-        { label: 'interest paid', amountUSD: -Math.round(interestAnnual / 52) },
-        { label: 'maintenance capex', amountUSD: -Math.round(comp.maintenanceCapex / 52) },
-        { label: 'cash taxes', amountUSD: -Math.round(Math.max(0, (ebit - interestAnnual)) * 0.21 / 52) },
-      ];
-      const cash = comp.cash + privLedger.reduce((a, e) => a + e.amountUSD, 0);
-      const coverage = Number(Math.max(-50, Math.min(50, ebit / Math.max(0.5, interestAnnual))).toFixed(2));
-      const leverage = comp.totalDebt / Math.max(1, ebitda);
-      const defaulted = comp.isDefaulted || (cash < 0 && coverage < DEFAULT_COVERAGE_FLOOR);
-      const rating = defaulted ? 'D' as const : determineCreditRating(leverage, coverage);
-      // SCALE: assigned onto the live object rather than rebuilt as a fresh ~150-field snapshot
-      // per company per week (the literal's values are all evaluated before the first field is
-      // assigned, so every read of `comp` inside it still sees the pre-assignment value). The
-      // old snapshots were 2,600 tenured allocations a week feeding the GC's 12% share.
-      return Object.assign(comp, {
-        annualRevenue: revenue,
-        revenueHistory: [...(comp.revenueHistory || []).slice(-12), revenue],
-        ebitda, ebit, netIncome: Math.round(netIncome),
-        cash: Number(cash.toFixed(0)),
-        lastCashLedger: privLedger,
-        leverage: Number(leverage.toFixed(2)),
-        interestCoverage: coverage,
-        isDefaulted: defaulted,
-        creditRating: rating,
-        ratingHistory: comp.creditRating === rating ? comp.ratingHistory : [...(comp.ratingHistory || []).slice(-12), rating],
-        // IND2, and §7.41's trap again: this path rebuilds from a fixed field list, so the
-        // contracted base was silently dropped every week and the whole hidden tier behaved as
-        // pure unit sellers (measured: 240 listed firms carried a base, 0 private ones).
-        recurringRevenueBaseUSD: nextBaseP === undefined ? undefined : Number(nextBaseP.toFixed(0)),
-        // HH5/HH6: a private firm is an employer like any other — it posts vacancies, consumes
-        // real matches and pays a real wage. This path rebuilds from a fixed field list too,
-        // so its headcount and wage were being silently dropped: the whole hidden tier hired
-        // and fired in the labor market and then reverted to its old payroll every week.
-        employeeCount: defaulted ? 0 : Math.max(1, Math.round(
-          companyUpdates[comp.ticker]?.employeeCount ?? comp.employeeCount
-        )),
-        previousEmployeeCount: comp.employeeCount,
-        offeredWageIndex: companyUpdates[comp.ticker]?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0,
-        unfilledVacancyShare: companyUpdates[comp.ticker]?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0,
-      });
-    }
-
     const reg = updatedRegions[comp.region];
+    // IND-R1 / IND-R6: EVERY firm's payroll, computed here — before BOTH forks, because a firm
+    // with staff owes them whatever kind of firm it is. It used to live inside the OPERATING
+    // branch, so a bank's headcount was hired and fired by the labor market, counted in
+    // unemployment, and cost nothing and paid nobody: headcount with no wage leg (rule 14).
+    // IND-R1 moved it above the PROFILE dispatch and fixed that for banks; it was still below
+    // the LISTING branch, so 1,712 private firms employing 8.20M people paid no wages either —
+    // 67% of the USA's named wage bill never reaching a household (§7.115).
+    //
+    // What this is: the firm's real headcount, in the occupations its sector employs, at the wage
+    // those occupations clear at, times the wage this firm itself offers (`offeredWageIndex`,
+    // which moves with its own hiring success). One payroll, one owner, one representation —
+    // which is also what retires the carrier profile's separate `crewCount x wage` line.
+    const weeklyPayrollUSD = weeklyWageBillUSD(
+      comp.employeeCount,
+      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+      getBaseAnnualWageUSD(comp.region),
+      reg.occupationPools,
+      comp.offeredWageIndex ?? 1.0
+    );
+    const baselineWeeklyPayrollUSD = weeklyWageBillUSD(
+      comp.baselineEmployeeCount ?? comp.employeeCount,
+      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+      getBaseAnnualWageUSD(comp.region),
+      BASELINE_WAGE_POOLS,
+      1.0
+    );
+    // Only the DEVIATION from baseline payroll adjusts a stated margin, because a stated margin
+    // already contains a baseline wage bill; charging the whole payroll again would count it
+    // twice. A profile with no stated margin (the carrier) charges the payroll in full instead —
+    // that is the cost-shape choice a profile exists to make.
+    const payrollAboveBaselineAnnualUSD = (weeklyPayrollUSD - baselineWeeklyPayrollUSD) * 52;
+
+    // IND-R6 — THE LISTING BRANCH IS GONE. There is one operating model and every firm runs it.
+    //
+    // What stood here: `if (!isPubliclyListed(comp)) { ...abbreviated rebuild...; return; }` — not
+    // a different model, a SHORTENED COPY of this one, and it skipped payroll, capex, PP&E,
+    // inventory, input consumption, cost drivers, the debt lifecycle and offerings. Only a few of
+    // those are genuinely public-only, and those are now guarded individually below, which is what
+    // 'listed is a profile that ADDS public-market behaviour' actually means.
+    //
+    // What the fork cost, all measured (§7.115, §7.119): three fields silently dropped by its
+    // fixed rebuild list because anything not named there died weekly (§7.41); 1,712 private firms
+    // employing 8.20M people paying no wages, so 67% of the USA's named wage bill never reached a
+    // household; 2.91B a week of cash moving by direct mutation outside the settlement layer; and
+    // a headcount rule that drifted out of agreement with the listed tier's because a fix could
+    // land in one path and miss the other. A second path does not stay a copy.
+
     const sec = SECTOR_BENCHMARKS[comp.sector];
 
     // SETL2b: drawing a bank facility is not a payment FROM anyone — the bank writes the loan and
@@ -288,35 +249,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     let newEbitdaMargin = 0;
     let newEbitda = 0;
-    // IND-R1: EVERY firm's payroll, computed here — before the profile dispatch, because a firm
-    // with staff owes them whatever kind of firm it is. It used to live inside the OPERATING
-    // branch, so a bank's headcount was hired and fired by the labor market, counted in
-    // unemployment, and cost nothing and paid nobody: headcount with no wage leg (rule 14),
-    // inflating measured employment against measured income.
-    //
-    // What this is: the firm's real headcount, in the occupations its sector employs, at the wage
-    // those occupations clear at, times the wage this firm itself offers (`offeredWageIndex`,
-    // which moves with its own hiring success). One payroll, one owner, one representation —
-    // which is also what retires the carrier profile's separate `crewCount x wage` line.
-    const weeklyPayrollUSD = weeklyWageBillUSD(
-      comp.employeeCount,
-      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-      getBaseAnnualWageUSD(comp.region),
-      reg.occupationPools,
-      comp.offeredWageIndex ?? 1.0
-    );
-    const baselineWeeklyPayrollUSD = weeklyWageBillUSD(
-      comp.baselineEmployeeCount ?? comp.employeeCount,
-      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-      getBaseAnnualWageUSD(comp.region),
-      BASELINE_WAGE_POOLS,
-      1.0
-    );
-    // Only the DEVIATION from baseline payroll adjusts a stated margin, because a stated margin
-    // already contains a baseline wage bill; charging the whole payroll again would count it
-    // twice. A profile with no stated margin (the carrier) charges the payroll in full instead —
-    // that is the cost-shape choice a profile exists to make.
-    const payrollAboveBaselineAnnualUSD = (weeklyPayrollUSD - baselineWeeklyPayrollUSD) * 52;
     let newEbit = 0;
     let newNetIncome = 0;
     let newEps = 0;
@@ -499,14 +431,36 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
       const baselineMargin = comp.baselineEbitdaMargin ?? (comp.ebitda / Math.max(1, comp.annualRevenue));
-      // RULE 2, OPEN — AND THIS IS THE ONE THAT BLOCKS CAP. A firm's EBITDA margin cannot leave
-      // [2%, 65%] whatever its costs and prices do, so **no firm can report a loss at the EBITDA
-      // line**. CAP's whole mechanism — a firm that cannot cover unit cost STOPS producing
-      // rather than throttling — cannot fire while this holds, and neither can the distress
-      // pricing that reads EBITDA. Now CAP0, the first slice of CAP: this clamp goes together
-      // with the cost-rate clamp and the real cost accounting that replaces them.
-      const targetMargin = Math.min(0.65, Math.max(0.04, baselineMargin - wageCompression - capacityDecayPenalty - avgCrowdingIntensity * 0.08 - inputPriceDrag * 0.03));
-      newEbitdaMargin = Math.min(0.65, Math.max(0.02, baseEbitdaMargin * 0.96 + targetMargin * 0.04 + (random() - 0.5) * 0.004));
+
+      // IND3 + CAP0 — THE MARGIN IS AN OUTCOME OF REAL COSTS, AND THE CLAMP IS GONE.
+      //
+      // What this replaces: a stated `baselineEbitdaMargin` walked 96/4 toward a target nudged by
+      // four coefficient terms, then held inside [2%, 65%] — so no firm could report a loss at
+      // the EBITDA line (rule 2, and the clamp CAP0 exists to remove), and the REAL dollar cost
+      // of the lots the firm actually consumed reached only the display COGS breakdown while an
+      // INDEX (`inputPriceDrag * 0.03`) stood in for it in the P&L. Two representations of one
+      // cost, the measured one unused beside the formula (rule 3, §7.117's closing finding).
+      //
+      // Now: EBITDA is revenue less what the firm actually spent — the real input lots it drew
+      // down at the prices it paid, its real wage bill at its real headcount, and everything else
+      // it spends. That last term is the only one not directly observed, so it is DERIVED from
+      // the firm's own opening books rather than stated: whatever share of revenue is left after
+      // the baseline margin, baseline inputs and baseline payroll. §7.4's discipline — seed by
+      // the engine's own code — which also means opening EBITDA is unchanged at week 0 and every
+      // later move is a real cost moving.
+      //
+      // Payroll now enters IN FULL, not as a deviation from baseline: a deviation was only ever
+      // needed because the margin it adjusted already contained a wage bill. Nothing here
+      // contains anything.
+      const baselineInputRate = (comp.productLines || []).reduce(
+        (r, l) => r + (l.revenueShare ?? 1) * recipeIntensityOf(l.subUnitId), 0);
+      const baselinePayrollRate = (baselineWeeklyPayrollUSD * 52) / Math.max(1, comp.baselineAnnualRevenue || comp.annualRevenue);
+      const otherOpexRate = 1 - baselineMargin - baselineInputRate - baselinePayrollRate;
+
+      const inputCostAnnualUSD = realInputConsumptionCostUSD * 52;
+      const payrollAnnualUSD = weeklyPayrollUSD * 52;
+      const otherOpexAnnualUSD = otherOpexRate * comp.annualRevenue;
+      newEbitdaMargin = 1 - (inputCostAnnualUSD + payrollAnnualUSD + otherOpexAnnualUSD) / Math.max(1, comp.annualRevenue);
 
       const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
       const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
@@ -643,7 +597,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // This is what makes a wage a price rather than a charge. Before it, the going rate could
       // move and no firm's earnings noticed, so labor demand had nothing to respond to and the
       // entire adjustment fell on cash exhaustion (measured: a 30-50% unemployment cascade).
-      newEbitda = newRevenue * newEbitdaMargin - payrollAboveBaselineAnnualUSD;
+      // IND3: the margin above already carries the full wage bill, so there is no deviation to
+      // add here — `payrollAboveBaselineAnnualUSD` exists only for profiles that still state a
+      // margin (the carrier charges its payroll in full instead; see profiles/).
+      newEbitda = newRevenue * newEbitdaMargin;
       const da = newRevenue * 0.05;
       newEbit = Math.max(1, newEbitda - da);
 
@@ -1422,7 +1379,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     let updatedConsensus = comp.dealerConsensus;
 
-    if (isReportingThisWeek) {
+    // IND-R6: public-only. Sell-side consensus and an earnings surprise need a firm that
+    // REPORTS — real private firms publish none of this. One of the few things the deleted
+    // branch was right to skip, now guarded where it happens instead of forking the whole model.
+    if (isReportingThisWeek && isPubliclyListed(comp)) {
       // Mean of Dealer Alpha, Beta, and Gamma estimates
       const alphaEps = comp.dealerConsensus?.alpha?.eps ?? comp.eps;
       const betaEps = comp.dealerConsensus?.beta?.eps ?? comp.eps;
@@ -1539,7 +1499,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const targetCashBuffer = Math.max(10, comp.currentLiabilities * 1.5);
     const excessCash = Math.max(0, newCash - targetCashBuffer);
     const debtToEquity = newTotalDebt / Math.max(1, (newStockPrice * comp.sharesOutstanding));
-    if (excessCash > 5 && debtToEquity < 0.6 && comp.sharesOutstanding > 10 && !isDefaulted && newStockPrice > 0) {
+    // IND-R6: public-only — retiring shares into the market needs a market to retire them into.
+    // A private firm's distributions to its owners are HC's sponsor machinery, not a buyback.
+    if (isPubliclyListed(comp) && excessCash > 5 && debtToEquity < 0.6 && comp.sharesOutstanding > 10 && !isDefaulted && newStockPrice > 0) {
       const estimatedBookValuePerShare = Math.max(0.5, (newCash + newRevenue * 0.8 - newTotalDebt) / comp.sharesOutstanding);
       // "Cheap" against the same arithmetic the market itself prices this company with (07e /
       // equity-valuation.ts), at the board's own cost of capital — not against a sector P/E

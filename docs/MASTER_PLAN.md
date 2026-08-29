@@ -4737,3 +4737,42 @@ that proved it, the lesson.
       cause of all three — **the same identity written three times will diverge, and the copy you
       did not know about is the one that decides.** Every number those records chased was a
       symptom of one pot being claimed by parties that never had to add up to it.
+
+121. **IND3, CAP0 and IND-R6 — the margin became an outcome, the clamp went, and the second code
+    path is deleted.** The three slices are one commit because they are one change: you cannot
+    delete the fork while the two sides disagree about what a margin means, and you cannot make a
+    margin an outcome while a clamp holds it inside a band.
+    - **IND3 — EBITDA is revenue less what the firm actually spent.** It was
+      `revenue x newEbitdaMargin − payrollAboveBaseline`, where the margin walked 96/4 toward a
+      target nudged by four coefficients, and the REAL dollar cost of the lots the firm consumed
+      reached only the display COGS breakdown while an INDEX (`inputPriceDrag * 0.03`) stood in
+      for it in the P&L — two representations of one cost with the measured one unused (rule 3).
+      Now: real input lots at the prices paid, the real wage bill at the real headcount, and an
+      other-opex rate DERIVED from the firm's own opening books (whatever is left after its
+      baseline margin, inputs and payroll — §7.4). Opening EBITDA is therefore unchanged at week
+      0 and every later move is a real cost moving. **Payroll enters in full**, not as a deviation:
+      a deviation was only needed because the margin it adjusted already contained a wage bill.
+    - **CAP0 — the `[2%, 65%]` clamp is gone**, with the `[4%, 65%]` target clamp. It was rule 2's
+      oldest open violation and the reason no firm could report a loss at the EBITDA line, which
+      is what blocked CAP's whole mechanism. Nothing replaced it: a margin that is the residual of
+      real costs does not need a band.
+    - **IND-R6 — the listing branch is DELETED, 107 lines.** Not patched: an earlier attempt this
+      session to give the private path equivalent-but-parallel economics was the same mistake in a
+      new form, and is recorded here because the pull toward it is strong. Every firm runs one
+      operating model; the genuinely public-only behaviour is guarded where it happens — sell-side
+      consensus and the earnings surprise (a private firm publishes none of it) and buybacks
+      (retiring shares needs a market to retire them into). **All three debt-offering paths stay
+      common: refinancing, the maintenance bridge and opportunistic issuance are things a private
+      firm does too**, which is exactly the distinction the fork could not make.
+    - **Measured, 10 weeks SHOCKS=0: harness 30 → 20 violations, and EVERY UNEMPLOYMENT VIOLATION
+      IS GONE** — 20.3% → 30.0% over the ten weeks, inside the band in all four regions in every
+      week, for the first time in this sequence of slices.
+    - **The 20 that remain are ONE family and they are not IND's:** sovereign bonds over-held in
+      all four regions, the defect §7.120 introduced and owns. It grows week over week (5 weeks
+      per region), so it is a FLOW not a seed sizing — the books accumulate sovereign paper faster
+      than issuance creates it, which points at 07c's float rather than the debt seed. **Next
+      item, and it is a debt owed, not a discovery.**
+    - **Still open in IND, unstarted:** IND-R3 (per-good consumption intensity), IND4, IND6, IND7,
+      IND10-19, and IND-R4's two financial ratios (`INSURER_EXPENSE_RATIO`,
+      `CARD_OPERATING_COST_BPS`) — the profiles' own stated cost shapes, which IND3 makes
+      derivable but did not derive. IND does not close here.
