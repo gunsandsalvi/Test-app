@@ -278,7 +278,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
 
     const totalMarketCap = regionCompanies.reduce((s, c) => s + c.marketCap, 0);
     const totalCorpDebt = regionCompanies.reduce((s, c) => s + c.totalDebt, 0);
-    const totalSovDebt = reg.debtToGdpPct * reg.derivedNominalGdpUSD;
+    // FRM: the ratio is measured now, and it is seeded from the stack macro/initialization built
+    // — so this reads the same number rather than the walked field it used to.
+    const totalSovDebt = reg.debtToGdpPctBottomUp * reg.derivedNominalGdpUSD;
 
     reg.institutionalSector.equityHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.equity * totalMarketCap).toFixed(0));
     reg.institutionalSector.corpBondHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.corpBond * totalCorpDebt).toFixed(0));

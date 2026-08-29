@@ -503,11 +503,7 @@ export interface Region {
   importsUSD: number;
   currentAccountPctGdp: number;
   fxReservesUSD: number;
-  structuralDeficitPctGdp: number;
-  cyclicalDeficitComponent?: number;
   govEmploymentGrowthRate?: number;
-  fiscalDeficitPctGdp: number;
-  debtToGdpPct: number;
   fiscalStanceScore: number;
   sovereignRating: 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'CCC' | 'D';
   laggedPolicyRateEMA: number;
@@ -515,7 +511,6 @@ export interface Region {
   inflationDeviationStreak: number;
   smoothedSlackGap?: number;
   policyRateLagBuffer: number[];
-  wageGrowthLagBuffer: number[];
   demandShockLagBuffer: number[];
 
   // Population & Labor Force Accounting

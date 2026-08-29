@@ -1,4 +1,5 @@
 import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
+import { openingSovereignRating } from './evolution';
 import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, OccupationType, OccupationPool, CreditTierBook, INDUSTRY_SUBUNITS, WealthTier, WealthTierData, HousingMarket, LifeCycleStage, LifeCycleStageData, SmePool, Industry, GovDebtTranche } from '../../types';
 import { buildHouseholdCohorts } from './household-cohorts';
@@ -144,18 +145,20 @@ function generateCreditTierBooks(creditCardDebtUSD: number, otherConsumerLoanDeb
 }
 
 /**
- * RULE 4, OPEN, on two counts. The names are real institutions — 'Federal Reserve', 'Bank of
- * England', 'Bank of Japan', 'European Central Bank', and the four countries — which §6.3-D
- * records; "not numeric data" does not exempt them, since rule 4 names real tickers and company
- * names first. And `sovereignRating` is ASSIGNED here (USA AA, UK AA, JPN A, EUR AAA) when a
- * rating is an OUTCOME of debt and deficit — the same rating `evolution.ts` then walks from a
- * formula debt ratio nobody measures (§6.1). Owner: IDX for the names, FRM for the rating.
+ * RULE 4, OPEN: the names are real institutions — 'Federal Reserve', 'Bank of England', 'Bank of
+ * Japan', 'European Central Bank', and the four countries — which §6.3-D records; "not numeric
+ * data" does not exempt them, since rule 4 names real tickers and company names first.
+ * Owner: IDX.
+ *
+ * FRM removed the second count: `sovereignRating` was ASSIGNED here (USA AA, UK AA, JPN A,
+ * EUR AAA), which is a real-world outcome. It is derived below from the seeded stack's own debt
+ * ratio and deficit, through the same thresholds the weekly review uses.
  */
-const REGION_IDENTITY: Record<RegionId, { name: string; currency: string; symbol: string; centralBank: string; sovereignRating: Region['sovereignRating'] }> = {
-  USA: { name: 'United States', currency: 'USD', symbol: '$', centralBank: 'Federal Reserve', sovereignRating: 'AA' },
-  UK: { name: 'United Kingdom', currency: 'GBP', symbol: '£', centralBank: 'Bank of England', sovereignRating: 'AA' },
-  JPN: { name: 'Japan', currency: 'JPY', symbol: '¥', centralBank: 'Bank of Japan', sovereignRating: 'A' },
-  EUR: { name: 'Eurozone', currency: 'EUR', symbol: '€', centralBank: 'European Central Bank', sovereignRating: 'AAA' },
+const REGION_IDENTITY: Record<RegionId, { name: string; currency: string; symbol: string; centralBank: string }> = {
+  USA: { name: 'United States', currency: 'USD', symbol: '$', centralBank: 'Federal Reserve' },
+  UK: { name: 'United Kingdom', currency: 'GBP', symbol: '£', centralBank: 'Bank of England' },
+  JPN: { name: 'Japan', currency: 'JPY', symbol: '¥', centralBank: 'Bank of Japan' },
+  EUR: { name: 'Eurozone', currency: 'EUR', symbol: '€', centralBank: 'European Central Bank' },
 };
 
 // Structural fiscal/demographic/ownership coefficients shared across regions. These are
@@ -168,11 +171,16 @@ const BIRTH_RATE_ANNUAL = 0.010;
 const DEATH_RATE_ANNUAL = 0.0095;
 const NET_MIGRATION_RATE_ANNUAL = 0.002;
 const EFFECTIVE_TAX_RATE = 0.31;
-// RULE 13: a deficit and a debt ratio are OUTCOMES, and PUB3b already makes the deficit one
-// (`governmentObligationsWeeklyUSD`). These seed a parallel top-down pair that `evolution.ts`
-// then walks and rates the sovereign off — see §6.1. Owner: FRM.
-const FISCAL_DEFICIT_PCT_GDP = 0.05;
+/**
+ * The size of the opening sovereign stack, as a multiple of nominal GDP. A SEED primitive with
+ * one use: it sizes `govDebtTranches` at week 0 and nothing thereafter. FRM deleted the weekly
+ * `debtToGdpPct` field it used to seed alongside — from week 1 the ratio is measured from the
+ * real stack over measured GDP (`debtToGdpPctBottomUp`), which is also what rates the sovereign.
+ */
 const DEBT_TO_GDP_PCT = 1.0;
+/** The opening deficit, used once: to derive the seed's own sovereign rating, and by
+ *  `national-accounts.ts` to close the seed's government-spending share. */
+const FISCAL_DEFICIT_PCT_GDP = 0.05;
 const GOV_EMPLOYMENT_SHARE_OF_POPULATION = 0.055;
 
 const BANK_BALANCE_SHEET_RATIOS = {
@@ -460,14 +468,13 @@ function buildRegion(regionId: RegionId): Region {
     importsUSD: 0,
     currentAccountPctGdp: 0,
     fxReservesUSD: Number((estimatedNominalGdpUSD * 0.002).toFixed(0)),
-    structuralDeficitPctGdp: FISCAL_DEFICIT_PCT_GDP,
-    fiscalDeficitPctGdp: FISCAL_DEFICIT_PCT_GDP,
-    debtToGdpPct: DEBT_TO_GDP_PCT,
     fiscalStanceScore: 0,
-    sovereignRating: identity.sovereignRating,
+    // FRM: an outcome of this region's own seeded position, through the weekly rater's own
+    // thresholds — not a label.
+    sovereignRating: openingSovereignRating(DEBT_TO_GDP_PCT, FISCAL_DEFICIT_PCT_GDP),
     laggedPolicyRateEMA: policyRate,
     laborForceParticipation: LABOR_FORCE_PARTICIPATION,
-    inflationDeviationStreak: 0, policyRateLagBuffer: [], wageGrowthLagBuffer: [], demandShockLagBuffer: [],
+    inflationDeviationStreak: 0, policyRateLagBuffer: [], demandShockLagBuffer: [],
     totalPopulation,
     birthRateAnnual: BIRTH_RATE_ANNUAL,
     deathRateAnnual: DEATH_RATE_ANNUAL,
@@ -514,7 +521,9 @@ function buildRegion(regionId: RegionId): Region {
       lastReserveDrainUSD: 0,
     },
     govDebtTranches,
-    debtToGdpPctBottomUp: 0,
+    // Seeded from the stack this function just built, so week 0 rates the sovereign off the same
+    // ratio week 1 will (§7.4).
+    debtToGdpPctBottomUp: estimatedNominalGdpUSD > 0 ? totalGovDebtUSD / estimatedNominalGdpUSD : 0,
     householdState: {
       consumerConfidence: 100,
       creditTierBooks: generateCreditTierBooks(creditCardDebtUSD, otherConsumerLoanDebtUSD),

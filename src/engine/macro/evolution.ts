@@ -29,6 +29,38 @@ import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
  */
 const WEALTH_MARGINAL_PROPENSITY_TO_CONSUME = 0.04;
 
+/**
+ * FRM — the sovereign's own budget position, both figures MEASURED.
+ *
+ * `debtToGdpPctBottomUp` is stage 11's real debt stack over measured GDP; the deficit is what
+ * the government's real obligations exceeded its real receipts by (PUB3b), annualised. Before
+ * this the rating read a `debtToGdpPct` walked from a stance step-function and a `tanh` of the
+ * output gap — a second representation of a quantity the model already measured, and the one the
+ * sovereign spread actually followed.
+ */
+/**
+ * FRM — the opening rating, from the seeded stack's own position through the same two thresholds
+ * the weekly review uses (§7.4: seed by the engine's own code). It replaces four ASSIGNED labels
+ * (USA AA, UK AA, JPN A, EUR AAA) — real-world outcomes, which rule 4 forbids. Regions that open
+ * with identical fiscal positions open at the same rating, and that is correct: nothing about
+ * the seed makes one of them a weaker credit than another.
+ */
+export function openingSovereignRating(debtToGdp: number, deficitPctGdp: number): Region['sovereignRating'] {
+  if (debtToGdp > 1.2 && deficitPctGdp > 0.05) return 'BBB';
+  if (debtToGdp < 0.9 && deficitPctGdp < 0.03) return 'AAA';
+  return 'AA';
+}
+
+export function sovereignDebtToGdpRatio(region: Region): number {
+  return region.debtToGdpPctBottomUp || 0;
+}
+
+export function sovereignDeficitPctGdp(region: Region): number {
+  const gdpUSD = region.derivedNominalGdpUSD || region.estimatedNominalGdpUSD || 0;
+  if (!(gdpUSD > 0)) return 0;
+  return ((region.governmentOutlaysUSD - region.governmentRevenueUSD) * 52) / gdpUSD;
+}
+
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {
   if (!pools) return 0.03;
   return Object.entries(mix).reduce((s, [occ, share]) => s + (pools[occ as OccupationType]?.wageGrowthAnnual ?? 0.03) * (share ?? 0), 0);
@@ -119,7 +151,6 @@ export function evolveRegionMacro(
   // by 0.95. Five invented numbers deciding fiscal policy, and none of them is the government's
   // own budget position, which is what actually constrains a real stimulus. Owner: MAC.
   let newFiscalStanceScore = region.fiscalStanceScore;
-  let newStructuralDeficitPctGdp = region.structuralDeficitPctGdp;
   const piStar = region.targetInflation;
 
   // Evaluate once per quarter, same cadence as monetary policy meetings
@@ -131,8 +162,6 @@ export function evolveRegionMacro(
     } else {
       newFiscalStanceScore = region.fiscalStanceScore * 0.95; // slow decay back to neutral
     }
-    const stanceChange = newFiscalStanceScore - region.fiscalStanceScore;
-    newStructuralDeficitPctGdp = (region.structuralDeficitPctGdp + stanceChange * 0.05);
   }
 
   // Process recession shocks
@@ -145,24 +174,18 @@ export function evolveRegionMacro(
   // react to the most recently published statistic, exactly as a real central bank does.
   const newInflation = region.inflation;
 
-  const smoothedAnnualizedGrowthForFiscal = ((region as any).smoothedWeeklyGrowthRate ?? newGdpGrowth / 52) * 52;
-  const outputGap = potentialGdp - smoothedAnnualizedGrowthForFiscal;
-  const targetCyclicalDeficitComponent = 0.15 * Math.tanh(outputGap * 2);
-  const prevCyclicalDeficitComponent = (region as any).cyclicalDeficitComponent ?? targetCyclicalDeficitComponent;
-  const cyclicalDeficitComponent = prevCyclicalDeficitComponent * 0.85 + targetCyclicalDeficitComponent * 0.15;
-  const newFiscalDeficitPctGdp = newStructuralDeficitPctGdp + cyclicalDeficitComponent;
-
   const newEstimatedNominalGdpUSD = (region as any).lastWeekNominalGdpUSD > 0 ? (region as any).lastWeekNominalGdpUSD : region.estimatedNominalGdpUSD;
 
   // Tax rate is a slow second fiscal lever — austerity nudges it up, stimulus nudges it down, same cadence as fiscalStanceScore
   const taxRateDrift = week % 13 === 0 ? -newFiscalStanceScore * 0.001 : 0;
   const newEffectiveTaxRate = Math.max(0.10, Math.min(0.50, isFinite(region.effectiveTaxRate + taxRateDrift) ? region.effectiveTaxRate + taxRateDrift : 0.25));
 
-  // RULE 3, OPEN: stage 11 OVERWRITES this with the real sum of what the bases actually paid
-  // (PUB1b/1c). This top-down `GDP x tax rate` survives only to fill the field between stage 02
-  // and stage 11, so anything reading government revenue in between sees the formula. Owner:
-  // MAC — delete it and carry last week's measured figure forward, as inflation already does.
-  const newGovernmentRevenueUSD = Math.max(1e8, newEstimatedNominalGdpUSD * newEffectiveTaxRate / 52); // weekly flow
+  // FRM: revenue is MEASURED — stage 11 sums what the bases actually paid (PUB1b/1c). This
+  // carries last week's measurement forward for the stages that read it before the new one
+  // exists, exactly as inflation does above. The `GDP x tax rate` formula that used to sit here
+  // was a second representation of the same quantity, and it was the one every stage between 02
+  // and 11 saw.
+  const newGovernmentRevenueUSD = region.governmentRevenueUSD;
   // PUB1: what the debt stack actually costs. Not added to spending — carved out of it.
   const govInterestWeeklyUSD = weeklyInterestExpenseUSD(region.govDebtTranches);
 
@@ -208,6 +231,18 @@ export function evolveRegionMacro(
   const newUnemployment = region.unemploymentRate;
   const unempDelta = 0;
 
+  // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
+  const defaultOccupationShares: Record<OccupationType, number> = BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
+  const currentLaborForceShares = region.occupationLaborForceShare || defaultOccupationShares;
+  const currentOccupationPools = region.occupationPools || {
+    GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+    MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
+  };
+
+
   // Consumer & Household Sector Simulation
   const nairu = newNairu; 
   const slackGap = nairu - newUnemployment;
@@ -216,18 +251,24 @@ export function evolveRegionMacro(
   const prevSmoothedSlackGap = region.smoothedSlackGap !== undefined ? region.smoothedSlackGap : slackGap;
   const newSmoothedSlackGap = prevSmoothedSlackGap * 0.85 + slackGap * 0.15;
   
-  // RULE 3, OPEN — TWO WAGE GROWTHS, AND THE FORMULA ONE DRIVES CONSUMPTION.
-  // LAB made the wage a real price: each firm sets `offeredWageIndex` from its own unfilled
-  // postings and its own margin headroom, and each occupation pool's `wageGrowthAnnual` is the
-  // employment-weighted average of what firms actually offer. Stage 08 reads that one
-  // (`getBlendedWageGrowth`) and so does the UI. This Phillips curve — an intercept, a slack
-  // coefficient and an expected-inflation coefficient, all invented — survives beside it, and it
-  // is THIS one that feeds `realWageGainEffect` (consumption) and `cciEquilibrium` (confidence).
-  // So what households are paid and what they spend out of are two different numbers.
-  // Owner: FRM. Delete it and read the pools.
-  const taperedSlackEffect = newSmoothedSlackGap > 0.01 ? 0.01 + (newSmoothedSlackGap - 0.01) * 0.3 : newSmoothedSlackGap;
-  const newWageGrowth = (0.025 + 0.8 * taperedSlackEffect + 0.1 * region.expectedInflation);
-  const { updatedBuffer: newWageGrowthLagBuffer, laggedValue: laggedWageGrowth } = pushAndReadLagged(region.wageGrowthLagBuffer || [], newWageGrowth, 3);
+  // FRM: households spend out of the wage they are actually paid. LAB made the wage a real
+  // price — each firm sets `offeredWageIndex` from its own unfilled postings and its own margin
+  // headroom, and each occupation pool's `wageGrowthAnnual` is the employment-weighted average
+  // of what firms actually offered — and stage 08 and the UI have read that all along. The
+  // Phillips curve that used to sit here (an intercept, a slack coefficient and an
+  // expected-inflation coefficient, all invented) fed consumption and confidence instead, so
+  // what households were paid and what they spent out of were two different numbers.
+  //
+  // Blended by the pools' own EMPLOYMENT, which is what "the region's wage growth" means. The
+  // three-week lag buffer went with the formula: a measured wage is already the average of what
+  // was offered over the weeks it took to fill those postings.
+  const employedTotal = (Object.values(currentOccupationPools) as OccupationPool[])
+    .reduce((s, p) => s + p.employed, 0);
+  const newWageGrowth = employedTotal > 0
+    ? (Object.values(currentOccupationPools) as OccupationPool[])
+        .reduce((s, p) => s + p.wageGrowthAnnual * (p.employed / employedTotal), 0)
+    : getBlendedWageGrowth(currentLaborForceShares, currentOccupationPools);
+  const laggedWageGrowth = newWageGrowth;
   
   const cciUnempMultiplier = (newCycleRegime === 'Recession' || newCycleRegime === 'Slowdown') && unempDelta > 0 ? 0.75 : 0.5;
   const cciEquilibrium = 100 + (newWageGrowth - region.inflation) * 150 - Math.max(0, newUnemployment - nairu) * 200 - Math.max(0, region.expectedInflation - piStar) * 80 + laggedDemandShock * 1000;
@@ -288,18 +329,6 @@ export function evolveRegionMacro(
   const newMortgageDebtUSD = prevHS.mortgageDebtUSD || 0;
   const newCreditCardDebtUSD = prevHS.creditCardDebtUSD || 0;
   const newOtherLoanDebtUSD = prevHS.otherConsumerLoanDebtUSD || 0;
-
-  // Occupation Pools & Retraining Dynamics (Stage 2: X3 & X4)
-  const defaultOccupationShares: Record<OccupationType, number> = BASELINE_OCCUPATION_LABOR_FORCE_SHARE;
-  const currentLaborForceShares = region.occupationLaborForceShare || defaultOccupationShares;
-  const currentOccupationPools = region.occupationPools || {
-    GENERAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    SKILLED_TRADES: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    TECHNICAL_ENGINEERING: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    SPECIALIZED_PROFESSIONAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-    MANAGERIAL_FINANCIAL: { employed: 0, wageIndex: 1.0, wageGrowthAnnual: 0.03 },
-  };
-
 
   // HH5/HH6: this stage no longer sets employment OR wages. Employment is matched in the
   // labor market stage; the going wage per occupation is the employment-weighted average of
@@ -715,25 +744,23 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     newInversionCount = 0;
   }
 
-  // RULE 3, OPEN — TWO DEBT RATIOS, AND THE FAKE ONE RATES THE SOVEREIGN.
-  // `debtToGdpPct` is walked here from `newFiscalDeficitPctGdp`, which is a formula
-  // (a stance step-function plus `0.15 x tanh(outputGap x 2)`) that PUB3b already replaced:
-  // `governmentObligationsWeeklyUSD` makes the deficit an OUTCOME of real obligations less real
-  // revenue, and stage 11 computes `debtToGdpPctBottomUp` from the real stack over measured GDP.
-  // Nothing reconciles them, and it is THIS one that drives the sovereign rating below — so a
-  // rating change, and the spread that follows it, is decided by the number nobody measures.
-  // Owner: FRM. Delete this walk and rate the sovereign off the bottom-up ratio.
-  const nominalGdpGrowthWeekly = (newGdpGrowth + newInflation) / 52; // real growth + inflation ≈ nominal growth
-  const weeklyDebtToGdpChange = (newFiscalDeficitPctGdp / 52) - (nominalGdpGrowthWeekly * region.debtToGdpPct);
-  const newDebtToGdpPct = Number((region.debtToGdpPct + weeklyDebtToGdpChange).toFixed(4));
+  // FRM: the sovereign is rated off the numbers that are MEASURED. There were two debt ratios
+  // and the rating read the invented one: `debtToGdpPct` was walked weekly from a stance
+  // step-function plus `0.15 x tanh(outputGap x 2)`, while stage 11 computed
+  // `debtToGdpPctBottomUp` from the real stack over measured GDP and PUB3b made the deficit an
+  // outcome of real obligations less real revenue. The walk, `fiscalDeficitPctGdp` and
+  // `structuralDeficitPctGdp` are gone; the same thresholds now read the real ratio and the
+  // real deficit, so a downgrade is something the government's own budget did.
+  const newDebtToGdpPct = sovereignDebtToGdpRatio(region);
+  const newDeficitPctGdp = sovereignDeficitPctGdp(region);
 
   let newSovereignRating = region.sovereignRating;
   if (week % 26 === 0) {
-    if (newDebtToGdpPct > 1.2 && newFiscalDeficitPctGdp > 0.05) {
+    if (newDebtToGdpPct > 1.2 && newDeficitPctGdp > 0.05) {
       if (newSovereignRating === 'AAA') newSovereignRating = 'AA';
       else if (newSovereignRating === 'AA') newSovereignRating = 'A';
       else if (newSovereignRating === 'A') newSovereignRating = 'BBB';
-    } else if (newDebtToGdpPct < 0.9 && newFiscalDeficitPctGdp < 0.03) {
+    } else if (newDebtToGdpPct < 0.9 && newDeficitPctGdp < 0.03) {
       if (newSovereignRating === 'BBB') newSovereignRating = 'A';
       else if (newSovereignRating === 'A') newSovereignRating = 'AA';
       else if (newSovereignRating === 'AA') newSovereignRating = 'AAA';
@@ -823,10 +850,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     recessionShockQueue: remainingShocks,
     centralBankBalanceSheet: newCbBalance,
     taylorTargetRate: taylorTarget,
-    structuralDeficitPctGdp: newStructuralDeficitPctGdp,
-    cyclicalDeficitComponent,
     govEmploymentGrowthRate,
-    fiscalDeficitPctGdp: newFiscalDeficitPctGdp,
     fiscalStanceScore: newFiscalStanceScore,
     sovereignRating: newSovereignRating,
     laggedPolicyRateEMA: region.laggedPolicyRateEMA * 0.96 + newPolicyRate * 0.04,
@@ -834,7 +858,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     inflationDeviationStreak: newInflationDeviationStreak,
     smoothedSlackGap: newSmoothedSlackGap,
     policyRateLagBuffer: newPolicyRateLagBuffer,
-    wageGrowthLagBuffer: newWageGrowthLagBuffer,
     demandShockLagBuffer: newDemandShockLagBuffer,
     potentialGdpGrowth: newPotentialGdpGrowth,
     neutralRate: newNeutralRate,
@@ -846,7 +869,6 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     expectedInflation: newExpectedInflation,
     gdpGrowth: newGdpGrowth,
     wageGrowth: Number(newWageGrowth.toFixed(4)),
-    debtToGdpPct: newDebtToGdpPct,
     unemploymentRate: newUnemployment,
     totalPopulation: newTotalPopulation,
     birthRateAnnual: birthRate,

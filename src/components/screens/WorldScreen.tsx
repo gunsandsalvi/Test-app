@@ -285,7 +285,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
               </div>
               <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] font-mono">
                 <span>Spending: {formatCurrency(reg.governmentSpendingUSD * 52, { compact: true })}/yr</span>
-                <span>Debt/GDP Ratio: {formatPercent(reg.debtToGdpPct, { isDecimal: true })}</span>
+                <span>Debt/GDP Ratio: {formatPercent(reg.debtToGdpPctBottomUp, { isDecimal: true })}</span>
               </div>
             </div>
 
