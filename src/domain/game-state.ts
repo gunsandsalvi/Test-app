@@ -58,6 +58,8 @@ export interface GameState {
   tradeInvoices: import('./trade-invoice').TradeInvoice[];
   /** G5 — open and just-closed workouts, carried across weeks. */
   estates?: import('./estate').Estate[];
+  /** CAL — accrued-but-unpaid interest by (instrument, holder); see stages/shared-helpers.ts. */
+  holderAccruedInterestUSD?: Record<string, number>;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   /** GUARD — books that could not trade this week: no participant's ceiling exceeded its own

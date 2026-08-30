@@ -630,6 +630,21 @@ export interface Region {
   swapBook?: SwapContract[];
   /** DER1 — the cleared par swap rate per tenor (annualised decimal). */
   swapParRateByTenor?: Record<string, number>;
+  /**
+   * CAL/DER — the SECURED OVERNIGHT INDEX: the cleared GC repo rate compounded week by week, the
+   * way a published overnight benchmark actually is. It is a level, not a rate: the ratio of two
+   * of its readings over a period IS the realised compounded rate for that period, which is what
+   * a floating leg references and what makes an OIS an OIS.
+   */
+  securedOvernightIndex?: number;
+  /**
+   * The SECURED CURVE, annualised decimals: this model's overnight benchmark and the term
+   * structure built on it. Overnight and 13-week are the repo market's own two cleared prints;
+   * 2/5/10Y are the par rates of swaps that pay the compounded overnight index against fixed.
+   * Every point is a price something actually traded at, which is what distinguishes a benchmark
+   * curve from a bootstrapped one.
+   */
+  securedCurve?: { on?: number; w13?: number; y2?: number; y5?: number; y10?: number };
   /** DER1 — the par rate less this region's own cleared sovereign zero, in bps: the SWAP SPREAD.
    *  The first cross-market basis this model produces, and the test that two of its markets
    *  agree with each other. */

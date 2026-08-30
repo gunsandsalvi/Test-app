@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial, RegionId,
 } from '../../../types';
-import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, tranchePaymentDue } from '../../../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
@@ -26,7 +26,7 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate } from './shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, applyHolderInterestAccruals, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate, accrueHoldersInterest, payHoldersAccruedInterest } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks, findRegionMmf } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
@@ -272,15 +272,46 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // that wrote it; market paper is paid to the REGISTER, which knows who holds it. Splitting
     // the two here is what lets each leg have a real payee instead of one aggregate leaving for
     // the boundary while the lenders were credited independently (rule 3's double derivation).
+    // CAL — INTEREST ACCRUES WEEKLY; CASH MOVES ON THE INSTRUMENT'S OWN DATES. `annualInterest`
+    // above is the accrual, and the income statement uses it every week, which is what an income
+    // statement is for. What LEAVES this week is only what is actually due: a bond pays its
+    // half-year on its own coupon date, a floating loan its quarter on its own reset, commercial
+    // paper nothing until it matures. The smooth 1/52 cash flow this replaces conserved dollars
+    // and erased the lumpiness that is the entire reason a treasurer's quarter-end is a thing.
+    const dueCashUSD = (t: DebtTranche): number => {
+      const { due, weeksCovered } = tranchePaymentDue(t, nextWeek);
+      if (!due) return 0;
+      const annualUSD = t.rateType === 'FIXED'
+        ? t.principalUSD * (t.couponRate ?? 0.05)
+        : t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
+      return (annualUSD * weeksCovered) / 52;
+    };
     const facilityInterestWeeklyUSD = nonMaturingTranches
       .filter(t => t.isBankFacility)
-      .reduce((sum, t) => sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0) / 52;
+      .reduce((sum, t) => sum + dueCashUSD(t), 0);
+    // Market paper accrues to the REGISTER every week and is paid on its own coupon dates. The
+    // accrual is what each holder earned while it held the paper; the payout hands each of them
+    // exactly that, whether or not it still holds on the date (shared-helpers.ts).
+    const weeklyAccrualUSD = (t: DebtTranche): number =>
+      (t.rateType === 'FIXED'
+        ? t.principalUSD * (t.couponRate ?? 0.05)
+        : t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000)) / 52;
+    const marketBondAccrualUSD = nonMaturingTranches
+      .filter(t => !t.isBankFacility && t.rateType === 'FIXED')
+      .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
+    const marketLoanAccrualUSD = nonMaturingTranches
+      .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
+      .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
+    const bondCouponDue = nonMaturingTranches.some(t => !t.isBankFacility && t.rateType === 'FIXED' && tranchePaymentDue(t, nextWeek).due);
+    const loanCouponDue = nonMaturingTranches.some(t => !t.isBankFacility && t.rateType !== 'FIXED' && tranchePaymentDue(t, nextWeek).due);
+    // What actually leaves the issuer's account for market paper this week: the accrued balances
+    // its coupon dates are clearing. Zero in the weeks between.
     const marketFixedInterestWeeklyUSD = nonMaturingTranches
       .filter(t => !t.isBankFacility && t.rateType === 'FIXED')
-      .reduce((sum, t) => sum + t.principalUSD * (t.couponRate ?? 0.05), 0) / 52;
+      .reduce((sum, t) => sum + dueCashUSD(t), 0);
     const marketFloatingInterestWeeklyUSD = nonMaturingTranches
       .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
-      .reduce((sum, t) => sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000), 0) / 52;
+      .reduce((sum, t) => sum + dueCashUSD(t), 0);
     const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
     // RULE 3, OPEN: the CORPORATE tax rate is a bare literal here, and it is the only one the
     // model has — `region.effectiveTaxRate` (which the fiscal stance drifts weekly) and
@@ -954,8 +985,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           reason: 'facility interest to the lending bank',
         });
       }
-      payHoldersCash(ctx, comp.id, 'CORP_BOND', marketFixedInterestWeeklyUSD);
-      payHoldersCash(ctx, comp.id, 'LEVERAGED_LOAN', marketFloatingInterestWeeklyUSD);
+      // CAL: accrue to whoever holds it this week; pay it out on the coupon date. The cash that
+      // leaves on that date IS the sum of the accruals, so the issuer's ledger and the holders'
+      // receivables clear against each other exactly.
+      accrueHoldersInterest(ctx, comp.id, 'CORP_BOND', marketBondAccrualUSD);
+      accrueHoldersInterest(ctx, comp.id, 'LEVERAGED_LOAN', marketLoanAccrualUSD);
+      if (bondCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'CORP_BOND');
+      if (loanCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'LEVERAGED_LOAN');
+      void marketFixedInterestWeeklyUSD; void marketFloatingInterestWeeklyUSD;
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
       const weeklyAccrualUSD = Math.max(0, (newEbit - annualInterest)) * (reg.effectiveTaxRate ?? 0.21) / 52;
@@ -981,7 +1018,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // takeouts: the issuer says what the holders of its equity are owed, and the settlement
       // pass distributes it pro rata to whoever the register says holds it. The issuer does not
       // need to know its holders, which is exactly why real issuers appoint an agent.
-      const dividendWeeklyUSD = Math.min(declaredDividendWeekly, maxSustainableWeekly);
+      // CAL: a board declares QUARTERLY and pays on a date, and the company's own reporting
+      // quarter is that date — the same thirteen-week clock stage 08 already runs its earnings
+      // on. Thirteen weeks of dividend leave in one week and nothing in the other twelve, which
+      // is what a shareholder's cash actually looks like and what a fund reinvesting it feels.
+      const dividendAccrualWeeklyUSD = Math.min(declaredDividendWeekly, maxSustainableWeekly);
+      const dividendWeeklyUSD = currentWeekMod13 === 13 ? dividendAccrualWeeklyUSD * 13 : 0;
       post('dividends paid', -dividendWeeklyUSD, undefined, false);
       payHoldersCash(ctx, comp.id, 'EQUITY', dividendWeeklyUSD);
       post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
@@ -1905,6 +1947,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   settleCorporateSweepBooks(mmfSweepBooks, ctx);
 
   applyPendingCorporateActionSettlements(ctx);
+    // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
+    applyHolderInterestAccruals(ctx, (regionId) => ({ kind: 'GOVERNMENT', region: regionId as RegionId }));
 
   ctx.newsItems.push(...refinanceNews);
 }

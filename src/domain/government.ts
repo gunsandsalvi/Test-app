@@ -265,3 +265,28 @@ export const PROCUREMENT_PER_PAYROLL_DOLLAR = 1.07;
 
 /** How hard a full stimulus (stance 1.0) leans on government hiring, per week. */
 export const GOV_HIRING_RESPONSE_TO_STANCE = 0.0004;
+
+/**
+ * CAL — the share of a bucket's ANNUAL coupon that is actually due this week.
+ *
+ * Government paper pays semi-annually, and the four tenors do not pay in the same week: each
+ * bucket's cycle is anchored by its own key, so a region's debt service is lumpy across the year
+ * the way a real treasury's is. Zero in most weeks, half a year's coupon in two of them.
+ *
+ * NOT WIRED YET, DELIBERATELY, AND THIS IS THE CONDITION. Both sides have to move together:
+ * `weeklyInterestExpenseUSD` is the government's own smooth accrual, and putting the HOLDERS on
+ * coupon dates without putting the TREASURY on them leaves the two disagreeing by exactly the
+ * lumpiness — measured the moment it was tried, as the `governmentInterestToUnmodeledHolders`
+ * boundary line swinging on coupon weeks. One change to that function and both readers of it,
+ * in the same pass, and this is ready for them.
+ */
+export function sovereignCouponDueShare(bucketKey: string, week: number): number {
+  const PAYMENTS_PER_YEAR = 2;
+  const periodWeeks = Math.round(52 / PAYMENTS_PER_YEAR);
+  // The bucket's own anchor: its key decides which weeks of the cycle are its coupon dates, so
+  // the tenors pay on different weeks rather than all at once.
+  let hash = 0;
+  for (let i = 0; i < bucketKey.length; i++) hash = ((hash << 5) - hash + bucketKey.charCodeAt(i)) | 0;
+  const anchor = Math.abs(hash) % periodWeeks;
+  return (week - anchor) % periodWeeks === 0 ? 1 / PAYMENTS_PER_YEAR : 0;
+}

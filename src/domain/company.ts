@@ -108,6 +108,19 @@ export interface DebtTranche {
    * repayable at par by construction.
    */
   callProtection?: import('./call-protection').CallProtectionKind;
+  /**
+   * CAL — how many times a year this instrument PAYS, and the week its cycle is anchored to.
+   *
+   * Interest ACCRUES every week — that is what an income statement says — but cash moves on the
+   * instrument's own dates: a bond semi-annually, a floating loan or facility quarterly off its
+   * reset, commercial paper at maturity and not before. The smooth 1/52 cash flow this replaces
+   * conserved dollars and erased the lumpiness that is the whole reason money markets breathe on
+   * a calendar: quarter-end liquidity, coupon-date reinvestment, the week a treasurer has to find
+   * real money. Absent means the instrument's default frequency for its kind.
+   */
+  paymentsPerYear?: number;
+  /** The week the payment cycle is anchored to — its issuance week. */
+  paymentAnchorWeek?: number;
   _refinanceInitiated?: boolean;
 }
 
@@ -604,4 +617,28 @@ export function peakCategoryShare(comp: { productLines?: { categoryMarketShare?:
  */
 export function isAntitrustBlocked(comp: { antitrustWeeksAboveThreshold?: number }): boolean {
   return (comp.antitrustWeeksAboveThreshold ?? 0) >= ANTITRUST_SUSTAINED_WEEKS;
+}
+
+/**
+ * CAL — how often this instrument pays, if it did not say.
+ *
+ * Semi-annual for a fixed-rate bond, quarterly for floating paper (it pays on its own reset), and
+ * once at maturity for commercial paper, which is a discount instrument and has no coupon.
+ */
+export function trancheePaymentsPerYear(t: DebtTranche): number {
+  if (t.paymentsPerYear !== undefined) return Math.max(1, t.paymentsPerYear);
+  if (t.isCommercialPaper) return 1;
+  return t.rateType === 'FIXED' ? 2 : 4;
+}
+
+/** Whether this tranche's cash payment falls in this week, and how many weeks it covers. */
+export function tranchePaymentDue(t: DebtTranche, week: number): { due: boolean; weeksCovered: number } {
+  const perYear = trancheePaymentsPerYear(t);
+  const periodWeeks = Math.max(1, Math.round(52 / perYear));
+  if (t.isCommercialPaper) {
+    return { due: t.maturityWeek === week, weeksCovered: periodWeeks };
+  }
+  const anchor = t.paymentAnchorWeek ?? 0;
+  const since = week - anchor;
+  return { due: since > 0 && since % periodWeeks === 0, weeksCovered: periodWeeks };
 }

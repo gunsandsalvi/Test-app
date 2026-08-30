@@ -27,7 +27,7 @@ import { runShortDebtClearingStage } from './stages/07f-short-debt-clearing';
 import { runEquityClearingStage } from './stages/07e-equity-clearing';
 import { runCompanyFundamentalsStage } from './stages/08-company-fundamentals';
 import { runPeLifecycleForRegion, settlePeLifecycleDeals, runFirmBirthsForRegion } from './stages/pe-lifecycle';
-import { applyPendingCorporateActionSettlements } from './stages/shared-helpers';
+import { applyPendingCorporateActionSettlements, applyHolderInterestAccruals } from './stages/shared-helpers';
 import { runIndexCalculationStage } from './stages/index-calculation';
 import { runEtfFlowsStage } from './stages/etf-flows';
 import { runHouseholdBalanceSheetStage } from './stages/household-balance-sheet';
@@ -172,6 +172,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // nothing: measured, institutional equity buying power fell 53.9B -> 43.0B against the
     // control because the capital calls went out and the tender proceeds never came back.
     applyPendingCorporateActionSettlements(ctx);
+    // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
+    applyHolderInterestAccruals(ctx, (regionId) => ({ kind: 'GOVERNMENT', region: regionId as RegionId }));
   });
 
   // HH1c: the liability flows. After stage 08, so the insurers' own P&L for the week is struck
@@ -218,6 +220,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
+    holderAccruedInterestUSD: Object.fromEntries(ctx.holderAccruedInterestUSD),
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
     dealers: dealersFromBanks(nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,

@@ -61,8 +61,16 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       p.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: p.id }
         : p.kind === 'BANK' ? { kind: 'BANK', ticker: p.ticker }
           : { kind: 'COMPANY', ticker: p.ticker };
+    // DER/CAL — THE FLOATING LEG PAYS THE SECURED OVERNIGHT RATE, WHICH MAKES THESE OIS.
+    //
+    // It used to pay `policyRate`: an administered number, not a traded one, so the swap curve
+    // was a term structure on something nobody transacts at. The overnight benchmark this model
+    // actually produces is the cleared GC repo print (WS6/REPO) — its own SOFR — and a swap that
+    // references it is what a modern rates market is built on. The reference is the rate the week
+    // PRINTED, compounded into the index below, so a floating leg pays realised overnight money.
+    const overnightRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
     priorBook.forEach((c) => {
-      const netUSD = swapWeeklyNetToReceiverUSD(c, reg.policyRate);
+      const netUSD = swapWeeklyNetToReceiverUSD(c, overnightRateAnnual);
       if (Math.abs(netUSD) < 1) return;
       if (netUSD > 0) pay(ctx, { payer: partyRef(c.payer), payee: partyRef(c.receiver), amountUSD: netUSD, reason: 'swap settlement' });
       else pay(ctx, { payer: partyRef(c.receiver), payee: partyRef(c.payer), amountUSD: -netUSD, reason: 'swap settlement' });
@@ -221,9 +229,24 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
 
     reg.swapBook = [...carried, ...newContracts];
     reg.swapParRateByTenor = parByTenor;
-    // The SWAP SPREAD: what this market says about the government's credit and the banking
-    // system's balance sheet, in one number per tenor. Two markets, one comparison — the first
-    // cross-market basis this model produces, and the diagnostic DER exists to get.
+    // The published benchmark: the overnight print compounded, exactly as an overnight index is.
+    reg.securedOvernightIndex = Number(
+      ((reg.securedOvernightIndex ?? 100) * (1 + overnightRateAnnual / 52)).toFixed(6)
+    );
+    // And the curve built on it: two cleared repo prints and three cleared swap par rates. Every
+    // point is a level something traded at this week, which is what a benchmark curve IS — as
+    // against `zeroRates`, which is the SOVEREIGN curve, a different credit and a different thing.
+    reg.securedCurve = {
+      on: reg.repoRateAnnual,
+      w13: reg.repoTermRateAnnual,
+      y2: parByTenor.s2,
+      y5: parByTenor.s5,
+      y10: parByTenor.s10,
+    };
+    // The SWAP SPREAD: the par rate on SECURED overnight money against the government's own
+    // yield at the same tenor. That comparison is what a swap spread actually is — two credits
+    // and two markets, one number — and it only became meaningful once the floating leg stopped
+    // referencing an administered rate. It is the first cross-market basis this model produces.
     reg.swapSpreadBpsByTenor = Object.fromEntries(SWAP_TENORS.map((k) => [
       k,
       Number((((parByTenor[k] ?? 0) - (reg.zeroRates[SWAP_TENOR_ZERO_FIELD[k]] ?? 0)) * 10000).toFixed(1)),

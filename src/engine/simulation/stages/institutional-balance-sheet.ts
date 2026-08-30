@@ -171,6 +171,11 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       let cb = sovCouponByRegion.get(h.issuerRegion);
       if (!cb) { cb = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
       const coupon = cb[bucket] ?? 0;
+      // CAL, REMAINING HALF: this is still a smooth accrual, deliberately. Putting the HOLDER on
+      // the treasury's coupon dates without putting the treasury's own expense on them leaves the
+      // two sides disagreeing by exactly the lumpiness — measured immediately, as the boundary
+      // line `governmentInterestToUnmodeledHolders` swinging on coupon weeks. The sovereign
+      // calendar is one change to `weeklyInterestExpenseUSD` and both readers of it, together.
       weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * coupon) / 52;
     });
     if (weeklyIncomeUSD <= 0) return entity;

@@ -429,6 +429,118 @@ export function payHoldersCash(
 }
 
 /**
+ * CAL — INTEREST ACCRUES TO WHOEVER OWNS THE PAPER THAT WEEK, AND IS PAID ON THE COUPON DATE.
+ *
+ * This is the piece that makes a lumpy coupon safe on a register that trades. Interest is earned
+ * continuously and paid discretely, and between the two dates it is a RECEIVABLE — so a holder
+ * that sells mid-period keeps what it earned and the buyer earns only from the week it bought.
+ * Real markets settle that in the trade price (a bond trades DIRTY: clean price plus accrued);
+ * this model settles it on the register instead, which is the same economics and needs no clearing
+ * adapter to know about coupons.
+ *
+ * Without it, paying the coupon to whoever happens to hold on the date would hand a one-week buyer
+ * a half-year of interest and take it from the holder that earned it — a transfer the auction
+ * never priced, and a standing incentive to own paper across coupon dates that nothing offsets.
+ */
+export function accrueHoldersInterest(
+  ctx: { pendingHolderAccrualUSD: Map<string, number> },
+  issuerId: string,
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND',
+  weeklyAccrualUSD: number
+): void {
+  if (!(weeklyAccrualUSD > 0)) return;
+  const key = `${instrumentType}:${issuerId}`;
+  ctx.pendingHolderAccrualUSD.set(key, (ctx.pendingHolderAccrualUSD.get(key) ?? 0) + weeklyAccrualUSD);
+}
+
+/** CAL — the coupon date: what each holder accrued on this paper becomes cash, and the balance
+ *  clears. The issuer pays exactly the sum of what it accrued, so the two sides cannot drift. */
+export function payHoldersAccruedInterest(
+  ctx: { pendingHolderAccrualPayout: Set<string> },
+  issuerId: string,
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND'
+): void {
+  ctx.pendingHolderAccrualPayout.add(`${instrumentType}:${issuerId}`);
+}
+
+const accrualKey = (instrumentKey: string, holderId: string) => `${instrumentKey}|${holderId}`;
+
+/**
+ * Run the week's accruals and coupon-date payouts over the register.
+ *
+ * The ACCRUAL walks holders of record and splits each issuer's weekly interest by what each one
+ * holds; the PAYOUT walks the accrued balances themselves, because a holder that has sold out no
+ * longer appears in the holdings and is still owed what it earned.
+ */
+export function applyHolderInterestAccruals(
+  ctx: {
+    updatedInstitutionalEntities: InstitutionalEntity[];
+    pendingHolderAccrualUSD: Map<string, number>;
+    pendingHolderAccrualPayout: Set<string>;
+    holderAccruedInterestUSD: Map<string, number>;
+    paymentInstructions?: import('./settlement').PaymentInstruction[];
+    issuerTickerById?: Map<string, string>;
+  },
+  /** Who pays a GOV_BOND coupon — the issuing region's treasury, not a company. */
+  sovereignPayer?: (issuerId: string) => import('./settlement').PartyRef | undefined
+): void {
+  const { pendingHolderAccrualUSD: accruals, pendingHolderAccrualPayout: payouts } = ctx;
+  if (accruals.size > 0) {
+    // Holders of record, by instrument, so each one's share is what it actually owns.
+    const totalByKey = new Map<string, number>();
+    ctx.updatedInstitutionalEntities.forEach((entity) => {
+      entity.itemizedHoldings.forEach((h) => {
+        const key = `${h.instrumentType}:${h.instrumentId}`;
+        if (!accruals.has(key)) return;
+        totalByKey.set(key, (totalByKey.get(key) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
+      });
+    });
+    ctx.updatedInstitutionalEntities.forEach((entity) => {
+      entity.itemizedHoldings.forEach((h) => {
+        const key = `${h.instrumentType}:${h.instrumentId}`;
+        const weeklyUSD = accruals.get(key);
+        const totalUSD = totalByKey.get(key) ?? 0;
+        if (weeklyUSD === undefined || !(totalUSD > 0)) return;
+        const shareUSD = weeklyUSD * ((h.quantityOrNotionalUSD ?? 0) / totalUSD);
+        if (!(shareUSD > 0)) return;
+        const k = accrualKey(key, entity.id);
+        ctx.holderAccruedInterestUSD.set(k, (ctx.holderAccruedInterestUSD.get(k) ?? 0) + shareUSD);
+      });
+    });
+  }
+
+  if (payouts.size === 0) return;
+  const cleared: string[] = [];
+  ctx.holderAccruedInterestUSD.forEach((accruedUSD, k) => {
+    const at = k.lastIndexOf('|');
+    const instrumentKey = k.slice(0, at);
+    if (!payouts.has(instrumentKey) || !(accruedUSD > 0)) return;
+    const holderId = k.slice(at + 1);
+    const colon = instrumentKey.indexOf(':');
+    const instrumentType = instrumentKey.slice(0, colon);
+    const issuerId = instrumentKey.slice(colon + 1);
+    const payer = instrumentType === 'GOV_BOND'
+      ? sovereignPayer?.(issuerId)
+      : (() => {
+          const ticker = ctx.issuerTickerById?.get(issuerId);
+          return ticker ? ({ kind: 'COMPANY', ticker } as import('./settlement').PartyRef) : undefined;
+        })();
+    if (payer && ctx.paymentInstructions) {
+      ctx.paymentInstructions.push({
+        payer,
+        payee: { kind: 'INSTITUTION', id: holderId },
+        amountUSD: accruedUSD,
+        reason: 'coupon payment',
+      });
+    }
+    cleared.push(k);
+  });
+  cleared.forEach((k) => ctx.holderAccruedInterestUSD.delete(k));
+  payouts.clear();
+  accruals.clear();
+}
+
+/**
  * The sovereign ladder's bucket vocabulary — bills below 2Y (WS5), bonds at the four standard
  * points. ONE function owns the mapping from a tranche's tenor to its bucket key: three separate
  * nearest-of-[2,5,10,30] reducers existed before bills did, and any one of them left unconverted

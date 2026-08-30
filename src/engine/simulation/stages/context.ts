@@ -155,6 +155,14 @@ export interface WeeklyStepContext {
   /** G5 — the open workouts. A defaulted issuer's assets and the claims on them, carried across
    *  weeks until the assets are gone and the residual is written off. */
   estates: import('../../../domain/estate').Estate[];
+  /** CAL — this week's interest accruals to distribute over the register, by instrument. */
+  pendingHolderAccrualUSD: Map<string, number>;
+  /** CAL — the instruments whose coupon falls due this week: their accrued balances become cash. */
+  pendingHolderAccrualPayout: Set<string>;
+  /** CAL — what each holder has EARNED and not yet been paid, by (instrument, holder). The
+   *  receivable that sits between an accrual and a coupon date, and the reason a bond can change
+   *  hands mid-period without moving the interest to the wrong party. */
+  holderAccruedInterestUSD: Map<string, number>;
   tradeInvoiceFxGainUSD: number;
   tradeInvoiceWriteOffUSD: number;
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
@@ -252,6 +260,9 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     shipmentsDispatched: [],
     tradeInvoicesBooked: [],
     estates: (state as any).estates ?? [],
+    pendingHolderAccrualUSD: new Map(),
+    pendingHolderAccrualPayout: new Set(),
+    holderAccruedInterestUSD: new Map(Object.entries((state as any).holderAccruedInterestUSD ?? {})),
     tradeInvoiceFxGainUSD: 0,
     tradeInvoiceWriteOffUSD: 0,
 
