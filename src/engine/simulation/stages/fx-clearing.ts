@@ -40,7 +40,7 @@ import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
 } from './financial-clearing-engine';
 import { centralBankFxReservesUSD } from '../../../domain/central-bank';
-import { fxDeskCapacityUSD, MAX_CROSS_CURRENCY_BASIS_BPS } from '../../../domain/dealer-derivatives';
+import { fxDeskCapacityUSD, DEALER_QUOTE_WIDTH_BPS } from '../../../domain/dealer-derivatives';
 import { leverageHeadroomUSD } from '../../macro/banking';
 
 const REGIONS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -281,7 +281,11 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     // most of what "the elastic side cannot absorb it" means. A desk now bids: at the market when
     // it is empty, and further away the fuller it is, because its balance sheet is what it is
     // selling and the price of that is the basis (XB2b's own number; DER makes it clear).
-    const basisFrac = MAX_CROSS_CURRENCY_BASIS_BPS / 10000;
+    // The width of a desk's own quote: the cleared cross-currency basis where one has printed —
+    // what its balance sheet is actually fetching this week — and the posted scale before that.
+    const clearedBasis = ctx.updatedRegions[fx.base]?.crossCurrencyBasisBps?.[fx.quote]
+      ?? ctx.updatedRegions[fx.quote]?.crossCurrencyBasisBps?.[fx.base];
+    const basisFrac = Math.max(1, clearedBasis ?? DEALER_QUOTE_WIDTH_BPS) / 10000;
     deskCapacityByTicker.forEach((capUSD, ticker) => {
       const bank: any = ctx.updatedCompanies.find((c: any) => c.ticker === ticker);
       const book = bank?.bankBalanceSheet?.fxDealerBook;

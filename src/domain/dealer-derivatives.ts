@@ -45,16 +45,17 @@ export const FX_PFE_ADD_ON_RATE = 0.02;
 export const FX_INITIAL_MARGIN_RATE = 0.02;
 
 /**
- * The basis at full utilization, in bps.
+ * DER closed the rule-1/15 defect this file used to carry. The cross-currency basis was
+ * `MAX(150) x utilization x (0.35 + 0.65 x oneWayShare)`: a formula with a ceiling, whose maximum
+ * was an observed crisis-era level (rule 4) and whose split was invented. It is now a CLEARED
+ * price — hedger demand against what the desks can actually write, in stages/fx-hedging.ts, and
+ * published on the region as `crossCurrencyBasisBps`.
  *
- * RULE 1/15, OPEN: the cross-currency basis IS a price — what a hedger pays the desk — and this
- * makes it a formula with a ceiling instead of something that clears. `crossCurrencyBasisBps`
- * below computes it as `MAX x utilization x (0.35 + 0.65 x oneWayShare)`, where the 150 is an
- * observed crisis-era level (a real-world outcome, rule 4) and the 0.35/0.65 split is invented.
- * A hedger that cannot get a hedge at this price should walk away and the level should rise until
- * someone supplies it — which is exactly what the clearing engine does elsewhere. Owner: DER.
+ * What survives is the WIDTH of a spot desk's own market-making schedule (XB6): a desk quotes at
+ * the market when it is empty and a basis away when it is full, and this is the scale it uses for
+ * "a basis" until a cleared one has printed. It is a scale, not a price, and nobody pays it.
  */
-export const MAX_CROSS_CURRENCY_BASIS_BPS = 150;
+export const DEALER_QUOTE_WIDTH_BPS = 150;
 
 /**
  * Share of its leverage headroom a desk will commit to derivative PFE before it stops quoting.
@@ -75,30 +76,6 @@ export const FX_DESK_CAPACITY_SHARE_OF_HEADROOM = 0.25;
 export function fxDeskCapacityUSD(leverageHeadroomUSD: number, book: FxDealerBook | undefined): number {
   const totalUSD = (Math.max(0, leverageHeadroomUSD) * FX_DESK_CAPACITY_SHARE_OF_HEADROOM) / FX_PFE_ADD_ON_RATE;
   return Math.max(0, totalUSD - (book?.grossNotionalUSD ?? 0));
-}
-
-/**
- * The price of the hedge: how far the desk's quote sits from CIP, in bps.
- *
- * Rises with utilization, and rises FASTER with the residual it cannot internalize — a desk with
- * balanced two-way flow carries almost nothing and quotes almost nothing, while a desk absorbing
- * one-way demand has to hold and delta-hedge the position and charges for it. That asymmetry is
- * why a basis blows out when everyone wants to hedge the same way at once, which is exactly when
- * it happens in reality.
- */
-export function crossCurrencyBasisBps(args: {
-  grossNotionalUSD: number;
-  netNotionalUSD: number;
-  capacityUSD: number;
-}): number {
-  const totalCapacityUSD = args.capacityUSD + args.grossNotionalUSD;
-  if (totalCapacityUSD <= 0) return MAX_CROSS_CURRENCY_BASIS_BPS;
-  const utilization = Math.min(1, args.grossNotionalUSD / totalCapacityUSD);
-  // The un-internalized share: what the desk actually has to carry.
-  const oneWayShare = args.grossNotionalUSD > 0
-    ? Math.min(1, Math.abs(args.netNotionalUSD) / args.grossNotionalUSD)
-    : 0;
-  return MAX_CROSS_CURRENCY_BASIS_BPS * utilization * (0.35 + 0.65 * oneWayShare);
 }
 
 /** An empty desk, for a bank that has not written a forward yet. */

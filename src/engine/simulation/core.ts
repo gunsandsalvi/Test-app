@@ -1,6 +1,7 @@
 import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
+import { runSwapClearingStage } from './stages/07g-swap-clearing';
 import { createInitialContext } from './stages/context';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
@@ -134,6 +135,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
   run('07f-short-debt-clearing', () => runShortDebtClearingStage(state, ctx));
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
+  // DER1: after the sovereign curve is this week's cleared one, which every schedule reads.
+  run('07g-swap-clearing', () => runSwapClearingStage(state, ctx));
   run('holdings-writeback', () => finalizeHoldingsStore(ctx));
   run('institutional-marking', () => markInstitutionalBooks(ctx));
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));

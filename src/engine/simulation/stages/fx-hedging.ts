@@ -20,10 +20,12 @@ import {
   forwardMarkToMarketUSD,
 } from '../../../domain/fx-hedging';
 import {
-  FxDealerBook, emptyFxDealerBook, fxDeskCapacityUSD, crossCurrencyBasisBps,
+  FxDealerBook, emptyFxDealerBook, fxDeskCapacityUSD,
   FX_INITIAL_MARGIN_RATE,
 } from '../../../domain/dealer-derivatives';
 import { leverageHeadroomUSD } from '../../macro/banking';
+import { fxWeeklySigma } from '../../../domain/fx-market';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
 function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
@@ -42,18 +44,23 @@ function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
 
 /**
  * How wide a basis a hedger will pay before it gives up and carries the currency risk instead.
- * A liability-driven book has almost no choice — its regulator prices the mismatch — while a
- * hedge fund treats the hedge as a trade and walks when it is expensive. This is what makes the
- * DEMAND curve slope: at a wide enough basis, some hedgers stop hedging.
+ *
+ * DER — DERIVED, not posted. What certainty is worth to a holder is the risk it removes, priced
+ * by how much of that risk its own mandate says it must not run: the currency's OWN annualised
+ * volatility (measured, from the pair's history) times the share of the exposure the mandate
+ * hedges (HF4's mandate property). A liability-driven book, which hedges everything because the
+ * claim it matches is in its own money, will pay close to a full sigma; a macro fund, for which
+ * the currency IS the trade, will pay nothing. The four posted tolerances this replaces
+ * (220/180/90/45) ordered the entity types correctly and were otherwise chosen.
+ *
+ * This is what makes the DEMAND curve slope: at a wide enough basis, some hedgers stop hedging.
  */
-function entityHedgeToleranceBps(entity: any): number {
-  switch (entity.entityType) {
-    case 'INSURER': return 220;
-    case 'PENSION_FUND': return 180;
-    case 'ASSET_MANAGER': return 90;
-    case 'HEDGE_FUND': return 45;
-    default: return 90;
-  }
+function entityHedgeToleranceBps(entity: any, annualFxSigma: number): number {
+  const mandateShare = Math.max(
+    equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy),
+    entity.entityType === 'INSURER' || entity.entityType === 'PENSION_FUND' ? HEDGE_RATIO_FIXED_INCOME : 0
+  );
+  return Math.max(0, annualFxSigma * 10000 * mandateShare);
 }
 
 interface DeskState { book: FxDealerBook; headroomUSD: number; marginReceivedUSD: number }
@@ -95,6 +102,111 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     d.book.initialMarginHeldUSD = live?.margin ?? 0;
   });
 
+  // ---- DER — THE CROSS-CURRENCY BASIS IS NOW A CLEARED PRICE.
+  //
+  // What it replaces: `MAX_BASIS x utilization x (0.35 + 0.65 x oneWayShare)` — a formula with a
+  // ceiling, whose maximum was an observed crisis-era level (rule 4) and whose 0.35/0.65 split was
+  // invented. A hedger that cannot get a hedge at a price should walk away and the price should
+  // rise until someone supplies it, which is what every other market in this model does.
+  //
+  // So it clears. The FLOAT is what the region's desks can still write — real supply, bounded by
+  // real balance sheets. The PARTICIPANTS are the hedgers, and their schedules slope the right way
+  // by construction: full size when the hedge is free, nothing at all once the basis passes what
+  // the risk is worth to them. Where demand is thin the basis clears near zero and hedging is
+  // nearly free; where it exceeds what the desks can carry, the basis rises until enough hedgers
+  // walk — which is exactly the post-2008 mechanism the old formula was imitating.
+  const annualSigmaByRegion = new Map<RegionId, number>();
+  (ctx.updatedFxPairs ?? []).forEach((fx: any) => {
+    const sigma = fxWeeklySigma(fx.historicalRates) * Math.sqrt(52);
+    [fx.base, fx.quote].forEach((r: RegionId) => {
+      if (r === 'USA') return;
+      annualSigmaByRegion.set(r, Math.max(annualSigmaByRegion.get(r) ?? 0, sigma));
+    });
+  });
+  const annualSigmaFor = (r: RegionId) => annualSigmaByRegion.get(r) ?? 0.10;
+
+  /** This week's unhedged gap for one holder in one foreign currency. */
+  const gapByEntityRegion = new Map<string, Map<RegionId, number>>();
+  ctx.updatedInstitutionalEntities.forEach((entity: any) => {
+    const live: FxForward[] = (entity.fxForwards || []).filter((f: FxForward) => f.maturityWeek > week);
+    const covered = new Map<RegionId, number>();
+    live.forEach((f) => covered.set(f.foreignRegion, (covered.get(f.foreignRegion) ?? 0) + f.notionalUSD));
+    const gaps = new Map<RegionId, number>();
+    hedgeableExposureByRegion(entity).forEach((wantUSD, issuer) => {
+      const gapUSD = wantUSD - (covered.get(issuer) ?? 0);
+      if (gapUSD > 1e6) gaps.set(issuer, gapUSD);
+    });
+    if (gaps.size > 0) gapByEntityRegion.set(entity.id, gaps);
+  });
+
+  /** The cleared basis, and each holder's filled notional, per (holder region, foreign currency). */
+  const clearedBasisBps = new Map<string, number>();
+  const filledByEntityRegion = new Map<string, Map<RegionId, number>>();
+  const bookKey = (holderRegion: RegionId, issuer: RegionId) => `${holderRegion}->${issuer}`;
+  const holderRegions = new Set<RegionId>();
+  ctx.updatedInstitutionalEntities.forEach((e: any) => holderRegions.add(e.region));
+  holderRegions.forEach((holderRegion) => {
+    let capacityUSD = 0;
+    ctx.updatedCompanies.forEach((c: any) => {
+      if (c.region !== holderRegion || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
+      const desk = desks.get(c.ticker);
+      if (desk) capacityUSD += fxDeskCapacityUSD(desk.headroomUSD, desk.book);
+    });
+    const issuers = new Set<RegionId>();
+    ctx.updatedInstitutionalEntities.forEach((e: any) => {
+      if (e.region !== holderRegion) return;
+      (gapByEntityRegion.get(e.id) ?? new Map()).forEach((_g: number, issuer: RegionId) => issuers.add(issuer));
+    });
+    issuers.forEach((issuer) => {
+      const key = bookKey(holderRegion, issuer);
+      const instrumentId = `XCS-${key}`;
+      const participants: ClearingParticipant[] = [];
+      ctx.updatedInstitutionalEntities.forEach((e: any) => {
+        if (e.region !== holderRegion) return;
+        const gapUSD = gapByEntityRegion.get(e.id)?.get(issuer) ?? 0;
+        if (!(gapUSD > 0)) return;
+        const toleranceBps = entityHedgeToleranceBps(e, annualSigmaFor(issuer));
+        if (!(toleranceBps > 0)) return;
+        const demand = new Map<string, ParticipantDemand>();
+        // Full size when the hedge is free, nothing at all at its own tolerance.
+        demand.set(instrumentId, {
+          reservationStat: toleranceBps,
+          maxHoldingUSD: gapUSD,
+          fullSizeStatRange: toleranceBps,
+        });
+        participants.push({ id: e.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
+      });
+      if (participants.length === 0 || !(capacityUSD > 0)) { clearedBasisBps.set(key, 0); return; }
+      const instrument: ClearingInstrument = {
+        id: instrumentId,
+        outstandingUSD: capacityUSD,
+        tradableFloatUSD: capacityUSD,
+        currentStat: Math.max(1, ctx.updatedRegions[holderRegion]?.crossCurrencyBasisBps?.[issuer] ?? 10),
+        statKind: 'PRICE_LIKE',
+        durationYears: 0,
+      };
+      // Undamped: both sides are genuinely elastic here, so the level is the market's, and a
+      // damper would be the only thing that could print instead of it (§6's doctrine).
+      const result = clearFinancialAsset([instrument], participants, new Map(), { dealerSpreadBps: 0, maxWeeklyStatMovePct: Number.NaN });
+      const basisBps = Math.max(0, result.newStatById.get(instrumentId) ?? 0);
+      clearedBasisBps.set(key, basisBps);
+      result.newParticipantHoldings.forEach((byInstrument, entityId) => {
+        const filledUSD = byInstrument.get(instrumentId) ?? 0;
+        if (filledUSD <= 1e6) return;
+        let byRegion = filledByEntityRegion.get(entityId);
+        if (!byRegion) { byRegion = new Map(); filledByEntityRegion.set(entityId, byRegion); }
+        byRegion.set(issuer, filledUSD);
+      });
+    });
+    // Published so the spot desks can quote off a real price next week, and so §6 can watch it.
+    const reg = ctx.updatedRegions[holderRegion];
+    if (reg) {
+      const byIssuer: Record<string, number> = {};
+      issuers.forEach((issuer) => { byIssuer[issuer] = Number((clearedBasisBps.get(bookKey(holderRegion, issuer)) ?? 0).toFixed(1)); });
+      reg.crossCurrencyBasisBps = byIssuer;
+    }
+  });
+
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity: any) => {
     const live: FxForward[] = (entity.fxForwards || []).filter((f: FxForward) => f.maturityWeek > week);
     const exposure = hedgeableExposureByRegion(entity);
@@ -118,25 +230,16 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     exposure.forEach((wantUSD, issuer) => {
       const gapUSD = wantUSD - (coveredByRegion.get(issuer) ?? 0);
       if (gapUSD <= 1e6) return;
+      // DER: what the AUCTION filled for this holder in this currency, at the cleared basis. The
+      // desk it faces is still the one with the most room, because a full desk stops quoting —
+      // but the price is now the market's, not that one desk's utilization.
       const dealer = pickDealerBank(ctx, entity.region, desks);
       if (!dealer) return;
       const desk = desks.get(dealer.ticker)!;
-
-      // Supply: what this desk can still write. A full desk quotes nothing, which is why a hedge
-      // can be unavailable at any price — the thing an infinite-supply derivative cannot express.
-      const writableUSD = Math.min(gapUSD, fxDeskCapacityUSD(dealer.headroomUSD, desk.book));
+      const filledUSD = filledByEntityRegion.get(entity.id)?.get(issuer) ?? 0;
+      const writableUSD = Math.min(gapUSD, filledUSD, fxDeskCapacityUSD(dealer.headroomUSD, desk.book));
       if (writableUSD <= 1e6) return;
-
-      // Price: the cross-currency basis this desk's utilization implies. Internalized two-way
-      // flow is nearly free; a one-way book has to be carried and delta-hedged, and costs.
-      const basisBps = crossCurrencyBasisBps({
-        grossNotionalUSD: desk.book.grossNotionalUSD,
-        netNotionalUSD: desk.book.netNotionalByRegion[issuer] ?? 0,
-        capacityUSD: fxDeskCapacityUSD(dealer.headroomUSD, desk.book),
-      });
-
-      // Demand: the hedger walks if the basis costs more than the mismatch is worth to it.
-      if (basisBps > entityHedgeToleranceBps(entity)) return;
+      const basisBps = clearedBasisBps.get(bookKey(entity.region, issuer)) ?? 0;
 
       // Initial margin is real cash leaving the client and sitting with the desk.
       const marginUSD = writableUSD * FX_INITIAL_MARGIN_RATE;

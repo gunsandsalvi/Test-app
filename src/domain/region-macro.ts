@@ -4,6 +4,7 @@
 import { RegionId } from './geography';
 import { RepoContract } from './repo';
 import { PrimeBrokerageLine } from './prime-brokerage';
+import { SwapContract } from './swaps';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSector, AssetOwnershipShares } from './banking';
@@ -620,6 +621,22 @@ export interface Region {
    * the repo book; the brokers' `primeBrokerageLoansUSD` and the funds' leverage are derived.
    */
   primeBrokerageBook?: PrimeBrokerageLine[];
+  /**
+   * DER1 — this region's live interest-rate swap book: every open contract, with the payer of
+   * fixed, the receiver, the par rate it was struck at and when it matures. Stored once with both
+   * parties named, the same shape as the repo and prime-brokerage books.
+   */
+  swapBook?: SwapContract[];
+  /** DER1 — the cleared par swap rate per tenor (annualised decimal). */
+  swapParRateByTenor?: Record<string, number>;
+  /** DER1 — the par rate less this region's own cleared sovereign zero, in bps: the SWAP SPREAD.
+   *  The first cross-market basis this model produces, and the test that two of its markets
+   *  agree with each other. */
+  swapSpreadBpsByTenor?: Record<string, number>;
+  /** DER — the CLEARED cross-currency basis this region's hedgers pay per foreign currency, in
+   *  bps. What a hedge costs, where hedger demand meets what the desks can carry — no longer a
+   *  formula with an observed crisis-era ceiling. */
+  crossCurrencyBasisBps?: Record<string, number>;
   /** REPO3 — the cleared TERM secured rate (annualised decimal), when the term book traded.
    *  A bank funding a long book at overnight and being caught by it is the mechanism a funding
    *  squeeze actually is, and it needs two prices to exist. */
