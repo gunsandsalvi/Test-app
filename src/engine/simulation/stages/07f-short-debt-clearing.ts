@@ -40,7 +40,7 @@ import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
-import { settleClearedBook, feeDesksForRegion } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
@@ -292,6 +292,25 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         }));
       instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookUSD.get(inst.id) ?? 0; });
 
+      // PUB — and what NO book holds is the treasury's OFFERING, not a reservation. Stage 11
+      // issues bills into the ladder every week; nothing ever bought them, and the treasury then
+      // repaid a holder that was not there. A bill auction is exactly this: paper that exists,
+      // offered at whatever the week's demand pays, and offered again next week if it does not
+      // clear. The central bank's book on a no-order week is a real holding and is NOT on offer.
+      const passiveCbByBucket = new Map<string, number>();
+      if (!cbOrder && reg.centralBankSheet) {
+        Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
+          .forEach(([key, usd]) => passiveCbByBucket.set(key, Number(usd) || 0));
+      }
+      activeBuckets.forEach((b) => {
+        const inst = instruments.find((i) => i.id === billInstrumentId(regionId, b.key));
+        if (!inst) return;
+        inst.primaryOfferingUSD = Math.max(0,
+          (outstandingByBucket.get(b.key) ?? 0)
+          - inst.tradableFloatUSD
+          - (passiveCbByBucket.get(b.key) ?? 0));
+      });
+
       const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
         dealerSpreadBps: DEALER_SPREAD_BPS,
         maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
@@ -415,7 +434,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
               : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
                 : dealerDeskPartyOf(id, deskTickers)),
         { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
-        feeDesksForRegion(ctx, regionId)
+        feeDesksForRegion(ctx, regionId),
+        // PUB: the treasury is paid for the bills this week's auction actually placed.
+        primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }))
       );
 
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the

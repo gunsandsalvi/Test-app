@@ -608,29 +608,39 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // at maturity — that difference IS the bill's cost, and it is why bills carry no coupon. A
     // bond is sold at par and pays its coupon weekly. Discounting proceeds while ALSO paying a
     // coupon would charge the government twice for the same borrowing.
-    reg.lastIssuanceProceedsUSD = Number(newTranches.reduce(
-      (a, t) => a + (isDiscountBill(t.tenorAtIssuanceYears)
-        ? discountBillProceedsUSD(t.principalUSD, t.couponRate ?? 0, t.tenorAtIssuanceYears)
-        : t.principalUSD),
-      0
-    ).toFixed(0));
-    // The share owed to holders outside the model: real money leaving the treasury, named as a
-    // boundary line instead of vanishing from the account with no payee.
+    // PUB: the treasury is NOT paid here. New paper joins the ladder unheld, and 07c/07f offer
+    // it in the same auction that prices the outstanding stock — the clearing house pays the
+    // treasury for whatever the week's demand takes, and what nobody takes is offered again.
+    // That is a treasury auction, and it is what makes an undersubscribed one a real event.
+    //
+    // What this replaces credited the whole issue to the TGA the moment it was written, whether
+    // or not any book bought it. The paper then sat with no holder until it matured, and the
+    // redemption paid 51B to somebody who was never there.
+    //
+    // A DISCOUNT BILL is a known gap, recorded rather than papered over: this line used to
+    // discount a bill's proceeds, but its BUYERS pay face in the clearing books and are repaid
+    // face, so the bill's cleared yield reaches nobody's cash. The auction pays what the buyers
+    // paid. Owner: the bill book's price/face split.
+    reg.lastIssuanceProceedsUSD = 0;
+    // PUB: what is left after every named holder has been repaid is UNSOLD PAPER, and a debt
+    // nobody holds is owed to nobody. It matures and it is simply gone — no payee, no payment.
+    //
+    // This used to be a boundary line ("sovereign redemption (unmodeled holders)", measured at
+    // 51B in a single week) on the reasoning that the money had to go SOMEWHERE. It did not: the
+    // treasury was never paid for that paper either, because nobody bought it. Both halves are
+    // closed now — the auction pays the treasury for what it places (07c/07f), and what it never
+    // places costs the treasury nothing when it rolls off. The remainder here is therefore a
+    // MEASURE OF UNDERSUBSCRIPTION at the front of the ladder, not a payment.
     {
       const cbRedeemedUSD = Array.from(cbRedeemedByBucket.values()).reduce((a, v) => a + v, 0);
-      const unmodeledUSD = Math.max(0, maturedPrincipalUSD - redemptionPaidUSD - cbRedeemedUSD);
-      if (unmodeledUSD > 0) {
-        pay(ctx, {
-          payer: { kind: 'GOVERNMENT', region: regionId },
-          payee: { kind: 'UNMODELED', region: regionId },
-          amountUSD: unmodeledUSD,
-          reason: 'sovereign redemption (unmodeled holders)',
-        });
-      }
+      reg.lastUnsoldMaturedUSD = Number(
+        Math.max(0, maturedPrincipalUSD - redemptionPaidUSD - cbRedeemedUSD).toFixed(0));
     }
     // The TGA's own debit is the settlement layer's now, so the central-bank stage must not take
     // it a second time; what stays here is the REPORTED figure.
-    reg.lastRedemptionPaidUSD = Number(maturedPrincipalUSD.toFixed(0));
+    // Only what was actually repaid: the unsold remainder above never left the account.
+    reg.lastRedemptionPaidUSD = Number(
+      (maturedPrincipalUSD - (reg.lastUnsoldMaturedUSD ?? 0)).toFixed(0));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
 

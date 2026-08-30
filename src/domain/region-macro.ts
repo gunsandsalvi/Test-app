@@ -802,6 +802,9 @@ export interface Region {
   /** PUB2 — this week's gross issuance proceeds and principal redeemed, so the TGA has the
    * financing leg that funds the deficit it is debited by. Written by stage 11. */
   lastIssuanceProceedsUSD?: number;
+  /** PUB: matured paper that no named book ever bought — the front-of-ladder undersubscription
+   *  the treasury auction leaves behind. It is not a payment; nobody was owed it. */
+  lastUnsoldMaturedUSD?: number;
   lastRedemptionPaidUSD?: number;
   /**
    * PUB1 — the slice of the interest bill paid to holders that do not exist yet: the central

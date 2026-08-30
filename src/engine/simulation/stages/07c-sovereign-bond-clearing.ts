@@ -51,7 +51,7 @@ import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nels
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -259,7 +259,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         reserveBucket(bucketOf(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
     });
 
-    //   - AND THE THIRD, which OWN7 missed: THE SHARE NO REAL BOOK HOLDS AT ALL. Measured at
+    //   - AND THE THIRD, which OWN7 missed, IS NOT A HOLDER AT ALL — it is UNSOLD PAPER, and it
+    //     is offered here rather than reserved. Measured at
     //     seed, the model's real books hold ~80% of every region's sovereign stock; the other
     //     ~20% sits with households, foreign official and retail — holders this model does not
     //     name yet. They are the purest case of "a holder that does not bid keeps its position",
@@ -269,9 +270,18 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     //     against +28B of actual new issuance (§7.124).
     //
     //     The residual is computed from the books themselves rather than stated: whatever the
-    //     outstanding is, less what every real holder actually has. That makes the float exactly
+    //     outstanding is, less what every real holder actually has. That keeps the float exactly
     //     "what the participants in this book hold between them", which is what OWN7's rule says
     //     and what the other two carve-outs already implement.
+    //
+    //     PUB — AND THEN IT IS SOLD. Reserving it made the float honest and left the paper in
+    //     limbo: stage 11 issues into the ladder every quarter, no book ever bought it, and when
+    //     it matured the treasury paid 51B to a holder that was never there ("sovereign
+    //     redemption (unmodeled holders)"). Unheld sovereign paper is a PRIMARY OFFERING — which
+    //     is what a treasury auction is — priced in the same solve as the outstanding stock, paid
+    //     for by whoever takes it, and offered again next week if nobody does. An undersubscribed
+    //     auction is then a real event with a real consequence for the treasury's account,
+    //     instead of a silent placement.
     const realHoldingsByBucket = new Map<string, number>();
     const addReal = (key: string | undefined, usd: number) => {
       if (!key || !(usd > 0)) return;
@@ -300,7 +310,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // (This read named a field that does not exist on the row — `bucketKey` for `tenorKey` —
     // so the dealer's position had never once been subtracted. G3a.)
     (reg.bankingSector.sovBondDealerInventory || []).forEach((pos) => addReal(pos.tenorKey, pos.inventoryUSD));
-    activeBuckets.forEach((b) => reserveBucket(b.key, Math.max(0,
+    const unheldByBucket = new Map<string, number>();
+    activeBuckets.forEach((b) => unheldByBucket.set(b.key, Math.max(0,
       (outstandingByBucket.get(b.key) ?? 0) - (realHoldingsByBucket.get(b.key) ?? 0))));
 
     const totalOutstandingUSD = activeBuckets.reduce((s, b) => s + (outstandingByBucket.get(b.key) ?? 0), 0) || 1;
@@ -316,7 +327,11 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         // already own (above). Every bidder here is a real holder, so what is left is genuinely
         // in play — and the allocation now sums to the stock rather than past it.
         tradableFloatUSD: Math.max(0,
-          (outstandingByBucket.get(b.key) ?? 0) - (nonParticipantByBucket.get(b.key) ?? 0)),
+          (outstandingByBucket.get(b.key) ?? 0)
+          - (nonParticipantByBucket.get(b.key) ?? 0)
+          - (unheldByBucket.get(b.key) ?? 0)),
+        // PUB: the treasury's own offering — every dollar of this bucket no book holds yet.
+        primaryOfferingUSD: unheldByBucket.get(b.key) ?? 0,
         currentStat: currentYieldDecimal * 10000, // bps
         statKind: 'YIELD_LIKE',
         durationYears: b.years,
@@ -604,7 +619,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
             : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
-      feeDesksForRegion(ctx, regionId)
+      feeDesksForRegion(ctx, regionId),
+      // PUB: the treasury is paid for the paper this week's auction actually placed.
+      primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }))
     );
   });
 }
