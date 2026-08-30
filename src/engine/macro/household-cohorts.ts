@@ -61,20 +61,50 @@ const TIER_TRANSFER_WEIGHT: Record<WealthTier, number> = {
   BOTTOM_50: 1.6, NEXT_40: 0.9, TOP_9: 0.2, TOP_1: 0.05,
 };
 
-/** Where the residual recycle lands: institutional-claim incidence — the pension and
- * insurance middle, with the top's share modest because its wealth is direct, not pooled. */
-const TIER_RESIDUAL_RECEIPT_WEIGHT: Record<WealthTier, number> = {
-  BOTTOM_50: 0.10, NEXT_40: 0.45, TOP_9: 0.30, TOP_1: 0.15,
-};
-
 /**
  * How the real HH3 debt-service burden distributes across tiers — a blended mortgage/card
  * reality (mortgages sit with the homeowning middle, revolving debt with the bottom half).
  * A stated primitive until HH4c gives cohorts their own balance sheets and the split derives.
  */
-const TIER_DEBT_SERVICE_WEIGHT: Record<WealthTier, number> = {
-  BOTTOM_50: 0.22, NEXT_40: 0.48, TOP_9: 0.22, TOP_1: 0.08,
-};
+/**
+ * RULE 19 — `TIER_DEBT_SERVICE_WEIGHT` and `TIER_RESIDUAL_RECEIPT_WEIGHT` are GONE.
+ *
+ * Eight stated numbers splitting debt service and capital receipts across tiers. The debt one
+ * carried its own exit condition — *"a stated primitive until HH4c gives cohorts their own
+ * balance sheets and the split derives"* — and §7.145 gave them balance sheets, which have been
+ * computing exactly these splits and throwing them away ever since.
+ *
+ * **Debt service follows DEBT.** A tier's share of what the sector owes is measured, so its share
+ * of what the sector pays to service it is that same share — the arithmetic, not a table.
+ * **The residual recycle follows INSTITUTIONAL CLAIMS**, for the same reason the stated version
+ * gave ("institutional-claim incidence"): the claim is now measured per tier, so the incidence is
+ * the claim.
+ *
+ * Both fall back to income share before any balance sheet has accumulated (§7.4: a seed states
+ * what the mechanism then owns), which is the only condition under which they are not measured.
+ */
+function tierShareOfMeasured(
+  wealthDistribution: Record<WealthTier, WealthTierData>,
+  field: 'debtUSD' | 'institutionalClaimsUSD'
+): Record<WealthTier, number> {
+  const raw = {} as Record<WealthTier, number>;
+  let total = 0;
+  WEALTH_TIERS.forEach((t) => {
+    const v = Math.max(0, wealthDistribution[t]?.[field] ?? 0);
+    raw[t] = v;
+    total += v;
+  });
+  if (total > 0) {
+    WEALTH_TIERS.forEach((t) => { raw[t] = raw[t] / total; });
+    return raw;
+  }
+  let incomeTotal = 0;
+  WEALTH_TIERS.forEach((t) => { incomeTotal += Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0); });
+  WEALTH_TIERS.forEach((t) => {
+    raw[t] = incomeTotal > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0) / incomeTotal : 0.25;
+  });
+  return raw;
+}
 
 /**
  * What each tier's consumption buys, by price tier. The budget-weighted sums of these mixes ARE
@@ -319,7 +349,9 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // ---- 5. Savings cross-section, λ-normalized to the aggregate behavioural rate; debt service
   // allocated; consumption the residual. ----
   const annualDebtServiceUSD = Math.max(0, weeklyDebtServiceUSD) * 52;
-  const dsNorm = WEALTH_TIERS.reduce((a, t) => a + TIER_DEBT_SERVICE_WEIGHT[t], 0) || 1;
+  // RULE 19 — both splits are MEASURED now (see `tierShareOfMeasured`).
+  const debtShareByTier = tierShareOfMeasured(wealthDistribution, 'debtUSD');
+  const claimShareByTier = tierShareOfMeasured(wealthDistribution, 'institutionalClaimsUSD');
 
   // HH: the cohorts DISTRIBUTE household income; they do not re-derive it. The cross-section —
   // who earns what, relative to whom — is built above from real employment, real occupation
@@ -417,7 +449,6 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const netWorthNorm = WEALTH_TIERS.reduce(
     (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0), 0
   ) || 1;
-  const residualNorm = WEALTH_TIERS.reduce((a, t) => a + TIER_RESIDUAL_RECEIPT_WEIGHT[t], 0) || 1;
   const tierReceiptsUSD = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => {
     const nw = Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0);
@@ -425,13 +456,13 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     tierReceiptsUSD[t] =
       Math.max(0, inputs.annualCapitalReceiptsUSD.depositInterestUSD) * (nw / netWorthNorm)
       + Math.max(0, inputs.annualCapitalReceiptsUSD.dividendsUSD) * ((nw * exp) / exposureNorm)
-      + Math.max(0, inputs.annualCapitalReceiptsUSD.residualUSD) * (TIER_RESIDUAL_RECEIPT_WEIGHT[t] / residualNorm);
+      + Math.max(0, inputs.annualCapitalReceiptsUSD.residualUSD) * claimShareByTier[t];
   });
   const cohorts: HouseholdCohort[] = preliminary.map(({ c, grossUSD, taxUSD, dispUSD }, i) => {
     const tierEarners = earnersByTier[c.tier] || 1;
     const share = (c.employed + c.unemployed) / tierEarners;
     const plannedSavingsUSD = cohortSavingsUSD[i];
-    const debtServiceUSD = annualDebtServiceUSD * (TIER_DEBT_SERVICE_WEIGHT[c.tier] / dsNorm) * share;
+    const debtServiceUSD = annualDebtServiceUSD * debtShareByTier[c.tier] * share;
     const capitalReceiptsUSD = tierReceiptsUSD[c.tier] * share;
     const budgetBeforeFloorUSD = dispUSD - plannedSavingsUSD - debtServiceUSD + capitalReceiptsUSD;
     const squeezedSavingsUSD = budgetBeforeFloorUSD < 0

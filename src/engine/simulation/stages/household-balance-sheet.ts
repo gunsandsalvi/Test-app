@@ -244,10 +244,16 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
           + housingStockUSD * incomeShareOf(t, i, W.housing[t]);
         const tierDebtUSD = mortgageUSD * incomeShareOf(t, i, W.mortgage[t])
           + consumerDebtUSD * borrowShareOf(t, i, W.consumerDebt[t]);
+        const tierClaimsUSD = institutionalClaimsUSD * cautiousShareOf(t, i, W.institutionalClaims[t]);
         const prev = reg.wealthDistribution[t];
         reg.wealthDistribution[t] = {
           ...prev,
           priorNetWorthUSD: prev.shareOfNetWorthUSD,
+          // RULE 19 — published so the cohort build can weight by MEASURED debt and MEASURED
+          // claims rather than by `TIER_DEBT_SERVICE_WEIGHT` and `TIER_RESIDUAL_RECEIPT_WEIGHT`.
+          // Both were computed here already and thrown away.
+          debtUSD: Number(tierDebtUSD.toFixed(0)),
+          institutionalClaimsUSD: Number(tierClaimsUSD.toFixed(0)),
           shareOfNetWorthUSD: Number((tierAssetsUSD - tierDebtUSD).toFixed(0)),
           homeEquityUSD: Number((housingStockUSD * incomeShareOf(t, i, W.housing[t])
             - mortgageUSD * incomeShareOf(t, i, W.mortgage[t])).toFixed(0)),

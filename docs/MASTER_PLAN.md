@@ -1788,7 +1788,8 @@ primitives — PATIENCE (what makes a wealth distribution stationary rather than
 and RISK AVERSION (the precautionary motive a confidence shock should work through) — plus
 one temporary, the illiquidity friction, which HSG retires. Firms need **zero to one**
 (entry scale, probably derivable from technology). Against roughly **90** stated numbers in
-the household layer today.
+the household layer at the 2026-08-30 count. **16 retired the same day (§7.170); the count stands
+at ~74 and may never rise.**
 
 **It can be this small because this model generates its own idiosyncratic income risk.** A
 standard Bewley/Aiyagari model must STATE the income process — persistence, variance, a
@@ -1803,7 +1804,9 @@ saving available and it is already banked.
 | `TIER_BALANCE_SHEET_WEIGHTS` (32) | mostly dead already — opening conditions only since §7.145 |
 | tier savings rates + the 4 aggregate coefficients + λ + the 90% cap | saving as a per-tier decision — **DIST item 1(a)**, and §6.1's live row |
 | ~~credit tier shares and rates (16)~~ | **RETIRED §7.162** — migration is two-way on measured delinquency and the rate is quoted |
-| `TIER_DEBT_SERVICE_WEIGHT` (4) | **its own comment already says "a stated primitive until HH4c gives cohorts their own balance sheets" — overdue** |
+| ~~`TIER_DEBT_SERVICE_WEIGHT` (4)~~ | **RETIRED §7.170** — debt service follows measured debt |
+| ~~`TIER_RESIDUAL_RECEIPT_WEIGHT` (4)~~ | **RETIRED §7.170** — the recycle follows measured institutional claims |
+| ~~`LifeCycleStageData.savingsRate` + `consumptionMultiplier` (8)~~ | **DELETED §7.170** — read by nothing; the life-cycle rate is the retired share |
 | `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN, item 22 |
 | ~~the average LTV~~, `WEALTH_SPENDDOWN_YEARS` | **the LTV RETIRED §7.159** (the book is vintages); the spend-down horizon still waits on housing that clears — HSG, item 5 |
 | **`TIER_OCCUPATION_MIXES` (14)** | **NOTHING — no owner assigned. The largest stated block with no mechanism scheduled to kill it.** A tier's occupation mix should be an outcome of who got hired into what, over time. |
@@ -5824,3 +5827,25 @@ that proved it, the lesson.
       and allocate it by income. **Settle that before building**; and watch for double-counting
       against the pension contribution and benefit flows, which already move real money between
       working and retired households.
+
+170. **RULE 19, FIRST PASS — 16 stated shape parameters retired, none replaced.** The count is the
+    measure of how much mechanism is missing, so this is the score moving: **~90 → ~74.**
+    - **8 deleted outright: `LifeCycleStageData.savingsRate` and `consumptionMultiplier`.** Four
+      stages' worth of stated saving and consumption behaviour, **read by nothing** (§7.169) —
+      only `RETIRED.shareOfPopulation` was ever used, and only to set a death rate. Wiring them in
+      would have restored one level down exactly what §7.165 removed at the aggregate. **A stated
+      number no mechanism needs is not a primitive, it is a leftover.**
+    - **4 derived: `TIER_DEBT_SERVICE_WEIGHT`.** It carried its own exit condition — *"a stated
+      primitive until HH4c gives cohorts their own balance sheets and the split derives."* §7.145
+      gave them balance sheets, and `household-balance-sheet.ts` **had been computing each tier's
+      debt and throwing it away ever since.** Debt service follows DEBT: a tier's share of what
+      the sector owes is its share of what the sector pays to service it. Arithmetic, not a table.
+    - **4 derived: `TIER_RESIDUAL_RECEIPT_WEIGHT`.** Its stated justification was
+      "institutional-claim incidence" — and the claim is measured per tier now, so the incidence
+      IS the claim. Same pattern: the number to use was already being computed and discarded.
+    - **The pattern worth keeping: two of the three were already derivable and nobody had looked.**
+      The balance sheets §7.145 built have been publishing the exact splits these tables state,
+      for as long as they have existed. **When a stated table has an exit condition written on it,
+      check whether the condition has already been met** — this one had, and the table outlived it.
+    - Both fall back to income share only before any balance sheet has accumulated (§7.4).
+      Harness green, 0 violations.

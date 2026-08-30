@@ -89,10 +89,10 @@ export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncome
 
 export function createLifeCycleDistribution(): Record<LifeCycleStage, LifeCycleStageData> {
   return {
-    EARLY_CAREER: { shareOfPopulation: 0.28, savingsRate: 0.02, consumptionMultiplier: 1.10 },
-    PEAK_EARNING: { shareOfPopulation: 0.35, savingsRate: 0.12, consumptionMultiplier: 1.00 },
-    PRE_RETIREMENT: { shareOfPopulation: 0.17, savingsRate: 0.20, consumptionMultiplier: 0.85 },
-    RETIRED: { shareOfPopulation: 0.20, savingsRate: -0.05, consumptionMultiplier: 0.75 },
+    EARLY_CAREER: { shareOfPopulation: 0.28 },
+    PEAK_EARNING: { shareOfPopulation: 0.35 },
+    PRE_RETIREMENT: { shareOfPopulation: 0.17 },
+    RETIRED: { shareOfPopulation: 0.20 },
   };
 }
 

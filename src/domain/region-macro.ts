@@ -27,6 +27,17 @@ export interface WealthTierData {
    * measure, and the share is its outcome.
    */
   accumulatedSavingsUSD?: number;
+  /**
+   * RULE 19 — this tier's MEASURED debt and institutional claims, so the cohort build can weight
+   * by them instead of by a stated table.
+   *
+   * `TIER_DEBT_SERVICE_WEIGHT` and `TIER_RESIDUAL_RECEIPT_WEIGHT` were four numbers each, and the
+   * debt one carried its own exit condition: *"a stated primitive until HH4c gives cohorts their
+   * own balance sheets and the split derives."* §7.145 gave them balance sheets. These are the
+   * split, measured where the balance sheets are built.
+   */
+  debtUSD?: number;
+  institutionalClaimsUSD?: number;
   equityExposureShare: number;
   homeEquityUSD?: number;
 }
@@ -69,10 +80,22 @@ export interface HouseholdCohort {
 
 export type LifeCycleStage = 'EARLY_CAREER' | 'PEAK_EARNING' | 'PRE_RETIREMENT' | 'RETIRED';
 
+/**
+ * RULE 19 — `savingsRate` and `consumptionMultiplier` are GONE from this type.
+ *
+ * Eight stated numbers describing how much each age saves and consumes, read by NOTHING (§7.169):
+ * only `RETIRED.shareOfPopulation` was ever used, and only to set a death rate. They were SHAPE
+ * parameters — a claim about the answer — and wiring them in would have put back one level down
+ * exactly what §7.165 removed at the aggregate.
+ *
+ * The life-cycle saving rate is DERIVED instead, and it has no free parameter: a household saves
+ * to fund the years it will not earn, so with `w` of adult life working and `r` retired and smooth
+ * consumption, the working-life saving rate is `r/(w+r)` — and since `w + r = 1` across the
+ * population, **it IS the retired share**, which this type already carries and which the model
+ * already evolves from real births and deaths.
+ */
 export interface LifeCycleStageData {
   shareOfPopulation: number;
-  savingsRate: number;
-  consumptionMultiplier: number;
 }
 
 /**
