@@ -6582,3 +6582,49 @@ that proved it, the lesson.
       clearing house is flat, and nothing is unresolved. What it says is that the settlement layer
       is not yet the ONLY way money moves, that the gap is almost entirely institutional cash, and
       that there is now a number on it to watch down.
+
+196. **CASH — the settlement layer gets a second cycle, and the meter gets corrected.**
+    - **The migration had stalled for a STRUCTURAL reason, not a careless one.** Settlement ran
+      once, mid-week, so every stage after it — the insurers, the money fund, the ETFs, the FX
+      desks, the estates, the treasury's redemptions — had nowhere to send a payment instruction
+      and moved both balances itself. **A week has two cycles now**, an intraday one and a close,
+      the way a day does; the two reports merge because "the clearing house is flat" and "nothing
+      is unresolved" are properties of the WEEK. That alone recovered the estate distributions,
+      which were already written as instructions and were being silently dropped.
+    - **Routed since:** repo (maturities, drawdowns, and the window's own interest), sovereign
+      coupons, and bond/bill redemptions — the last with an explicit boundary line for holders the
+      model does not name, so the treasury is debited by the ledger instead of a later stage
+      subtracting the total. The FX desks' variation margin settles as income between two named
+      parties, initial margin as reserves against the funding line, because the client's money is
+      not the desk's earnings.
+    - **Three real defects the routing exposed, each fixed at the root:**
+      - The wholesale-funding residual netted maturities out of the LIABILITIES while their cash
+        was still on the sheet, moving the difference into wholesale permanently. It is struck on
+        the positions as they stand — except the INTEREST, which equity has already taken and
+        whose cash leaves at settlement, so the residual has to see the balance the week will end
+        on. Principal nets out; interest does not.
+      - **`applyBankFundingSplit` was a second, incomplete copy of the balance-sheet identity**:
+        loans, sovereigns and cash, and nothing else — no repo, no standing facility, no desk
+        inventory, no margin loans. Two derivations of one thing (rule 3), and whichever ran last
+        won. It reads the one asset side now.
+      - The central bank reconciled its sheet BEFORE the close, so the week settled reserves under
+        a balance sheet that had already counted them.
+    - **THE CORRECTION, and it is mine.** §7.195 said the 02b reconcile was the size of what
+      bypasses settlement. **It is not only that**, and routing more flows through the ledger
+      pushed it UP twice before I understood why. It also absorbs the `Math.max(0, cashUSD)` clamp
+      on the deposit line — and something is sitting behind that clamp.
+    - **A FUND IS OVERDRAWN, AND THE PLUG WAS PAYING FOR IT.** One equity index fund's cash is
+      negative and growing: −1.4B at week five, −3.8B by week ten. The reconcile re-plugs it every
+      week, which keeps the per-bank identity intact — the defect paying for its own cover, which
+      is why nothing ever caught it. **3.6B of the 11.0B gross is that clamp**, now reported on its
+      own line, with a harness check behind it: an institution's cash is a bank deposit, nothing
+      lends it an unsecured overdraft, and the one entity type that CAN borrow (a hedge fund,
+      through HF1's prime broker) receives that borrowing as cash. Three entities fire, one of them
+      persistently. **Owner: ETF2**, whose row is about the AP's real capacity — a fund creating
+      shares it cannot pay for is the same defect from the funding side.
+    - **One routing deliberately NOT kept.** The insurers' premiums and benefits have a household
+      leg, and household payments DEFER inside settlement while the insurer's leg lands at once —
+      so routing it put the two ends out of step and made things worse. The T+1
+      `pendingBankSettlementUSD` path exists for exactly that reason. Recorded rather than forced:
+      the household side needs the deferral understood before it moves, and that is one change to
+      both paths, together.
