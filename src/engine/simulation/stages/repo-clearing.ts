@@ -46,7 +46,7 @@ import {
   repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBucket,
 } from '../../../domain/repo';
 import { WeeklyStepContext } from './context';
-import { pay, PartyRef } from './settlement';
+import { pay, PartyRef, pendingSettlementUSD } from './settlement';
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
   YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
@@ -186,6 +186,13 @@ export function selectCollateral(
  * liability liquidity needs and retires the shared constant. */
 export const CASH_SLEEVE_OVERNIGHT_SHARE = 0.5;
 
+/** Who a contract's lender is, as a settlement party: a bank's reserves, an institution's
+ *  balance, or the central bank's window. */
+const repoLenderParty = (lender: RepoParty, regionId: RegionId): PartyRef =>
+  lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: lender.ticker }
+    : lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: lender.id }
+      : { kind: 'CENTRAL_BANK', region: regionId };
+
 const repoInstrumentId = (regionId: RegionId) => `${regionId}-REPO-ON`;
 const repoTermInstrumentId = (regionId: RegionId) => `${regionId}-REPO-TERM`;
 const CB_SRF_SEAT_ID = 'CB-SRF';
@@ -242,21 +249,21 @@ export function runRegionalRepoSession(
   // ---- Mature the institutional lenders' legs: principal plus the interest their contract
   // actually promised, at the rate IT was struck at and over the term IT ran. (The paying side
   // flowed in evolveBankingSector, so the money arrives here having genuinely left a borrower.)
-  const maturedByEntity = new Map<string, number>();
+  // CASH: every matured contract repays through the settlement layer, from the named borrower to
+  // the named lender. Principal and interest both move as reserves (`BANK_SECURITIES`) because
+  // the P&L for both sides is booked where it is computed — the borrower's interest expense and a
+  // bank lender's interest income in `evolveBankingSector`, an institution's in its own income
+  // line. Equity where the accrual is; cash through the ledger.
   maturedNow.forEach((c) => {
-    if (c.lender.kind !== 'INSTITUTION') return;
-    maturedByEntity.set(
-      c.lender.id,
-      (maturedByEntity.get(c.lender.id) ?? 0) + c.principalUSD + repoInterestToMaturityUSD(c)
-    );
-  });
-  if (maturedByEntity.size > 0) {
-    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-      const backUSD = maturedByEntity.get(e.id);
-      if (!backUSD) return e;
-      return { ...e, cashUSD: (e.cashUSD ?? 0) + backUSD };
+    const dueUSD = c.principalUSD + repoInterestToMaturityUSD(c);
+    if (!(dueUSD > 0)) return;
+    pay(ctx, {
+      payer: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
+      payee: repoLenderParty(c.lender, regionId),
+      amountUSD: dueUSD,
+      reason: 'repo maturity',
     });
-  }
+  });
 
   // What each bank still has pledged against contracts that did NOT mature.
   const encumberedByTicker = new Map<string, Map<string, number>>();
@@ -277,7 +284,12 @@ export function runRegionalRepoSession(
   banks.forEach((bank) => {
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
-    const shortfallUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO - sheet.cashReservesUSD;
+    // CASH: reserves plus what this week's already-posted legs will settle — the maturity it has
+    // just been billed for is real money leaving, and a bank that cannot see it cannot know it is
+    // short. The same read 07c makes before it bids.
+    const settledCashUSD = sheet.cashReservesUSD
+      + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
+    const shortfallUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO - settledCashUSD;
     if (shortfallUSD <= 0) return;
     const capacityUSD = unencumberedBorrowingCapacityUSD(sheet, haircuts, encumberedByTicker.get(bank.ticker));
     const needUSD = Math.min(shortfallUSD, capacityUSD);
@@ -296,7 +308,9 @@ export function runRegionalRepoSession(
   const regionEntities = ctx.updatedInstitutionalEntities.filter((e) => e.region === regionId && !e.isDefaulted);
   const overnightSleeveByEntity = new Map<string, number>();
   regionEntities.forEach((e) => {
-    const sleeveUSD = Math.max(0, e.cashUSD ?? 0) * CASH_SLEEVE_OVERNIGHT_SHARE;
+    // Its balance plus what its own matured contracts are about to pay it back.
+    const availableUSD = Math.max(0, (e.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: e.id }));
+    const sleeveUSD = availableUSD * CASH_SLEEVE_OVERNIGHT_SHARE;
     if (sleeveUSD > 0) overnightSleeveByEntity.set(e.id, sleeveUSD);
   });
 
@@ -349,7 +363,9 @@ export function runRegionalRepoSession(
   banks.forEach((bank) => {
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
-    const surplusUSD = sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
+    const surplusUSD = sheet.cashReservesUSD
+      + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker })
+      - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
     if (surplusUSD > 0) bankSurplusUSD.set(bank.ticker, surplusUSD);
   });
   const entitySleeveUSD = new Map(overnightSleeveByEntity);
@@ -542,29 +558,22 @@ export function runRegionalRepoSession(
     onNeedUSD
   );
 
-  // The cash the contracts actually raised, on both sides.
-  const cashByTicker = new Map<string, number>();
+  // CASH: the lender's money reaches the borrower through the settlement layer, named on both
+  // sides. It used to be four direct mutations that cancelled — and cancelling is not the same
+  // as being recorded, which is the whole reason the ledger exists.
   const lentByEntity = new Map<string, number>();
   newContracts.forEach((c) => {
-    cashByTicker.set(c.borrowerTicker, (cashByTicker.get(c.borrowerTicker) ?? 0) + c.principalUSD);
-    if (c.lender.kind === 'BANK') {
-      const sheet = sheetByTicker.get(c.lender.ticker);
-      if (sheet) sheetByTicker.set(c.lender.ticker, { ...sheet, cashReservesUSD: sheet.cashReservesUSD - c.principalUSD });
-    } else if (c.lender.kind === 'INSTITUTION') {
+    if (!(c.principalUSD > 0)) return;
+    if (c.lender.kind === 'INSTITUTION') {
       lentByEntity.set(c.lender.id, (lentByEntity.get(c.lender.id) ?? 0) + c.principalUSD);
     }
-  });
-  cashByTicker.forEach((cashUSD, ticker) => {
-    const sheet = sheetByTicker.get(ticker)!;
-    sheetByTicker.set(ticker, { ...sheet, cashReservesUSD: sheet.cashReservesUSD + cashUSD });
-  });
-  if (lentByEntity.size > 0) {
-    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-      const lentUSD = lentByEntity.get(e.id);
-      if (!lentUSD) return e;
-      return { ...e, cashUSD: (e.cashUSD ?? 0) - lentUSD };
+    pay(ctx, {
+      payer: repoLenderParty(c.lender, regionId),
+      payee: { kind: 'BANK_SECURITIES', ticker: c.borrowerTicker },
+      amountUSD: c.principalUSD,
+      reason: 'repo drawdown',
     });
-  }
+  });
   creditRrpOnUnlentSleeves(ctx, regionId, overnightSleeveByEntity, lentByEntity, rrpBps);
 
   return finish(
@@ -589,11 +598,19 @@ function creditRrpOnUnlentSleeves(
   rrpBps: number
 ): void {
   if (rrpBps <= 0 || sleeveByEntity.size === 0) return;
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-    if (e.region !== regionId) return e;
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    if (e.region !== regionId) return;
     const parkedUSD = (sleeveByEntity.get(e.id) ?? 0) - (lentByEntity.get(e.id) ?? 0);
-    if (parkedUSD <= 0) return e;
-    return { ...e, cashUSD: (e.cashUSD ?? 0) + (parkedUSD * (rrpBps / 10000)) / 52 };
+    if (parkedUSD <= 0) return;
+    const interestUSD = (parkedUSD * (rrpBps / 10000)) / 52;
+    if (!(interestUSD > 0)) return;
+    // The window pays it, and now says so: the non-bank mirror of the IOR banks earn.
+    pay(ctx, {
+      payer: { kind: 'CENTRAL_BANK', region: regionId },
+      payee: { kind: 'INSTITUTION', id: e.id },
+      amountUSD: interestUSD,
+      reason: 'reverse repo interest',
+    });
   });
 }
 

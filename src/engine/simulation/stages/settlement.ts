@@ -159,7 +159,57 @@ const partyKey = (p: PartyRef): string =>
  * bank's many customers become one reserve settlement — which is what a net settlement system
  * does, and what keeps this O(instructions) rather than O(instructions x books).
  */
+/**
+ * CASH — the week has TWO settlement cycles, and needs them.
+ *
+ * A single pass ran in the middle of the week, so every stage after it had nowhere to send a
+ * payment instruction and moved the two balances itself instead. That is the structural reason
+ * the migration stalled: not that those stages were written carelessly, but that posting was not
+ * an option for them. The insurers, the money fund, the ETFs, the FX desks, the estates and the
+ * treasury's redemptions all run after the mid-week pass.
+ *
+ * So it runs again at the close, and everything posted since settles then. A real day has an
+ * intraday cycle and an end-of-day cycle for exactly this reason. The two reports MERGE, because
+ * the invariants — the clearing house flat, nothing unresolved — are properties of the WEEK.
+ */
+export function mergeSettlementReports(a: SettlementReport, b: SettlementReport): SettlementReport {
+  const mergeMap = <K>(x: Map<K, number>, y: Map<K, number>): Map<K, number> => {
+    const out = new Map(x);
+    y.forEach((v, k) => out.set(k, (out.get(k) ?? 0) + v));
+    return out;
+  };
+  const mergeNested = <K>(x: Map<K, Map<string, number>>, y: Map<K, Map<string, number>>) => {
+    const out = new Map(x);
+    y.forEach((inner, k) => out.set(k, mergeMap(out.get(k) ?? new Map<string, number>(), inner)));
+    return out;
+  };
+  return {
+    ...b,
+    instructions: a.instructions + b.instructions,
+    grossUSD: a.grossUSD + b.grossUSD,
+    depositDeltaByBank: mergeMap(a.depositDeltaByBank, b.depositDeltaByBank),
+    reserveDeltaByBank: mergeMap(a.reserveDeltaByBank, b.reserveDeltaByBank),
+    tgaDeltaByRegion: mergeMap(a.tgaDeltaByRegion, b.tgaDeltaByRegion),
+    unmodeledDeltaByRegion: mergeMap(a.unmodeledDeltaByRegion, b.unmodeledDeltaByRegion),
+    corporateDepositDeltaByBank: mergeMap(a.corporateDepositDeltaByBank, b.corporateDepositDeltaByBank),
+    institutionalDepositDeltaByBank: mergeMap(a.institutionalDepositDeltaByBank, b.institutionalDepositDeltaByBank),
+    unmodeledDepositDeltaByBank: mergeMap(a.unmodeledDepositDeltaByBank, b.unmodeledDepositDeltaByBank),
+    smeDepositDeltaByBank: mergeMap(a.smeDepositDeltaByBank, b.smeDepositDeltaByBank),
+    smePoolFlowsByPool: mergeNested(a.smePoolFlowsByPool, b.smePoolFlowsByPool),
+    householdFlowsByRegion: mergeNested(a.householdFlowsByRegion, b.householdFlowsByRegion),
+    creditCreatedByBank: mergeMap(a.creditCreatedByBank, b.creditCreatedByBank),
+    bankEquityDeltaByBank: mergeMap(a.bankEquityDeltaByBank, b.bankEquityDeltaByBank),
+    unmodeledByReason: mergeMap(a.unmodeledByReason, b.unmodeledByReason),
+    householdDeferredUSD: a.householdDeferredUSD + b.householdDeferredUSD,
+    clearingHouseResidualUSD: a.clearingHouseResidualUSD + b.clearingHouseResidualUSD,
+    centralBankIssuanceUSD: a.centralBankIssuanceUSD + b.centralBankIssuanceUSD,
+    centralBankResidualUSD: a.centralBankResidualUSD + b.centralBankResidualUSD,
+    unresolvedUSD: a.unresolvedUSD + b.unresolvedUSD,
+  };
+}
+
 export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
+  const priorReport = ctx.lastSettlementReport;
   const instructions = ctx.paymentInstructions;
   const report: SettlementReport = {
     instructions: instructions.length,
@@ -184,8 +234,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     unresolvedUSD: 0,
   };
   if (instructions.length === 0) {
-    ctx.lastSettlementReport = report;
-    return report;
+    ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
+    return ctx.lastSettlementReport;
   }
 
   // ---- 1. Net every party's position. Order-independent by construction (addition), so the
@@ -421,7 +471,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   });
 
   report.centralBankResidualUSD = centralBankResidualUSD(report);
-  ctx.lastSettlementReport = report;
+  ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
   ctx.paymentInstructions = [];
   ctx.pendingNetByParty.clear();
   return report;

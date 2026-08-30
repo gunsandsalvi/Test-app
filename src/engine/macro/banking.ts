@@ -274,9 +274,11 @@ export function evolveBankingSector(
   const survivingSrfUSD = Math.min(survivingSecuredUSD, Math.max(0, prevBanking.srfBorrowingUSD ?? 0));
   const survivingRepoBorrowedUSD = survivingSecuredUSD - survivingSrfUSD;
   const survivingRepoLentUSD = Math.max(0, (prevBanking.repoLentUSD ?? 0) - maturingRepoLendPrincipalUSD);
-  cashUSD -= maturingRepoBorrowPrincipalUSD + maturingRepoBorrowInterestUSD;
+  // CASH: the P&L is this bank's own and is booked here; the MONEY moves through the settlement
+  // layer, posted by the repo session as instructions between the two named counterparties. The
+  // cash legs used to be taken here and credited to the lender in another stage — two direct
+  // mutations that happened to cancel, which is exactly what the ledger exists to replace.
   equityUSD -= maturingRepoBorrowInterestUSD;
-  cashUSD += maturingRepoLendPrincipalUSD + maturingRepoLendInterestUSD;
   equityUSD += maturingRepoLendInterestUSD;
 
   // ---- 2. Household deposit flow — HH4d: REAL flows only, no target. The full savings
@@ -485,12 +487,25 @@ export function evolveBankingSector(
       // every week — leaving both out of the residual moved the whole of each into wholesale,
       // and the per-bank identity broke by exactly the surviving repo (measured: 9.70B on one
       // USA bank, constant from the week its first term contract was struck).
-      + dealerDeskGrossUSD(prevBanking.dealerDeskInventory) + survivingRepoLentUSD
+      + dealerDeskGrossUSD(prevBanking.dealerDeskInventory)
+      // CASH: the maturing legs have NOT moved cash at this point in the week — the repo session
+      // posts them and the settlement pass executes them. So the residual is struck against the
+      // positions as they still stand; netting the maturity out here while the cash was still on
+      // the sheet moved it into wholesale funding permanently, and the identity broke by exactly
+      // the week's maturities once the cash legs became instructions.
+      //
+      // The INTEREST is the exception, and it is the one that survived the first fix: it has
+      // already been taken out of equity above, and its cash leaves at settlement, so the residual
+      // has to see the balance the week will END on. Principal nets out (asset and liability move
+      // together); interest does not, and left in it printed a one-week 15.7M identity break on
+      // whichever bank's repo book matured that week.
+      + (prevBanking.repoLentUSD ?? 0)
+      - maturingRepoBorrowInterestUSD + maturingRepoLendInterestUSD
       + (prevBanking.primeBrokerageLoansUSD ?? 0)
       - depositsUSD - corporateDepositsUSD
       - (prevBanking.institutionalDepositsUSD ?? 0) - (prevBanking.unmodeledDepositsUSD ?? 0)
       - (prevBanking.smeDepositsUSD ?? 0)
-      - survivingSecuredUSD
+      - ((prevBanking.repoBorrowedUSD ?? 0) + (prevBanking.srfBorrowingUSD ?? 0))
       - equityUSD
     ).toFixed(0)),
     corporateDepositsUSD,

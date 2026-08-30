@@ -213,8 +213,13 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // HH5: employment's one representation, re-read after defaults (08), mergers (10) and births
   // have landed — a bankrupt firm's staff are unemployed the week the firm goes, not the next.
   run('labor-reconciliation', () => runLaborReconciliationStage(state, ctx));
+  // CASH: the CLOSE. Everything the late stages posted — the insurers, the money fund, the ETFs,
+  // the FX desks, the estates, the treasury's redemptions — settles here. A week has two cycles
+  // because a day does, and without the second one those stages had nowhere to send a payment.
+  run('settlement-close', () => runSettlementStage(ctx));
   // PUB2: the central bank's week — remittances, the TGA, and the reserves its flows move.
-  // After stage 11 so every treasury flow of the week has posted.
+  // After stage 11 AND after the close, so every flow of the week has posted before it counts
+  // its own liabilities: settling reserves after it reconciled left its sheet not closing.
   run('central-bank', () => runCentralBankStage(state, ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));

@@ -51,6 +51,7 @@ import { CreditTierBook, AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-m
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
+import { bankTotalAssetsUSD } from '../../macro/banking';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
  * market's covenant ladder expresses (§5-RV's "lenders do not fund unlimited leverage"). */
@@ -894,10 +895,32 @@ export function runBankHouseholdLending(
  *
  * Idempotent: derived from the assets and equity actually present, so re-applying is safe.
  */
-export function applyBankFundingSplit(sheet: BankingSector, householdDepositsUSD: number): void {
-  const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a: number, v) => a + (Number(v) || 0), 0);
+export function applyBankFundingSplit(
+  sheet: BankingSector,
+  householdDepositsUSD: number,
+  /** CASH: reserves this bank has already been billed for or promised but that have not settled
+   *  yet. The sheet's repo and facility LIABILITIES are struck post-maturity the moment the
+   *  session re-derives them, while the cash for those maturities moves at the settlement pass —
+   *  so a split struck on the raw balance bakes the difference into wholesale funding, where
+   *  nothing ever takes it out again. Measured as a one-week 15.7M identity break on the bank
+   *  whose repo book halved that week. */
+  pendingCashUSD = 0
+): void {
+  // CASH/rule 3 — ONE IDENTITY, NOT TWO. This used to re-derive the funding need from its own
+  // partial list of assets: loans, sovereigns and cash, and nothing else. It knew nothing about
+  // repo lent or borrowed, the standing facility, the desks' inventory or the margin loans out to
+  // funds — so it disagreed with `evolveBankingSector`'s residual, which counts all of them, and
+  // whichever ran last won. It went unnoticed while every one of those lines was small or moved
+  // in step with cash; the moment the repo legs became payment instructions and stopped moving
+  // cash in the same breath as the liability, the two derivations came apart and the per-bank
+  // identity broke by the difference.
+  //
+  // `bankTotalAssetsUSD` is the one asset side; the secured funding lines are the liabilities
+  // this split is not responsible for. Whatever is left is what deposits and wholesale money
+  // have to cover.
   const fundingNeedUSD = Number((
-    sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
+    bankTotalAssetsUSD(sheet) + pendingCashUSD - sheet.bankEquityUSD
+      - (sheet.repoBorrowedUSD ?? 0) - (sheet.srfBorrowingUSD ?? 0)
   ).toFixed(0));
   sheet.depositsUSD = Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD));
   const afterHouseholdUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
