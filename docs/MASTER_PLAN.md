@@ -301,11 +301,11 @@ Read in this order:
 6. **Bank NIM and household interest income**, which G3c's deposit rate can take to zero for a
    liquid bank whose depositors are not leaving.
 7. **The price level and the JPN fiscal band**, against NAT's reseed and nothing earlier.
-8. **§7.208's four derivations — READ, at 12 weeks (§7.209).** The tier wage multiplier is inert
+8. **§7.208's four derivations — READ at 12 weeks (§7.209) and 60 (§7.211).** The tier wage multiplier is inert
    at the aggregate, the wage level owns the whole real-side move, the ladder owns the whole price
-   move, and CAL's two checks are green every week. What is still owed is the LONG read: whether
-   the price level in §6.1 settles or compounds over 60, and whether JPN's labour market recovers
-   or stays at ~25%.
+   move, and CAL's two checks are green every week — over sixty, its payable cross-check trips
+   zero times. The long read is IN (§7.211) and items 1-7 above are collectable for the first
+   time: the instrument works now.
 9. **§5-DER's verify list** — the swap spread and CDS-cash basis in calm weeks and under stress,
    contango when inventories are high and backwardation when scarce, expiry convergence, and
    hedged firms feeling less P&L from the shocks they hedged.
@@ -489,8 +489,11 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 
 | Defect | State and next action |
 |---|---|
+| **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | Distinct from §7.210's quit rate, which is fixed and holds for ~12 weeks. Over 60, EUR reaches 65% unemployment and UK prints 0.0% at week 49 — 52 band violations across EUR and JPN. **Next action: the same treatment that worked in §7.210 — find the week it turns, and check what is FLAT while employment moves.** Owner: HH5/LAB. |
+| **SUPPLIER MARKET SHARES DO NOT SUM TO 100%** | ~120 violations over 60 weeks in `agricultural_commodities` and `network_infrastructure`, in all four regions. **A goods-market accounting defect with nothing to do with prices**, invisible until the harness could run this long. Cheapest of the open rows and probably the most self-contained. Owner: the goods market (IND). |
+| **REPO COLLATERAL IS OVER-PLEDGED** | The largest single family in §7.211 (XIVF 56x, THSY 54x): a bank pledging more of a tenor bucket than it holds. `repoEncumberedCollateralUSD` is supposed to be reconciled against holdings every week by `reconcileRepoPledges`. Owner: WS6/REPO. |
 | **EUR GOVERNMENT OUTLAYS EXCEED ITS BUDGET** | New in §7.210's run, twice in twelve weeks (3.96B against 2.63B at week 11) and only in EUR. Interest and transfers are contractual and paid in full (PUB1e), so an outlay above budget means one of those grew past what the stance allows — most likely the interest bill, which CAL now pays on real dates. **Next action: print EUR's `decomposeGovernmentSpending` parts against `governmentOutlaysUSD` in the weeks it trips.** Owner: MAC. |
-| **THE PRICE LEVEL RUNS TO ~90% ANNUALISED** | Bisected to COH4's demand ladder (§7.208): the commit before it prints −4.78 and this one 34.96, on identical everything else. **The ladder is not obviously wrong and that is the point.** It posts the households' own derived reservation — a staple can draw on the whole budget, so the reservation is ~3.3× the going price — and a supply-short goods market clears there. Forcing the reach multiple to 1 drops week 1 from 29% to 3.3%, so the reservation is the driver; but the reservation is measured, and **the shortage it is meeting is §6's own damper defect, which the retired 1.9% bid premium was suppressing as rationing.** So the ladder did not create this; it stopped hiding it. **Do not put the premium back and do not cap the bid.** The well-posed question is why the goods market cannot supply the registry's own stated per-capita want. Owners: the supply-side work (SCALE/PROD), with COH4. |
+| **THE PRICE LEVEL NEITHER SETTLES NOR COMPOUNDS — IT OSCILLATES AT ~200%** | Bisected to COH4's demand ladder (§7.208): the commit before it prints −4.78 and this one 34.96, on identical everything else. **The ladder is not obviously wrong and that is the point.** It posts the households' own derived reservation — a staple can draw on the whole budget, so the reservation is ~3.3× the going price — and a supply-short goods market clears there. Forcing the reach multiple to 1 drops week 1 from 29% to 3.3%, so the reservation is the driver; but the reservation is measured, and **the shortage it is meeting is §6's own damper defect, which the retired 1.9% bid premium was suppressing as rationing.** So the ladder did not create this; it stopped hiding it. **Do not put the premium back and do not cap the bid.** The well-posed question is why the goods market cannot supply the registry's own stated per-capita want. **Read at 60 weeks (§7.211): 29 → 102 → 274 → 90, no fixed point and no runaway.** Owners: the supply-side work (SCALE/PROD), with COH4. |
 | **THE CAPITAL-GOODS SECTOR CANNOT SUPPLY THE ECONOMY'S CAPEX** | Firms bid their real capex and the basket weights sum to 1, so the bids ARE the capex figure: **~163B/yr of bids against ~13B/yr of deliveries, an 8% fill** (§7.167), four of five categories short at 65–174% over base (§7.168). §7.178 made the demand LEVEL honest (gap 1.55x → 1.29x) and §7.199 closed the seed's investment fixed point. **Both are UNMEASURED and this is measurement item 1.** It is the accumulated cost behind the ~29% unemployment that has been blocking unrelated work (§7.179). |
 | **THE BOOKS PRINT THEIR DAMPERS** | The engine states its own failure condition: a name clamped for weeks means the posted schedules disagree with the printed level and **the print is the damper, not the market.** Last measured **947 persistently bound** (890 before the OWN7 sweep, peaking at 1042 before the desk-position fix). §7.197 records the rise as the honest shape of deleting the residual dealer: **the pressure was always there.** **Do not widen the damper.** The well-posed question is: who buys when the holders as a group want less than they hold? Owners: SCALE (the float half), and the measurement run. |
 | **A SHOCK TEST STOPPED MOVING ITS PRICE** | `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an identical control world — no longer moves the name's price. Same signature as the sovereign-auction shock test: demand so far below the enlarged float that both A/B worlds pin at the damper. Re-measure after G3e's float change. |
@@ -1427,3 +1430,33 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        §7.209 was to put `LABOR_SHARE_OF_OUTPUT = 0.62` back, which would have hidden a quit rate
        that says everyone quits and left it waiting for whichever future change tightened a labour
        market next.
+211. **THE 60-WEEK READ — the first long run in the project's history, and the answer is no.**
+     §7.209 and §7.210 fixed the two defects that stopped the harness and the one that destroyed a
+     labour market. Neither made the model right; they made it MEASURABLE. This is the measurement.
+     - **647 violations in 92 families.** Zero in week 1, 36 in week 60 alone, accumulating
+       monotonically. **The model is structurally sound and dynamically divergent** — those are
+       different properties and only the first has been worked on.
+     - **The price level does NOT settle.** 29% (w1) → 102 (w13) → 239 (w14) → 274 (w49) → 90
+       (w60): not a level shift finding a new fixed point, and not a runaway either. It oscillates
+       at an absurd altitude. §6.1's row asked whether it settles or compounds over 60. **It does
+       neither, and that is a third answer worth having.**
+     - **Nominal GDP doubles (0.75T → 1.47T) on a price level that trebled.** Real output is
+       roughly flat to falling. The damper count is the one number moving the right way: 3003 → 613.
+     - **EUR's labour market fails late** (65% by w60) and UK's prints 0.0% at w49. §7.210 fixed the
+       quit rate; something else takes the labour market apart over a longer horizon, and it is not
+       the same defect.
+     - **The top families, in order, are where the next work is:** repo collateral over-pledged
+       (XIVF 56x, THSY 54x — a bank pledging more of a bucket than it holds), fund overdrafts
+       (PEF# 52x, and three equity funds), USA bank NIM out of band (41x), and **supplier market
+       shares that do not sum to 100% in `agricultural_commodities` and `network_infrastructure`
+       across all four regions (~120x combined)** — a goods-market accounting defect that has
+       nothing to do with prices and had never been visible.
+     - **CAL is clean.** Its cross-check — the treasury's payable against what its bank holders
+       carry — trips **zero times in sixty weeks**. The per-bank identity breaks that appear from
+       w14 are 6–39M on ~100B sheets (~0.0003%) and begin only once inflation is past 200%;
+       unattributed, and not the sovereign receivable.
+     - **What this read is worth:** items 1–7 of the measurement debt have been owed since §7.199
+       and could not be collected, because the instrument was broken. They are collectable now, and
+       the first collection says the honest thing: **the mechanisms are increasingly real and the
+       OUTCOMES are not yet plausible.** Rule 12's "measure once at the end" assumes you can measure
+       at all.
