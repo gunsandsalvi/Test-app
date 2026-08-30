@@ -598,12 +598,13 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | Defect | State and next action |
 |---|---|
 | **THE ORDER OF A SOURCE-FILE DECLARATION SETS UNEMPLOYMENT** | §7.222 measured it: reverse the order `05-unit-bidding` walks `INDUSTRY_SUBUNITS` — a declaration order, nothing economic — and week 1 aggregate net income moves +3.8%, GDP −0.12%, **every one of 2,496 firms buys a different amount**, and by week 2 seven more firms are dead and unemployment prints 9.49% against 9.61%. Sub-unit markets open one after another and firms spend one budget across all of them, so whichever market opens first is served first. That coupling is REAL (a firm has one wallet); what is arbitrary is that the queue is a file's declaration order. **Rule 19: an arbitrary implementation detail is setting a macro outcome.** The well-posed question is what the opening order should BE — simultaneous clearing across a firm's budget, or an order derived from something economic. Do not paper over it by pre-allocating per-market budgets: that lets a firm overspend. Owner: IND/SCALE. |
+| **THE SEED'S SUPPLY AND ITS DEMAND ARE TWO STATEMENTS ABOUT ONE ECONOMY, AND THEY DISAGREE BY SECTOR** | §7.224 measured it: **36 of the USA's 37 categories open with capacity below the demand the same seed generates** — 23% for `network_infrastructure`, 25% `consumer_devices`, 47% `household_chemicals`, against 300% for `upstream_extraction`. **The error is banded by sector, exactly**: every Tech sub-unit 0.50, every Industrials sub-unit 0.77, every Consumer sub-unit 1.23, Energy 1.31–1.49. So `companyGenerator`'s greedy line-dealing is right WITHIN a sector and the sector's total revenue is wrong — the roster's sector split and the IO demand solve never meet. The VALUE totals reconcile (IO gross output 1033B against firm+SME revenue 980B, 94.9%), which is why this never showed up as a missing-output defect. **Why it is the top row: the dispersion is a one-way ratchet on the price level** — a short market clears at the household's reservation (up to 3.3x) and a long one can only fall to the seller's unit cost — and that price level is what the labour market differences into layoffs. **Next action: find where a sector's total revenue is set and derive it from the demand its own sub-units carry** (§7.4: the seed opens in the shape the engine produces). `SECTOR_FIRM_COUNT` is a flat 10 per sector and `deriveInitialRevenueUSD` sizes a firm off its PRIMARY category alone, while the firm then spreads revenue over three lines — start there. Owner: the seed, with IND. |
 | **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | §7.213: 32,278 holding rows at seed → ~103,000 distinct positions by week 5, ~122,000 rows by week 15. **15% are duplicate `(holder, instrument)` rows and 9% are under $1,000.** §1's §7.4 rule is that the seed opens in the shape the weekly engine produces; this one does not, and every stage that walks the register pays for the gap. Consolidating duplicates and dust is ~25% off every register walk — the largest algorithmic item left. Owner: the seed, with SCALE. |
-| **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | Distinct from §7.210's quit rate, which is fixed and holds for ~12 weeks. Over 60, EUR reaches 65% unemployment and UK prints 0.0% at week 49 — 52 band violations across EUR and JPN. **Next action: the same treatment that worked in §7.210 — find the week it turns, and check what is FLAT while employment moves.** Owner: HH5/LAB. |
-| **SUPPLIER MARKET SHARES DO NOT SUM TO 100%** | ~120 violations over 60 weeks in `agricultural_commodities` and `network_infrastructure`, in all four regions. **A goods-market accounting defect with nothing to do with prices**, invisible until the harness could run this long. Cheapest of the open rows and probably the most self-contained. Owner: the goods market (IND). |
+| **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | **RE-DIAGNOSED IN §7.224: nothing in the labour market is wrong.** It reads `nominalGrowth - inflation`, and the inflation was a goods-market defect at week 1. With that fixed, EUR's 66% is gone and all four regions sit near 33%, but JPN now reaches 75% by week 58 and 69 band violations remain. **Do not touch the matching function or the quit rate until the capacity row below is closed** — the labour market will keep printing whatever the price level hands it. Owner: HH5/LAB, after IND. |
+| **SUPPLIER MARKET SHARES DO NOT SUM TO 100%** | **LARGELY CLOSED BY §7.224 — it was a symptom, not a defect.** Shares summed to 2-35% across dozens of categories in all four regions because the producers had been shed by the labour cascade; with the week-1 unit errors fixed it is **one** category (`JPN:heavy_equipment`, 10 weeks). Do not work this row directly — re-read it after the capacity row closes. |
 | **REPO COLLATERAL IS OVER-PLEDGED** | The largest single family in §7.211 (XIVF 56x, THSY 54x): a bank pledging more of a tenor bucket than it holds. `repoEncumberedCollateralUSD` is supposed to be reconciled against holdings every week by `reconcileRepoPledges`. Owner: WS6/REPO. |
 | **EUR GOVERNMENT OUTLAYS EXCEED ITS BUDGET** | New in §7.210's run, twice in twelve weeks (3.96B against 2.63B at week 11) and only in EUR. Interest and transfers are contractual and paid in full (PUB1e), so an outlay above budget means one of those grew past what the stance allows — most likely the interest bill, which CAL now pays on real dates. **Next action: print EUR's `decomposeGovernmentSpending` parts against `governmentOutlaysUSD` in the weeks it trips.** Owner: MAC. |
-| **THE PRICE LEVEL NEITHER SETTLES NOR COMPOUNDS — IT OSCILLATES AT ~200%** | Bisected to COH4's demand ladder (§7.208): the commit before it prints −4.78 and this one 34.96, on identical everything else. **The ladder is not obviously wrong and that is the point.** It posts the households' own derived reservation — a staple can draw on the whole budget, so the reservation is ~3.3× the going price — and a supply-short goods market clears there. Forcing the reach multiple to 1 drops week 1 from 29% to 3.3%, so the reservation is the driver; but the reservation is measured, and **the shortage it is meeting is §6's own damper defect, which the retired 1.9% bid premium was suppressing as rationing.** So the ladder did not create this; it stopped hiding it. **Do not put the premium back and do not cap the bid.** The well-posed question is why the goods market cannot supply the registry's own stated per-capita want. **Read at 60 weeks (§7.211): 29 → 102 → 274 → 90, no fixed point and no runaway.** Owners: the supply-side work (SCALE/PROD), with COH4. |
+| **THE PRICE LEVEL DOES NOT SETTLE** | **PARTLY CLOSED BY §7.224, AND THE OLD DIAGNOSIS WAS WRONG.** This row blamed COH4's demand ladder. The ladder is not the cause: two unit errors were, both at week 1 — the seasonal factor inside the production shutdown test (whole categories shipping zero) and a CPI whose base and current prices were different price concepts. Both fixed; mid-run inflation 2,266% -> 145%, week-60 50.8%, and the hyperinflating revenue prints (6.6e+21) are gone. **What remains is not oscillation, it is a ratchet**, and its cause is the row above: capacity dispersed against demand, short markets clearing at the reservation and long ones floored at cost. **Still do not put the bid premium back and do not cap the bid.** Owner: IND, via the capacity row. |
 | **THE CAPITAL-GOODS SECTOR CANNOT SUPPLY THE ECONOMY'S CAPEX** | Firms bid their real capex and the basket weights sum to 1, so the bids ARE the capex figure: **~163B/yr of bids against ~13B/yr of deliveries, an 8% fill** (§7.167), four of five categories short at 65–174% over base (§7.168). §7.178 made the demand LEVEL honest (gap 1.55x → 1.29x) and §7.199 closed the seed's investment fixed point. **Both are UNMEASURED and this is measurement item 1.** It is the accumulated cost behind the ~29% unemployment that has been blocking unrelated work (§7.179). |
 | **THE BOOKS PRINT THEIR DAMPERS** | The engine states its own failure condition: a name clamped for weeks means the posted schedules disagree with the printed level and **the print is the damper, not the market.** Last measured **947 persistently bound** (890 before the OWN7 sweep, peaking at 1042 before the desk-position fix). §7.197 records the rise as the honest shape of deleting the residual dealer: **the pressure was always there.** **Do not widen the damper.** The well-posed question is: who buys when the holders as a group want less than they hold? Owners: SCALE (the float half), and the measurement run. |
 | **A SHOCK TEST STOPPED MOVING ITS PRICE** | `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an identical control world — no longer moves the name's price. Same signature as the sovereign-auction shock test: demand so far below the enlarged float that both A/B worlds pin at the damper. Re-measure after G3e's float change. |
@@ -1932,3 +1933,74 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        exactly). §7.216, §7.218, §7.219 and §7.220 each spent longer than that being wrong.
        **The permutation test is the tool: to find out whether a loop is parallel, run it backwards
        and hash the world.**
+223. **THE RE-KEY AND THE SHARDED COMPANY WEEK — §7.222's TWO CONCLUSIONS, BUILT.**
+     - **`rng.ts` now has entity-scoped draws** (`beginEntityScope`/`endEntityScope`). A firm's
+       random number follows its own id, the week and the world's seed, so it gets the same draw
+       wherever it sits in a loop, on whichever core, in a roster of any size. The scope swaps the
+       state word rather than branching inside `random()`, which stays four operations.
+     - **THIS RESET EVERY DRAW IN THE SIMULATION.** Same distributions, same mechanisms, a different
+       world from week 1. **Every number in §7 measured before this commit is against the old
+       stream** and cannot be compared to one measured after it without re-running the baseline.
+       Applied to stage 08's company loop and stage 05's sub-unit loop.
+     - **Stage 08's loop is a sharded kernel.** Contiguous row ranges, each with its own
+       accumulators — credit events, defaults, rating changes, earnings, offerings, refinance news,
+       both tax buckets and the payment journal — folded back in shard order. `SHARDS=1`, `3` and
+       `8` produce the same world to the hash, which is the property the combine exists to have.
+       Shards run inline, so there is no speedup yet; what it buys is that no single mutable
+       accumulator threads one company to the next, which is the thing a worker cannot have.
+     - **TWO CONTENDED RESOURCES STAY SERIAL AND ARE NAMED IN THE CODE:** the money fund's finite
+       redeemable cash and the lead-bank allocator's capacity. Both must move out of the kernel and
+       into the combine before the worker step. §7.222 measured that neither binds in the opening
+       weeks — a fact about the current world, not a property to rely on.
+     - **WHAT IS STILL NOT BUILT, AND WHY.** The worker pool. A worker takes a `SharedArrayBuffer`
+       for free and cannot take an object graph at all, so sharding stage 08 across cores needs its
+       companies in columns first — the `src/engine/columns/` work. **`SHARDS` is the knob that
+       proves the combine; it does not yet buy a millisecond.** Do not report a speedup from this
+       commit.
+224. **THE LONG-HORIZON FAILURE IS ONE DEFECT IN THE GOODS MARKET, AND IT IS AT WEEK ONE.** §6.1
+     carried three separate rows — the price level oscillating, the labour market failing over 60
+     weeks, supplier market shares not summing to 100%. They are one cascade, and the harness could
+     not see it because every one of them is a SYMPTOM measured at week 40.
+     - **THE CHAIN, MEASURED END TO END.** Goods markets open short → prices clear at the
+       households' reservation → CPI runs → `desiredEmploymentGrowthAnnual` reads
+       `nominalGrowth − inflation` and prints a large negative → every firm sheds →
+       `staffedShare` falls → output falls → markets are shorter still. Sixty weeks in: EUR
+       unemployment 66%, inflation 2,266%, market shares at 2%, and firms whose revenue reached
+       **6.6e+21**. Nothing in the labour market is wrong. It is reading a broken price.
+     - **TWO ROOT DEFECTS FOUND AND FIXED, both at week 1, both in units rather than in behaviour.**
+       (a) **The seasonal factor was inside the shutdown test.** Unit cost was a FULL week's
+       operating cost over a SEASONALLY REDUCED volume, so a harvest good in its low season priced
+       its output at 1/0.70 of its real cost and idled the plant. At week one: **all 49** of the
+       USA's `agricultural_commodities` producers idle (96.35 against a price of 88.95) and **45 of
+       46** `residential_construction` producers idle (21202 against 20923) — margins of 8% and 1.3%
+       against seasonal factors of 0.702 and 0.750, on a seed struck at break-even by construction.
+       Both categories shipped ZERO units into markets demanding millions. (b) **The CPI was built
+       on two different prices** — the basket's base is the LANDED price (the seed has no shelf
+       price yet) and its current is the SHELF price, so week one printed the channel margin as
+       inflation. `??` was the wrong guard besides: an uncleared category's shelf price is NaN,
+       which is neither null nor undefined, so the fallback never fired and the category dropped
+       out of the basket entirely.
+     - **MEASURED, 60 weeks, same seed:** violations **1,792 → 641**, violation FAMILIES **831 → 64**,
+       mid-run inflation **2,266% → 145%**, week-60 inflation **50.8%**, EUR's 66% unemployment gone,
+       supplier-market-share violations from dozens of categories in all four regions down to
+       **one** (`JPN:heavy_equipment`). The hyperinflating revenue prints are gone entirely.
+     - **THE WORLD IS STILL WRONG AND THE NEXT DEFECT IS LOCATED.** Unemployment settles near 33%
+       and JPN reaches 75% by week 58. Upstream of it: **36 of the USA's 37 categories open with
+       production capacity BELOW the demand the same seed generates** — 23% for
+       `network_infrastructure`, 25% `consumer_devices`, 47% `household_chemicals`, against 300% for
+       `upstream_extraction`. The dispersion is what does the damage, not the average: a short
+       market clears at the household's reservation (up to 3.3x) while a long one can only fall to
+       the seller's unit cost, so dispersion in coverage is a one-way ratchet on the price level.
+     - **AND THE ERROR IS BANDED BY SECTOR, WHICH NAMES ITS CAUSE.** Producer revenue share against
+       demand share, per category: **every** Tech sub-unit 0.50, **every** Industrials/Materials
+       sub-unit 0.77, **every** Consumer/Health sub-unit 1.23, Energy 1.31–1.49. Within a sector the
+       greedy line-dealing in `companyGenerator` is exact; BETWEEN sectors the roster's revenue and
+       the IO demand solve are two independent statements about the same economy, off by up to 3x.
+       The seed's VALUE accounting reconciles to 94.9% (IO gross output 1033B against firm+SME
+       revenue 980B), so the totals are right and the SECTOR SPLIT is not. Every industry has an
+       SME pool, so pool coverage is not the gap.
+     - **THE METHOD THAT FOUND IT, AND IT IS THE ONE §7.221 PRESCRIBED.** Every step was a
+       measurement at week 1, never at week 40. The harness reports the labour band violation at
+       week 20 and the market-share violation at week 60; both are forty weeks downstream of a
+       comparison whose units were wrong on the first tick. **When a long run fails, measure the
+       first week, not the failure.**
