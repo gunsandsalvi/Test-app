@@ -573,7 +573,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: the desks' inventory, owned by the banks that took it. This auction prices the
     // BOND buckets only — the bill rows (07f's book) pass through, the same partition the
     // banks' own holdings above obey.
-    const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
+    const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
     const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => p.tenorKey.startsWith('b'));
     const newDealerInventory: { tenorKey: string; inventoryUSD: number }[] = [];
     deskViewById.forEach((inventoryUSD, instrumentId) => {

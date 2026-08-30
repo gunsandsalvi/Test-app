@@ -350,7 +350,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
       // same regional array as bonds under their own keys, and the bond rows pass through.
-      const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
+      const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
       const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !p.tenorKey.startsWith('b'));
       const billDealerRows = activeBuckets.map((b) => ({
         tenorKey: b.key,

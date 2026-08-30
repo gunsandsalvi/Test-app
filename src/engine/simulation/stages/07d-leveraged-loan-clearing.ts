@@ -417,7 +417,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: real dealer inventory.
     // G3a: owned by the desks that took it; the regional array is the derived sum.
-    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
+    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
     deskViewByCompany.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });

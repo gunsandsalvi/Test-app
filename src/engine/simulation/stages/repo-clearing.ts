@@ -148,9 +148,15 @@ export function unencumberedBorrowingCapacityUSD(
 }
 
 /**
- * REPO2 — which paper a borrower actually pledges, and how much of it. Cheapest-to-deliver: the
- * lowest-haircut bucket first, because that is the paper that raises the most cash per dollar of
- * face, which is what a treasury genuinely does. Returns the pledges and the cash they raise.
+ * REPO2 — which paper a borrower actually pledges, and how much of it.
+ *
+ * LONGEST FIRST, and the reason is the whole point of holding the short end. A bank's bills are
+ * its liquidity buffer: they are what the coverage ratio counts and what it must be able to SELL
+ * in the week it is short. Its long bonds are an investment book, and financing an investment
+ * book is exactly what secured funding is for. Pledging by lowest haircut instead — which looks
+ * like cheapest-to-deliver — puts the entire pledge into bills, encumbers the buffer, and then
+ * the bill auction has to sell paper the repo book says cannot move: measured immediately, banks
+ * pledging 6.1B of 13-week bills against 1.0B they still held by the end of the week.
  */
 export function selectCollateral(
   free: Map<string, number>,
@@ -158,7 +164,7 @@ export function selectCollateral(
   targetCashUSD: number
 ): { pledges: RepoPledge[]; raisedUSD: number } {
   const buckets = Array.from(free.entries())
-    .sort((a, b) => (haircuts[a[0]] ?? 1) - (haircuts[b[0]] ?? 1));
+    .sort((a, b) => (BUCKET_DURATION_YEARS[b[0]] ?? 0) - (BUCKET_DURATION_YEARS[a[0]] ?? 0));
   const pledges: RepoPledge[] = [];
   let raisedUSD = 0;
   for (const [bucketKey, freeFaceUSD] of buckets) {

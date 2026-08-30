@@ -24,9 +24,9 @@ function sheetOf(ctx: WeeklyStepContext, bank: Company) {
   return ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
 }
 
-function priorPositions(inv: DealerDeskInventory | undefined, book: string): Map<string, number> {
-  const byId = new Map<string, number>();
-  (inv?.[book] ?? []).forEach((p) => byId.set(p.instrumentId, p.inventoryUSD));
+function priorPositions(inv: DealerDeskInventory | undefined, book: string): Map<string, DealerDeskPosition> {
+  const byId = new Map<string, DealerDeskPosition>();
+  (inv?.[book] ?? []).forEach((p) => byId.set(p.instrumentId, p));
   return byId;
 }
 
@@ -67,7 +67,7 @@ export function buildDealerDeskParticipants(args: {
       book,
     });
     let priorTotalUSD = 0;
-    prior.forEach((v) => { priorTotalUSD += Math.abs(v); });
+    prior.forEach((p) => { priorTotalUSD += Math.abs(p.inventoryUSD); });
     if (capacityUSD <= 0 && priorTotalUSD <= 0) return;
 
     // A desk pays for inventory with the bank's own reserves, above the buffer it must keep —
@@ -82,9 +82,12 @@ export function buildDealerDeskParticipants(args: {
     instruments.forEach((inst, i) => {
       if (liveFloatUSD[i] <= 0) return;
       const floatShare = liveFloatUSD[i] / totalFloatUSD;
-      const priorUSD = Math.max(0, prior.get(inst.id) ?? 0);
+      const priorPos = prior.get(inst.id);
       const px = unitPrice(i);
-      if (priorUSD > 0) currentHoldingsByInstrumentId.set(inst.id, priorUSD / px);
+      // Carried at market: the position is the UNITS it holds, valued at this week's level.
+      const priorUnits = Math.max(0, priorPos?.units ?? (priorPos ? priorPos.inventoryUSD / px : 0));
+      const priorUSD = priorUnits * px;
+      if (priorUnits > 0) currentHoldingsByInstrumentId.set(inst.id, priorUnits);
       const roomUSD = capacityUSD * floatShare;
       const maxHoldingUSD = priorUSD + roomUSD;
       if (maxHoldingUSD <= 0) return;
@@ -130,6 +133,11 @@ export function applyDealerDeskFills(args: {
   ctx: WeeklyStepContext;
   banks: Company[];
   book: string;
+  /** The names this session actually priced. A stage may only rewrite the instruments it
+   *  cleared (§7.34): a desk position in a name that carried no float this week is untouched,
+   *  not deleted — rebuilding the book from the fills alone made those positions vanish with no
+   *  cash leg, which is the exact WS5 bug, caught by the per-bank identity in its first probe. */
+  instruments: ClearingInstrument[];
   result: ClearingResult;
   /** The unit price, for a book that clears in units — the inventory a bank carries is money. */
   unitPriceOf?: (instrumentId: string) => number;
@@ -146,21 +154,34 @@ export function applyDealerDeskFills(args: {
     const fills = result.newParticipantHoldings.get(deskId);
     if (!fills) { inventories.push(sheet.dealerDeskInventory); return; }
 
+    const clearedIds = new Set(args.instruments.map((i) => i.id));
     const prior = priorPositions(sheet.dealerDeskInventory, book);
-    let prevUSD = 0;
-    prior.forEach((v) => { prevUSD += v; });
+    // The book is carried at MARKET: what it held, valued at this week's level. The change from
+    // last week's carrying value is real trading P&L and hits equity. Without the mark, the
+    // difference between the cost the position was booked at and the price this week's cash leg
+    // used showed up as a phantom fee, and the per-bank identity drifted by exactly it.
+    let prevMarkedUSD = 0;
+    let markToMarketUSD = 0;
     const positions: DealerDeskPosition[] = [];
+    prior.forEach((p, instrumentId) => {
+      if (!clearedIds.has(instrumentId)) { positions.push(p); return; }
+      const units = p.units ?? p.inventoryUSD;
+      const markedUSD = units * unitPrice(instrumentId);
+      prevMarkedUSD += markedUSD;
+      markToMarketUSD += markedUSD - p.inventoryUSD;
+    });
     let newUSD = 0;
     fills.forEach((units, instrumentId) => {
+      if (!clearedIds.has(instrumentId)) return;
       const inventoryUSD = units * unitPrice(instrumentId);
       if (Math.abs(inventoryUSD) <= 1) return;
-      positions.push({ instrumentId, inventoryUSD });
+      positions.push({ instrumentId, inventoryUSD, units });
       newUSD += inventoryUSD;
     });
     const cashDeltaUSD = args.cashDeltaOf
       ? args.cashDeltaOf(deskId)
       : (result.netCashDeltaByParticipantId.get(deskId) ?? 0);
-    const feeUSD = Math.max(0, -(cashDeltaUSD + (newUSD - prevUSD)));
+    const feeUSD = Math.max(0, -(cashDeltaUSD + (newUSD - prevMarkedUSD)));
 
     const inventory: DealerDeskInventory = { ...(sheet.dealerDeskInventory ?? {}) };
     if (positions.length > 0) inventory[book] = positions;
@@ -169,7 +190,7 @@ export function applyDealerDeskFills(args: {
     ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
       ...sheet,
       dealerDeskInventory: inventory,
-      bankEquityUSD: sheet.bankEquityUSD - feeUSD,
+      bankEquityUSD: sheet.bankEquityUSD - feeUSD + markToMarketUSD,
     };
     inventories.push(inventory);
   });

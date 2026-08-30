@@ -66,7 +66,12 @@ export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
 /** One name a desk is long (or short, when negative) in one book. */
 export interface DealerDeskPosition {
   instrumentId: string;
+  /** Marked to this week's cleared level. A trading book is carried at market, not at cost. */
   inventoryUSD: number;
+  /** For a book that clears in UNITS (07e's shares), the position itself. `inventoryUSD` is
+   *  then this times the current price, and the difference week to week is real trading P&L —
+   *  without it, the mark showed up as a phantom fee and the per-bank identity drifted by it. */
+  units?: number;
 }
 
 /** A bank's market-making inventory, by book ('corporate bond', 'sovereign bond', ...). */

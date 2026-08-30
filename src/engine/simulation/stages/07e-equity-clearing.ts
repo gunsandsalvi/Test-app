@@ -404,7 +404,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // that carried it — the equity desk held nothing however one-sided the session was, because
     // the engine's residual came back in shares and this adapter dropped it.
     applyDealerDeskFills({
-      ctx, banks: regionBanks, book: BOOK, result,
+      ctx, banks: regionBanks, book: BOOK, instruments, result,
       unitPriceOf: (companyId) => companyById.get(companyId)?.stockPrice ?? 0,
       cashDeltaOf: (deskId) => deskCashUSD.get(deskId) ?? 0,
     });

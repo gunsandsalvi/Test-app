@@ -442,7 +442,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Apply: each desk's inventory, onto the bank that carried it. The regional array is now
     // the DERIVED sum of the named desks — nothing decides off it (G3a).
-    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
+    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
     deskViewByCompany.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });

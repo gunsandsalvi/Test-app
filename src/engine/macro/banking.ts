@@ -264,6 +264,14 @@ export function evolveBankingSector(
   // same way. Interest is P&L; principal is not. The standing facility is in here too — a window
   // draw is a repo contract with the central bank as the named lender, so it matures like one
   // instead of being repaid off a separate scalar at a posted rate. ----
+  // What is STILL outstanding once this week's maturities have settled. A term book means these
+  // are not zero, and everything downstream — the funding residual, the leverage ratio, the
+  // identity — has to see them. The repo session overwrites all three from the region's book.
+  const survivingSecuredUSD = Math.max(0,
+    (prevBanking.repoBorrowedUSD ?? 0) + (prevBanking.srfBorrowingUSD ?? 0) - maturingRepoBorrowPrincipalUSD);
+  const survivingSrfUSD = Math.min(survivingSecuredUSD, Math.max(0, prevBanking.srfBorrowingUSD ?? 0));
+  const survivingRepoBorrowedUSD = survivingSecuredUSD - survivingSrfUSD;
+  const survivingRepoLentUSD = Math.max(0, (prevBanking.repoLentUSD ?? 0) - maturingRepoLendPrincipalUSD);
   cashUSD -= maturingRepoBorrowPrincipalUSD + maturingRepoBorrowInterestUSD;
   equityUSD -= maturingRepoBorrowInterestUSD;
   cashUSD += maturingRepoLendPrincipalUSD + maturingRepoLendInterestUSD;
@@ -399,11 +407,7 @@ export function evolveBankingSector(
   // ---- 7. Statistics — readings of the ledger, never drivers of it. The NIM damping factor
   // that clamped loan yields whenever the margin exceeded 5% is deleted (a clamp on a price,
   // rule 2): if the margin is wrong, its inputs are wrong, and those are G2's to make real. ----
-  // The repo asset that survives this week's maturations: what the sheet still carries less what
-  // just came back. (The session below strikes the new book; the margin here reads the ledger as
-  // it stands at this point, which is what it has always done.)
-  const repoAssetUSD = Math.max(0, (prevBanking.repoLentUSD ?? 0) - maturingRepoLendPrincipalUSD);
-  const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + repoAssetUSD;
+  const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + survivingRepoLentUSD;
   const netInterestMarginPct = totalAssetsUSD > 0
     ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD - corporateDepositInterestUSD) * 52) / totalAssetsUSD
     : 0.025;
@@ -445,11 +449,15 @@ export function evolveBankingSector(
     // position is final — all of them in the repo session, the standing facility included, since
     // a window draw is a contract with the central bank as the named lender. These four are then
     // DERIVED from the region's book. What came due settled in step 1 above.
-    srfBorrowingUSD: 0,
+    srfBorrowingUSD: survivingSrfUSD,
     onRrpLendingUSD: 0,
-    repoLentUSD: 0,
-    repoBorrowedUSD: 0,
-    repoEncumberedCollateralUSD: 0,
+    repoLentUSD: survivingRepoLentUSD,
+    repoBorrowedUSD: survivingRepoBorrowedUSD,
+    repoEncumberedCollateralUSD: prevBanking.repoEncumberedCollateralUSD ?? 0,
+    // G3a: the desks' inventory persists across weeks; only real fills move it, in the stages
+    // that own it. This return rebuilds the sheet from a fixed field list, so leaving it out
+    // deleted every desk's book every week with no cash leg.
+    dealerDeskInventory: prevBanking.dealerDeskInventory,
     // G2: the itemized book and the corporate-deposit view are owned by the G2 stages
     // (bank-lending.ts / 02b); carried through evolution untouched.
     businessLoans: prevBanking.businessLoans || [],
@@ -468,9 +476,16 @@ export function evolveBankingSector(
     // not noticed).
     wholesaleFundingUSD: Number((
       businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD
+      // G3a: the desks' inventory is an asset this bank owns and finances. REPO1/REPO3: secured
+      // funding that has NOT matured is still a liability, and a term book means there is some
+      // every week — leaving both out of the residual moved the whole of each into wholesale,
+      // and the per-bank identity broke by exactly the surviving repo (measured: 9.70B on one
+      // USA bank, constant from the week its first term contract was struck).
+      + dealerDeskGrossUSD(prevBanking.dealerDeskInventory) + survivingRepoLentUSD
       - depositsUSD - corporateDepositsUSD
       - (prevBanking.institutionalDepositsUSD ?? 0) - (prevBanking.unmodeledDepositsUSD ?? 0)
       - (prevBanking.smeDepositsUSD ?? 0)
+      - survivingSecuredUSD
       - equityUSD
     ).toFixed(0)),
     corporateDepositsUSD,
