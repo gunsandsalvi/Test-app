@@ -519,7 +519,7 @@ row below is their replacement, and §7 itself is left exactly as written.*
 | **GUARD** — silent failures become loud | §7.105 | Five silent defaults throw at the read (`domain/defect.ts`); the UI renders an em dash. **Two were hiding live bugs** — no seeded company carried a `listingStatus`, and a merger's consolidated tranche lost its call protection AND its bank-facility flag, recreating the G2 double-count inside 07d's float. Three dead stage-01 outputs deleted with a full-universe weekly sweep. Three new invariants: category shares sum to one, a market with a funded borrower must clear non-zero volume (measured by the session, not the closing balances), and a holding ceiling must be able to exceed its own position. |
 | **OWN7** — the corporate over-holding | §7.104 | Harness 602 → 107. **A float is what the participants in THIS book can hold between them** — not the whole issue, because a holder that does not bid keeps its position. Ownership is now measured, keyed by issuer, and conserved; the one remaining over-hold is a defaulted issuer's paper, which is G5's. |
 | **IDX** — an index is a statistic | §7.134 | The published index is the cap-weighted move of its own constituents with **no bound**, the $0.10 stock-price floor is gone, **beta is measured** off each name's cleared returns against its own region's index, and every published name is generated — five real index brands and four central banks deleted (rule 4). Sector sub-indices filter to `listed` like the regional ones, closing a latent double-count. |
-| **CASH** — one settlement layer | §7.87–89, §7.91–93, §7.103 | Stages do not move money; they record an instruction and one stage executes them. Money is a named bank's liability, a loan creates a deposit, the cleared books settle through a clearing house, and the per-bank identity is the gate that holds every week. **What is left is a boundary with a size and an owner, not a leak:** `dealer inventory` (G3), `primary distribution`/`primary proceeds` (WS8), `commercial paper` (no cleared book yet), and `non-auction operating receipts` — the true edge of the modelled world. |
+| **CASH** — one settlement layer | §7.87–89, §7.91–93, §7.103, §7.195 | Stages do not move money; they record an instruction and one stage executes them. Money is a named bank's liability, a loan creates a deposit, the cleared books settle through a clearing house, and the per-bank identity is the gate that holds every week. **THE MIGRATION IS NOT FINISHED, AND IT IS NOW MEASURED (§7.195): 12.2B gross over ten weeks moves with no payment instruction behind it, 11.6B of it INSTITUTIONAL cash.** 02b's `reconcileUSD` invents the matching reserves, which is why every check passed — the plug is why nobody noticed. The boundary lines are a separate and smaller thing: `dealer inventory` (G3 shrank it), `primary distribution`/`primary proceeds` (WS8), `commercial paper` (no cleared book yet), and `non-auction operating receipts` — the true edge of the modelled world.
 
 ---
 
@@ -6540,3 +6540,45 @@ that proved it, the lesson.
     - **And the swap spread finally means what a swap spread means:** secured money against the
       government's own yield at the same tenor. Two credits, two markets, one number. Against
       `zeroRates` — the SOVEREIGN curve — it is a genuinely different thing, which is the point.
+
+195. **THE SETTLEMENT SWEEP — every line that moves cash or an asset, read, and the bypass
+     measured.** *(User, 2026-08-30: "go through each line of the file and verify if there is cash
+     or assets moving outside the clearing and settlement systems".)*
+    - **The measurement first, because 02b was already computing it and nobody printed it.** Its
+      `reconcileUSD` line invents the reserves behind any holder balance that moved without a
+      payment instruction, and its own comment has always called it "the migration's own progress
+      meter: it goes to zero when every stage records instructions." **12.2B gross over ten weeks
+      — corporate 0.9B, SME 0.4B, INSTITUTIONAL 11.6B.** The plug is exactly why this was
+      invisible: it keeps the per-bank identity from drifting, so every check passed while a
+      second, unrouted way of moving money survived beside the first (rule 3).
+    - **ASSETS ARE CLEAN.** Every writer of `itemizedHoldings`, `sovereignBondHoldingsByTenor`,
+      `businessLoans`/`householdLoans`, the desk books and the repo/swap/prime-brokerage books is
+      the stage that owns it or a documented one (estate write-offs, bill accretion, redemptions).
+      No asset moves without its owner moving it.
+    - **CASH: 25 sites outside `settlement.ts`, all read.** Every one is TWO-SIDED — nothing
+      creates money from nothing — but most move both balances DIRECTLY instead of posting an
+      instruction. In classes:
+      - **Institutional, and this is the 11.6B**: the repo session's four legs, the money fund's
+        diversion and its management fee, PE capital calls and distributions, ETF creations, the
+        insurers' premium/benefit net, the FX desks' marks and margin, the sovereign coupon
+        credit, and bill/bond redemptions. Each pairs correctly; none posts.
+      - **Corporate and household, mostly migrated**: companies settle through instructions, and
+        the household side reaches the banks through `pendingBankSettlementUSD` at T+1 — which is
+        a SECOND routing path beside `pay()`, and is itself a rule-3 observation worth recording.
+      - **Named boundaries, not leaks**: the RRP interest institutions earn (the central-bank
+        boundary, G9's), consumer principal coming home from household income, and
+        `facilityNetOriginationUSD`'s residue, which `bank-lending.ts` already documents as "a
+        change with no payment behind it".
+      - **`shared-helpers.ts`'s register fallback** credits cash directly only when
+        `paymentInstructions` is absent; with settlement live it posts. Dead path, kept for the
+        seed.
+    - **REPO TREATS COUPONS CORRECTLY, and now it says so.** A pledged bond stays on the
+      borrower's `sovereignBondHoldingsByTenor` and encumbrance is a separate face amount, so the
+      coupon accrues to the collateral GIVER and the lender earns only repo interest. That is
+      PLEDGE semantics, single-counted, with no manufactured payment needed. (Under
+      sale-and-repurchase semantics title would pass and the coupon would be manufactured back —
+      the same net, and the model does not need both.)
+    - **What this does NOT say.** Nothing here is a conservation break: the identity holds, the
+      clearing house is flat, and nothing is unresolved. What it says is that the settlement layer
+      is not yet the ONLY way money moves, that the gap is almost entirely institutional cash, and
+      that there is now a number on it to watch down.
