@@ -11,6 +11,7 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
+import { isActiveCompany } from '../../../domain/company';
 import { decomposeGovernmentSpending } from '../../../domain/government';
 import { pay } from './settlement';
 import { SME_WAGE_GAP } from '../../bootstrap/firms';
@@ -171,15 +172,25 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) {
-          // These categories' real demand/growth signal now comes entirely from stage05's real
-          // per-company capex bids and Phase 1's real-sales revenue reconciliation, not from
-          // this stage's statistical demandLevelUSD/demandGrowthAnnual — this placeholder just
-          // carries the level forward unchanged (no growth signal from here) so the field stays
-          // a sane, non-zero number for anything that still reads it (e.g. the commodities UI).
-          // No corporateDemandUSD here either — these categories' real bids in stage05 are
-          // sized directly from each buyer's own capex, not from a generic corporate-demand
-          // share, to avoid double-counting.
-          allTargets[su.unitId] = reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId]);
+          // RULE 3 — INVESTMENT WAS REPRESENTED TWICE, and this is where the second copy lived.
+          //
+          // The level was CARRIED FORWARD UNCHANGED from the seed — a frozen placeholder — while
+          // the real demand was each firm's own capex, bid directly in stage 05. So the
+          // capital-goods industries were SIZED for one number and ASKED for another: measured
+          // 54.0B/yr built against 83.6B/yr bid, **1.55x** (§7.168), and four of the five
+          // categories in permanent shortage as a result.
+          //
+          // The level IS the firms' own capex now — a measurement of what they will actually bid,
+          // not a statistic beside it. `corporateDemandUSD` still stays absent: stage 05 sizes
+          // those bids from each buyer's capex directly, and adding a generic corporate share on
+          // top would be the double count this comment originally warned about.
+          const capexDemandUSD = ctx.updatedCompanies.reduce((a, c) => (
+            c.region === regionId && isActiveCompany(c)
+              ? a + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) * CAPEX_SUPPLIER_WEIGHTS[su.unitId]
+              : a), 0);
+          allTargets[su.unitId] = capexDemandUSD > 0
+            ? capexDemandUSD
+            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId]));
           smoothingByCategory[su.unitId] = 0.08;
           return;
         }
