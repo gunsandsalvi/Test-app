@@ -9,7 +9,10 @@
 
 import { RegionId, OccupationType } from '../../types';
 import { getRegionProductivityPerCapitaUSD } from './population';
-import { LABOR_SHARE_OF_OUTPUT } from './national-accounts';
+import { derivedLabourShareOfValueAdded } from '../../domain/industry-registry';
+import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from '../simulation/constants';
+import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
+import { getRegionNeutralRate } from './yield-curves';
 
 // Structural skill tier per occupation (1 = least specialized). The ordering is a modeling
 // choice about which occupations command a wage premium, not a copied wage survey.
@@ -69,7 +72,21 @@ const BASELINE_WEIGHTED_TIER_PREMIUM = (Object.keys(OCCUPATION_SKILL_TIER) as Oc
  */
 export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType, number> {
   const productivity = getRegionProductivityPerCapitaUSD(regionId);
-  const averageWage = productivity * LABOR_SHARE_OF_OUTPUT;
+  // COH3 — THE WAGE LEVEL IS NO LONGER A STATED LABOUR SHARE. `LABOR_SHARE_OF_OUTPUT = 0.62` set
+  // every occupation's base wage, and through it household income, the labour market, every
+  // employer's payroll and the freight market's crew cost. It is derived now from what the
+  // technology actually leaves after capital is paid for (domain/industry-registry.ts).
+  //
+  // The cost of capital here is the region's own STRUCTURAL one — its neutral rate plus the
+  // equity risk premium — not this week's policy rate. A base wage is an anchor; the cyclical
+  // movement is the labour market's, carried by each occupation's `wageIndex` from what
+  // employers actually offer. Putting the policy rate here as well would be a second cyclical
+  // channel on the same quantity (rule 3).
+  const averageWage = productivity * derivedLabourShareOfValueAdded({
+    ppeIntensityBySector: SECTOR_PPE_INTENSITY,
+    usefulLifeYearsBySector: SECTOR_PPE_USEFUL_LIFE_YEARS,
+    costOfCapitalAnnual: getRegionNeutralRate(regionId) + EQUITY_RISK_PREMIUM,
+  });
   const result = {} as Record<OccupationType, number>;
   (Object.keys(OCCUPATION_SKILL_TIER) as OccupationType[]).forEach((occ) => {
     const tier = OCCUPATION_SKILL_TIER[occ];

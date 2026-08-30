@@ -1173,3 +1173,50 @@ export function industryOfSubUnit(unitId: string): Industry | undefined {
 export function financingProfileOf(industry: Industry): { fixedRateTilt: number; maxPayoutRatio: number } {
   return INDUSTRY_REGISTRY[industry].financingProfile;
 }
+
+/**
+ * COH3 — THE LABOUR SHARE OF VALUE ADDED, DERIVED FROM THE TECHNOLOGY.
+ *
+ * A firm's value added splits into labour compensation and gross operating surplus, and the
+ * surplus must cover what the capital costs: it wears out, and its owners require a return. So
+ *
+ *     labourShare = 1 − (depreciation rate + cost of capital) × (capital / value added)
+ *
+ * and every term is a primitive the registry or the seed already carries. **Capital per unit of
+ * value added is not the same as capital per unit of REVENUE** — `SECTOR_PPE_INTENSITY` is the
+ * second, and value added is revenue net of what the recipe consumes, so the ratio is
+ * `intensity / (1 − recipe intensity)`. Depreciation is one over the sector's own useful life.
+ *
+ * What this replaces is `LABOR_SHARE_OF_OUTPUT = 0.62`, a stated share that set every
+ * occupation's base wage — the anchor under household income, the labour market, every payroll
+ * and the freight market's crew cost. It is rule 19's clearest surviving case: a claim about the
+ * answer, in the one place the answer is most load-bearing.
+ *
+ * The weighting across sectors is each sector's own share of the economy's OUTPUT, from the
+ * registry's own sub-unit composition — not a chosen mix.
+ */
+export function derivedLabourShareOfValueAdded(args: {
+  ppeIntensityBySector: Record<string, number>;
+  usefulLifeYearsBySector: Record<string, number>;
+  costOfCapitalAnnual: number;
+}): number {
+  let weighted = 0;
+  let total = 0;
+  allSubUnits.forEach((su) => {
+    const spec = Object.values(INDUSTRY_REGISTRY).find((i) => i.subUnits.includes(su));
+    const sector = spec?.sector;
+    if (!sector) return;
+    const intensity = args.ppeIntensityBySector[sector];
+    const life = args.usefulLifeYearsBySector[sector];
+    if (!(intensity > 0) || !(life > 0)) return;
+    const recipe = Math.min(0.95, Math.max(0, recipeIntensityOf(su.unitId)));
+    const capitalPerValueAdded = intensity / (1 - recipe);
+    const surplusShare = (1 / life + Math.max(0, args.costOfCapitalAnnual)) * capitalPerValueAdded;
+    // A sub-unit whose capital charge exceeds its whole value added contributes a zero labour
+    // share, not a negative one — that is a firm that cannot cover its capital, which is a real
+    // state and CAP's mechanism, not an arithmetic to carry into an average.
+    weighted += Math.max(0, 1 - surplusShare);
+    total += 1;
+  });
+  return total > 0 ? weighted / total : 0;
+}

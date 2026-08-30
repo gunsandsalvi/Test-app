@@ -1,3 +1,13 @@
+import { derivedLabourShareOfValueAdded } from '../../domain/industry-registry';
+import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from '../simulation/constants';
+
+/**
+ * The cost of capital the IDENTITY's reference share is struck at — the productivity-growth
+ * trend plus the inflation target plus the equity risk premium, i.e. a region at its own neutral
+ * rate. Each region's actual wage level uses its OWN neutral rate; this is the one number the
+ * cross-region identity is defined against.
+ */
+const REFERENCE_COST_OF_CAPITAL_ANNUAL = 0.065;
 /**
  * National Accounts Identity
  *
@@ -40,8 +50,21 @@
  * §6.1's household-income row. Retiring this module is that row's real content.
  */
 
-/** Share of output paid out as wages — the labor share. */
-export const LABOR_SHARE_OF_OUTPUT = 0.62;
+/**
+ * COH3 — THE LABOUR SHARE NO LONGER SETS THE WAGE LEVEL. `getBaseAnnualWageUSD` derives it from
+ * the technology (`derivedLabourShareOfValueAdded`): what value added leaves after the capital
+ * that produced it is depreciated and its owners paid. What survives here is the identity's own
+ * REFERENCE share — the one the capital-income ratio below is defined against — and it is now
+ * that same derivation at a reference cost of capital, so the two cannot silently disagree.
+ *
+ * They did: this was 0.62 while the derivation lands near 0.79, so capital income per wage dollar
+ * was being computed against a labour share the model had stopped using.
+ */
+export const LABOR_SHARE_OF_OUTPUT = derivedLabourShareOfValueAdded({
+  ppeIntensityBySector: SECTOR_PPE_INTENSITY,
+  usefulLifeYearsBySector: SECTOR_PPE_USEFUL_LIFE_YEARS,
+  costOfCapitalAnnual: REFERENCE_COST_OF_CAPITAL_ANNUAL,
+});
 
 /**
  * Share of output households receive as capital income (dividends, interest, rent). The rest of

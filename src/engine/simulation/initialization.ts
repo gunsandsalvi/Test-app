@@ -62,7 +62,6 @@ import { isActiveCompany } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
 import { centralBankAssetsUSD, centralBankCurrencyResidualUSD, unbackedBankCashUSD, CENTRAL_BANK_SOVEREIGN_SHARE } from '../../domain/central-bank';
 import { reconcileEmploymentView } from './stages/labor-market';
-import { LABOR_SHARE_OF_OUTPUT } from '../bootstrap/national-accounts';
 import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
