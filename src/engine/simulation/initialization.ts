@@ -1,5 +1,5 @@
 
-import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
+import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
 import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
@@ -265,10 +265,23 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       subUnits.forEach(su => {
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
         govBudgetByCategory[su.unitId] = suGovDemand / 52;
+        // SUPPLY/CHAIN — INVESTMENT GOES WHERE CAPEX IS ACTUALLY SPENT.
+        //
+        // `I` used to be spread across EVERY corporate-bought good by its corporate buyer-mix
+        // weight, while stage 05's firms bid their capex only into the five CAPITAL-GOODS
+        // categories by `capexBasketWeight`. **Two different allocations of the same investment
+        // number**, and the capital-goods industries were therefore built for a fraction of what
+        // would be bid at them: measured 54.0B/yr sized against 83.6B/yr bid, 1.55x, with four of
+        // five categories in permanent shortage (§7.168).
+        //
+        // A corporate purchase of a NON-capital good is intermediate demand, not final demand,
+        // and the Leontief solve below already produces it from the recipes — so putting it here
+        // as well was counting it twice from the other side.
+        const capexWeight = CAPEX_SUPPLIER_WEIGHTS[su.unitId] ?? 0;
         finalDemandBySubUnit[su.unitId] =
           (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
           + suGovDemand
-          + (totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0);
+          + capexWeight * I;
       });
     });
     const totalOutputBySubUnit = totalOutputFromFinalDemand(finalDemandBySubUnit);

@@ -11,9 +11,12 @@ import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFro
 import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, seedPoolLeverageStrata, SME_POOL_STRATA_COUNT } from '../bootstrap/firms';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
-import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
+import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../domain/market-microstructure';
 import { INITIAL_WEATHER } from './weather';
-import { getRegionPopulation, getRegionProductivityPerCapitaUSD, getRegionBirthRateAnnual, getRegionDeathRateAnnual } from '../bootstrap/population';
+import {
+  getRegionPopulation, getRegionProductivityPerCapitaUSD, getRegionBirthRateAnnual, getRegionDeathRateAnnual,
+  stationaryAgeDistribution, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS, MAX_AGE_YEARS,
+} from '../bootstrap/population';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import { CPI_BASE_LEVEL, seedCpiHistory } from '../simulation/stages/price-index';
 import {
@@ -96,12 +99,23 @@ export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncome
   };
 }
 
-export function createLifeCycleDistribution(): Record<LifeCycleStage, LifeCycleStageData> {
+/**
+ * DEM — the four stage shares are BANDS of the seed's own stationary age structure now, not four
+ * stated numbers (§7.181). The structure follows from the Gompertz hazard and the region's own
+ * birth rate, so a region whose fertility the demographic transition put low opens OLDER — which
+ * is the difference between regions arriving as an outcome instead of a table (rule 4).
+ */
+export function createLifeCycleDistribution(birthRateAnnual = 0.0125): Record<LifeCycleStage, LifeCycleStageData> {
+  const ages = stationaryAgeDistribution(birthRateAnnual);
+  const band = (from: number, to: number) => ages.slice(from, to).reduce((a, b) => a + b, 0);
+  const span = RETIREMENT_AGE_YEARS - WORKFORCE_ENTRY_AGE_YEARS;
+  const t1 = WORKFORCE_ENTRY_AGE_YEARS + Math.round(span / 3);
+  const t2 = WORKFORCE_ENTRY_AGE_YEARS + Math.round((2 * span) / 3);
   return {
-    EARLY_CAREER: { shareOfPopulation: 0.28 },
-    PEAK_EARNING: { shareOfPopulation: 0.35 },
-    PRE_RETIREMENT: { shareOfPopulation: 0.17 },
-    RETIRED: { shareOfPopulation: 0.20 },
+    EARLY_CAREER: { shareOfPopulation: band(0, t1) },
+    PEAK_EARNING: { shareOfPopulation: band(t1, t2) },
+    PRE_RETIREMENT: { shareOfPopulation: band(t2, RETIREMENT_AGE_YEARS) },
+    RETIRED: { shareOfPopulation: band(RETIREMENT_AGE_YEARS, MAX_AGE_YEARS) },
   };
 }
 
@@ -135,10 +149,14 @@ export function createInitialCategoryDemand(
   const finalDemand: Record<string, number> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
+      // SUPPLY/CHAIN — investment goes where capex is actually spent (the capital-goods basket),
+      // not spread across every corporate-bought good. A corporate purchase of a non-capital good
+      // is INTERMEDIATE demand, which the solve below produces from the recipes; putting it here
+      // too counted it twice and starved the capital-goods industries (§7.180).
       finalDemand[su.unitId] =
         (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
         + (totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0)
-        + (totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0);
+        + (CAPEX_SUPPLIER_WEIGHTS[su.unitId] ?? 0) * I;
     });
   });
   const totalOutput = totalOutputFromFinalDemand(finalDemand);
@@ -345,7 +363,7 @@ function buildRegion(regionId: RegionId): Region {
     ),
     occupationMix: GOVERNMENT_OCCUPATION_MIX,
   });
-  const seedLifeCycle = createLifeCycleDistribution();
+  const seedLifeCycle = createLifeCycleDistribution(getRegionBirthRateAnnual(regionId));
   // PUB3b (§7.4): the seed budget is the same sum of real obligations the weekly step computes,
   // so week 0's fiscal state and week 1's are the same shape rather than two derivations.
   const seedAvgAnnualWageUSD = totalEmployed > 0 ? totalWageIncomeUSD / totalEmployed : 0;
@@ -384,6 +402,8 @@ function buildRegion(regionId: RegionId): Region {
     // The seed has no accumulated deposits yet, so every tier opens below its buffer and saves
     // toward it — which is the opening condition a cold start should have (§7.4).
     liquidAssetsUSD: 0,
+    // DEM/DIST — the seed's own stationary age structure decides it, like every other week.
+    retiredShareOfPopulation: seedLifeCycle.RETIRED.shareOfPopulation,
     weeklyDebtServiceUSD: 0,
     // Zero here to match the zero debt service: both sides of the budget loop arrive together
     // at the HH3 seed migration, which re-derives the cohorts with the real books.
@@ -607,6 +627,8 @@ function buildRegion(regionId: RegionId): Region {
     historicalZeroCurves: [{ week: 1, ...zeroRates }],
     wealthDistribution: seedWealthDistribution,
     housingMarket: createHousingMarket(regionId, estimatedHouseholdIncomeUSD, totalPopulation),
+    // DEM — the age structure the stage shares above are bands OF (rule 3).
+    ageDistribution: stationaryAgeDistribution(getRegionBirthRateAnnual(regionId)),
     lifeCycleDistribution: seedLifeCycle,
   };
 

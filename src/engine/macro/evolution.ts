@@ -22,7 +22,10 @@ import {
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
 import { buildHouseholdCohorts, tierWealthMpc, WEALTH_TIERS } from './household-cohorts';
-import { getRegionDeathRateAnnual } from '../bootstrap/population';
+import {
+  getRegionDeathRateAnnual, stationaryAgeDistribution, mortalityHazardAnnual, MAX_AGE_YEARS,
+  RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS,
+} from '../bootstrap/population';
 
 /**
  * Cents of extra consumption per dollar of extra wealth — the marginal propensity to consume out
@@ -290,9 +293,16 @@ export function evolveRegionMacro(
   const birthRate = region.birthRateAnnual ?? 0.010;
   // DEM: mortality follows the share of the population that is old, which drifts every week, so
   // an ageing region's death rate rises on its own rather than sitting at a seeded constant.
-  const deathRate = getRegionDeathRateAnnual(
-    (region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.20)
-  );
+  // DEM — THE DEATH RATE IS THE AGE STRUCTURE'S OWN, not a linear proxy off the retired share.
+  //
+  // `MORTALITY_PER_RETIRED_SHARE x retiredShare` was a fitted stand-in for an age structure the
+  // model did not have; now it does, so the crude rate is what the hazard actually kills:
+  // the population-weighted integral of the Gompertz hazard over every age. An ageing region's
+  // death rate rises because its people are older, which is the mechanism the proxy was imitating.
+  const agesForDeaths = region.ageDistribution && region.ageDistribution.length === MAX_AGE_YEARS
+    ? region.ageDistribution
+    : stationaryAgeDistribution(birthRate);
+  const deathRate = agesForDeaths.reduce((a, w, age) => a + w * mortalityHazardAnnual(age), 0);
   const migrationRate = region.netMigrationRateAnnual ?? 0;
   const netAnnualGrowthRate = birthRate - deathRate + migrationRate + migrationAttractivenessSignal;
   const netPopulationGrowthRate = netAnnualGrowthRate / 52;
@@ -568,6 +578,10 @@ export function evolveRegionMacro(
     // DIST/MAC — the sector's real liquid assets, which each tier's buffer is measured against.
     // The savings RATE is no longer passed in: it is what comes out.
     liquidAssetsUSD: Math.max(0, prevHS.depositsUSD ?? 0) + Math.max(0, prevHS.mmfSharesUSD ?? 0),
+    // DEM/DIST — the life-cycle saving rate, read off the real age structure (§7.181). Last
+    // week's, because the cohorts are built before this week's ages are advanced; a week's lag on
+    // a demographic share is not a lag anyone can measure.
+    retiredShareOfPopulation: region.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.20,
     weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
     measuredDisposableIncomeUSD: newEstimatedHouseholdIncomeUSD,
     annualCapitalReceiptsUSD,
@@ -864,17 +878,44 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     mortgageOriginationVolumeUSD: Number((newEstimatedHouseholdIncomeUSD * 0.05 * creditFactor).toFixed(0)),
   };
 
-  // Life-cycle demographic distribution evolution
+  // ---- DEM: PEOPLE AGE. The age structure is a real stock now, not four drifting shares. ----
+  //
+  // What this replaces: `EARLY_CAREER/PEAK/PRE/RETIRED` shares walked by stated drift constants
+  // (`retirementDrift = 0.0003`) and renormalised. Nobody aged; four numbers moved. With a death
+  // rate that was a linear proxy off the retired share, it implied a 33-year retirement and a
+  // 133-year working life (§7.169), which is why no life-cycle could be derived from it.
+  //
+  // Now everyone ages 1/52 of a year a week, births enter at age zero, and deaths leave at the
+  // Gompertz hazard for their OWN age. The four stage shares become age BANDS of the result — one
+  // representation of who is how old (rule 3) — and life expectancy, retirement duration and the
+  // length of a working life stop being stated anywhere.
+  const prevAges = region.ageDistribution && region.ageDistribution.length === MAX_AGE_YEARS
+    ? region.ageDistribution
+    : stationaryAgeDistribution(birthRate);
+  const nextAges = new Array(MAX_AGE_YEARS).fill(0);
+  const weekFraction = 1 / 52;
+  for (let a = 0; a < MAX_AGE_YEARS; a++) {
+    const survivors = prevAges[a] * (1 - mortalityHazardAnnual(a) * weekFraction);
+    const movingUp = survivors * weekFraction;
+    nextAges[a] += survivors - movingUp;
+    if (a + 1 < MAX_AGE_YEARS) nextAges[a + 1] += movingUp;
+  }
+  nextAges[0] += birthRate * weekFraction;
+  const ageTotal = nextAges.reduce((x, y) => x + y, 0) || 1;
+  const newAgeDistribution = nextAges.map((x) => x / ageTotal);
+  const bandShare = (from: number, to: number) =>
+    newAgeDistribution.slice(from, to).reduce((x, y) => x + y, 0);
+
   const prevLifeCycle = region.lifeCycleDistribution ?? createLifeCycleDistribution();
   const updatedLifeCycle = { ...prevLifeCycle };
-  const birthDrift = (birthRate / 52) * 0.1;
-  const retirementDrift = 0.0003;
-  const deathDrift = (deathRate / 52) * 0.1;
-
-  let ecShare = Math.max(0.05, prevLifeCycle.EARLY_CAREER.shareOfPopulation + birthDrift - retirementDrift * 0.5);
-  let peShare = Math.max(0.05, prevLifeCycle.PEAK_EARNING.shareOfPopulation + retirementDrift * 0.3 - retirementDrift * 0.5);
-  let prShare = Math.max(0.05, prevLifeCycle.PRE_RETIREMENT.shareOfPopulation + retirementDrift * 0.5 - retirementDrift * 0.3);
-  let retShare = Math.max(0.05, prevLifeCycle.RETIRED.shareOfPopulation + retirementDrift * 0.5 - deathDrift);
+  // The two boundaries that are POLICY — workforce entry and retirement age — are named; the two
+  // inside the working span split it evenly, because nothing in the model distinguishes them.
+  const workingSpan = RETIREMENT_AGE_YEARS - WORKFORCE_ENTRY_AGE_YEARS;
+  let ecShare = bandShare(0, WORKFORCE_ENTRY_AGE_YEARS + Math.round(workingSpan / 3));
+  let peShare = bandShare(WORKFORCE_ENTRY_AGE_YEARS + Math.round(workingSpan / 3),
+    WORKFORCE_ENTRY_AGE_YEARS + Math.round((2 * workingSpan) / 3));
+  let prShare = bandShare(WORKFORCE_ENTRY_AGE_YEARS + Math.round((2 * workingSpan) / 3), RETIREMENT_AGE_YEARS);
+  let retShare = bandShare(RETIREMENT_AGE_YEARS, MAX_AGE_YEARS);
 
   const totalLifeCycleShare = ecShare + peShare + prShare + retShare;
   updatedLifeCycle.EARLY_CAREER = { ...prevLifeCycle.EARLY_CAREER, shareOfPopulation: ecShare / totalLifeCycleShare };
@@ -911,6 +952,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     ...region,
     wealthDistribution: updatedWealthDist,
     housingMarket: updatedHousingMarket,
+    // DEM — the age structure itself, of which `lifeCycleDistribution` is a view.
+    ageDistribution: newAgeDistribution,
     lifeCycleDistribution: updatedLifeCycle,
     cycleRegime: newCycleRegime,
     inversionWeeksCount: newInversionCount,

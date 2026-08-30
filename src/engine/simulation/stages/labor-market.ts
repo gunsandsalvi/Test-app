@@ -50,8 +50,9 @@ import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
+import { RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../../bootstrap/population';
 import {
-  RENT_SHARE_TO_LABOUR, RETURN_TO_EXPERIENCE_ANNUAL, TenureStratum, TENURE_COHORTS, WORKING_LIFE_YEARS,
+  RENT_SHARE_TO_LABOUR, RETURN_TO_EXPERIENCE_ANNUAL, TenureStratum, TENURE_COHORTS,
 } from '../../../domain/region-macro';
 
 const OCCUPATIONS: OccupationType[] = [
@@ -394,7 +395,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
           // of a workforce hiring and separating at a constant rate (§7.4).
           : Array.from({ length: TENURE_COHORTS }, (_, k) => ({
               weight: 1 / TENURE_COHORTS,
-              tenureYears: (k + 0.5) * (WORKING_LIFE_YEARS / TENURE_COHORTS),
+              tenureYears: (k + 0.5) * ((RETIREMENT_AGE_YEARS - WORKFORCE_ENTRY_AGE_YEARS) / TENURE_COHORTS),
             }));
         const afterSeparationsShare = employedBefore > 0
           ? Math.max(0, 1 - separations / employedBefore) : 1;

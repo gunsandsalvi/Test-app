@@ -40,6 +40,15 @@ export interface ProductLine {
    * is real and inflation cancels).
    */
   weeklyCapacityUnits?: number;
+  /**
+   * CAP — this line's CAPITAL PRODUCTIVITY: units a week per dollar of the firm's net PP&E, fixed
+   * the first time the line trades from the capacity and the capital it opened with.
+   *
+   * Capacity used to be a RATE walked against its own prior value, which accumulates every error
+   * it is ever given and drifts from the capital it claims to describe. A plant is not a rate; it
+   * is what the capital can make (§7.177, §5-CAP).
+   */
+  unitsPerNetPpeDollar?: number;
 }
 
 // 1$ is 1$ Phase 6: one real purchase lot — a specific quantity bought from a specific named

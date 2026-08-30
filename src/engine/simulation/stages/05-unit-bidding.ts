@@ -22,7 +22,7 @@
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
 import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY_TIER } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
+import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
@@ -706,30 +706,29 @@ function buildRegionSupplyPlans(
     // closes a positive feedback loop (§7.28). Real capacity is physical: what price changes is
     // how hard the plant is run (productionResponseFactor) and whether the warehouse is already
     // full (productionThrottle), never how much the plant can make.
-    if (!(line.weeklyCapacityUnits! > 0)) {
-      // Seeded from this line's real baseline output at the price prevailing when it first
-      // trades — at week 1 that is the bootstrap price, so capacity opens exactly where the old
-      // dollar-anchored figure did and only the response to later price moves changes.
-      line.weeklyCapacityUnits =
+    // CAP — CAPACITY IS READ OFF PP&E, NOT WALKED (§7.177, restored now its blocker is closed).
+    //
+    // It was a RATE applied to its own prior value, which accumulates every error it is ever
+    // given and drifts from the capital it is supposed to describe. A plant is not a rate: it is
+    // what the capital can make. The line carries its own capital productivity — units a week per
+    // dollar of net PP&E, fixed the first time it trades — and capacity is that times the capital
+    // it has now. IND1/IND13 already grow PP&E by what was DELIVERED and COMMISSIONED, so
+    // capacity simply reads the result.
+    //
+    // Stage 05 runs BEFORE stage 08 on week 1, so `grossPPEUSD` is not set yet: it carries stage
+    // 08's own opening fallback here, or the ratio would be fixed against a one-dollar plant.
+    const grossPPEForCapacityUSD = comp.grossPPEUSD
+      ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+    const netPPEForCapacityUSD = Math.max(1,
+      grossPPEForCapacityUSD - (comp.accumulatedDepreciationUSD ?? (grossPPEForCapacityUSD * 0.45)));
+    if (!(line.unitsPerNetPpeDollar! > 0)) {
+      const openingCapacityUnits =
         ((comp.baselineAnnualRevenue || comp.annualRevenue) / 52) * (line.revenueShare ?? 1.0) / referencePriceUSD;
-    } else {
-      // Real net investment grows the plant: growth capex less depreciation, over the capital
-      // stock. Both are nominal dollars, so the ratio is real and inflation cancels out of it.
-      const grossPPE = comp.grossPPEUSD ?? 0;
-      const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationUSD ?? 0));
-      const weeklyDepreciationUSD = grossPPE / ((SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12) * 52);
-      // IND1/IND13: real net investment is capital COMMISSIONED less depreciation — a plant
-      // grows when machines are installed and running, not when a budget is approved (IND1) and
-      // not when a crate is unloaded (IND13).
-      const netInvestmentRate = ((comp.capexCommissionedLastWeekUSD ?? 0) - weeklyDepreciationUSD) / netPPE;
-      // CAP — THE ±2%/WEEK CLAMP IS GONE (rule 2). It bounded an OUTCOME: a firm that had just
-      // commissioned a plant twice its size still grew 2%, and one whose capital had evaporated
-      // still shrank only 2%. It was doing the work the INVESTMENT DECISION should do, and that
-      // decision was broken underneath it — maintenance capex was derived from its own prior
-      // value, so net investment was permanently and invisibly negative (§7.167). With the
-      // decision anchored to real depreciation there is nothing left for a bound to protect.
-      line.weeklyCapacityUnits = Math.max(0.0001, line.weeklyCapacityUnits! * (1 + netInvestmentRate));
+      line.unitsPerNetPpeDollar =
+        openingCapacityUnits / (netPPEForCapacityUSD * (line.revenueShare ?? 1.0));
     }
+    line.weeklyCapacityUnits = Math.max(0.0001,
+      line.unitsPerNetPpeDollar! * netPPEForCapacityUSD * (line.revenueShare ?? 1.0));
     const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     const costRate = Math.max(0, 1 - baseMargin);
     const weeklyOperatingCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52) * (line.revenueShare ?? 1.0);

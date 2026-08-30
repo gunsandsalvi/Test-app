@@ -6120,3 +6120,44 @@ that proved it, the lesson.
       **Those are the unblocking rows now, and they unblock by making the band stop binding.**
     - Both reverted changes are written down in full, here and in §7.177, so neither needs
       re-deriving when their blockers clear.
+
+180. **SUPPLY/CHAIN — INVESTMENT WAS ALLOCATED TWO DIFFERENT WAYS, in all three copies of the
+    identity.** The seed spread `I` across EVERY corporate-bought good by its corporate buyer-mix
+    weight; stage 05's firms bid their capex only into the five CAPITAL-GOODS categories by
+    `capexBasketWeight`. **Two allocations of one number**, and the capital-goods industries were
+    therefore built for a fraction of what would be bid at them (§7.168's 1.55x, four of five
+    categories short).
+    - **Investment now goes where capex is actually spent** — the capex basket — in the seed, the
+      macro seed and the weekly rebuild. A corporate purchase of a NON-capital good is
+      INTERMEDIATE demand, which the Leontief solve already produces from the recipes, so putting
+      it in final demand as well was counting it twice from the other side.
+    - **And the weekly corporate input level is now what the firms will really bid**: summed from
+      the same `firmInputIntensities` accessor stage 05 uses per firm, so the regional level and
+      the bids that fill it are one number rather than two (rule 3).
+
+181. **DEM — PEOPLE AGE NOW. A real age structure, and the life-cycle savings rate falls out of
+    it.** The last piece of the household chain, and it retires the placeholders three other
+    records were waiting on.
+    - **What it replaces was not an age structure.** `lifeCycleDistribution` was four shares walked
+      by stated drift constants (`retirementDrift = 0.0003`) and renormalised — nobody aged, four
+      numbers moved — and `deathRateAnnual` was a linear proxy off the retired share. Together
+      they implied a **33-year retirement and a 133-year working life** (§7.169).
+    - **`Region.ageDistribution` is population share by single year of age.** Everyone ages 1/52 of
+      a year a week, births enter at zero, deaths leave at the **Gompertz hazard for their own
+      age** — two BIOLOGICAL primitives (hazard at birth, doubling time) replacing a fitted proxy.
+      The four stage shares are BANDS of it, so there is one representation of who is how old.
+    - **The crude death rate is now the age structure's own integral**, so an ageing region's
+      death rate rises because its people are older — the mechanism the proxy was imitating.
+    - **The seed's age structure is the STATIONARY distribution implied by the hazard and the
+      region's own birth rate**, so a region whose fertility the demographic transition put low
+      opens OLDER. Regional difference as an outcome, not a table (rule 4, §7.4).
+    - **THE PAYOFF: the life-cycle savings rate is derived, with no coefficient.** A household
+      saves to fund the years it will not earn, so the working-life saving rate is `r/(w+r)`, and
+      `w + r = 1` across a population, so **it IS the retired share** — which now comes from a real
+      age structure. That is what §7.165 was missing: a buffer rule alone has no motive that
+      survives a stationary economy, which is why the sector sat permanently dissaving.
+    - **Retired with it:** `WORKING_LIFE_YEARS`, the placeholder §7.174 owed to DEM — the span is
+      the years between `WORKFORCE_ENTRY_AGE_YEARS` and `RETIREMENT_AGE_YEARS`, both POLICY
+      primitives (a retirement age is legislated, not derived).
+    - Also restored now their blockers are closed: **capacity read off PP&E** (§7.177) and the
+      **beneficiary-liability reversal** (§7.179), both as designed and recorded there.

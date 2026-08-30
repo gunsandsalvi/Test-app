@@ -12,6 +12,8 @@ import { CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { formSupplyRelationships } from './shared-helpers';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../../bootstrap/national-accounts';
 import { isActiveCompany } from '../../../domain/company';
+import { firmInputIntensities } from '../../../domain/industry-registry';
+import { profileKeyOf } from './profiles';
 import { decomposeGovernmentSpending } from '../../../domain/government';
 import { pay } from './settlement';
 import { SME_WAGE_GAP } from '../../bootstrap/firms';
@@ -169,6 +171,19 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     const smoothingByCategory: Record<string, number> = {};
     const corporateDemandByCategory: Record<string, number> = {};
 
+    // SUPPLY/CHAIN — the corporate input basket, summed from the firms that will bid it. This is
+    // the same accessor stage 05 uses per firm, so the regional level and the bids that fill it
+    // are one number rather than two (§7.180).
+    const corpInputDemandByCategory: Record<string, number> = {};
+    ctx.updatedCompanies.forEach((c) => {
+      if (c.region !== regionId || !isActiveCompany(c)) return;
+      const intensities = firmInputIntensities(c.productLines, profileKeyOf(c));
+      Object.entries(intensities).forEach(([unitId, intensity]) => {
+        corpInputDemandByCategory[unitId] =
+          (corpInputDemandByCategory[unitId] ?? 0) + c.annualRevenue * (intensity ?? 0);
+      });
+    });
+
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) {
@@ -201,7 +216,15 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
         // PUB1e: stage 05 bids exactly this, weekly (rule 9 — the period is in the name).
         govBudgetByCategory[su.unitId] = suGovDemand / 52;
-        const suCorpDemand = totalCorpWeight > 0 ? (su.buyerMix.CORPORATE / totalCorpWeight) * I : 0;
+        // SUPPLY/CHAIN — WHAT CORPORATES BUY OF A NON-CAPITAL GOOD IS NOT INVESTMENT.
+        //
+        // This sized it as a share of `I`, so the same investment number was allocated twice: once
+        // here across every corporate-bought good by buyer mix, and once as the capital-goods
+        // bids stage 05 actually places (§7.180). A corporate purchase of professional services or
+        // premises is an OPERATING purchase — intermediate demand — and the level must be what
+        // the firms will really bid, which stage 05 sizes from each firm's own input intensity.
+        // Same number, one representation (rule 3).
+        const suCorpDemand = corpInputDemandByCategory[su.unitId] ?? 0;
         allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;
         corporateDemandByCategory[su.unitId] = suCorpDemand;
 

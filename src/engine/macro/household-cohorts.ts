@@ -197,6 +197,16 @@ export interface CohortBuildInputs {
    * the opposite of what a cross-section is for.
    */
   liquidAssetsUSD: number;
+  /**
+   * DEM/DIST — the share of the population that is RETIRED, from the real age structure.
+   *
+   * It is the life-cycle saving rate, exactly: a household saves to fund the years it will not
+   * earn, so with `w` of adult life working and `r` retired and smooth consumption the working-life
+   * saving rate is `r/(w+r)` — and `w + r = 1` across the population, so it IS `r`. No coefficient
+   * (§7.169), and it is what makes a positive steady-state savings rate an OUTCOME rather than the
+   * four stated per-stage rates §7.170 deleted.
+   */
+  retiredShareOfPopulation: number;
   /** HH3's real weekly debt service (interest + required principal), annualized inside. */
   weeklyDebtServiceUSD: number;
   /** HH — the region's MEASURED disposable household income (annual): the sum of what households
@@ -242,8 +252,8 @@ export interface CohortBuildResult {
 export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildResult {
   const {
     occupationPools, baseAnnualWageUSD, laborForceByOccupation,
-    governmentTransfersWeeklyUSD, liquidAssetsUSD, weeklyDebtServiceUSD, wealthDistribution,
-    measuredDisposableIncomeUSD,
+    governmentTransfersWeeklyUSD, liquidAssetsUSD, retiredShareOfPopulation, weeklyDebtServiceUSD,
+    wealthDistribution, measuredDisposableIncomeUSD,
   } = inputs;
 
   // ---- 1. Membership: transpose the tier→occupation mixes into per-occupation tier weights,
@@ -421,7 +431,15 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     const shareOfTier = tierIncomeUSD[tier] > 0 ? x.dispUSD / tierIncomeUSD[tier] : 0;
     const liquidUSD = Math.max(0, liquidAssetsUSD) * tierLiquidShare(tier) * shareOfTier;
     const targetBufferUSD = (x.dispUSD / 52) * BUFFER_TARGET_WEEKS;
-    return (targetBufferUSD - liquidUSD) / WEALTH_SPENDDOWN_YEARS;
+    // DEM/DIST — THE LIFE-CYCLE, and it is the last piece of the savings rate.
+    //
+    // The buffer term alone has no motive that survives a stationary economy: once the stock is
+    // at target, saving is zero, and §7.165 measured the sector permanently DISSAVING because it
+    // opened above target. A household also saves to fund the years it will not earn, and that
+    // rate is exactly the retired share of the population (§7.169) — no coefficient, and it comes
+    // from the real age structure now that one exists.
+    const lifeCycleSavingUSD = x.dispUSD * Math.max(0, Math.min(1, retiredShareOfPopulation));
+    return lifeCycleSavingUSD + (targetBufferUSD - liquidUSD) / WEALTH_SPENDDOWN_YEARS;
   });
 
   const tierDisposableUSD = {} as Record<WealthTier, number>;

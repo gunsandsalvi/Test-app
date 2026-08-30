@@ -70,8 +70,21 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     if (!BENEFICIARY_TYPES.includes(entity.entityType)) {
       return entity.beneficiaryLiabilityUSD === undefined ? entity : { ...entity, beneficiaryLiabilityUSD: undefined };
     }
-    const liabilityUSD = Math.max(0, entity.totalAssetsUSD - Math.max(0, entity.equityCapitalUSD));
-    return { ...entity, beneficiaryLiabilityUSD: liabilityUSD };
+    // COH2 — REVERSED. This was `totalAssets − equityCapital`: the obligation derived from the
+    // holdings, with equity pinned at its seed ratio and never updated, so a fund was as big as
+    // its assets and households' claims were the residual that made the arithmetic work.
+    // **In reality a pension fund is as big as the entitlements it owes**, and the entitlement is
+    // now a real stock accumulated from contributions, benefits and investment return
+    // (`insurance-and-pensions.ts`). What is a RESIDUAL is the fund's own capital — its surplus or
+    // deficit against what it owes, which is the number that actually means something, and the
+    // one that retires `INSTITUTIONAL_OPENING_BOOK_SHARE`.
+    const liabilityUSD = Math.max(0, entity.beneficiaryLiabilityUSD
+      ?? (entity.totalAssetsUSD - Math.max(0, entity.equityCapitalUSD)));
+    return {
+      ...entity,
+      beneficiaryLiabilityUSD: liabilityUSD,
+      equityCapitalUSD: entity.totalAssetsUSD - liabilityUSD,
+    };
   });
 
   const fundNavPerShare = (fund: InstitutionalEntity): number => {

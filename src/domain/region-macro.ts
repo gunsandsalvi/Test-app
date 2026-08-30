@@ -392,13 +392,14 @@ export const RETURN_TO_EXPERIENCE_ANNUAL = 0.02;
  * DIST 1(b) — how finely the experience cross-section is cut, and how long a working life runs.
  *
  * `TENURE_COHORTS` is a RESOLUTION parameter (rule 19): it says how the distribution is
- * discretised and the answer must not depend on it. `WORKING_LIFE_YEARS` is the span the cold
- * start spreads them over — the one demographic fact the tenure ladder needs, and a placeholder
- * until DEM's age structure can say it (§7.169: the current mortality primitive implies a
- * 133-year working life, so it cannot).
+ * discretised and the answer must not depend on it (verified §7.175).
+ *
+ * `WORKING_LIFE_YEARS` is GONE: it was a placeholder for the span the cold start spreads tenure
+ * over, owed to DEM because the old mortality proxy implied a 133-year working life (§7.169).
+ * DEM has a real age structure now, so the span is what it actually is — the years between
+ * entering the workforce and retiring, both POLICY primitives (§7.181).
  */
 export const TENURE_COHORTS = 20;
-export const WORKING_LIFE_YEARS = 40;
 
 export interface OccupationPool {
   employed: number;
@@ -762,6 +763,15 @@ export interface Region {
   // Wealth, Demographics & Housing
   wealthDistribution: Record<WealthTier, WealthTierData>;
   housingMarket: HousingMarket;
+  /**
+   * DEM — THE AGE STRUCTURE: population share by single year of age, index = age in years.
+   *
+   * `lifeCycleDistribution` below is now a VIEW of this — its four stage shares are age bands —
+   * so there is one representation of who is how old (rule 3). It replaces four shares walked by
+   * drift constants and renormalised, which implied a 33-year retirement and a 133-year working
+   * life (§7.169) and could therefore carry no life-cycle at all.
+   */
+  ageDistribution?: number[];
   lifeCycleDistribution: Record<LifeCycleStage, LifeCycleStageData>;
 
   // Central Banking Dot Plot Projections

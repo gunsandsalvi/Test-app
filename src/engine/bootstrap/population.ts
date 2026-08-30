@@ -75,3 +75,62 @@ export function getRegionBirthRateAnnual(regionId: RegionId): number {
 export function getRegionDeathRateAnnual(retiredShareOfPopulation: number): number {
   return Number((MORTALITY_PER_RETIRED_SHARE * Math.max(0, retiredShareOfPopulation)).toFixed(5));
 }
+
+/**
+ * DEM — MORTALITY RISES EXPONENTIALLY WITH AGE (Gompertz), which is the one demographic fact a
+ * real age structure needs and the model did not have.
+ *
+ * Two BIOLOGICAL primitives (rule 19's technology category): the hazard at age zero and how fast
+ * it doubles. Everything demographic then falls out of them and the birth rate — life expectancy,
+ * how long retirement lasts, how long a working life runs — instead of being stated separately
+ * and inconsistently.
+ *
+ * **What this replaces was not an age structure at all.** `lifeCycleDistribution` was four shares
+ * walked by drift constants (`retirementDrift = 0.0003`) and renormalised, and `deathRateAnnual`
+ * was a linear proxy off the retired share. Together they implied a **33-year retirement and a
+ * 133-year working life** (§7.169), which is why the savings life-cycle could not be derived from
+ * them: `r/d` is not a lifespan when `d` is a fitted proxy.
+ */
+export const GOMPERTZ_HAZARD_AT_BIRTH_ANNUAL = 0.00012;
+export const GOMPERTZ_DOUBLING_YEARS = 8.5;
+
+/** DEM — the annual probability of dying at a given age. */
+export function mortalityHazardAnnual(ageYears: number): number {
+  const b = Math.LN2 / GOMPERTZ_DOUBLING_YEARS;
+  return Math.min(1, GOMPERTZ_HAZARD_AT_BIRTH_ANNUAL * Math.exp(b * Math.max(0, ageYears)));
+}
+
+/** DEM — the oldest age the structure carries. Nobody survives the hazard past it. */
+export const MAX_AGE_YEARS = 100;
+
+/**
+ * DEM — the age at which people stop working, in this model.
+ *
+ * A POLICY primitive (rule 19's third category): a retirement age is legislated, not derived.
+ * It is the ONE number that turns the age structure into a working/retired split, replacing four
+ * drifting stage shares and their drift constants.
+ */
+export const RETIREMENT_AGE_YEARS = 65;
+/** DEM — when people enter the workforce. Policy, same as above (school-leaving age). */
+export const WORKFORCE_ENTRY_AGE_YEARS = 22;
+
+/**
+ * DEM — the stationary age distribution implied by the hazard and a given birth rate: what a
+ * population that has been born and dying at these rates forever looks like. The seed's opening
+ * age structure, and an OUTCOME of the two primitives rather than four stated shares (§7.4).
+ */
+export function stationaryAgeDistribution(birthRateAnnual: number): number[] {
+  const survive: number[] = [];
+  let s = 1;
+  for (let a = 0; a < MAX_AGE_YEARS; a++) {
+    survive.push(s);
+    s *= Math.max(0, 1 - mortalityHazardAnnual(a));
+  }
+  const growth = Math.max(0, birthRateAnnual);
+  // Weight each age by survival AND by how many were born that many years ago: a growing
+  // population has proportionally more young people, which is the demographic transition arriving
+  // as arithmetic rather than as a table.
+  const raw = survive.map((sv, a) => sv * Math.pow(1 + growth, -a));
+  const total = raw.reduce((x, y) => x + y, 0) || 1;
+  return raw.map((x) => x / total);
+}

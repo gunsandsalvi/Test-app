@@ -133,6 +133,16 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       pensionEntities.forEach((e) => {
         const share = (e.beneficiaryLiabilityUSD ?? 0) / entitlementsUSD;
         addEntityCash(e.id, (weeklyContributionsUSD - weeklyBenefitsUSD) * share);
+        // COH2 — THE ENTITLEMENT IS A STOCK ACCUMULATED FROM REAL FLOWS, not a plug.
+        //
+        // It used to be `totalAssets − equityCapital`, with equity fixed at 12% of assets at the
+        // seed and NEVER UPDATED — so a fund's obligation to households was whatever kept that
+        // ratio true forever, and households' claims were an accounting residual of the fund's own
+        // asset growth (rule 13). What a pension fund owes is what was paid in, less what was paid
+        // out, plus what the money earned on the way.
+        e.beneficiaryLiabilityUSD = Math.max(0, (e.beneficiaryLiabilityUSD ?? 0)
+          + (weeklyContributionsUSD - weeklyBenefitsUSD) * share
+          + Math.max(0, e.lastWeeklyInvestmentIncomeUSD ?? 0));
         benefitsByEntityId.set(e.id, weeklyBenefitsUSD * share * 52);
       });
     }
