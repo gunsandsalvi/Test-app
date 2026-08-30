@@ -268,6 +268,19 @@ export const MORTGAGE_FIXED_PERIOD_WEEKS = 5 * 52;
  * volume used to be `turnover x LTV x bank appetite`, with the rate nowhere in it.
  */
 export const MORTGAGE_DSTI_LIMIT = 0.35;
+
+/**
+ * CRD — the weekly rate at which a clean credit file climbs back a tier.
+ *
+ * An INSTITUTIONAL primitive (§5-DIST-P): how long a blemish stays on a file is set by credit-
+ * reporting rules, not by anything a household or a lender decides. Seven years is the usual
+ * statutory period, so a clean file recovers a rung on that order.
+ *
+ * It exists because migration used to be one-way — households moved DOWN whenever unemployment
+ * was above NAIRU and never came back, so any long run ends with the whole population subprime.
+ * A distribution that can only move in one direction is an absorbing state, not a distribution.
+ */
+export const CREDIT_FILE_CURE_WEEKLY = 1 / (7 * 52);
 /** Auto/personal term credit: 5-year annuities, seeded mid-life. */
 export const CONSUMER_TERM_WEEKS = 5 * 52;
 export const CONSUMER_TERM_SEED_WAM_WEEKS = Math.round(2.5 * 52);

@@ -1310,6 +1310,18 @@ const indModule: HarnessModule = (() => {
     }, 0);
     out.push(`  work in progress carried across every firm: ${B(totalWipUSD)}`);
 
+    out.push('--- DIST/CRD: the credit tiers, and whether they can move BOTH ways ---');
+    REGIONS.forEach(r => {
+      const books: any[] = (s.regions[r].householdState as any).creditTierBooks ?? [];
+      if (books.length === 0) return;
+      const row = (t: string) => books.find(b => b.tier === t);
+      const f = (t: string) => (row(t)?.shareOfHouseholds ?? 0);
+      const d = (t: string) => (row(t)?.delinquencyRatePct ?? 0);
+      const rate = (t: string) => (row(t)?.avgInterestRate ?? 0);
+      out.push(`  ${r}: shares SP ${pct(f('SUPER_PRIME'))} P ${pct(f('PRIME'))} NP ${pct(f('NEAR_PRIME'))} SUB ${pct(f('SUBPRIME'))} (sum ${pct(f('SUPER_PRIME') + f('PRIME') + f('NEAR_PRIME') + f('SUBPRIME'))})`);
+      out.push(`      delinquency SP ${pct(d('SUPER_PRIME'))} P ${pct(d('PRIME'))} NP ${pct(d('NEAR_PRIME'))} SUB ${pct(d('SUBPRIME'))} | rates SP ${pct(rate('SUPER_PRIME'))} SUB ${pct(rate('SUBPRIME'))}`);
+    });
+
     out.push('--- DIST: the SME pools, and what share of each cannot service its debt ---');
     REGIONS.forEach(r => {
       const pools: any[] = (s.regions[r] as any).smePools ?? [];

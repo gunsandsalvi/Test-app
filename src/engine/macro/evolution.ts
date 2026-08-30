@@ -8,6 +8,8 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
+import { CREDIT_FILE_CURE_WEEKLY, CONSUMER_CREDIT_RISK_WEIGHT, CARD_OPERATING_COST_BPS } from '../../domain/banking';
+import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { evolveRegionalWeather } from './weather';
@@ -577,23 +579,46 @@ export function evolveRegionMacro(
   const specializedStress = (newOccupationPools.SPECIALIZED_PROFESSIONAL.wageGrowthAnnual < 0 ? 1 : 0) + (newOccupationPools.TECHNICAL_ENGINEERING.wageGrowthAnnual < 0 ? 1 : 0);
   const generalStress = (newOccupationPools.GENERAL.wageGrowthAnnual < 0 ? 1 : 0);
 
-  const shiftFraction = Math.max(0, householdStressSignal * 1.5); // fraction of each tier to shift down
+  // DIST/CRD — CREDIT MIGRATION IS TWO-WAY, AND IT RUNS ON MEASURED DELINQUENCY.
+  //
+  // What this replaces was a ONE-WAY RATCHET: `shiftFraction = Math.max(0, stress x 1.5)` moved
+  // households down the tiers whenever unemployment was above NAIRU and did NOTHING otherwise —
+  // never up. Nobody ever recovered a credit tier, so over any long run the whole population
+  // ends in SUBPRIME and stays there. It is the same defect shape as a household that can buy
+  // equity and never sell it: an absorbing direction with no return.
+  //
+  // The mechanism is what a credit file actually is. A household that goes DELINQUENT drops a
+  // tier; one that stays current long enough has the blemish age off and climbs back. Both flows
+  // are measured — the down-flow off each tier's own delinquency rate, which the tiers already
+  // carry — and the only stated number is how long a record persists, which is an institutional
+  // primitive (credit-reporting periods are set by regulation, §5-DIST-P's third category).
+  const tierOf = (t: string, fallback: number) =>
+    region.householdState.creditTierBooks.find(x => x.tier === t)?.shareOfHouseholds ?? fallback;
+  const delinquencyOf = (t: string) =>
+    Math.max(0, region.householdState.creditTierBooks.find(x => x.tier === t)?.delinquencyRatePct ?? 0);
 
-  const superPrimePrev = region.householdState.creditTierBooks.find(t => t.tier === 'SUPER_PRIME')?.shareOfHouseholds ?? 0.25;
-  const primePrev = region.householdState.creditTierBooks.find(t => t.tier === 'PRIME')?.shareOfHouseholds ?? 0.50;
-  const nearPrimePrev = region.householdState.creditTierBooks.find(t => t.tier === 'NEAR_PRIME')?.shareOfHouseholds ?? 0.15;
-  const subprimePrev = region.householdState.creditTierBooks.find(t => t.tier === 'SUBPRIME')?.shareOfHouseholds ?? 0.10;
+  const superPrimePrev = tierOf('SUPER_PRIME', 0.25);
+  const primePrev = tierOf('PRIME', 0.50);
+  const nearPrimePrev = tierOf('NEAR_PRIME', 0.15);
+  const subprimePrev = tierOf('SUBPRIME', 0.10);
 
-  const superPrimeShift = superPrimePrev * shiftFraction;
-  const newSuperPrime = Math.max(0.01, superPrimePrev - superPrimeShift);
+  // Down: the delinquent share of each tier drops one rung, weekly.
+  const downFrom = (share: number, tier: string) => share * (delinquencyOf(tier) / 52);
+  // Up: a clean file ages its blemish off, so a fixed share of each lower tier climbs one rung —
+  // net of whoever in it just went delinquent, which is what makes the two flows one balance.
+  const upFrom = (share: number) => share * CREDIT_FILE_CURE_WEEKLY;
 
-  const primeShift = (primePrev + superPrimeShift) * shiftFraction;
-  const newPrime = Math.max(0.01, (primePrev + superPrimeShift) - primeShift);
+  const spDown = downFrom(superPrimePrev, 'SUPER_PRIME');
+  const pDown = downFrom(primePrev, 'PRIME');
+  const npDown = downFrom(nearPrimePrev, 'NEAR_PRIME');
+  const pUp = upFrom(primePrev);
+  const npUp = upFrom(nearPrimePrev);
+  const spUp = upFrom(subprimePrev);
 
-  const nearPrimeShift = (nearPrimePrev + primeShift) * shiftFraction;
-  const newNearPrime = Math.max(0.01, (nearPrimePrev + primeShift) - nearPrimeShift);
-
-  const newSubprime = Math.max(0.01, subprimePrev + nearPrimeShift);
+  const newSuperPrime = Math.max(0.001, superPrimePrev - spDown + pUp);
+  const newPrime = Math.max(0.001, primePrev + spDown - pDown - pUp + npUp);
+  const newNearPrime = Math.max(0.001, nearPrimePrev + pDown - npDown - npUp + spUp);
+  const newSubprime = Math.max(0.001, subprimePrev + npDown - spUp);
 
   const updatedTiers = region.householdState.creditTierBooks.map(tier => {
     let newShare = tier.shareOfHouseholds;
@@ -603,21 +628,30 @@ export function evolveRegionMacro(
     else if (tier.tier === 'SUBPRIME') newShare = newSubprime;
 
     const tierStress = householdStressSignal + (tier.tier === 'SUBPRIME' || tier.tier === 'NEAR_PRIME' ? generalStress * 0.01 : specializedStress * 0.01);
-    const cci = region.bankingSector.creditConditionsIndex;
-    let newAvgInterestRate = tier.avgInterestRate;
-    let newDelinquency = tier.delinquencyRatePct + tierStress * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
 
-    if (tier.tier === 'SUBPRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.05;
-    } else if (tier.tier === 'NEAR_PRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.03;
-    } else if (tier.tier === 'PRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.01;
-    } else if (tier.tier === 'SUPER_PRIME') {
-      newAvgInterestRate = tier.avgInterestRate + cci * 0.005;
-    }
-    
-    newDelinquency = Math.max(0.001, newDelinquency);
+    // DIST/CRD — DELINQUENCY IS A STOCK THAT HEALS, NOT AN ACCUMULATOR.
+    //
+    // It was `delinquency + tierStress x multiplier` every week, and `tierStress` is positive
+    // whenever unemployment is above NAIRU — so a delinquency rate could only ever climb, for as
+    // long as the economy was slack, without bound and with no way back. Arrears CURE: a
+    // borrower catches up, or the loan is written off and leaves the book. Both remove it from
+    // the delinquent stock, on the same clock a file takes to clear.
+    const arrivalRate = Math.max(0, tierStress) * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
+    const newDelinquency = Math.max(0.001,
+      tier.delinquencyRatePct * (1 - CREDIT_FILE_CURE_WEEKLY * 52) + arrivalRate);
+
+    // DIST/CRD — THE TIER'S RATE IS QUOTED, NOT DRIFTED (rules 1 and 3).
+    //
+    // It was `rate + creditConditionsIndex x k` EVERY WEEK — an accumulator with no anchor, so a
+    // sustained credit squeeze compounded a household lending rate to anything at all. It was
+    // also a SECOND representation of household credit pricing: `quoteHouseholdMarginBps` already
+    // prices exactly this for the banks' own pools, off measured loss, capital and cost to serve.
+    // One price, from one place, at this tier's OWN measured loss rate.
+    const newAvgInterestRate = region.policyRate + quoteHouseholdMarginBps({
+      annualLossRate: newDelinquency,
+      riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
+      operatingCostBps: CARD_OPERATING_COST_BPS,
+    }) / 10000;
 
     return {
       ...tier,
