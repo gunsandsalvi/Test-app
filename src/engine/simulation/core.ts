@@ -183,9 +183,10 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // nothing: measured, institutional equity buying power fell 53.9B -> 43.0B against the
     // control because the capital calls went out and the tender proceeds never came back.
     applyPendingCorporateActionSettlements(ctx);
-    // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
-    // Corporate paper only — the sovereign ledger is party-keyed and runs as its own stage below.
-    applyHolderInterestAccruals(ctx);
+    // CAL's accruals are NOT run again here. Stage 08 is where the week's interest is registered
+    // and where the coupon dates are declared, and it applies them itself; a second call walked
+    // the whole register again for nothing — or, in a week with no coupon due, for a second
+    // accrual on top of the first.
   });
 
   // HH1c: the liability flows. After stage 08, so the insurers' own P&L for the week is struck

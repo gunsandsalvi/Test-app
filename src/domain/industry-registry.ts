@@ -837,21 +837,42 @@ export const PROFILE_INPUT_BASKET: Record<string, Record<string, number>> = {
  * charges it, and `shared-helpers` builds supply relationships from it, so a firm cannot be a
  * buyer in one place and not in another (rule 3).
  */
+/**
+ * SCALE: the basket is a pure function of the firm's product lines, and it was rebuilt from the
+ * registry on every call — including once per firm per candidate input in stage 05, where the
+ * caller then read a SINGLE key off the fresh object it had just paid to build.
+ *
+ * Keyed on the product-line ARRAY's identity, which is exactly the right cache lifetime: nothing
+ * mutates a `revenueShare` in place (checked — every one is built in a fresh object literal), and
+ * stage 08 rebuilds the array whenever the mix changes, so a stale entry cannot outlive its
+ * inputs. **The returned object is shared, so callers must treat it as read-only** — all five do
+ * (`Object.values`, `Object.keys`, `Object.entries`, one key read).
+ */
+const inputIntensityByLines = new WeakMap<object, Record<string, number>>();
+const inputIntensityByProfile = new Map<string, Record<string, number>>();
+
 export function firmInputIntensities(
   productLines: { subUnitId: string; revenueShare?: number }[] | undefined,
   profileKey: string
 ): Record<string, number> {
   const lines = productLines ?? [];
   if (lines.length > 0) {
+    const memo = inputIntensityByLines.get(lines as object);
+    if (memo !== undefined) return memo;
     const out: Record<string, number> = {};
     lines.forEach((l) => {
       Object.entries(byId.get(l.subUnitId)?.recipeInputs ?? {}).forEach(([input, intensity]) => {
         out[input] = (out[input] ?? 0) + (l.revenueShare ?? 1) * intensity;
       });
     });
+    inputIntensityByLines.set(lines as object, out);
     return out;
   }
-  return { ...(PROFILE_INPUT_BASKET[profileKey] ?? {}) };
+  const memo = inputIntensityByProfile.get(profileKey);
+  if (memo !== undefined) return memo;
+  const out = { ...(PROFILE_INPUT_BASKET[profileKey] ?? {}) };
+  inputIntensityByProfile.set(profileKey, out);
+  return out;
 }
 
 /**

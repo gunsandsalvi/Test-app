@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "verify": "bash scripts/check-hygiene.sh && tsx scripts/harness.ts",
-    "profile": "bash scripts/check-hygiene.sh && PROFILE=1 tsx scripts/harness.ts"
+    "verify": "bash scripts/check-hygiene.sh && NODE_OPTIONS=--max-semi-space-size=64 tsx scripts/harness.ts",
+    "profile": "bash scripts/check-hygiene.sh && NODE_OPTIONS=--max-semi-space-size=64 PROFILE=1 tsx scripts/harness.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

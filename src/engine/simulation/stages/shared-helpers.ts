@@ -509,28 +509,37 @@ export function applyHolderInterestAccruals(
 ): void {
   const { pendingHolderAccrualUSD: accruals, pendingHolderAccrualPayout: payouts } = ctx;
   if (accruals.size > 0) {
-    // Holders of record, by instrument, so each one's share is what it actually owns.
+    // SCALE: ONE pass over the register, not two. This walked every entity's every holding to
+    // total the float, then walked all of them AGAIN to divide by it — building the same
+    // `type:id` key string twice per holding, ~70k rows each way. The matching rows are collected
+    // on the first pass and the second walks only those, which is the same arithmetic in the same
+    // order on the same values.
     const totalByKey = new Map<string, number>();
+    const matched: { entityId: string; key: string; qtyUSD: number }[] = [];
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       entity.itemizedHoldings.forEach((h) => {
         const key = `${h.instrumentType}:${h.instrumentId}`;
         if (!accruals.has(key)) return;
-        totalByKey.set(key, (totalByKey.get(key) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
+        const qtyUSD = h.quantityOrNotionalUSD ?? 0;
+        totalByKey.set(key, (totalByKey.get(key) ?? 0) + qtyUSD);
+        matched.push({ entityId: entity.id, key, qtyUSD });
       });
     });
-    ctx.updatedInstitutionalEntities.forEach((entity) => {
-      entity.itemizedHoldings.forEach((h) => {
-        const key = `${h.instrumentType}:${h.instrumentId}`;
-        const weeklyUSD = accruals.get(key);
-        const totalUSD = totalByKey.get(key) ?? 0;
-        if (weeklyUSD === undefined || !(totalUSD > 0)) return;
-        const shareUSD = weeklyUSD * ((h.quantityOrNotionalUSD ?? 0) / totalUSD);
-        if (!(shareUSD > 0)) return;
-        const k = accrualKey(key, entity.id);
-        ctx.holderAccruedInterestUSD.set(k, (ctx.holderAccruedInterestUSD.get(k) ?? 0) + shareUSD);
-      });
+    matched.forEach(({ entityId, key, qtyUSD }) => {
+      const weeklyUSD = accruals.get(key);
+      const totalUSD = totalByKey.get(key) ?? 0;
+      if (weeklyUSD === undefined || !(totalUSD > 0)) return;
+      const shareUSD = weeklyUSD * (qtyUSD / totalUSD);
+      if (!(shareUSD > 0)) return;
+      const k = accrualKey(key, entityId);
+      ctx.holderAccruedInterestUSD.set(k, (ctx.holderAccruedInterestUSD.get(k) ?? 0) + shareUSD);
     });
   }
+  // THE ACCRUAL IS CONSUMED HERE, NOT AT THE BOTTOM. It used to be cleared only on the payout
+  // path, so in a week when NO instrument's coupon fell due the early return below left the
+  // accruals standing — and this function is called twice a week. Every holder accrued the same
+  // week's interest TWICE, and the second call paid for the full register walk to do it.
+  accruals.clear();
 
   if (payouts.size === 0) return;
   const cleared: string[] = [];
@@ -555,7 +564,6 @@ export function applyHolderInterestAccruals(
   });
   cleared.forEach((k) => ctx.holderAccruedInterestUSD.delete(k));
   payouts.clear();
-  accruals.clear();
 }
 
 /**

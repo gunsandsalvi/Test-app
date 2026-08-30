@@ -14,7 +14,7 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
-import { GameState, RegionId, Company, InstitutionalEntity } from '../../../types';
+import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingUSD,
   realisedDebtRecoveryRate,
@@ -52,6 +52,12 @@ interface EstateIndex {
   companyById: Map<string, Company>;
   receivableTermWeeksByTicker: Map<string, number>;
   ppeWeeksByRegion: Map<string, number>;
+  /** `entityId -> instrumentId -> the rows of that entity's book holding it`. Built once for the
+   *  holders that actually have a claim, which is what turns a per-claim SCAN of a whole book
+   *  into a lookup: ~300 institutions were being re-scanned by ~11,000 claims a week. */
+  rowsByEntityInstrument: Map<string, Map<string, ItemizedHolding[]>>;
+  /** Entities whose book was written, so the sub-$1 compaction runs once each at the end. */
+  touchedEntityIds: Set<string>;
 }
 
 function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
@@ -66,7 +72,27 @@ function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
   return {
     entityById, bankByTicker, companyById,
     receivableTermWeeksByTicker: new Map(), ppeWeeksByRegion: new Map(),
+    rowsByEntityInstrument: new Map(), touchedEntityIds: new Set(),
   };
+}
+
+/** The claim holders' books, indexed by instrument — built once, for the holders that need it. */
+function indexClaimHolders(index: EstateIndex, estates: Estate[]): void {
+  const needed = new Set<string>();
+  estates.forEach((e) => {
+    if (e.closedWeek !== undefined) return;
+    e.claims.forEach((c) => { if (c.holder.kind === 'INSTITUTION') needed.add(c.holder.id); });
+  });
+  needed.forEach((id) => {
+    const e = index.entityById.get(id);
+    if (!e) return;
+    const byInstrument = new Map<string, ItemizedHolding[]>();
+    (e.itemizedHoldings || []).forEach((h) => {
+      const rows = byInstrument.get(h.instrumentId);
+      if (rows) rows.push(h); else byInstrument.set(h.instrumentId, [h]);
+    });
+    index.rowsByEntityInstrument.set(id, byInstrument);
+  });
 }
 
 export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -75,6 +101,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   const estates: Estate[] = ctx.estates ?? [];
   const byCompanyId = new Map(estates.map((e) => [e.companyId, e]));
   const index = buildEstateIndex(ctx);
+  indexClaimHolders(index, estates);
 
   // ---- Open an estate for every issuer that has just defaulted. ----
   ctx.updatedCompanies.forEach((comp) => {
@@ -134,6 +161,14 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     }
   });
 
+  // The sub-$1 rows a written-down book leaves behind, dropped once per holder instead of once
+  // per claim — the same set removed, at the end of the same stage.
+  index.touchedEntityIds.forEach((id) => {
+    const e = index.entityById.get(id);
+    if (!e) return;
+    e.itemizedHoldings = (e.itemizedHoldings || []).filter((h) => (h.quantityOrNotionalUSD ?? 0) > 1);
+  });
+
   ctx.estates = estates.filter((e) => e.closedWeek === undefined || week - e.closedWeek < 4);
 }
 
@@ -188,18 +223,24 @@ function reduceHolding(
   companyId: string, amountUSD: number, isLoss: boolean
 ): void {
   if (claim.holder.kind === 'INSTITUTION') {
-    // SCALE: the holder is looked up, not searched for, and its book is written in place. This
-    // rebuilt the whole entity array once per claim — the single largest cost in the stage.
-    const e = index.entityById.get(claim.holder.id);
+    // SCALE: the holder is looked up, its rows for THIS issuer are looked up, and only those are
+    // written — in place. This rebuilt the entire institutional-entity array and rescanned the
+    // holder's whole book once per claim; with ~11,000 claims open against ~300 institutions,
+    // every book was being walked about thirty-seven times a week to change a handful of rows.
+    const id = claim.holder.id;
+    const e = index.entityById.get(id);
     if (!e) return;
     let leftUSD = amountUSD;
-    const holdings = (e.itemizedHoldings || []).map((h) => {
-      if (h.instrumentId !== companyId || leftUSD <= 0) return h;
-      const takeUSD = Math.min(leftUSD, h.quantityOrNotionalUSD ?? 0);
-      leftUSD -= takeUSD;
-      return { ...h, quantityOrNotionalUSD: (h.quantityOrNotionalUSD ?? 0) - takeUSD };
-    }).filter((h) => (h.quantityOrNotionalUSD ?? 0) > 1);
-    e.itemizedHoldings = holdings;
+    const rows = index.rowsByEntityInstrument.get(id)?.get(companyId);
+    if (rows) {
+      for (let i = 0; i < rows.length && leftUSD > 0; i++) {
+        const h = rows[i];
+        const takeUSD = Math.min(leftUSD, h.quantityOrNotionalUSD ?? 0);
+        leftUSD -= takeUSD;
+        h.quantityOrNotionalUSD = (h.quantityOrNotionalUSD ?? 0) - takeUSD;
+      }
+      index.touchedEntityIds.add(id);
+    }
     e.totalAssetsUSD = Math.max(0, e.totalAssetsUSD - (isLoss ? amountUSD : 0));
     e.equityCapitalUSD = Math.max(0, (e.equityCapitalUSD ?? 0) - (isLoss ? amountUSD : 0));
     return;
