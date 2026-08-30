@@ -20,13 +20,14 @@
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
-import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY_TIER } from '../../../domain/industry';
+import { categoryPriceTier, householdPriceCeilingMultiple, householdDemandLadder } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { channelMarginRate, DISTRIBUTION_SUBUNIT_ID } from '../../../domain/distribution';
+import { subUnitSpecOf } from '../../../domain/industry-registry';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
@@ -1067,21 +1068,44 @@ function buildRegionDemandPlans(
     }
 
     if (hhDemandUnits > 0.001) {
-      // HH4b: the willingness-to-pay premium is a PRICE-TIER property, not one frozen number —
-      // households pay up for staples when supply tightens (the bottom cohorts' inelastic
-      // food-and-energy demand) and walk away from luxury at the same price move (the top
-      // cohorts' discretionary swing).
-      const priceElasticityPremium = HOUSEHOLD_BID_BASE_PREMIUM
-        * HOUSEHOLD_BID_PREMIUM_BY_TIER[categoryPriceTier(subUnitId)];
-      plans.push({
-        regionId,
-        isHouseholdAggregate: true,
-        demandUnits: hhDemandUnits,
-        // IND16: this book clears at the FACTORY GATE, so what the household can bid there is
-        // what its willingness to pay leaves once the channel has taken its cut. A costly channel
-        // means less reaches the producer — which is the transmission the tier exists for, and
-        // the reason it is not merely a bookkeeping layer.
-        maxPriceUSD: (referencePriceUSD * (1.0 + priceElasticityPremium)) / (1 + channelMargin),
+      // COH4 — THE HOUSEHOLD POSTS A SCHEDULE, NOT A QUANTITY AT A CEILING.
+      //
+      // It used to bid its whole week's units at one price: the going price times a frozen
+      // constant times a chosen per-tier elasticity. A step cannot express a demand curve, so
+      // that single number was standing in for a whole schedule — which is why the two honest
+      // derivations of it differed by two orders of magnitude (rule 15).
+      //
+      // The ladder is the curve: saturating below at what the household physically has use for,
+      // budget-constrained above (`units = budget / price`), and reaching only as far up as the
+      // budget it could redirect onto this tier. Every input is measured. **No elasticity and no
+      // premium anywhere** — a household facing a dearer luxury buys less of it, which the curve
+      // says on its own.
+      const hs = reg.householdState;
+      const ceilingMultiple = householdPriceCeilingMultiple(categoryPriceTier(subUnitId), {
+        STAPLE: hs.stapleSpendShare, STANDARD: hs.standardSpendShare, LUXURY: hs.luxurySpendShare,
+      });
+      // What it has use for: the registry's own per-capita consumption intensity, which is the
+      // primitive IND-R3 put there for exactly this and which nothing outside the seed read.
+      const perCapitaAnnual = subUnitSpecOf(subUnitId)?.householdUnitsPerCapitaAnnual ?? 0;
+      const satiationUnits = perCapitaAnnual > 0
+        ? (perCapitaAnnual * Math.max(0, reg.totalPopulation)) / 52
+          * seasonalFactor(subUnitId, week, 'demand')
+        : 0;
+      // IND16: this book clears at the FACTORY GATE, so every rung is the factory-gate price the
+      // household's willingness to pay leaves once the channel has taken its cut.
+      householdDemandLadder({
+        weeklyBudgetUSD: hhDemandUnits * shelfPriceUSD,
+        referencePriceUSD,
+        ceilingMultiple,
+        satiationUnits,
+      }).forEach((rung) => {
+        if (rung.units <= 0.001) return;
+        plans.push({
+          regionId,
+          isHouseholdAggregate: true,
+          demandUnits: rung.units,
+          maxPriceUSD: rung.maxPriceUSD / (1 + channelMargin),
+        });
       });
     }
   }
