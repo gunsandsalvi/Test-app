@@ -428,7 +428,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | — | consequence | **MAC — the price level has no anchor** *(was item 1)* | **DEMOTED under rule 18, and RESCOPED.** It was "close the inflation escape", scoped against a measurement (−36% by w37) taken before ten IND slices, three root-cause fixes and a calendar. **That evidence is void and may not be inherited.** The honest row: the price level's behaviour is a SYMPTOM, its cause is one or more missing mechanisms, and every mechanism landed so far has moved it without trying. **Re-measure on a whole number of years AFTER the foundation tier, then scope.** Its saving half is DIST's item 1(a) and its confidence half needs a precautionary motive, which needs DEM's age structure. |
 | — | consequence | **EMP — the labour collapse** *(was item 2)* | **DEMOTED under rule 18: this row has no build in it.** Its seed half is done (§7.118-121) and §7.149 fixed the defect that made the collapse one-directional — the hiring branch had never fired. What is left is a CRITERION ("60 weeks stable"), not a work item, so it belongs in §5's S-final validation gate rather than the work order. Nothing to start; watch it as the foundation tier lands. |
 | 9 | markets | **G3 — one dealer system (all three of them)** | **CLOSED 2026-08-30 (§7.185–187).** There is one dealer system: a desk per named bank, an ordinary participant in its book's auction, sized by its own leverage headroom and funded by its own reserves. The regional arrays are derived views; the player's three invented counterparties are gone and its fill price is the desk's quote, not a React component's; all five fixed bank prices — the wholesale spread, the deposit beta, the ROE hurdle, the underwriting fee and the hash-drawn lead bank — come out of the bank's own sheet. Primary is now a firm commitment. **Unblocks: CRD's CDS half, DER, ETF2.** Its damper half (G3d) and the equity-float change are the two things a measurement run has to check.
-| 10 | markets | **REPO — secured funding is a market with counterparties** | New 2026-08-29. Repo already CLEARS (`repo-clearing.ts` uses the generic engine, real reservations, the SRF as a seat) but it is not an asset class: no `AssetType`, no `ItemizedHolding`, no named counterparty, one anonymous pool per region, collateral as a scalar. Rules 3 and 14. It is also what should bound a bank's securities book, which is why OWN8's residual ceiling exists at all. |
+| 10 | markets | **REPO — secured funding is a market with counterparties** | **CLOSED 2026-08-30 (§7.188).** A repo is a CONTRACT — named lender, named borrower, struck rate, maturity, and the specific paper pledged — stored once on the region's book with both parties named; every scalar the sheets carried is derived from it, the standing facility included. Collateral is cheapest-to-deliver and encumbrance is per bucket. There is a TERM book, and a term need the private market will not fund falls back to overnight, which is what a funding squeeze is. **Deliberately NOT done: `AssetType.REPO` and an `ItemizedHolding` row** — the position is already real and named, and a second representation to satisfy a checklist is the exact defect this row removed. A player financing a position belongs with **HF**'s prime brokerage. |
 | 11 | markets | **XB — cross-border portfolios and trade** | IN PROGRESS. **XB6** remains and owns the FX leg of the damper defect: the float is systematically one-way and the elastic side cannot absorb it. |
 | 12 | markets | **HF — hedge fund strategies + prime brokerage** | Grown: speculator schedules from own capital (the FX elastic side), hedge ratios onto mandate profiles, home bias as a LIMIT not a weight, the LBO debt share as a financing outcome. |
 | 13 | markets | **DER — derivatives and the people who hedge with them** | Prereq G3. Adds: the cross-currency basis becomes a cleared price, not `150 × utilization × invented split`. |
@@ -6277,3 +6277,42 @@ that proved it, the lesson.
       balance sheet.
     - **One more duplicate went with it:** each book's bid-ask was a private constant in its
       adapter AND a different number in the player's dealer table. One table now, read by both.
+
+188. **REPO — a repo becomes a contract with two named parties, and secured funding gets a term.**
+    - The premise the row corrected first: repo already CLEARED. What it was not was an asset
+      class. A position was a scalar `repoLentUSD` beside books that itemize everything else
+      (rule 3); who lent to whom was unknowable, so the cash leg had no counterparty and the
+      collateral leg had no owner (rule 14); and the pledge was one number, so no particular bond
+      was encumbered.
+    - **Stored ONCE, with both parties named.** The region holds the book; the borrower's
+      `repoBorrowedUSD`, the lender's `repoLentUSD`, `srfBorrowingUSD` and encumbrance are all
+      derived from it — the G2 pattern. That is what makes the position two-sided WITHOUT being
+      two copies of one thing, and it is why `AssetType.REPO` and an `ItemizedHolding` row were
+      deliberately NOT added: the checklist in §5's table was evidence of a defect, not a
+      specification, and satisfying it literally would have re-created the duplication.
+    - **The standing facility is a lender, not a separate scalar.** A window draw is a repo
+      contract with the central bank named, so it matures like every other contract at the rate it
+      was struck at. `evolveBankingSector`'s separate SRF repayment block is gone.
+    - **Maturation is per contract.** `last week's scalar × this week's rate` could only ever
+      describe an overnight book: a term contract's interest is not one week's accrual and its
+      principal is not due.
+    - **Collateral is specific (REPO2).** A borrower pledges cheapest-to-deliver — lowest haircut
+      first, the paper that raises the most cash per dollar of face, which is what a treasury
+      actually does — and 07c/07f floor the buckets ACTUALLY pledged. The blended share this
+      replaces had thirty-year paper withholding the two-year book from the auction that prices
+      it, and could hide an over-pledge of one bucket behind a large position in another. The new
+      harness check asks per bucket, which the old shape made impossible.
+    - **There is a term market (REPO3), and its split is measured, not stated.** The need divides
+      by how long it has already lasted: what a bank is simply ROLLING is structural funding and
+      goes to term; the increment on top is this week's cash dip and goes overnight. Lenders'
+      term reservations are their own outside option over a quarter — the three-month zero the
+      curve already prints — so no new parameter. **The window is not in the term book**, because
+      the facility is overnight: a term need the private market will not fund is not funded and
+      falls back to overnight at whatever that costs. That is a funding squeeze, and the model
+      could not previously have one.
+    - **REPO4 turned out to be mostly already true and the row says so rather than inventing work
+      for itself:** a bank's securities budget in 07c/07f is already cash-above-buffer plus what
+      its collateral can finance, bounded by leverage headroom, and OWN8's
+      `sovereignBookCapacityUSD` is `book + headroom` — the balance sheet its equity supports, not
+      a fabricated ceiling. What REPO2 added is that the financing half is now computed off the
+      specific unpledged paper rather than a blended average.
