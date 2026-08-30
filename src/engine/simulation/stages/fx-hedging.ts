@@ -16,6 +16,9 @@ import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pay } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
+import { invoiceCurrencyOf } from '../../../domain/invoice-currency';
+import { exposureToHedgeUSD } from './corporate-financing';
+import { TradeInvoice } from '../../../domain/trade-invoice';
 import {
   FxForward, HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS,
   forwardMarkToMarketUSD,
@@ -64,6 +67,43 @@ function entityHedgeToleranceBps(entity: any, annualFxSigma: number): number {
   return Math.max(0, annualFxSigma * 10000 * mandateShare);
 }
 
+/**
+ * DER5 — A CORPORATE'S TRANSACTION FX EXPOSURE, measured off its own invoices.
+ *
+ * The institutions in this book hedge TRANSLATION risk: assets they hold abroad. A company's
+ * exposure is a different and more immediate thing — it has delivered goods and is waiting to be
+ * paid in somebody else's money, or owes in it, and between delivery and payment the amount of
+ * cash that eventually moves is a currency's worth away (XB3a-5 built exactly that invoice). It
+ * was measured, it sat on the books every week, and nobody could hedge it: the FX forward market
+ * had one client population and it was the fund managers.
+ *
+ * The exposure is the outstanding invoice, in the currency it is denominated in, for whichever
+ * party is not invoicing in its own money. Both sides of the same invoice can be exposed to
+ * different currencies, and each hedges its own.
+ */
+function corporateExposureByRegion(
+  invoices: TradeInvoice[], week: number
+): Map<string, Map<RegionId, number>> {
+  const currencyRegion = new Map<string, RegionId>();
+  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => currencyRegion.set(invoiceCurrencyOf(r), r));
+  const out = new Map<string, Map<RegionId, number>>();
+  const add = (ticker: string, region: RegionId, usd: number) => {
+    let byRegion = out.get(ticker);
+    if (!byRegion) { byRegion = new Map(); out.set(ticker, byRegion); }
+    byRegion.set(region, (byRegion.get(region) ?? 0) + usd);
+  };
+  invoices.forEach((inv) => {
+    if (inv.weekDue <= week) return; // already due; the exposure is settled, not carried
+    const foreign = currencyRegion.get(inv.currency);
+    if (!foreign) return;
+    const usd = Math.max(0, inv.amountCurrency * inv.bookedUsdPerCurrency);
+    if (!(usd > 0)) return;
+    if (inv.sellerRegion !== foreign) add(inv.sellerTicker, foreign, usd);
+    if (inv.buyerRegion !== foreign) add(inv.buyerTicker, foreign, usd);
+  });
+  return out;
+}
+
 interface DeskState { book: FxDealerBook; headroomUSD: number; marginReceivedUSD: number }
 
 export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
@@ -88,6 +128,16 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
   const liveNotionalByTicker = new Map<string, { gross: number; net: Record<string, number>; margin: number }>();
   ctx.updatedInstitutionalEntities.forEach((e: any) => {
     (e.fxForwards || []).forEach((f: FxForward) => {
+      if (f.maturityWeek <= week) return;
+      const cur = liveNotionalByTicker.get(f.counterpartyTicker) ?? { gross: 0, net: {}, margin: 0 };
+      cur.gross += f.notionalUSD;
+      cur.net[f.foreignRegion] = (cur.net[f.foreignRegion] ?? 0) + f.notionalUSD;
+      cur.margin += f.notionalUSD * FX_INITIAL_MARGIN_RATE;
+      liveNotionalByTicker.set(f.counterpartyTicker, cur);
+    });
+  });
+  ctx.updatedCompanies.forEach((c: any) => {
+    (c.fxForwards || []).forEach((f: FxForward) => {
       if (f.maturityWeek <= week) return;
       const cur = liveNotionalByTicker.get(f.counterpartyTicker) ?? { gross: 0, net: {}, margin: 0 };
       cur.gross += f.notionalUSD;
@@ -140,12 +190,58 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     if (gaps.size > 0) gapByEntityRegion.set(entity.id, gaps);
   });
 
+  // DER5: the CORPORATES' half of the same book. A firm hedges the invoice exposure its own
+  // coverage covenant has no room for — the identical test 07i's commodity hedgers take, read
+  // against a currency instead of a price — and it will pay up to what that exposure's own
+  // volatility costs it, which is `entityHedgeToleranceBps` with a covenant-derived share in
+  // place of a mandate one. Same auction, same basis: a corporate bidding for a hedge widens it
+  // for the fund managers, which is what a shared dealer balance sheet means.
+  // Last week's carried book plus what this week's trade booked — an invoice struck on Monday
+  // carries the same exposure as one struck a month ago.
+  const corporateExposure = corporateExposureByRegion(
+    [...(state.tradeInvoices ?? []), ...ctx.tradeInvoicesBooked], week);
+  const corpGapByTicker = new Map<string, Map<RegionId, number>>();
+  const corpToleranceByTicker = new Map<string, Map<RegionId, number>>();
+  ctx.updatedCompanies.forEach((c: any) => {
+    if (c.isBankEntity || !isActiveCompany(c)) return;
+    const exposure = corporateExposure.get(c.ticker);
+    if (!exposure) return;
+    const live: FxForward[] = (c.fxForwards || []).filter((f: FxForward) => f.maturityWeek > week);
+    const covered = new Map<RegionId, number>();
+    live.forEach((f) => covered.set(f.foreignRegion, (covered.get(f.foreignRegion) ?? 0) + f.notionalUSD));
+    const gaps = new Map<RegionId, number>();
+    const tolerances = new Map<RegionId, number>();
+    exposure.forEach((exposureUSD, foreign) => {
+      const horizonYears = FX_FORWARD_TENOR_WEEKS / 52;
+      const oneSigma = annualSigmaFor(foreign) * Math.sqrt(horizonYears);
+      const mustHedgeUSD = exposureToHedgeUSD({
+        exposureUSD,
+        ebitAnnualUSD: c.ebit ?? 0,
+        interestAnnualUSD: (c.interestCoverage > 0 && isFinite(c.interestCoverage))
+          ? Math.max(0, c.ebit ?? 0) / c.interestCoverage : 0,
+        oneSigma,
+      });
+      if (!(mustHedgeUSD > 0)) return;
+      const gapUSD = mustHedgeUSD - (covered.get(foreign) ?? 0);
+      if (gapUSD <= 1e6) return;
+      gaps.set(foreign, gapUSD);
+      // What certainty is worth to it: the risk it removes, at the share of the exposure it has
+      // no covenant room for. Same construction as the institutions' tolerance above.
+      tolerances.set(foreign, annualSigmaFor(foreign) * 10000 * (mustHedgeUSD / exposureUSD));
+    });
+    if (gaps.size > 0) {
+      corpGapByTicker.set(c.ticker, gaps);
+      corpToleranceByTicker.set(c.ticker, tolerances);
+    }
+  });
+
   /** The cleared basis, and each holder's filled notional, per (holder region, foreign currency). */
   const clearedBasisBps = new Map<string, number>();
   const filledByEntityRegion = new Map<string, Map<RegionId, number>>();
   const bookKey = (holderRegion: RegionId, issuer: RegionId) => `${holderRegion}->${issuer}`;
   const holderRegions = new Set<RegionId>();
   ctx.updatedInstitutionalEntities.forEach((e: any) => holderRegions.add(e.region));
+  ctx.updatedCompanies.forEach((c: any) => { if (corpGapByTicker.has(c.ticker)) holderRegions.add(c.region); });
   holderRegions.forEach((holderRegion) => {
     let capacityUSD = 0;
     ctx.updatedCompanies.forEach((c: any) => {
@@ -157,6 +253,10 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     ctx.updatedInstitutionalEntities.forEach((e: any) => {
       if (e.region !== holderRegion) return;
       (gapByEntityRegion.get(e.id) ?? new Map()).forEach((_g: number, issuer: RegionId) => issuers.add(issuer));
+    });
+    ctx.updatedCompanies.forEach((c: any) => {
+      if (c.region !== holderRegion) return;
+      (corpGapByTicker.get(c.ticker) ?? new Map()).forEach((_g: number, issuer: RegionId) => issuers.add(issuer));
     });
     issuers.forEach((issuer) => {
       const key = bookKey(holderRegion, issuer);
@@ -176,6 +276,22 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
           fullSizeStatRange: toleranceBps,
         });
         participants.push({ id: e.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
+      });
+      ctx.updatedCompanies.forEach((c: any) => {
+        if (c.region !== holderRegion) return;
+        const gapUSD = corpGapByTicker.get(c.ticker)?.get(issuer) ?? 0;
+        if (!(gapUSD > 0)) return;
+        const toleranceBps = corpToleranceByTicker.get(c.ticker)?.get(issuer) ?? 0;
+        if (!(toleranceBps > 0)) return;
+        participants.push({
+          id: `CORP-${c.ticker}`,
+          currentHoldingsByInstrumentId: new Map(),
+          demandByInstrumentId: new Map<string, ParticipantDemand>([[instrumentId, {
+            reservationStat: toleranceBps,
+            maxHoldingUSD: gapUSD,
+            fullSizeStatRange: toleranceBps,
+          }]]),
+        });
       });
       if (participants.length === 0 || !(capacityUSD > 0)) { clearedBasisBps.set(key, 0); return; }
       const instrument: ClearingInstrument = {
@@ -287,6 +403,65 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
 
     // Both legs are instructions now; nothing here moves a balance.
     return { ...entity, fxForwards: [...live, ...newForwards] };
+  });
+
+  // ---- DER5 — THE CORPORATES' SIDE, struck against the same desks at the same cleared basis.
+  // A hedged exporter genuinely feels less of a currency move than an unhedged one, which is the
+  // whole point of the row; before this the invoice exposure was measured every week and no firm
+  // in the model could do anything about it.
+  ctx.updatedCompanies = ctx.updatedCompanies.map((c: any) => {
+    if (c.isBankEntity || !isActiveCompany(c)) return c;
+    const live: FxForward[] = (c.fxForwards || []).filter((f: FxForward) => f.maturityWeek > week);
+    const gaps = corpGapByTicker.get(c.ticker);
+    if (live.length === 0 && !gaps) return c;
+
+    // Mark every live contract; the desk's mirror is collected exactly as the institutions' is.
+    let markUSD = 0;
+    live.forEach((f) => {
+      const m = forwardMarkToMarketUSD(f, ctx.getFxToUsd(f.foreignRegion));
+      markUSD += m;
+      bankMarkByTicker.set(f.counterpartyTicker, (bankMarkByTicker.get(f.counterpartyTicker) ?? 0) - m);
+      if (Math.abs(m) > 0) {
+        pay(ctx, m > 0
+          ? { payer: { kind: 'BANK', ticker: f.counterpartyTicker }, payee: { kind: 'COMPANY', ticker: c.ticker }, amountUSD: m, reason: 'fx forward variation margin' }
+          : { payer: { kind: 'COMPANY', ticker: c.ticker }, payee: { kind: 'BANK', ticker: f.counterpartyTicker }, amountUSD: -m, reason: 'fx forward variation margin' });
+      }
+    });
+
+    const newForwards: FxForward[] = [];
+    (gaps ?? new Map<RegionId, number>()).forEach((gapUSD: number, issuer: RegionId) => {
+      const dealer = pickDealerBank(ctx, c.region, desks);
+      if (!dealer) return;
+      const desk = desks.get(dealer.ticker)!;
+      const filledUSD = filledByEntityRegion.get(`CORP-${c.ticker}`)?.get(issuer) ?? 0;
+      const writableUSD = Math.min(gapUSD, filledUSD, fxDeskCapacityUSD(dealer.headroomUSD, desk.book));
+      if (writableUSD <= 1e6) return;
+      const basisBps = clearedBasisBps.get(bookKey(c.region, issuer)) ?? 0;
+      const marginUSD = writableUSD * FX_INITIAL_MARGIN_RATE;
+      if (marginUSD > Math.max(0, c.cashUSD ?? 0) + markUSD) return;
+      pay(ctx, {
+        payer: { kind: 'COMPANY', ticker: c.ticker },
+        payee: { kind: 'BANK_SECURITIES', ticker: dealer.ticker },
+        amountUSD: marginUSD,
+        reason: 'fx forward initial margin',
+      });
+      desk.book.grossNotionalUSD += writableUSD;
+      desk.book.netNotionalByRegion[issuer] = (desk.book.netNotionalByRegion[issuer] ?? 0) + writableUSD;
+      desk.book.initialMarginHeldUSD += marginUSD;
+      desk.marginReceivedUSD += marginUSD;
+      newForwards.push({
+        id: `${c.ticker}-FX-${issuer}-${week}`,
+        holderId: c.ticker,
+        counterpartyTicker: dealer.ticker,
+        foreignRegion: issuer,
+        contractedRate: ctx.getFxToUsd(issuer) * (1 - basisBps / 10000),
+        notionalUSD: writableUSD,
+        maturityWeek: week + FX_FORWARD_TENOR_WEEKS,
+      });
+    });
+
+    if (live.length === (c.fxForwards || []).length && newForwards.length === 0) return c;
+    return { ...c, fxForwards: [...live, ...newForwards] };
   });
 
   // XB2f: the desk offers its WHOLE net position to the FX market — it does not decide how much

@@ -25,7 +25,7 @@ import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { isActiveCompany } from '../../../domain/company';
-import { COVENANT_INTEREST_COVERAGE } from './corporate-financing';
+import { exposureToHedgeUSD } from './corporate-financing';
 import { BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 
@@ -45,19 +45,6 @@ const partyRefOf = (p: FuturesParty): PartyRef =>
   p.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: p.id }
     : p.kind === 'BANK' ? { kind: 'BANK', ticker: p.ticker }
       : { kind: 'COMPANY', ticker: p.ticker };
-
-/**
- * What a firm has to hedge: the exposure whose own one-sigma move would take its earnings through
- * the coverage covenant. Everything inside that, it can wear. The same test 07g uses to decide
- * which corporates must pay fixed, applied to a price rather than a rate.
- */
-function exposureToHedgeUSD(args: {
-  exposureUSD: number; ebitAnnualUSD: number; interestAnnualUSD: number; oneSigma: number;
-}): number {
-  if (!(args.exposureUSD > 0) || !(args.oneSigma > 0)) return 0;
-  const spareEbitUSD = Math.max(0, args.ebitAnnualUSD - COVENANT_INTEREST_COVERAGE * Math.max(0, args.interestAnnualUSD));
-  return Math.max(0, args.exposureUSD - spareEbitUSD / args.oneSigma);
-}
 
 export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContext): void {
   const book: FuturesPosition[] = ctx.commodityFuturesBook ?? state.commodityFuturesBook ?? [];

@@ -174,3 +174,26 @@ export function decideCorporateFinancing(params: {
 
   return { netDebtChangeUSD: 0, reason: 'NONE', walkAwayCostAnnual };
 }
+
+/**
+ * DER5 — WHAT A FIRM HAS TO HEDGE: the exposure whose own one-sigma move would take its earnings
+ * through the coverage covenant. Everything inside that headroom it can wear; everything past it
+ * is a covenant breach waiting on a price, and a breach is not a preference.
+ *
+ * It is the same test `committedLineHeadroomUSD` above applies to interest, read against a price
+ * instead of a rate, and the same shape 07g uses to decide which corporates must pay fixed. One
+ * owner for all of it, because it is one question: how much variance does this balance sheet have
+ * room for?
+ */
+export function exposureToHedgeUSD(params: {
+  exposureUSD: number;
+  ebitAnnualUSD: number;
+  interestAnnualUSD: number;
+  /** The exposure's own standard deviation over the hedge horizon, as a fraction. */
+  oneSigma: number;
+}): number {
+  if (!(params.exposureUSD > 0) || !(params.oneSigma > 0)) return 0;
+  const spareEbitUSD = Math.max(0,
+    params.ebitAnnualUSD - COVENANT_INTEREST_COVERAGE * Math.max(0, params.interestAnnualUSD));
+  return Math.max(0, params.exposureUSD - spareEbitUSD / params.oneSigma);
+}
