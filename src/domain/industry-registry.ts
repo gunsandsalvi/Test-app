@@ -864,8 +864,16 @@ export function firmInputIntensities(
  */
 
 /** What one dollar of this product consumes in total — the product's own intermediate share. */
+const recipeIntensityById = new Map<string, number>();
 export function recipeIntensityOf(unitId: string): number {
-  return Object.values(byId.get(unitId)?.recipeInputs ?? {}).reduce((a, b) => a + b, 0);
+  // SCALE: a fixed property of a fixed registry, and it was allocating an array and reducing it
+  // on every call — including once per sub-unit inside the labour-share derivation and once per
+  // product line in the headcount and input-output walks.
+  const memo = recipeIntensityById.get(unitId);
+  if (memo !== undefined) return memo;
+  const out = Object.values(byId.get(unitId)?.recipeInputs ?? {}).reduce((a, b) => a + b, 0);
+  recipeIntensityById.set(unitId, out);
+  return out;
 }
 
 /**
