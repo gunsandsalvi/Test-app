@@ -493,11 +493,59 @@ how state is LAID OUT and TRAVERSED, not of what the model says.
 (§7.216 found 105,000 ledger keys being converted to a plain object and back every week for a
 reader that does not exist); string identity; and stages that allocate.
 
-**The migration, if it is taken:** strangler, not big-bang. The SoA store lands behind the existing
-accessors; stages convert one at a time with the object view kept as a debug-only materialiser; the
-20-week bit-exactness diff is the gate at every step. **The repo's determinism discipline is what
-makes this safe** — bit-exactness is checkable after every commit, which is not true of most
-rewrites.
+**The migration is a strangler, not a big bang.** The SoA store lands behind the existing
+accessors; stages convert one at a time with the object view kept as a debug-only materialiser.
+**The repo's determinism discipline is what makes this safe** — bit-exactness is checkable after
+every commit, which is not true of most rewrites.
+
+#### WAVE 2 — the execution order
+
+**Sequenced prove → biggest → parallelise → finish.** Milestones 1–3 (§7.217) are done: party ids,
+the register's CSR index, the payment journal. Those were the parts that fit behind existing
+accessors. What follows moves the state itself.
+
+**PHASE 0 — THE GATE, AND IT IS NOT THE ONE IN USE.** Every step so far was gated on a 20-week diff
+of the harness's PRINTED lines. That is not sufficient for this work: a column conversion that drops
+or misorders a field nothing prints passes it silently. **Before any table moves, the gate becomes a
+hash over the whole state** — every column of every table, in row order — asserted equal against the
+object-graph run. Cheap to build, and it is the thing that makes every later step provable rather
+than hopeful. **Do not start Phase 1 without it.**
+
+**PHASE 1 — THE PRIMITIVES.** Three pieces of infrastructure, no behaviour change, each with its own
+tests: a `Table` (named typed-array columns over one `SharedArrayBuffer`, growable, row ids, a free
+list); the string INTERN table (already exists for parties and payment reasons — generalise it); and
+the per-week ARENA with a bump pointer and a reset at the week boundary. Nothing gets faster in this
+phase. Skipping it is how the rewrite turns into a rewrite of itself.
+
+**PHASE 2 — HOLDINGS, to prove the machinery.** ~110,000 rows, five fields, and its CSR index
+already exists (§7.217). Twenty files read it, and the reads are the mechanical kind. It is the
+right first table because it is big enough to be a real test and small enough that a mistake is
+findable. The object view survives as a materialiser for the UI and the harness. Expect a modest
+wall-clock win; the point of this phase is that everything after it is mechanical rather than novel.
+
+**PHASE 3 — COMPANIES, the one that pays.** 2,496 rows × ~72 fields, and `runCompanyFundamentalsStage`
+is 196 ms of the remaining 1,200 with a **78 µs per-company floor** that is pointer chasing and
+allocation, not arithmetic. This is the biggest single item in the engine and the most-referenced
+type in the repo, which is exactly why it goes AFTER the machinery is proven and not before. Convert
+the table, then the stage-08 body kernel by kernel — its seven sections are already identified.
+
+**PHASE 4 — PARALLELISE.** Only now. Workers multiply whatever is already columnar, so doing this
+before Phases 2–3 would multiply almost nothing — which is the real reason §7.213's worker
+measurement came back dead. Shard the kernels over the `SharedArrayBuffer`; combine per-shard
+reductions IN SHARD ORDER. `financial-clearing-engine.ts` already does exactly this and is
+byte-identical to serial: **it is the pattern to copy, not to invent.**
+
+**PHASE 5 — THE REST, then delete the graph from the hot path.** Tranches (~8,600), the contract and
+plan books, the cohorts and pools. Then the object graph exists only as the debug/UI materialiser,
+and `GameState` stops being one giant object.
+
+**THE PROJECTION, PHASE BY PHASE.** Phases 0–1 buy nothing. Phase 2 is modest. **Phase 3 is the step
+that takes the cycle under 300 ms single-threaded**, and Phase 4 is what takes it under 100. The
+payoff is back-loaded and the plan should be judged on Phase 3 landing, not on Phase 1 feeling slow.
+
+**IF A STEP CANNOT BE BIT-EXACT, STOP AND DECLARE IT.** The whole value of this sequence is that
+§7.211's measurement programme survives it. A step that reorders a float sum is a world relabel and
+costs that; it is allowed, but it is a decision with a record, not a shrug in a commit message.
 - **Stale, and left as the standing warning:** earlier text called `09-concentration-risk` "the
   cheapest win on the table: 98 ms a week for flags nothing prices off." **CRD-R1 gave it a
   consumer** (§7.184). Read the code before believing a row.
