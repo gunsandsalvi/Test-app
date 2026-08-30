@@ -20,7 +20,7 @@
  *     economy's totals never change because a firm was created.
  */
 
-import { Company, InstitutionalEntity, Region, RegionId, DebtTranche } from '../../../types';
+import { Company, InstitutionalEntity, Region, RegionId, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { PrimaryOffering, mandateAllocator } from '../../../domain/primary-market';
 import { isActiveCompany } from '../../../domain/company';
@@ -90,6 +90,17 @@ export function publicComparableEvMultiple(
 const LBO_MAX_LEVERAGE = 6.0;
 /** Weeks a sponsor holds before it will consider an exit. */
 const MIN_HOLD_WEEKS = 78;
+/**
+ * G5 — THE FUND'S LIFE, and why a sponsor sells to another sponsor at all.
+ *
+ * A closed-end fund has a term: it draws capital, holds, and must return that capital to its LPs
+ * by the end of it. That is a CONTRACT TERM, the same kind of primitive as a mortgage's or a
+ * CDS's tenor, and it is the whole reason sponsor-to-sponsor sales happen in reality — the seller
+ * is out of time, not out of conviction. Without it a holding could only leave by listing, and
+ * §5-G5 names that as "the half of the capital-recycling loop a listing cannot provide": when the
+ * public market is shut, a portfolio in this model simply never turned over.
+ */
+const PE_FUND_LIFE_WEEKS = 10 * 52;
 /** Discount margin below which the loan market is "open" enough for a dividend recap. */
 const RECAP_DM_THRESHOLD_BPS = 450;
 /**
@@ -329,6 +340,66 @@ export function runPeLifecycleForRegion(
           peDeal: { kind: 'IPO', sponsorId: sponsor.id },
         } as PrimaryOffering);
         pendingIssuers.add(listCandidate.id);
+      }
+    }
+
+    // ---- G5: EXIT BY SALE. The fund is out of TIME, which is what actually forces most private
+    // exits — a closed-end fund must return its LPs' capital by the end of its term, and when the
+    // public market will not take the company it sells it to a sponsor that still has capital to
+    // deploy. That is the capital-recycling loop, and a listing alone cannot close it: with the
+    // IPO test unmet a holding never left the portfolio at all.
+    //
+    // The price is the same one mark, sale and purchase all read this week (`markEvMultiple`), so
+    // a company is never sold on one number and marked on another. The buyer pays with its own
+    // called capital, the seller distributes the proceeds to ITS LPs, and the company's DEBT
+    // stays where it is — which is what makes this a change of owner rather than a refinancing.
+    const saleCandidate = portfolio.find((c) => {
+      if (pendingIssuers.has(c.id) || c.listingStatus !== 'PRIVATE') return false;
+      if (nextWeek - (c.ownership?.acquiredWeek ?? 0) < PE_FUND_LIFE_WEEKS) return false;
+      return ebitdaOf(c) > 0 && equityValueUSD(c, markEvMultiple) > 0;
+    });
+    if (saleCandidate) {
+      const priceUSD = equityValueUSD(saleCandidate, markEvMultiple);
+      // Whichever OTHER sponsor in this region can actually fund it. A buyer that cannot pay is
+      // not a buyer, so a company nobody can afford stays where it is — an illiquid exit window,
+      // which is a real thing for a fund at the end of its life.
+      const buyer = sponsors.find((s2) =>
+        s2.id !== sponsor.id && !s2.isDefaulted
+        && dryPowderUSD(s2, lpById) >= priceUSD);
+      if (buyer && priceUSD > 1e6) {
+        const drawnUSD = callCapitalUSD(ctx, buyer.id, priceUSD);
+        if (drawnUSD >= priceUSD * 0.999) {
+          pay(ctx, {
+            payer: { kind: 'INSTITUTION', id: buyer.id },
+            payee: { kind: 'INSTITUTION', id: sponsor.id },
+            amountUSD: priceUSD,
+            reason: 'private company sold sponsor-to-sponsor',
+          });
+          distributeToLps(ctx, sponsor.id, priceUSD);
+          sponsor.peFund!.portfolioCompanyIds = sponsor.peFund!.portfolioCompanyIds
+            .filter((id) => id !== saleCandidate.id);
+          buyer.peFund!.portfolioCompanyIds = [...buyer.peFund!.portfolioCompanyIds, saleCandidate.id];
+          saleCandidate.ownership = {
+            founderPct: saleCandidate.ownership?.founderPct ?? 0,
+            ...(saleCandidate.ownership ?? {}),
+            peSponsorId: buyer.id,
+            acquiredWeek: nextWeek,
+            entryEvMultiple: markEvMultiple,
+          };
+          pendingIssuers.add(saleCandidate.id);
+          ctx.newsItems.push({
+            id: `pe-sale-${saleCandidate.id}-${nextWeek}`,
+            week: nextWeek,
+            title: `${saleCandidate.name} Changes Hands in Sponsor-to-Sponsor Sale`,
+            description: `${sponsor.name} sold ${saleCandidate.name} to ${buyer.name} at ${markEvMultiple.toFixed(1)}x EBITDA at the end of its fund's term.`,
+            category: 'CREDIT',
+            impactBadge: '[PRIVATE EQUITY]',
+            impactRegion: regionId,
+            impactSector: saleCandidate.sector,
+            affectedTicker: saleCandidate.ticker,
+            urgent: false,
+          } as NewsItem);
+        }
       }
     }
 
