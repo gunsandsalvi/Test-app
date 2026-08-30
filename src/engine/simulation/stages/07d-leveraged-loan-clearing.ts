@@ -41,8 +41,9 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
+import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand , YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
@@ -364,7 +365,23 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} leveraged loan`);
-    settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD);
+    // G3c: quoted per deal — the desks' spread plus a week's spread move through the loan's own
+    // duration, on the residual the desks cannot absorb.
+    const bookCapacityUSD = totalDeskCapacityUSD(ctx, regionBanks, BOOK);
+    const durationById = new Map(regionCompanies.map((c) => [c.id, loanCreditDurationYears(c)]));
+    settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
+      (o, clearedStat) => underwritingFeeBps({
+        bookSpreadBps: DEALER_SPREAD_BPS,
+        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
+          statKind: 'YIELD_LIKE', currentStat: clearedStat,
+          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
+          minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
+          durationYears: durationById.get(o.issuerId) ?? 0,
+        }),
+        dealSizeUSD: o.sizeUSD,
+        deskCapacityUSD: bookCapacityUSD,
+      }),
+      BOOK);
 
     // Apply: real cleared discount margin + derived price-to-par, mutated in place so stage 8
     // reads it as an already-real value. Also extend the rolling history for momentum.

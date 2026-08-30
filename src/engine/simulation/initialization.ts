@@ -37,7 +37,7 @@ import { LABOR_SHARE_OF_OUTPUT } from '../bootstrap/national-accounts';
 import { weeklyWageBillUSD } from '../bootstrap/labor-and-wages';
 import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
-import { chooseLeadBank } from '../../domain/primary-market';
+import { mandateAllocator } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { DEALERS } from '../dealers';
 import { GameState } from '../../types';
@@ -545,9 +545,17 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
       // relationship lead WS8 mandates for its offerings, so one firm has one bank).
+      // G3c: a house bank is won, not drawn. Each relationship consumes the winner's balance
+      // sheet, so the region's firms spread across its banks in proportion to the equity each
+      // one actually has — the hash of the firm's id this replaces spread them too, but on
+      // nothing any bank did.
+      const houseBanks = mandateAllocator(regionBanksForLending.map(b => ({
+        ticker: b.ticker, bankMarketShare: b.bankMarketShare,
+        capacityUSD: b.bankBalanceSheet?.bankEquityUSD ?? 0,
+      })));
       regionCompanies.forEach(c => {
         if (c.isBankEntity) return;
-        c.homeBankTicker = chooseLeadBank(c.id, regionBanksForLending.map(b => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare })));
+        c.homeBankTicker = houseBanks.pick(c.id, Math.max(0, c.cash));
       });
       const corpDepositsByBank = new Map<string, number>();
       regionCompanies.forEach(c => {
@@ -1023,9 +1031,12 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     if (regionBanks.length === 0) return;
     const byBank = new Map<string, number>();
+    const houseBanks = mandateAllocator(regionBanks.map(b => ({
+      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityUSD,
+    })));
     institutionalEntities.forEach(e => {
       if (e.region !== regionId) return;
-      e.homeBankTicker = chooseLeadBank(e.id, regionBanks.map(b => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare })));
+      e.homeBankTicker = houseBanks.pick(e.id, Math.max(0, e.cashUSD ?? 0));
       byBank.set(e.homeBankTicker, (byBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
     });
     regionBanks.forEach(b => {
@@ -1302,17 +1313,19 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const reg = regions[regionId];
     const regionBanks = companies.filter(c => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     if (regionBanks.length === 0) return;
-    const bankRefs = regionBanks.map(b => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare }));
+    const lateHouseBanks = mandateAllocator(regionBanks.map(b => ({
+      ticker: b.ticker, bankMarketShare: b.bankMarketShare, capacityUSD: b.bankBalanceSheet!.bankEquityUSD,
+    })));
     const lateCorporateByBank = new Map<string, number>();
     const lateInstitutionalByBank = new Map<string, number>();
     companies.forEach(c => {
       if (c.region !== regionId || c.isBankEntity || c.homeBankTicker) return;
-      c.homeBankTicker = chooseLeadBank(c.id, bankRefs);
+      c.homeBankTicker = lateHouseBanks.pick(c.id, Math.max(0, c.cash));
       lateCorporateByBank.set(c.homeBankTicker, (lateCorporateByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
     });
     institutionalEntities.forEach(e => {
       if (e.region !== regionId || e.homeBankTicker) return;
-      e.homeBankTicker = chooseLeadBank(e.id, bankRefs);
+      e.homeBankTicker = lateHouseBanks.pick(e.id, Math.max(0, e.cashUSD ?? 0));
       lateInstitutionalByBank.set(e.homeBankTicker, (lateInstitutionalByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
     });
     if (lateCorporateByBank.size === 0 && lateInstitutionalByBank.size === 0) return;

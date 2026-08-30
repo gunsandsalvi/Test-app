@@ -101,6 +101,10 @@ export interface BankingSector {
    * exclude it from further borrowing capacity.
    */
   repoEncumberedCollateralUSD: number;
+  /** G3c: the deposit rate this bank decided to pay (annualised decimal), out of its own
+   *  alternative funding cost and the share of its base actually in play. One writer
+   *  (evolveBankingSector); anyone who needs the rate reads it here rather than restating it. */
+  depositRateAnnual?: number;
   /** XB2b: the FX forward desk's live book — inventory, margin held, and notional written. */
   fxDealerBook?: FxDealerBook;
   /**
@@ -231,12 +235,12 @@ export interface HouseholdLoanPool {
 }
 
 /**
- * What wholesale money costs over policy.
+ * What wholesale money costs over policy, for a bank whose credit the market has not priced yet.
  *
- * RULE 1, OPEN: this is the PRICE of a bank's own funding, and it is the same 40bps for a
- * well-capitalised bank and one whose capital ratio has left its band. A bank's funding spread is
- * exactly where the market's view of it shows up — and §6.1's USA cohort story is about banks
- * funding ~48% wholesale, so this number is load-bearing there. Owner: G3.
+ * G3c closed the rule-1 defect this used to carry: a bank's funding spread is now its OWN cleared
+ * corporate-bond spread, printed by the same auction that prices every other issuer, so a bank
+ * whose capital ratio has left its band pays for it. This survives as the week-1 fallback, before
+ * the first auction has run.
  */
 export const WHOLESALE_FUNDING_SPREAD_BPS = 40;
 

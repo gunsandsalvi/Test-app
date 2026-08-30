@@ -90,7 +90,9 @@ export function divertHouseholdSavingsToMmf(
 ): number {
   const mmf = findRegionMmf(ctx.updatedInstitutionalEntities, regionId);
   if (!mmf || weeklySavingsDepositInflowUSD <= 0) return 0;
-  const depositRateAnnual = reg.policyRate * 0.45; // the banks' deposit beta (G2 slice 5 makes it competitive)
+  // G3c: what the banks actually decided to pay this week, not a second copy of a retired
+  // beta. One number, one writer — the depositor's choice is between this and the fund's yield.
+  const depositRateAnnual = reg.bankingSector.depositRateAnnual ?? 0;
   const gap = (mmf.mmfNetYieldAnnual ?? 0) - depositRateAnnual;
   if (gap <= 0) return 0;
   const divertedShare = Math.min(1, gap / DEPOSIT_MMF_FULL_SWITCH_GAP);

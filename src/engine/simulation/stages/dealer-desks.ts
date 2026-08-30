@@ -12,6 +12,7 @@ import {
   DealerDeskInventory, DealerDeskPosition, dealerDeskCapacityUSD, dealerDeskParticipantId,
   dealerDeskTicker, regionalDeskView,
 } from '../../../domain/dealer-desk';
+import { LeadBankCandidate } from '../../../domain/primary-market';
 import { leverageHeadroomUSD, MIN_CASH_BUFFER_RATIO, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
 import { WeeklyStepContext } from './context';
@@ -173,6 +174,64 @@ export function applyDealerDeskFills(args: {
     inventories.push(inventory);
   });
   return regionalDeskView(inventories, book);
+}
+
+/** The dealer capacity live in one book across a region's banks — what a new deal can be
+ *  placed into without anyone taking price risk, and therefore what an underwriter's fee is
+ *  quoted against (G3c). */
+export function totalDeskCapacityUSD(ctx: WeeklyStepContext, banks: Company[], book: string): number {
+  let capacityUSD = 0;
+  banks.forEach((bank) => {
+    const sheet = sheetOf(ctx, bank);
+    if (!sheet) return;
+    capacityUSD += dealerDeskCapacityUSD({
+      balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet),
+      inventory: sheet.dealerDeskInventory,
+      book,
+    });
+  });
+  return capacityUSD;
+}
+
+/**
+ * G3c — the mandate allocator for one pass: who each issuer's lead bank is, and what winning a
+ * mandate costs the winner. The relationship comes off the banks' own itemized loan books, so it
+ * is measured every time and a bank that lets a facility run off loses the call; free capacity
+ * comes off the same desk capacity that underwrites the deal, and `award` decrements it, so a
+ * bank that has taken deals on this week stops winning them.
+ */
+export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book: string) {
+  const freeUSD = new Map<string, number>();
+  const lentByBankByBorrower = new Map<string, Map<string, number>>();
+  banks.forEach((bank) => {
+    const sheet = sheetOf(ctx, bank);
+    if (!sheet) return;
+    freeUSD.set(bank.ticker, dealerDeskCapacityUSD({
+      balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
+      leverageHeadroomUSD: leverageHeadroomUSD(sheet),
+      inventory: sheet.dealerDeskInventory,
+      book,
+    }));
+    const byBorrower = new Map<string, number>();
+    (sheet.businessLoans || []).forEach((l) => {
+      if (l.status !== 'PERFORMING') return;
+      byBorrower.set(l.borrowerId, (byBorrower.get(l.borrowerId) ?? 0) + l.principalUSD);
+    });
+    lentByBankByBorrower.set(bank.ticker, byBorrower);
+  });
+  return {
+    candidatesFor: (issuerId: string): LeadBankCandidate[] => banks.map((bank) => ({
+      ticker: bank.ticker,
+      bankMarketShare: bank.bankMarketShare,
+      relationshipUSD: lentByBankByBorrower.get(bank.ticker)?.get(issuerId) ?? 0,
+      freeCapacityUSD: freeUSD.get(bank.ticker) ?? 0,
+    })),
+    /** The winner's desk is that much less able to win the next one. */
+    award: (ticker: string, sizeUSD: number) => {
+      freeUSD.set(ticker, Math.max(0, (freeUSD.get(ticker) ?? 0) - Math.max(0, sizeUSD)));
+    },
+  };
 }
 
 /** Route a desk's participant id to the bank whose reserves fund it. */

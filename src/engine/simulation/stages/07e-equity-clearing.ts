@@ -38,7 +38,8 @@ const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion } from './book-settlement';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
+import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
@@ -300,8 +301,20 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} equity`);
     // Equity proceeds are shares x the CLEARED price — the one place the conversion differs
     // from credit (where the stat is a spread and the paper prices at par).
+    // G3c: quoted per deal. Equity moves in price already, so the risk on the residual is the
+    // book's own one-week move — which is why an equity mandate is the dearest of the three.
+    const bookCapacityUSD = totalDeskCapacityUSD(ctx, regionBanks, BOOK);
     settlePricedOfferings(regionId, 'EQUITY', offeringsByIssuerId, result, ctx,
-      (o, clearedStat) => o.sizeUSD * clearedStat);
+      (o, clearedStat) => o.sizeUSD * clearedStat,
+      (o, clearedStat) => underwritingFeeBps({
+        bookSpreadBps: DEALER_SPREAD_BPS,
+        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
+          statKind: 'PRICE_LIKE', currentStat: clearedStat, maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
+        }),
+        dealSizeUSD: o.sizeUSD * clearedStat,
+        deskCapacityUSD: bookCapacityUSD,
+      }),
+      BOOK);
 
     // Apply the cleared price. Stage 08 runs after this and reads it as already-real, exactly as
     // it reads the cleared OAS — it no longer computes a price of its own.

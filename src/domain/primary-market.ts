@@ -84,9 +84,10 @@ export interface PrimaryOffering {
  * Underwriting fees by instrument, in bps of size. Ordered the way real placement difficulty
  * orders them: loans need syndication, equity needs a book of new owners.
  *
- * RULE 1, OPEN: a fee is a PRICE, and competing desks should bid it down for an easy deal and up
- * for a hard one. One fixed schedule means an issuer's placement cost never responds to how many
- * banks want the mandate or how the deal is going. Owner: G3.
+ * G3c closed the rule-1 defect: the fee is now QUOTED per deal by `underwritingFeeBps` below,
+ * out of the book's own spread and what the underwriter can lose on the residual it expects to
+ * hold. This table survives as the fallback for a quote made before the deal's own numbers are
+ * known — and as the check on the derivation, which reproduces all three of its levels.
  */
 export const UNDERWRITING_FEE_BPS: Record<PrimaryOfferingInstrumentType, number> = {
   CORP_BOND: 50,
@@ -95,26 +96,127 @@ export const UNDERWRITING_FEE_BPS: Record<PrimaryOfferingInstrumentType, number>
 };
 
 /**
- * The issuer's house bank: a stable hash of the issuer id, weighted by measured deposit share.
- * Stable across weeks, so fee flow is attributable.
+ * G3c — what an underwriting mandate is actually worth, quoted rather than read off a table.
  *
- * RULE 13, OPEN: this is a draw, not a relationship. Nothing the bank DID wins it the mandate —
- * not its price, not its balance sheet, not whether it lent to this issuer before — and no
- * issuer ever moves. A real house-bank relationship is won and lost. Owner: G3.
+ * A firm-commitment underwriter sells two things and the fee is the price of both. It makes a
+ * market in the paper, so it earns the same bid/ask its desk earns in the secondary. And it
+ * GUARANTEES the price: whatever the book does not take, the lead owns at the agreed level, and
+ * carries it into a market that can move against it before it distributes. So:
+ *
+ *     fee = the desks' own spread  +  what it can lose on the residual it expects to hold
+ *
+ * Every term is something the model already prints. The spread is the book's own. The move is
+ * the book's own one-week move — for a credit book, that spread move through the deal's
+ * duration, which is what turns a widening into a price. The residual share is what the desks
+ * cannot absorb: a deal small against the market's live dealer capacity places itself, and one
+ * large against it is placed at the underwriter's risk. A fee therefore falls when banks have
+ * balance sheet and rises when they do not, and it is bid per DEAL rather than per asset class.
+ *
+ * The table above survives only as the fallback for a quote made before any of that is known.
  */
-export function chooseLeadBank(
-  issuerId: string,
-  banks: { ticker: string; bankMarketShare?: number }[]
-): string {
+export function underwritingFeeBps(args: {
+  /** The desks' own secondary bid/ask in this book, in bps. */
+  bookSpreadBps: number;
+  /** What the paper's PRICE can move against the underwriter in one week, in bps. */
+  oneWeekPriceRiskBps: number;
+  /** The deal, against the dealer capacity live in this book right now. */
+  dealSizeUSD: number;
+  deskCapacityUSD: number;
+}): number {
+  const residualShare = args.dealSizeUSD > 0
+    ? args.dealSizeUSD / (args.dealSizeUSD + Math.max(0, args.deskCapacityUSD))
+    : 0;
+  return Math.max(1, args.bookSpreadBps + residualShare * Math.max(0, args.oneWeekPriceRiskBps));
+}
+
+/**
+ * The price risk a book's own one-week move puts on paper the underwriter is left holding.
+ *
+ * PRICE_LIKE books move in price already. A YIELD_LIKE book moves in yield or spread, and what
+ * turns that into money is the deal's own duration — the same arithmetic the credit desks use
+ * everywhere else.
+ */
+export function oneWeekPriceRiskBps(args: {
+  statKind: 'PRICE_LIKE' | 'YIELD_LIKE';
+  currentStat: number;
+  maxWeeklyStatMovePct: number;
+  minWeeklyStatMoveBps?: number;
+  durationYears?: number;
+}): number {
+  const moveInStat = Math.abs(args.currentStat) * args.maxWeeklyStatMovePct;
+  if (args.statKind === 'PRICE_LIKE') return args.maxWeeklyStatMovePct * 10000;
+  return (moveInStat + (args.minWeeklyStatMoveBps ?? 0)) * Math.max(0, args.durationYears ?? 0);
+}
+
+/**
+ * The issuer's house bank — G3c: a relationship, not a draw.
+ *
+ * What this replaces: a stable hash of the issuer id, weighted by deposit share. Nothing the
+ * bank DID won it the mandate — not its price, not its balance sheet, not whether it had ever
+ * lent to this issuer — and because the hash never changed, no issuer ever moved. Rule 13: a
+ * mandate is an outcome.
+ *
+ * A mandate now follows, in order, the two things that really decide it:
+ *   1. **The credit relationship the bank already has.** The lender carrying this issuer's
+ *      facilities knows the credit and gets the call. This is what makes a mandate LOSABLE: the
+ *      relationship is measured off the banks' own itemized loan books every time it is asked,
+ *      so a bank that lets a facility run off loses the mandate to the one that wrote the next.
+ *   2. **The balance sheet to place the deal.** With no incumbent, the mandate goes to the desk
+ *      that can actually underwrite it — free dealer capacity, which the caller decrements as it
+ *      hands mandates out, so a bank that has taken deals on stops winning them.
+ * Market share is the last resort, for a caller that knows neither, and the issuer id only ever
+ * breaks an exact tie, so the choice is stable across a week's passes.
+ */
+export interface LeadBankCandidate {
+  ticker: string;
+  bankMarketShare?: number;
+  /** What this bank already lends this issuer — the relationship, measured. */
+  relationshipUSD?: number;
+  /** What its desk could still underwrite; the caller decrements it as mandates are won. */
+  freeCapacityUSD?: number;
+}
+
+export function chooseLeadBank(issuerId: string, banks: LeadBankCandidate[]): string {
   if (banks.length === 0) return '';
   let hash = 0;
   for (let i = 0; i < issuerId.length; i++) hash = ((hash << 5) - hash + issuerId.charCodeAt(i)) | 0;
-  const u = ((hash >>> 0) % 10000) / 10000;
-  const totalShare = banks.reduce((a, b) => a + (b.bankMarketShare ?? 1 / banks.length), 0) || 1;
-  let acc = 0;
-  for (const b of banks) {
-    acc += (b.bankMarketShare ?? 1 / banks.length) / totalShare;
-    if (u <= acc) return b.ticker;
-  }
-  return banks[banks.length - 1].ticker;
+  const tieBreak = (hash >>> 0) % banks.length;
+  const rank = (b: LeadBankCandidate, i: number): number[] => [
+    Math.max(0, b.relationshipUSD ?? 0),
+    Math.max(0, b.freeCapacityUSD ?? 0),
+    b.bankMarketShare ?? 0,
+    banks.length - ((i - tieBreak + banks.length) % banks.length),
+  ];
+  let best = banks[0];
+  let bestRank = rank(banks[0], 0);
+  banks.forEach((b, i) => {
+    const r = rank(b, i);
+    for (let k = 0; k < r.length; k++) {
+      if (r[k] > bestRank[k]) { best = b; bestRank = r; return; }
+      if (r[k] < bestRank[k]) return;
+    }
+  });
+  return best.ticker;
+}
+
+/**
+ * G3c — hand out a pass's mandates (or house-bank relationships) without any bank winning them
+ * all. Each award consumes the winner's capacity, so the allocation spreads across the region's
+ * banks in proportion to the balance sheet each actually has — the same quantity that decides
+ * whether a bank could serve the client at all, in place of a hash of the client's id.
+ */
+export function mandateAllocator(banks: { ticker: string; bankMarketShare?: number; capacityUSD: number }[]) {
+  const freeUSD = new Map(banks.map((b) => [b.ticker, Math.max(0, b.capacityUSD)]));
+  return {
+    pick(clientId: string, sizeUSD: number, relationshipUSD?: (ticker: string) => number): string {
+      const ticker = chooseLeadBank(clientId, banks.map((b) => ({
+        ticker: b.ticker,
+        bankMarketShare: b.bankMarketShare,
+        relationshipUSD: relationshipUSD ? relationshipUSD(b.ticker) : 0,
+        freeCapacityUSD: freeUSD.get(b.ticker) ?? 0,
+      })));
+      if (ticker) freeUSD.set(ticker, Math.max(0, (freeUSD.get(ticker) ?? 0) - Math.max(0, sizeUSD)));
+      return ticker;
+    },
+  };
 }

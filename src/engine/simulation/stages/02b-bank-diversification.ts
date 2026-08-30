@@ -23,6 +23,7 @@
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { regionalDeskView } from '../../../domain/dealer-desk';
+import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 import {
@@ -223,7 +224,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // parameter is an OUTFLOW, so the signed pending flips sign.
         -(reg.householdState.pendingBankSettlementUSD ?? 0) * share,
         // Slice 5: the rate this bank's deposits must compete with.
-        findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0
+        findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0,
+        // G3c: what the market charges THIS bank for money — its own cleared credit spread,
+        // printed by the same corporate-bond auction that prices every other issuer.
+        bank.oasSpreadBps > 0 ? bank.oasSpreadBps : WHOLESALE_FUNDING_SPREAD_BPS
       );
 
       // G2: the itemized book's own week — facility reconciliation, real interest accrual

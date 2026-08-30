@@ -2,18 +2,15 @@
  * WS8 — the settlement half of a primary offering, shared by the clearing adapters
  * (07b bonds, 07d loans, 07e equity).
  *
- * Money, conserved across named books — BEST-EFFORTS placement until G3 exists:
+ * Money, conserved across named books — FIRM COMMITMENT since G3 gave the desks owners:
  *   - participants paid for the new paper they took through their ordinary cash legs
  *     (the engine's netCashDelta covers fills against the enlarged float);
- *   - the ISSUER receives what the market actually took, minus the fee (stage 08 posts it
- *     through the S5 ledger and creates the tranche at the CLEARED terms);
- *   - the LEAD BANK receives the fee, cash and equity together;
- *   - the unsold residual sits on the region dealer book UNFUNDED — the same §7.19 gap every
- *     dealer-inventory acquisition has today. Firm-commitment underwriting (the lead paying
- *     real cash for the residual) requires the desk to BE a named bank's balance sheet, which
- *     is exactly G3; wiring the cash leg before the asset had a ledger to sit on broke the
- *     per-bank identity invariant by the residual amount in its first harness run.
- *   Sum per settlement: buyers −(take), issuer +(take − fee), lead +fee = 0 exactly.
+ *   - the ISSUER receives the WHOLE deal, minus the fee — that is what a guarantee is (stage 08
+ *     posts it through the S5 ledger and creates the tranche at the CLEARED terms);
+ *   - the LEAD BANK receives the fee, cash and equity together, and pays real reserves for the
+ *     residual it is left holding, which lands in its own desk inventory. The §7.19 gap this
+ *     used to carry is closed: the residual has a payer, because the desk is a balance sheet.
+ *   Sum per settlement: buyers −(take), issuer +(gross − fee), lead +fee −(gross − take) = 0.
  *
  * A WITHDRAWN offering settles nothing: no fee, no residual, no proceeds — the deal never
  * happened, and stage 08's purpose-specific fallback (the revolver, for a refinancing) is the
@@ -22,6 +19,7 @@
 
 import { Company, RegionId } from '../../../types';
 import { PrimaryOffering, UNDERWRITING_FEE_BPS } from '../../../domain/primary-market';
+import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { WeeklyStepContext } from './context';
 import { ClearingResult } from './financial-clearing-engine';
 
@@ -36,7 +34,14 @@ export function settlePricedOfferings(
   offeringsByIssuerId: Map<string, PrimaryOffering>,
   result: ClearingResult,
   ctx: WeeklyStepContext,
-  statToGrossProceedsUSD: (offering: PrimaryOffering, clearedStat: number) => number
+  statToGrossProceedsUSD: (offering: PrimaryOffering, clearedStat: number) => number,
+  /** G3c: what the lead quoted for THIS deal — the book's own spread plus what it can lose on
+   *  the residual. Omitted only where a book has not been given its own quote yet. */
+  feeBpsOf?: (offering: PrimaryOffering, clearedStat: number) => number,
+  /** G3e: the desk book the lead's firm commitment lands in ('corporate bond', 'equity', ...).
+   *  Omitted leaves the residual unfunded, which is what every book did before the desks
+   *  had owners. */
+  deskBook?: string
 ): void {
   if (offeringsByIssuerId.size === 0) return;
   const settledOfferingIds = new Set<string>();
@@ -53,22 +58,40 @@ export function settlePricedOfferings(
       return;
     }
 
-    // Proceeds on the MARKET TAKE (grossed at the cleared level for equity, par for credit).
+    // G3e: FIRM COMMITMENT. The lead guaranteed the price, so the issuer is paid on the whole
+    // deal and the lead owns whatever the book did not take, at the cleared level, in its own
+    // desk inventory — which is the business the fee below is the price of. Before the desks
+    // had owners the residual sat on a region with no payer and the issuer was paid only on
+    // the market take, which is best-efforts placement wearing a firm commitment's name.
     const takeShare = Math.min(1, outcome.marketTakeUSD / Math.max(1, offering.sizeUSD));
-    const grossUSD = statToGrossProceedsUSD(offering, outcome.clearedStat) * takeShare;
-    const feeUSD = grossUSD * (UNDERWRITING_FEE_BPS[instrumentType] / 10000);
-
-    // Lead bank: the fee, cash and equity together (both legs — an equity-only credit breaks
-    // the identity invariant).
+    const fullGrossUSD = statToGrossProceedsUSD(offering, outcome.clearedStat);
     const lead = ctx.updatedCompanies.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet)
       ?? ctx.prevActiveFirms.find((c: Company) => c.ticker === offering.leadBankTicker && c.bankBalanceSheet);
-    if (lead && feeUSD > 0) {
+    const firmCommitment = !!(lead && deskBook);
+    const grossUSD = firmCommitment ? fullGrossUSD : fullGrossUSD * takeShare;
+    const residualUSD = firmCommitment ? Math.max(0, fullGrossUSD - fullGrossUSD * takeShare) : 0;
+    const feeBps = feeBpsOf ? feeBpsOf(offering, outcome.clearedStat) : UNDERWRITING_FEE_BPS[instrumentType];
+    const feeUSD = grossUSD * (feeBps / 10000);
+
+    // Lead bank: the fee (cash and equity together — an equity-only credit breaks the identity
+    // invariant) and the residual (cash out, inventory in — the security is the other leg, so
+    // equity does not move).
+    if (lead && (feeUSD > 0 || residualUSD > 0)) {
       const existingSheet = ctx.companyUpdates[lead.ticker]?.bankBalanceSheet ?? lead.bankBalanceSheet!;
+      const inventory: DealerDeskInventory = { ...(existingSheet.dealerDeskInventory ?? {}) };
+      if (deskBook && residualUSD > 0) {
+        const rows = [...(inventory[deskBook] ?? [])];
+        const at = rows.findIndex((r) => r.instrumentId === issuerId);
+        if (at >= 0) rows[at] = { instrumentId: issuerId, inventoryUSD: rows[at].inventoryUSD + residualUSD };
+        else rows.push({ instrumentId: issuerId, inventoryUSD: residualUSD });
+        inventory[deskBook] = rows;
+      }
       if (!ctx.companyUpdates[lead.ticker]) ctx.companyUpdates[lead.ticker] = {};
       ctx.companyUpdates[lead.ticker].bankBalanceSheet = {
         ...existingSheet,
-        cashReservesUSD: existingSheet.cashReservesUSD + feeUSD,
+        cashReservesUSD: existingSheet.cashReservesUSD + feeUSD - residualUSD,
         bankEquityUSD: existingSheet.bankEquityUSD + feeUSD,
+        dealerDeskInventory: inventory,
       };
     }
 

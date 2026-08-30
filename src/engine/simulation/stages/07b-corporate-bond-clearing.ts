@@ -57,8 +57,9 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
-import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
-import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
+import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand, YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
@@ -393,7 +394,23 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} corporate bond`);
     // WS8: settle this week's priced offerings — lead bank pays the unsold residual and takes
     // the fee; stage 08 posts the issuer's proceeds and creates the tranche at cleared terms.
-    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD);
+    // G3c: the lead quotes THIS deal — the desks' own spread, plus what a week's spread move
+    // through the deal's own duration can cost on the residual the desks cannot absorb.
+    const bookCapacityUSD = totalDeskCapacityUSD(ctx, regionBanks, BOOK);
+    const durationById = new Map(regionCompanies.map((c) => [c.id, creditDurationYears(c)]));
+    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
+      (o, clearedStat) => underwritingFeeBps({
+        bookSpreadBps: DEALER_SPREAD_BPS,
+        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
+          statKind: 'YIELD_LIKE', currentStat: clearedStat,
+          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
+          minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
+          durationYears: durationById.get(o.issuerId) ?? 0,
+        }),
+        dealSizeUSD: o.sizeUSD,
+        deskCapacityUSD: bookCapacityUSD,
+      }),
+      BOOK);
 
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
     // week's already-real value rather than recomputing one. Also extend each company's rolling

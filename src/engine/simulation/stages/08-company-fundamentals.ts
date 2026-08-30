@@ -9,7 +9,7 @@
  */
 
 import {
-  GameState, Company, DebtTranche, NewsItem, SegmentFinancial,
+  GameState, Company, DebtTranche, NewsItem, SegmentFinancial, RegionId,
 } from '../../../types';
 import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare } from '../../../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
@@ -30,6 +30,7 @@ import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateA
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks, findRegionMmf } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
+import { leadBankAllocator } from './dealer-desks';
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
@@ -160,11 +161,22 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   const primarySettlementByIssuerId = new Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; proceedsUSD: number }>();
   ctx.primarySettlements.forEach((s) => primarySettlementByIssuerId.set(s.offering.issuerId, s));
   const pendingOfferingIssuerIds = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
-  const regionBanksForLeads: Record<string, { ticker: string; bankMarketShare?: number }[]> = {};
-  ctx.prevActiveFirms.forEach((c) => {
-    if (!c.isBankEntity) return;
-    (regionBanksForLeads[c.region] ??= []).push({ ticker: c.ticker, bankMarketShare: c.bankMarketShare });
+  // G3c: mandates go to the bank that carries the issuer's credit, and — with no incumbent —
+  // to the desk that can still underwrite. Both are measured here, per region, once a week.
+  const leadAllocatorByRegion = new Map<string, ReturnType<typeof leadBankAllocator>>();
+  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
+    leadAllocatorByRegion.set(r, leadBankAllocator(
+      ctx, ctx.prevActiveFirms.filter((c) => c.isBankEntity && c.region === r && c.bankBalanceSheet), 'corporate bond'
+    ));
   });
+  /** Who leads this issuer's deal — re-asked every time, so the mandate can be lost. */
+  const leadBankFor = (comp: Company, sizeUSD: number): string => {
+    const alloc = leadAllocatorByRegion.get(comp.region);
+    if (!alloc) return comp.homeBankTicker ?? '';
+    const ticker = chooseLeadBank(comp.id, alloc.candidatesFor(comp.id));
+    if (ticker) alloc.award(ticker, sizeUSD);
+    return ticker || (comp.homeBankTicker ?? '');
+  };
   const enqueueOffering = (o: PrimaryOffering) => {
     ctx.primaryOfferingsWorking.push(o);
     pendingOfferingIssuerIds.add(o.issuerId);
@@ -1236,7 +1248,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           ? Math.max(50, Math.round((revolverAllInAnnual - fiveYearSovRate) * 10000))
           : REVOLVER_MARGIN_BPS,
         rateType: refinanceAsFixed ? 'FIXED' : 'FLOATING',
-        leadBankTicker: comp.homeBankTicker ?? chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+        leadBankTicker: leadBankFor(comp, tranche.principalUSD),
         announcedWeek: nextWeek,
       });
     });
@@ -1361,7 +1373,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             : REVOLVER_MARGIN_BPS,
           rateType: asFixed ? 'FIXED' : 'FLOATING',
           refinancesTrancheIds: bridges.map(t => t.id),
-          leadBankTicker: comp.homeBankTicker ?? chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+          leadBankTicker: leadBankFor(comp, bridgeUSD),
           announcedWeek: nextWeek,
         });
       }
@@ -1454,7 +1466,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         sizeUSD: dealSizeUSD,
         walkAwayStat: walkAwayOasBps,
         rateType: 'FIXED',
-        leadBankTicker: comp.homeBankTicker ?? chooseLeadBank(comp.id, regionBanksForLeads[comp.region] ?? []),
+        leadBankTicker: leadBankFor(comp, dealSizeUSD),
         announcedWeek: nextWeek,
       });
       newLastOpportunisticOfferingWeek = nextWeek;

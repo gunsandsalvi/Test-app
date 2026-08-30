@@ -34,6 +34,7 @@
  */
 
 import { Company, Region, RegionId } from '../../../types';
+import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import {
   BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
   MORTGAGE_RISK_WEIGHT, CONSUMER_CREDIT_RISK_WEIGHT, householdBookRwaUSD, annuityWeeklyPrincipalUSD,
@@ -63,13 +64,22 @@ const BANK_MIN_CAPITAL_RATIO = 0.08;
  * Return the bank needs on the equity a loan consumes — and therefore, through
  * `quoteLoanMarginBps`, the price of every loan it writes.
  *
- * ITS OWN EXIT CONDITION IS MET. This said a bank's hurdle should come "from its own cost of
- * equity once its stock clears in 07e post-G2". G2 is closed and bank stock DOES clear in 07e —
- * the book-value carve-out was removed and 07e's own comment records it. So the input exists:
- * risk-free + beta x ERP off the bank's own cleared price. Third file found stating a condition
- * that has since been satisfied (with `national-accounts.ts` and `etf.ts`). Owner: G3.
+ * G3c met this file's own stated exit condition: bank stock clears in 07e, so the hurdle is the
+ * bank's own cost of equity — risk-free plus its measured beta times the equity risk premium,
+ * `bankRequiredReturnAnnual` below. Two banks with different betas now price the same loan
+ * differently, which is what a cost of capital IS. The constant survives as the fallback for a
+ * quote made where no particular bank is lending (the household aggregate's average rate) and
+ * for a bank with no beta yet.
  */
 export const BANK_TARGET_ROE = 0.12;
+
+/**
+ * THIS bank's cost of equity: the risk-free rate its own region prints, plus its own measured
+ * beta against the equity risk premium. The price of every loan it writes rides on it.
+ */
+export function bankRequiredReturnAnnual(bank: { beta?: number }, reg: Region): number {
+  return Math.max(0.01, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + (bank.beta ?? 1) * EQUITY_RISK_PREMIUM);
+}
 /** Share of the gap to the serviceable ceiling the SME pools seek to borrow each week when
  * credit is free — the pace of a real investment pipeline (MS/BP make segment investment
  * demand fully real; this is its flow rate, not its price test). */
@@ -80,9 +90,12 @@ export function quoteLoanMarginBps(params: {
   annualDefaultProbability: number;
   /** Risk weight of the exposure (1.0 business). */
   riskWeight: number;
+  /** G3c: the quoting bank's own cost of equity. Omitted only where no one bank is quoting. */
+  requiredReturnAnnual?: number;
 }): number {
   const expectedLossBps = params.annualDefaultProbability * (1 - CREDIT_RECOVERY_RATE) * 10000;
-  const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO * BANK_TARGET_ROE * 10000;
+  const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO
+    * (params.requiredReturnAnnual ?? BANK_TARGET_ROE) * 10000;
   return Math.max(25, Math.round(expectedLossBps + capitalCostBps));
 }
 
@@ -132,6 +145,7 @@ export function migrateSmeDebtAtSeed(
   const totalDepositsUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0) || 1;
   banks.forEach((bank) => {
     const sheet = bank.bankBalanceSheet!;
+    const bankHurdle = bankRequiredReturnAnnual(bank, reg);
     const bankShare = sheet.depositsUSD / totalDepositsUSD;
     const loans: BankLoan[] = [];
     segs.forEach((seg, i) => {
@@ -142,7 +156,7 @@ export function migrateSmeDebtAtSeed(
         borrowerId: smePoolId(regionId, seg.industry),
         borrowerKind: 'SME_POOL',
         principalUSD,
-        marginBps: quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0 }),
+        marginBps: quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle }),
         originationWeek: 0,
         termWeeks: 52 * 5,
         status: 'PERFORMING',
@@ -202,6 +216,8 @@ export function runBankWeeklyLending(
   nextWeek: number
 ): WeeklyLendingResult {
   const policyRate = reg.policyRate;
+  // G3c: every price this bank quotes below rides on ITS OWN cost of equity.
+  const bankHurdle = bankRequiredReturnAnnual(bank, reg);
   let loans = [...(sheet.businessLoans || [])];
 
   // ---- Facility reconciliation: the bank's records mirror the borrowers' real ladders. The
@@ -280,7 +296,7 @@ export function runBankWeeklyLending(
     // what it sells (its own measured EBITDA margin). Without this term the schedule was a
     // pure quantity target and a +300bp hike moved origination 0.5% — priced but inert.
     const allInRateAnnual = policyRate + quoteLoanMarginBps({
-      annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0,
+      annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle,
     }) / 10000;
     const poolReturnAnnual = Math.max(0.001, seg.marginPct);
     const appetite = Math.max(0, Math.min(1, (poolReturnAnnual - allInRateAnnual) / poolReturnAnnual));
@@ -297,7 +313,7 @@ export function runBankWeeklyLending(
     if (grantedUSD <= 0) return;
 
     smeOriginationBySegment.set(seg.industry, (smeOriginationBySegment.get(seg.industry) ?? 0) + grantedUSD);
-    const marginBps = quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0 });
+    const marginBps = quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle });
     if (poolLoan) {
       poolLoan.principalUSD += grantedUSD;
       // the pool's blended margin drifts toward the new quote as new money joins the book
@@ -377,10 +393,13 @@ export function quoteHouseholdMarginBps(params: {
   annualLossRate: number;
   riskWeight: number;
   operatingCostBps: number;
+  /** G3c: the quoting bank's own cost of equity. Omitted only where no one bank is quoting. */
+  requiredReturnAnnual?: number;
 }): number {
   // The measured loss rate is already frequency x severity, so it IS the expected-loss term.
   const expectedLossBps = params.annualLossRate * 10000;
-  const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO * BANK_TARGET_ROE * 10000;
+  const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO
+    * (params.requiredReturnAnnual ?? BANK_TARGET_ROE) * 10000;
   return Math.max(50, Math.round(expectedLossBps + capitalCostBps + params.operatingCostBps));
 }
 
@@ -408,11 +427,16 @@ export function migrateHouseholdDebtAtSeed(
   if (!hs || banks.length === 0) return;
   const mortgageRate = currentMortgageRateAnnual(reg);
   const lossRate = consumerAnnualLossRate(reg.unemploymentRate, hs.creditTierBooks);
+  // G3c: the seed's quote is made by the banks that will carry the book, at their own average
+  // cost of equity — one migration, every lender in it.
+  const seedHurdle = banks.reduce((a, b) => a + bankRequiredReturnAnnual(b, reg), 0) / banks.length;
   const cardMarginBps = quoteHouseholdMarginBps({
     annualLossRate: lossRate, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT, operatingCostBps: CARD_OPERATING_COST_BPS,
+    requiredReturnAnnual: seedHurdle,
   });
   const termMarginBps = quoteHouseholdMarginBps({
     annualLossRate: lossRate * 0.5, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT, operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS,
+    requiredReturnAnnual: seedHurdle,
   });
 
   const totalDepositsUSD = banks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0) || 1;
@@ -596,6 +620,8 @@ export function runBankHouseholdLending(
   currentWeek: number
 ): HouseholdLendingResult {
   const policyRate = reg.policyRate;
+  // G3c: this bank's own cost of equity prices the consumer credit it writes.
+  const bankHurdle = bankRequiredReturnAnnual(bank, reg);
   const hs = reg.householdState;
   const pools: HouseholdLoanPool[] = (sheet.householdLoans || []).map((pl) => ({ ...pl }));
 
@@ -815,7 +841,7 @@ export function runBankHouseholdLending(
         const total = pl.principalUSD + grantedUSD;
         pl.marginBps = quoteHouseholdMarginBps({
           annualLossRate: unsecuredLossRateAnnual * 0.5, riskWeight: CONSUMER_CREDIT_RISK_WEIGHT,
-          operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS,
+          operatingCostBps: CONSUMER_TERM_OPERATING_COST_BPS, requiredReturnAnnual: bankHurdle,
         });
         pl.wamWeeks = Math.round((((pl.wamWeeks ?? CONSUMER_TERM_SEED_WAM_WEEKS) - 1) * pl.principalUSD + CONSUMER_TERM_WEEKS * grantedUSD) / Math.max(1, total));
         pl.principalUSD = total;

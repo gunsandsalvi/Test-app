@@ -22,7 +22,7 @@
 
 import { Company, InstitutionalEntity, Region, RegionId, DebtTranche } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
+import { PrimaryOffering, mandateAllocator } from '../../../domain/primary-market';
 import { isActiveCompany } from '../../../domain/company';
 import { random } from '../../rng';
 import { companyFairValuePerShare } from '../../equity-valuation';
@@ -199,9 +199,14 @@ export function runPeLifecycleForRegion(
   );
   if (sponsors.length === 0) return;
 
-  const banksForLeads = ctx.prevActiveFirms
+  // G3c: the sponsor's deals go to desks that can still underwrite them, and each award
+  // consumes the winner's balance sheet.
+  const leadBanks = mandateAllocator(ctx.prevActiveFirms
     .filter((c) => c.region === regionId && c.isBankEntity)
-    .map((c) => ({ ticker: c.ticker, bankMarketShare: c.bankMarketShare }));
+    .map((c) => ({
+      ticker: c.ticker, bankMarketShare: c.bankMarketShare,
+      capacityUSD: (ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet)?.bankEquityUSD ?? 0,
+    })));
   const byId = new Map(ctx.updatedCompanies.map((c) => [c.id, c]));
   const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
   // One valuation for this region this week: what the public market pays for comparable listed
@@ -267,7 +272,7 @@ export function runPeLifecycleForRegion(
             // A recap is discretionary: the sponsor walks if the market prices it wide.
             walkAwayStat: RECAP_DM_THRESHOLD_BPS,
             rateType: 'FLOATING',
-            leadBankTicker: chooseLeadBank(recapTarget.id, banksForLeads),
+            leadBankTicker: leadBanks.pick(recapTarget.id, recapUSD),
             announcedWeek: nextWeek,
             peDeal: { kind: 'RECAP', sponsorId: sponsor.id },
           } as PrimaryOffering);
@@ -319,7 +324,7 @@ export function runPeLifecycleForRegion(
           walkAwayStat: talkPerShare / IPO_PREMIUM_OVER_ENTRY,
           indicativeStat: talkPerShare,
           postIssueSharesOutstanding: postIssueShares,
-          leadBankTicker: chooseLeadBank(listCandidate.id, banksForLeads),
+          leadBankTicker: leadBanks.pick(listCandidate.id, sharesOffered * talkPerShare),
           announcedWeek: nextWeek,
           peDeal: { kind: 'IPO', sponsorId: sponsor.id },
         } as PrimaryOffering);
@@ -358,7 +363,7 @@ export function runPeLifecycleForRegion(
             sizeUSD: debtUSD,
             walkAwayStat: RECAP_DM_THRESHOLD_BPS * 2,
             rateType: 'FLOATING',
-            leadBankTicker: chooseLeadBank(target.id, banksForLeads),
+            leadBankTicker: leadBanks.pick(target.id, debtUSD),
             announcedWeek: nextWeek,
             peDeal: { kind: 'LBO', sponsorId: sponsor.id, equityUSD },
           } as PrimaryOffering);
@@ -425,7 +430,7 @@ export function runPeLifecycleForRegion(
             sizeUSD: debtUSD,
             walkAwayStat: RECAP_DM_THRESHOLD_BPS * 2,
             rateType: 'FLOATING',
-            leadBankTicker: chooseLeadBank(listedTarget.id, banksForLeads),
+            leadBankTicker: leadBanks.pick(listedTarget.id, debtUSD),
             announcedWeek: nextWeek,
             peDeal: { kind: 'TAKE_PRIVATE', sponsorId: sponsor.id, equityUSD, takeoutPricePerShare },
           } as PrimaryOffering);
@@ -651,9 +656,12 @@ export function runFirmBirthsForRegion(
   // on the firm and nowhere else (rule 3's "1$ is 1$"). Measured: 12 unbanked firms at seed
   // growing with every birth cohort. The relationship is chosen the same way the seed chooses
   // it, so a born firm enters the world banked like every other.
-  const banksForRelationship = ctx.updatedCompanies
+  const banksForRelationship = mandateAllocator(ctx.updatedCompanies
     .filter((b) => b.region === regionId && b.isBankEntity && isActiveCompany(b))
-    .map((b) => ({ ticker: b.ticker, bankMarketShare: b.bankMarketShare }));
+    .map((b) => ({
+      ticker: b.ticker, bankMarketShare: b.bankMarketShare,
+      capacityUSD: (ctx.companyUpdates[b.ticker]?.bankBalanceSheet ?? b.bankBalanceSheet)?.bankEquityUSD ?? 0,
+    })));
   // Its real share of each market it entered, measured against what the region's firms already
   // sell there — the weekly evolution scales this number, so a firm starting at zero could never
   // gain any share at all.
@@ -674,8 +682,8 @@ export function runFirmBirthsForRegion(
 
   born.forEach((c) => {
     (c as any).bornWeek = nextWeek;
-    if (!c.homeBankTicker && banksForRelationship.length > 0) {
-      c.homeBankTicker = chooseLeadBank(c.id, banksForRelationship);
+    if (!c.homeBankTicker) {
+      c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, c.cash));
     }
   });
   return born;

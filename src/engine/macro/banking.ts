@@ -233,7 +233,15 @@ export function evolveBankingSector(
   /** G2 slice 5: the money fund's net yield this region — what this bank's deposits COMPETE
    * with. A bank losing funding to the fund raises its own rate toward it; funding cost stops
    * being a fixed beta on policy. */
-  competingMmfYieldAnnual: number = 0
+  competingMmfYieldAnnual: number = 0,
+  /**
+   * G3c — what the market charges THIS bank over policy for wholesale money: its own cleared
+   * credit spread, the same OAS 07b prints for every other issuer. A bank is a borrower in the
+   * bond market like any other, and its funding spread is exactly where the market's view of it
+   * shows up; the 40bps constant this replaces was identical for a sound bank and a breaching
+   * one. Defaults to the posted constant only for a bank with no cleared spread yet (week 1).
+   */
+  ownWholesaleSpreadBps: number = WHOLESALE_FUNDING_SPREAD_BPS
 ): BankingSector {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
   let cashUSD = prevBanking.cashReservesUSD;
@@ -285,7 +293,7 @@ export function evolveBankingSector(
   // HH4d: wholesale funding pays its way — a real spread over policy on a stock split out at
   // seed (issuance/retirement awaits a bank-liability project).
   const wholesaleUSD = prevBanking.wholesaleFundingUSD ?? 0;
-  const wholesaleInterestUSD = (wholesaleUSD * (policyRate + WHOLESALE_FUNDING_SPREAD_BPS / 10000)) / 52;
+  const wholesaleInterestUSD = (wholesaleUSD * (policyRate + Math.max(0, ownWholesaleSpreadBps) / 10000)) / 52;
   cashUSD -= wholesaleInterestUSD;
   equityUSD -= wholesaleInterestUSD;
 
@@ -320,16 +328,29 @@ export function evolveBankingSector(
   // funding the fund is actually taking (the WS7 diversion, as a share of this bank's own
   // savings inflow). A bank that ignores a better-paying fund loses its deposits — the real
   // discipline WS7's liability side exists to impose.
-  // RULE 1, OPEN: 0.45 is an observed deposit beta — a real-world pass-through — and it is the
-  // same for every bank. It is described as a floor the competitive rate rises above, but it IS
-  // the rate in any week the money fund is not taking funding, which is most of them. What a bank
-  // pays for deposits should come from its own funding need against the alternatives its
-  // depositors can see. Owner: G3.
-  const betaFloorRate = policyRate * 0.45;
+  // G3c: the deposit rate is the bank's OWN decision, made out of its own numbers. What it pays
+  // is bounded above by the cheaper of two alternatives — what the deposit is worth to it (the
+  // wholesale funding it displaces, at its own cleared spread) and what the depositor could get
+  // instead (the money fund's net yield) — and it pays that much only on the share of its base
+  // that is actually in play. Two measured things put deposits in play: money walking to the
+  // fund, and the bank's own liquidity being short of what a stressed month would take. A bank
+  // that is liquid and losing nobody genuinely has no reason to pay, and one that is short pays
+  // its full alternative cost. This retires `policyRate x 0.45`, an observed real-world
+  // pass-through that was the same for every bank and, since the fund rarely took funding, WAS
+  // the rate almost every week.
+  const alternativeCostAnnual = Math.min(
+    policyRate + Math.max(0, ownWholesaleSpreadBps) / 10000,
+    Math.max(0, competingMmfYieldAnnual)
+  );
   const fundingPressure = weeklySavingsInflowUSD > 0
     ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE)))
     : 0;
-  const depositRate = Math.max(betaFloorRate, betaFloorRate + (competingMmfYieldAnnual - betaFloorRate) * fundingPressure);
+  const stressedUSD = stressedOutflowUSD(prevBanking) * LIQUIDITY_COVERAGE_RATIO;
+  const liquidityShortfallShare = stressedUSD > 0
+    ? Math.max(0, Math.min(1, (stressedUSD - Math.max(0, prevBanking.cashReservesUSD)) / stressedUSD))
+    : 0;
+  const contestedShare = Math.max(0, Math.min(1, Math.max(fundingPressure, liquidityShortfallShare)));
+  const depositRate = alternativeCostAnnual * contestedShare;
   // Reserves earn the policy rate — the floor-system IOR. The 0.85 "tiering" haircut and the
   // bank-side ON RRP parking it justified are gone: a bank whose reserves earn IOR never goes
   // to the RRP window, which is exactly the real system.
@@ -459,6 +480,9 @@ export function evolveBankingSector(
     smeDepositsUSD: prevBanking.smeDepositsUSD ?? 0,
     // Dealer inventories and the tenor book persist across weeks — only real fills change
     // them, in the stages that own them.
+    // G3c: the rate this bank actually decided to pay, published so nothing else has to
+    // guess at it (the money fund read `policyRate x 0.45` — a second copy of a retired number).
+    depositRateAnnual: Number(depositRate.toFixed(6)),
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
     sovereignBondHoldingsByTenor: prevBanking.sovereignBondHoldingsByTenor || {},
     sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],
