@@ -23,6 +23,11 @@
 
 /** How many shards a kernel should split into on this host. */
 export function shardCount(): number {
+  // SHARDS pins the split, so a run can prove a sharded kernel against a single-shard one. A
+  // change in shard count that changes the world is a defect in the kernel's combine, not a
+  // property of the hardware, and this is how that is checked.
+  const pinned = Number(process.env.SHARDS);
+  if (Number.isFinite(pinned) && pinned >= 1) return Math.max(1, Math.min(64, Math.floor(pinned)));
   const cpus = (globalThis as { navigator?: { hardwareConcurrency?: number } })
     .navigator?.hardwareConcurrency;
   const n = typeof cpus === 'number' && cpus > 0 ? cpus : 4;

@@ -67,3 +67,49 @@ export function randomBetween(min: number, max: number): number {
 export function randomInt(n: number): number {
   return Math.floor(random() * n);
 }
+
+/**
+ * ENTITY-SCOPED DRAWS — §7.222.
+ *
+ * A stage that loops over entities and draws from the stream above gives each entity the number
+ * that happens to sit at its position in the loop. That makes the ITERATION ORDER an input to the
+ * economy: §7.222 measured it, and reversing stage 08's company loop moved aggregate net income
+ * by 2.0% and killed a different firm, because `insurerProfile`'s loss ratio is the 40th draw for
+ * the 40th company and the 2,456th for the same company read backwards.
+ *
+ * A stream position is a RESOLUTION artefact (§1.19) and it was setting real outcomes. So a loop
+ * over entities opens a scope per entity instead: the stream is re-seeded from the entity's OWN
+ * identity, the week, and the world's seed, so a firm draws the same number wherever it sits in
+ * the loop, on whichever core, in a roster of any size. That is what makes the loop parallel —
+ * with it, §7.222 measured forward and reverse order agreeing to seventeen significant digits.
+ *
+ * The scope swaps the state word rather than branching inside `random()`, because `random()` is
+ * called millions of times a run and must stay four operations long.
+ */
+
+/** FNV-1a over a key, so an entity's stream follows its identity rather than its index. */
+function keyHash(key: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/**
+ * Open an entity's own stream. Returns the caller's stream position, to be handed back to
+ * `endEntityScope` when the entity's work is done — so a loop leaves the global stream exactly
+ * where it found it, and the number of draws an entity makes cannot shift anyone else's.
+ */
+export function beginEntityScope(key: string, salt: number): number {
+  const saved = state;
+  const seeded = (keyHash(key) ^ Math.imul(salt | 0, 0x9e3779b9) ^ currentSeed) >>> 0;
+  state = seeded || DEFAULT_SIMULATION_SEED;
+  return saved;
+}
+
+/** Close an entity's stream and restore the caller's. */
+export function endEntityScope(saved: number): void {
+  state = saved >>> 0;
+}

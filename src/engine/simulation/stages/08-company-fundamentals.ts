@@ -36,11 +36,12 @@ import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 import { WeeklyStepContext } from './context';
 import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
 import { measureBeta, regionIndexOf } from '../../macro/indices';
-import { pay, PartyRef } from './settlement';
+import { pay, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
+import { runShardedVoid } from '../../columns/kernel';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
-import { random } from '../../rng';
+import { random, beginEntityScope, endEntityScope } from '../../rng';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
 
@@ -139,7 +140,7 @@ function groupSupplyRelationships(
 
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
-  const refinanceNews: NewsItem[] = [];
+  let refinanceNews: NewsItem[] = [];
 
   // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
   // values at the top of a stage, never inside a per-company loop). Each of these was a full
@@ -240,7 +241,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     pendingOfferingIssuerIds.add(o.issuerId);
   };
 
-  ctx.updatedCompanies = state.companies.map(function companyWeekKernel(comp) {
+  // SCALE/§7.222 — ONE COMPANY'S WEEK, AND IT DEPENDS ON NOTHING ABOUT WHERE IT SITS.
+  // The loop below is order-invariant: reversing it leaves every aggregate identical to
+  // seventeen significant digits, with the only residual difference two ULP of float-summation
+  // associativity in the accumulators, which the ordered combine removes. That property is what
+  // makes the stage shardable, and it is NOT free — it holds because each company opens its own
+  // random stream (rng.ts's `beginEntityScope`) instead of drawing from wherever the shared
+  // stream happens to have reached. Before that, reversing this loop moved aggregate net income
+  // by 2.0% and killed a different firm.
+  //
+  // If you add a draw, a contended resource, or a read of another company's live book to this
+  // kernel, you break that property. The test is one line: run the loop backwards and hash the
+  // world.
+  const companyWeekKernel = (comp: Company): Company => {
     /**
      * Earnings PER SHARE, for a company that has shares. A private firm's register is empty until
      * it lists (HC7's `postIssueSharesOutstanding` creates it), so there is nothing to divide by
@@ -2140,7 +2153,120 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       leveragedLoan: comp.leveragedLoan,
       treasuryHoldings: newTreasuryHoldings,
     });
+  };
+
+  // SCALE wave 2 — THE COMPANY WEEK AS A SHARDED KERNEL (columns/kernel.ts).
+  //
+  // Contiguous row ranges, each with its OWN accumulators, folded back **in shard order**. That
+  // ordering is the whole of determinism here: float addition is not associative, so a reduction
+  // reproduces only if the shards combine in a fixed order — and row ranges give exactly that.
+  // Executed inline today, so this is bit-identical to the serial loop it replaces; what it buys
+  // is that the stage no longer has a single mutable accumulator threading every company to the
+  // next, which is what a worker cannot have.
+  //
+  // TWO SERIALISATION POINTS REMAIN, both deliberate and both named so they are not forgotten:
+  // `mmfSweepBooks` (a fund's finite cash, drawn down as companies redeem) and
+  // `leadAllocatorByRegion` (a desk's capacity, consumed as mandates are awarded). Both are real
+  // contended resources — first come really is first served — so neither can be a per-shard
+  // accumulator. Before the worker step they must move OUT of the kernel and INTO the combine,
+  // where the draw happens in row order. §7.222 measured that neither binds in the opening weeks,
+  // which is why the stage is order-invariant today; that is a fact about the current world, not
+  // a property to rely on.
+  const companyRows = state.companies;
+  const updatedCompanies: Company[] = new Array(companyRows.length);
+
+  interface CompanyShardAccumulators {
+    creditEvents: WeeklyStepContext['creditEventsThisWeek'];
+    defaulted: string[];
+    ratings: WeeklyStepContext['ratingChanges'];
+    earnings: unknown[];
+    offerings: PrimaryOffering[];
+    news: NewsItem[];
+    taxAccrued: Record<string, number>;
+    taxCollected: Record<string, number>;
+    journal: PaymentJournal;
+  }
+
+  /** Point the shared accumulators at this shard's own, and hand back what they were. */
+  const openShard = (): CompanyShardAccumulators => {
+    const held: CompanyShardAccumulators = {
+      creditEvents: ctx.creditEventsThisWeek,
+      defaulted: ctx.defaultedTickers,
+      ratings: ctx.ratingChanges,
+      earnings: ctx.earningsReportedThisTurn,
+      offerings: ctx.primaryOfferingsWorking,
+      news: refinanceNews,
+      taxAccrued: ctx.taxAccruedByRegion,
+      taxCollected: ctx.taxCollectedByRegion,
+      journal: ctx.paymentJournal,
+    };
+    ctx.creditEventsThisWeek = [];
+    ctx.defaultedTickers = [];
+    ctx.ratingChanges = [];
+    ctx.earningsReportedThisTurn = [];
+    ctx.primaryOfferingsWorking = [];
+    refinanceNews = [];
+    ctx.taxAccruedByRegion = {};
+    ctx.taxCollectedByRegion = {};
+    ctx.paymentJournal = newPaymentJournal();
+    return held;
+  };
+
+  /** Fold this shard's accumulators onto the ones it displaced, in shard order. */
+  const closeShard = (held: CompanyShardAccumulators): void => {
+    const mine = {
+      creditEvents: ctx.creditEventsThisWeek,
+      defaulted: ctx.defaultedTickers,
+      ratings: ctx.ratingChanges,
+      earnings: ctx.earningsReportedThisTurn,
+      offerings: ctx.primaryOfferingsWorking,
+      news: refinanceNews,
+      taxAccrued: ctx.taxAccruedByRegion,
+      taxCollected: ctx.taxCollectedByRegion,
+      journal: ctx.paymentJournal,
+    };
+    ctx.creditEventsThisWeek = held.creditEvents;
+    ctx.defaultedTickers = held.defaulted;
+    ctx.ratingChanges = held.ratings;
+    ctx.earningsReportedThisTurn = held.earnings;
+    ctx.primaryOfferingsWorking = held.offerings;
+    refinanceNews = held.news;
+    ctx.taxAccruedByRegion = held.taxAccrued;
+    ctx.taxCollectedByRegion = held.taxCollected;
+    ctx.paymentJournal = held.journal;
+
+    for (const e of mine.creditEvents) ctx.creditEventsThisWeek.push(e);
+    for (const t of mine.defaulted) ctx.defaultedTickers.push(t);
+    for (const r of mine.ratings) ctx.ratingChanges.push(r);
+    for (const e of mine.earnings) ctx.earningsReportedThisTurn.push(e);
+    for (const o of mine.offerings) ctx.primaryOfferingsWorking.push(o);
+    for (const n of mine.news) refinanceNews.push(n);
+    for (const r of Object.keys(mine.taxAccrued)) {
+      ctx.taxAccruedByRegion[r] = (ctx.taxAccruedByRegion[r] ?? 0) + mine.taxAccrued[r];
+    }
+    for (const r of Object.keys(mine.taxCollected)) {
+      ctx.taxCollectedByRegion[r] = (ctx.taxCollectedByRegion[r] ?? 0) + mine.taxCollected[r];
+    }
+    const j = ctx.paymentJournal;
+    for (let k = 0; k < mine.journal.amountUSD.length; k++) {
+      j.payerId.push(mine.journal.payerId[k]);
+      j.payeeId.push(mine.journal.payeeId[k]);
+      j.amountUSD.push(mine.journal.amountUSD[k]);
+      j.reasonId.push(mine.journal.reasonId[k]);
+    }
+  };
+
+  runShardedVoid(companyRows.length, (range) => {
+    const held = openShard();
+    for (let i = range.lo; i < range.hi; i++) {
+      const comp = companyRows[i];
+      const savedStream = beginEntityScope(comp.id, nextWeek);
+      updatedCompanies[i] = companyWeekKernel(comp);
+      endEntityScope(savedStream);
+    }
+    closeShard(held);
   });
+  ctx.updatedCompanies = updatedCompanies;
 
   // Every corporate action this stage recorded reaches the real books here, in one pass.
   // WS7: the funds receive/pay the week's net corporate sweep money.

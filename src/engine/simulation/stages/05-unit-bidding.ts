@@ -32,7 +32,7 @@ import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputInten
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
-import { random } from '../../rng';
+import { random, beginEntityScope, endEntityScope } from '../../rng';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
 import { convertLocal, localToUsd, fromTable, snapshotFxToUsd, FxToUsd } from '../../../domain/currency';
 import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
@@ -1898,7 +1898,14 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     contractsByRegionBySubUnit[regionId] = map;
   });
 
+  // §7.222 — each market draws from its OWN stream, not from wherever the shared one has reached.
+  // This does NOT make the loop parallel: §7.222 measured that stage 05 stays order-dependent with
+  // the scope in place, because the markets are coupled through each firm's single budget, spent
+  // market by market (see §6.1's declaration-order row). What the scope fixes is the separate
+  // defect it exposed — a market's bid noise was a function of its position in a source file's
+  // declaration list rather than of the market.
   Object.values(INDUSTRY_SUBUNITS).flat().forEach(subUnit => {
+    const savedStream = beginEntityScope(subUnit.unitId, ctx.nextWeek);
     const own = {} as Record<RegionId, SupplyContract[]>;
     MARKET_REGION_IDS.forEach(r => { own[r] = contractsByRegionBySubUnit[r].get(subUnit.unitId) ?? []; });
     const survivors = runSubUnitMarkets(
@@ -1907,6 +1914,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
       indexes, lookup, own, sourcing
     );
     MARKET_REGION_IDS.forEach(r => { contractsByRegionBySubUnit[r].set(subUnit.unitId, survivors[r]); });
+    endEntityScope(savedStream);
   });
 
   MARKET_REGION_IDS.forEach(regionId => {
