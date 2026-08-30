@@ -475,7 +475,7 @@ slice on machinery that now exists, which is what the markets tier was for.
 | 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | **CLOSED 2026-08-30 (§7.193).** Commodity prices follow extraction cost per tonne and units per tonne; the seed is the marginal producer's cost and the market does the rest. Weather has a season index, an exposure read off what each region actually produces, and generated place names; the two dead impact fields are deleted and the third is a YIELD cut the commodity book prices. **The reseed changes every energy and metal price and therefore every recipe cost — the measurement run must read the price level and the JPN fiscal band against it, not against anything measured before today.** |
 | 16 | depth | **CAL — payment calendars** | **CORPORATE HALF DONE 2026-08-30 (§7.194).** Interest accrues to whoever holds the paper that week and the coupon date turns each holder's accrued balance into cash — a bond half-yearly, a floating loan quarterly, CP at maturity, dividends on the quarter the board already reports. **P&L stays smooth on both sides; only cash is lumpy.** **Remains: the SOVEREIGN calendar**, which needs the treasury's expense, the banks' credit and the institutions' credit moving in one pass plus a per-bucket accrual (a bank is not on the institutional register) — half of it measured worse than none. |
 | 17 | depth | **ETF2 — a real price for ETF shares** | **CLOSED 2026-08-30 (§7.201, §7.205, §7.206) — UNMEASURED.** The funding half landed early because it owned the harness's largest violation family; §7.205 added IN-KIND redemption (the fund delivers its pro-rata slice of everything it owns, so no money has to be found and the cash cap stops being a constraint on institutions) and DERIVED the AP's capacity from the risk a basket consumes while a desk holds it, retiring a constant that contradicted its own name. **And §7.206 closed the row's actual title: the share BOOK clears.** The float is what the fund's investors hold, the primary offering is what the APs will create, no AP creates below net asset value (which holds a discount without a bound), and an investor's reservation is the point at which it would rather assemble the index itself — net asset value plus what the constituent books charge for every name in it, which bounds a premium by a price the model already sets. `premiumToNavBps` is a real premium; `unmetFlowShare` stays beside it as the quantity. Holders mark at what their shares trade at. **What it owes a run: whether the premium sits at zero in calm weeks and only moves when the APs are actually constrained.** |
-| 18 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
+| 18 | depth | **HC3b — the product-market handover** | **CLOSED 2026-08-30 (§7.207) — UNMEASURED, AND IT CARRIES A DECLARED RELABEL.** Revenue is what was sold. The statistical revenue formula is gone — the lagged category growth rate, the random draw, the sector pricing beta, the ±5% weekly clamp, the 90/10 smoothing into the previous print, the unsold correction bolted on afterwards and the 50% haircut on default — and a firm's revenue is now its own measured sales from stage 05's auction, annualised at the same measurement weight a pool's receipts use. The subscription base survives intact, because it is a recognition rule about what was sold rather than a formula standing in for a market. **This is what the largest declared boundary line was made of:** `non-auction operating receipts` IS `revenue/52 − what settled`, so it is redeclared for what it now measures (an accrual lag) rather than what it used to be (customers nobody could name). **What it owes a run: the revenue level, which is the collapse this row was deferred for.** |
 | 19 | depth | **SCALE — universe scale-up under a wall-clock budget** | Wave 2 after IND. Owns the float half of the promoted damper defect: thin books are why prints pin. |
 | 20 | depth | **MNC — multinational production** | Prereqs IND, XB. |
 | 21 | depth | **DYN — entry, exit, and industry structure** | Prereqs IND, BP1. Adds: the named tier's cut point falls out of the Pareto tail instead of sitting beside it. |
@@ -7200,4 +7200,48 @@ that proved it, the lesson.
       forcing it before collapsed both tiers (−10% to −22% growth)**, which is precisely a
       measurement question, and it is the third change now waiting on a run beside the wage level
       and the household bid premium.
+    - **UNMEASURED**, like everything since §7.199.
+
+207. **HC3b — revenue is what was sold, and the largest boundary line was made of the formula.**
+    - **THE FORMULA, IN FULL, SO IT IS NOT REBUILT.** A firm's revenue was last week's revenue
+      grown by a lagged category-demand rate, plus a random draw, plus inflation times a stated
+      sector pricing beta; the weekly rate clamped to ±5%; the result smoothed 90/10 into the
+      previous print; then corrected DOWNWARD by half of whatever production had not sold, and
+      halved again if the firm had defaulted. **A number about the CATEGORY with a real-sales
+      correction bolted onto it** — two representations of one quantity (rule 3), an outcome
+      stated as a formula (rule 13), and a clamp on top (rule 2).
+    - **AND IT WAS REVENUE WITH NO PAYER, WHICH THE MODEL ALREADY SAID OUT LOUD.**
+      `non-auction operating receipts` — the largest declared line on the UNMODELED boundary — is
+      *exactly* `newRevenue / 52 − what actually settled`. Every dollar of that gap was income from
+      customers this model could not name (rule 14), and the frontier existed because the formula
+      kept producing it. **The line was not a gap in the goods market so much as a readout of the
+      formula's disagreement with the auction.**
+    - **A SALE IS A BUYER AND A SELLER.** Stage 05 runs the week's auction for every one of a
+      firm's product lines against real named buyers before stage 08 runs; what it sold is
+      `salesUSD`, and that is the revenue — annualised, entering at the same measurement weight a
+      pool's receipts do, for the same reason: one week of clearing is not a year of trade. That
+      weight now has ONE owner (`RECEIPTS_MEASUREMENT_WEIGHT`) instead of a private copy in
+      `sme-pools.ts` doing the identical job on the identical quantity.
+    - **WHAT GOES WITH IT.** Production that did not sell is not revenue by CONSTRUCTION, so the
+      unsold correction goes with the formula it was correcting. `SECTOR_PRICING_POWER` had no
+      other reader and is deleted. The company-level demand-shock lag buffer is deleted. The
+      commodity-price growth adjustment is deleted: a producer's revenue rises with its
+      commodity's price because it SELLS units at that price, and the auction already charges it —
+      a tanh of the price ratio on top was the same fact a second time. **The 50% default haircut
+      is deleted too, and that one is a claim:** a defaulted firm's revenue should fall because its
+      customers stop buying from it, and if nothing in the auction makes them, that is a finding
+      for the estate work rather than a multiplier to keep here.
+    - **DECLARED RELABEL (rule 10).** The formula's `random()` draw is gone, so one RNG call per
+      operating firm per week disappears and the stream shifts. **Same-seed worlds will not match
+      anything measured before this commit**, and no comparison across it is valid.
+    - **WHAT THIS OWES A RUN, and it is the reason the row sat open.** The plan recorded that
+      forcing the sales anchor before collapsed both tiers (−10% to −22% growth). The revenue
+      LEVEL is the measurement: if firms shrink to what the auction clears, either the auction is
+      not clearing what it should (a finding about stage 05's demand coverage) or the firms were
+      always too big (a finding about the seed). Both are worth knowing and neither was knowable
+      while a formula was papering over the difference. **The boundary line is the instrument:** it
+      is redeclared as the accrual lag it now measures, and a line that stays large means the sales
+      anchor is not binding somewhere. Closing it entirely is a PAIR with the operating-cost line
+      beside it — both are accruals, and removing one side's boundary settlement without the other
+      makes every firm bleed cash.
     - **UNMEASURED**, like everything since §7.199.
