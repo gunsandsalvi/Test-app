@@ -24,6 +24,72 @@
  * so a credit squeeze bites where the borrowing actually is.
  */
 
+/**
+ * A NODE of a population laid out on one axis — a share of the people, and where they sit.
+ * `bufferBands` and `wageBands` are both this shape, because it is the same operation.
+ */
+export interface PopulationNode {
+  shareOfPopulation: number;
+  /** The value that orders the axis: months of buffer, a wage premium, anything measured. */
+  value: number;
+  /** An optional second quantity carried along, summed rather than averaged (debt, say). */
+  carried?: number;
+}
+
+/**
+ * Lay a set of band shares along a population ranked by `value`, and return each band's own
+ * share-weighted mean of it (plus its share of the carried total).
+ *
+ * This is the general form of "two partitions of one population go on ONE AXIS rather than being
+ * mapped to each other". It is used twice: to give a CREDIT tier the balance sheets of the
+ * households in its band of the buffer ranking, and to give a WEALTH tier the wages of the
+ * workers in its band of the earnings ranking. One operation, one implementation (rule 3).
+ *
+ * `nodes` may arrive in any order — they are sorted here, ascending, because the axis is the
+ * value and nothing else. `bandShares` must be ordered lowest band first.
+ */
+export function bandMeansOverDistribution(
+  nodes: PopulationNode[],
+  bandShares: number[]
+): { mean: number; carriedShare: number }[] {
+  const sorted = [...nodes]
+    .filter((n) => n.shareOfPopulation > 0)
+    .sort((a, b) => a.value - b.value);
+  const totalPopulation = sorted.reduce((a, n) => a + n.shareOfPopulation, 0);
+  const totalCarried = sorted.reduce((a, n) => a + Math.max(0, n.carried ?? 0), 0);
+  if (!(totalPopulation > 0)) return bandShares.map(() => ({ mean: 0, carriedShare: 0 }));
+
+  const totalBand = bandShares.reduce((a, s) => a + Math.max(0, s), 0) || 1;
+  const out: { mean: number; carriedShare: number }[] = [];
+  let nodeIndex = 0;
+  let nodeConsumed = 0;
+
+  bandShares.forEach((rawShare) => {
+    let want = (Math.max(0, rawShare) / totalBand) * totalPopulation;
+    let weighted = 0;
+    let carried = 0;
+    let taken = 0;
+    while (want > 1e-12 && nodeIndex < sorted.length) {
+      const node = sorted[nodeIndex];
+      const available = node.shareOfPopulation - nodeConsumed;
+      const slice = Math.min(available, want);
+      if (slice > 0) {
+        weighted += node.value * slice;
+        carried += Math.max(0, node.carried ?? 0) * (slice / node.shareOfPopulation);
+        taken += slice;
+        want -= slice;
+        nodeConsumed += slice;
+      }
+      if (node.shareOfPopulation - nodeConsumed <= 1e-12) { nodeIndex++; nodeConsumed = 0; }
+    }
+    out.push({
+      mean: taken > 0 ? weighted / taken : 0,
+      carriedShare: totalCarried > 0 ? carried / totalCarried : 0,
+    });
+  });
+  return out;
+}
+
 /** One band of the population on the buffer axis. */
 export interface BufferBand {
   shareOfHouseholds: number;
@@ -46,57 +112,23 @@ export function bufferMonthsOf(tier: {
 }
 
 /**
- * Lay a set of credit-tier shares along the population ranked by buffer, and hand each one the
- * balance sheet of the households in its band.
- *
- * `wealthBands` may arrive in any order — it is sorted here, ascending, because the axis is the
- * buffer and nothing else. `creditShares` must be ordered worst file first: the households with
- * the least room are the ones whose files are impaired.
+ * Lay the credit tiers along the population ranked by BUFFER, and hand each one the balance sheet
+ * of the households in its band. `creditShares` must be ordered worst file first: the households
+ * with the least room are the ones whose files are impaired.
  */
 export function joinCreditTiersToBalanceSheets(
   wealthBands: BufferBand[],
   creditShares: number[]
 ): { bufferMonths: number; debtShare: number }[] {
-  const bands = [...wealthBands]
-    .filter((b) => b.shareOfHouseholds > 0)
-    .sort((a, b) => a.bufferMonths - b.bufferMonths);
-  const totalHouseholds = bands.reduce((a, b) => a + b.shareOfHouseholds, 0);
-  const totalDebtUSD = bands.reduce((a, b) => a + Math.max(0, b.debtUSD), 0);
-  if (!(totalHouseholds > 0)) return creditShares.map(() => ({ bufferMonths: 0, debtShare: 0 }));
-
-  const totalCreditShare = creditShares.reduce((a, s) => a + Math.max(0, s), 0) || 1;
-  const out: { bufferMonths: number; debtShare: number }[] = [];
-  let cursor = 0;           // how far into the ranked population we have walked, in household share
-  let bandIndex = 0;
-  let bandConsumed = 0;     // how much of the current wealth band is already spoken for
-
-  creditShares.forEach((rawShare) => {
-    // The slice of the ranked population this credit tier occupies.
-    let want = (Math.max(0, rawShare) / totalCreditShare) * totalHouseholds;
-    let weightedBuffer = 0;
-    let debtUSD = 0;
-    let taken = 0;
-    while (want > 1e-9 && bandIndex < bands.length) {
-      const band = bands[bandIndex];
-      const available = band.shareOfHouseholds - bandConsumed;
-      const slice = Math.min(available, want);
-      if (slice > 0) {
-        weightedBuffer += band.bufferMonths * slice;
-        debtUSD += Math.max(0, band.debtUSD) * (slice / band.shareOfHouseholds);
-        taken += slice;
-        want -= slice;
-        bandConsumed += slice;
-        cursor += slice;
-      }
-      if (band.shareOfHouseholds - bandConsumed <= 1e-9) { bandIndex++; bandConsumed = 0; }
-    }
-    out.push({
-      bufferMonths: taken > 0 ? weightedBuffer / taken : 0,
-      debtShare: totalDebtUSD > 0 ? debtUSD / totalDebtUSD : 0,
-    });
-  });
-  void cursor;
-  return out;
+  const bands = bandMeansOverDistribution(
+    wealthBands.map((b) => ({
+      shareOfPopulation: b.shareOfHouseholds,
+      value: b.bufferMonths,
+      carried: b.debtUSD,
+    })),
+    creditShares
+  );
+  return bands.map((b) => ({ bufferMonths: b.mean, debtShare: b.carriedShare }));
 }
 
 /**

@@ -16,13 +16,33 @@
 
 import {
   OccupationType, WealthTier, WealthTierData, OccupationPool, HouseholdCohort,
+  TenureStratum, RETURN_TO_EXPERIENCE_ANNUAL,
 } from '../../domain/region-macro';
+import { PopulationNode, bandMeansOverDistribution } from '../../domain/household-credit';
 import {
   HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR,
   HOUSEHOLD_EFFECTIVE_TAX_RATE, UNEMPLOYMENT_REPLACEMENT_RATE, CONSUMPTION_TAX_RATE, splitWageBill, EMPLOYER_PAYROLL_TAX_RATE,
 } from '../bootstrap/national-accounts';
 
 export const WEALTH_TIERS: WealthTier[] = ['BOTTOM_50', 'NEXT_40', 'TOP_9', 'TOP_1'];
+
+/**
+ * Each tier's own wage multiplier: the mean premium over its band of the occupation's earnings
+ * ranking. Falls back to the seed table only when there is no cross-section to rank yet.
+ */
+function tierWageMultipliers(
+  nodes: PopulationNode[],
+  tierShares: number[]
+): Record<WealthTier, number> {
+  const out = {} as Record<WealthTier, number>;
+  if (nodes.length === 0) {
+    WEALTH_TIERS.forEach((t) => { out[t] = TIER_WAGE_MULTIPLIER_SEED[t]; });
+    return out;
+  }
+  const bands = bandMeansOverDistribution(nodes, tierShares);
+  WEALTH_TIERS.forEach((t, i) => { out[t] = Math.max(0.0001, bands[i]?.mean ?? 1); });
+  return out;
+}
 const OCCUPATIONS: OccupationType[] = [
   'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
 ];
@@ -40,13 +60,59 @@ export const TIER_OCCUPATION_MIXES: Record<WealthTier, Partial<Record<Occupation
 };
 
 /**
- * Within one occupation, how far a tier's earners sit above or below the occupation's average
- * wage — a senior engineer against a junior one. Normalized per occupation at build time so
- * each occupation's wage BILL is preserved exactly; only the split moves.
+ * DIST — WITHIN ONE OCCUPATION, WHAT A TIER'S EARNERS MAKE, DERIVED.
+ *
+ * This was `{0.40, 1.05, 3.4, 13.0}` — a stated 32.5x spread between the top and bottom of one
+ * occupation, and rule 19's largest surviving shape parameter. §7.172 measured why it could not
+ * be derived then: every firm paid the same (p99/p10 of 1.01x), so a tier split of an occupation
+ * was degenerate and deleting the table would have flattened the income distribution rather than
+ * deriving it. **Both missing mechanisms now exist.** A more productive firm pays more (§7.173)
+ * and a more experienced worker earns more (§7.174), and together they produce ~2.5x.
+ *
+ * **The judgement §7.174 left open, taken.** 32.5x WITHIN one occupation is not a plausible wage
+ * fact — a top practitioner does not out-earn a junior one thirty-fold in the same job. That
+ * number is the whole income concentration crammed into a wage multiplier, and the model already
+ * measures the part that belongs elsewhere: capital income is ~38% of the top tier's income and
+ * is carried separately. So deriving is MORE correct than the table, and it moves top-tier income
+ * from wages toward capital, where it belongs.
+ *
+ * **The derivation needs no mapping table**, for the same reason the credit-tier join does not
+ * (`domain/household-credit.ts`): the wealth tiers and the occupation's workers are two partitions
+ * of one population, so they go on ONE AXIS rather than being mapped to each other. The axis is
+ * the wage premium each worker actually carries — its firm's, times its own experience — and each
+ * tier takes the mean over its band of that ranking. The normalisation below is unchanged, so the
+ * occupation's wage BILL is still preserved exactly and only the split moves.
+ *
+ * The seed value survives as the OPENING CONDITION, used before any tenure cross-section or firm
+ * premium exists to rank (§7.4).
  */
-const TIER_WAGE_MULTIPLIER: Record<WealthTier, number> = {
+const TIER_WAGE_MULTIPLIER_SEED: Record<WealthTier, number> = {
   BOTTOM_50: 0.40, NEXT_40: 1.05, TOP_9: 3.4, TOP_1: 13.0,
 };
+
+/**
+ * The earnings cross-section inside one occupation: every (firm premium × experience premium)
+ * pair the occupation's workers actually span, as a population on one axis.
+ *
+ * The two are independent — which firm a worker is at says nothing about how long it has been
+ * there — so the joint distribution is their product over the cross of the two margins.
+ */
+function occupationWagePremiumNodes(
+  tenureStrata: TenureStratum[] | undefined,
+  firmPremiums: { shareOfWorkers: number; premium: number }[]
+): PopulationNode[] {
+  const tenure = (tenureStrata ?? []).filter((t) => t.weight > 0);
+  const firms = firmPremiums.filter((f) => f.shareOfWorkers > 0 && f.premium > 0);
+  if (tenure.length === 0 || firms.length === 0) return [];
+  const nodes: PopulationNode[] = [];
+  tenure.forEach((t) => {
+    const experience = 1 + RETURN_TO_EXPERIENCE_ANNUAL * Math.max(0, t.tenureYears);
+    firms.forEach((f) => {
+      nodes.push({ shareOfPopulation: t.weight * f.shareOfWorkers, value: experience * f.premium });
+    });
+  });
+  return nodes;
+}
 
 /** Progressive tax RATE multipliers, renormalized by the week's actual income weights so the
  * aggregate take equals the flat HOUSEHOLD_EFFECTIVE_TAX_RATE to the dollar — progressivity
@@ -184,6 +250,14 @@ export interface CohortBuildInputs {
   baseAnnualWageUSD: Record<OccupationType, number>;
   /** Labor force per occupation (employed + unemployed), the same figure the benefits sum uses. */
   laborForceByOccupation: Record<OccupationType, number>;
+  /**
+   * DIST — the region's employers, as a wage-premium cross-section: each firm's own
+   * `offeredWageIndex` weighted by the share of the region's workers it employs (§7.173).
+   *
+   * With the tenure strata this is what derives `TIER_WAGE_MULTIPLIER`. Absent before the labour
+   * market has run, where the seed table stands in (§7.4).
+   */
+  firmWagePremiums?: { shareOfWorkers: number; premium: number }[];
   /** PUB3b: the government's REAL weekly transfer obligation — the one number the budget owns. */
   governmentTransfersWeeklyUSD: number;
   /**
@@ -259,7 +333,7 @@ export interface CohortBuildResult {
 
 export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildResult {
   const {
-    occupationPools, baseAnnualWageUSD, laborForceByOccupation,
+    occupationPools, baseAnnualWageUSD, laborForceByOccupation, firmWagePremiums,
     governmentTransfersWeeklyUSD, liquidAssetsUSD, retiredShareOfPopulation, weeklyDebtServiceUSD,
     wealthDistribution, measuredDisposableIncomeUSD,
   } = inputs;
@@ -289,15 +363,23 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     const weights = tierWeightInOcc(occ);
     const unemployedInPool = Math.max(0, (laborForceByOccupation[occ] ?? 0) - pool.employed);
     const occWage = baseAnnualWageUSD[occ] * pool.wageIndex;
-    // Normalize the tier wage multipliers by this occupation's own tier weights so
-    // Σ_t employed_t x wage_t = employed x occWage — the bill is untouched, only split.
-    const multNorm = WEALTH_TIERS.reduce((a, t) => a + weights[t] * TIER_WAGE_MULTIPLIER[t], 0) || 1;
+    // DIST: what each tier's earners make inside THIS occupation, measured off the two
+    // cross-sections that produce wage dispersion — the firm's premium and the worker's own
+    // experience — laid on one axis and banded by the tiers' own population shares. The seed
+    // table stands in only until both exist to rank (§7.4).
+    const multiplier = tierWageMultipliers(
+      occupationWagePremiumNodes(pool.tenureStrata, firmWagePremiums ?? []),
+      WEALTH_TIERS.map((t) => weights[t])
+    );
+    // Normalize by this occupation's own tier weights so Σ_t employed_t x wage_t = employed x
+    // occWage — the bill is untouched, only the split moves.
+    const multNorm = WEALTH_TIERS.reduce((a, t) => a + weights[t] * multiplier[t], 0) || 1;
     WEALTH_TIERS.forEach((tier) => {
       const w = weights[tier];
       if (!(w > 0)) return;
       // PUB1c: the occupation wage is TOTAL COMPENSATION; households are paid it net of the
       // employer's payroll tax, exactly as the aggregate derivation nets it.
-      const cellWage = splitWageBill(occWage * (TIER_WAGE_MULTIPLIER[tier] / multNorm)).grossWagesUSD;
+      const cellWage = splitWageBill(occWage * (multiplier[tier] / multNorm)).grossWagesUSD;
       const employed = pool.employed * w;
       const unemployed = unemployedInPool * w;
       cells.push({

@@ -592,6 +592,11 @@ export function evolveRegionMacro(
     measuredDisposableIncomeUSD: newEstimatedHouseholdIncomeUSD,
     annualCapitalReceiptsUSD,
     wealthDistribution: region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD),
+    // DIST — the employers' own wage premia, weighted by whom they employ. With the tenure
+    // strata this is what derives the tier wage multiplier instead of stating it (§7.173-174).
+    firmWagePremiums: allCompanies
+      .filter((c) => c.region === region.id && (c.employeeCount ?? 0) > 0 && (c.offeredWageIndex ?? 0) > 0)
+      .map((c) => ({ shareOfWorkers: c.employeeCount, premium: c.offeredWageIndex! })),
   });
 
   // DIST/MAC — THE SAVINGS RATE, MEASURED. Every tier decided its own saving against its own
