@@ -489,7 +489,11 @@ export function payHoldersAccruedInterest(
   ctx.pendingHolderAccrualPayout.add(`${instrumentType}:${issuerId}`);
 }
 
-const accrualKey = (instrumentKey: string, holderId: string) => `${instrumentKey}|${holderId}`;
+// SCALE: the ledger is NESTED — instrument, then holder — not keyed by a composite string.
+// Flat, it cost a `${instrument}|${holder}` build per matched row (~105,000 a week) to write, and
+// the coupon-date pass then walked ALL 105,000 entries and string-sliced each one to find the few
+// whose instrument was actually due. Nested, the write is two map lookups and no string, and the
+// payout visits only the instruments paying this week and their own holders.
 
 /**
  * Run the week's accruals and coupon-date payouts over the register.
@@ -503,7 +507,7 @@ export function applyHolderInterestAccruals(
     updatedInstitutionalEntities: InstitutionalEntity[];
     pendingHolderAccrualUSD: Map<string, number>;
     pendingHolderAccrualPayout: Set<string>;
-    holderAccruedInterestUSD: Map<string, number>;
+    holderAccruedInterestUSD: Map<string, Map<string, number>>;
     paymentInstructions?: import('./settlement').PaymentInstruction[];
     issuerTickerById?: Map<string, string>;
   }
@@ -556,8 +560,9 @@ export function applyHolderInterestAccruals(
       if (weeklyUSD === undefined || !(totalUSD > 0)) return;
       const shareUSD = weeklyUSD * (qtyUSD / totalUSD);
       if (!(shareUSD > 0)) return;
-      const k = accrualKey(key, entityId);
-      ctx.holderAccruedInterestUSD.set(k, (ctx.holderAccruedInterestUSD.get(k) ?? 0) + shareUSD);
+      let byHolder = ctx.holderAccruedInterestUSD.get(key);
+      if (!byHolder) { byHolder = new Map(); ctx.holderAccruedInterestUSD.set(key, byHolder); }
+      byHolder.set(entityId, (byHolder.get(entityId) ?? 0) + shareUSD);
     });
   }
   // THE ACCRUAL IS CONSUMED HERE, NOT AT THE BOTTOM. It used to be cleared only on the payout
@@ -567,27 +572,27 @@ export function applyHolderInterestAccruals(
   accruals.clear();
 
   if (payouts.size === 0) return;
-  const cleared: string[] = [];
-  ctx.holderAccruedInterestUSD.forEach((accruedUSD, k) => {
-    const at = k.lastIndexOf('|');
-    const instrumentKey = k.slice(0, at);
-    if (!payouts.has(instrumentKey) || !(accruedUSD > 0)) return;
-    const holderId = k.slice(at + 1);
+  // Only the instruments whose coupon falls due this week, and only their own holders.
+  payouts.forEach((instrumentKey) => {
+    const byHolder = ctx.holderAccruedInterestUSD.get(instrumentKey);
+    if (!byHolder) return;
     const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
     const ticker = ctx.issuerTickerById?.get(issuerId);
     const payer = ticker
       ? ({ kind: 'COMPANY', ticker } as import('./settlement').PartyRef) : undefined;
-    if (payer && ctx.paymentInstructions) {
-      ctx.paymentInstructions.push({
-        payer,
-        payee: { kind: 'INSTITUTION', id: holderId },
-        amountUSD: accruedUSD,
-        reason: 'coupon payment',
-      });
-    }
-    cleared.push(k);
+    byHolder.forEach((accruedUSD, holderId) => {
+      if (!(accruedUSD > 0)) return;
+      if (payer && ctx.paymentInstructions) {
+        ctx.paymentInstructions.push({
+          payer,
+          payee: { kind: 'INSTITUTION', id: holderId },
+          amountUSD: accruedUSD,
+          reason: 'coupon payment',
+        });
+      }
+    });
+    ctx.holderAccruedInterestUSD.delete(instrumentKey);
   });
-  cleared.forEach((k) => ctx.holderAccruedInterestUSD.delete(k));
   payouts.clear();
 }
 

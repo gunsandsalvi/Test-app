@@ -67,7 +67,7 @@ export interface GameState {
    * program, 5.25% of all CPU, converting a container to another container and back. Nothing
    * serialises or hashes GameState, so the object form was buying nothing at all.
    */
-  holderAccruedInterestUSD?: Map<string, number>;
+  holderAccruedInterestUSD?: Map<string, Map<string, number>>;
   /** CAL — accrued-but-unpaid SOVEREIGN interest by (region, tenor bucket, party); see
    *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
    *  government paper on its own balance sheet and is not on the institutional register. */

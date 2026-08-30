@@ -198,7 +198,7 @@ export interface WeeklyStepContext {
   /** CAL — what each holder has EARNED and not yet been paid, by (instrument, holder). The
    *  receivable that sits between an accrual and a coupon date, and the reason a bond can change
    *  hands mid-period without moving the interest to the wrong party. */
-  holderAccruedInterestUSD: Map<string, number>;
+  holderAccruedInterestUSD: Map<string, Map<string, number>>;
   /** CAL — the same receivable for GOVERNMENT paper, keyed `<region>|<bucket>|<partyKey>` because
    *  its holders are not all on the institutional register: a bank holds sovereigns directly, per
    *  tenor, on its own balance sheet, and so do the central bank and the corporate treasuries. */
@@ -310,7 +310,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     cashOverdraftUSD: 0,
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),
-    holderAccruedInterestUSD: (state as any).holderAccruedInterestUSD ?? new Map<string, number>(),
+    holderAccruedInterestUSD: (state as any).holderAccruedInterestUSD ?? new Map<string, Map<string, number>>(),
     sovereignAccruedInterestUSD: (state as any).sovereignAccruedInterestUSD ?? new Map<string, number>(),
     tradeInvoiceFxGainUSD: 0,
     tradeInvoiceWriteOffUSD: 0,
