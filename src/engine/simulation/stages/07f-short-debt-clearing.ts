@@ -40,9 +40,13 @@ import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, l
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
 const DEALER_SPREAD_BPS = 2; // the tightest market there is
+
+/** This book's name, as the desks and the clearing house know it. */
+const BOOK = 'bill';
 const MAX_WEEKLY_YIELD_MOVE_PCT = 0.25; // short paper reprices to policy fast; damping is looser here
 /** A bank's pickup over reserves for holding a bill instead — the arbitrage band's width. */
 const BANK_BILL_PICKUP_BPS = 5;
@@ -235,7 +239,13 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           (reg.centralBankSheet.lastOrderPlacedUSD ?? 0) + (cbOrder?.orderedUSD ?? 0);
       }
 
-      const result = clearFinancialAsset(instruments, participants, priorDealerInventory, {
+      // G3a: the banks' bill desks — the same market makers, a different book.
+      const deskParticipants = buildDealerDeskParticipants({
+        ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+      });
+      const deskTickers = deskTickersOf(deskParticipants);
+
+      const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
         dealerSpreadBps: DEALER_SPREAD_BPS,
         maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
       });
@@ -327,21 +337,23 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // desks' fees, and the dealer's own inventory leg.
       const billEntityIds = new Set(regionEntities.map((e) => e.id));
       settleClearedBook(
-        ctx, regionId, 'bill',
+        ctx, regionId, BOOK,
         result.netCashDeltaByParticipantId,
         (id) => (billEntityIds.has(id) ? { kind: 'INSTITUTION', id }
           : id.startsWith('BANK-') ? { kind: 'BANK_SECURITIES', ticker: id.slice(5) }
             : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
-              : undefined),
+              : dealerDeskPartyOf(id, deskTickers)),
         { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
         feeDesksForRegion(ctx, regionId)
       );
 
-      // Dealer residual: bills live in the same dealer book as bonds, under their own keys.
+      // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
+      // same regional array as bonds under their own keys, and the bond rows pass through.
+      const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
       const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !p.tenorKey.startsWith('b'));
       const billDealerRows = activeBuckets.map((b) => ({
         tenorKey: b.key,
-        inventoryUSD: result.newDealerInventoryById.get(billInstrumentId(regionId, b.key)) ?? 0,
+        inventoryUSD: deskViewById.get(billInstrumentId(regionId, b.key)) ?? 0,
       })).filter((r) => Math.abs(r.inventoryUSD) > 1);
       reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...bondDealerRows, ...billDealerRows] };
     }

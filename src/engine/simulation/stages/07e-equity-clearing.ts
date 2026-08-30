@@ -38,12 +38,16 @@ const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
 const DEALER_SPREAD_BPS = 8;
+
+/** This book's name, as the desks and the clearing house know it. */
+const BOOK = 'equity';
 /** Equity gaps more than credit; this is discrete-time damping, not a bound. */
 const MAX_WEEKLY_PRICE_MOVE_PCT = 0.18;
 /** How far below its fair value a holder must see the price before it takes full size. */
@@ -179,6 +183,31 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       currentSharesByEntity.set(entity.id, bySharesForCompany);
     });
 
+    // G3a/G3e: the banks' equity desks, and the float they and the other participants make up.
+    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const deskParticipants = buildDealerDeskParticipants({
+      ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+      unitPriceOf: (i) => refPriceOf(regionCompanies[i]),
+    });
+    const deskTickers = deskTickersOf(deskParticipants);
+
+    // OWN7's rule, finally applied to the register: the float is what the participants in THIS
+    // book hold between them, not every share that exists. `tradableFloatUSD` was
+    // `sharesOutstanding` — the whole company — while the only bidders were institutions whose
+    // mandates keep them far below it, so the book asked a demand side that can never reach the
+    // supply to price it, and the level printed at the damper week after week (§6). Founders,
+    // households and corporates on the register do not bid, so their shares were never for
+    // sale; the same carve-out 07c and 07f already make, computed the same way — off what the
+    // real holders actually hold rather than a stated passive share.
+    const heldByBookShares = new Map<string, number>();
+    const addHeld = (companyId: string, shares: number) => {
+      if (!(shares > 0)) return;
+      heldByBookShares.set(companyId, (heldByBookShares.get(companyId) ?? 0) + shares);
+    };
+    currentSharesByEntity.forEach((byCompany) => byCompany.forEach((shares, companyId) => addHeld(companyId, shares)));
+    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((shares, companyId) => addHeld(companyId, shares)));
+    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookShares.get(inst.id) ?? 0; });
+
     // ETF: the index funds tracking any equity index this book prices. They are ordinary holders
     // — real positions, real cash — but their schedule has no reservation level: a fund buys its
     // benchmark weight at whatever the market is asking. That is the one demand shape this engine
@@ -263,7 +292,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       };
     });
 
-    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants], new Map(), {
+    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], new Map(), {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
     });
@@ -287,6 +316,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // SCALE C1: fills append to the store for the single write-back after this, the last book.
     // SETL6: the cash legs are collected here and settled below through the clearing house.
     const netCashByEntityId = new Map<string, number>();
+    let bookFeeUSD = 0;
     bookEntities.forEach((entity) => {
       const newShares = result.newParticipantHoldings.get(entity.id) ?? new Map<string, number>();
       const equityHoldings: ItemizedHolding[] = [];
@@ -302,38 +332,82 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         });
       });
       // The engine's cash delta is in the same unit as the quantity — shares — so convert the
-      // traded share flow into money at each name's cleared price.
+      // traded share flow into money at each name's cleared price. G3e: and charge the desks'
+      // spread on it, which this adapter never did because the engine's fee came back
+      // share-denominated too — so equity trading was free while every other book paid.
       let cashDeltaUSD = 0;
+      let feeUSD = 0;
+      const chargeUSD = (tradedShares: number, comp: Company) => {
+        cashDeltaUSD -= tradedShares * comp.stockPrice;
+        const f = Math.abs(tradedShares) * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
+        cashDeltaUSD -= f;
+        feeUSD += f;
+      };
       newShares.forEach((shares, companyId) => {
         const comp = companyById.get(companyId);
         if (!comp) return;
         const prev = currentSharesByEntity.get(entity.id)?.get(companyId) ?? 0;
-        cashDeltaUSD -= (shares - prev) * comp.stockPrice;
+        chargeUSD(shares - prev, comp);
       });
       currentSharesByEntity.get(entity.id)!.forEach((prevShares, companyId) => {
         if (newShares.has(companyId)) return;
         const comp = companyById.get(companyId);
-        if (comp) cashDeltaUSD += prevShares * comp.stockPrice;
+        if (comp) chargeUSD(-prevShares, comp);
       });
       netCashByEntityId.set(entity.id, cashDeltaUSD);
+      bookFeeUSD += feeUSD;
       store.append(entity.id, equityHoldings);
+    });
+
+    // G3e: the desks' own money leg, computed the same way — this book clears in shares, so the
+    // engine's cash legs are share-denominated and every money number here is made in this
+    // adapter. A desk pays the book's spread on its own flow exactly as a client does.
+    const deskCashUSD = new Map<string, number>();
+    deskParticipants.forEach((desk) => {
+      const newShares = result.newParticipantHoldings.get(desk.id) ?? new Map<string, number>();
+      let cashDeltaUSD = 0;
+      const charge = (tradedShares: number, comp: Company) => {
+        cashDeltaUSD -= tradedShares * comp.stockPrice;
+        const f = Math.abs(tradedShares) * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
+        cashDeltaUSD -= f;
+        bookFeeUSD += f;
+      };
+      newShares.forEach((shares, companyId) => {
+        const comp = companyById.get(companyId);
+        if (!comp) return;
+        charge(shares - (desk.currentHoldingsByInstrumentId.get(companyId) ?? 0), comp);
+      });
+      desk.currentHoldingsByInstrumentId.forEach((prevShares, companyId) => {
+        if (newShares.has(companyId)) return;
+        const comp = companyById.get(companyId);
+        if (comp) charge(-prevShares, comp);
+      });
+      deskCashUSD.set(desk.id, cashDeltaUSD);
+      netCashByEntityId.set(desk.id, cashDeltaUSD);
+    });
+    // And the inventory it was left holding, marked at this week's cleared price, onto the bank
+    // that carried it — the equity desk held nothing however one-sided the session was, because
+    // the engine's residual came back in shares and this adapter dropped it.
+    applyDealerDeskFills({
+      ctx, banks: regionBanks, book: BOOK, result,
+      unitPriceOf: (companyId) => companyById.get(companyId)?.stockPrice ?? 0,
+      cashDeltaOf: (deskId) => deskCashUSD.get(deskId) ?? 0,
     });
 
     // SETL6. This book clears in SHARES, so the engine's own money legs are share-denominated
     // and unusable here; the deltas above are the money ones. The dealer is the counterparty to
     // all of them, so its leg is their negative — exactly, which is what keeps the clearing
-    // house flat. No fee: the engine's spread is in shares and this adapter has never charged
-    // it, so equity trading is free (§6 carries it).
+    // house flat.
     let dealerNetUSD = 0;
     netCashByEntityId.forEach((v) => { dealerNetUSD -= v; });
     let primaryUSD = 0;
     result.primaryOutcomeById.forEach((o) => { if (!o.withdrawn) primaryUSD += o.marketTakeUSD * o.clearedStat; });
     const entityIds = new Set(bookEntities.map((e) => e.id));
     settleClearedBook(
-      ctx, regionId, 'equity',
+      ctx, regionId, BOOK,
       netCashByEntityId,
-      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : undefined),
-      { netCashUSD: dealerNetUSD, feeUSD: 0 },
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
+      { netCashUSD: dealerNetUSD, feeUSD: bookFeeUSD },
       feeDesksForRegion(ctx, regionId),
       primaryUSD
     );

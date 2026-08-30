@@ -1,4 +1,5 @@
 import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT, WHOLESALE_FUNDING_SPREAD_BPS } from '../../types';
+import { dealerDeskGrossUSD } from '../../domain/dealer-desk';
 
 /**
  * The banking sector's weekly evolution — a FLOW LEDGER, not a formula sheet.
@@ -73,8 +74,12 @@ export const BASEL_MIN_LEVERAGE_RATIO = 0.03;
 /** Unweighted total assets — the leverage ratio's denominator. */
 export function bankTotalAssetsUSD(sheet: BankingSector): number {
   const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+  // G3a: the desks' inventory is an asset the bank OWNS and finances, and a cash security
+  // consumes the leverage ratio one-for-one. Before the desks had owners it consumed nothing,
+  // which is precisely what let a book with no capital behind it absorb any imbalance.
   return sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD
-    + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0);
+    + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0)
+    + dealerDeskGrossUSD(sheet.dealerDeskInventory);
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */

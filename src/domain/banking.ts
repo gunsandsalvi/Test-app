@@ -8,6 +8,7 @@
 
 import { RegionId } from './geography';
 import { FxDealerBook } from './dealer-derivatives';
+import { DealerDeskInventory } from './dealer-desk';
 
 export interface ItemizedHolding {
   instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN: the DebtTranche.id; for GOV_BOND: the GovDebtTranche.id; for ETF_SHARE: the fund entity's id
@@ -102,6 +103,14 @@ export interface BankingSector {
   repoEncumberedCollateralUSD: number;
   /** XB2b: the FX forward desk's live book — inventory, margin held, and notional written. */
   fxDealerBook?: FxDealerBook;
+  /**
+   * G3a — THIS bank's own market-making inventory, by book. The three arrays above
+   * (`corpBondDealerInventory`, `sovBondDealerInventory`, `loanDealerInventory`) are now the
+   * derived regional SUM of these, kept for the readers that want one aggregate; this is the
+   * owned position, sized by the bank's own leverage headroom, funded out of its own reserves,
+   * and decided by a schedule it posts in the auction. See domain/dealer-desk.ts.
+   */
+  dealerDeskInventory?: DealerDeskInventory;
   /**
    * G2 slice 1 — the ITEMIZED business loan book: every dollar of `businessLoanBookUSD` is one
    * of these, with a named borrower. Two real borrower classes today: the SME segment pools

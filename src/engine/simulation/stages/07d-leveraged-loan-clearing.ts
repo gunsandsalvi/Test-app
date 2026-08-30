@@ -41,6 +41,7 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
@@ -58,6 +59,9 @@ const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 // unsecured bond spread — collateral and seniority mean less loss given default.
 const SENIOR_LIEN_DISCOUNT = 0.85;
 const DEALER_SPREAD_BPS = 20; // loan secondary markets trade a bit wider than investment-grade bonds
+
+/** This book's name, as the desks and the clearing house know it. */
+const BOOK = 'leveraged loan';
 
 function floatingDebtUSD(comp: Company): number {
   // G2: bank FACILITIES (revolvers, maintenance bridges) are excluded — they are loans on a
@@ -347,7 +351,14 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       };
     });
 
-    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants], priorDealerInventoryById, {
+    // G3a: the named banks' loan-trading desks, sized by their own headroom.
+    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const deskParticipants = buildDealerDeskParticipants({
+      ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+    });
+    const deskTickers = deskTickersOf(deskParticipants);
+
+    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
@@ -386,8 +397,10 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
 
     // Apply: real dealer inventory.
+    // G3a: owned by the desks that took it; the regional array is the derived sum.
+    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
-    result.newDealerInventoryById.forEach((inventoryUSD, companyId) => {
+    deskViewByCompany.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });
     });
     reg.bankingSector = { ...reg.bankingSector, loanDealerInventory: newDealerInventory };
@@ -395,9 +408,9 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // SETL6: the book's whole cash side, through the clearing house.
     const entityIds = new Set(bookEntities.map((e) => e.id));
     settleClearedBook(
-      ctx, regionId, 'leveraged loan',
+      ctx, regionId, BOOK,
       result.netCashDeltaByParticipantId,
-      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : undefined),
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
       primaryTakeUSD(result)

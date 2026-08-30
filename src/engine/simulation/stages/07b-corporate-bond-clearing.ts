@@ -57,6 +57,7 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 
 // One shared empty Map for participants that hand demand over by index (see ClearingParticipant).
@@ -78,6 +79,9 @@ const CREDIT_CONDITIONS_FAIR_VALUE_SENSITIVITY_BPS = 150;
 // Bid/ask spread the dealer desk earns on the gross flow it facilitates, credited as real
 // trading revenue to the named banks' own equity (split by bankMarketShare).
 const DEALER_SPREAD_BPS = 15;
+
+/** This book's name, as the desks and the clearing house know it. */
+const BOOK = 'corporate bond';
 // Real insurers and pension funds overwhelmingly run investment-grade-only mandates in
 // practice — a genuine structural avoidance of high-yield paper, not a soft preference.
 const IG_MANDATE_HY_AVOIDANCE_TILT = -0.7;
@@ -372,7 +376,16 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       };
     });
 
-    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants], priorDealerInventoryById, {
+    // G3a: the market makers, one per named bank, sized by that bank's own leverage headroom
+    // and funded by its own reserves. They are ordinary participants — the residual with no
+    // owner this replaces is documented in domain/dealer-desk.ts.
+    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    const deskParticipants = buildDealerDeskParticipants({
+      ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+    });
+    const deskTickers = deskTickersOf(deskParticipants);
+
+    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
     });
@@ -408,9 +421,11 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       store.append(entity.id, newCorpHoldings);
     });
 
-    // Apply: real dealer inventory.
+    // Apply: each desk's inventory, onto the bank that carried it. The regional array is now
+    // the DERIVED sum of the named desks — nothing decides off it (G3a).
+    const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
-    result.newDealerInventoryById.forEach((inventoryUSD, companyId) => {
+    deskViewByCompany.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });
     });
     reg.bankingSector = { ...reg.bankingSector, corpBondDealerInventory: newDealerInventory };
@@ -418,9 +433,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // SETL6: the book's whole cash side, through the clearing house.
     const entityIds = new Set(bookEntities.map((e) => e.id));
     settleClearedBook(
-      ctx, regionId, 'corporate bond',
+      ctx, regionId, BOOK,
       result.netCashDeltaByParticipantId,
-      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : undefined),
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
       primaryTakeUSD(result)

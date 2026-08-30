@@ -56,7 +56,15 @@ export const FX_INITIAL_MARGIN_RATE = 0.02;
  */
 export const MAX_CROSS_CURRENCY_BASIS_BPS = 150;
 
-/** Share of its leverage headroom a desk will commit to derivative PFE before it stops quoting. */
+/**
+ * Share of its leverage headroom a desk will commit to derivative PFE before it stops quoting.
+ *
+ * G3 deliberately did NOT merge this with the cash desks' commitment
+ * (DEALER_DESK_SHARE_OF_BALANCE_SHEET): the bases are different things — a derivative consumes
+ * capacity through a 2% PFE add-on and a cash bond consumes it one-for-one — so one number
+ * covering both would be one number meaning two. DER owns whether the two decisions are really
+ * one when it makes the basis a cleared price.
+ */
 export const FX_DESK_CAPACITY_SHARE_OF_HEADROOM = 0.25;
 
 /**

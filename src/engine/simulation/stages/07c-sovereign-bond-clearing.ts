@@ -52,6 +52,7 @@ import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion } from './book-settlement';
+import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
@@ -71,6 +72,9 @@ const SOVEREIGN_FULL_SIZE_YIELD_RANGE_BPS = 120;
 const DURATION_PREMIUM_BPS_PER_YEAR = 4;
 const INSTITUTIONAL_REAL_RETURN_BPS = 150;
 const DEALER_SPREAD_BPS = 5;
+
+/** This book's name, as the desks and the clearing house know it. */
+const BOOK = 'sovereign bond';
 const BANK_PREFERRED_TENOR_YEARS = 3; // a bank's HQLA book skews shorter/more liquid than a typical bond investor
 /**
  * Share of its policy government-bond allocation each holder keeps at ANY yield, because its
@@ -286,8 +290,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
         .forEach(([key, usd]) => addReal(key, Number(usd) || 0));
     }
-    (reg.bankingSector.sovBondDealerInventory || []).forEach((pos: { bucketKey?: string; inventoryUSD: number }) =>
-      addReal(pos.bucketKey, pos.inventoryUSD));
+    // The desks' own book is held paper like any other: it comes out of what is reservable.
+    // (This read named a field that does not exist on the row — `bucketKey` for `tenorKey` —
+    // so the dealer's position had never once been subtracted. G3a.)
+    (reg.bankingSector.sovBondDealerInventory || []).forEach((pos) => addReal(pos.tenorKey, pos.inventoryUSD));
     activeBuckets.forEach((b) => reserveBucket(b.key, Math.max(0,
       (outstandingByBucket.get(b.key) ?? 0) - (realHoldingsByBucket.get(b.key) ?? 0))));
 
@@ -466,9 +472,15 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const priorDealerInventoryById = new Map<string, number>();
     (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => priorDealerInventoryById.set(bucketInstrumentId(regionId, p.tenorKey), p.inventoryUSD));
 
+    // G3a: each bank's govvie desk, distinct from the investment book it also runs above.
+    const deskParticipants = buildDealerDeskParticipants({
+      ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
+    });
+    const deskTickers = deskTickersOf(deskParticipants);
+
     const result = clearFinancialAsset(
       instruments,
-      [...entityParticipants, ...bankParticipants, ...(cbOrder ? [cbOrder.participant] : [])],
+      [...entityParticipants, ...bankParticipants, ...(cbOrder ? [cbOrder.participant] : []), ...deskParticipants],
       priorDealerInventoryById,
       { dealerSpreadBps: DEALER_SPREAD_BPS, maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT }
     );
@@ -558,12 +570,16 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       reg.centralBankSheet.lastOpenMarketPurchasesUSD = Number(filled.toFixed(0));
     }
 
-    // Apply: real dealer inventory.
+    // Apply: the desks' inventory, owned by the banks that took it. This auction prices the
+    // BOND buckets only — the bill rows (07f's book) pass through, the same partition the
+    // banks' own holdings above obey.
+    const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, result });
+    const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => p.tenorKey.startsWith('b'));
     const newDealerInventory: { tenorKey: string; inventoryUSD: number }[] = [];
-    result.newDealerInventoryById.forEach((inventoryUSD, instrumentId) => {
+    deskViewById.forEach((inventoryUSD, instrumentId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ tenorKey: instrumentId.replace(`${regionId}-GOV-`, ''), inventoryUSD });
     });
-    reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: newDealerInventory };
+    reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...newDealerInventory, ...billDealerRows] };
 
     // SETL6: the book's whole cash side, through the clearing house. The central bank's leg is
     // named and settles to nothing — it pays with reserves it creates, which is what makes an
@@ -572,12 +588,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const entityIds = new Set(biddingEntities.map((e) => e.id));
     const bankTickers = new Set(regionBanks.map((b) => b.ticker));
     settleClearedBook(
-      ctx, regionId, 'sovereign bond',
+      ctx, regionId, BOOK,
       result.netCashDeltaByParticipantId,
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
         : bankTickers.has(id) ? { kind: 'BANK_SECURITIES', ticker: id }
           : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
-            : undefined),
+            : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId)
     );

@@ -22,6 +22,7 @@
 
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
+import { regionalDeskView } from '../../../domain/dealer-desk';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 import {
@@ -324,6 +325,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // — one source of truth, now genuinely derived from real per-bank state instead of the
     // other way around.
     const sumField = (f: (s: BankingSector) => number) => newSheets.reduce((s, { sheet }) => s + f(sheet), 0);
+    // G3a: the region's view of one dealer book — every named desk's position, summed by name.
+    const deskView = (book: string) =>
+      Array.from(regionalDeskView(newSheets.map(({ sheet }) => sheet.dealerDeskInventory), book).entries())
+        .filter(([, usd]) => Math.abs(usd) > 1);
     const totalAssets = sumField((s) => s.businessLoanBookUSD + s.consumerLoanBookUSD + s.sovereignBondHoldingsUSD + s.cashReservesUSD);
     const weightedAvg = (f: (s: BankingSector) => number) =>
       totalAssets > 0
@@ -362,15 +367,16 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         });
         return buckets;
       })(),
-      // Real dealer inventory is a shared regional book (see corpBondDealerInventory's domain
-      // comment) owned and updated by 07b-corporate-bond-clearing.ts, which runs right after
-      // this stage — carried forward unchanged here, not recomputed as a per-bank sum.
-      corpBondDealerInventory: priorAggregate.corpBondDealerInventory || [],
-      // Same shared-regional-dealer-desk pattern for sovereign bonds — owned by
-      // 07c-sovereign-bond-clearing.ts, carried forward unchanged here.
-      sovBondDealerInventory: priorAggregate.sovBondDealerInventory || [],
-      // Same for leveraged loans — owned by 07d-leveraged-loan-clearing.ts.
-      loanDealerInventory: priorAggregate.loanDealerInventory || [],
+      // G3a: dealer inventory is now OWNED, one desk per named bank (domain/dealer-desk.ts).
+      // These three arrays are the derived regional view of those desks and nothing decides off
+      // them — the books that clear later this week overwrite them with their own session's
+      // result, and a desk's position is only ever written by the bank that took it.
+      corpBondDealerInventory: deskView('corporate bond').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
+      sovBondDealerInventory: [
+        ...deskView('sovereign bond').map(([instrumentId, inventoryUSD]) => ({ tenorKey: instrumentId.replace(`${regionId}-GOV-`, ''), inventoryUSD })),
+        ...deskView('bill').map(([instrumentId, inventoryUSD]) => ({ tenorKey: instrumentId.replace(`${regionId}-GOV-`, ''), inventoryUSD })),
+      ],
+      loanDealerInventory: deskView('leveraged loan').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
       // WS6: the region's overnight book is the sum of the named banks' real positions. The
       // RATE is one market print per region and lives on reg.repoRateAnnual — never a second
       // copy on any sheet.
