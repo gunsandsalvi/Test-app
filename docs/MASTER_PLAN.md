@@ -1664,3 +1664,43 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - **The lesson worth keeping:** three rounds of "the profile is flat, there is nothing left"
        were wrong, and they were wrong because the instrument could not see inside a stage. **A
        flat profile is a statement about the profiler until the profiler can resolve lines.**
+217. **WAVE 2, MILESTONES 1–3 — the design's decisions, applied and measured.** §7.216's design
+     was written from the profile; this is what happened when it was built. **1418 → ~1200 ms per
+     cycle at full fidelity, bit-exact**, and everything below is the design's own numbering.
+     - **Decision 2, A PARTY IS AN `int32`.** `partyKey` built a fresh string per call and was
+       called four times per payment — ~580,000 string builds a week for identities that never
+       change. Interned per kind, so the kind is never concatenated into a lookup; the running net
+       and the netting pass are ARRAYS indexed by that id with a touched-list for the reset.
+       **1418 → 1333, and the run-to-run spread collapsed from ±50 ms to ±3 ms** — fewer
+       allocations, steadier timing.
+     - **Decision 3, THE REGISTER AS CSR.** Two flat `Int32Array`s — holder position, row position
+       — grouped by instrument type by counting sort. A consumer that wants one type walks only
+       that slice. **It caches across stages and holds POSITIONS, not references**, so a stage that
+       re-maps the entity list does not disturb it; five weekly writers bump it beside their own
+       write. Within a type it preserves register order, which is what keeps every consumer
+       bit-exact.
+     - **Decision 5, THE PAYMENTS AS COLUMNS.** Four parallel arrays, reasons interned. `pay`'s
+       signature is unchanged so no call site moved. The apply pass rebuilds a `PartyRef` from the
+       first ref seen for an id — sound because **the id IS the identity**. The old instruction
+       array is gone from the context and from `GameState`, where it had become state nothing read.
+     - **AND THE LEDGER ITSELF WAS THE WRONG SHAPE TWICE.** First it was a plain object rebuilt into
+       a Map every week and back (§7.216). Then, still flat, it cost a composite string per matched
+       row to write and the coupon pass walked ALL 105,000 entries string-slicing each to find the
+       few actually due. Nested by instrument then holder: no string, and the payout visits only
+       the instruments paying this week.
+     - **TWO MORE QUADRATICS, both found by the heap profiler rather than the CPU one.**
+       `formSupplyRelationships` re-derived "who makes this input" for every (customer × line ×
+       requirement) by filtering the whole region with a `.some()` inside the filter — tens of
+       millions of comparisons a week and **15% of everything the engine allocated**; it is one
+       index now (1287 → 1221). And securities lending read the whole live borrow book once per
+       loan, twice.
+     - **A NEGATIVE RESULT, kept because it cost a day to learn:** the weekly register
+       consolidation was A/B'd once the sweeps around it got cheaper — 1205 ms with it against 1209
+       without. It pays for itself by a hair and stops the register fragmenting, so it stays, but
+       it is nothing like the 25% the row-count suggested.
+     - **WHAT IS LEFT, AND IT IS ONE THING.** `runCompanyFundamentalsStage` is 196 ms of the
+       remainder, 2,496 companies × an 1,800-line body whose per-company floor is 78 µs — and that
+       floor is **decision 1**, the one milestone not attempted here: the company table. Everything
+       else in the profile is now under 8%. **Wave 2's remaining value is concentrated in a single
+       conversion**, which is a better place to be than a flat profile, and it is the one that
+       touches every file that reads a company.
