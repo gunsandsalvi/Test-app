@@ -352,15 +352,43 @@ export const CONSUMER_TERM_OPERATING_COST_BPS = 150;
  */
 export const MORTGAGE_OPERATING_COST_BPS = 40;
 /**
- * Share of the owner-occupied housing stock that trades per year — the driver of mortgage
- * origination demand.
+ * HSG — HOW MANY HOUSES CHANGE HANDS IS AN OUTCOME NOW, and this is the seed's opening value.
  *
- * RULE 4/13, OPEN: an observed real-world turnover rate. How many houses change hands is an
- * OUTCOME of households deciding to move against a price, which is precisely what HSG builds; a
- * constant here means origination volume cannot respond to the housing market at all.
- * Owner: HSG.
+ * `HOUSING_TURNOVER_RATE_ANNUAL = 0.04` was an observed real-world rate fixing origination volume,
+ * with its own rule-4/13 objection written above it: how many houses trade is what households
+ * decide against a price and a rate, so a constant meant origination could not respond to the
+ * housing market at all. `housingTurnoverAnnual` below derives it. This survives as the rate the
+ * region opens on, before any mortgage book has a cross-section to read (§7.4).
  */
-export const HOUSING_TURNOVER_RATE_ANNUAL = 0.04;
+export const HOUSING_TURNOVER_SEED_RATE_ANNUAL = 0.04;
+
+/**
+ * HSG — THE TURNOVER RATE, from the two things that actually move a household.
+ *
+ * **A tenure ends.** Every owner sells once: the estate does it if the owner does not. So the
+ * floor is one move per tenure, and a tenure is the years an owner has left — the same Gompertz
+ * hazard the pension drawdown reads (§7.181), at the median age of the adult population. Nothing
+ * about that is stated; it is the demography the model already carries.
+ *
+ * **Or moving up becomes affordable.** An owner trades up when today's income at today's quoted
+ * rate supports a bigger loan than the one it took — which is a MEASURABLE share of the vintage
+ * cross-section, since every vintage remembers the house it was written against. Those owners
+ * make that move once over the same tenure, so the rate is `(1 + tradeUpShare) / tenure`.
+ *
+ * The result is what the row asked for: rates fall and turnover rises because more of the book
+ * clears the test; rates rise and it falls back toward the forced-move floor. No coefficient
+ * decides the sensitivity — the vintage cross-section does.
+ */
+export function housingTurnoverAnnual(args: {
+  /** Years an owner is expected to hold — `remainingLifeExpectancyYears(median adult age)`. */
+  tenureYears: number;
+  /** Share of the mortgage book, by principal, that can now afford more than it borrowed. */
+  tradeUpShare: number;
+}): number {
+  const tenure = Math.max(1, args.tenureYears);
+  const share = Math.max(0, Math.min(1, args.tradeUpShare));
+  return (1 + share) / tenure;
+}
 export const MORTGAGE_LTV_AT_ORIGINATION = 0.80;
 /** Foreclosure recovers the house less the real cost of taking and selling it. */
 export const FORECLOSURE_COST_SHARE = 0.25;

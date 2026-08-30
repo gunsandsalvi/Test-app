@@ -44,12 +44,13 @@ import {
   mortgageSeverityAtLtv,
   MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_OPERATING_COST_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
-  CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_RATE_ANNUAL, MORTGAGE_LTV_AT_ORIGINATION,
+  CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_SEED_RATE_ANNUAL, housingTurnoverAnnual, MORTGAGE_LTV_AT_ORIGINATION,
   FORECLOSURE_COST_SHARE, MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, MORTGAGE_MIN_LOSS_SEVERITY,
 } from '../../../domain/banking';
 import { CreditTierBook, AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
+import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
 import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
 import { bankTotalAssetsUSD } from '../../macro/banking';
 
@@ -579,7 +580,7 @@ export function migrateHouseholdDebtAtSeed(
   // origination LTV minus sellers' remaining loans (at the book's average LTV) the sales retire.
   const seedAvgLtv = housingStockUSD > 0 ? Math.min(2, hs.mortgageDebtUSD / housingStockUSD) : 1;
   hs.weeklyMortgageOriginationUSD = Number((
-    (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52) * Math.max(0, MORTGAGE_LTV_AT_ORIGINATION - seedAvgLtv)
+    (housingStockUSD * HOUSING_TURNOVER_SEED_RATE_ANNUAL / 52) * Math.max(0, MORTGAGE_LTV_AT_ORIGINATION - seedAvgLtv)
   ).toFixed(0));
   hs.weeklyNewConsumerCreditUSD = Number((
     hs.creditCardDebtUSD * CARD_POOL_PAYMENT_RATE_WEEKLY
@@ -607,6 +608,8 @@ export interface HouseholdLendingResult {
   declinedOriginationUSD: number;
   /** HSG — what THIS bank quoted a mortgage at this week. The region keeps the best of them. */
   mortgageRateQuotedAnnual: number;
+  /** HSG — the turnover its own vintage cross-section implies. The region keeps the book-weighted mean. */
+  turnoverRateAnnual: number;
 }
 
 /**
@@ -686,6 +689,13 @@ export function runBankHouseholdLending(
   // cross-section implies), the mortgage risk weight, its own cost of equity and its own
   // servicing cost. A bank whose book is underwater quotes wider, which is what a credit
   // tightening looks like from the lender's side.
+  // HSG — THIS WEEK'S TURNOVER, measured off the bank's own vintage cross-section.
+  //
+  // Every owner sells once per tenure — the estate does it if the owner does not — and an owner
+  // trades up when today's income at today's quote supports a bigger loan than the one it took.
+  // The second is a real share of the book, because every vintage remembers the house it was
+  // written against, so turnover rises as rates fall and falls back to the forced-move floor as
+  // they rise. `HOUSING_TURNOVER_RATE_ANNUAL` decided all of that with one number.
   const bankMortgageRate = Math.max(0.005,
     (reg.zeroRates?.tenor10Y ?? 0.04)
     + quoteHouseholdMarginBps({
@@ -695,6 +705,29 @@ export function runBankHouseholdLending(
       requiredReturnAnnual: bankHurdle,
     }) / 10000);
   const marketMortgageRate = bankMortgageRate;
+
+  // The lending standard, hoisted: what one household's income supports at THIS bank's quote.
+  // Both the turnover rate below and the origination block further down read it, and computing it
+  // twice is how two answers to one question appear (rule 3).
+  const householdsCount = Math.max(1, (reg.totalPopulation ?? 0) / AVERAGE_HOUSEHOLD_SIZE);
+  const weeklyIncomePerHouseholdUSD = Math.max(0, reg.estimatedHouseholdIncomeUSD) / 52 / householdsCount;
+  const rWeekly = Math.max(0.00001, marketMortgageRate / 52);
+  const annuityFactor = rWeekly / (1 - Math.pow(1 + rWeekly, -MORTGAGE_TERM_WEEKS));
+  const affordableLoanUSD = (weeklyIncomePerHouseholdUSD * MORTGAGE_DSTI_LIMIT) / annuityFactor;
+
+  // HSG — TURNOVER IS AN OUTCOME. The share of the book that can now afford more than it
+  // borrowed is a real measurement, because every vintage remembers the house it was written
+  // against; the forced-move floor is one sale per tenure, and a tenure is what the hazard says
+  // an owner of the median adult age has left. See `housingTurnoverAnnual`.
+  const mortgageBookNowUSD = (mortgagePool?.vintages ?? []).reduce((a, v) => a + v.principalUSD, 0);
+  const tradeUpUSD = (mortgagePool?.vintages ?? []).reduce((a, v) => {
+    const originalLoanUSD = Math.max(0, v.originationCollateralUSD) * MORTGAGE_LTV_AT_ORIGINATION;
+    return a + (affordableLoanUSD > originalLoanUSD ? v.principalUSD : 0);
+  }, 0);
+  const turnoverRateAnnual = housingTurnoverAnnual({
+    tenureYears: remainingLifeExpectancyYears(medianAdultAgeYears(reg.ageDistribution)),
+    tradeUpShare: mortgageBookNowUSD > 0 ? tradeUpUSD / mortgageBookNowUSD : 0,
+  });
 
   const equityUSD = sheet.bankEquityUSD;
   const otherRwaUSD = (sheet.businessLoans || []).reduce((a, l) => a + l.principalUSD, 0);
@@ -762,7 +795,7 @@ export function runBankHouseholdLending(
       // that keeps gross origination from reading as pure net money creation. It retires whole
       // loans from across the book, so it comes off the vintages pro rata.
       const bookBeforeUSD = vintages.reduce((a, v) => a + v.principalUSD, 0);
-      const salesVolumeUSD = (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52) * bankShare;
+      const salesVolumeUSD = (housingStockUSD * turnoverRateAnnual / 52) * bankShare;
       const bookLtv = housingStockUSD > 0 ? Math.min(2, bookBeforeUSD / (housingStockUSD * bankShare)) : 1;
       const dischargeUSD = Math.min(bookBeforeUSD, salesVolumeUSD * bookLtv);
       if (dischargeUSD > 0 && bookBeforeUSD > 0) {
@@ -784,22 +817,15 @@ export function runBankHouseholdLending(
       // annuity factor rises with the rate, so the same household borrows less at 7% than at 3%,
       // against the same house. That is how policy reaches a housing market.
       const newRate = marketMortgageRate;
-      const householdsCount = Math.max(1, (reg.totalPopulation ?? 0) / AVERAGE_HOUSEHOLD_SIZE);
-      const weeklyIncomePerHouseholdUSD = Math.max(0, reg.estimatedHouseholdIncomeUSD) / 52 / householdsCount;
-      const affordablePaymentUSD = weeklyIncomePerHouseholdUSD * MORTGAGE_DSTI_LIMIT;
-      // Invert the annuity: the principal whose weekly payment is exactly what is affordable.
-      const rWeekly = Math.max(0.00001, newRate / 52);
-      const annuityFactor = rWeekly / (1 - Math.pow(1 + rWeekly, -MORTGAGE_TERM_WEEKS));
-      const affordableLoanUSD = affordablePaymentUSD / annuityFactor;
       const affordableLtv = medianHomePriceUSD > 0 ? affordableLoanUSD / medianHomePriceUSD : MORTGAGE_LTV_AT_ORIGINATION;
       // A buyer borrows the lesser of what the lending standard allows on LTV and what its own
       // income supports. When affordability binds, the deal is smaller.
       const bindingLtv = Math.max(0, Math.min(MORTGAGE_LTV_AT_ORIGINATION, affordableLtv));
       // ...and when it binds hard enough, the deal does not happen at all: a buyer who cannot
       // raise the loan does not complete, so TRANSACTIONS fall too, not just loan sizes. This is
-      // the half of `HOUSING_TURNOVER_RATE_ANNUAL`'s constancy that belongs to the borrower.
+      // the borrower's half of what the turnover rate above measures on the seller's side.
       const affordabilityGate = Math.max(0, Math.min(1, affordableLtv / Math.max(0.01, MORTGAGE_LTV_AT_ORIGINATION)));
-      const demandUSD = (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52)
+      const demandUSD = (housingStockUSD * turnoverRateAnnual / 52)
         * bindingLtv * affordabilityGate * appetite * bankShare;
       const grantedUSD = Math.min(demandUSD, headroomUSD() / Math.max(0.01, MORTGAGE_RISK_WEIGHT));
       declinedOriginationUSD += demandUSD - grantedUSD;
@@ -911,6 +937,7 @@ export function runBankHouseholdLending(
     consumerCreditOriginationUSD,
     declinedOriginationUSD,
     mortgageRateQuotedAnnual: bankMortgageRate,
+    turnoverRateAnnual,
   };
 }
 

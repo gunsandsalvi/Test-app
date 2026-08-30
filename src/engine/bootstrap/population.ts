@@ -133,6 +133,29 @@ export const RETIREMENT_AGE_YEARS = 65;
 export const WORKFORCE_ENTRY_AGE_YEARS = 22;
 
 /**
+ * HSG — the median age of the ADULT population, from the region's own age distribution.
+ *
+ * A housing tenure is however long the owner has left, and an owner is an adult; this is the age
+ * the hazard is read at. Derived rather than stated: an ageing region turns its housing stock over
+ * more often, which is the demography reaching the housing market.
+ */
+export function medianAdultAgeYears(ageDistribution: number[] | undefined): number {
+  const ages = ageDistribution;
+  if (!ages || ages.length === 0) return (WORKFORCE_ENTRY_AGE_YEARS + MAX_AGE_YEARS) / 2;
+  let adultTotal = 0;
+  for (let a = WORKFORCE_ENTRY_AGE_YEARS; a < Math.min(ages.length, MAX_AGE_YEARS); a++) {
+    adultTotal += Math.max(0, ages[a] ?? 0);
+  }
+  if (!(adultTotal > 0)) return (WORKFORCE_ENTRY_AGE_YEARS + MAX_AGE_YEARS) / 2;
+  let cumulative = 0;
+  for (let a = WORKFORCE_ENTRY_AGE_YEARS; a < Math.min(ages.length, MAX_AGE_YEARS); a++) {
+    cumulative += Math.max(0, ages[a] ?? 0);
+    if (cumulative >= adultTotal / 2) return a;
+  }
+  return MAX_AGE_YEARS - 1;
+}
+
+/**
  * DEM — the stationary age distribution implied by the hazard and a given birth rate: what a
  * population that has been born and dying at these rates forever looks like. The seed's opening
  * age structure, and an OUTCOME of the two primitives rather than four stated shares (§7.4).

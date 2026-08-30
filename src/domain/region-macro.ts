@@ -148,6 +148,15 @@ export interface HousingMarket {
    * Undefined before the first bank pass, where the seed spread stands in (§7.4).
    */
   bestMortgageRateAnnual?: number;
+  /**
+   * HSG — the share of the owner-occupied stock that traded last year, MEASURED.
+   *
+   * One sale per tenure because every owner sells once, plus the owners whose income at the
+   * current quote now supports more than they borrowed — a real share of the mortgage vintage
+   * cross-section (`housingTurnoverAnnual`). Undefined before the first bank pass, where the seed
+   * rate stands in (§7.4).
+   */
+  turnoverRateAnnual?: number;
 }
 
 export interface WeatherAnomaly {

@@ -11,7 +11,7 @@ import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking'
 import {
   CREDIT_FILE_CURE_WEEKLY, CONSUMER_CREDIT_RISK_WEIGHT, CARD_OPERATING_COST_BPS,
   MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_TERM_WEEKS, MORTGAGE_DSTI_LIMIT, MORTGAGE_LTV_AT_ORIGINATION,
-  HOUSING_TURNOVER_RATE_ANNUAL,
+  HOUSING_TURNOVER_SEED_RATE_ANNUAL,
 } from '../../domain/banking';
 import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
 import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE } from '../../domain/region-macro';
@@ -901,12 +901,16 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   }).sort((a, b) => b.priceUSD - a.priceUSD);
   // The week's supply: existing owners selling, plus what construction actually completed.
   const owningHouseholdsCount = householdsCount * Math.max(0, prevHousing.ownershipRatePct ?? 0.6);
-  const supplyUnitsThisWeek = owningHouseholdsCount * (HOUSING_TURNOVER_RATE_ANNUAL / 52) + resSupplyUnits;
+  // HSG: what the banks measured off their own vintage cross-sections last week — one sale per
+  // tenure plus the owners who can now afford to trade up. The seed rate stands in only before
+  // the first bank pass has run (§7.4).
+  const turnoverRateAnnual = prevHousing.turnoverRateAnnual ?? HOUSING_TURNOVER_SEED_RATE_ANNUAL;
+  const supplyUnitsThisWeek = owningHouseholdsCount * (turnoverRateAnnual / 52) + resSupplyUnits;
   let absorbed = 0;
   let marginalPriceUSD = affordabilityByTier[affordabilityByTier.length - 1]?.priceUSD ?? 0;
   for (const tier of affordabilityByTier) {
     marginalPriceUSD = tier.priceUSD;
-    absorbed += tier.households * (HOUSING_TURNOVER_RATE_ANNUAL / 52);
+    absorbed += tier.households * (turnoverRateAnnual / 52);
     if (absorbed >= supplyUnitsThisWeek) break;
   }
   // A house cannot clear below what it costs to build: the construction sector's own cleared
