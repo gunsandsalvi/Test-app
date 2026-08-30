@@ -26,6 +26,7 @@
 
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { pendingSettlementUSD } from './settlement';
 import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
 import { AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
@@ -256,6 +257,23 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
   });
 
+  // ETF2 — ONE BUDGET PER INVESTOR, ACROSS EVERY FUND IT BUYS INTO.
+  //
+  // The cash test below is right and was applied in the wrong place: inside a loop over FUNDS, so
+  // an investor buying into three of them was allowed its full balance in each. The same dollar
+  // was budgeted once per fund, and the overdrafts that produced are the harness's largest
+  // remaining violation family (§7.196 traced one of them; the reconcile plug was quietly paying
+  // for it every week). A running budget is what every other book in this model gives a bidder.
+  const budgetRemainingByInvestor = new Map<string, number>();
+  const budgetOf = (inv: { id: string; cashUSD?: number }): number => {
+    const existing = budgetRemainingByInvestor.get(inv.id);
+    if (existing !== undefined) return existing;
+    const opening = Math.max(0, (inv.cashUSD ?? 0)
+      + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: inv.id }));
+    budgetRemainingByInvestor.set(inv.id, opening);
+    return opening;
+  };
+
   funds.forEach((fund) => {
     const desired = desiredByFund.get(fund.id)!;
     const navUSD = navByFundId.get(fund.id) ?? 0;
@@ -281,11 +299,14 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       if (!investor) return;
       const wantUSD = desired.get(id) ?? 0;
       const haveUSD = heldByInvestor.get(id) ?? 0;
-      // A buyer can only pay with money it has; a seller is unconstrained.
+      // A buyer can only pay with money it has, and only once: the budget is what is LEFT after
+      // the funds already visited this week, plus whatever this week's clearing books have
+      // already committed of it (`pendingSettlementUSD`). A seller is unconstrained.
       const deltaUSD = wantUSD > haveUSD
-        ? Math.min(wantUSD - haveUSD, Math.max(0, investor.cashUSD ?? 0))
+        ? Math.min(wantUSD - haveUSD, budgetOf(investor))
         : wantUSD - haveUSD;
       if (Math.abs(deltaUSD) < 1) return;
+      if (deltaUSD > 0) budgetRemainingByInvestor.set(id, budgetOf(investor) - deltaUSD);
       wantDeltaByInvestor.set(id, deltaUSD);
       if (deltaUSD > 0) grossCreateUSD += deltaUSD; else grossRedeemUSD += -deltaUSD;
     });
@@ -327,6 +348,24 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
     // Everyone's order is filled in the same proportion — the AP cannot choose whose basket to
     // carry. Redemptions net against creations first, so only the residual consumes capacity.
+    // ETF2 — AND A FUND CAN ONLY PAY A REDEMPTION OUT OF CASH IT HAS.
+    //
+    // A redemption settled in CASH is money leaving the fund, and nothing checked that it had
+    // any: a fund whose assets are securities paid out anyway and went overdrawn, which is the
+    // other half of the violation family above. What it cannot settle is unmet flow — the
+    // mechanism already has a name and a meter for that (`unmetFlowShare`).
+    //
+    // The real answer is IN KIND: an ETF redemption hands over the basket, not money, and needs
+    // no cash at all. That is the next slice of this row, and it is why the cap here is a
+    // constraint rather than a fix — until the basket moves, a fund short of cash genuinely
+    // cannot honour the redemption.
+    const fundCashAvailableUSD = Math.max(0, (fund.cashUSD ?? 0)
+      + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id }));
+    // The redemption side is rationed by the fund's own cash on top of the AP's capacity: both
+    // are real constraints and the tighter one binds.
+    const cashFillRatio = grossRedeemUSD > 0
+      ? Math.min(1, fundCashAvailableUSD / grossRedeemUSD)
+      : 1;
     const executedByInvestor = new Map<string, number>();
     wantDeltaByInvestor.forEach((deltaUSD, id) => {
       // The netted part always clears; only the imbalance is rationed.
@@ -335,7 +374,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
                         : Math.min(grossCreateUSD, grossRedeemUSD) / Math.max(1, grossRedeemUSD))
         : 1;
       const imbalanceShare = 1 - nettedShare;
-      const executedUSD = deltaUSD * (nettedShare + imbalanceShare * fillRatio);
+      const apExecutedUSD = deltaUSD * (nettedShare + imbalanceShare * fillRatio);
+      const executedUSD = apExecutedUSD < 0 ? apExecutedUSD * cashFillRatio : apExecutedUSD;
       if (Math.abs(executedUSD) >= 1) executedByInvestor.set(id, executedUSD);
     });
 
@@ -343,7 +383,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // The household leg, rationed at the same fill the institutions get — the AP cannot choose
     // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
     // money genuinely leaves the household balance sheet to buy the shares.
-    const householdExecutedUSD = householdUSD * fillRatio;
+    const householdExecutedUSD = householdUSD * fillRatio * (householdUSD < 0 ? cashFillRatio : 1);
     if (householdExecutedUSD !== 0) {
       fundCashDeltaUSD += householdExecutedUSD;
       householdExecutedByFund.set(fund.id, householdExecutedUSD);
