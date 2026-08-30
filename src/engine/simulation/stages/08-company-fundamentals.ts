@@ -105,6 +105,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // scan of a multi-thousand-element array executed once per company.
   const entityById = new Map(state.institutionalEntities.map(e => [e.id, e]));
   const firmById = new Map(prevActiveFirms.map(c => [c.id, c]));
+  // CRD-R1 — the median issuer's revenue, so SCALE in the rating is relative to the firms a
+  // credit is actually rated against rather than a stated size (§7.184).
+  const regionMedianRevenueUSD = (() => {
+    const revs = prevActiveFirms.map(c => c.annualRevenue).filter(r => r > 0).sort((a, b) => a - b);
+    return revs.length > 0 ? revs[Math.floor(revs.length / 2)] : 1;
+  })();
   // SCALE: the one cross-company read in the loop below. Companies are now updated IN PLACE,
   // so a customer processed after its supplier would otherwise read the supplier's POST-update
   // book; snapshot the two supplier figures the relationship shock needs before anything moves,
@@ -1018,7 +1024,27 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         newEbit = 0;
       }
     } else {
-      const calculatedRating = determineCreditRating(newLeverage, newCoverage);
+      // CRD-R1 — the rating reads everything the model already measures about this issuer, not
+      // just two ratios (§7.184). Every argument is a measurement taken elsewhere for another
+      // purpose; nothing here is a new stated weight.
+      const wallUSD = comp.debtTranches
+        .filter((t) => (t.maturityWeek ?? Infinity) - nextWeek <= 52)
+        .reduce((a, t) => a + t.principalUSD, 0);
+      const ladderUSD = Math.max(1, comp.debtTranches.reduce((a, t) => a + t.principalUSD, 0));
+      const revHist = comp.revenueHistory ?? [];
+      const revMean = revHist.length > 2 ? revHist.reduce((a, x) => a + x, 0) / revHist.length : 0;
+      const revVol = revMean > 0
+        ? Math.sqrt(revHist.reduce((a, x) => a + (x - revMean) ** 2, 0) / revHist.length) / revMean
+        : 0;
+      const calculatedRating = determineCreditRating(newLeverage, newCoverage, {
+        annualRevenueUSD: newRevenue,
+        peerMedianRevenueUSD: regionMedianRevenueUSD,
+        customerConcentration: comp.customerConcentration,
+        supplierConcentration: comp.supplierConcentration,
+        maturityWallShare: wallUSD / ladderUSD,
+        liquidityToDebt: Math.max(0, newCash) / ladderUSD,
+        revenueVolatility: revVol,
+      });
       // Wall Street: rating migration is deliberately sticky (a 25%/week chance to move even one
       // notch) to mirror how real rating agencies don't instantly re-rate every week — but the
       // bond-implied spread (real institutional order flow tilted by computeExpectedLossSpreadBps

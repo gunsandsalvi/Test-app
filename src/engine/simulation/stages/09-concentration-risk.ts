@@ -71,7 +71,23 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
     });
   };
 
+  // CRD-R1 — the LARGEST single counterparty share, as a number. The flags above are strings for
+  // the UI; a rating cannot be notched off a sentence. This stage has measured concentration every
+  // week at 8.5% of run time with nothing consuming it (§5-CRD); this is its first consumer.
+  const topShare = (index: Map<string, PartyExposure>, ticker: string, id: string): number => {
+    let top = 0;
+    [index.get(ticker), index.get(id)].forEach(entry => {
+      if (!entry || !(entry.totalUSD > 0)) return;
+      entry.byCounterpartyUSD.forEach((valueUSD) => {
+        top = Math.max(top, valueUSD / entry.totalUSD);
+      });
+    });
+    return top;
+  };
+
   ctx.updatedCompanies.forEach(comp => {
+    comp.customerConcentration = Number(topShare(asSupplier, comp.ticker, comp.id).toFixed(4));
+    comp.supplierConcentration = Number(topShare(asCustomer, comp.ticker, comp.id).toFixed(4));
     const hasAny = asSupplier.has(comp.ticker) || asSupplier.has(comp.id)
       || asCustomer.has(comp.ticker) || asCustomer.has(comp.id);
     if (!hasAny) {

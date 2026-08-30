@@ -423,7 +423,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 4 | foundation | **COH — cohorts accumulate: household balance sheets** | **Mostly delivered by DIST from a different direction (§7.145) — re-read §5-COH before starting; most of what it describes has happened.** What is left and what makes it item 3: the household balance sheet still cannot distinguish what is spendable now from what is accumulated, and the savings rework needs that distinction to have a buffer to be a buffer OF. Also still owns `beneficiaryLiabilityUSD`'s reversal and retiring `national-accounts.ts`. |
 | 5 | foundation | **DEM — demographic variability** *(unblocks COH2, and the savings life-cycle)* | **THE AGE STRUCTURE ALREADY EXISTS AND NOTHING READS IT (§7.169).** `lifeCycleDistribution` carries four stages with `shareOfPopulation`, `savingsRate` and `consumptionMultiplier` per stage; only `RETIRED.shareOfPopulation` is ever read, and only to set a death rate. **`LifeCycleStageData.savingsRate` is read NOWHERE** — the life-cycle saving motive is present as data and binds on nothing, the fifth instance of that pattern this session. **And it should not simply be wired in: those per-stage rates are stated shape parameters** (§5-DIST-P), and the derivation is better than they are — see the row's §5 entry. | Small; takes the population-growth and migration clamps. **Promoted in substance: its AGE STRUCTURE half is what gives the household sector a life-cycle**, and a life-cycle is what makes a positive steady-state savings rate an outcome rather than a coefficient (§5-DIST-P). |
 | 6 | markets | **HSG — a housing market that clears** *(clamps)* | **PROMOTED from item 10; substantially started 2026-08-30.** Done: the mortgage book is a cross-section of **vintages** each marked to today's prices, so severity is `E[f(LTV)]` and the model can have a mortgage credit event — a −20% price move now takes severity to 2.1x where the one-average book said its floor (§7.159); loans carry a **5-year fix and RESET** (17.5% of the book reprices a year) with per-vintage default frequency; and borrowing capacity is `DSTI x income / annuity factor` (§7.160). **What remains is the row's actual title: `medianHomePriceUSD` does not CLEAR.** Until it does, the affordability limit has slack it should not always have, and `HOUSING_TURNOVER_RATE_ANNUAL` is still a constant on the seller's side. |
-| 7 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | **The household half is DONE (§7.162):** tier migration is two-way on measured delinquency, delinquency heals instead of accumulating, and the tier rate is QUOTED from that tier's own measured loss rather than drifting `+cci x k` forever. **What remains:** the ratings half (ratings handling zero earnings) and the CDS half, which needs G3. |
+| 7 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | **Household half DONE (§7.162); RATINGS half DONE (§7.184).** Tier migration is two-way on measured delinquency, delinquency heals, the tier rate is quoted from that tier's own measured loss; and a rating is no longer two ratios — scale, customer and supplier concentration, the maturity wall against liquidity, and earnings volatility each notch it, every one a measurement the model already took. **Remains: the CDS half, which needs G3.** |
 | 8 | foundation | **IND — industry operating models** | **CLOSED except IND16 (§7.146-156).** Kept in the table only because IND16 is open: the distribution tier, and it is a REFACTOR not an addition — a household already buys `facilities_and_logistics` as a good, so a channel margin on top would pay the same sector twice. Design in §5-IND16. |
 | — | consequence | **MAC — the price level has no anchor** *(was item 1)* | **DEMOTED under rule 18, and RESCOPED.** It was "close the inflation escape", scoped against a measurement (−36% by w37) taken before ten IND slices, three root-cause fixes and a calendar. **That evidence is void and may not be inherited.** The honest row: the price level's behaviour is a SYMPTOM, its cause is one or more missing mechanisms, and every mechanism landed so far has moved it without trying. **Re-measure on a whole number of years AFTER the foundation tier, then scope.** Its saving half is DIST's item 1(a) and its confidence half needs a precautionary motive, which needs DEM's age structure. |
 | — | consequence | **EMP — the labour collapse** *(was item 2)* | **DEMOTED under rule 18: this row has no build in it.** Its seed half is done (§7.118-121) and §7.149 fixed the defect that made the collapse one-directional — the hiring branch had never fired. What is left is a CRITERION ("60 weeks stable"), not a work item, so it belongs in §5's S-final validation gate rather than the work order. Nothing to start; watch it as the foundation tier lands. |
@@ -1147,7 +1147,7 @@ short is visibly squeezed when the curve moves.
 **Done:** tier migration is two-way on measured delinquency, delinquency heals rather than
 accumulating, and the tier rate is QUOTED from that tier's own measured loss instead of drifting
 `+cci x k` forever (which was also a second representation of household credit pricing).
-**Remains:** the ratings half, and the CDS half, which needs G3.
+**The RATINGS half is done (§7.184).** Remains: the CDS half, which needs G3.
 
 **CRD-R1 — A RATING IS NOT TWO RATIOS.** *(User, 2026-08-29, on IND8's close.)*
 `determineCreditRating(leverage, coverage)` is the whole rater, seed and week. Real credit
@@ -6190,3 +6190,22 @@ that proved it, the lesson.
       affordability and the price determine each other and the limit is live in both directions.
     - `mortgageOriginationVolumeUSD` goes with it: it was `income x 5% x creditFactor`, a statistic
       beside the real lending rather than a measure of it. It is what the banks originated.
+
+184. **CRD-R1 — A RATING IS NOT TWO RATIOS, and 09-concentration-risk finally has a consumer.**
+    - `determineCreditRating(leverage, coverage)` was the whole rater, seed and week, **while the
+      model measured most of real credit analysis and threw it away.** Leverage and coverage stay
+      the spine — they put the firm on the ladder — and each further measurement moves it by at
+      most one NOTCH, at that measurement's own natural break rather than a fitted weight:
+      **scale** relative to the median issuer it is rated against (an order of magnitude either
+      way), **customer and supplier concentration** above a half, a **maturity wall** over a third
+      of the ladder that the firm's own cash cannot cover, and **earnings volatility** above a
+      quarter, taken from `revenueHistory`.
+    - **Every argument is a number the simulation already produces for another purpose.** Nothing
+      here is a new stated weight, and an absent field applies no notch — which is what "no
+      opinion" means, not a default assumption.
+    - **`09-concentration-risk.ts` has measured concentration every week at 8.5% of run time with
+      NOTHING consuming it** (§5-CRD, §7.107). It produced flag STRINGS for the UI, and a rating
+      cannot be notched off a sentence — so it now publishes the largest counterparty share as a
+      NUMBER on both sides of the book. **The stage's work is load-bearing instead of decorative**,
+      which is what §5-SCALE's "cheapest large win on the table" note was pointing at.
+    - **The seed rater inherits it for free**, because seed and week share one function (§7.4).

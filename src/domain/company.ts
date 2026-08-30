@@ -220,6 +220,13 @@ export interface LeveragedLoanInfo {
 
 export interface Company {
   concentrationRiskFlags?: string[];
+  /**
+   * CRD-R1 — the largest single counterparty's share of this firm's contract revenue and of its
+   * input supply, measured weekly by `09-concentration-risk.ts`. The flags beside them are
+   * sentences for the UI; these are what a rating can be notched off.
+   */
+  customerConcentration?: number;
+  supplierConcentration?: number;
   financialStatementProfile?: FinancialStatementProfile;
   /** XB3a-2 — CARRIER only: the ships and trucks this firm owns, the lanes they are committed to,
    *  and what they carried last week. Its revenue is freight earned in the per-lane market, not
