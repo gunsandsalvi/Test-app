@@ -521,7 +521,22 @@ function buildRegionSupplyPlans(
     //
     // Unit cost is the same dollar figure the offer floor uses (§7.130), so a firm never produces
     // something it would then refuse to sell.
-    const uncappedProductionUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    // IND15 — LABOUR CONSTRAINS OUTPUT. Production is what the plant AND the staffed hours allow.
+    //
+    // Until now it was the plant alone, so a firm that could not hire produced exactly as much as
+    // one fully staffed, and the labour market was decorative: vacancies went unfilled with no
+    // consequence anywhere in the goods economy. A firm short of half its people makes half its
+    // output, which is also what turns a hiring shortage into an inflationary force rather than a
+    // statistic.
+    //
+    // The staffing ratio is the firm's OWN headcount against the headcount its baseline output
+    // needed — both measured, no new field — so a firm that has shed staff cannot ship what it
+    // used to and one that hired can.
+    const staffedShare = (comp.baselineEmployeeCount ?? 0) > 0
+      ? Math.max(0, (comp.employeeCount ?? 0) / comp.baselineEmployeeCount!)
+      : 1;
+    const plantUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    const uncappedProductionUnits = Math.min(plantUnits, plantUnits * staffedShare);
     const prospectiveUnitCostUSD = uncappedProductionUnits > 0.0001
       ? weeklyOperatingCostUSD / uncappedProductionUnits
       : Infinity;

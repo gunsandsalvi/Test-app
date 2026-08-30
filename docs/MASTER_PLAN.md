@@ -362,7 +362,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 4 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **CAP0 DONE (§7.121): the [2%, 65%] margin clamp is gone**, deleted with IND3 because a margin that is the residual of real costs needs no band. A firm can report a loss now, so CAP's own mechanism — a firm that cannot cover unit cost STOPS producing rather than throttling — can finally fire. That and the capacity decisions are what remains. |
 | 5 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. |
 | 6 | foundation | **COH — cohorts accumulate: household balance sheets** | New, from the review's sharpest reframing: §6.3's "nine imposed household tables" are ONE missing mechanism — cohorts have no balance sheets. Give them one and eight of the nine become measurements; reverse `beneficiaryLiabilityUSD` and the institutional seed share goes too; retire `national-accounts.ts`, whose own exit condition is met. |
-| — | **PROPOSED** | **DIST — the distribution is the state** | **New 2026-08-29, from a user question; still NOT scheduled, but its prerequisite is now MET.** IND-R6 delivered the one firm model DIST extends from two tiers to N resolutions (§7.121), so the case for taking it before COH — which it redesigns — is live rather than hypothetical. Carry a moment of a distribution only where a decision is NONLINEAR in it — `E[f(x)] = f(E[x])` only for affine `f`, and every nonlinearity here is a threshold. Pools and cohorts become K weighted constituents, each a real object at a population weight, with a named entity as the node of weight one — one representation at two resolutions. **§7.109 was an instance of the defect this fixes.** It REDESIGNS COH (item 5), derives DYN's cut point, changes SCALE's premise, and turns MAC's savings rate and CRD's credit tiers into outcomes. A one-day measurement settles its priority before the argument — see §5. **Recommendation: not first; with or just after CAP.** |
+| — | **IN PROGRESS** | **DIST — the distribution is the state** | **Substantially delivered (§7.140-145), started on user directive.** SME pools carry a leverage cross-section struck from the named tier's own rule; both distress terms are integrals over it rather than functions of the mean; the absorbing barrier removes the levered weight a default destroys and reinjects it unlevered; and **all nine of §6.3-A's stated household tables are now measurements**, including the wealthy-hand-to-mouth middle, which the derivation produces rather than assumes. Verified: aggregation exactness (K=1..50 identical), seed-flat-get-a-tail (1.00x → 19.32x in two years), weight conservation. **What remains is architectural, not behavioural:** the named tier as a node of weight one — one representation at N resolutions — plus cut-point invariance, which needs that unification to be testable. |
 | 7 | markets | **G3 — one dealer system (all three of them)** | The regional desk copied onto four sheets, the player-facing `Dealer` priced inside a React component, and every fixed bank price the review found: underwriting fees, the wholesale spread, the deposit-beta floor, the hash-drawn lead bank, `BANK_TARGET_ROE`. Also owns the dealer-capacity half of the promoted damper defect (§6.1). |
 | 8 | markets | **REPO — secured funding is a market with counterparties** | New 2026-08-29. Repo already CLEARS (`repo-clearing.ts` uses the generic engine, real reservations, the SRF as a seat) but it is not an asset class: no `AssetType`, no `ItemizedHolding`, no named counterparty, one anonymous pool per region, collateral as a scalar. Rules 3 and 14. It is also what should bound a bank's securities book, which is why OWN8's residual ceiling exists at all. |
 | 9 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | Needs G3 for the CDS half; the ratings half and the household credit-tier books (shares AND rates imposed) are independent. |
@@ -5347,3 +5347,23 @@ that proved it, the lesson.
       per cohort, but a distribution whose moments are derived (§5-DIST's argument, and the reason
       that section said COH would be REWRITTEN rather than executed). **§5-COH should be re-read
       before it is started; most of what it describes has happened.**
+
+146. **IND15 — labour constrains output, and the labour market stopped being decorative.** Stage
+    05's production plan was the plant alone: `weeklyCapacityUnits x responseFactor x throttle`.
+    A firm that could not hire produced exactly as much as one fully staffed, so an unfilled
+    vacancy had no consequence anywhere in the goods economy — HH5/6's hiring machinery ran, and
+    nothing downstream could tell the difference.
+    - **The fix is one `min`.** Production = `min(plant, plant x staffedShare)` where
+      `staffedShare = employeeCount / baselineEmployeeCount` — the firm's own headcount against
+      the headcount its baseline output needed. **Both numbers were already measured**; no new
+      field, no new coefficient, and nothing to calibrate. A firm that has shed half its people
+      ships half its output; one that hired above baseline is not rewarded with extra output,
+      because the plant still binds — hence the `min` rather than a bare multiply.
+    - **It moved the headline more than CAP's production rule did.** Week-10 deflation
+      −24.76% → **−19.82%**, harness green, 0 violations. That is the size of the answer to
+      MAC(a): part of what looked like a demand shortfall was firms producing at plant capacity
+      while under-staffed, dumping unsellable supply into the merit order and pushing clearing
+      prices down. Supply that no one could have made is still supply, and it priced.
+    - **The general point, again (§7.121, §7.125).** Every mechanism that exists but binds on
+      nothing is a mechanism that is not there. The labour market cleared, wages moved, hiring
+      succeeded and failed — and none of it reached a price until output could feel it.
