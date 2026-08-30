@@ -5290,3 +5290,28 @@ that proved it, the lesson.
       debt every week (§7.140), so what this evolves is the SHAPE; the level stays the book's.
       That is deliberate — a cross-section that drifted away from the debt it describes would be
       the second representation rule 3 forbids.
+
+144. **DIST/COH — the deposit split is an outcome of who saved, and SEED-FLAT-GET-A-TAIL passes.**
+    The first of §6.3-A's nine stated cross-section tables to become a measurement.
+    - **§5-COH's own sentence was not true.** *"Who holds deposits is whose savings accumulated"* —
+      but `TIER_BALANCE_SHEET_WEIGHTS.deposits` applied a fixed share of the aggregate **every
+      week**, so a tier that saved more never got richer and the wealth distribution could not
+      respond to the one thing that produces it (rule 13). The table is documented "US
+      SCF-shaped": an observed real-world equilibrium, and the largest of the nine.
+    - **The fix.** Each tier carries the stock its own saving builds — the cohorts already measure
+      the flow — and the deposit split is that stock's share of the total. The stated weights
+      remain the OPENING CONDITION only, used until the accumulation has anything in it (§7.4: a
+      seed may state what the mechanism then owns).
+    - **§5-DIST's second verify criterion, met.** Seed every tier with the SAME accumulated saving
+      so any skew must be produced rather than carried in:
+      **25.0 / 25.0 / 25.0 / 25.0% → 6.4 / 29.1 / 32.1 / 32.4% at week 52 → 2.3 / 16.2 / 38.0 /
+      43.5% at week 104**, top-to-bottom ratio **1.00x → 5.07x → 19.32x.** The concentration is
+      the mechanism's, out of the cohorts' own differing savings rates and incomes. **A
+      distribution that emerges from a flat start is derived; one that is read from a table is
+      assumed.**
+    - **Honestly noted: it concentrates FAST** — 19x in two years. That is an outcome of the
+      savings-rate spread the cohort budgets produce (0.010 at the bottom against 0.350 at the
+      top), not of anything stated here, and whether that spread is right is COH's question now
+      that the accumulation can ask it. Before this, the question could not even be posed.
+    - Harness green, 0 violations. **Eight tables of §6.3-A remain**; this one and the wealth MPC
+      (§7.142) are done.

@@ -154,9 +154,27 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     if (reg.wealthDistribution) {
       const W = TIER_BALANCE_SHEET_WEIGHTS;
       const consumerDebtUSD = (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0);
-      WEALTH_TIERS.forEach((t: WealthTier) => {
+
+      // DIST/COH — THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.
+      //
+      // §5-COH's own sentence is "who holds deposits is whose savings accumulated", and it was
+      // not true: `W.deposits` applied a fixed share of the aggregate every week, so a tier that
+      // saved more never got richer and the wealth distribution could not respond to the one
+      // thing that produces it (rule 13). Each tier now carries the stock its own saving built,
+      // and the split is that stock's share of the total.
+      //
+      // The stated weights remain the OPENING CONDITION only, used until the accumulation has
+      // anything in it (§7.4: a seed may state what the mechanism will then own). This is the
+      // largest of the nine tables §6.3-A records, and the first of them to become a measurement.
+      const accumulatedByTier = WEALTH_TIERS.map((t: WealthTier) =>
+        Math.max(0, reg.wealthDistribution?.[t]?.accumulatedSavingsUSD ?? 0));
+      const accumulatedTotal = accumulatedByTier.reduce((a, b) => a + b, 0);
+      const depositShareOf = (t: WealthTier, i: number) =>
+        accumulatedTotal > 0 ? accumulatedByTier[i] / accumulatedTotal : W.deposits[t];
+
+      WEALTH_TIERS.forEach((t: WealthTier, i: number) => {
         const tierAssetsUSD =
-          (depositsUSD + mmfSharesUSD) * W.deposits[t]
+          (depositsUSD + mmfSharesUSD) * depositShareOf(t, i)
           + (etfHoldingsUSD + directEquityUSD) * W.equityLike[t]
           + privateBusinessEquityUSD * W.privateBusiness[t]
           + institutionalClaimsUSD * W.institutionalClaims[t]

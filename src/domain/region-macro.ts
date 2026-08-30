@@ -17,6 +17,16 @@ export interface WealthTierData {
   /** HH4c — last week's marked net worth, so the tier wealth effect reads a real CHANGE. */
   priorNetWorthUSD?: number;
   savingsRate: number;
+  /**
+   * DIST/COH — this tier's CUMULATIVE saving, the stock its deposit share is derived from.
+   *
+   * "Who holds deposits is whose savings accumulated" is §5-COH's own sentence, and it was not
+   * true: the deposit split was a stated weight applied to the aggregate every week, so a tier
+   * that saved more never got richer and the wealth distribution could not respond to the one
+   * thing that produces it (rule 13). This accumulates the per-tier saving the cohorts already
+   * measure, and the share is its outcome.
+   */
+  accumulatedSavingsUSD?: number;
   equityExposureShare: number;
   homeEquityUSD?: number;
 }

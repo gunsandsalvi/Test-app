@@ -845,9 +845,15 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // as a split of the same marked components the aggregate is built from, every week, after
   // the clearing books. Only the income line (the cohorts' summed disposable) is written here.
   (Object.keys(updatedWealthDist) as WealthTier[]).forEach(t => {
+    // DIST/COH: the tier's cumulative saving, which its deposit share is derived from. The
+    // cohorts already measure what each tier saved this week; this is the stock that flow builds.
+    // A tier that saves more now gets richer, which is the mechanism the stated split replaced.
+    const priorAccumulated = updatedWealthDist[t].accumulatedSavingsUSD;
+    const savedThisWeekUSD = (cohortResult.tierSavingsUSD[t] ?? 0) / 52;
     updatedWealthDist[t] = {
       ...updatedWealthDist[t],
       shareOfIncomeUSD: Number(Math.max(1000, cohortResult.tierDisposableUSD[t] ?? updatedWealthDist[t].shareOfIncomeUSD).toFixed(0)),
+      accumulatedSavingsUSD: Number((Math.max(0, priorAccumulated ?? 0) + savedThisWeekUSD).toFixed(0)),
     };
   });
 
