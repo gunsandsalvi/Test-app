@@ -153,6 +153,48 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       pool.defaultRateAnnualPct = Number(Math.max(0,
         0.015 + coverageDistress * 0.04 + cashStressIntegral * 0.06
       ).toFixed(4));
+
+      // DIST — THE ABSORBING BARRIER, AND ITS REINJECTION.
+      //
+      // A default wrote the bank's loan down (bank-lending.ts) and left the FIRM in the pool:
+      // a pool could default 5% a year forever and its cross-section never changed. That is a
+      // one-sided flow (rule 14) — the lender lost the money and nobody stopped existing.
+      //
+      // Firms do not fail at random: the ones that fail are the ones that could not service
+      // their debt, so the exiting weight is drawn from the strata in proportion to their OWN
+      // distress. The survivors are therefore less levered than the pool was — which is what a
+      // credit cycle's cleansing phase IS, and a scalar pool could not represent it at all.
+      //
+      // Reinjection is the other half: an SME tier is not a closed cohort. New firms form, and
+      // they form UNLEVERED — a business starts without a balance sheet. Entry replaces the
+      // exiting weight, so the pool's firm count is conserved while its composition shifts. What
+      // makes this a barrier rather than a rescale is that the weight leaves from one end of the
+      // distribution and re-enters at the other.
+      if (pool.strata && pool.strata.length > 0) {
+        const weeklyExitRate = pool.defaultRateAnnualPct / 52;
+        const distressOf = (lev: number) => Math.max(0, 1 - coverageOf(lev))
+          + Math.max(0, 1 - (cashCoverWeeks * (residualOf(lev) / Math.max(1e-9, meanResidual))) / TARGET_CASH_WEEKS_OF_WAGES);
+        const totalDistress = pool.strata.reduce((a, st) => a + st.weight * distressOf(st.leverageMultiple), 0);
+        if (weeklyExitRate > 0 && totalDistress > 0) {
+          const leastLevered = pool.strata.reduce((lo, st) => st.leverageMultiple < lo ? st.leverageMultiple : lo, Infinity);
+          let reinjectedWeight = 0;
+          const survivors = pool.strata.map((st) => {
+            // Each stratum loses weight in proportion to its share of the pool's total distress.
+            const exiting = st.weight * weeklyExitRate * (distressOf(st.leverageMultiple) / totalDistress) * pool.strata!.length;
+            const leaving = Math.min(st.weight, Math.max(0, exiting));
+            reinjectedWeight += leaving;
+            return { weight: st.weight - leaving, leverageMultiple: st.leverageMultiple };
+          });
+          // Entrants form unlevered, at the least-levered end of the surviving distribution.
+          const entryStratum = survivors.reduce((best, st) =>
+            st.leverageMultiple <= leastLevered ? st : best, survivors[0]);
+          entryStratum.weight += reinjectedWeight;
+          const total = survivors.reduce((a, st) => a + st.weight, 0);
+          pool.strata = total > 0
+            ? survivors.map((st) => ({ weight: Number((st.weight / total).toFixed(6)), leverageMultiple: st.leverageMultiple }))
+            : pool.strata;
+        }
+      }
     });
   });
 }

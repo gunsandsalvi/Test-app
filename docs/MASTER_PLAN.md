@@ -5265,3 +5265,28 @@ that proved it, the lesson.
     - Harness green, 0 violations, week-10 numbers unchanged — wealth effects are second-order
       over ten weeks. The levels are uniformly lower than the stated table's, which is a real
       change to the aggregate wealth effect and will show at horizon.
+
+143. **DIST — the absorbing barrier and its reinjection: default removes weight, and the survivors
+    are cleaner.** §5-DIST said to design this first because it is where every ledger bug in the
+    scheme will live.
+    - **The one-sided flow it closes.** A pool default already wrote the bank's loan down
+      (`bank-lending.ts`, principal x PD x (1 − recovery)) — but it left the FIRM in the pool. A
+      pool could default 5% a year forever and its cross-section never changed: **the lender lost
+      the money and nobody stopped existing** (rule 14).
+    - **Firms do not fail at random.** The ones that fail are the ones that could not service
+      their debt, so the exiting weight is drawn from the strata in proportion to their OWN
+      distress. The survivors are therefore less levered than the pool was — **which is what a
+      credit cycle's cleansing phase IS, and a scalar pool could not represent it at all.**
+    - **Reinjection is the other half, and it is what makes this a BARRIER rather than a
+      rescale.** An SME tier is not a closed cohort: new firms form, and they form UNLEVERED,
+      because a business starts without a balance sheet. Entry replaces the exiting weight at the
+      least-levered end, so the firm count is conserved while the composition shifts. Weight
+      leaves at one end of the distribution and re-enters at the other.
+    - **Measured over twenty weeks: weight sum 1.000000 → 0.999999** (the drift is the 6-decimal
+      rounding, nothing else), **mean leverage 2.700 → 2.334 while p90 moves only 4.197 → 4.122**
+      — weight left the levered end and re-entered unlevered, which is the cleansing showing up
+      exactly where it should. Harness green, 0 violations.
+    - **Note on the level versus the shape.** The strata's mean is re-centred on the pool's own
+      debt every week (§7.140), so what this evolves is the SHAPE; the level stays the book's.
+      That is deliberate — a cross-section that drifted away from the debt it describes would be
+      the second representation rule 3 forbids.
