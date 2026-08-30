@@ -740,7 +740,44 @@ export function generateInitialCompanies(
   });
 
   
-  // G1: Assign Product Lines & Category Market Share
+  // G1: Assign Product Lines & Category Market Share — dealt against the demand this seed has
+  // so far, and dealt AGAIN by `simulation/initialization.ts` once the authoritative demand
+  // vector (real procurement, real firm capex) exists. See the function's own doc.
+  dealProductLinesAndHeadcount(companies, (region, unitId) =>
+    Number((initialRegions[region]?.categoryDemand as any)?.[unitId]?.demandLevelUSD) || 0);
+
+  return companies;
+}
+
+
+/**
+ * SUPPLY/CHAIN — DEAL THE PRODUCER BASE AGAINST THE DEMAND THE ECONOMY WILL ACTUALLY STATE.
+ *
+ * This pass decides which sub-units each firm produces, what share of each category it holds, and
+ * — through value added — how many people it employs. It is weighted by `demandLevelUSD`, so the
+ * producer base converges on demand's own shape and a new sub-unit in the registry gets producers
+ * with no generator edit (BP1b, rule 17).
+ *
+ * **It is exported because it has to run TWICE, and that closes a fixed point the plan called
+ * genuine.** Category demand is seeded three times (§7.120): a placeholder in
+ * `macro/initialization.ts` off GDP shares, then the authoritative one in
+ * `simulation/initialization.ts` which runs after the firms exist and can therefore use the real
+ * procurement budget and the firms' OWN capex as `I`. The firm universe was dealt against the
+ * placeholder and the demand vector was then overwritten — so the capital-goods sub-units were
+ * dealt the producers a GDP-share investment number implied, and then asked to supply the real
+ * one. Measured: 1.29x more capex bid than built for, four of five categories in permanent
+ * shortage at 65-174% over base price (§7.168, §7.178).
+ *
+ * **The coupling is one-directional, which is why one re-deal converges exactly.** A firm's SIZE
+ * — its revenue, its PP&E, and therefore its capex — is set before any line is dealt, so `I` does
+ * not move when the lines are re-dealt. Re-dealing against the authoritative vector is a fixed
+ * point reached in one pass, not an iteration. It also draws no RNG: the deal is a deterministic
+ * greedy over a sorted list, so running it twice relabels nothing (rule 10).
+ */
+export function dealProductLinesAndHeadcount(
+  companies: Company[],
+  demandLevelUSD: (region: RegionId, subUnitId: string) => number
+): void {
   const categories: string[] = [];
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
@@ -769,11 +806,10 @@ export function generateInitialCompanies(
       // in the registry gets producers with no generator edit. Deterministic greedy: each firm
       // (largest first) takes the sub-units its sector currently under-serves most, so every
       // category's producer base converges to its demand share and coverage is an outcome.
-      const regionDemand = initialRegions[_regionId as RegionId]?.categoryDemand ?? {};
       const sectorSubUnits = (subUnitsByProducingSector()[sector as ProducingSector] ?? [])
         .map(({ industry, su }) => ({
           industry, unitId: su.unitId,
-          weightUSD: Math.max(0, Number((regionDemand[su.unitId] as any)?.demandLevelUSD) || 0),
+          weightUSD: Math.max(0, demandLevelUSD(_regionId as RegionId, su.unitId)),
         }))
         .filter(x => x.weightUSD > 0);
       const totalWeightUSD = sectorSubUnits.reduce((a, x) => a + x.weightUSD, 0);
@@ -876,10 +912,7 @@ export function generateInitialCompanies(
       }
     });
   });
-
-  return companies;
 }
-
 
 
 // HC7: `generateIPOCompany` is DELETED. It conjured a company out of a category's demand

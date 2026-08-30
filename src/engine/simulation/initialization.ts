@@ -69,7 +69,7 @@ import { mandateAllocator } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, HedgeFundStrategy, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
-import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
+import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount } from '../companyGenerator';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
 import { getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
@@ -86,7 +86,7 @@ import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
 import { refreshRegionalHoldingsView, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
-import { setSimulationSeed, getRngState, DEFAULT_SIMULATION_SEED } from '../rng';
+import { setSimulationSeed, getRngState, setRngState, DEFAULT_SIMULATION_SEED } from '../rng';
 import { deriveSubUnitUnitPrice } from '../bootstrap/category-demand';
 import { getBaseAnnualWageUSD } from '../bootstrap/labor-and-wages';
 import { decomposeGovernmentSpending, governmentObligationsWeeklyUSD } from '../../domain/government';
@@ -124,13 +124,195 @@ function seedUnitMassTonnes(regions: Record<RegionId, Region>): Record<string, n
   return masses;
 }
 
+/**
+ * SUPPLY/CHAIN — THE SEED'S DEMAND VECTOR, AND THE FIXED POINT IT CLOSES.
+ *
+ * Extracted from `createInitialGameState` so it can be run more than once. It is the
+ * AUTHORITATIVE copy of the C + I + G identity (§7.120's third): it runs after the firms and the
+ * government exist, so its `G` is the real procurement budget and its `I` the firms' own capex,
+ * where the placeholder in `macro/initialization.ts` could only use GDP shares.
+ *
+ * **Why it has to be callable twice.** A firm's revenue is derived from its primary category's
+ * DEMAND SEED, and its capex from its revenue — while `I`, which sizes the capital-goods half of
+ * that demand seed, is the sum of exactly those capexes. Firm size and investment demand each
+ * determine the other, and the seed resolved it by simply using the placeholder for one side:
+ * the capital-goods industries were built for a GDP-share investment number and then asked to
+ * supply the real one. Measured, that is 1.29x more capex bid than built for, four of five
+ * capital-goods categories in permanent shortage at 65-174% over base price (§7.168, §7.178),
+ * plant shrinking because nobody can make the machines, and — through the cost of capital the
+ * labour market sheds against — a share of the ~29% unemployment that has been blocking
+ * unrelated work (§7.179).
+ *
+ * `solveSeedInvestmentFixedPoint` below iterates the two against each other until they agree.
+ */
+export function seedRegionCategoryDemand(
+  reg: Region,
+  regionId: RegionId,
+  companies: Company[]
+): void {
+    const hs = reg.householdState;
+    const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
+    // §7.4: the seed uses the SAME procurement owner the weekly stage does, so week 0's
+    // government demand and week 1's are the same shape.
+    const G = decomposeGovernmentSpending(
+      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
+      reg.governmentPayrollWeeklyUSD ?? 0
+    ).procurementBudgetUSD * 52;
+    const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
+    reg.laggedCorporateDemandBase = corpBase;
+    const I = corpBase;
+
+    let totalHhWeight = 0;
+    let totalGovWeight = 0;
+    let totalCorpWeight = 0;
+
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        totalHhWeight += su.buyerMix.HOUSEHOLD;
+        totalGovWeight += su.buyerMix.GOVERNMENT;
+        totalCorpWeight += su.buyerMix.CORPORATE;
+      });
+    });
+
+    const regionFirmCount = companies.filter(c => c.region === regionId).length;
+    const govBudgetByCategory: Record<string, number> = {};
+
+    // CHAIN-E — THE THIRD COPY OF THE C + I + G IDENTITY, and the one that wins.
+    //
+    // This is the authoritative seed: it runs after firms and the government exist, so its G is
+    // the real procurement budget and its I the firms' real capex, where `macro/initialization.ts`
+    // could only use GDP-share placeholders. It then OVERWRITES that earlier seed wholesale.
+    //
+    // The identity therefore lives in three places — the placeholder seed, here, and the weekly
+    // rebuild in `03-category-demand.ts` — and the intermediate-demand solve was added to the
+    // other two and missed here (§7.120). Because this copy is the one that survives, the model
+    // ran on FINAL demand only regardless: measured, the placeholder seed produced 1,481B of
+    // total output for the USA and this line replaced it with 567B, so every firm was sized
+    // against a market 2.6x larger than the one it then had to sell into. Rule 3, and the reason
+    // the same fix has to be made three times is itself the defect.
+    const finalDemandBySubUnit: Record<string, number> = {};
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+        govBudgetByCategory[su.unitId] = suGovDemand / 52;
+        // SUPPLY/CHAIN — INVESTMENT GOES WHERE CAPEX IS ACTUALLY SPENT.
+        //
+        // `I` used to be spread across EVERY corporate-bought good by its corporate buyer-mix
+        // weight, while stage 05's firms bid their capex only into the five CAPITAL-GOODS
+        // categories by `capexBasketWeight`. **Two different allocations of the same investment
+        // number**, and the capital-goods industries were therefore built for a fraction of what
+        // would be bid at them: measured 54.0B/yr sized against 83.6B/yr bid, 1.55x, with four of
+        // five categories in permanent shortage (§7.168).
+        //
+        // A corporate purchase of a NON-capital good is intermediate demand, not final demand,
+        // and the Leontief solve below already produces it from the recipes — so putting it here
+        // as well was counting it twice from the other side.
+        const capexWeight = CAPEX_SUPPLIER_WEIGHTS[su.unitId] ?? 0;
+        finalDemandBySubUnit[su.unitId] =
+          (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
+          + suGovDemand
+          + capexWeight * I;
+      });
+    });
+    const totalOutputBySubUnit = totalOutputFromFinalDemand(finalDemandBySubUnit);
+
+    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
+      subUnits.forEach(su => {
+        const demandLevelUSD = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
+        (reg.categoryDemand as any)[su.unitId] = createSeedCategoryDemandState(
+          demandLevelUSD,
+          reg.gdpGrowth ?? 0.02,
+          // §7.127: FINAL demand prices the good; total output is the quantity behind it.
+          deriveSubUnitUnitPrice(finalDemandBySubUnit[su.unitId] ?? 0, su.buyerMix, reg.totalPopulation, regionFirmCount, su.unitId)
+        );
+      });
+    });
+
+    // SUPPLY/CHAIN — RE-DEAL THE PRODUCER BASE, now that this region's demand is the real one.
+    //
+    // The firm universe was dealt against the PLACEHOLDER seed in `macro/initialization.ts`,
+    // whose `I` is a GDP share; the vector just written above uses the government's real
+    // procurement budget and the firms' OWN capex. Dealing against the first and selling into the
+    // second is how the capital-goods sub-units came to be built for 1.29x less than would be bid
+    // at them, with four of five in permanent shortage at 65-174% over base (§7.168, §7.178) —
+    // and the plan called that a genuine fixed point.
+    //
+    // It closes in ONE pass, because the coupling is one-directional: a firm's revenue, PP&E and
+    // therefore its capex are all set before any line is dealt, so `I` does not move when the
+    // lines move. The deal draws no RNG, so nothing is relabelled (rule 10).
+    dealProductLinesAndHeadcount(
+      companies.filter(c => c.region === regionId),
+      (_r, unitId) => Number((reg.categoryDemand as any)?.[unitId]?.demandLevelUSD) || 0
+    );
+
+    // PUB1e: the budget stage 05 bids in week 1, seeded here so it is never empty.
+    reg.governmentProcurementBudgetByCategory = govBudgetByCategory;
+    reg.governmentProcurementSpentUSD = 0;
+}
+
+/**
+ * SUPPLY/CHAIN — iterate firm size and investment demand until they are the same number.
+ *
+ * Each pass generates the firm universe against the current demand vector, reads the investment
+ * that universe actually implies (`Σ capex`), and rewrites the vector from it. The map is a
+ * strong contraction — capital-goods makers are a slice of the economy, so a change in their
+ * demand moves total capex by much less than itself — and it settles in a few passes.
+ *
+ * **The RNG is rewound before every pass**, so the universe that survives is bit-for-bit the one
+ * a single generation against the converged vector would have produced. Without that the
+ * iteration would consume the stream and relabel the world (rule 10); with it, the extra passes
+ * are invisible to everything downstream.
+ */
+const SEED_INVESTMENT_TOLERANCE = 0.01;
+const SEED_INVESTMENT_MAX_PASSES = 6;
+
+export function solveSeedInvestmentFixedPoint(
+  regions: Record<RegionId, Region>,
+  generate: () => Company[],
+  rewindRng: () => void
+): Company[] {
+  let companies = generate();
+  for (let pass = 0; pass < SEED_INVESTMENT_MAX_PASSES; pass++) {
+    let worstDrift = 0;
+    (Object.keys(regions) as RegionId[]).forEach((regionId) => {
+      const reg = regions[regionId];
+      const before = reg.laggedCorporateDemandBase ?? 0;
+      seedRegionCategoryDemand(reg, regionId, companies);
+      const after = reg.laggedCorporateDemandBase ?? 0;
+      const denom = Math.max(1, Math.abs(after));
+      worstDrift = Math.max(worstDrift, Math.abs(after - before) / denom);
+    });
+    if (worstDrift <= SEED_INVESTMENT_TOLERANCE) break;
+    rewindRng();
+    companies = generate();
+  }
+  return companies;
+}
+
 export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
   setSimulationSeed(seed);
   const regions = getInitialRegions();
   const fxPairs = getInitialFxPairs();
   // §6 hoist: the generator reads seed primitives from the regions this function just built,
   // instead of rebuilding four fresh regions per company.
-  const companies = generateInitialCompanies(regions);
+  //
+  // SUPPLY/CHAIN — and it runs until FIRM SIZE and INVESTMENT DEMAND agree. A firm's revenue is
+  // derived from its primary category's demand seed and its capex from that revenue, while `I` —
+  // which sizes the capital-goods half of the demand seed — is the sum of exactly those capexes.
+  // The seed used to resolve that circle by using a GDP-share placeholder for one side and the
+  // real number for the other, which is why the capital-goods industries were built for 1.29x
+  // less than would be bid at them (§7.168, §7.178). The RNG is rewound before each pass, so the
+  // universe that survives is the one a single generation against the converged vector produces.
+  // The rewind restores the stream position as it stands HERE, not the seed itself: the region
+  // and FX builders above may draw, so re-seeding would hand the generator a different stream
+  // than a single pass would have. Snapshot, restore, and the surviving universe is identical.
+  const rngBeforeFirms = getRngState();
+  const companies = solveSeedInvestmentFixedPoint(
+    regions,
+    () => generateInitialCompanies(regions),
+    () => setRngState(rngBeforeFirms)
+  );
 
   // ---- HC Wave 1: the named private tier (HC1 generation + HC3 carves) ----
   // Generated FIRST, so every bootstrap computation below sees one consistent, already-carved
@@ -263,88 +445,11 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
   Object.keys(regions).forEach(r => {
     const regionId = r as RegionId;
     const reg = regions[regionId];
-    const hs = reg.householdState;
-    const C = reg.estimatedHouseholdIncomeUSD * (1 - hs.savingsRate);
-    // §7.4: the seed uses the SAME procurement owner the weekly stage does, so week 0's
-    // government demand and week 1's are the same shape.
-    const G = decomposeGovernmentSpending(
-      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
-      GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
-      reg.governmentPayrollWeeklyUSD ?? 0
-    ).procurementBudgetUSD * 52;
-    const corpBase = companies.filter(c => c.region === regionId).reduce((s, c) => s + c.capex, 0);
-    reg.laggedCorporateDemandBase = corpBase;
-    const I = corpBase;
-
-    let totalHhWeight = 0;
-    let totalGovWeight = 0;
-    let totalCorpWeight = 0;
-
-    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
-      subUnits.forEach(su => {
-        totalHhWeight += su.buyerMix.HOUSEHOLD;
-        totalGovWeight += su.buyerMix.GOVERNMENT;
-        totalCorpWeight += su.buyerMix.CORPORATE;
-      });
-    });
-
-    const regionFirmCount = companies.filter(c => c.region === regionId).length;
-    const govBudgetByCategory: Record<string, number> = {};
-
-    // CHAIN-E — THE THIRD COPY OF THE C + I + G IDENTITY, and the one that wins.
-    //
-    // This is the authoritative seed: it runs after firms and the government exist, so its G is
-    // the real procurement budget and its I the firms' real capex, where `macro/initialization.ts`
-    // could only use GDP-share placeholders. It then OVERWRITES that earlier seed wholesale.
-    //
-    // The identity therefore lives in three places — the placeholder seed, here, and the weekly
-    // rebuild in `03-category-demand.ts` — and the intermediate-demand solve was added to the
-    // other two and missed here (§7.120). Because this copy is the one that survives, the model
-    // ran on FINAL demand only regardless: measured, the placeholder seed produced 1,481B of
-    // total output for the USA and this line replaced it with 567B, so every firm was sized
-    // against a market 2.6x larger than the one it then had to sell into. Rule 3, and the reason
-    // the same fix has to be made three times is itself the defect.
-    const finalDemandBySubUnit: Record<string, number> = {};
-    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
-      subUnits.forEach(su => {
-        const suGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
-        govBudgetByCategory[su.unitId] = suGovDemand / 52;
-        // SUPPLY/CHAIN — INVESTMENT GOES WHERE CAPEX IS ACTUALLY SPENT.
-        //
-        // `I` used to be spread across EVERY corporate-bought good by its corporate buyer-mix
-        // weight, while stage 05's firms bid their capex only into the five CAPITAL-GOODS
-        // categories by `capexBasketWeight`. **Two different allocations of the same investment
-        // number**, and the capital-goods industries were therefore built for a fraction of what
-        // would be bid at them: measured 54.0B/yr sized against 83.6B/yr bid, 1.55x, with four of
-        // five categories in permanent shortage (§7.168).
-        //
-        // A corporate purchase of a NON-capital good is intermediate demand, not final demand,
-        // and the Leontief solve below already produces it from the recipes — so putting it here
-        // as well was counting it twice from the other side.
-        const capexWeight = CAPEX_SUPPLIER_WEIGHTS[su.unitId] ?? 0;
-        finalDemandBySubUnit[su.unitId] =
-          (totalHhWeight > 0 ? (su.buyerMix.HOUSEHOLD / totalHhWeight) * C : 0)
-          + suGovDemand
-          + capexWeight * I;
-      });
-    });
-    const totalOutputBySubUnit = totalOutputFromFinalDemand(finalDemandBySubUnit);
-
-    Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
-      subUnits.forEach(su => {
-        const demandLevelUSD = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
-        (regions[regionId].categoryDemand as any)[su.unitId] = createSeedCategoryDemandState(
-          demandLevelUSD,
-          reg.gdpGrowth ?? 0.02,
-          // §7.127: FINAL demand prices the good; total output is the quantity behind it.
-          deriveSubUnitUnitPrice(finalDemandBySubUnit[su.unitId] ?? 0, su.buyerMix, reg.totalPopulation, regionFirmCount, su.unitId)
-        );
-      });
-    });
-
-    // PUB1e: the budget stage 05 bids in week 1, seeded here so it is never empty.
-    reg.governmentProcurementBudgetByCategory = govBudgetByCategory;
-    reg.governmentProcurementSpentUSD = 0;
+    // SUPPLY/CHAIN: the demand vector and the producer base are already converged against each
+    // other (`solveSeedInvestmentFixedPoint`, run before the private tier). This call writes the
+    // final vector onto the region from the universe that survived, so nothing downstream reads a
+    // pass that was rewound.
+    seedRegionCategoryDemand(reg, regionId, companies);
 
     // P3 / P4: Populate initial dollar holdings for institutional sectors from shares
     const regionCompanies = companies.filter(c => c.region === regionId);
