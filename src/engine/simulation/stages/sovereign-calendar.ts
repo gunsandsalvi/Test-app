@@ -1,0 +1,168 @@
+/**
+ * CAL, second half — THE SOVEREIGN CALENDAR. Interest on government paper accrues to whoever
+ * holds it that week, and the bucket's coupon date turns each holder's accrued balance into cash.
+ *
+ * **Why this is one pass and not three.** The corporate half (§7.194) put holders on the coupon
+ * dates and the issuer on the same dates in the same change, because interest earned continuously
+ * and paid discretely is a RECEIVABLE in between and both sides have to see it. The sovereign
+ * half was deferred on the grounds that half of it measured worse than none — which is true, and
+ * which rule 12 already answers: build the whole thing before measuring. The whole thing is three
+ * legs that must move together:
+ *
+ *   - the **treasury's expense**, which was smooth while the holders were about to become lumpy;
+ *   - the **institutions'** credit, which the register already knows how to accrue;
+ *   - the **banks'** credit — and this is the piece that made it awkward, because **a bank is not
+ *     on the institutional register.** It holds sovereigns directly, per tenor bucket, on its own
+ *     balance sheet. So the accrual cannot be keyed by institution id; it is keyed by PARTY.
+ *
+ * One ledger, keyed `<region>|<bucket>|<partyKey>`, and it is the ONLY writer of the receivable
+ * on either book — the bank's `sovereignAccruedCouponUSD` and the treasury's
+ * `sovereignCouponPayableUSD` are the same balance seen from two sides. That is what makes them
+ * incapable of drifting: the treasury pays exactly the sum of what its holders accrued.
+ *
+ * **The P&L stays smooth on both sides and only CASH is lumpy** — the same result the corporate
+ * half reached (rule 9: an expense and a payment are different numbers with different periods).
+ *
+ * **Who is deliberately NOT on the calendar, and why.**
+ *   - **Bills.** A discount bill pays no coupon at all; its whole return is accretion to par at
+ *     redemption, which PUB3d already settles in the redemption leg. `sovereignCouponByBucket`
+ *     excludes them, so the bill buckets simply never accrue here. This is also why the corporate
+ *     treasuries are absent: short paper is all they hold.
+ *   - **The central bank.** It earns its coupons and remits the profit to the treasury in the
+ *     same week, on the same two accounts (the TGA and its own liability). Putting that round
+ *     trip on a date moves a number out of one side of the central bank's sheet and back into it
+ *     — no participant's behaviour depends on the timing, because the one holder in this model
+ *     that can never be short of cash is the issuer of the cash.
+ *   - **The holders this model does not name.** They are paid smoothly, as the boundary line
+ *     `governmentInterestToUnmodeledHoldersUSD` already says they are.
+ */
+
+import { RegionId } from '../../../types';
+import { WeeklyStepContext } from './context';
+import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
+import { sovereignCouponByBucket, sovereignCouponDueShare } from '../../../domain/government';
+import { sovBucketKey } from './shared-helpers';
+import { isActiveCompany } from '../../../domain/company';
+
+/** `<region>|<bucket>|<partyKey>` — the receivable one holder has against one bucket. */
+const accrualKey = (regionId: RegionId, bucket: string, party: PartyRef) =>
+  `${regionId}|${bucket}|${partyKey(party)}`;
+
+const REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+
+/**
+ * Accrue this week's sovereign interest to every holder of record, then pay out the buckets whose
+ * coupon falls due. Runs after every book that trades sovereigns has cleared and before the
+ * fiscal stage, so the register it walks is the one the week ended with and the treasury's own
+ * interest line is struck against the same holdings.
+ */
+export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
+  const accrued = ctx.sovereignAccruedInterestUSD;
+  /** What each BANK earned this week — its equity leg, posted once at the end. */
+  const bankEarnedUSD = new Map<string, number>();
+
+  REGION_IDS.forEach((regionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg) return;
+    const couponByBucket = sovereignCouponByBucket(reg.govDebtTranches ?? [], sovBucketKey);
+
+    /** One holder's week of interest on one bucket, at that bucket's own weighted-average coupon. */
+    const accrue = (bucket: string, party: PartyRef, notionalUSD: number): number => {
+      const coupon = couponByBucket[bucket] ?? 0;
+      if (!(coupon > 0) || !(notionalUSD > 0)) return 0;
+      const weeklyUSD = (notionalUSD * coupon) / 52;
+      if (!(weeklyUSD > 0)) return 0;
+      const k = accrualKey(regionId, bucket, party);
+      accrued.set(k, (accrued.get(k) ?? 0) + weeklyUSD);
+      return weeklyUSD;
+    };
+
+    // ---- 1. The institutions, off the register. Their cash arrives on the date; the income
+    // statement is struck in institutional-balance-sheet.ts, where it stays smooth. ----
+    ctx.updatedInstitutionalEntities.forEach((entity) => {
+      if (entity.isDefaulted) return;
+      (entity.itemizedHoldings || []).forEach((h) => {
+        if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return;
+        accrue(h.instrumentId.replace(`${regionId}-GOV-`, ''),
+          { kind: 'INSTITUTION', id: entity.id }, h.quantityOrNotionalUSD ?? 0);
+      });
+    });
+
+    // ---- 2. The banks, off their own per-tenor books. This is the leg that could not be keyed
+    // by institution id, and the reason the ledger is party-keyed at all. ----
+    ctx.updatedCompanies.forEach((c) => {
+      if (!c.isBankEntity || !c.bankBalanceSheet || c.region !== regionId || !isActiveCompany(c)) return;
+      let earnedUSD = 0;
+      Object.entries(c.bankBalanceSheet.sovereignBondHoldingsByTenor || {}).forEach(([bucket, usd]) => {
+        earnedUSD += accrue(bucket, { kind: 'BANK_SECURITIES', ticker: c.ticker }, Number(usd) || 0);
+      });
+      if (earnedUSD > 0) bankEarnedUSD.set(c.ticker, (bankEarnedUSD.get(c.ticker) ?? 0) + earnedUSD);
+    });
+
+    // ---- 3. THE COUPON DATES. A bucket whose date falls this week turns every holder's accrued
+    // balance into cash — including a holder that has since sold out, because it earned it while
+    // it held the paper. The treasury pays exactly the sum, so neither side can drift. ----
+    const dueBuckets = new Set(
+      Object.keys(couponByBucket).filter((b) => sovereignCouponDueShare(b, ctx.nextWeek) > 0)
+    );
+    let paidUSD = 0;
+    if (dueBuckets.size > 0) {
+      const cleared: string[] = [];
+      accrued.forEach((amountUSD, k) => {
+        const firstBar = k.indexOf('|');
+        if (k.slice(0, firstBar) !== regionId) return;
+        const secondBar = k.indexOf('|', firstBar + 1);
+        if (!dueBuckets.has(k.slice(firstBar + 1, secondBar)) || !(amountUSD > 0)) return;
+        const payee = partyFromKey(k.slice(secondBar + 1));
+        if (!payee) return;
+        // A BANK is paid as BANK_SECURITIES rather than BANK: the coupon is not income arriving
+        // now — the equity leg was posted the week it was EARNED — so this is one of the bank's
+        // assets becoming another, the receivable turning into reserves. Routing it as BANK would
+        // credit equity a second time, which is exactly the shape §7.62 caught in the CB stage.
+        pay(ctx, {
+          payer: { kind: 'GOVERNMENT', region: regionId },
+          payee,
+          amountUSD,
+          reason: 'sovereign coupon',
+        });
+        paidUSD += amountUSD;
+        cleared.push(k);
+      });
+      cleared.forEach((k) => accrued.delete(k));
+    }
+
+    // ---- 4. The treasury's own side of the same balance, so its expense can stay smooth while
+    // its account moves on the dates (stages/central-bank.ts reads the change in this level). ----
+    reg.sovereignCouponPayableUSD = Number(sovereignAccruedPayableUSD(accrued, regionId).toFixed(0));
+    reg.sovereignCouponPaidUSD = Number(paidUSD.toFixed(0));
+  });
+
+  // ---- 5. The banks' books. The receivable is SET to the ledger — one writer, so the holder's
+  // asset is the issuer's payable by construction — and equity takes what was earned. Assets move
+  // by (accrued - paid) + paid = accrued, equity by accrued: the identity holds either week. ----
+  ctx.updatedCompanies.forEach((c) => {
+    if (!c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return;
+    const earnedUSD = bankEarnedUSD.get(c.ticker) ?? 0;
+    const key = `|${partyKey({ kind: 'BANK_SECURITIES', ticker: c.ticker })}`;
+    let heldUSD = 0;
+    accrued.forEach((usd, k) => { if (k.endsWith(key)) heldUSD += usd; });
+    if (earnedUSD === 0 && heldUSD === (c.bankBalanceSheet.sovereignAccruedCouponUSD ?? 0)) return;
+    c.bankBalanceSheet = {
+      ...c.bankBalanceSheet,
+      bankEquityUSD: c.bankBalanceSheet.bankEquityUSD + earnedUSD,
+      sovereignAccruedCouponUSD: heldUSD,
+    };
+  });
+}
+
+/**
+ * What the treasury has ACCRUED but not yet paid on its bond stack — its own side of the same
+ * receivable, so the reported interest line stays smooth while the cash is lumpy.
+ */
+export function sovereignAccruedPayableUSD(
+  accrued: Map<string, number>, regionId: RegionId
+): number {
+  let total = 0;
+  accrued.forEach((usd, k) => { if (k.startsWith(`${regionId}|`)) total += usd; });
+  return total;
+}

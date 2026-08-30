@@ -145,12 +145,35 @@ export interface SettlementReport {
   unresolvedUSD: number;
 }
 
-const partyKey = (p: PartyRef): string =>
+export const partyKey = (p: PartyRef): string =>
   p.kind === 'COMPANY' || p.kind === 'BANK' || p.kind === 'BANK_CREDIT' || p.kind === 'BANK_SECURITIES'
     ? `${p.kind}:${p.ticker}`
     : p.kind === 'INSTITUTION' ? `INSTITUTION:${p.id}`
       : p.kind === 'SEGMENT' ? `SEGMENT:${p.region}:${p.industry}`
         : `${p.kind}:${p.region}`;
+
+/** The inverse of `partyKey`, for the ledgers that key a balance by party (CAL's accrual). */
+export function partyFromKey(key: string): PartyRef | undefined {
+  const first = key.indexOf(':');
+  if (first < 0) return undefined;
+  const kind = key.slice(0, first);
+  const rest = key.slice(first + 1);
+  switch (kind) {
+    case 'COMPANY': case 'BANK': case 'BANK_CREDIT': case 'BANK_SECURITIES':
+      return { kind, ticker: rest } as PartyRef;
+    case 'INSTITUTION':
+      return { kind: 'INSTITUTION', id: rest };
+    case 'SEGMENT': {
+      const at = rest.indexOf(':');
+      return at < 0 ? undefined
+        : { kind: 'SEGMENT', region: rest.slice(0, at) as any, industry: rest.slice(at + 1) as any };
+    }
+    case 'GOVERNMENT': case 'CENTRAL_BANK': case 'HOUSEHOLD': case 'CLEARING_HOUSE': case 'UNMODELED':
+      return { kind, region: rest } as PartyRef;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Execute the week's instructions.

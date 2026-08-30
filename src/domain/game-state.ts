@@ -60,6 +60,10 @@ export interface GameState {
   estates?: import('./estate').Estate[];
   /** CAL — accrued-but-unpaid interest by (instrument, holder); see stages/shared-helpers.ts. */
   holderAccruedInterestUSD?: Record<string, number>;
+  /** CAL — accrued-but-unpaid SOVEREIGN interest by (region, tenor bucket, party); see
+   *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
+   *  government paper on its own balance sheet and is not on the institutional register. */
+  sovereignAccruedInterestUSD?: Record<string, number>;
   /** CASH — reserves 02b invented this week to cover balances that moved outside settlement. */
   lastCashReconcileUSD?: Partial<Record<import('./geography').RegionId, number>>;
   lastCashReconcileByClassUSD?: { corporate: number; institutional: number; sme: number };

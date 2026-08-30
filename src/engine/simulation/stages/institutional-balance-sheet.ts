@@ -30,10 +30,10 @@
  *     relative-value framework depends on.
  */
 
-import { RegionId, Company, InstitutionalEntity } from '../../../types';
+import { RegionId, InstitutionalEntity } from '../../../types';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
-import { pendingSettlementUSD, pay } from './settlement';
+import { pendingSettlementUSD } from './settlement';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 
@@ -103,69 +103,28 @@ export function stagePurchaseBudgetUSD(
 }
 
 /**
- * Credit each entity its real portfolio income for the week, at the issuer's own real terms.
- * The payer's side already exists (stage 08 expenses every tranche's interest), so this leg
- * completes a flow rather than creating one. Runs before the clearing stages so the week's
- * income can fund the week's bids.
+ * Report each entity's real portfolio income for the week, at the issuer's own real terms.
+ *
+ * INCOME, not cash. Every coupon in this model is now a payment from a named issuer that lands on
+ * a date (SETL4 for corporates, CAL for sovereigns), and this is the accrual beside it: what the
+ * entity EARNED, whether or not a coupon fell due. Runs before the clearing stages, so the week's
+ * earnings can size the week's bids.
  */
 export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
-  const companyById = new Map<string, Company>(
-    [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].map((c) => [c.id, c]));
-
-  // SCALE: every one of these is a pure function of one issuer's (or one region's) ladder, and
-  // was being recomputed once per HOLDING — the same ladder walked once per holder of the same
-  // paper, and the whole sovereign ladder once per gov-bond row. Same arithmetic once, memoized
-  // for the week; every holding then reads the identical number it always did.
-  const avgFixedCouponByIssuer = new Map<string, number | null>();
-  const avgFloatMarginBpsByIssuer = new Map<string, number | null>();
+  // SCALE: the sovereign ladder is a pure function of one region's stack and was being walked
+  // once per gov-bond ROW — the same arithmetic once, memoized for the week.
   const sovCouponByRegion = new Map<string, Record<string, number>>();
-  const avgFixedCouponOf = (issuer: Company): number | null => {
-    let memo = avgFixedCouponByIssuer.get(issuer.id);
-    if (memo === undefined) {
-      const fixed = (issuer.debtTranches || []).filter((t) => t.rateType === 'FIXED');
-      const principal = fixed.reduce((a, t) => a + t.principalUSD, 0);
-      memo = principal <= 0 ? null
-        : fixed.reduce((a, t) => a + t.principalUSD * (t.couponRate ?? 0.05), 0) / principal;
-      avgFixedCouponByIssuer.set(issuer.id, memo);
-    }
-    return memo;
-  };
-  const avgFloatMarginBpsOf = (issuer: Company): number | null => {
-    let memo = avgFloatMarginBpsByIssuer.get(issuer.id);
-    if (memo === undefined) {
-      // G2: bank facilities pay their interest to the lending BANK, not to loan-market
-      // holders — excluded here exactly as they are from 07d's float.
-      const floating = (issuer.debtTranches || []).filter((t) => t.rateType === 'FLOATING' && !t.isBankFacility);
-      const principal = floating.reduce((a, t) => a + t.principalUSD, 0);
-      memo = principal <= 0 ? null
-        : floating.reduce((a, t) => a + t.principalUSD * (t.floatingMarginBps ?? 200), 0) / principal;
-      avgFloatMarginBpsByIssuer.set(issuer.id, memo);
-    }
-    return memo;
-  };
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let weeklyIncomeUSD = 0;
-    // CASH: which treasury owes what, so the coupon is PAID by the government that issued the
-    // paper rather than appearing on the holder's book.
-    const couponByIssuerRegion = new Map<string, number>();
-    entity.itemizedHoldings.forEach((h) => {
-      const notional = h.quantityOrNotionalUSD ?? 0;
-      if (notional <= 0) return;
-      const issuer = companyById.get((h as { instrumentId?: string }).instrumentId ?? '');
-      if (!issuer) return;
-      // SETL4: corporate coupons are no longer DERIVED here. The issuer pays them to the
-      // register and the settlement pass credits each holder its real share (stage 08 +
-      // shared-helpers) — one payment with a payer, instead of the issuer expensing interest on
-      // 100% of principal while holders independently accrued on their own holdings and the
-      // difference went nowhere (rule 3, and the residual the government side already names).
-      // Sovereign coupons below stay: the government pays them in stage 11.
-      void issuer;
-    });
-    // PUB1: sovereign coupons are REAL now — paid at each bucket's weighted-average coupon off
-    // the issuing region's own debt stack, and debited from that government's account in stage
-    // 11. This replaces the WS7-era bill carry, which credited holders while the government paid
-    // nothing (the §6 asymmetric-boundary row).
+    // CAL — SOVEREIGN COUPONS ARE ON THE CALENDAR NOW (`sovereign-calendar.ts`), so they are no
+    // longer credited here. Interest accrues to whoever holds the paper that week and the
+    // bucket's coupon date turns the balance into cash, with the TREASURY on the same dates —
+    // which is the pass this comment used to say had to happen all at once. It did.
+    //
+    // What is still reported here is the INCOME, because an income statement is smooth: the
+    // accrual is the entity's earnings for the week whether or not a coupon fell due (rule 9 — an
+    // expense and a payment are different numbers with different periods).
     entity.itemizedHoldings.forEach((h) => {
       if (h.instrumentType !== 'GOV_BOND') return;
       const issuerReg = ctx.updatedRegions[h.issuerRegion];
@@ -173,31 +132,11 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       const bucket = h.instrumentId.replace(`${h.issuerRegion}-GOV-`, '');
       let cb = sovCouponByRegion.get(h.issuerRegion);
       if (!cb) { cb = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
-      const coupon = cb[bucket] ?? 0;
-      // CAL, REMAINING HALF: this is still a smooth accrual, deliberately. Putting the HOLDER on
-      // the treasury's coupon dates without putting the treasury's own expense on them leaves the
-      // two sides disagreeing by exactly the lumpiness — measured immediately, as the boundary
-      // line `governmentInterestToUnmodeledHolders` swinging on coupon weeks. The sovereign
-      // calendar is one change to `weeklyInterestExpenseUSD` and both readers of it, together.
-      const couponUSD = ((h.quantityOrNotionalUSD ?? 0) * coupon) / 52;
-      weeklyIncomeUSD += couponUSD;
-      couponByIssuerRegion.set(h.issuerRegion, (couponByIssuerRegion.get(h.issuerRegion) ?? 0) + couponUSD);
+      weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * (cb[bucket] ?? 0)) / 52;
     });
     if (weeklyIncomeUSD <= 0) return entity;
-    // CASH: the coupon is a PAYMENT from the treasury that owes it. Stage 11 already debits the
-    // government for it; this is the leg that used to arrive as cash on the holder's book with
-    // nothing recording that it had moved. Recorded as well as paid: the entity's income
-    // statement and its cash are the same event, and stage 08 reports it on the listed shell
-    // rather than inventing a portfolio yield of its own (HH1b — one institution, not two).
-    couponByIssuerRegion.forEach((amountUSD, issuerRegion) => {
-      if (!(amountUSD > 0)) return;
-      pay(ctx, {
-        payer: { kind: 'GOVERNMENT', region: issuerRegion as RegionId },
-        payee: { kind: 'INSTITUTION', id: entity.id },
-        amountUSD,
-        reason: 'sovereign coupon',
-      });
-    });
+    // Stage 08 reports this on the listed shell rather than inventing a portfolio yield of its
+    // own (HH1b — one institution, not two).
     return { ...entity, lastWeeklyInvestmentIncomeUSD: weeklyIncomeUSD };
   });
 }

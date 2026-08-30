@@ -39,6 +39,7 @@ import { generatePrivateCompanies } from '../companyGenerator';
 import { runConcentrationRiskStage } from './stages/09-concentration-risk';
 import { runMergersStage } from './stages/10-mergers';
 import { runFiscalAndSovereignDebtStage } from './stages/11-fiscal-and-sovereign-debt';
+import { runSovereignCalendarStage } from './stages/sovereign-calendar';
 import { runBillAccretionStage } from './stages/bill-accretion';
 import { runFxHedgingStage } from './stages/fx-hedging';
 import { runFxClearingStage, recordForeignHoldingsSnapshot } from './stages/fx-clearing';
@@ -183,7 +184,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // control because the capital calls went out and the tender proceeds never came back.
     applyPendingCorporateActionSettlements(ctx);
     // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
-    applyHolderInterestAccruals(ctx, (regionId) => ({ kind: 'GOVERNMENT', region: regionId as RegionId }));
+    // Corporate paper only — the sovereign ledger is party-keyed and runs as its own stage below.
+    applyHolderInterestAccruals(ctx);
   });
 
   // HH1c: the liability flows. After stage 08, so the insurers' own P&L for the week is struck
@@ -219,6 +221,11 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('fx-clearing', () => { runFxClearingStage(state, ctx); recordForeignHoldingsSnapshot(ctx); });
   run('money-fund-income', () => distributeMoneyFundIncome(ctx));
   run('bill-accretion', () => runBillAccretionStage(state, ctx));
+  // CAL: the sovereign calendar. After every book that trades government paper has cleared and
+  // the bills have accreted, so the holders it walks are the ones the week ended with; before the
+  // fiscal stage, which strikes the treasury's own interest line against the same holdings. The
+  // payments it posts settle at the close below.
+  run('sovereign-calendar', () => runSovereignCalendarStage(ctx));
   run('11-fiscal-and-sovereign-debt', () => runFiscalAndSovereignDebtStage(state, ctx));
   // HH5: employment's one representation, re-read after defaults (08), mergers (10) and births
   // have landed — a bankrupt firm's staff are unemployed the week the firm goes, not the next.
@@ -237,6 +244,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
     commodityFuturesBook: ctx.commodityFuturesBook,
     holderAccruedInterestUSD: Object.fromEntries(ctx.holderAccruedInterestUSD),
+    sovereignAccruedInterestUSD: Object.fromEntries(ctx.sovereignAccruedInterestUSD),
     lastCashReconcileUSD: ctx.cashReconcileUSD,
     lastCashReconcileByClassUSD: ctx.cashReconcileByClassUSD,
     lastCashOverdraftUSD: ctx.cashOverdraftUSD,

@@ -95,6 +95,14 @@ export interface BankingSector {
   repoLentUSD: number;
   repoBorrowedUSD: number;
   /**
+   * CAL — sovereign interest this bank has EARNED but not yet been PAID. A coupon accrues every
+   * week and settles on the bucket's date, so in between it is a receivable, and a real one: the
+   * bank's own asset against the treasury. `sovereign-calendar.ts` is its only writer, posting it
+   * against equity off the same ledger the treasury pays from, so the holder's claim and the
+   * issuer's payable are one number seen from two books and cannot drift by the lumpiness.
+   */
+  sovereignAccruedCouponUSD?: number;
+  /**
    * Government-bond collateral pledged against `repoBorrowedUSD` + `srfBorrowingUSD`, at the
    * derived per-bucket haircuts (see computeSovereignRepoHaircuts). Pledged paper cannot
    * simultaneously be sold — 07c/07f read this as a floor on the pledging bank's holdings and

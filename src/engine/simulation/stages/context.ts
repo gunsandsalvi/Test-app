@@ -193,6 +193,10 @@ export interface WeeklyStepContext {
    *  receivable that sits between an accrual and a coupon date, and the reason a bond can change
    *  hands mid-period without moving the interest to the wrong party. */
   holderAccruedInterestUSD: Map<string, number>;
+  /** CAL — the same receivable for GOVERNMENT paper, keyed `<region>|<bucket>|<partyKey>` because
+   *  its holders are not all on the institutional register: a bank holds sovereigns directly, per
+   *  tenor, on its own balance sheet, and so do the central bank and the corporate treasuries. */
+  sovereignAccruedInterestUSD: Map<string, number>;
   tradeInvoiceFxGainUSD: number;
   tradeInvoiceWriteOffUSD: number;
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
@@ -300,6 +304,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),
     holderAccruedInterestUSD: new Map(Object.entries((state as any).holderAccruedInterestUSD ?? {})),
+    sovereignAccruedInterestUSD: new Map(Object.entries((state as any).sovereignAccruedInterestUSD ?? {})),
     tradeInvoiceFxGainUSD: 0,
     tradeInvoiceWriteOffUSD: 0,
 

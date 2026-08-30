@@ -40,14 +40,10 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
       .reduce((a, [k, v]) => a + ((Number(v) || 0) * (couponByBucket[k] ?? 0)) / 52, 0);
     const remitUSD = remittanceUSD(couponIncomeUSD, reservesBefore, reg.policyRate);
 
-    // ---- 2. The treasury's week. Revenue in, spending out, remittance in. Only the flows that
-    // genuinely pass through a bank balance sheet move reserves — today that is the coupon the
-    // government pays to its bank holders. Taxes and procurement are still boundary flows
-    // (PUB1b), so they move the TGA without a reserve leg and the gap is recorded below. ----
-    const bankHeldCouponUSD = banks.reduce(
-      (a, c) => a + Object.entries(c.bankBalanceSheet!.sovereignBondHoldingsByTenor || {})
-        .reduce((x, [k, v]) => x + ((Number(v) || 0) * (couponByBucket[k] ?? 0)) / 52, 0), 0
-    );
+    // ---- 2. The treasury's week. Revenue in, spending out, remittance in. Taxes and procurement
+    // are still boundary flows (PUB1b), so they move the TGA without a reserve leg and the gap is
+    // recorded below. The COUPON is no longer among them: CAL puts it on the calendar, so it
+    // leaves as a real payment to a named holder and its reserve leg comes with it. ----
     // Financing is part of the treasury's week: a deficit is funded by issuance, and maturing
     // paper is repaid. Without these legs the TGA is debited by every deficit and credited by
     // nothing, and it simply runs down (measured: −40.3B by week 60).
@@ -63,7 +59,16 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // settlement migration and this statement were double-counting every migrated flow).
     // The statement remains the treasury's week; what settlement executed is subtracted from it.
     const settledTgaUSD = ctx.lastSettlementReport?.tgaDeltaByRegion.get(regionId) ?? 0;
-    const tgaFlowUSD = reg.governmentRevenueUSD - outlaysUSD + remitUSD
+    // CAL: `outlaysUSD` carries the treasury's SMOOTH interest accrual — its expense for the week,
+    // which is the right number for the flow statement and the deficit. Its ACCOUNT, though, moves
+    // when the coupons are actually paid, and the difference between the two is precisely the
+    // change in what it owes but has not yet paid. Adding the change back leaves the TGA debited
+    // by the cash that left: the dates the calendar settled, plus the holders this model does not
+    // name, who are still paid smoothly. Rule 9, on the issuer's side of the same balance.
+    const payableDeltaUSD = (reg.sovereignCouponPayableUSD ?? 0)
+      - ((state.regions?.[regionId] as { sovereignCouponPayableUSD?: number } | undefined)
+        ?.sovereignCouponPayableUSD ?? 0);
+    const tgaFlowUSD = reg.governmentRevenueUSD - outlaysUSD + remitUSD + payableDeltaUSD
       // CASH: redemptions leave the TGA through the settlement layer now — one payment per named
       // holder, plus a boundary line for the ones this model does not name (stage 11). Taking
       // them here too would debit the account twice for one repayment.
@@ -72,12 +77,12 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     cb.treasuryAccountUSD = Number((cb.treasuryAccountUSD + tgaFlowUSD).toFixed(0));
     cb.lastRemittanceUSD = Number(remitUSD.toFixed(0));
 
-    // ---- 3. The reserve leg already exists and must not be posted twice. `evolveBankingSector`
-    // credits each bank's sovereign coupon to its cash AND its equity in the same week (02b
-    // passes it in), which is the balanced posting. What was missing is only the OTHER side —
-    // the treasury paying it — and that is the TGA debit above. Crediting reserves here as well
-    // broke the per-bank balance-sheet identity by exactly the coupon, on every bank.
-    cb.lastReserveDrainUSD = Number((-bankHeldCouponUSD).toFixed(0));
+    // ---- 3. The reserve leg is the settlement pass's, and posting it here as well is the trap
+    // §7.62 recorded: it broke the per-bank balance-sheet identity by exactly the coupon, on every
+    // bank. Under CAL the coupon is a real payment from the treasury to a named holder, so its
+    // reserve leg is struck where every other payment's is, and what is reported here is what the
+    // treasury's account did — which is what a reserve drain means. ----
+    cb.lastReserveDrainUSD = Number((-(reg.sovereignCouponPaidUSD ?? 0)).toFixed(0));
 
     // ---- 4. Currency closes the balance sheet. The CB is the one book allowed to issue the
     // liability that balances it — no capital constraint, never defaults. ----

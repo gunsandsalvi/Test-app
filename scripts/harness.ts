@@ -2017,6 +2017,9 @@ function runHarness() {
         bs.depositsUSD + (bs.corporateDepositsUSD ?? 0) + ((bs as any).institutionalDepositsUSD ?? 0) + ((bs as any).unmodeledDepositsUSD ?? 0) + ((bs as any).smeDepositsUSD ?? 0) + (bs.wholesaleFundingUSD ?? 0) + bs.bankEquityUSD + (bs.srfBorrowingUSD ?? 0) + ((bs as any).repoBorrowedUSD ?? 0)
         - bs.businessLoanBookUSD - bs.consumerLoanBookUSD - sovUSD - bs.cashReservesUSD
         - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
+        // CAL: a sovereign coupon earned and not yet paid is this bank's asset against the
+        // treasury, and the treasury carries the same balance as its payable.
+        - ((bs as any).sovereignAccruedCouponUSD ?? 0)
         // G3a: the desks' own inventory is this bank's asset, bought with its own reserves.
         - Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryUSD: number }[]>)
             .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0)
@@ -2026,6 +2029,26 @@ function runHarness() {
         violations.push({
           week: w,
           message: `Bank ${c.ticker} balance-sheet identity broken by ${(residualUSD / 1e6).toFixed(1)}M — a flow is missing a leg`
+        });
+      }
+    });
+
+    // 5b-ii. CAL: the sovereign receivable and the sovereign payable are ONE balance seen from
+    // two books, so the treasury's payable can never be less than what its bank holders are
+    // carrying against it. If this ever trips, the calendar has two writers again — find the
+    // second one, never reconcile the difference.
+    (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((regionId) => {
+      const reg: any = (state.regions as any)?.[regionId];
+      if (!reg) return;
+      const bankHeldUSD = state.companies.reduce((a: number, c: any) => (
+        c.isBankEntity && c.bankBalanceSheet && c.region === regionId && !c.isDefaulted && !c.mergerAcquired
+          ? a + (c.bankBalanceSheet.sovereignAccruedCouponUSD ?? 0) : a), 0);
+      if (bankHeldUSD - (reg.sovereignCouponPayableUSD ?? 0) > 5e6) {
+        violations.push({
+          week: w,
+          message: `${regionId} sovereign receivables exceed the treasury's payable by `
+            + `${((bankHeldUSD - (reg.sovereignCouponPayableUSD ?? 0)) / 1e6).toFixed(1)}M — `
+            + `the coupon accrual has a second writer`
         });
       }
     });

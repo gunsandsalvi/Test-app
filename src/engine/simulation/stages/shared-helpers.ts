@@ -467,7 +467,10 @@ export function payHoldersCash(
 export function accrueHoldersInterest(
   ctx: { pendingHolderAccrualUSD: Map<string, number> },
   issuerId: string,
-  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER',
+  // GOV_BOND is deliberately absent: a bank holds government paper on its own balance sheet and
+  // is not on this register at all, so the sovereign accrual is keyed by PARTY instead and lives
+  // in stages/sovereign-calendar.ts. One ledger per thing, not one register with a hole in it.
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER',
   weeklyAccrualUSD: number
 ): void {
   if (!(weeklyAccrualUSD > 0)) return;
@@ -480,7 +483,7 @@ export function accrueHoldersInterest(
 export function payHoldersAccruedInterest(
   ctx: { pendingHolderAccrualPayout: Set<string> },
   issuerId: string,
-  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'COMMERCIAL_PAPER'
 ): void {
   ctx.pendingHolderAccrualPayout.add(`${instrumentType}:${issuerId}`);
 }
@@ -502,9 +505,7 @@ export function applyHolderInterestAccruals(
     holderAccruedInterestUSD: Map<string, number>;
     paymentInstructions?: import('./settlement').PaymentInstruction[];
     issuerTickerById?: Map<string, string>;
-  },
-  /** Who pays a GOV_BOND coupon — the issuing region's treasury, not a company. */
-  sovereignPayer?: (issuerId: string) => import('./settlement').PartyRef | undefined
+  }
 ): void {
   const { pendingHolderAccrualUSD: accruals, pendingHolderAccrualPayout: payouts } = ctx;
   if (accruals.size > 0) {
@@ -538,15 +539,10 @@ export function applyHolderInterestAccruals(
     const instrumentKey = k.slice(0, at);
     if (!payouts.has(instrumentKey) || !(accruedUSD > 0)) return;
     const holderId = k.slice(at + 1);
-    const colon = instrumentKey.indexOf(':');
-    const instrumentType = instrumentKey.slice(0, colon);
-    const issuerId = instrumentKey.slice(colon + 1);
-    const payer = instrumentType === 'GOV_BOND'
-      ? sovereignPayer?.(issuerId)
-      : (() => {
-          const ticker = ctx.issuerTickerById?.get(issuerId);
-          return ticker ? ({ kind: 'COMPANY', ticker } as import('./settlement').PartyRef) : undefined;
-        })();
+    const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
+    const ticker = ctx.issuerTickerById?.get(issuerId);
+    const payer = ticker
+      ? ({ kind: 'COMPANY', ticker } as import('./settlement').PartyRef) : undefined;
     if (payer && ctx.paymentInstructions) {
       ctx.paymentInstructions.push({
         payer,

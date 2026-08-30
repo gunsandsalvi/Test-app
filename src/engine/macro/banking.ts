@@ -87,6 +87,8 @@ export function bankTotalAssetsUSD(sheet: BankingSector): number {
   // which is precisely what let a book with no capital behind it absorb any imbalance.
   return sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD
     + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0)
+    // CAL: a coupon earned and not yet paid is an asset the bank holds against the treasury.
+    + (sheet.sovereignAccruedCouponUSD ?? 0)
     + dealerDeskGrossUSD(sheet.dealerDeskInventory)
     // HF1: a margin loan to a fund consumes the leverage ratio like any other loan.
     + (sheet.primeBrokerageLoansUSD ?? 0);
@@ -380,8 +382,16 @@ export function evolveBankingSector(
   // is still the curve read used elsewhere; it no longer credits income here.
   const weeklyInterestIncomeUSD = (Math.max(0, cashUSD) * policyRate) / 52
     + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD + sovereignCouponWeeklyUSD;
-  cashUSD += weeklyInterestIncomeUSD;
-  equityUSD += weeklyInterestIncomeUSD;
+  // CAL: the income statement is smooth and the CASH is lumpy — a coupon is earned every week and
+  // paid on the bucket's date, and rule 9 says those are different numbers with different periods.
+  // So the coupon stays in the income line above (it is genuinely this week's earnings, and the
+  // NIM below is an income measure) while the money it will become arrives on the date.
+  // `sovereign-calendar.ts` posts BOTH of its legs — the receivable and the equity it earns — off
+  // the ledger the treasury pays from, which is the only way the holder's claim and the issuer's
+  // payable stay the same number. Everything else here is money that genuinely arrived this week.
+  const cashInterestIncomeUSD = weeklyInterestIncomeUSD - sovereignCouponWeeklyUSD;
+  cashUSD += cashInterestIncomeUSD;
+  equityUSD += cashInterestIncomeUSD;
   const weeklyDepositInterestUSD = (depositsUSD * depositRate) / 52;
   depositsUSD += weeklyDepositInterestUSD;
   equityUSD -= weeklyDepositInterestUSD;
@@ -494,6 +504,9 @@ export function evolveBankingSector(
     // not noticed).
     wholesaleFundingUSD: Number((
       businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD
+      // CAL: the accrued coupon is an asset like any other, and leaving it out moved the whole
+      // receivable into wholesale funding the week after it was first posted.
+      + (prevBanking.sovereignAccruedCouponUSD ?? 0)
       // G3a: the desks' inventory is an asset this bank owns and finances. REPO1/REPO3: secured
       // funding that has NOT matured is still a liability, and a term book means there is some
       // every week — leaving both out of the residual moved the whole of each into wholesale,
@@ -534,6 +547,8 @@ export function evolveBankingSector(
     depositRateAnnual: Number(depositRate.toFixed(6)),
     corpBondDealerInventory: prevBanking.corpBondDealerInventory || [],
     sovereignBondHoldingsByTenor: prevBanking.sovereignBondHoldingsByTenor || {},
+    // CAL: carried, never written here — the calendar owns this balance on both books.
+    sovereignAccruedCouponUSD: prevBanking.sovereignAccruedCouponUSD ?? 0,
     sovBondDealerInventory: prevBanking.sovBondDealerInventory || [],
     loanDealerInventory: prevBanking.loanDealerInventory || [],
   };

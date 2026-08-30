@@ -882,6 +882,12 @@ export interface Region {
    * is real; this line is what has no recipient. Watch it fall as PUB2 and XB land.
    */
   governmentInterestToUnmodeledHoldersUSD?: number;
+  /** CAL — sovereign interest ACCRUED to named holders and not yet paid: the treasury's payable,
+   *  the same balance its holders carry as a receivable. Written only by sovereign-calendar.ts. */
+  sovereignCouponPayableUSD?: number;
+  /** CAL — what this week's coupon dates actually turned into cash. The treasury's expense stays
+   *  smooth (`governmentInterestWeeklyUSD`); its ACCOUNT moves by this (stages/central-bank.ts). */
+  sovereignCouponPaidUSD?: number;
   govDebtTranches: GovDebtTranche[];
   pendingUnfundedDeficitUSD?: number;
   debtToGdpPctBottomUp: number;

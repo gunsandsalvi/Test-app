@@ -2106,8 +2106,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   settleCorporateSweepBooks(mmfSweepBooks, ctx);
 
   applyPendingCorporateActionSettlements(ctx);
-    // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
-    applyHolderInterestAccruals(ctx, (regionId) => ({ kind: 'GOVERNMENT', region: regionId as RegionId }));
+  // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
+  applyHolderInterestAccruals(ctx);
 
   ctx.newsItems.push(...refinanceNews);
 }
