@@ -16,6 +16,8 @@ import { priceCorporateBond, priceLeveragedLoan, priceInterestRateSwap, priceCre
 import { getUnifiedInitialMarginRate } from '../../dealers';
 import { calculateCompositeIndices } from '../../macro/indices';
 import { WeeklyStepContext } from './context';
+import { realizedAnnualVol } from '../../../domain/volatility';
+import { regionIndexOf } from '../../macro/indices';
 
 export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepContext): void {
   const { updatedRegions, updatedCompanies, updatedCommodities, updatedFxPairs, nextWeek } = ctx;
@@ -393,7 +395,17 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         const strike = pos.strike || underlyingPrice;
         const remainingWeeks = Math.max(0.1, (pos.expiryWeek || nextWeek + 4) - nextWeek);
         const tYears = remainingWeeks / 52;
-        const vol = (pos.impliedVol || 0.3) + ctx.marketVolComponent;
+        // DER — THE OPTION IS REPRICED AT THE NAME'S OWN VOLATILITY. `pos.impliedVol || 0.3` put a
+        // stated 30% on every option whose row did not carry one, so a Black-Scholes price
+        // computed from it was a stated price (rule 1) and no name could be riskier than another.
+        // Until there is an options BOOK to imply a vol from, the honest input is the one the
+        // model measures: this underlying's own realised vol. A name too new to estimate one
+        // falls back to its region's index, which is estimable — no constant anywhere in the
+        // chain. `marketVolComponent` rides on top, as the market-wide premium it always was.
+        const nameVol = realizedAnnualVol(comp?.historicalPrices, 26);
+        const indexVol = realizedAnnualVol(
+          regionIndexOf(state.compositeIndices, pos.region).historical, 26);
+        const vol = (pos.impliedVol ?? nameVol ?? indexVol ?? 0) + ctx.marketVolComponent;
         const r = updatedRegions[pos.region].policyRate;
 
         const greeks = calculateBlackScholesGreeks(

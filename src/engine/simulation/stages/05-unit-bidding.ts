@@ -41,6 +41,7 @@ import { paymentTermWeeks } from '../../../domain/trade-invoice';
 import { computeAnnualDefaultProbability } from './shared-helpers';
 import { getFxToUsd } from './06-fx-and-trade';
 import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
+import { realizedAnnualVol } from '../../../domain/volatility';
 
 export const MARKET_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
@@ -1773,18 +1774,6 @@ function formContracts(
   });
 }
 
-function computeRealizedVol(historicalValues: number[], window: number): number {
-  const recent = historicalValues.slice(-window);
-  if (recent.length < 3) return 0.16;
-  const returns: number[] = [];
-  for (let i = 1; i < recent.length; i++) {
-    if (recent[i - 1] > 0) returns.push(Math.log(recent[i] / recent[i - 1]));
-  }
-  if (returns.length < 2) return 0.16;
-  const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
-  const variance = returns.reduce((s, r) => s + Math.pow(r - mean, 2), 0) / returns.length;
-  return Math.sqrt(variance) * Math.sqrt(52);
-}
 
 
 export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -1869,9 +1858,15 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   if (!state.tradeInvoices) state.tradeInvoices = [];
   for (const inv of ctx.tradeInvoicesBooked) state.tradeInvoices.push(inv);
 
-  const realizedIndexVol = computeRealizedVol(state.compositeIndices.usaComposite.historical ?? [], 13);
+  // DER/rule 3: ONE realised-vol estimator (domain/volatility.ts). The local copy that stood here
+  // carried its own 0.16 fallback, so a market with too little history was reported as being at
+  // exactly its own baseline — which reads as "no excess vol" whether that is true or unknown.
+  // Unknown is now unknown: no history, no component.
+  const realizedIndexVol = realizedAnnualVol(state.compositeIndices.usaComposite.historical, 13);
   const baselineVol = 0.16;
   const usaRegime = ctx.updatedRegions.USA.cycleRegime;
   const regimeVolPremium = usaRegime === 'Recession' ? 0.08 : usaRegime === 'Slowdown' ? 0.03 : 0;
-  ctx.marketVolComponent = Math.max(0, realizedIndexVol - baselineVol) * 0.5 + regimeVolPremium;
+  ctx.marketVolComponent = (realizedIndexVol === undefined
+    ? 0
+    : Math.max(0, realizedIndexVol - baselineVol) * 0.5) + regimeVolPremium;
 }
