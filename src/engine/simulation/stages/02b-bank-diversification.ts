@@ -30,6 +30,7 @@ import {
   evolveBankingSector, computeSovereignBookAnnualYield, HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE,
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
+import { maturingAt, repoInterestToMaturityUSD } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
 import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId } from './bank-lending';
 import { WeeklyStepContext } from './context';
@@ -151,6 +152,18 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     const sovCouponByBucket = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
 
+    // REPO1: what each bank owes and is owed on contracts that come due this week.
+    const dueThisWeek = maturingAt(reg.repoBook ?? [], ctx.nextWeek);
+    const maturingRepo = (ticker: string) => {
+      let borrowPrincipalUSD = 0, borrowInterestUSD = 0, lendPrincipalUSD = 0, lendInterestUSD = 0;
+      dueThisWeek.forEach((c) => {
+        const interestUSD = repoInterestToMaturityUSD(c);
+        if (c.borrowerTicker === ticker) { borrowPrincipalUSD += c.principalUSD; borrowInterestUSD += interestUSD; }
+        if (c.lender.kind === 'BANK' && c.lender.ticker === ticker) { lendPrincipalUSD += c.principalUSD; lendInterestUSD += interestUSD; }
+      });
+      return { borrowPrincipalUSD, borrowInterestUSD, lendPrincipalUSD, lendInterestUSD };
+    };
+
     const newSheets: { bank: Company; sheet: BankingSector }[] = banks.map((bank) => {
       const share = bank.bankMarketShare ?? 1 / banks.length;
       const prevSheet = bank.bankBalanceSheet ?? scaleBankingSector(priorAggregate, share);
@@ -208,10 +221,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // THIS bank's real tenor book at the real cleared curve — not the 10Y on a scalar.
         computeSovereignBookAnnualYield(prevSheet.sovereignBondHoldingsByTenor, reg.zeroRates),
         reg.creditConditionsSpilloverAdjustment ?? 0,
-        // WS6: last week's overnight repo book matures inside as explicit flows.
-        prevSheet.repoBorrowedUSD ?? 0,
-        prevSheet.repoLentUSD ?? 0,
-        reg.repoRateAnnual ?? reg.policyRate,
+        // REPO1: the CONTRACTS due this week mature inside as explicit flows — each at the rate
+        // it was struck at and over the term it ran, the standing facility included.
+        maturingRepo(bank.ticker).borrowPrincipalUSD,
+        maturingRepo(bank.ticker).borrowInterestUSD,
+        maturingRepo(bank.ticker).lendPrincipalUSD,
+        maturingRepo(bank.ticker).lendInterestUSD,
         priorLoanInterestWeeklyUSD - priorFacilityInterestWeeklyUSD - priorSmeInterestWeeklyUSD,
         priorHouseholdInterestWeeklyUSD,
         // PUB1: real coupons on this bank's own sovereign book.

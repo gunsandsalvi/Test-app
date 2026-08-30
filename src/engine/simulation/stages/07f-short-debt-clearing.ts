@@ -36,6 +36,7 @@ import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nels
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
+import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
@@ -170,15 +171,13 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // are commitments that have not settled yet, and the same reserves cannot fund both.
         const settledCashUSD = sheet.cashReservesUSD
           + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
+        // REPO2: the floor is the face of THIS bill bucket actually pledged, not a blended share.
+        const encumberedFace = encumberedFaceByBucket(reg.repoBook ?? [], bank.ticker);
         const fundableUSD = Math.min(
           Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
-            + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts),
+            + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
           leverageHeadroomUSD(sheet)
         );
-        const totalBookUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-        const encumberedShare = totalBookUSD > 0
-          ? Math.min(1, (sheet.repoEncumberedCollateralUSD ?? 0) / totalBookUSD)
-          : 0;
         const appetiteUSD = sovereignBookCapacityUSD(sheet);
         const liquidityFloorUSD = liquidityDrivenSovereignFloorUSD(sheet);
         activeBuckets.forEach((b) => {
@@ -191,7 +190,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             maxHoldingUSD: appetiteUSD * bucketShareOfSovStock,
             fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
             maxNetPurchaseUSD: fundableUSD * bucketShare,
-            minHoldingUSD: Math.max(heldUSD * encumberedShare, liquidityFloorUSD * bucketShareOfSovStock),
+            minHoldingUSD: Math.max(encumberedFace.get(b.key) ?? 0, liquidityFloorUSD * bucketShareOfSovStock),
           });
         });
         participants.push({ id: `BANK-${bank.ticker}`, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });

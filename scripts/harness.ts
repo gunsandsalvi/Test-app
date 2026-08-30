@@ -1939,6 +1939,44 @@ function runHarness() {
         });
       }
     });
+    // 5c-2. REPO1/REPO2: the region's repo book is the register, and every scalar is derived
+    // from it. Three things must hold, and none of them could even be ASKED while a position was
+    // a scalar with no counterparty: what a bank borrows equals the contracts naming it as
+    // borrower; what a lender lends equals the contracts naming it as lender; and no BUCKET is
+    // pledged beyond what the pledger holds of that bucket (the blended-share version could hide
+    // a thirty-year over-pledge behind a large two-year book).
+    (['USA', 'EUR', 'UK', 'JPN'] as const).forEach(regionId => {
+      const reg: any = (state as any).regions[regionId];
+      const book: any[] = reg.repoBook ?? [];
+      if (book.length === 0) return;
+      const borrowedBy = new Map<string, number>();
+      const pledgedBy = new Map<string, Map<string, number>>();
+      book.forEach((c: any) => {
+        borrowedBy.set(c.borrowerTicker, (borrowedBy.get(c.borrowerTicker) ?? 0) + c.principalUSD);
+        const byBucket = pledgedBy.get(c.borrowerTicker) ?? new Map<string, number>();
+        (c.collateral ?? []).forEach((p: any) => byBucket.set(p.bucketKey, (byBucket.get(p.bucketKey) ?? 0) + p.faceUSD));
+        pledgedBy.set(c.borrowerTicker, byBucket);
+        if (!(c.principalUSD >= 0) || !(c.maturityWeek > c.struckWeek)) {
+          violations.push({ week: w, message: `${regionId} repo contract ${c.id} is malformed (principal ${c.principalUSD}, ${c.struckWeek}->${c.maturityWeek})` });
+        }
+      });
+      state.companies.forEach((c: any) => {
+        if (!c.isBankEntity || c.region !== regionId || !c.bankBalanceSheet) return;
+        const bs = c.bankBalanceSheet;
+        const derivedUSD = borrowedBy.get(c.ticker) ?? 0;
+        const sheetUSD = (bs.repoBorrowedUSD ?? 0) + (bs.srfBorrowingUSD ?? 0);
+        if (Math.abs(derivedUSD - sheetUSD) > 5e6) {
+          violations.push({ week: w, message: `Bank ${c.ticker} secured borrowing ${(sheetUSD / 1e9).toFixed(2)}B disagrees with its ${(derivedUSD / 1e9).toFixed(2)}B of repo contracts` });
+        }
+        (pledgedBy.get(c.ticker) ?? new Map()).forEach((faceUSD: number, bucketKey: string) => {
+          const heldUSD = Number(bs.sovereignBondHoldingsByTenor?.[bucketKey] ?? 0);
+          if (faceUSD > heldUSD + 1e6) {
+            violations.push({ week: w, message: `Bank ${c.ticker} pledged ${(faceUSD / 1e9).toFixed(2)}B of ${bucketKey} against ${(heldUSD / 1e9).toFixed(2)}B held of it` });
+          }
+        });
+      });
+    });
+
     state.companies.forEach((c: any) => {
       if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
       const bs = c.bankBalanceSheet;

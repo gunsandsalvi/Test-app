@@ -58,6 +58,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 import { MAX_OVERWEIGHT_MULTIPLE } from './asset-allocation';
 import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT_ID } from './central-bank-demand';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
+import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
@@ -409,6 +410,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const repoHaircuts = computeSovereignRepoHaircuts(reg);
     const bankParticipants: ClearingParticipant[] = regionBanks.map((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
+      const encumberedFace = encumberedFaceByBucket(reg.repoBook ?? [], bank.ticker);
       const currentByBucket = new Map<string, number>();
       Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
         currentByBucket.set(bucketInstrumentId(regionId, key), Number(v) || 0);
@@ -432,16 +434,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         + pendingSettlementUSD(ctx, { kind: 'BANK_SECURITIES', ticker: bank.ticker });
       const fundableUSD = Math.min(
         Math.max(0, settledCashUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO)
-          + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts),
+          + unencumberedBorrowingCapacityUSD(sheet, repoHaircuts, encumberedFace),
         leverageHeadroomUSD(sheet)
       );
-      // Collateral already pledged overnight cannot simultaneously be sold: the encumbered
-      // share of the book is a floor on holdings — size, never price, exactly like the
-      // liability-driven core above.
-      const totalBookUSD = Array.from(currentByBucket.values()).reduce((a, b) => a + b, 0);
-      const encumberedShare = totalBookUSD > 0
-        ? Math.min(1, (sheet.repoEncumberedCollateralUSD ?? 0) / totalBookUSD)
-        : 0;
+      // REPO2: collateral already pledged cannot simultaneously be sold, and the pledge names
+      // the paper. The floor is now the face of THIS bucket that is actually encumbered — a
+      // blended share withheld thirty-year paper from the two-year book and vice versa.
 
       // A bank's reservation yield is the administered rate it can earn on reserves instead, plus
       // what it needs for the duration risk a bond carries and cash does not. This is the same
@@ -462,7 +460,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           // Two floors, whichever binds: collateral already pledged overnight cannot be sold,
           // and a bank cannot sell below the liquidity its reserves do not already cover.
           minHoldingUSD: Math.max(
-            (currentByBucket.get(id) ?? 0) * encumberedShare,
+            encumberedFace.get(b.key) ?? 0,
             liquidityFloorUSD * bucketShareOfSovStock
           ),
         });

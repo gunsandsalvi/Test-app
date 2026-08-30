@@ -1088,16 +1088,19 @@ becomes a property of the pledged paper, so 07c/07f's `minHoldingUSD` floor read
 pledge, collateral quality matters, and a fire sale can be modelled.
 
 **REPO3 — term, not only overnight.** A term structure in secured funding, so a bank can fund a
-long book short and be caught by it — the real mechanism behind a funding squeeze, and the reason
-`WHOLESALE_FUNDING_SPREAD_BPS` is now the bank's own cleared OAS (§7.186); the constant survives only as the week-one fallback.
+long book short and be caught by it — the real mechanism behind a funding squeeze. G3c made
+`WHOLESALE_FUNDING_SPREAD_BPS` the bank's own cleared OAS (§7.186), so the PRICE of unsecured
+funding now moves with the market's view of the bank; what is still missing is the TERM structure
+that makes a squeeze bite.
 
 **REPO4 — the funding decision and the securities decision are ONE.** A treasury buys the bond
 and repos it out; the book is bounded by capital and by what it can finance, not by leftover
 deposits. This is what deletes OWN8's interim capital ceiling. It also gives
 `investableSurplusUSD`'s replacement a real economic meaning rather than an accounting one.
 
-**Scope decision to take before starting (ASK THE USER, rule 8):** GC-against-sovereigns only, or
-corporate and equity collateral from the start. The second is what makes prime brokerage and
+**Scope decision, taken 2026-08-30:** the documented default — **GC against sovereigns only**,
+with the instrument shaped so other collateral is a registry entry and not a rewrite (rule 17).
+The alternative was corporate and equity collateral from the start. The second is what makes prime brokerage and
 leveraged funds real (**HF**, item 13) and lets a hedge fund finance a position, but it is roughly
 double the work and pulls DER's margin machinery forward. Default assumption if unanswered:
 sovereign GC only, with the instrument shaped so other collateral is a registry entry and not a

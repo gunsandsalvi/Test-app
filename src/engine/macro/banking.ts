@@ -204,12 +204,15 @@ export function evolveBankingSector(
    * (computeSovereignBookAnnualYield). Rule 9: annualised decimal. */
   sovereignBookAnnualYield: number,
   spilloverAdjustment: number = 0,
-  /** WS6: last week's overnight repo book and the rate it was struck at (annualised decimal).
-   * The positions mature here as explicit flows — principal and interest both. Zero until the
-   * repo market exists or when the bank had no position. */
-  priorRepoBorrowedUSD: number = 0,
-  priorRepoLentUSD: number = 0,
-  priorRepoRateAnnual: number = 0,
+  /** REPO1: the repo CONTRACTS that come due this week — principal and the interest each one
+   * actually promised, at the rate IT was struck at and over the term IT ran. This replaces
+   * `last week's scalar x this week's rate`, which could only ever describe an overnight book:
+   * a term contract's interest is not one week's accrual, and its principal is not due. The
+   * standing facility is folded in, because a window draw is a repo contract like any other. */
+  maturingRepoBorrowPrincipalUSD: number = 0,
+  maturingRepoBorrowInterestUSD: number = 0,
+  maturingRepoLendPrincipalUSD: number = 0,
+  maturingRepoLendInterestUSD: number = 0,
   /** G2: real interest earned this week on the bank's ITEMIZED loan book (each loan at its own
    * terms, computed by bank-lending.ts from the prior week's book) — replaces the
    * business-loan yield formula. The business book itself is carried untouched here: it is a
@@ -256,21 +259,15 @@ export function evolveBankingSector(
   // untouched — a stage may only rewrite the instruments it cleared.
   const sovereignUSD = prevBanking.sovereignBondHoldingsUSD;
 
-  // ---- 1. Overnight maturations: last week's secured funding comes due. ----
-  // SRF: repay principal plus one week's interest at the posted rate. (This week's draw, if
-  // any, happens in 02b after this function, once the week's cash position is final.)
-  const srfDueUSD = prevBanking.srfBorrowingUSD ?? 0;
-  const srfInterestUSD = (srfDueUSD * (policyRate + SRF_SPREAD_BPS / 10000)) / 52;
-  cashUSD -= srfDueUSD + srfInterestUSD;
-  equityUSD -= srfInterestUSD;
-  // Repo (WS6): borrowed principal returns to the lender with interest; lent principal returns
-  // to this bank with interest. Interest is P&L; principal is not.
-  const repoBorrowInterestUSD = (priorRepoBorrowedUSD * priorRepoRateAnnual) / 52;
-  cashUSD -= priorRepoBorrowedUSD + repoBorrowInterestUSD;
-  equityUSD -= repoBorrowInterestUSD;
-  const repoLendInterestUSD = (priorRepoLentUSD * priorRepoRateAnnual) / 52;
-  cashUSD += priorRepoLentUSD + repoLendInterestUSD;
-  equityUSD += repoLendInterestUSD;
+  // ---- 1. Secured funding that comes due this week (REPO1). Borrowed principal returns to the
+  // lender with the interest its own contract promised; lent principal returns to this bank the
+  // same way. Interest is P&L; principal is not. The standing facility is in here too — a window
+  // draw is a repo contract with the central bank as the named lender, so it matures like one
+  // instead of being repaid off a separate scalar at a posted rate. ----
+  cashUSD -= maturingRepoBorrowPrincipalUSD + maturingRepoBorrowInterestUSD;
+  equityUSD -= maturingRepoBorrowInterestUSD;
+  cashUSD += maturingRepoLendPrincipalUSD + maturingRepoLendInterestUSD;
+  equityUSD += maturingRepoLendInterestUSD;
 
   // ---- 2. Household deposit flow — HH4d: REAL flows only, no target. The full savings
   // inflow arrives (less what the money fund's yield gate diverted) and last week's household ETF
@@ -402,7 +399,11 @@ export function evolveBankingSector(
   // ---- 7. Statistics — readings of the ledger, never drivers of it. The NIM damping factor
   // that clamped loan yields whenever the margin exceeded 5% is deleted (a clamp on a price,
   // rule 2): if the margin is wrong, its inputs are wrong, and those are G2's to make real. ----
-  const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + priorRepoLentUSD;
+  // The repo asset that survives this week's maturations: what the sheet still carries less what
+  // just came back. (The session below strikes the new book; the margin here reads the ledger as
+  // it stands at this point, which is what it has always done.)
+  const repoAssetUSD = Math.max(0, (prevBanking.repoLentUSD ?? 0) - maturingRepoLendPrincipalUSD);
+  const totalAssetsUSD = businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD + repoAssetUSD;
   const netInterestMarginPct = totalAssetsUSD > 0
     ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD - corporateDepositInterestUSD) * 52) / totalAssetsUSD
     : 0.025;
@@ -440,9 +441,10 @@ export function evolveBankingSector(
     centralBankReservesUSD: Number(newCentralBankReservesUSD.toFixed(0)),
     moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
     itemizedHoldings: prevBanking.itemizedHoldings || [],
-    // This week's facility and repo positions are struck AFTER this function, once the week's
-    // cash position is final (02b for the SRF; the WS6 repo stage for the market legs). Last
-    // week's came due in step 1 above.
+    // REPO1: this week's secured positions are struck AFTER this function, once the week's cash
+    // position is final — all of them in the repo session, the standing facility included, since
+    // a window draw is a contract with the central bank as the named lender. These four are then
+    // DERIVED from the region's book. What came due settled in step 1 above.
     srfBorrowingUSD: 0,
     onRrpLendingUSD: 0,
     repoLentUSD: 0,

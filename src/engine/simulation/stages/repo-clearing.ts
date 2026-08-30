@@ -41,6 +41,10 @@
 
 import { RegionId, Region, InstitutionalEntity } from '../../../types';
 import { BankingSector } from '../../../domain/banking';
+import {
+  RepoContract, RepoPledge, RepoParty, repoPartyKey, repoInterestToMaturityUSD,
+  repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBucket,
+} from '../../../domain/repo';
 import { WeeklyStepContext } from './context';
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
@@ -99,6 +103,24 @@ export function collateralCapacityUSD(
 }
 
 /**
+ * REPO2 — what this bank could still raise, bucket by bucket, against paper it has not already
+ * pledged. Encumbrance is now a property of the specific paper (domain/repo.ts), so pledging
+ * thirty-year bonds no longer withholds the two-year book from the auction that prices it, and
+ * the cash a pledge raises is that bucket's own haircut rather than a blended average.
+ */
+export function unencumberedByBucket(
+  sheet: BankingSector,
+  encumberedFace: Map<string, number>
+): Map<string, number> {
+  const free = new Map<string, number>();
+  Object.entries(sheet.sovereignBondHoldingsByTenor || {}).forEach(([key, v]) => {
+    const freeUSD = Math.max(0, (Number(v) || 0) - (encumberedFace.get(key) ?? 0));
+    if (freeUSD > 0) free.set(key, freeUSD);
+  });
+  return free;
+}
+
+/**
  * The funding a bank can still raise against paper it has not already pledged — the real bound
  * on both its repo borrowing here and its bond-buying budget in 07c/07f. Already-pledged
  * collateral (repo + SRF) is excluded; the fraction is by value, applied at the pool's blended
@@ -106,13 +128,50 @@ export function collateralCapacityUSD(
  */
 export function unencumberedBorrowingCapacityUSD(
   sheet: BankingSector,
-  haircuts: Record<string, number>
+  haircuts: Record<string, number>,
+  /** REPO2: what this bank has already pledged, by bucket. Omitted falls back to the sheet's
+   *  derived scalar, for the callers that have no book to hand. */
+  encumberedFace?: Map<string, number>
 ): number {
+  if (encumberedFace) {
+    let capacityUSD = 0;
+    unencumberedByBucket(sheet, encumberedFace).forEach((freeUSD, key) => {
+      capacityUSD += freeUSD * (1 - (haircuts[key] ?? haircuts.t5 ?? 0.05));
+    });
+    return Math.max(0, capacityUSD);
+  }
   const { faceUSD, capacityUSD } = collateralCapacityUSD(sheet, haircuts);
   if (faceUSD <= 0) return 0;
   const encumberedFaceUSD = Math.min(faceUSD, sheet.repoEncumberedCollateralUSD ?? 0);
   const unencumberedShare = (faceUSD - encumberedFaceUSD) / faceUSD;
   return Math.max(0, capacityUSD * unencumberedShare);
+}
+
+/**
+ * REPO2 — which paper a borrower actually pledges, and how much of it. Cheapest-to-deliver: the
+ * lowest-haircut bucket first, because that is the paper that raises the most cash per dollar of
+ * face, which is what a treasury genuinely does. Returns the pledges and the cash they raise.
+ */
+export function selectCollateral(
+  free: Map<string, number>,
+  haircuts: Record<string, number>,
+  targetCashUSD: number
+): { pledges: RepoPledge[]; raisedUSD: number } {
+  const buckets = Array.from(free.entries())
+    .sort((a, b) => (haircuts[a[0]] ?? 1) - (haircuts[b[0]] ?? 1));
+  const pledges: RepoPledge[] = [];
+  let raisedUSD = 0;
+  for (const [bucketKey, freeFaceUSD] of buckets) {
+    if (raisedUSD >= targetCashUSD - 1) break;
+    const perDollar = 1 - (haircuts[bucketKey] ?? haircuts.t5 ?? 0.05);
+    if (perDollar <= 0) continue;
+    const wantedFaceUSD = (targetCashUSD - raisedUSD) / perDollar;
+    const faceUSD = Math.min(freeFaceUSD, wantedFaceUSD);
+    if (faceUSD <= 0) continue;
+    pledges.push({ bucketKey, faceUSD });
+    raisedUSD += faceUSD * perDollar;
+  }
+  return { pledges, raisedUSD };
 }
 
 /** The overnight half of an institution's cash sleeve — the split WS5's bill program already
@@ -121,7 +180,14 @@ export function unencumberedBorrowingCapacityUSD(
 export const CASH_SLEEVE_OVERNIGHT_SHARE = 0.5;
 
 const repoInstrumentId = (regionId: RegionId) => `${regionId}-REPO-ON`;
+const repoTermInstrumentId = (regionId: RegionId) => `${regionId}-REPO-TERM`;
 const CB_SRF_SEAT_ID = 'CB-SRF';
+/** REPO3: the term book's maturity — one quarter, the tenor the curve's own front point prices,
+ *  so a lender's outside option over it is something the model already publishes. */
+export const REPO_TERM_WEEKS = 13;
+/** A perfectly elastic window stands at full size AT its posted rate; the numerical step that
+ *  represents that vertical schedule sits just below it. See the seat's comment in runBook. */
+const SRF_SEAT_STEP_BPS = 1;
 
 export interface RepoSessionResult {
   repoRateAnnual: number;
@@ -149,42 +215,73 @@ export function runRegionalRepoSession(
   sheetByTicker: Map<string, BankingSector>,
   ctx: WeeklyStepContext
 ): RepoSessionResult {
+  const week = ctx.nextWeek;
   const priorRepoRateAnnual = reg.repoRateAnnual ?? reg.policyRate;
   const policyBps = reg.policyRate * 10000;
   const rrpBps = Math.max(0, policyBps - ON_RRP_SPREAD_BPS);
   const srfBps = policyBps + SRF_SPREAD_BPS;
   const corridorWidthBps = Math.max(1, srfBps - rrpBps);
-  const instrumentId = repoInstrumentId(regionId);
+  const onInstrumentId = repoInstrumentId(regionId);
+  const termInstrumentId = repoTermInstrumentId(regionId);
   const haircuts = computeSovereignRepoHaircuts(reg);
 
-  // ---- Mature last week's institutional positions: principal plus interest at the rate the
-  // position was struck at. (Bank maturations already flowed in evolveBankingSector step 1;
-  // the paying side of THIS interest flowed there too, so the money arrives here having
-  // genuinely left the borrowers.) ----
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-    if (e.region !== regionId) return e;
-    const lentUSD = e.repoLentUSD ?? 0;
-    if (lentUSD <= 0) return e;
-    return {
-      ...e,
-      cashUSD: (e.cashUSD ?? 0) + lentUSD + (lentUSD * priorRepoRateAnnual) / 52,
-      repoLentUSD: 0,
-    };
+  // ---- REPO1: last week's contracts. What matured has settled (bank legs inside
+  // evolveBankingSector, institutional legs below); what has not matured is still outstanding
+  // and still encumbers its own collateral. ----
+  const priorBook = reg.repoBook ?? [];
+  const maturedNow = priorBook.filter((c) => c.maturityWeek <= week);
+  const carriedBook = priorBook.filter((c) => c.maturityWeek > week);
+
+  // ---- Mature the institutional lenders' legs: principal plus the interest their contract
+  // actually promised, at the rate IT was struck at and over the term IT ran. (The paying side
+  // flowed in evolveBankingSector, so the money arrives here having genuinely left a borrower.)
+  const maturedByEntity = new Map<string, number>();
+  maturedNow.forEach((c) => {
+    if (c.lender.kind !== 'INSTITUTION') return;
+    maturedByEntity.set(
+      c.lender.id,
+      (maturedByEntity.get(c.lender.id) ?? 0) + c.principalUSD + repoInterestToMaturityUSD(c)
+    );
   });
+  if (maturedByEntity.size > 0) {
+    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
+      const backUSD = maturedByEntity.get(e.id);
+      if (!backUSD) return e;
+      return { ...e, cashUSD: (e.cashUSD ?? 0) + backUSD };
+    });
+  }
+
+  // What each bank still has pledged against contracts that did NOT mature.
+  const encumberedByTicker = new Map<string, Map<string, number>>();
+  banks.forEach((b) => encumberedByTicker.set(b.ticker, encumberedFaceByBucket(carriedBook, b.ticker)));
 
   // ---- Borrowers: real shortfall to the buffer, bounded by unencumbered collateral. ----
-  const borrowNeedByTicker = new Map<string, number>();
-  let totalNeedUSD = 0;
+  // REPO3: the need splits by how long it has already lasted. Money a bank has needed every
+  // week — the part of this week's need that is simply ROLLING a contract that just matured —
+  // is structural funding and belongs at term; the increment on top of it is this week's cash
+  // dip and belongs overnight. A treasury that funds a permanent book overnight is running the
+  // maturity mismatch a funding squeeze is made of, and this is what lets it.
+  const rolledByTicker = new Map<string, number>();
+  maturedNow.forEach((c) => rolledByTicker.set(c.borrowerTicker, (rolledByTicker.get(c.borrowerTicker) ?? 0) + c.principalUSD));
+
+  const needByTicker = new Map<string, { onUSD: number; termUSD: number }>();
+  let totalOnNeedUSD = 0;
+  let totalTermNeedUSD = 0;
   banks.forEach((bank) => {
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
     const shortfallUSD = sheet.depositsUSD * MIN_CASH_BUFFER_RATIO - sheet.cashReservesUSD;
     if (shortfallUSD <= 0) return;
-    const needUSD = Math.min(shortfallUSD, unencumberedBorrowingCapacityUSD(sheet, haircuts));
+    const capacityUSD = unencumberedBorrowingCapacityUSD(sheet, haircuts, encumberedByTicker.get(bank.ticker));
+    const needUSD = Math.min(shortfallUSD, capacityUSD);
     if (needUSD <= 0) return;
-    borrowNeedByTicker.set(bank.ticker, needUSD);
-    totalNeedUSD += needUSD;
+    const termUSD = Math.min(needUSD, rolledByTicker.get(bank.ticker) ?? 0);
+    const onUSD = needUSD - termUSD;
+    needByTicker.set(bank.ticker, { onUSD, termUSD });
+    totalOnNeedUSD += onUSD;
+    totalTermNeedUSD += termUSD;
   });
+  const totalNeedUSD = totalOnNeedUSD + totalTermNeedUSD;
 
   // ---- Lenders (whether or not there is need this week, their idle overnight cash earns the
   // administered floor: an institution's unlent overnight sleeve is implicitly parked at the
@@ -196,23 +293,42 @@ export function runRegionalRepoSession(
     if (sleeveUSD > 0) overnightSleeveByEntity.set(e.id, sleeveUSD);
   });
 
+  const finish = (book: RepoContract[], onRateAnnual: number, termRateAnnual: number | undefined,
+                  clearedVolumeUSD: number): RepoSessionResult => {
+    reg.repoBook = book;
+    reg.repoTermRateAnnual = termRateAnnual === undefined ? undefined : Number(termRateAnnual.toFixed(6));
+    // REPO1: every scalar the sheets carried is now DERIVED from the book — the G2 pattern.
+    banks.forEach((bank) => {
+      const sheet = sheetByTicker.get(bank.ticker);
+      if (!sheet) return;
+      sheetByTicker.set(bank.ticker, {
+        ...sheet,
+        repoBorrowedUSD: Number((repoBorrowedUSD(book, bank.ticker) - srfBorrowedUSD(book, bank.ticker)).toFixed(0)),
+        srfBorrowingUSD: Number(srfBorrowedUSD(book, bank.ticker).toFixed(0)),
+        repoLentUSD: Number(repoLentUSD(book, { kind: 'BANK', ticker: bank.ticker }).toFixed(0)),
+        repoEncumberedCollateralUSD: Number(
+          Array.from(encumberedFaceByBucket(book, bank.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+        ),
+      });
+    });
+    const lentByEntityId = new Map<string, number>();
+    book.forEach((c) => {
+      if (c.lender.kind !== 'INSTITUTION') return;
+      lentByEntityId.set(c.lender.id, (lentByEntityId.get(c.lender.id) ?? 0) + c.principalUSD);
+    });
+    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) =>
+      e.region === regionId ? { ...e, repoLentUSD: Number((lentByEntityId.get(e.id) ?? 0).toFixed(0)) } : e
+    );
+    return { repoRateAnnual: onRateAnnual, sheetByTicker, fundableNeedUSD: totalNeedUSD, clearedVolumeUSD };
+  };
+
   if (!(totalNeedUSD > 0)) {
     // No borrower: nothing clears, the overnight complex sits at its floor, and the sleeves
     // earn the RRP rate there.
     creditRrpOnUnlentSleeves(ctx, regionId, overnightSleeveByEntity, new Map(), rrpBps);
-    return { repoRateAnnual: rrpBps / 10000, sheetByTicker, fundableNeedUSD: 0, clearedVolumeUSD: 0 };
+    return finish(carriedBook, rrpBps / 10000, undefined, 0);
   }
 
-  const instrument: ClearingInstrument = {
-    id: instrumentId,
-    outstandingUSD: totalNeedUSD,
-    tradableFloatUSD: totalNeedUSD,
-    currentStat: priorRepoRateAnnual * 10000,
-    statKind: 'YIELD_LIKE',
-    durationYears: 1 / 52,
-  };
-
-  const participants: ClearingParticipant[] = [];
   const lenderSchedule = (reservationBps: number, maxHoldingUSD: number): ParticipantDemand => ({
     reservationStat: reservationBps,
     maxHoldingUSD,
@@ -221,115 +337,235 @@ export function runRegionalRepoSession(
     fullSizeStatRange: corridorWidthBps,
   });
 
-  // Surplus banks: reservation is the policy rate their reserves already earn (IOR).
+  /** Available lender cash this session, decremented as each book takes it. */
+  const bankSurplusUSD = new Map<string, number>();
   banks.forEach((bank) => {
     const sheet = sheetByTicker.get(bank.ticker);
     if (!sheet) return;
     const surplusUSD = sheet.cashReservesUSD - sheet.depositsUSD * MIN_CASH_BUFFER_RATIO;
-    if (surplusUSD <= 0) return;
-    participants.push({
-      id: `BANK-${bank.ticker}`,
-      currentHoldingsByInstrumentId: new Map(),
-      demandByInstrumentId: new Map([[instrumentId, lenderSchedule(policyBps, surplusUSD)]]),
-    });
+    if (surplusUSD > 0) bankSurplusUSD.set(bank.ticker, surplusUSD);
   });
+  const entitySleeveUSD = new Map(overnightSleeveByEntity);
 
-  // Institutions: reservation is the RRP rate their idle cash earns at the window.
-  overnightSleeveByEntity.forEach((sleeveUSD, entityId) => {
-    participants.push({
-      id: `INST-${entityId}`,
-      currentHoldingsByInstrumentId: new Map(),
-      demandByInstrumentId: new Map([[instrumentId, lenderSchedule(rrpBps, sleeveUSD)]]),
-    });
-  });
-
-  // The standing repo facility: a posted rate with unlimited quantity response — a real seat
-  // in the book (rule 1's administered exception), which is what makes the ceiling a market
-  // outcome instead of a clamp. A perfectly elastic window stands at FULL size exactly AT its
-  // posted rate, so the one-basis-point numerical step that represents the vertical schedule
-  // sits just BELOW it — a seat whose step straddled the posted rate cleared up to 1bp above
-  // the window, which no borrower with window access would ever pay (measured as 16
-  // corridor-ceiling breaches in the first 60-week run).
-  const SRF_SEAT_STEP_BPS = 1;
-  participants.push({
-    id: CB_SRF_SEAT_ID,
-    currentHoldingsByInstrumentId: new Map(),
-    demandByInstrumentId: new Map([[instrumentId, {
-      reservationStat: srfBps - SRF_SEAT_STEP_BPS,
-      maxHoldingUSD: totalNeedUSD,
-      fullSizeStatRange: SRF_SEAT_STEP_BPS,
-    }]]),
-  });
-
-  const result = clearFinancialAsset([instrument], participants, new Map(), {
-    // Bilateral GC at one rate — no desk in the middle taking a spread out of it.
-    dealerSpreadBps: 0,
-    // Overnight money reprices to the corridor the week policy moves; the corridor — the
-    // participants' own posted outside options — is the real bound. The damper is set so wide
-    // it cannot be the thing that prints (the harness asserts the corridor every week, so a
-    // damper-bound print would be caught as a violation, per §6's damper-diagnostic doctrine).
-    maxWeeklyStatMovePct: 1000,
-  });
-
-  ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
-  const clearedBps = result.newStatById.get(instrumentId) ?? priorRepoRateAnnual * 10000;
-  const repoRateAnnual = clearedBps / 10000;
-
-  // ---- Settle lenders. ----
-  const lentByEntity = new Map<string, number>();
-  let privateLentUSD = 0;
-  let srfLentUSD = 0;
-  result.newParticipantHoldings.forEach((byInstrument, pid) => {
-    const lentUSD = byInstrument.get(instrumentId) ?? 0;
-    if (lentUSD <= 0) return;
-    if (pid === CB_SRF_SEAT_ID) { srfLentUSD += lentUSD; return; }
-    privateLentUSD += lentUSD;
-    if (pid.startsWith('BANK-')) {
-      const ticker = pid.replace('BANK-', '');
-      const sheet = sheetByTicker.get(ticker)!;
-      sheetByTicker.set(ticker, {
-        ...sheet,
-        cashReservesUSD: sheet.cashReservesUSD - lentUSD,
-        repoLentUSD: lentUSD,
+  /**
+   * One book's session. `reservationOf` is each lender's own outside option over THIS book's
+   * term — the whole reason the corridor holds without a clamp, now asked at two maturities.
+   */
+  const runBook = (args: {
+    instrumentId: string;
+    needUSD: number;
+    currentBps: number;
+    bankReservationBps: number;
+    instReservationBps: number;
+    withWindow: boolean;
+  }) => {
+    const instrument: ClearingInstrument = {
+      id: args.instrumentId,
+      outstandingUSD: args.needUSD,
+      tradableFloatUSD: args.needUSD,
+      currentStat: args.currentBps,
+      statKind: 'YIELD_LIKE',
+      durationYears: 1 / 52,
+    };
+    const participants: ClearingParticipant[] = [];
+    bankSurplusUSD.forEach((surplusUSD, ticker) => {
+      if (surplusUSD <= 0) return;
+      participants.push({
+        id: `BANK-${ticker}`,
+        currentHoldingsByInstrumentId: new Map(),
+        demandByInstrumentId: new Map([[args.instrumentId, lenderSchedule(args.bankReservationBps, surplusUSD)]]),
       });
-    } else {
-      lentByEntity.set(pid.replace('INST-', ''), lentUSD);
+    });
+    entitySleeveUSD.forEach((sleeveUSD, entityId) => {
+      if (sleeveUSD <= 0) return;
+      participants.push({
+        id: `INST-${entityId}`,
+        currentHoldingsByInstrumentId: new Map(),
+        demandByInstrumentId: new Map([[args.instrumentId, lenderSchedule(args.instReservationBps, sleeveUSD)]]),
+      });
+    });
+    if (args.withWindow) {
+      // The standing repo facility: a posted rate with unlimited quantity response — a real seat
+      // in the book (rule 1's administered exception), which is what makes the ceiling a market
+      // outcome instead of a clamp. A perfectly elastic window stands at FULL size exactly AT its
+      // posted rate, so the one-basis-point numerical step that represents the vertical schedule
+      // sits just BELOW it — a seat whose step straddled the posted rate cleared up to 1bp above
+      // the window, which no borrower with window access would ever pay (measured as 16
+      // corridor-ceiling breaches in the first 60-week run).
+      participants.push({
+        id: CB_SRF_SEAT_ID,
+        currentHoldingsByInstrumentId: new Map(),
+        demandByInstrumentId: new Map([[args.instrumentId, {
+          reservationStat: srfBps - SRF_SEAT_STEP_BPS,
+          maxHoldingUSD: args.needUSD,
+          fullSizeStatRange: SRF_SEAT_STEP_BPS,
+        }]]),
+      });
     }
+    if (participants.length === 0) return { clearedBps: args.currentBps, lentByParty: new Map<string, number>(), totalLentUSD: 0 };
+
+    const result = clearFinancialAsset([instrument], participants, new Map(), {
+      // Bilateral GC at one rate — no desk in the middle taking a spread out of it.
+      dealerSpreadBps: 0,
+      // Overnight money reprices to the corridor the week policy moves; the corridor — the
+      // participants' own posted outside options — is the real bound. The damper is set so wide
+      // it cannot be the thing that prints (the harness asserts the corridor every week, so a
+      // damper-bound print would be caught as a violation, per §6's damper-diagnostic doctrine).
+      maxWeeklyStatMovePct: 1000,
+    });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    const clearedBps = result.newStatById.get(args.instrumentId) ?? args.currentBps;
+    const lentByParty = new Map<string, number>();
+    let totalLentUSD = 0;
+    result.newParticipantHoldings.forEach((byInstrument, pid) => {
+      const lentUSD = byInstrument.get(args.instrumentId) ?? 0;
+      if (lentUSD <= 0) return;
+      lentByParty.set(pid, lentUSD);
+      totalLentUSD += lentUSD;
+      // The cash is committed: it cannot fund the other book too.
+      if (pid.startsWith('BANK-')) {
+        const t = pid.replace('BANK-', '');
+        bankSurplusUSD.set(t, Math.max(0, (bankSurplusUSD.get(t) ?? 0) - lentUSD));
+      } else if (pid.startsWith('INST-')) {
+        const id = pid.replace('INST-', '');
+        entitySleeveUSD.set(id, Math.max(0, (entitySleeveUSD.get(id) ?? 0) - lentUSD));
+      }
+    });
+    return { clearedBps, lentByParty, totalLentUSD };
+  };
+
+  // ---- REPO3: term first. A lender's outside option over a quarter is the three-month zero
+  // its own money could earn instead, which is exactly what the curve prints; the window does
+  // NOT sit in this book, because the standing facility is overnight — so a term need the
+  // private market will not fund simply is not funded, and falls back to overnight below. That
+  // is a funding squeeze, and it could not previously happen.
+  const termBps = Math.max(0, (reg.zeroRates?.tenor3M ?? reg.policyRate) * 10000);
+  const term = totalTermNeedUSD > 0
+    ? runBook({
+        instrumentId: termInstrumentId,
+        needUSD: totalTermNeedUSD,
+        currentBps: (reg.repoTermRateAnnual ?? reg.policyRate) * 10000,
+        bankReservationBps: termBps,
+        instReservationBps: Math.max(0, termBps - ON_RRP_SPREAD_BPS),
+        withWindow: false,
+      })
+    : { clearedBps: termBps, lentByParty: new Map<string, number>(), totalLentUSD: 0 };
+
+  // Whatever term did not fund still has to be funded today.
+  const onNeedUSD = totalOnNeedUSD + Math.max(0, totalTermNeedUSD - term.totalLentUSD);
+  const overnight = onNeedUSD > 0
+    ? runBook({
+        instrumentId: onInstrumentId,
+        needUSD: onNeedUSD,
+        currentBps: priorRepoRateAnnual * 10000,
+        bankReservationBps: policyBps,
+        instReservationBps: rrpBps,
+        withWindow: true,
+      })
+    : { clearedBps: rrpBps, lentByParty: new Map<string, number>(), totalLentUSD: 0 };
+
+  // ---- Settle. Every dollar becomes a CONTRACT with both parties named: at one cleared rate a
+  // lender's cash is fungible, so each borrower draws from each lender in proportion to what
+  // that lender put into the book — which is what "general collateral" means. ----
+  const newContracts: RepoContract[] = [];
+  const encumberedWorking = new Map<string, Map<string, number>>();
+  banks.forEach((b) => encumberedWorking.set(b.ticker, new Map(encumberedByTicker.get(b.ticker) ?? new Map())));
+  let contractSeq = 0;
+
+  const strike = (
+    lentByParty: Map<string, number>,
+    totalLentUSD: number,
+    rateAnnual: number,
+    termWeeks: number,
+    needOf: (t: string) => number,
+    totalNeedForBookUSD: number
+  ) => {
+    if (totalLentUSD <= 0 || totalNeedForBookUSD <= 0) return 0;
+    const fundedShare = Math.min(1, totalLentUSD / totalNeedForBookUSD);
+    let struckUSD = 0;
+    needByTicker.forEach((_need, ticker) => {
+      const wantUSD = needOf(ticker) * fundedShare;
+      if (wantUSD <= 0) return;
+      const sheet = sheetByTicker.get(ticker)!;
+      const worked = encumberedWorking.get(ticker)!;
+      lentByParty.forEach((lentUSD, pid) => {
+        const shareUSD = wantUSD * (lentUSD / totalLentUSD);
+        if (shareUSD <= 1) return;
+        const free = unencumberedByBucket(sheet, worked);
+        const { pledges, raisedUSD } = selectCollateral(free, haircuts, shareUSD);
+        if (raisedUSD <= 1) return;
+        const principalUSD = Math.min(shareUSD, raisedUSD);
+        pledges.forEach((pl) => worked.set(pl.bucketKey, (worked.get(pl.bucketKey) ?? 0) + pl.faceUSD));
+        const lender: RepoParty = pid === CB_SRF_SEAT_ID
+          ? { kind: 'CENTRAL_BANK' }
+          : pid.startsWith('BANK-')
+            ? { kind: 'BANK', ticker: pid.replace('BANK-', '') }
+            : { kind: 'INSTITUTION', id: pid.replace('INST-', '') };
+        newContracts.push({
+          id: `${regionId}-REPO-${week}-${contractSeq++}`,
+          regionId,
+          lender,
+          borrowerTicker: ticker,
+          principalUSD: Number(principalUSD.toFixed(0)),
+          rateAnnual,
+          struckWeek: week,
+          maturityWeek: week + termWeeks,
+          collateral: pledges.map((pl) => ({ bucketKey: pl.bucketKey, faceUSD: Number(pl.faceUSD.toFixed(0)) })),
+        });
+        struckUSD += principalUSD;
+      });
+    });
+    return struckUSD;
+  };
+
+  const termStruckUSD = strike(
+    term.lentByParty, term.totalLentUSD, term.clearedBps / 10000, REPO_TERM_WEEKS,
+    (t) => needByTicker.get(t)?.termUSD ?? 0, totalTermNeedUSD
+  );
+  const unfundedTermUSD = Math.max(0, totalTermNeedUSD - termStruckUSD);
+  const onStruckUSD = strike(
+    overnight.lentByParty, overnight.totalLentUSD, overnight.clearedBps / 10000, 1,
+    (t) => {
+      const n = needByTicker.get(t);
+      if (!n) return 0;
+      // A bank whose term leg went unfunded carries that need overnight too.
+      const shortTermUSD = totalTermNeedUSD > 0 ? unfundedTermUSD * (n.termUSD / totalTermNeedUSD) : 0;
+      return n.onUSD + shortTermUSD;
+    },
+    onNeedUSD
+  );
+
+  // The cash the contracts actually raised, on both sides.
+  const cashByTicker = new Map<string, number>();
+  const lentByEntity = new Map<string, number>();
+  newContracts.forEach((c) => {
+    cashByTicker.set(c.borrowerTicker, (cashByTicker.get(c.borrowerTicker) ?? 0) + c.principalUSD);
+    if (c.lender.kind === 'BANK') {
+      const sheet = sheetByTicker.get(c.lender.ticker);
+      if (sheet) sheetByTicker.set(c.lender.ticker, { ...sheet, cashReservesUSD: sheet.cashReservesUSD - c.principalUSD });
+    } else if (c.lender.kind === 'INSTITUTION') {
+      lentByEntity.set(c.lender.id, (lentByEntity.get(c.lender.id) ?? 0) + c.principalUSD);
+    }
+  });
+  cashByTicker.forEach((cashUSD, ticker) => {
+    const sheet = sheetByTicker.get(ticker)!;
+    sheetByTicker.set(ticker, { ...sheet, cashReservesUSD: sheet.cashReservesUSD + cashUSD });
   });
   if (lentByEntity.size > 0) {
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
       const lentUSD = lentByEntity.get(e.id);
       if (!lentUSD) return e;
-      return { ...e, cashUSD: (e.cashUSD ?? 0) - lentUSD, repoLentUSD: lentUSD };
+      return { ...e, cashUSD: (e.cashUSD ?? 0) - lentUSD };
     });
   }
   creditRrpOnUnlentSleeves(ctx, regionId, overnightSleeveByEntity, lentByEntity, rrpBps);
 
-  // ---- Settle borrowers: one GC rate for everyone; when the book is short the shortfall is
-  // shared pro rata to need, and the same shares decide how much of each borrower's funding is
-  // market repo versus the window. Collateral for both legs is encumbered at face implied by
-  // the blended haircut actually applied. ----
-  const totalLentUSD = privateLentUSD + srfLentUSD;
-  const fundedShare = Math.min(1, totalLentUSD / totalNeedUSD);
-  const privateShare = totalLentUSD > 0 ? privateLentUSD / totalLentUSD : 0;
-  borrowNeedByTicker.forEach((needUSD, ticker) => {
-    const sheet = sheetByTicker.get(ticker)!;
-    const fundedUSD = needUSD * fundedShare;
-    const repoBorrowedUSD = fundedUSD * privateShare;
-    const srfBorrowingUSD = fundedUSD - repoBorrowedUSD;
-    const { faceUSD, capacityUSD } = collateralCapacityUSD(sheet, haircuts);
-    const blendedHaircutFactor = faceUSD > 0 ? capacityUSD / faceUSD : 1;
-    const pledgedFaceUSD = blendedHaircutFactor > 0 ? fundedUSD / blendedHaircutFactor : fundedUSD;
-    sheetByTicker.set(ticker, {
-      ...sheet,
-      cashReservesUSD: sheet.cashReservesUSD + fundedUSD,
-      repoBorrowedUSD: Number(repoBorrowedUSD.toFixed(0)),
-      srfBorrowingUSD: Number(srfBorrowingUSD.toFixed(0)),
-      repoEncumberedCollateralUSD: Number(Math.min(faceUSD, (sheet.repoEncumberedCollateralUSD ?? 0) + pledgedFaceUSD).toFixed(0)),
-    });
-  });
-
-  return { repoRateAnnual, sheetByTicker, fundableNeedUSD: totalNeedUSD, clearedVolumeUSD: totalLentUSD };
+  return finish(
+    [...carriedBook, ...newContracts],
+    overnight.clearedBps / 10000,
+    term.clearedBps / 10000,
+    termStruckUSD + onStruckUSD
+  );
 }
 
 /**

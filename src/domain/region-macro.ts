@@ -2,6 +2,7 @@
  *  market, its housing stock, its government's debt, its banks and institutions, and its weather. */
 
 import { RegionId } from './geography';
+import { RepoContract } from './repo';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSector, AssetOwnershipShares } from './banking';
@@ -604,6 +605,18 @@ export interface Region {
    * sheets carry positions, never a second copy of the rate.
    */
   repoRateAnnual: number;
+  /**
+   * REPO1 — this region's live secured-funding book: every open contract, with its lender, its
+   * borrower, the rate it was struck at, when it matures and the specific paper pledged. Stored
+   * ONCE with both parties named, which is what makes the position two-sided (rule 14) without
+   * being two copies of one thing (rule 3). The sheets' `repoLentUSD`, `repoBorrowedUSD`,
+   * `srfBorrowingUSD` and encumbrance are all derived from it (domain/repo.ts).
+   */
+  repoBook?: RepoContract[];
+  /** REPO3 — the cleared TERM secured rate (annualised decimal), when the term book traded.
+   *  A bank funding a long book at overnight and being caught by it is the mechanism a funding
+   *  squeeze actually is, and it needs two prices to exist. */
+  repoTermRateAnnual?: number;
   /** GUARD — the repo session's own volume diagnostic (see RepoSessionResult). */
   repoFundableNeedUSD?: number;
   repoClearedVolumeUSD?: number;
