@@ -280,10 +280,25 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       let layoffs = desiredWeeklyChange < 0
         ? Math.max(0, -desiredWeeklyChange * LAYOFF_SPEED_MULTIPLE - quits)
         : 0;
-      // SEG-D: a pool out of cash sheds staff, exactly as a named firm does above. Without this
-      // a pool whose costs outran its receipts kept its entire headcount indefinitely, financed
-      // by nothing — and the workers never reached the pools that could actually pay them, which
-      // is the reallocation that makes the tier's composition move at all.
+      // DIST — DISTRESS LAYOFFS INTEGRATE OVER THE POOL'S STRATA, NOT OVER ITS MEAN.
+      //
+      // The rule above is `cash < 0 → shed`, applied PER FIRM to the named tier: each firm
+      // crosses its own threshold or does not. Applied to a pool's TOTAL it says something quite
+      // different — that either every firm in the pool has distress layoffs or none does — and it
+      // is the same code at two resolutions with only one of them right (rule 3, §5-DIST).
+      //
+      // DIST already measures which strata cannot service what they owe, and the exiting weight
+      // at the absorbing barrier is drawn from exactly that (§7.143). The employment side reads
+      // the same integral: the share of the pool's firms in trouble sheds, and the rest does not.
+      // A pool whose aggregate cash is comfortable while a third of its firms cannot cover their
+      // interest now sheds that third — which the mean could not express.
+      const distressedShare = seg.distressedFirmShare ?? ((seg.cashUSD ?? 0) < 0 ? 1 : 0);
+      if (distressedShare > 0) {
+        layoffs = Math.max(layoffs, current * distressedShare * DISTRESS_LAYOFF_SPEED);
+      }
+      // The whole pool running out of money is still the acute case, and it is not the same
+      // statement: the strata above are about firms that cannot service DEBT, this is a pool
+      // that cannot make PAYROLL.
       if ((seg.cashUSD ?? 0) < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
       OCCUPATIONS.forEach((occ) => {
         const w = (mix as Partial<Record<OccupationType, number>>)[occ] ?? 0;

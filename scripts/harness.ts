@@ -1310,6 +1310,19 @@ const indModule: HarnessModule = (() => {
     }, 0);
     out.push(`  work in progress carried across every firm: ${B(totalWipUSD)}`);
 
+    out.push('--- DIST: the SME pools, and what share of each cannot service its debt ---');
+    REGIONS.forEach(r => {
+      const pools: any[] = (s.regions[r] as any).smePools ?? [];
+      if (pools.length === 0) return;
+      const shares = pools.map(p => p.distressedFirmShare ?? 0).sort((a, b) => a - b);
+      const cashNeg = pools.filter(p => (p.cashUSD ?? 0) < 0).length;
+      const q = (f: number) => shares[Math.min(shares.length - 1, Math.floor(f * shares.length))];
+      // The point of the integral: pools whose AGGREGATE cash is fine but whose levered strata
+      // are not. On the mean those sheds never happened.
+      const hidden = pools.filter(p => (p.cashUSD ?? 0) >= 0 && (p.distressedFirmShare ?? 0) > 0.01).length;
+      out.push(`  ${r}: ${pools.length} pools | distressed share p10 ${q(0.1).toFixed(3)} p50 ${q(0.5).toFixed(3)} p90 ${q(0.9).toFixed(3)} | pool cash negative: ${cashNeg} | solvent pools with distressed strata: ${hidden}`);
+    });
+
     out.push('--- IND: the cost structure every firm sheds against ---');
     // §5-EMP/§5-CHAIN's diagnosis, measured rather than restated: the labour rule sheds on
     // `capitalCharge - ebitda`, so what matters is where the distribution of firms sits against

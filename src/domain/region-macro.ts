@@ -316,6 +316,17 @@ export interface SmePool {
   /** DIST — the pool's leverage cross-section. Absent = not yet seeded; every decision that is
    *  nonlinear in leverage integrates over this instead of reading the pool's mean. */
   strata?: SmePoolStratum[];
+  /**
+   * DIST — THE SHARE OF THIS POOL'S FIRMS THAT CANNOT SERVICE WHAT THEY OWE, integrated over the
+   * strata rather than read off the pool's mean.
+   *
+   * Measured in `sme-pools.ts`, where the strata and the distress function already live, and
+   * read by `labor-market.ts` — one representation of one number (rule 3). It exists because the
+   * SAME distress rule was being applied at two different resolutions: `cash < 0 → shed staff`
+   * ran PER FIRM for the named tier and against the pool's TOTAL for segments, so either every
+   * firm in a pool had distress layoffs or none did.
+   */
+  distressedFirmShare?: number;
 }
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';

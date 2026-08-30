@@ -175,6 +175,13 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
         const distressOf = (lev: number) => Math.max(0, 1 - coverageOf(lev))
           + Math.max(0, 1 - (cashCoverWeeks * (residualOf(lev) / Math.max(1e-9, meanResidual))) / TARGET_CASH_WEEKS_OF_WAGES);
         const totalDistress = pool.strata.reduce((a, st) => a + st.weight * distressOf(st.leverageMultiple), 0);
+        // DIST — the same integral, published for the employment side. A firm that cannot cover
+        // its debt service is the firm that sheds staff, and that is a property of the STRATA,
+        // not of the pool's average. Bounded at 1 because it is a SHARE OF FIRMS — a definitional
+        // bound, not a behavioural one (rule 2): `distressOf` sums a coverage term and a cash
+        // term, so it can exceed 1 for a stratum failing on both, and no more of a pool than all
+        // of it can be in trouble.
+        pool.distressedFirmShare = Number(Math.max(0, Math.min(1, totalDistress)).toFixed(4));
         if (weeklyExitRate > 0 && totalDistress > 0) {
           const leastLevered = pool.strata.reduce((lo, st) => st.leverageMultiple < lo ? st.leverageMultiple : lo, Infinity);
           let reinjectedWeight = 0;
