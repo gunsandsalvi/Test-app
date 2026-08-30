@@ -47,11 +47,19 @@ export const ON_RRP_SPREAD_BPS = 20;
  * not the other would have made the diverted amount and the amount it is measured against
  * disagree — §7.5's duplicated-constant shape, the same defect as the 0.35 procurement literal.
  *
- * RULE 13, OPEN: it is still a stated split. Where a household's saving goes is a portfolio
- * choice it should make on the yields it can see — the deposit rate, the money fund, the direct
- * register — and WS7 already models one leg of exactly that choice. Owner: COH.
+ * COH4 — CLOSED, and this is now the SEED ONLY (§7.4). Where a household's saving goes is a
+ * portfolio choice it makes, and COH2 already makes it: the split by MOTIVE. The buffer half
+ * stays where it can be spent, which is a deposit; the life-cycle half leaves as a pension
+ * contribution. `householdState.liquidSavingShare` is that same split, measured every week, and
+ * every weekly reader takes it — this value is what the first pass opens on and nothing else.
  */
-export const HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE = 0.3;
+export const HOUSEHOLD_SAVINGS_TO_DEPOSITS_SEED_SHARE = 0.3;
+
+/** The share of saving that reaches the banks: measured where it is decided, seeded before. */
+export function savingsToDepositsShare(hs?: { liquidSavingShare?: number }): number {
+  const measured = hs?.liquidSavingShare;
+  return measured !== undefined && measured >= 0 ? measured : HOUSEHOLD_SAVINGS_TO_DEPOSITS_SEED_SHARE;
+}
 
 /** Share of deposits a bank's own treasury keeps as ready cash — its operating-buffer policy.
  * Below it the bank funds itself (repo, then the SRF); this is a behavioural policy choice,
@@ -246,7 +254,11 @@ export function evolveBankingSector(
    * shows up; the 40bps constant this replaces was identical for a sound bank and a breaching
    * one. Defaults to the posted constant only for a bank with no cleared spread yet (week 1).
    */
-  ownWholesaleSpreadBps: number = WHOLESALE_FUNDING_SPREAD_BPS
+  ownWholesaleSpreadBps: number = WHOLESALE_FUNDING_SPREAD_BPS,
+  /** COH4: the share of the region's household saving that arrives as a DEPOSIT rather than
+   * leaving as a pension contribution — measured by the cohorts' own motive split, not stated.
+   * Defaults to the seed share, which is all the first pass has (§7.4). */
+  savingsToDepositsShareValue: number = HOUSEHOLD_SAVINGS_TO_DEPOSITS_SEED_SHARE
 ): BankingSector {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
   let cashUSD = prevBanking.cashReservesUSD;
@@ -352,7 +364,7 @@ export function evolveBankingSector(
     Math.max(0, competingMmfYieldAnnual)
   );
   const fundingPressure = weeklySavingsInflowUSD > 0
-    ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE)))
+    ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * savingsToDepositsShareValue)))
     : 0;
   const stressedUSD = stressedOutflowUSD(prevBanking) * LIQUIDITY_COVERAGE_RATIO;
   const liquidityShortfallShare = stressedUSD > 0

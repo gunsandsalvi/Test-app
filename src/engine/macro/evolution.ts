@@ -989,6 +989,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // drawdown drift is gone — the household-balance-sheet stage derives each tier's net worth
   // as a split of the same marked components the aggregate is built from, every week, after
   // the clearing books. Only the income line (the cohorts' summed disposable) is written here.
+  let savedGrossThisWeekUSD = 0;
+  let savedToDepositsThisWeekUSD = 0;
   (Object.keys(updatedWealthDist) as WealthTier[]).forEach(t => {
     // DIST/COH: the tier's cumulative saving, which its deposit share is derived from. The
     // cohorts already measure what each tier saved this week; this is the stock that flow builds.
@@ -1021,6 +1023,16 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       ?? Math.max(0, priorAccumulated ?? 0) * exposure);
     const lifeCycleThisWeekUSD = Math.max(0,
       Math.min(savedThisWeekUSD, (cohortResult.tierLifeCycleSavingUSD[t] ?? 0) / 52));
+    // COH4 — WHERE THE WEEK'S SAVING ACTUALLY GOES, measured. `HOUSEHOLD_SAVINGS_TO_DEPOSITS_
+    // SHARE = 0.3` stated it, and its own comment convicted it: where a household's saving goes
+    // is a portfolio choice it makes, and COH2 already makes it — by MOTIVE, which is exactly the
+    // split that decides it. The buffer half stays where it can be spent, which is a deposit; the
+    // life-cycle half leaves as a pension contribution. This is that same split, summed, so the
+    // banks' funding competition reads the households' own decision instead of a constant.
+    if (savedThisWeekUSD > 0) {
+      savedGrossThisWeekUSD += savedThisWeekUSD;
+      savedToDepositsThisWeekUSD += savedThisWeekUSD - lifeCycleThisWeekUSD;
+    }
     if (savedThisWeekUSD >= 0) {
       liquidUSD += savedThisWeekUSD - lifeCycleThisWeekUSD;
       investedUSD += lifeCycleThisWeekUSD;
@@ -1040,6 +1052,10 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       accumulatedSavingsUSD: Number((liquidUSD + investedUSD).toFixed(0)),
     };
   });
+
+  const liquidSavingShare = savedGrossThisWeekUSD > 0
+    ? Number((savedToDepositsThisWeekUSD / savedGrossThisWeekUSD).toFixed(4))
+    : undefined;
 
   const updatedRegion: Region = {
     ...region,
@@ -1104,6 +1120,10 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       savingsRate: newSavingsRate,
       realConsumptionGrowth: newRealConsumptionGrowth,
       householdDebtToIncomeRatio: newHouseholdDebtToIncomeRatio,
+      // COH4: the measured share of this week's saving that stayed liquid — i.e. became a bank
+      // deposit rather than a pension contribution. Undefined in a week nobody saved, where the
+      // seed share stands in (§7.4).
+      liquidSavingShare: liquidSavingShare ?? prevHS.liquidSavingShare,
       stapleSpendShare: newStapleShare,
       standardSpendShare: newStandardShare,
       luxurySpendShare: newLuxuryShare,

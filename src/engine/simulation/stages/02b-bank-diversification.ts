@@ -27,7 +27,7 @@ import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 import {
-  evolveBankingSector, computeSovereignBookAnnualYield, HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE,
+  evolveBankingSector, computeSovereignBookAnnualYield, savingsToDepositsShare,
 } from '../../macro/banking';
 import { runRegionalRepoSession } from './repo-clearing';
 import { maturingAt, repoInterestToMaturityUSD } from '../../../domain/repo';
@@ -103,7 +103,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // WS7: the household savings flow chooses between deposits and the money fund on last
     // week's real yield gap, BEFORE the banks' deposit flow posts — the deposits simply never
     // arrive at the banks. This is the funding competition WS7 exists to create.
-    const regionSavingsDepositInflowUSD = (reg.householdState.savingsRate * reg.estimatedHouseholdIncomeUSD) / 52 * HOUSEHOLD_SAVINGS_TO_DEPOSITS_SHARE;
+    const depositShare = savingsToDepositsShare(reg.householdState);
+    const regionSavingsDepositInflowUSD = (reg.householdState.savingsRate * reg.estimatedHouseholdIncomeUSD) / 52 * depositShare;
     const regionDivertedUSD = divertHouseholdSavingsToMmf(regionId, reg, regionSavingsDepositInflowUSD, ctx);
 
     // G2: the corporate bank facilities each named bank holds, read off the borrowers' REAL
@@ -247,7 +248,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         findRegionMmf(ctx.updatedInstitutionalEntities, regionId)?.mmfNetYieldAnnual ?? 0,
         // G3c: what the market charges THIS bank for money — its own cleared credit spread,
         // printed by the same corporate-bond auction that prices every other issuer.
-        bank.oasSpreadBps > 0 ? bank.oasSpreadBps : WHOLESALE_FUNDING_SPREAD_BPS
+        bank.oasSpreadBps > 0 ? bank.oasSpreadBps : WHOLESALE_FUNDING_SPREAD_BPS,
+        // COH4: the households' own measured split, so the funding-pressure denominator and the
+        // inflow it is measured against are the SAME number (§7.5's duplicated-constant shape).
+        depositShare
       );
 
       // G2: the itemized book's own week — facility reconciliation, real interest accrual

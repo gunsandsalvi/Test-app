@@ -202,6 +202,10 @@ export interface HouseholdState {
   savingsRate: number;
   realConsumptionGrowth: number;
   householdDebtToIncomeRatio: number;
+  /** COH4 — the share of the week's household saving that stayed LIQUID, i.e. arrived at a bank
+   * as a deposit rather than leaving as a pension contribution. Measured from the motive split
+   * the cohorts already make (`evolution.ts`); the seed share stands in until the first pass. */
+  liquidSavingShare?: number;
   stapleSpendShare: number;
   standardSpendShare: number;
   luxurySpendShare: number;
