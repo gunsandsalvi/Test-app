@@ -230,6 +230,16 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       });
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
     });
+    // OWN7, first half: the float is what this book's holders hold, and the INSTITUTIONS' half of
+    // it is known here. It is set before the desks are built rather than after, because a desk is
+    // sized against the LIVE float — leaving `tradableFloatUSD` at the whole outstanding until
+    // after the desk build gave every desk capacity against an issue that is not for sale, and a
+    // float of zero makes `buildDealerDeskParticipants` hand back no desk at all.
+    const heldByInstitutionsUSD = new Map<string, number>();
+    currentHoldingByCompanyByEntity.forEach((byCompany) => byCompany.forEach((usd, id) => {
+      if (usd > 0) heldByInstitutionsUSD.set(id, (heldByInstitutionsUSD.get(id) ?? 0) + usd);
+    }));
+    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByInstitutionsUSD.get(inst.id) ?? 0; });
 
     // XB1: each entity's target is ITS OWN book — assets x its corporate-credit allocation x
     // what its mandate allows in this issuer's market. The imposed institutional share,
@@ -392,20 +402,16 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     });
     const deskTickers = deskTickersOf(deskParticipants);
 
-    // OWN7's rule, applied to this book: the float is what the participants in THIS book hold
-    // between them, plus whatever is on offer in the primary (the engine adds the offering to
-    // the float itself). A holder outside the book keeps its position, so its paper was never
-    // for sale — and the residual no named book holds at all was never for sale either, because
-    // there is no seller to decrement. Same carve-out as 07c/07e/07f, computed the same way:
-    // off what the real holders actually hold, never off a stated passive share.
-    const heldByBookUSD = new Map<string, number>();
-    const addHeld = (instrumentId: string, usd: number) => {
-      if (!(usd > 0)) return;
-      heldByBookUSD.set(instrumentId, (heldByBookUSD.get(instrumentId) ?? 0) + usd);
-    };
-    currentHoldingByCompanyByEntity.forEach((byCompany) => byCompany.forEach((usd, id) => addHeld(id, usd)));
-    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((usd, id) => addHeld(id, usd)));
-    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookUSD.get(inst.id) ?? 0; });
+    // OWN7, second half: the desks' own books join the float now that they exist. A holder
+    // outside this book keeps its position, so its paper was never for sale — and the residual no
+    // named book holds at all was never for sale either, because there is no seller to decrement.
+    const deskHeldUSD = new Map<string, number>();
+    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((usd, id) => {
+      if (usd > 0) deskHeldUSD.set(id, (deskHeldUSD.get(id) ?? 0) + usd);
+    }));
+    instruments.forEach((inst) => {
+      inst.tradableFloatUSD = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
+    });
 
     const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,

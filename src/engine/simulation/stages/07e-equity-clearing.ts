@@ -186,6 +186,16 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       currentSharesByEntity.set(entity.id, bySharesForCompany);
     });
 
+    // OWN7, first half: the INSTITUTIONS' half of the float, set BEFORE the desks are built —
+    // a desk is sized against the live float, so leaving `tradableFloatUSD` at the whole share
+    // count until after the desk build gave every desk capacity against shares that are not for
+    // sale (and a float of zero hands back no desk at all).
+    const heldByInstitutionsShares = new Map<string, number>();
+    currentSharesByEntity.forEach((byCompany) => byCompany.forEach((shares, companyId) => {
+      if (shares > 0) heldByInstitutionsShares.set(companyId, (heldByInstitutionsShares.get(companyId) ?? 0) + shares);
+    }));
+    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByInstitutionsShares.get(inst.id) ?? 0; });
+
     // G3a/G3e: the banks' equity desks, and the float they and the other participants make up.
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     const deskParticipants = buildDealerDeskParticipants({
@@ -194,22 +204,20 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     });
     const deskTickers = deskTickersOf(deskParticipants);
 
-    // OWN7's rule, finally applied to the register: the float is what the participants in THIS
-    // book hold between them, not every share that exists. `tradableFloatUSD` was
-    // `sharesOutstanding` — the whole company — while the only bidders were institutions whose
-    // mandates keep them far below it, so the book asked a demand side that can never reach the
-    // supply to price it, and the level printed at the damper week after week (§6). Founders,
-    // households and corporates on the register do not bid, so their shares were never for
-    // sale; the same carve-out 07c and 07f already make, computed the same way — off what the
-    // real holders actually hold rather than a stated passive share.
-    const heldByBookShares = new Map<string, number>();
-    const addHeld = (companyId: string, shares: number) => {
-      if (!(shares > 0)) return;
-      heldByBookShares.set(companyId, (heldByBookShares.get(companyId) ?? 0) + shares);
-    };
-    currentSharesByEntity.forEach((byCompany) => byCompany.forEach((shares, companyId) => addHeld(companyId, shares)));
-    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((shares, companyId) => addHeld(companyId, shares)));
-    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookShares.get(inst.id) ?? 0; });
+    // OWN7, second half: the desks' own books join the float now that they exist.
+    // `tradableFloatUSD` was `sharesOutstanding` — the whole company — while the only bidders
+    // were institutions whose mandates keep them far below it, so the book asked a demand side
+    // that can never reach the supply to price it, and the level printed at the damper week after
+    // week (§6). Founders, households and corporates on the register do not bid, so their shares
+    // were never for sale; the same carve-out 07c and 07f already make, computed the same way —
+    // off what the real holders actually hold rather than a stated passive share.
+    const deskHeldShares = new Map<string, number>();
+    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((shares, companyId) => {
+      if (shares > 0) deskHeldShares.set(companyId, (deskHeldShares.get(companyId) ?? 0) + shares);
+    }));
+    instruments.forEach((inst) => {
+      inst.tradableFloatUSD = (heldByInstitutionsShares.get(inst.id) ?? 0) + (deskHeldShares.get(inst.id) ?? 0);
+    });
 
     // ETF: the index funds tracking any equity index this book prices. They are ordinary holders
     // — real positions, real cash — but their schedule has no reservation level: a fund buys its

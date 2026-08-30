@@ -56,6 +56,7 @@ export const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
 export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
   'sovereign bond': 5,
   bill: 2,               // the tightest market there is
+  'commercial paper': 5, // short, high-grade, but a credit — wider than a bill, tighter than a bond
   'corporate bond': 15,
   'leveraged loan': 20,  // loan secondary markets trade wider than investment grade
   equity: 8,

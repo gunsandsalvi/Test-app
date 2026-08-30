@@ -33,7 +33,7 @@ import { WeeklyStepContext } from './context';
 
 /** The instrument types the clearing books price — the only groups the store indexes. */
 const BOOK_TYPES: ItemizedHolding['instrumentType'][] = [
-  'CORP_BOND', 'GOV_BOND', 'LEVERAGED_LOAN', 'EQUITY',
+  'CORP_BOND', 'GOV_BOND', 'LEVERAGED_LOAN', 'EQUITY', 'COMMERCIAL_PAPER',
 ];
 
 interface EntitySlot {

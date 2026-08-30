@@ -54,7 +54,9 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
     e.itemizedHoldings.forEach((h) => {
       institutionalHoldings.push(h);
       const v = h.quantityOrNotionalUSD ?? 0;
-      if (h.instrumentType === 'CORP_BOND') corp += v;
+      // CP: an issuer's short paper is corporate credit like its bonds — one view of the
+      // institutional sector's claim on companies, whatever book prices it.
+      if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'COMMERCIAL_PAPER') corp += v;
       else if (h.instrumentType === 'GOV_BOND') sov += v;
       else if (h.instrumentType === 'LEVERAGED_LOAN') loan += v;
       else if (h.instrumentType === 'EQUITY') equity += v;
@@ -130,7 +132,8 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
       const v = h.quantityOrNotionalUSD ?? 0;
       const key = h.instrumentType === 'EQUITY' ? 'equity'
         : h.instrumentType === 'GOV_BOND' ? 'sovBond'
-        : (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN') ? 'corpBond' : null;
+        : (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN'
+          || h.instrumentType === 'COMMERCIAL_PAPER') ? 'corpBond' : null;
       if (!key) return;
       accFor(held, h.issuerRegion)[key] += v;
       if (e.region !== h.issuerRegion) accFor(foreign, h.issuerRegion)[key] += v;
@@ -210,7 +213,8 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
       const v = h.quantityOrNotionalUSD ?? 0;
       if (h.instrumentType === 'EQUITY') a.equity.institutionalUSD += v;
       else if (h.instrumentType === 'GOV_BOND') a.sovBond.institutionalUSD += v;
-      else if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN') a.corpBond.institutionalUSD += v;
+      else if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN'
+        || h.instrumentType === 'COMMERCIAL_PAPER') a.corpBond.institutionalUSD += v;
     });
   });
 

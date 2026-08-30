@@ -37,7 +37,7 @@ export type ClaimHolder =
 export interface EstateClaim {
   holder: ClaimHolder;
   /** What kind of paper this holder owned — decides where it sits in the waterfall. */
-  instrumentType: 'LEVERAGED_LOAN' | 'CORP_BOND' | 'BANK_FACILITY' | 'EQUITY';
+  instrumentType: 'LEVERAGED_LOAN' | 'CORP_BOND' | 'COMMERCIAL_PAPER' | 'BANK_FACILITY' | 'EQUITY';
   seniority: number;
   principalUSD: number;
   recoveredUSD: number;

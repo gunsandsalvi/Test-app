@@ -11,8 +11,8 @@ import { FxDealerBook } from './dealer-derivatives';
 import { DealerDeskInventory } from './dealer-desk';
 
 export interface ItemizedHolding {
-  instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN: the DebtTranche.id; for GOV_BOND: the GovDebtTranche.id; for ETF_SHARE: the fund entity's id
-  instrumentType: 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'PE_FUND_INTEREST' | 'ETF_SHARE';
+  instrumentId: string; // for equity: company.id; for CORP_BOND/LEVERAGED_LOAN/COMMERCIAL_PAPER: the issuer's company.id; for GOV_BOND: the tenor-bucket id; for ETF_SHARE: the fund entity's id
+  instrumentType: 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER' | 'PE_FUND_INTEREST' | 'ETF_SHARE';
   issuerRegion: RegionId;
   quantityOrNotionalUSD: number; // dollar-denominated market value at cost
   /**

@@ -145,10 +145,6 @@ const BOUNDARY_FRONTIERS: Record<string, string> = {
   // there is nobody to pay. Shrinks to nothing as the fleet reaches every lane; the served part
   // is paid to the carrier by name (stage 05). Owner: the freight book.
   'freight on a lane no carrier serves': 'no carrier on the lane to pay',
-  // CP is issued at a derived rate with no cleared book, so its holder has no name. The money
-  // funds are the real buyer. Owner: WS7 / the CP book.
-  'commercial paper issued': 'commercial paper holders, no cleared book',
-  'commercial paper redeemed': 'commercial paper holders, no cleared book',
   // Owner: G5 — the residual claimants an estate pays once the named ones are satisfied.
   'estate distribution': 'unnamed residual claimants in a workout',
 };
@@ -173,12 +169,12 @@ function checkBoundaryFlows(state: GameState, week: number): Violation[] {
 function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
   const out: Violation[] = [];
   const regionIds = ['USA', 'EUR', 'UK', 'JPN'] as const;
-  type Book = { corp: number; loan: number; sov: number };
+  type Book = { corp: number; loan: number; sov: number; cp: number };
   const held: Record<string, Book> = {};
   const outstanding: Record<string, Book> = {};
   regionIds.forEach((r) => {
-    held[r] = { corp: 0, loan: 0, sov: 0 };
-    outstanding[r] = { corp: 0, loan: 0, sov: 0 };
+    held[r] = { corp: 0, loan: 0, sov: 0, cp: 0 };
+    outstanding[r] = { corp: 0, loan: 0, sov: 0, cp: 0 };
   });
 
   const companyRegionById = new Map<string, string>();
@@ -193,7 +189,11 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     const o = outstanding[c.region];
     if (!o) return;
     (c.debtTranches || []).forEach((t: any) => {
-      if (t.rateType === 'FIXED') o.corp += t.principalUSD; else o.loan += t.principalUSD;
+      // CP has its own book (07f) and its own holders; counting it as a corporate BOND was the
+      // same conflation that had its coupon paid to the bondholders.
+      if (t.isCommercialPaper) o.cp += t.principalUSD;
+      else if (t.rateType === 'FIXED') o.corp += t.principalUSD;
+      else o.loan += t.principalUSD;
     });
   });
   regionIds.forEach((r) => {
@@ -208,6 +208,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     if (h.instrumentType === 'CORP_BOND') b.corp += v;
     else if (h.instrumentType === 'LEVERAGED_LOAN') b.loan += v;
     else if (h.instrumentType === 'GOV_BOND') b.sov += v;
+    else if (h.instrumentType === 'COMMERCIAL_PAPER') b.cp += v;
   };
   state.institutionalEntities.forEach((e: any) => {
     if (e.isDefaulted) return;
@@ -242,6 +243,12 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
   regionIds.forEach((r) => {
     const reg: any = (state as any).regions[r];
     (reg.bankingSector.corpBondDealerInventory || []).forEach((p: any) => { held[r].corp += p.inventoryUSD; });
+    // The CP desks' book lives only on the named banks (no regional array — G3a's doctrine).
+    (state as any).companies.forEach((c: any) => {
+      if (c.region !== r || !c.bankBalanceSheet) return;
+      (c.bankBalanceSheet.dealerDeskInventory?.['commercial paper'] || [])
+        .forEach((p: any) => { held[r].cp += p.inventoryUSD; });
+    });
     (reg.bankingSector.loanDealerInventory || []).forEach((p: any) => { held[r].loan += p.inventoryUSD; });
     (reg.bankingSector.sovBondDealerInventory || []).forEach((p: any) => { held[r].sov += p.inventoryUSD; });
     Object.values(reg.centralBankSheet?.sovereignHoldingsByTenor || {}).forEach((usd: any) => {
@@ -254,6 +261,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
       ['corporate bonds', held[r].corp, outstanding[r].corp],
       ['leveraged loans', held[r].loan, outstanding[r].loan],
       ['sovereign bonds', held[r].sov, outstanding[r].sov],
+      ['commercial paper', held[r].cp, outstanding[r].cp],
     ];
     cases.forEach(([label, h, o]) => {
       if (o <= 0) return;

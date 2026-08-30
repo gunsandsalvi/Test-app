@@ -288,13 +288,20 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       (t.rateType === 'FIXED'
         ? t.principalUSD * (t.couponRate ?? 0.05)
         : t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000)) / 52;
+    // CP: commercial paper is a FIXED tranche and this filter took it as a corporate BOND, so
+    // the CP coupon was accruing to the bond holders of record — a register whose float
+    // explicitly excludes CP (07b). It has its own book and its own holders now.
     const marketBondAccrualUSD = nonMaturingTranches
-      .filter(t => !t.isBankFacility && t.rateType === 'FIXED')
+      .filter(t => !t.isBankFacility && !t.isCommercialPaper && t.rateType === 'FIXED')
+      .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
+    const commercialPaperAccrualUSD = nonMaturingTranches
+      .filter(t => t.isCommercialPaper)
       .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
     const marketLoanAccrualUSD = nonMaturingTranches
       .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
       .reduce((sum, t) => sum + weeklyAccrualUSD(t), 0);
-    const bondCouponDue = nonMaturingTranches.some(t => !t.isBankFacility && t.rateType === 'FIXED' && tranchePaymentDue(t, nextWeek).due);
+    const bondCouponDue = nonMaturingTranches.some(t => !t.isBankFacility && !t.isCommercialPaper && t.rateType === 'FIXED' && tranchePaymentDue(t, nextWeek).due);
+    const cpCouponDue = nonMaturingTranches.some(t => t.isCommercialPaper && tranchePaymentDue(t, nextWeek).due);
     const loanCouponDue = nonMaturingTranches.some(t => !t.isBankFacility && t.rateType !== 'FIXED' && tranchePaymentDue(t, nextWeek).due);
     // What actually leaves the issuer's account for market paper this week: the accrued balances
     // its coupon dates are clearing. Zero in the weeks between.
@@ -994,8 +1001,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // receivables clear against each other exactly.
       accrueHoldersInterest(ctx, comp.id, 'CORP_BOND', marketBondAccrualUSD);
       accrueHoldersInterest(ctx, comp.id, 'LEVERAGED_LOAN', marketLoanAccrualUSD);
+      accrueHoldersInterest(ctx, comp.id, 'COMMERCIAL_PAPER', commercialPaperAccrualUSD);
       if (bondCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'CORP_BOND');
       if (loanCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'LEVERAGED_LOAN');
+      if (cpCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'COMMERCIAL_PAPER');
       void marketFixedInterestWeeklyUSD; void marketFloatingInterestWeeklyUSD;
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
@@ -1537,11 +1546,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // retired. Ranking by rate-saved per dollar of call cost is what a treasury actually does,
       // and it uses the same call-price arithmetic the decision above does.
       let remainingToRepayUSD = -financing.netDebtChangeUSD;
+      let facilityRepaidUSD = 0;
       updatedTranches = updatedTranches
         .slice()
         .sort((a, b) => retirementEconomics(b).valuePerCost - retirementEconomics(a).valuePerCost)
         .map(t => {
           if (remainingToRepayUSD <= 0) return t;
+          // CP is 07f's, exactly as the surplus-cash prepayment above already says: its size is
+          // the working-capital gap and its holders are a book this stage does not settle. It was
+          // NOT excluded here, and the register that repays holders on a ladder change filters CP
+          // out — so paper retired on this path left its holders with a claim on nothing and no
+          // cash. Measured by the ledger check on its first run: the EUR CP stock falling week
+          // after week while its holders' books stood still, 109% held by week eight.
+          if (t.isCommercialPaper) return t;
           const { premiumPerDollar, worthRetiring } = retirementEconomics(t);
           // A company that wants less leverage still will not pay a make-whole to get it: if
           // nothing in the stack is economic to retire this week, it holds the cash and waits.
@@ -1549,9 +1566,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           const repaidUSD = Math.min(t.principalUSD, remainingToRepayUSD / (1 + premiumPerDollar));
           remainingToRepayUSD -= repaidUSD * (1 + premiumPerDollar);
           recordPremium(t, repaidUSD * premiumPerDollar);
+          // A drawn FACILITY retired here is a KNOWN GAP, measured and left alone rather than
+          // half-closed: the register below settles market paper only, so the principal leaves
+          // the issuer's ladder and reaches no lender. Paying the bank is not enough on its own —
+          // the facility is also an itemized loan on that bank's book (G2), and moving the cash
+          // without shrinking the asset breaks the per-bank identity, which is exactly what
+          // happened when this was tried. One change to both sides, together. Owner: G2.
+          if (t.isBankFacility) facilityRepaidUSD += repaidUSD;
           return { ...t, principalUSD: t.principalUSD - repaidUSD };
         })
         .filter(t => t.principalUSD > 0.01);
+      void facilityRepaidUSD;
       const actuallyRepaidUSD = -financing.netDebtChangeUSD - remainingToRepayUSD;
       debtRepaymentThisWeek += actuallyRepaidUSD;
       post('opportunistic deleveraging: principal repaid', -actuallyRepaidUSD, undefined, false);

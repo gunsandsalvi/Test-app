@@ -467,7 +467,7 @@ export function payHoldersCash(
 export function accrueHoldersInterest(
   ctx: { pendingHolderAccrualUSD: Map<string, number> },
   issuerId: string,
-  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND',
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER',
   weeklyAccrualUSD: number
 ): void {
   if (!(weeklyAccrualUSD > 0)) return;
@@ -480,7 +480,7 @@ export function accrueHoldersInterest(
 export function payHoldersAccruedInterest(
   ctx: { pendingHolderAccrualPayout: Set<string> },
   issuerId: string,
-  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND'
+  instrumentType: 'CORP_BOND' | 'LEVERAGED_LOAN' | 'GOV_BOND' | 'COMMERCIAL_PAPER'
 ): void {
   ctx.pendingHolderAccrualPayout.add(`${instrumentType}:${issuerId}`);
 }

@@ -205,6 +205,10 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
         addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'LEVERAGED_LOAN', seniority: CLAIM_SENIORITY.SECURED, principalUSD: usd, recoveredUSD: 0 });
       } else if (h.instrumentType === 'CORP_BOND') {
         addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'CORP_BOND', seniority: CLAIM_SENIORITY.UNSECURED, principalUSD: usd, recoveredUSD: 0 });
+      } else if (h.instrumentType === 'COMMERCIAL_PAPER') {
+        // CP: senior unsecured, ranking with the bonds. Its holders are money funds, which is
+        // exactly why a CP default is a systemic event and a bond default usually is not.
+        addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'COMMERCIAL_PAPER', seniority: CLAIM_SENIORITY.UNSECURED, principalUSD: usd, recoveredUSD: 0 });
       } else if (h.instrumentType === 'EQUITY') {
         addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'EQUITY', seniority: CLAIM_SENIORITY.EQUITY, principalUSD: usd, recoveredUSD: 0 });
       }

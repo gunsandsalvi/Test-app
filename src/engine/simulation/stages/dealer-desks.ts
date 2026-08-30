@@ -80,14 +80,23 @@ export function buildDealerDeskParticipants(args: {
     const currentHoldingsByInstrumentId = new Map<string, number>();
     const demandByIndex: (ParticipantDemand | undefined)[] = new Array(instruments.length);
     instruments.forEach((inst, i) => {
-      if (liveFloatUSD[i] <= 0) return;
-      const floatShare = liveFloatUSD[i] / totalFloatUSD;
       const priorPos = prior.get(inst.id);
       const px = unitPrice(i);
       // Carried at market: the position is the UNITS it holds, valued at this week's level.
       const priorUnits = Math.max(0, priorPos?.units ?? (priorPos ? priorPos.inventoryUSD / px : 0));
       const priorUSD = priorUnits * px;
+      // A DESK'S EXISTING POSITION IS A FACT, not a function of this week's float, and it is
+      // declared before any float test. It used to sit BELOW the `liveFloatUSD[i] <= 0` guard, so
+      // a name whose float came out zero left the desk reporting no holding — and
+      // `applyDealerDeskFills`, which rebuilds the book from the fills for every name it cleared,
+      // then deleted the position with no cash leg. That is the WS5 bug this file's own comment
+      // warns about, and OWN7 walked straight into it: once the float became "what the
+      // participants hold", a book whose float is set AFTER the desks are built hands them zero.
+      // Measured in the CP book on its first run: the desks' 2.34B position entering the week as
+      // 0.02B, and 2.3B of paper left held by nobody.
       if (priorUnits > 0) currentHoldingsByInstrumentId.set(inst.id, priorUnits);
+      if (liveFloatUSD[i] <= 0) return;
+      const floatShare = liveFloatUSD[i] / totalFloatUSD;
       const roomUSD = capacityUSD * floatShare;
       const maxHoldingUSD = priorUSD + roomUSD;
       if (maxHoldingUSD <= 0) return;

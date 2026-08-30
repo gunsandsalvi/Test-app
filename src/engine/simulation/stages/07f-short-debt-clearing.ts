@@ -29,9 +29,9 @@
  * interest arithmetic picks CP up off the ladder like any other tranche).
  */
 
-import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem } from '../../../types';
+import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { computeAnnualDefaultProbability, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -44,12 +44,18 @@ import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settl
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
+import {
+  CP_SINGLE_ISSUER_LIMIT, CP_SHARE_OF_TERM_SLEEVE, CP_FULL_SIZE_YIELD_RANGE_BPS,
+  cpCreditPolicyShare, cpReservationYieldBps,
+} from '../../../domain/commercial-paper';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'bill';
+/** And the other book this stage owns (CP). */
+const CP_BOOK = 'commercial paper';
 const MAX_WEEKLY_YIELD_MOVE_PCT = 0.25; // short paper reprices to policy fast; damping is looser here
 /** A bank's pickup over reserves for holding a bill instead — the arbitrage band's width. */
 const BANK_BILL_PICKUP_BPS = 5;
@@ -59,13 +65,15 @@ const BILL_FULL_SIZE_YIELD_RANGE_BPS = 15;
 /** Share of an institution's cash sleeve it will hold as bills rather than overnight cash. */
 const CASH_SLEEVE_BILL_SHARE = 0.5;
 
-/** CP access: investment grade only — the real CP market is an A1/P1 club with a BBB fringe. */
-const CP_ACCESS_RATINGS = new Set(['AAA', 'AA', 'A', 'BBB']);
-/** Above this annual default probability nobody rolls your paper, whatever the rating label. */
-const CP_MAX_ANNUAL_PD = 0.08;
+// CP — three constants are gone with the formula (domain/commercial-paper.ts):
+//   `CP_ACCESS_RATINGS` and `CP_MAX_ANNUAL_PD` were a binary gate that made a roll all-or-nothing,
+//   which is not how funding stress arrives. Credit policy is a SIZE now (`cpCreditPolicyShare`),
+//   the same doctrine as the sub-investment-grade sleeve in the bond book: a weak name gets a
+//   small line and has to pay, and whether it can is what the auction decides.
+//   `CP_LIQUIDITY_PREMIUM_BPS` was 15bp of "CP is not a bill even for a AAA name" added to a
+//   price nobody quoted. The premium over bills is now whatever the book clears at, which is what
+//   a liquidity premium IS.
 const CP_TENOR_WEEKS = 13;
-/** Liquidity premium over bills + expected loss — CP is not a bill even for a AAA name. */
-const CP_LIQUIDITY_PREMIUM_BPS = 15;
 /** The revolver a failed roll draws: policy + this margin. Committed lines price ~300bp drawn. */
 export const REVOLVER_MARGIN_BPS = 350;
 /** CP outstanding is capped at this share of revenue — a treasurer bridges with CP, never term-funds with it. */
@@ -277,20 +285,31 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           (reg.centralBankSheet.lastOrderPlacedUSD ?? 0) + (cbOrder?.orderedUSD ?? 0);
       }
 
+      // OWN7, first half: the float that every bidder EXCEPT the desks makes up, set before the
+      // desks are built — a desk is sized against the live float, so leaving it at the whole
+      // outstanding until after gave every desk capacity against paper that is not for sale.
+      const heldByBiddersUSD = new Map<string, number>();
+      participants.forEach((p) => p.currentHoldingsByInstrumentId.forEach((usd, id) => {
+        if (usd > 0) heldByBiddersUSD.set(id, (heldByBiddersUSD.get(id) ?? 0) + usd);
+      }));
+      instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBiddersUSD.get(inst.id) ?? 0; });
+
       // G3a: the banks' bill desks — the same market makers, a different book.
       const deskParticipants = buildDealerDeskParticipants({
         ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
       });
       const deskTickers = deskTickersOf(deskParticipants);
 
-      // OWN7, applied: every bidder is a real holder, so what they hold between them is what is
-      // genuinely in play. Everything else on the register keeps its position.
-      const heldByBookUSD = new Map<string, number>();
-      [...participants, ...deskParticipants].forEach((p) =>
-        p.currentHoldingsByInstrumentId.forEach((usd, id) => {
-          if (usd > 0) heldByBookUSD.set(id, (heldByBookUSD.get(id) ?? 0) + usd);
-        }));
-      instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookUSD.get(inst.id) ?? 0; });
+      // OWN7, second half: the desks' own books join the float now that they exist. Every bidder
+      // is a real holder, so what they hold between them is what is genuinely in play; everything
+      // else on the register keeps its position.
+      const deskHeldUSD = new Map<string, number>();
+      deskParticipants.forEach((p) => p.currentHoldingsByInstrumentId.forEach((usd, id) => {
+        if (usd > 0) deskHeldUSD.set(id, (deskHeldUSD.get(id) ?? 0) + usd);
+      }));
+      instruments.forEach((inst) => {
+        inst.tradableFloatUSD = (heldByBiddersUSD.get(inst.id) ?? 0) + (deskHeldUSD.get(inst.id) ?? 0);
+      });
 
       // PUB — and what NO book holds is the treasury's OFFERING, not a reservation. Stage 11
       // issues bills into the ladder every week; nothing ever bought them, and the treasury then
@@ -450,8 +469,25 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...bondDealerRows, ...billDealerRows] };
     }
 
-    // ---- Commercial paper ----
+    // ---- Commercial paper: a real book (CP) ----
+    //
+    // Why this used to be a formula and what it cost is written up once, in
+    // domain/commercial-paper.ts. In short: CP arrived with the bills and its buyers did not
+    // exist yet, so it was priced at `bill + expected loss + 15bp`, sized entirely by the issuer,
+    // rationed only by a binary rating gate, and paid for by nobody. It clears now.
     const billYield13wBps = reg.zeroRates.tenor3M * 10000;
+    const cpRecoveryRate = creditRecoveryRate(reg);
+    const revolverWalkAwayBps = (reg.policyRate * 10000) + REVOLVER_MARGIN_BPS;
+
+    interface CpIssuer {
+      comp: Company;
+      annualPd: number;
+      survivingUSD: number;
+      maturedUSD: number;
+      wantedUSD: number;
+    }
+    const cpIssuers: CpIssuer[] = [];
+
     ctx.prevActiveFirms.forEach((comp) => {
       if (comp.region !== regionId || !isActiveCompany(comp) || !isPubliclyListed(comp)) return;
       if (comp.isBankEntity || comp.isInstitutionalEntity) return;
@@ -459,6 +495,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const existingCP = (comp.debtTranches || []).filter((t) => t.isCommercialPaper);
       const cpMaturingNow = existingCP.filter((t) => t.maturityWeek <= ctx.nextWeek);
       const cpOutstandingUSD = existingCP.reduce((s, t) => s + t.principalUSD, 0);
+      const maturedUSD = cpMaturingNow.reduce((s, t) => s + t.principalUSD, 0);
+      const survivingUSD = Math.max(0, cpOutstandingUSD - maturedUSD);
 
       // What CP actually funds: the WORKING-CAPITAL STOCK — the receivables and inventory the
       // balance sheet permanently carries (the same 8%-of-revenue the statements themselves
@@ -467,7 +505,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // permanently rolled, that grows when cash drains and shrinks when it rebuilds. The first
       // version of this looked only for a projected cash DEFICIT and found no issuer in sixty
       // weeks: almost nobody projects negative cash, but plenty of real issuers paper their
-      // working capital, which is who the CP market is.
+      // working capital, which is who the CP market is. THE SIZE IS STILL THE ISSUER'S; the
+      // price is not, and what the book will not fund at that price does not place.
       const annualInterest = (comp.debtTranches || []).reduce((sum, t) => {
         if (t.rateType === 'FIXED') return sum + t.principalUSD * (t.couponRate ?? 0.05);
         return sum + t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
@@ -476,7 +515,6 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const dividendsQuarterUSD = Math.abs(latestSnap?.cashFlowStatement?.dividendsPaid ?? 0);
       const quarterOutflowsUSD = annualInterest / 4 + (comp.maintenanceCapex ?? 0) / 4 + dividendsQuarterUSD;
       const quarterInflowUSD = Math.max(0, comp.ebitda) / 4;
-      // Quarter-end cash before any CP: what the company itself will have on hand.
       const projectedCashUSD = comp.cash - cpOutstandingUSD + quarterInflowUSD - quarterOutflowsUSD;
       const workingCapitalStockUSD = comp.annualRevenue * WORKING_CAPITAL_SHARE_OF_REVENUE;
       const rawGapUSD = Math.max(0, workingCapitalStockUSD - Math.max(0, projectedCashUSD));
@@ -484,23 +522,231 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ? Math.min(rawGapUSD, comp.annualRevenue * CP_MAX_SHARE_OF_REVENUE)
         : 0;
 
-      const needsRoll = cpMaturingNow.length > 0;
-      const wantsNewPaper = targetCPUSD > cpOutstandingUSD + 1;
-      if (!needsRoll && !wantsNewPaper) return;
+      if (survivingUSD <= 0 && targetCPUSD <= 0 && maturedUSD <= 0) return;
+      cpIssuers.push({
+        comp,
+        annualPd: computeAnnualDefaultProbability(comp),
+        survivingUSD,
+        maturedUSD,
+        wantedUSD: Math.max(0, targetCPUSD - survivingUSD),
+      });
+    });
 
-      const annualPD = computeAnnualDefaultProbability(comp);
-      const hasAccess = CP_ACCESS_RATINGS.has(comp.creditRating) && annualPD < CP_MAX_ANNUAL_PD && !comp.isDefaulted;
+    if (cpIssuers.length > 0) {
+      ctx.holdingsStore!.nextEpoch();
+      const store = ctx.holdingsStore!;
+      const cpIssuerIds = new Set(cpIssuers.map((i) => i.comp.id));
+      const issuerById = new Map(cpIssuers.map((i) => [i.comp.id, i]));
 
-      if (!hasAccess) {
-        // The failed roll: the market said no, the committed bank line says yes at a price.
-        // This is the real mechanism of a funding squeeze, alive before G2 makes the line itself
-        // a modeled asset on some bank's book.
-        const failedUSD = cpMaturingNow.reduce((s, t) => s + t.principalUSD, 0);
-        if (failedUSD > 1) {
-          comp.debtTranches = (comp.debtTranches || []).filter((t) => !(t.isCommercialPaper && t.maturityWeek <= ctx.nextWeek));
-          comp.debtTranches.push({
-            id: `${comp.ticker}-REVOLVER-${ctx.nextWeek}`,
-            principalUSD: failedUSD,
+      // ---- 1. MATURITIES. The issuer repays its holders of record and their claim shrinks by
+      // exactly what they were paid. This used to be one payment to the boundary, because there
+      // was no register of who held the paper.
+      const cpEntities = ctx.updatedInstitutionalEntities.filter((e) => !e.isDefaulted);
+      const heldByIssuerByEntity = new Map<string, Map<string, number>>();
+      cpEntities.forEach((entity) => {
+        const byIssuer = new Map<string, number>();
+        store.scan(entity.id, 'COMMERCIAL_PAPER', (h) => {
+          if (!cpIssuerIds.has(h.instrumentId)) return false;
+          byIssuer.set(h.instrumentId, (byIssuer.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+          return true;
+        });
+        heldByIssuerByEntity.set(entity.id, byIssuer);
+      });
+
+      // A DESK IS A HOLDER, and its paper matures like anyone else's. Scaling only the
+      // institutions left the desks carrying a claim on CP that had already been repaid, and the
+      // ledger check caught it immediately: holders at 117% of the EUR stock by week ten.
+      const cpBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+      const deskCpRows = new Map<string, { instrumentId: string; inventoryUSD: number; units?: number }[]>();
+      cpBanks.forEach((bank) => {
+        const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
+        if (sheet?.dealerDeskInventory?.[CP_BOOK]) deskCpRows.set(bank.ticker, sheet.dealerDeskInventory[CP_BOOK]);
+      });
+
+      cpIssuers.forEach((iss) => {
+        const preUSD = iss.survivingUSD + iss.maturedUSD;
+        if (!(iss.maturedUSD > 0) || !(preUSD > 0)) return;
+        const survivingShare = iss.survivingUSD / preUSD;
+        deskCpRows.forEach((rows, ticker) => {
+          let repaidUSD = 0;
+          rows.forEach((r) => {
+            if (r.instrumentId !== iss.comp.id) return;
+            repaidUSD += r.inventoryUSD * (1 - survivingShare);
+            r.inventoryUSD *= survivingShare;
+            if (r.units !== undefined) r.units *= survivingShare;
+          });
+          if (repaidUSD > 0) {
+            pay(ctx, {
+              payer: { kind: 'COMPANY', ticker: iss.comp.ticker },
+              payee: { kind: 'BANK_SECURITIES', ticker },
+              amountUSD: repaidUSD,
+              reason: 'commercial paper redeemed',
+            });
+          }
+        });
+        heldByIssuerByEntity.forEach((byIssuer, entityId) => {
+          const heldUSD = byIssuer.get(iss.comp.id) ?? 0;
+          if (!(heldUSD > 0)) return;
+          const repaidUSD = heldUSD * (1 - survivingShare);
+          byIssuer.set(iss.comp.id, heldUSD - repaidUSD);
+          if (repaidUSD > 0) {
+            pay(ctx, {
+              payer: { kind: 'COMPANY', ticker: iss.comp.ticker },
+              payee: { kind: 'INSTITUTION', id: entityId },
+              amountUSD: repaidUSD,
+              reason: 'commercial paper redeemed',
+            });
+          }
+        });
+        iss.comp.debtTranches = (iss.comp.debtTranches || [])
+          .filter((t) => !(t.isCommercialPaper && t.maturityWeek <= ctx.nextWeek));
+      });
+
+      deskCpRows.forEach((rows, ticker) => {
+        const bank = cpBanks.find((b) => b.ticker === ticker);
+        if (!bank) return;
+        const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
+        if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
+        ctx.companyUpdates[ticker].bankBalanceSheet = {
+          ...sheet,
+          dealerDeskInventory: {
+            ...(sheet.dealerDeskInventory ?? {}),
+            [CP_BOOK]: rows.filter((r) => Math.abs(r.inventoryUSD) > 1),
+          },
+        };
+      });
+
+      // ---- 2. THE BOOK. One instrument per issuer, the surviving stock plus what it brings.
+      const heldByInstitutionsUSD = new Map<string, number>();
+      heldByIssuerByEntity.forEach((byIssuer) => byIssuer.forEach((usd, issuerId) => {
+        if (usd > 0) heldByInstitutionsUSD.set(issuerId, (heldByInstitutionsUSD.get(issuerId) ?? 0) + usd);
+      }));
+      const cpInstruments: ClearingInstrument[] = cpIssuers.map((iss) => {
+        const survivingTranches = (iss.comp.debtTranches || []).filter((t) => t.isCommercialPaper);
+        const weightedCouponBps = iss.survivingUSD > 0
+          ? survivingTranches.reduce((a, t) => a + t.principalUSD * (t.couponRate ?? 0), 0) / iss.survivingUSD * 10000
+          : 0;
+        const fairOpeningBps = cpReservationYieldBps({
+          clearedBillYieldBps: billYield13wBps,
+          annualDefaultProbability: iss.annualPd,
+          recoveryRate: cpRecoveryRate,
+          tenorWeeks: CP_TENOR_WEEKS,
+        });
+        return {
+          id: iss.comp.id,
+          // OWN7: what the INSTITUTIONS hold, before the desks are built. Their own positions are
+          // added below — the desks have to be sized against a live float, and a float of zero
+          // makes `buildDealerDeskParticipants` return no desk at all.
+          outstandingUSD: iss.survivingUSD,
+          tradableFloatUSD: heldByInstitutionsUSD.get(iss.comp.id) ?? 0,
+          currentStat: weightedCouponBps > 0 ? weightedCouponBps : Math.max(1, fairOpeningBps),
+          statKind: 'YIELD_LIKE',
+          durationYears: CP_TENOR_WEEKS / 52,
+          primaryOfferingUSD: iss.wantedUSD,
+          // THE TREASURER'S WALK-AWAY IS ITS COMMITTED LINE. Nobody pays more for paper than the
+          // revolver beside it costs, so above this the deal is pulled and the line is drawn —
+          // which is the funding squeeze the old rating gate asserted, now priced.
+          primaryWithdrawStat: iss.wantedUSD > 0 ? revolverWalkAwayBps : undefined,
+        };
+      });
+
+      // ---- 3. THE BUYERS. The money funds and the cash sleeves that already run through the
+      // bill and repo books, plus the banks' own desks. A buyer's reservation is its own
+      // alternative — the cleared 13-week bill, which is exactly what this money earns instead —
+      // plus the loss it expects on THIS issuer over the paper's actual life. Credit policy is a
+      // SIZE, never a veto (domain/commercial-paper.ts).
+      const cpParticipants: ClearingParticipant[] = [];
+      cpEntities.forEach((entity) => {
+        const sleeveUSD = entity.totalAssetsUSD * entity.assetAllocationTarget.cashPct * CP_SHARE_OF_TERM_SLEEVE;
+        const holdings = heldByIssuerByEntity.get(entity.id) ?? new Map<string, number>();
+        if (!(sleeveUSD > 0) && holdings.size === 0) return;
+        const cashUSD = Math.max(0, (entity.cashUSD ?? 0)
+          + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })) * CP_SHARE_OF_TERM_SLEEVE;
+        const demand = new Map<string, ParticipantDemand>();
+        cpIssuers.forEach((iss) => {
+          const lineUSD = sleeveUSD * CP_SINGLE_ISSUER_LIMIT * cpCreditPolicyShare(iss.comp.creditRating);
+          demand.set(iss.comp.id, {
+            reservationStat: cpReservationYieldBps({
+              clearedBillYieldBps: billYield13wBps,
+              annualDefaultProbability: iss.annualPd,
+              recoveryRate: cpRecoveryRate,
+              tenorWeeks: CP_TENOR_WEEKS,
+            }),
+            maxHoldingUSD: lineUSD,
+            fullSizeStatRange: CP_FULL_SIZE_YIELD_RANGE_BPS,
+            maxNetPurchaseUSD: cashUSD * CP_SINGLE_ISSUER_LIMIT,
+          });
+        });
+        cpParticipants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
+      });
+
+      const cpDeskParticipants = buildDealerDeskParticipants({
+        ctx, banks: cpBanks, book: CP_BOOK, instruments: cpInstruments,
+        spreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
+      });
+      const cpDeskTickers = deskTickersOf(cpDeskParticipants);
+
+      // OWN7: and now the desks' own books join the float, which is complete once they exist.
+      const cpDeskHeldUSD = new Map<string, number>();
+      cpDeskParticipants.forEach((p) =>
+        p.currentHoldingsByInstrumentId.forEach((usd, id) => {
+          if (usd > 0) cpDeskHeldUSD.set(id, (cpDeskHeldUSD.get(id) ?? 0) + usd);
+        }));
+      cpInstruments.forEach((inst) => {
+        inst.tradableFloatUSD = (heldByInstitutionsUSD.get(inst.id) ?? 0) + (cpDeskHeldUSD.get(inst.id) ?? 0);
+      });
+
+      const cpResult = clearFinancialAsset(cpInstruments, [...cpParticipants, ...cpDeskParticipants], new Map(), {
+        dealerSpreadBps: DESK_SPREAD_BPS_BY_BOOK[CP_BOOK],
+        maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
+        // OWN7: the float here is a stock these participants already hold, so an unsold
+        // position stays with its holder rather than falling to a dealer nobody names.
+        unsoldStaysWithHolder: true,
+      });
+      ctx.damperBoundInstrumentIds.push(...cpResult.damperBoundInstrumentIds);
+      if (!cpResult.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} commercial paper`);
+
+      // ---- 4. APPLY. Holders' books from the fills; the issuer's new paper at the CLEARED rate
+      // for exactly what placed; the committed line for the roll it could not place.
+      cpEntities.forEach((entity) => {
+        const fills = cpResult.newParticipantHoldings.get(entity.id);
+        if (!fills) return;
+        const rows: ItemizedHolding[] = [];
+        fills.forEach((usd, instrumentId) => {
+          if (usd > 1) rows.push({ instrumentId, instrumentType: 'COMMERCIAL_PAPER', issuerRegion: regionId, quantityOrNotionalUSD: usd });
+        });
+        store.append(entity.id, rows);
+      });
+
+      cpIssuers.forEach((iss) => {
+        const outcome = cpResult.primaryOutcomeById.get(iss.comp.id);
+        const clearedBps = cpResult.newStatById.get(iss.comp.id) ?? 0;
+        const placedUSD = outcome && !outcome.withdrawn ? Math.max(0, outcome.marketTakeUSD) : 0;
+        // No floor on the level (rule 15): the paper exists at whatever the auction printed.
+        if (placedUSD > 1) {
+          iss.comp.debtTranches = iss.comp.debtTranches || [];
+          iss.comp.debtTranches.push({
+            id: `${iss.comp.ticker}-CP-${ctx.nextWeek}`,
+            principalUSD: placedUSD,
+            rateType: 'FIXED',
+            couponRate: Number((clearedBps / 10000).toFixed(4)),
+            originationWeek: ctx.nextWeek,
+            maturityWeek: ctx.nextWeek + CP_TENOR_WEEKS,
+            seniority: 'SENIOR',
+            isCommercialPaper: true,
+          } as DebtTranche);
+        }
+        // A roll it could not place is the real funding squeeze: the market said no (or said yes
+        // at a level past the revolver, which is the same answer), and the committed bank line
+        // catches the maturity at its own price. What the issuer merely WANTED to add and could
+        // not place is simply funding it does not get — a revolver is not drawn for growth.
+        const rollNeedUSD = Math.min(iss.maturedUSD, iss.wantedUSD);
+        const revolverUSD = Math.max(0, rollNeedUSD - placedUSD);
+        if (revolverUSD > 1) {
+          iss.comp.debtTranches = iss.comp.debtTranches || [];
+          iss.comp.debtTranches.push({
+            id: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
+            principalUSD: revolverUSD,
             rateType: 'FLOATING',
             floatingMarginBps: REVOLVER_MARGIN_BPS,
             originationWeek: ctx.nextWeek,
@@ -509,60 +755,52 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             // G2: a committed bank line is BANK debt, exactly like the revolver stage 08 draws
             // for a withdrawn refinancing. Unmarked, the identical instrument sat in the
             // syndicated loan market's float on one path and on the house bank's itemized book
-            // on the other — one real thing represented two ways (rule 3), and the same
-            // double-count class G2 slice 1 was built to close. It also picked up a six-month
-            // soft call from the call-protection rules, which a revolver must never carry.
+            // on the other — one real thing represented two ways (rule 3).
             isBankFacility: true,
-            facilityBankTicker: comp.homeBankTicker,
+            facilityBankTicker: iss.comp.homeBankTicker,
+          });
+          pay(ctx, {
+            payer: { kind: 'BANK_CREDIT', ticker: iss.comp.homeBankTicker ?? '' },
+            payee: { kind: 'COMPANY', ticker: iss.comp.ticker },
+            amountUSD: revolverUSD,
+            reason: 'revolver drawn: commercial paper roll failed',
           });
           ctx.newsItems.push({
-            id: `cp-fail-${comp.ticker}-${ctx.nextWeek}`,
+            id: `cp-fail-${iss.comp.ticker}-${ctx.nextWeek}`,
             week: ctx.nextWeek,
-            title: `${comp.ticker} CP Roll Fails — Revolver Drawn`,
-            description: `${comp.name} could not roll ${(failedUSD / 1e6).toFixed(0)}M of commercial paper (rating ${comp.creditRating}) and drew its bank revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
+            title: `${iss.comp.ticker} CP Roll Fails — Revolver Drawn`,
+            description: `${iss.comp.name} could not place ${(revolverUSD / 1e6).toFixed(0)}M of commercial paper (rating ${iss.comp.creditRating}) and drew its bank revolver at policy+${REVOLVER_MARGIN_BPS}bps.`,
             category: 'CREDIT',
             impactBadge: '[FUNDING SQUEEZE]',
-            impactRegion: comp.region,
-            impactSector: comp.sector,
-            affectedTicker: comp.ticker,
+            impactRegion: iss.comp.region,
+            impactSector: iss.comp.sector,
+            affectedTicker: iss.comp.ticker,
             urgent: true,
           } as NewsItem);
         }
-        return;
-      }
+        const cpNowUSD = (iss.comp.debtTranches || [])
+          .filter((t) => t.isCommercialPaper).reduce((a, t) => a + t.principalUSD, 0);
+        iss.comp.totalDebt = Math.max(0,
+          iss.comp.totalDebt - (iss.survivingUSD + iss.maturedUSD) + cpNowUSD + revolverUSD);
+      });
 
-      // Priced as bills plus this issuer's own short-horizon expected loss — the annual
-      // structural PD scaled to the paper's actual quarter of life.
-      const shortHorizonELbps = annualPD * (CP_TENOR_WEEKS / 52) * (1 - creditRecoveryRate(reg)) * 10000;
-      const cpRate = (billYield13wBps + shortHorizonELbps + CP_LIQUIDITY_PREMIUM_BPS) / 10000;
+      // The desks' own CP inventory, on the banks that took it.
+      applyDealerDeskFills({ ctx, banks: cpBanks, book: CP_BOOK, instruments: cpInstruments, result: cpResult });
 
-      const survivingCP = existingCP.filter((t) => t.maturityWeek > ctx.nextWeek);
-      const survivingUSD = survivingCP.reduce((s, t) => s + t.principalUSD, 0);
-      const newPaperUSD = Math.max(0, targetCPUSD - survivingUSD);
-      const maturedUSD = cpMaturingNow.reduce((s, t) => s + t.principalUSD, 0);
-
-      comp.debtTranches = (comp.debtTranches || []).filter((t) => !(t.isCommercialPaper && t.maturityWeek <= ctx.nextWeek));
-      if (newPaperUSD > 1) {
-        comp.debtTranches.push({
-          id: `${comp.ticker}-CP-${ctx.nextWeek}`,
-          principalUSD: newPaperUSD,
-          rateType: 'FIXED',
-          couponRate: Number(cpRate.toFixed(4)),
-          originationWeek: ctx.nextWeek,
-          maturityWeek: ctx.nextWeek + CP_TENOR_WEEKS,
-          seniority: 'SENIOR',
-          isCommercialPaper: true,
-        } as DebtTranche);
-      }
-      // The cash legs are real, and somebody is on the other side of them: paper sold is money
-      // from its buyer, paper redeemed is money back to its holder. CP has no cleared book yet
-      // (it is issued here at a derived rate, not auctioned), so the holder is the named
-      // boundary — a deposit stock to watch, not cash appearing on the issuer's balance sheet.
-      const cp: PartyRef = { kind: 'UNMODELED', region: regionId };
-      const issuer: PartyRef = { kind: 'COMPANY', ticker: comp.ticker };
-      pay(ctx, { payer: cp, payee: issuer, amountUSD: newPaperUSD, reason: 'commercial paper issued' });
-      pay(ctx, { payer: issuer, payee: cp, amountUSD: maturedUSD, reason: 'commercial paper redeemed' });
-      comp.totalDebt = Math.max(0, comp.totalDebt + newPaperUSD - maturedUSD);
-    });
+      // SETL6: the whole cash side — buyers to the clearing house, the desks' fee, and the
+      // clearing house to each ISSUER for the paper its own program actually placed.
+      const cpEntityIds = new Set(cpEntities.map((e) => e.id));
+      settleClearedBook(
+        ctx, regionId, CP_BOOK,
+        cpResult.netCashDeltaByParticipantId,
+        (id) => (cpEntityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, cpDeskTickers)),
+        { netCashUSD: cpResult.dealerNetCashUSD, feeUSD: cpResult.totalDealerRevenueUSD },
+        feeDesksForRegion(ctx, regionId),
+        primaryTakes(cpResult, (issuerId) => {
+          const iss = issuerById.get(issuerId);
+          return iss ? { kind: 'COMPANY', ticker: iss.comp.ticker } : undefined;
+        })
+      );
+    }
   });
 }
