@@ -1200,7 +1200,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (!(premiumUSD > 0)) return;
       if (t.rateType === 'FIXED') bondCallPremiumUSD += premiumUSD;
       else loanCallPremiumUSD += premiumUSD;
-      post('call premium paid to holders', -premiumUSD);
+      // SETL4: reported here, PAID by the register below (`payHoldersCash`) — settling it here as
+      // well debited the issuer twice, once to the holders and once to nobody.
+      post('call premium paid to holders', -premiumUSD, undefined, false);
     };
 
     // Corporate debt lifecycle: call and refinance when genuinely accretive
@@ -1227,7 +1229,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         const budgetUSD = newCash - comp.annualRevenue * 0.15;
         const calledAmountUSD = Math.min(tranche.principalUSD, budgetUSD / (1 + premiumPerDollar));
         tranche.principalUSD -= calledAmountUSD;
-        post('accretive call: principal retired', -calledAmountUSD);
+        // The ladder change below reaches the holders through the register (settleCorporateAction-
+        // OnHolders), which is what pays them; this line reports it on the cash walk only.
+        post('accretive call: principal retired', -calledAmountUSD, undefined, false);
         recordPremium(tranche, calledAmountUSD * premiumPerDollar);
         // Calling a bond because it is expensive relative to the market is REFINANCING, not
         // deleveraging: the issuer replaces it at today's cheaper rate and keeps the money. The
@@ -1250,7 +1254,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             seniority: 'SENIOR',
             callProtection: callProtectionForIssue({ rateType: 'FIXED', isInvestmentGrade: isInvestmentGrade(newRating) }),
           });
-          post('accretive call: replacement issue proceeds', calledAmountUSD);
+          post('accretive call: replacement issue proceeds', calledAmountUSD, undefined, false);
         }
       }
     });
@@ -1378,7 +1382,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // The principal leaves through the ledger; the refinancing proceeds (if the offering
       // settled) arrived above. A maturity with neither settlement nor revolver above means the
       // company simply repays from cash — deleveraging by default, which is real.
-      post('maturing tranche principal repaid', -maturingTranche.principalUSD);
+      post('maturing tranche principal repaid', -maturingTranche.principalUSD, undefined, false);
     }
 
     if (maintenanceFundingTranches.length > 0) {
@@ -1454,7 +1458,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
             })
             .filter(t => t.principalUSD > 0.01);
           const prepaidUSD = Math.min(ladderTotalUSD, ladderTotalUSD - updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0));
-          post('surplus-cash debt prepayment', -prepaidUSD);
+          post('surplus-cash debt prepayment', -prepaidUSD, undefined, false);
           debtRepaymentThisWeek += prepaidUSD;
         }
       }
@@ -1536,7 +1540,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         .filter(t => t.principalUSD > 0.01);
       const actuallyRepaidUSD = -financing.netDebtChangeUSD - remainingToRepayUSD;
       debtRepaymentThisWeek += actuallyRepaidUSD;
-      post('opportunistic deleveraging: principal repaid', -actuallyRepaidUSD);
+      post('opportunistic deleveraging: principal repaid', -actuallyRepaidUSD, undefined, false);
     }
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.
@@ -1691,7 +1695,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (sharesToRetire > 0.001) {
         updatedSharesOutstanding = Math.max(1.0, comp.sharesOutstanding - sharesToRetire);
         buybacksThisWeek = sharesToRetire * newStockPrice;
-        post('share buybacks', -buybacksThisWeek);
+        // The shares retire through the EQUITY register below; the money reaches the same holders
+        // of record, pro rata, instead of the boundary.
+        post('share buybacks', -buybacksThisWeek, undefined, false);
+        payHoldersCash(ctx, comp.id, 'EQUITY', buybacksThisWeek);
       }
     }
     const newMarketCap = Number((newStockPrice * updatedSharesOutstanding).toFixed(0));

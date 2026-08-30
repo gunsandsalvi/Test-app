@@ -398,7 +398,29 @@ export function applyPendingCorporateActionSettlements(
         const principalCashUSD = h.instrumentType === 'EQUITY'
           ? 0
           : h.quantityOrNotionalUSD * (1 - ratio);
-        cashUSD += principalCashUSD;
+        // CASH: and it comes FROM THE ISSUER, by name — the same route the premium above takes.
+        // Crediting `cashUSD` here made the redemption money appear on the holder's book while
+        // stage 08's ledger posted the issuer's side against the UNMODELED boundary: two halves
+        // of one payment, neither of them attached to the other (rule 14). A float INCREASE runs
+        // the same instruction backwards, because a placement is paid for.
+        const principalIssuerTicker = ctx.issuerTickerById?.get(h.instrumentId);
+        if (ctx.paymentInstructions && principalIssuerTicker && Math.abs(principalCashUSD) > 0) {
+          ctx.paymentInstructions.push(principalCashUSD > 0
+            ? {
+              payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
+              payee: { kind: 'INSTITUTION', id: entity.id },
+              amountUSD: principalCashUSD,
+              reason: 'principal redeemed to holder of record',
+            }
+            : {
+              payer: { kind: 'INSTITUTION', id: entity.id },
+              payee: { kind: 'COMPANY', ticker: principalIssuerTicker },
+              amountUSD: -principalCashUSD,
+              reason: 'placement paid by holder of record',
+            });
+        } else {
+          cashUSD += principalCashUSD;
+        }
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
       })
       .filter((h) => h.quantityOrNotionalUSD > 1);
