@@ -26,7 +26,7 @@ import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
-import { channelMarginRate, DISTRIBUTION_SUBUNIT_ID } from '../../../domain/distribution';
+import { channelMarginRate, shelfPriceUSD, DISTRIBUTION_SUBUNIT_ID } from '../../../domain/distribution';
 import { subUnitSpecOf } from '../../../domain/industry-registry';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
@@ -765,12 +765,35 @@ function buildRegionSupplyPlans(
     // once a year and no price makes it ripen twice. Averages to 1 over the year, so this moves
     // output around the calendar and never adds any.
     const seasonalPlantFactor = seasonalFactor(subUnitId, week, 'production');
-    const plantUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle * seasonalPlantFactor;
-    const uncappedProductionUnits = Math.min(plantUnits, plantUnits * staffedShare);
-    const prospectiveUnitCostUSD = uncappedProductionUnits > 0.0001
-      ? weeklyOperatingCostUSD / uncappedProductionUnits
+    // IND18/RULE 9 — THE CALENDAR MOVES OUTPUT; IT DOES NOT DECIDE SOLVENCY.
+    //
+    // The shutdown test below asks whether the price covers what a unit costs to make, and it was
+    // being asked at the SEASONAL week's volume against a FULL week's operating cost. Those are
+    // two different periodicities (§1.9). A harvest good in its low season makes 70% of its normal
+    // output and still pays 100% of its wages, so its "unit cost" printed 1/0.70 = 1.43x the real
+    // one, and the seed — which is struck at break-even by construction — flipped straight to the
+    // idle branch.
+    //
+    // MEASURED, and this is what it cost: at WEEK ONE, all 49 of the USA's agricultural_commodities
+    // producers were idle (cost 96.35 against a price of 88.95) and 45 of 46 residential_construction
+    // producers were idle (21202 against 20923) — margins of 8% and 1.3% against a seasonal factor
+    // of 0.702 and 0.750. Both categories delivered ZERO units into a market demanding millions,
+    // their prices cleared at the households' reservation, and that is the 29% inflation the world
+    // opens with, which the labour market then reads as collapsing real revenue and answers with
+    // layoffs. Sixty weeks later: EUR unemployment 66%, inflation 2266%, market shares at 2%.
+    //
+    // The seasonal factor averages to 1 over the year — it redistributes output and never adds
+    // any, as its own comment says. So it cannot belong in the firm's economics. The test is asked
+    // on the plant's NORMAL-season volume, which is the basis its costs were struck on; the
+    // calendar then says how much of that ripens this week. No clamp, no floor: the comparison
+    // simply gets its units right.
+    const normalSeasonUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    const staffedNormalSeasonUnits = Math.min(normalSeasonUnits, normalSeasonUnits * staffedShare);
+    const prospectiveUnitCostUSD = staffedNormalSeasonUnits > 0.0001
+      ? weeklyOperatingCostUSD / staffedNormalSeasonUnits
       : Infinity;
     const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
+    const uncappedProductionUnits = staffedNormalSeasonUnits * seasonalPlantFactor;
     const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     // IND10 — the firm offers what it HAS plus what its plant FINISHED this week, not what it
@@ -1051,15 +1074,15 @@ function buildRegionDemandPlans(
     // what the channel charges to hold the stock it is buying out of. Dividing the budget by the
     // factory-gate price was the model paying no one to move the goods.
     const channelMargin = channelMarginRate(subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
-    const shelfPriceUSD = referencePriceUSD * (1 + channelMargin);
-    let hhDemandUnits = ((demandState.demandLevelUSD * hhShare) / 52) / shelfPriceUSD
+    const shelfPrice = shelfPriceUSD(referencePriceUSD, subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
+    let hhDemandUnits = ((demandState.demandLevelUSD * hhShare) / 52) / shelfPrice
       * seasonalFactor(subUnitId, week, 'demand');
 
     if (subUnitId === 'passenger_vehicles') {
-      const initialStock = reg.householdState.durableGoodsStockUnits ?? (((demandState.demandLevelUSD * hhShare) / shelfPriceUSD) * 3.5);
+      const initialStock = reg.householdState.durableGoodsStockUnits ?? (((demandState.demandLevelUSD * hhShare) / shelfPrice) * 3.5);
       const scrappageRate = 0.12 / 52;
       const replacementDemandUnits = initialStock * scrappageRate;
-      const targetStock = (reg.estimatedHouseholdIncomeUSD * (1 - reg.householdState.savingsRate) * 0.10) / shelfPriceUSD;
+      const targetStock = (reg.estimatedHouseholdIncomeUSD * (1 - reg.householdState.savingsRate) * 0.10) / shelfPrice;
       const expansionDemandUnits = Math.max(0, (targetStock - initialStock) * 0.05);
       hhDemandUnits = replacementDemandUnits + expansionDemandUnits;
       // Scrappage happens once a week, not once per book: the stock is retired here and this
@@ -1093,7 +1116,7 @@ function buildRegionDemandPlans(
       // IND16: this book clears at the FACTORY GATE, so every rung is the factory-gate price the
       // household's willingness to pay leaves once the channel has taken its cut.
       householdDemandLadder({
-        weeklyBudgetUSD: hhDemandUnits * shelfPriceUSD,
+        weeklyBudgetUSD: hhDemandUnits * shelfPrice,
         referencePriceUSD,
         budgetReachMultiple,
         satiationUnits,
@@ -1719,8 +1742,8 @@ function runSubUnitMarkets(
     // real steps, each with a real payee; recipes and the price indices keep reading the landed
     // one, because that is genuinely what a firm pays.
     const reg05 = ctx.updatedRegions[regionId];
-    demandState.shelfUnitPriceUSD = Number((publishedPrice[regionId]
-      * (1 + channelMarginRate(subUnitId, reg05?.zeroRates?.tenor3M ?? reg05?.policyRate ?? 0))).toFixed(2));
+    demandState.shelfUnitPriceUSD = Number(shelfPriceUSD(
+      publishedPrice[regionId], subUnitId, reg05?.zeroRates?.tenor3M ?? reg05?.policyRate ?? 0).toFixed(2));
 
     const contracts = survivingContracts[regionId];
     const contractUnits = contracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);

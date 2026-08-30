@@ -30,6 +30,36 @@
 
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { Region } from '../../../types';
+import { shelfPriceUSD } from '../../../domain/distribution';
+
+/**
+ * THE PRICE THIS INDEX IS BUILT ON, ON BOTH SIDES OF EVERY RATIO.
+ *
+ * A CPI prices what a consumer pays — the shelf price. Stage 05 writes one each week; before it
+ * has run (the seed builds the opening basket) there is none, and the code here fell back to the
+ * LANDED price with `??`. That made the basket's BASE the price a business pays and its CURRENT
+ * the price a household pays, so week one printed the entire channel margin as inflation: CPI
+ * 100 -> 127.78 with no price in the economy having moved, 30% headline, and every downstream
+ * reader — the Taylor rule, real growth, the labour market's real-revenue signal — took it as
+ * real. Deriving the missing one keeps a single concept on both sides.
+ *
+ * `??` was also the wrong guard: `shelfUnitPriceUSD` is NaN on a category the auction has not
+ * cleared, and NaN is neither null nor undefined, so the fallback did not fire and the category
+ * dropped out of the basket entirely.
+ */
+function shelfPriceFor(
+  demand: { shelfUnitPriceUSD?: number; unitPriceUSD?: number } | undefined,
+  subUnitId: string,
+  region: Region
+): number {
+  if (!demand) return 0;
+  const written = demand.shelfUnitPriceUSD;
+  if (typeof written === 'number' && isFinite(written) && written > 0) return written;
+  const landed = demand.unitPriceUSD;
+  if (!(typeof landed === 'number' && isFinite(landed) && landed > 0)) return 0;
+  const shortRate = region.zeroRates?.tenor3M ?? region.policyRate ?? 0;
+  return shelfPriceUSD(landed, subUnitId, shortRate);
+}
 
 /**
  * Food and energy. Excluded from core inflation because their prices are set in the commodity
@@ -68,8 +98,8 @@ export function buildCpiBasket(region: Region, week: number, baseIndexLevel: num
       // the landed price plus what the channel charges to hold the stock it is sold out of. The
       // landed price is what a business pays for the same good, and reading it here left the
       // channel's cost out of the household's cost of living entirely.
-      const price = demand?.shelfUnitPriceUSD ?? demand?.unitPriceUSD;
-      if (!demand || !price || !(price > 0)) return;
+      const price = shelfPriceFor(demand, su.unitId, region);
+      if (!demand || !(price > 0)) return;
       const spendUSD = demand.demandLevelUSD * su.buyerMix.HOUSEHOLD;
       if (!(spendUSD > 0)) return;
       householdSpendBySubUnit[su.unitId] = spendUSD;
@@ -101,8 +131,8 @@ export function computeCpiLevel(region: Region, basket: CpiBasket, excludeFoodAn
     if (excludeFoodAndEnergy && FOOD_AND_ENERGY_SUBUNITS.has(unitId)) return;
     const basePrice = basket.basePriceBySubUnit[unitId];
     const cd = region.categoryDemand[unitId as keyof typeof region.categoryDemand];
-    const currentPrice = cd?.shelfUnitPriceUSD ?? cd?.unitPriceUSD;
-    if (!basePrice || !(basePrice > 0) || !currentPrice || !(currentPrice > 0)) return;
+    const currentPrice = shelfPriceFor(cd, unitId, region);
+    if (!basePrice || !(basePrice > 0) || !(currentPrice > 0)) return;
     weightedRatioSum += weight * (currentPrice / basePrice);
     includedWeight += weight;
   });

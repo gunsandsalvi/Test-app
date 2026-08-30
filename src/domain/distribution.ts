@@ -59,5 +59,19 @@ export function channelMarginRate(subUnitId: string, shortRateAnnual: number): n
   return annualRate * (coverWeeks / 52);
 }
 
+/**
+ * IND16 — WHAT A HOUSEHOLD PAYS, and the ONE definition of it (§1.3).
+ *
+ * Stage 05 writes this onto each category's demand state every week. The price index needs the
+ * same number for a week the engine has not run yet — the seed — and reading the LANDED price
+ * there instead was a 28% level error that read as inflation: the basket's base prices were what
+ * a business pays and its current prices were what a household pays, so the index stepped by the
+ * whole channel margin on week one and printed 30% inflation on a world where no price had moved.
+ * Two price concepts in one ratio. One function now, called from both sides.
+ */
+export function shelfPriceUSD(landedUnitPriceUSD: number, subUnitId: string, shortRateAnnual: number): number {
+  return landedUnitPriceUSD * (1 + channelMarginRate(subUnitId, shortRateAnnual));
+}
+
 /** The sub-unit whose firms run the channel — the same sector that sells the service. */
 export const DISTRIBUTION_SUBUNIT_ID = 'facilities_and_logistics';
