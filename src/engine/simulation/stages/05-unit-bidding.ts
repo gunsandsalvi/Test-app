@@ -25,7 +25,7 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
-import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
+import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
@@ -636,7 +636,11 @@ function settleContracts(
 
     if (fillRate < 0.95) {
       // Named shock propagation: reduced fill rate constrains customer capacity directly
-      custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, Math.max(0.3, fillRate));
+      // CAP — THE 0.3 FLOOR IS GONE (rule 2). A firm whose inputs are rationed to nothing must be
+      // able to stop: the floor said every firm could always run at three tenths on inputs it did
+      // not have, which is production out of nothing. Stage 08 already measures real physical
+      // fulfilment from the lots actually held, so the constraint has a real basis to be.
+      custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, Math.max(0, fillRate));
     }
 
     // IND11 — TERMINATION FOR NON-PERFORMANCE. A supplier that has missed its obligation for a
@@ -687,7 +691,14 @@ function buildRegionSupplyPlans(
     // decision, and it was the one this throttle could not express.
     const productionThrottle = Math.min(1.0, Math.max(0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
     const priceSignal = (supplierExpectedUnitPriceUSD / referencePriceUSD) - 1.0;
-    const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
+    // CAP — THE [0.5, 2.0] BAND IS GONE (rule 2). It bounded how far a firm would run its plant
+    // against the price it expects, which is a DECISION, and the band was standing in for the
+    // decision's own limits: a firm cannot run above its plant (the capacity term), cannot staff
+    // beyond its headcount (IND15), and will not produce below unit cost at all (the
+    // cost-covering rule below, which is CAP's own mechanism and now fires). Three real bounds,
+    // so the stated one has nothing left to protect. Negative response is still not a thing —
+    // a plant cannot run backwards.
+    const productionResponseFactor = Math.max(0, 1.0 + priceSignal * 1.5);
 
     // Production is capacity x utilisation, in UNITS. The previous version sized production in
     // dollars (annualRevenue/52) and divided by the CURRENT price, so a doubling of price halved
@@ -878,7 +889,10 @@ function buildRegionSupplyPlans(
           openOfferUnits: poolOfferUnits,
           // Its own unit cost: a pool earning a 9% margin cannot sell below 91 cents on the
           // dollar of the reference price and stay solvent.
-          minPriceUSD: referencePriceUSD * Math.max(0.5, 1 - pool.marginPct),
+          // CAP — the half-the-reference floor is gone (rule 2). It existed because `marginPct`
+          // could be anything; since IND3 a margin is the residual of real costs, so `1 − margin`
+          // IS the pool's unit cost and needs no floor under it. A cost cannot be negative.
+          minPriceUSD: referencePriceUSD * Math.max(0, 1 - pool.marginPct),
         });
       }
     }

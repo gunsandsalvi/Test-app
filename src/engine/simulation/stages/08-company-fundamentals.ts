@@ -753,9 +753,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const qCapexEffect = ((tobinsQ - 1) * 0.2);
     const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
     const competitivenessCapexEffect = (avgCompetitiveness * 0.15);
-    // RULE 2: a floor justified as "realistic" is the shape rule 2 exists to catch. A firm under
-    // real payout pressure DOES cut investment to zero, and whether it can is CAP's (4) question.
-    const growthCapexAllocationShare = Math.max(0.4, 1 - payoutPressure * 0.75);
+    // CAP — THE 0.4 FLOOR IS GONE, and its own comment had already convicted it: "a floor
+    // justified as realistic is the shape rule 2 exists to catch." A firm under real payout
+    // pressure DOES cut growth investment to zero, and the maintenance half is separately funded
+    // and separately anchored to depreciation (§7.167), so nothing here needs protecting from a
+    // firm choosing not to expand. Investment cannot be negative; that is all that is left.
+    const growthCapexAllocationShare = Math.max(0, 1 - payoutPressure * 0.75);
 
     // CAP — A FIRM EXPANDS WHEN THE MARKET IT SELLS INTO CANNOT BE MET.
     //

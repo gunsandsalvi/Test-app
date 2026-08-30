@@ -409,8 +409,8 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | # | Tier | Project | Why here |
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
-| 1 | foundation | **DIST — the distribution is the state** | **PROMOTED TO ITEM 1 (2026-08-30). Substantially delivered and the largest live mechanism row.** Done: SME pool leverage strata with both distress terms as integrals (§7.140-141), the absorbing barrier and its reinjection (§7.143), all nine §6.3-A household tables as measurements (§7.145), and **two of the four §7.157 sweep targets** — pool distress layoffs over the strata (§7.161) and the credit tiers' three one-way ratchets (§7.162). The mortgage half went to HSG (§7.159). **What remains: (a) the FOURTH one-way ratchet — cohort saving sits under a `Math.max(0,...)` so no tier can dissave (§7.163), which blocks both the savings rework and forced selling; (b) the named tier as a node of weight one, one representation at N resolutions; (c) cut-point invariance, which needs (b) to be testable.** §5-DIST-P is its governing idea and holds the primitive scoreboard. |
-| 2 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **CAP0 DONE (§7.121)** — the [2%,65%] margin clamp is gone and a firm can report a loss, so CAP's own mechanism (a firm that cannot cover unit cost STOPS) can fire. **IND13 handed it two measured defects (§6.1, §7.151):** capex covers ~0.5%/yr of a capital stock depreciating at ~8%, so the plant is being consumed several times faster than replaced; and a hard **±2%/week clamp on capacity growth** (rule 2). Both were invisible until the construction stock existed to measure them. The capacity DECISIONS are the rest. |
+| 1 | foundation | **DIST — the distribution is the state** | **SUBSTANTIALLY CLOSED 2026-08-30.** (a) the savings rate is an outcome and the fourth one-way ratchet is gone (§7.165); (b) workers differ — the experience cross-section on DIST's own machinery, plus rent-sharing giving firms a real premium (§7.173-174); (c) cut-point invariance verified with an affine control at exactly 0.0000% (§7.175). Earlier: pool strata and both distress terms as integrals (§7.140-141), the absorbing barrier and reinjection (§7.143), all nine §6.3-A tables as measurements (§7.145), pool distress layoffs over the strata (§7.161), the credit tiers' three one-way ratchets (§7.162). The mortgage target went to HSG (§7.159-160). **What is left is ONE JUDGEMENT, not a mechanism:** whether to derive `TIER_WAGE_MULTIPLIER` from the ~2.5x the model now produces against the 32.5x it states — see §7.174. Own slice, with a before/after. |
+| 2 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **THE CLAMP PROGRAMME IS DONE (§7.176); the capacity DECISIONS remain.** Deleted this pass: the production-response [0.5,2.0] band, the input-supply-constraint 0.3 floor, the SME pool's half-the-reference offer floor, the growth-capex 0.4 floor (whose own comment had already convicted it), and the ±2%/week capacity clamp (§7.167). `CAPEX_PUBLIC_SUPPLY_SHARE` was dead — imported, never read — and is gone with them. The carrier's offer floor now includes the capital charge on the hulls, so a balanced freight market no longer clears where no ship can be replaced. Maintenance capex is anchored to depreciation (§7.167). **What is left: capacity read off PP&E rather than walked, and the capex SUPPLY row in §6.1 — the capital-goods sector is sized for two thirds of what it is asked for.** |
 | 3 | foundation | **COH — cohorts accumulate: household balance sheets** | **Mostly delivered by DIST from a different direction (§7.145) — re-read §5-COH before starting; most of what it describes has happened.** What is left and what makes it item 3: the household balance sheet still cannot distinguish what is spendable now from what is accumulated, and the savings rework needs that distinction to have a buffer to be a buffer OF. Also still owns `beneficiaryLiabilityUSD`'s reversal and retiring `national-accounts.ts`. |
 | 4 | foundation | **DEM — demographic variability** *(unblocks COH2, and the savings life-cycle)* | **THE AGE STRUCTURE ALREADY EXISTS AND NOTHING READS IT (§7.169).** `lifeCycleDistribution` carries four stages with `shareOfPopulation`, `savingsRate` and `consumptionMultiplier` per stage; only `RETIRED.shareOfPopulation` is ever read, and only to set a death rate. **`LifeCycleStageData.savingsRate` is read NOWHERE** — the life-cycle saving motive is present as data and binds on nothing, the fifth instance of that pattern this session. **And it should not simply be wired in: those per-stage rates are stated shape parameters** (§5-DIST-P), and the derivation is better than they are — see the row's §5 entry. | Small; takes the population-growth and migration clamps. **Promoted in substance: its AGE STRUCTURE half is what gives the household sector a life-cycle**, and a life-cycle is what makes a positive steady-state savings rate an outcome rather than a coefficient (§5-DIST-P). |
 | 5 | markets | **HSG — a housing market that clears** *(clamps)* | **PROMOTED from item 10; substantially started 2026-08-30.** Done: the mortgage book is a cross-section of **vintages** each marked to today's prices, so severity is `E[f(LTV)]` and the model can have a mortgage credit event — a −20% price move now takes severity to 2.1x where the one-average book said its floor (§7.159); loans carry a **5-year fix and RESET** (17.5% of the book reprices a year) with per-vintage default frequency; and borrowing capacity is `DSTI x income / annuity factor` (§7.160). **What remains is the row's actual title: `medianHomePriceUSD` does not CLEAR.** Until it does, the affordability limit has slack it should not always have, and `HOUSING_TURNOVER_RATE_ANNUAL` is still a constant on the seller's side. |
@@ -5990,3 +5990,31 @@ that proved it, the lesson.
       is redundant for one consumer and essential for the next.
     - Reported, not asserted — the battery pattern (§1.10): a threshold on this gap would be a
       stated number doing exactly what rule 19 forbids.
+
+176. **CAP — the clamp programme closes: five bounds deleted, one dead constant, and the carrier
+    floor learns about capital.** §6.4's discipline is that a clamp goes only once the mechanism
+    under it exists. Every one of these now had one.
+    - **Production response `[0.5, 2.0]`** bounded how hard a firm runs its plant against the price
+      it expects — a DECISION, and the band was standing in for the decision's own limits. Three
+      real bounds now exist: the plant (capacity), the staffing (IND15), and the cost-covering rule
+      that stops production outright (CAP's own mechanism, which fires since §7.121). Only
+      "a plant cannot run backwards" is left.
+    - **Input-supply-constraint floor `0.3`** said every firm could always run at three tenths on
+      inputs it did not have — production out of nothing. Stage 08 measures real physical
+      fulfilment off the lots actually held, so the constraint has a real basis and a firm rationed
+      to nothing can stop.
+    - **The SME pool's `max(0.5, 1 − marginPct)` offer floor** existed because a margin could be
+      anything; since IND3 a margin is the residual of real costs, so `1 − margin` IS the pool's
+      unit cost and needs no floor under it.
+    - **The growth-capex `0.4` floor** — its own comment had already convicted it: *"a floor
+      justified as realistic is the shape rule 2 exists to catch."* A firm under real payout
+      pressure does cut growth investment to zero, and maintenance is separately funded and
+      separately anchored (§7.167).
+    - **`CAPEX_PUBLIC_SUPPLY_SHARE = 0.65` was DEAD** — imported by stage 05 and read nowhere.
+      §7.58's instruction again: grep for the readers before trusting a constant.
+    - **The carrier's offer floor was fuel and crew only** — what a ship costs to SAIL, not what it
+      costs to HAVE. A balanced freight market therefore cleared at a price where no carrier could
+      replace a hull, and the fleet was consumed with nothing saying so. It now carries the return
+      its capital requires, spread over the tonne-miles that capital delivers — the same arithmetic
+      LAB runs on labour.
+    - Harness green and 0 violations at every step.

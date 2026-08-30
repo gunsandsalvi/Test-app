@@ -141,6 +141,9 @@ export function marginalCostPerTonneNmUSD(args: {
   fuelPriceUsdPerTonne: number;
   annualCrewWageUSD: number;
   distanceNm: number;
+  /** CAP — this asset's share of its owner's weekly capital charge (cost of capital on net
+   *  PP&E). Absent = the old fuel-and-crew floor, which cannot replace a ship. */
+  weeklyCapitalChargeUSD?: number;
 }): number {
   const { asset, fuelPriceUsdPerTonne, annualCrewWageUSD, distanceNm } = args;
   const fuelPerTonneNm = (asset.fuelTonnesPerNm * fuelPriceUsdPerTonne) / Math.max(1, asset.capacityTonnes);
@@ -152,7 +155,15 @@ export function marginalCostPerTonneNmUSD(args: {
   const weeklyCrewCostUSD = (asset.crewCount * annualCrewWageUSD) / 52;
   const crewPerTonneNm = weeklyTonneNm > 0 ? weeklyCrewCostUSD / weeklyTonneNm : 0;
 
-  return fuelPerTonneNm + crewPerTonneNm;
+  // CAP — AND THE CAPITAL THAT DOES THE WORK. Fuel and crew alone are what a ship costs to SAIL,
+  // not what it costs to HAVE: a floor built from them clears a balanced freight market at a
+  // price where no carrier can ever replace a hull, so the fleet is consumed and the market never
+  // says so. The charge is the same arithmetic LAB already runs on labour — the return the
+  // capital requires — spread over the tonne-miles that capital delivers.
+  const capitalPerTonneNm = weeklyTonneNm > 0
+    ? (args.weeklyCapitalChargeUSD ?? 0) / weeklyTonneNm : 0;
+
+  return fuelPerTonneNm + crewPerTonneNm + capitalPerTonneNm;
 }
 
 /** A carrier's fleet, carried on the Company that owns it. */

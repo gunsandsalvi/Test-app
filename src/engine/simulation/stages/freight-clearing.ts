@@ -25,6 +25,7 @@ import {
   FreightAsset, laneKey, marginalCostPerTonneNmUSD, weeklyCapacityTonnes,
 } from '../../../domain/carrier';
 import { getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { convertLocal, FxToUsd } from '../../../domain/currency';
 import { LaneBooking, SOURCING_REGION_IDS } from './sourcing-intent';
 import { WeeklyStepContext } from './context';
@@ -114,6 +115,18 @@ function buildCarrierOffers(
     const fuelUsdPerTonne = fuelPriceUsdPerTonne(regions[home], unitMassTonnes);
     const wage = crewAnnualWageUSD(regions[home], home);
 
+    // CAP — the carrier's own weekly capital charge, spread across its fleet by capacity. The
+    // return its hulls require is a real cost of offering the capacity, and a floor without it
+    // prices freight where the fleet cannot be replaced.
+    const netPpeUSD = Math.max(0, (carrier.grossPPEUSD ?? 0) - (carrier.accumulatedDepreciationUSD ?? 0));
+    const costOfCapital = Math.max(0,
+      (regions[home]?.zeroRates?.tenor10Y ?? regions[home]?.policyRate ?? 0) + (carrier.beta ?? 1) * EQUITY_RISK_PREMIUM);
+    const fleetCapacityTonnes = (carrier.carrierFleet?.assets ?? []).reduce((a, x: FreightAsset) => {
+      const d = laneDistanceNm(x.laneFrom, x.laneTo);
+      return a + (d > 0 ? weeklyCapacityTonnes(x, d) : 0);
+    }, 0);
+    const carrierWeeklyCapitalChargeUSD = (netPpeUSD * costOfCapital) / 52;
+
     // One offer per lane, not per hull: several identical vessels on a route are one block of
     // capacity at one cost.
     const byLane = new Map<string, { capacityTonnes: number; minPrice: number }>();
@@ -127,6 +140,8 @@ function buildCarrierOffers(
       // which is the channel by which a weak home currency makes an operator cheap abroad.
       const costInCarrierMoney = marginalCostPerTonneNmUSD({
         asset, fuelPriceUsdPerTonne: fuelUsdPerTonne, annualCrewWageUSD: wage, distanceNm,
+        weeklyCapitalChargeUSD: fleetCapacityTonnes > 0
+          ? carrierWeeklyCapitalChargeUSD * (capacity / fleetCapacityTonnes) : 0,
       }) * distanceNm;
       const minPrice = convertLocal(costInCarrierMoney, home, asset.laneFrom, fxToUsd);
       const existing = byLane.get(key);
