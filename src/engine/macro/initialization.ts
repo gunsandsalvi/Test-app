@@ -20,7 +20,6 @@ import {
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import { CPI_BASE_LEVEL, seedCpiHistory } from '../simulation/stages/price-index';
 import {
-  assertHouseholdIncomeIdentity,
   computeHouseholdDisposableIncomeUSD,
   splitWageBill,
   UNEMPLOYMENT_REPLACEMENT_RATE,
@@ -396,9 +395,12 @@ function buildRegion(regionId: RegionId): Region {
     wageIncomeUSD: totalWageIncomeUSD,
     transfersWeeklyUSD: seedObligations.transfersUSD,
   }).toFixed(0));
-  assertHouseholdIncomeIdentity(
-    regionId, estimatedHouseholdIncomeUSD, estimatedNominalGdpUSD, seedObligations.transfersUSD
-  );
+  // COH3 — `assertHouseholdIncomeIdentity` is GONE, and the reason is that it could not fail.
+  // Both sides of it came from the same four constants, so it was a tautology dressed as a check
+  // — and its real effect was to PIN the seed to an identity the model stopped using in week 1,
+  // when household income became the measured sum of what employers actually pay (§7.96). A check
+  // that cannot fire is not a check; what would catch a real break is the cohort identity the
+  // harness already asserts, which compares two things that are separately derived.
   const lastWeekNominalGdpUSD = estimatedNominalGdpUSD;
 
   // HH4 — §7.4: the cohorts are seeded by the same builder the weekly evolution runs, off the

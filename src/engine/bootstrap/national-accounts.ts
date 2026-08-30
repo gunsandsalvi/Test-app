@@ -155,33 +155,13 @@ export function computeHouseholdDisposableIncomeUSD(parts: {
  * the 106.6%-of-output gap fails loudly at startup instead of surfacing weeks later as fake
  * growth.
  */
-export function assertHouseholdIncomeIdentity(
-  regionId: string,
-  householdIncomeUSD: number,
-  outputUSD: number,
-  /**
-   * PUB3b: the government's REAL weekly transfer obligation. It used to be re-derived here from
-   * the spending budget and a procurement share — a third representation of a number the budget
-   * owns, which is exactly what the assert exists to catch elsewhere.
-   */
-  transfersWeeklyUSD: number
-): void {
-  const transferShare = (Math.max(0, transfersWeeklyUSD) * 52) / outputUSD;
-  // PUB1c: households receive the labor share NET of the employer's payroll tax.
-  const expectedShare =
-    (LABOR_SHARE_OF_OUTPUT / (1 + EMPLOYER_PAYROLL_TAX_RATE)
-      + HOUSEHOLD_CAPITAL_INCOME_SHARE_OF_OUTPUT + transferShare) *
-    (1 - HOUSEHOLD_EFFECTIVE_TAX_RATE);
-  const actualShare = householdIncomeUSD / outputUSD;
-  if (Math.abs(actualShare - expectedShare) > 1e-4) {
-    throw new Error(
-      `National accounts identity broken at init for region ${regionId}: household income is ` +
-        `${(actualShare * 100).toFixed(4)}% of output but the income decomposition requires ` +
-        `${(expectedShare * 100).toFixed(4)}%. Fix the wage/occupation/fiscal primitives that ` +
-        `feed it — do not adjust this assertion.`
-    );
-  }
-}
+/**
+ * COH3 — `assertHouseholdIncomeIdentity` is DELETED. It threw at startup if household income
+ * departed from `(labour share / (1 + payroll tax) + capital share + transfer share) x (1 - tax
+ * rate)` — but every term on both sides came from the same four constants in this file, so it
+ * was a tautology, and the one thing it did do was pin the seed to an identity the model stops
+ * using in week 1. Income is the measured sum of what employers pay from there on (§7.96).
+ */
 
 /**
  * The expenditure side of the identity: C + I + G + NX. One function so the cold-start bootstrap
