@@ -473,7 +473,10 @@ function buildRegionSupplyPlans(
     // swings in real cleared sales even when underlying demand is stable. A continuous response
     // that scales down smoothly as the inventory/capacity ratio grows converges instead.
     const inventoryToCapacityRatio = currentInvUSD / Math.max(1, warehouseCapacityUSD);
-    const productionThrottle = Math.max(0.3, Math.min(1.0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
+    // CAP: the 0.3 floor is gone (rule 2). A plant with a full warehouse and nowhere to sell
+    // stops; it does not keep running at three tenths forever. Zero is a real production
+    // decision, and it was the one this throttle could not express.
+    const productionThrottle = Math.min(1.0, Math.max(0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
     const priceSignal = (supplierExpectedUnitPriceUSD / referencePriceUSD) - 1.0;
     const productionResponseFactor = Math.max(0.5, Math.min(2.0, 1.0 + priceSignal * 1.5));
 
@@ -503,7 +506,27 @@ function buildRegionSupplyPlans(
         line.weeklyCapacityUnits! * (1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate)))
       );
     }
-    const targetProductionUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
+    const costRate = Math.max(0, 1 - baseMargin);
+    const weeklyOperatingCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52) * (line.revenueShare ?? 1.0);
+
+    // CAP — A FIRM THAT CANNOT COVER UNIT COST STOPS PRODUCING.
+    //
+    // This is §5-CAP's own mechanism and the half §7.129 recorded as missing: an investment
+    // response without a production-stopping rule is half a control loop. The throttle above
+    // answers "is my warehouse full"; nothing answered "does making one more unit lose money".
+    // A firm facing a price below what the unit costs it idles the plant — that is what makes a
+    // downturn end, because supply leaves until the price recovers, and it is why the clamp CAP0
+    // removed had to go first: while EBITDA could not be negative, this could never fire.
+    //
+    // Unit cost is the same dollar figure the offer floor uses (§7.130), so a firm never produces
+    // something it would then refuse to sell.
+    const uncappedProductionUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    const prospectiveUnitCostUSD = uncappedProductionUnits > 0.0001
+      ? weeklyOperatingCostUSD / uncappedProductionUnits
+      : Infinity;
+    const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
+    const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     const contractSales = (contractUnitsBySupplier.get(comp.ticker) ?? 0) + (contractUnitsBySupplier.get(comp.id) ?? 0);
     const openOfferUnits = Math.max(0, targetProductionUnits + currentUnits - contractSales);
@@ -525,9 +548,6 @@ function buildRegionSupplyPlans(
     // The [0.40, 0.98] band on the cost rate goes with it: it existed because the margin it read
     // was a stated number that could be anything, and since IND3 it is the residual of real
     // costs (rule 2).
-    const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
-    const costRate = Math.max(0, 1 - baseMargin);
-    const weeklyOperatingCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52) * (line.revenueShare ?? 1.0);
     const ratingPdMap: Record<string, number> = {
       'AAA': 0.0002, 'AA': 0.001, 'A': 0.003, 'BBB': 0.01, 'BB': 0.03, 'B': 0.08, 'CCC': 0.20
     };

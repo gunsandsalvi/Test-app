@@ -5168,3 +5168,23 @@ that proved it, the lesson.
       the ownership machinery to issue a new register first, then divest.
     - Harness green, 0 violations. **IND's independent slices are now IND4, IND6 and IND7-first-
       half done; IND10-19 remain and are the depth-tier build-outs.**
+
+139. **CAP — a firm that cannot cover unit cost STOPS producing. The control loop closes.**
+    §5-CAP's own mechanism, and the half §7.129 recorded as missing when it added the investment
+    response: *"an investment response without a production-stopping rule is half a control loop."*
+    - **What was there.** `productionThrottle` answered "is my warehouse full" (and floored at
+      0.3, so a plant with nowhere to sell still ran at three tenths forever — rule 2). Nothing
+      answered **"does making one more unit lose money"**. A firm facing a price below its unit
+      cost kept producing into inventory.
+    - **What is there now.** Production goes to ZERO when the expected price is below what the
+      unit costs to make — the same dollar figure the offer floor uses (§7.130), so a firm never
+      produces something it would then refuse to sell. **That is what makes a downturn end:**
+      supply leaves until the price recovers. And it is why CAP0 had to go first — while EBITDA
+      could not be negative, this could never fire.
+    - **Measured: deflation −25.5% → −21.9% at week 10 — the first improvement in this whole
+      chain**, after four fixes that each made it worse or left it flat (§7.129, §7.130, §7.131).
+      Unemployment flat to slightly better. Harness green, 0 violations.
+    - **The lesson, and it is why §7.129's honesty mattered:** that slice shipped a mechanism that
+      measurably worsened the headline and said so, naming the missing counterpart. The
+      counterpart is this, and together they behave. **A half-loop recorded as a half-loop is
+      recoverable; a half-loop shipped as a fix is not.**
