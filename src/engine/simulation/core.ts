@@ -2,6 +2,7 @@ import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runSwapClearingStage } from './stages/07g-swap-clearing';
+import { runCdsClearingStage } from './stages/07h-cds-clearing';
 import { runEstateResolutionStage } from './stages/estate-resolution';
 import { reconcileRepoPledges } from './stages/repo-clearing';
 import { createInitialContext } from './stages/context';
@@ -139,6 +140,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
   // DER1: after the sovereign curve is this week's cleared one, which every schedule reads.
   run('07g-swap-clearing', () => runSwapClearingStage(state, ctx));
+  // CRD/DER2: after 07b, whose cleared OAS every schedule in the protection book prices against.
+  run('07h-cds-clearing', () => runCdsClearingStage(state, ctx));
   // REPO2: the sovereign books have all cleared, so a pledge on paper a bank no longer holds is
   // called and the loan it secured shrinks with it.
   run('repo-collateral-reconcile', () => reconcileRepoPledges(ctx));

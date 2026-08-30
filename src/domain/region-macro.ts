@@ -5,6 +5,7 @@ import { RegionId } from './geography';
 import { RepoContract } from './repo';
 import { PrimeBrokerageLine } from './prime-brokerage';
 import { SwapContract } from './swaps';
+import { CdsContract } from './credit-default-swap';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSector, AssetOwnershipShares } from './banking';
@@ -679,6 +680,13 @@ export interface Region {
    * parties named, the same shape as the repo and prime-brokerage books.
    */
   swapBook?: SwapContract[];
+  /**
+   * CRD/DER2 — the single-name CDS contracts written on this region's issuers, stored ONCE with
+   * both parties named (the G2/REPO/DER contract-book pattern). Every scalar anyone wants about
+   * protection — who is hedged, who is short the credit, what one name's outstanding is — is
+   * derived from this list, never carried beside it.
+   */
+  cdsBook?: CdsContract[];
   /** DER1 — the cleared par swap rate per tenor (annualised decimal). */
   swapParRateByTenor?: Record<string, number>;
   /**

@@ -442,7 +442,19 @@ export interface Company {
   // Debt & CDS Pricing
   seniorBondYield: number;
   oasSpreadBps: number;
+  /**
+   * CRD/DER2 — the CLEARED single-name CDS spread, in bps. It was `oasSpreadBps + a random draw
+   * in [-4, +4]` bounded to [10, 5000] — a decoration on another price with a clamp on each end —
+   * and it is now what the protection book actually cleared at (07h).
+   */
   cdsSpreadBps: number;
+  /**
+   * CRD/DER2 — the CDS BASIS: the cleared protection spread less this issuer's cleared cash OAS.
+   * An OUTCOME, and the second cross-market agreement test this model can run after DER1's swap
+   * spread. Persistently negative means the cash market is paying more for the same default risk
+   * than the synthetic one.
+   */
+  cdsBasisBps?: number;
   // Rolling weekly history of real cleared oasSpreadBps (most recent last, capped length) — real
   // credit investors weigh recent spread momentum (a name that's been widening fast is a riskier
   // "catch the falling knife" buy even if it already looks cheap) alongside static fair value.

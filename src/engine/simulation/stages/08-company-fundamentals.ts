@@ -1584,8 +1584,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     // Real, already-cleared this week (see the comment above) — not recomputed here.
     const newOasBps = comp.oasSpreadBps;
-    const rawNewCds = newOasBps + Math.floor(random() * 8 - 4);
-    const newCdsSpreadBps = isFinite(rawNewCds) ? Math.round(Math.max(10, Math.min(5000, rawNewCds))) : 150;
+    // CRD/DER2 — THE CDS SPREAD IS CLEARED NOW (07h), not decorated here.
+    //
+    // What stood here was `oasSpreadBps + a random draw in [-4, +4]`, bounded to [10, 5000]: a
+    // decoration on another price with a clamp on each end, which is rule 1 and rule 15 in two
+    // lines. Nothing traded it and nobody was on either side, so a bank could not lay off a
+    // credit concentration at all — the only way to reduce one was to stop lending. The
+    // protection book prices it against real hedging demand and real sellers, and the difference
+    // between it and the cash OAS is the BASIS, which is an outcome worth having.
+    const newCdsSpreadBps = comp.cdsSpreadBps > 0 ? comp.cdsSpreadBps : newOasBps;
 
     // Real, already-cleared this week by 07d-leveraged-loan-clearing.ts — not recomputed here.
 
