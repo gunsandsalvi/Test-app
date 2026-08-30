@@ -78,6 +78,16 @@ const CONTRACT_NON_PERFORMANCE_WEEKS = 13;
  */
 const CONTRACT_INDEXATION_MIN_WEEKS = 52;
 
+/**
+ * IND14 — the floor under a supplier's sourcing weight.
+ *
+ * Not a rescue and not a band on the record itself, which is measured and unbounded: it is the
+ * statement that a buyer who has never dealt with a firm cannot know it is unreliable, so
+ * SOMEBODY tries it. Without it a firm that missed a quarter could never win another contract
+ * from anyone, ever, and the model has no re-entry mechanism to bring it back (that is DYN's).
+ */
+const SUPPLIER_MIN_SOURCING_WEIGHT = 0.05;
+
 // 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal
 // recipe (CATEGORY_INPUT_REQUIREMENTS) that 08-company-fundamentals.ts uses to draw down input
 // inventory — bidding to this real, recipe-derived need (instead of a generic revenue-share
@@ -572,6 +582,10 @@ function settleContracts(
     // company's whole-business sales) — but the inventory settlement below needs THIS sub-unit's
     // contract sales specifically, so track that separately rather than reading the total.
     contractSalesUnitsBySupplier[supplier.ticker] = (contractSalesUnitsBySupplier[supplier.ticker] ?? 0) + actualTransacted;
+    // IND14 — the supplier's own delivery record, kept where the delivery happens: what it owed
+    // this week against what it shipped. Stage 08 smooths it onto the firm.
+    supUp._contractOwedUnits = (supUp._contractOwedUnits ?? 0) + contract.quantityUnitsPerWeek;
+    supUp._contractDeliveredUnits = (supUp._contractDeliveredUnits ?? 0) + Math.min(actualTransacted, contract.quantityUnitsPerWeek);
 
     const custUp = companyUpdates[customer.ticker];
     custUp.purchasesUnits = (custUp.purchasesUnits ?? 0) + actualTransacted;
@@ -1570,11 +1584,31 @@ function formContracts(
 
   const candidateSuppliers = supplyPlans.filter(p => p.company && inMoneyOfferKeys.has(p.key));
   if (candidateSuppliers.length === 0) return;
+  // IND14 — RELIABILITY IS PRICED INTO SOURCING. Who a buyer contracts with was a uniform random
+  // draw over everyone in the money: a supplier that had failed to deliver for a year was as
+  // likely to win the next contract as one that never missed. The merit order already prices
+  // landed cost; this is the other half of a real sourcing decision, and IND11's delivery record
+  // is what makes it measurable rather than asserted.
+  //
+  // The weight is the record itself — a supplier that ships 60% of what it owes is drawn 60% as
+  // often as a perfect one — with a floor, because a firm nobody can ever contract with again
+  // could never recover, and the model has no re-entry for that (DYN's).
+  const reliabilityWeights = candidateSuppliers.map(p =>
+    Math.max(SUPPLIER_MIN_SOURCING_WEIGHT, Math.min(1, p.company!.deliveryReliability ?? 1)));
+  const reliabilityTotal = reliabilityWeights.reduce((a, w) => a + w, 0);
+  const drawSupplier = (): SupplyPlan => {
+    let x = random() * reliabilityTotal;
+    for (let i = 0; i < candidateSuppliers.length; i++) {
+      x -= reliabilityWeights[i];
+      if (x <= 0) return candidateSuppliers[i];
+    }
+    return candidateSuppliers[candidateSuppliers.length - 1];
+  };
   const totalSuppliersRevenue = supplyPlans.reduce((s, p) => s + (p.company?.annualRevenue ?? 0), 0);
 
   demandPlans.forEach(bidPlan => {
     if (!bidPlan.company || !bidPlan.key || !inMoneyBidKeys.has(bidPlan.key)) return;
-    const supplierPlan = candidateSuppliers[Math.floor(random() * candidateSuppliers.length)];
+    const supplierPlan = drawSupplier();
     if (random() >= 0.15) return;
     const supplierComp = supplierPlan.company!;
     const customerComp = bidPlan.company;

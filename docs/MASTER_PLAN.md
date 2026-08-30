@@ -5530,3 +5530,26 @@ that proved it, the lesson.
       depreciation by an order of magnitude, and there is a ±2%/week clamp on capacity growth
       next to it. Both logged in §6.1 as CAP's; both were invisible until the stock existed to
       look at, which is the argument for building the stock.
+
+152. **IND14 — reliability is a supplier attribute, and IND11 is what made it measurable.** Who a
+    buyer contracted with was `candidateSuppliers[floor(random() x n)]` — a uniform draw over
+    everyone in the money. A supplier that had failed to deliver for a year was exactly as likely
+    to win the next contract as one that had never missed.
+    - **There was nothing to measure before.** An undelivered order evaporated (§7.148), so a
+      chronic under-deliverer was indistinguishable from a punctual one the following Monday.
+      `recentFulfillmentEMA` was the closest thing and it answers a different question — "did
+      this firm sell anything", not "did it deliver what it promised".
+    - `Company.deliveryReliability` is units delivered against units OWED on the firm's own
+      contracts, accumulated where the delivery happens and smoothed at 0.9 — **deliberately
+      slow, because reliability that one good week repairs is not reliability**, which is exactly
+      §5-IND14's test. It weights the sourcing draw: a supplier shipping 60% of what it owes is
+      drawn 60% as often. The merit order already prices landed cost; this is the other half.
+    - **The one floor, and what it is not.** `SUPPLIER_MIN_SOURCING_WEIGHT = 0.05` bounds the
+      WEIGHT, never the record, which stays measured and unbounded. It says a buyer who has never
+      dealt with a firm cannot know it is unreliable, so somebody tries it. Without it a firm
+      that missed one quarter could never win another contract from anyone ever again, and there
+      is no re-entry mechanism to bring it back — that is DYN's.
+    - **Measured at week 10: p10 0.889, p50 1.000, p90 1.000, nobody below 0.5.** The attribute
+      exists and is dispersing, and the dispersion is YOUNG on purpose: at 0.9 a record moves
+      only 65% of the way to the truth in ten weeks, so this is what a slow EMA looks like early.
+      It needs a longer run or a supply shock to bite, and that is the correct shape.

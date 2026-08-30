@@ -1265,6 +1265,17 @@ const indModule: HarnessModule = (() => {
       out.push(`  ${r}: EBITDA/rev ${pct(ebitda / rev)}  inputs/rev ${pct(inputs / rev)}  netPPE/rev ${(netPpe / rev).toFixed(2)}x  |  below cost of capital: ${below}/${firms.length} (${pct(below / firms.length)})`);
     });
 
+    out.push('--- IND14: reliability is a supplier attribute, and it is priced ---');
+    const suppliers = s.companies.filter(c => isActiveCompany(c) && (c as any).deliveryReliability !== undefined);
+    if (suppliers.length > 0) {
+      const rel = suppliers.map(c => (c as any).deliveryReliability as number).sort((a, b) => a - b);
+      const q = (f: number) => rel[Math.min(rel.length - 1, Math.floor(f * rel.length))];
+      out.push(`  ${rel.length} suppliers with a delivery record: p10 ${q(0.1).toFixed(3)}  p50 ${q(0.5).toFixed(3)}  p90 ${q(0.9).toFixed(3)}`);
+      // The dispersion IS the attribute: a flat record would mean reliability distinguishes
+      // nobody and pricing it changes nothing.
+      out.push(`  spread p90/p10: ${(q(0.1) > 0 ? q(0.9) / q(0.1) : 0).toFixed(2)}x  |  below 0.5: ${suppliers.filter(c => ((c as any).deliveryReliability ?? 1) < 0.5).length}`);
+    }
+
     out.push('--- IND13: capital that has arrived and is not yet plant ---');
     const aucFirms = s.companies.filter(c => isActiveCompany(c) && ((c as any).assetsUnderConstruction ?? []).length > 0);
     const aucUSD = aucFirms.reduce((a, c) => a + ((c as any).assetsUnderConstruction as any[]).reduce((b, l) => b + l.valueUSD, 0), 0);

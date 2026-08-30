@@ -451,6 +451,20 @@ export interface Company {
    */
   wipBySubUnit?: Record<string, { units: number; valueUSD: number }[]>;
   recentFulfillmentEMA: number;
+  /**
+   * IND14 — THIS SUPPLIER'S DELIVERY RECORD: units delivered against units owed on its own
+   * contracts, smoothed.
+   *
+   * A stockout does not lose a week's sale, it loses the relationship. Before IND11 there was
+   * nothing to measure — an undelivered order evaporated and a chronic under-deliverer looked
+   * identical to a punctual one the following Monday. Now the record exists, so it can be
+   * PRICED: buyers weight who they contract with by it, beside landed cost.
+   *
+   * The EMA is deliberately slow (0.9). Reliability that could be repaired by one good week
+   * would not be reliability, and the design's own test is that the graph does not rewire back
+   * on one good week.
+   */
+  deliveryReliability?: number;
   /** IND2 — the annualised CONTRACTED revenue base a subscription seller carries. It survives a
    *  week with no sales and decays only by churn, which is what makes a software firm's revenue
    *  behave differently from a steel mill's. Absent on pure unit sellers. */

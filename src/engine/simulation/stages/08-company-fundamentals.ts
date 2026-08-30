@@ -1776,6 +1776,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // pipeline is a firm whose half-built output vanishes every week.
       wipBySubUnit: update?.wipBySubUnit ?? comp.wipBySubUnit,
       recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
+      // IND14 — the delivery record, smoothed slowly onto the firm. A week in which this
+      // supplier owed nothing tells us nothing, so it leaves the record where it was.
+      deliveryReliability: Number((() => {
+        const owed = (update as any)?._contractOwedUnits ?? 0;
+        const prior = comp.deliveryReliability ?? 1;
+        if (!(owed > 0)) return prior;
+        const shipped = (update as any)?._contractDeliveredUnits ?? 0;
+        return prior * 0.9 + Math.max(0, Math.min(1, shipped / owed)) * 0.1;
+      })().toFixed(4)),
       recurringRevenueBaseUSD: newRecurringBaseUSD === undefined
         ? undefined : Number(newRecurringBaseUSD.toFixed(0)),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
