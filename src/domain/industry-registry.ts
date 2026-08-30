@@ -58,6 +58,16 @@ export interface SubUnitSpec {
   householdPriceTier?: HouseholdPriceTier;
   /** Share of any buyer's capex basket this category takes (capital-goods categories only). */
   capexBasketWeight?: number;
+  /**
+   * IND13 — weeks from a capital good ARRIVING to it entering service.
+   *
+   * A machine on the loading dock is not plant: it is installed, commissioned, and only then
+   * makes anything. IND1 already separated ordering from delivery; this is the second half, and
+   * it is why PP&E and the capacity it adds arrive AFTER the demand that justified them — the
+   * mechanism of every capacity cycle. Capital-goods categories only; a technological primitive
+   * like the production lead above (rule 4).
+   */
+  commissioningLeadWeeks?: number;
   linkedCommodities?: { commodityId: string; intensityShare: number }[];
   // ---- IND's dials. Storability and carrying cost are DERIVED from the physics above
   // (see isStorable / annualCarryingCostRateOf) rather than stated twice; these two are not
@@ -288,6 +298,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 12_000,
         capexBasketWeight: 0.3,
+        commissioningLeadWeeks: 6,
         productionLeadWeeks: 8,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -300,6 +311,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 40_000,
         capexBasketWeight: 0.2,
+        commissioningLeadWeeks: 10,
         productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -359,6 +371,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 15_000,
         capexBasketWeight: 0.1,
+        commissioningLeadWeeks: 2,
         productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -406,6 +419,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.1, CORPORATE: 0.9 },
         deliveryMode: 'DIGITAL',
         capexBasketWeight: 0.15,
+        commissioningLeadWeeks: 4,
         productionLeadWeeks: 0,
         revenueMechanism: 'SUBSCRIPTION',
       },
@@ -703,6 +717,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.45, CORPORATE: 0.55 },
         deliveryMode: 'IN_PLACE',
         capexBasketWeight: 0.25,
+        commissioningLeadWeeks: 13,
         productionLeadWeeks: 52,
         revenueMechanism: 'UNIT_SALE',
       },
@@ -983,6 +998,11 @@ export function isStorable(unitId: string): boolean {
 /** IND10 — weeks from starting a unit to having one to sell. 0 = made on demand. */
 export function productionLeadWeeksOf(unitId: string): number {
   return byId.get(unitId)?.productionLeadWeeks ?? 0;
+}
+
+/** IND13 — weeks from a capital good arriving to it entering service. 0 = usable on delivery. */
+export function commissioningLeadWeeksOf(unitId: string): number {
+  return byId.get(unitId)?.commissioningLeadWeeks ?? 0;
 }
 
 /**

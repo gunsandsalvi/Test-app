@@ -798,8 +798,21 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // ordered is not PP&E — capex is a bid into a real market that can go unfilled or arrive
     // weeks later by ship, and investment showing up after the demand that justified it is the
     // mechanism behind every capacity cycle. (`newCapex / 52` capitalised the intention.)
-    const capexDeliveredThisWeekUSD = companyUpdates[comp.ticker]?.capexDeliveredUSD ?? 0;
-    const newGrossPPEUSD = priorGrossPPE + capexDeliveredThisWeekUSD;
+    // IND13 — CONSTRUCTION IN PROGRESS. What arrived this week joins the assets under
+    // construction, each lot carrying the week it enters service. The plant grows by what was
+    // COMMISSIONED, not by what was delivered — so PP&E, and the capacity that grows off it,
+    // arrive after the demand that justified them. That lag is the capacity cycle.
+    const underConstruction = [
+      ...(comp.assetsUnderConstruction ?? []),
+      ...(companyUpdates[comp.ticker]?.capexUnderConstruction ?? []),
+    ];
+    let capexCommissionedThisWeekUSD = 0;
+    const stillUnderConstruction: { valueUSD: number; entersServiceWeek: number }[] = [];
+    underConstruction.forEach((lot) => {
+      if (lot.entersServiceWeek <= nextWeek) capexCommissionedThisWeekUSD += lot.valueUSD;
+      else stillUnderConstruction.push(lot);
+    });
+    const newGrossPPEUSD = priorGrossPPE + capexCommissionedThisWeekUSD;
     const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
 
     // ---- S5: the weekly cash walk is an explicit ledger ----
@@ -1734,7 +1747,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       growthCapex: Number(newGrowthCapex.toFixed(1)),
       grossPPEUSD: Number(newGrossPPEUSD.toFixed(1)),
       // IND1: read by stage 05's capacity growth — real net investment is what arrived.
-      capexDeliveredLastWeekUSD: Number(capexDeliveredThisWeekUSD.toFixed(1)),
+      // IND13 — the plant grew by what entered service. Both lines are named on the rebuild
+      // because a fixed field list drops what it does not name (§7.41), and a dropped
+      // construction queue is capital that arrives and then never exists.
+      capexCommissionedLastWeekUSD: Number(capexCommissionedThisWeekUSD.toFixed(1)),
+      assetsUnderConstruction: stillUnderConstruction,
       accumulatedDepreciationUSD: Number(newAccumulatedDepreciationUSD.toFixed(1)),
       rndExpense: Number(newRndExpense.toFixed(1)),
       maintenanceShortfallStreak: newMaintenanceShortfallStreak,

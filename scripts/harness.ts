@@ -1265,6 +1265,21 @@ const indModule: HarnessModule = (() => {
       out.push(`  ${r}: EBITDA/rev ${pct(ebitda / rev)}  inputs/rev ${pct(inputs / rev)}  netPPE/rev ${(netPpe / rev).toFixed(2)}x  |  below cost of capital: ${below}/${firms.length} (${pct(below / firms.length)})`);
     });
 
+    out.push('--- IND13: capital that has arrived and is not yet plant ---');
+    const aucFirms = s.companies.filter(c => isActiveCompany(c) && ((c as any).assetsUnderConstruction ?? []).length > 0);
+    const aucUSD = aucFirms.reduce((a, c) => a + ((c as any).assetsUnderConstruction as any[]).reduce((b, l) => b + l.valueUSD, 0), 0);
+    const grossPpeUSD = s.companies.filter(isActiveCompany).reduce((a, c) => a + (c.grossPPEUSD ?? 0), 0);
+    const commissionedUSD = s.companies.reduce((a, c) => a + ((c as any).capexCommissionedLastWeekUSD ?? 0), 0);
+    out.push(`  ${aucFirms.length} firms carrying construction in progress, ${B(aucUSD)} against ${B(grossPpeUSD)} of gross PP&E (${pct(grossPpeUSD ? aucUSD / grossPpeUSD : 0)})`);
+    out.push(`  entered service this week: ${B(commissionedUSD)}`);
+    // The lag itself: how long the queue's oldest waiting lot has left, against the leads the
+    // registry states. A queue that empties instantly means the mechanism is not binding.
+    const waits = aucFirms.flatMap(c => ((c as any).assetsUnderConstruction as any[]).map(l => l.entersServiceWeek - s.currentWeek));
+    if (waits.length > 0) {
+      waits.sort((a, b) => a - b);
+      out.push(`  weeks still to wait: p50 ${waits[Math.floor(waits.length / 2)]}, max ${waits[waits.length - 1]} (registry leads run 2-13)`);
+    }
+
     out.push('--- IND12: trade credit, and who carries it ---');
     const invoices = ((s as any).tradeInvoices ?? []) as any[];
     const byTicker = new Map(s.companies.map(c => [c.ticker, c]));

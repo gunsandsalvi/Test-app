@@ -23,7 +23,7 @@ import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Compan
 import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY_TIER } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
-import { isStorable, purchaseKindOf, productionLeadWeeksOf } from '../../../domain/industry-registry';
+import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
@@ -137,7 +137,13 @@ function addInputInventory(update: any, baseComp: Company, subUnitId: string, se
   // third of the world's purchases immortal (§6's lot leak).
   const kind = purchaseKindOf(subUnitId);
   if (kind === 'CAPITAL_GOOD') {
-    update.capexDeliveredUSD = (update.capexDeliveredUSD ?? 0) + addedValueUSD;
+    // IND13 — a capital good that has ARRIVED is not yet plant. It is installed and commissioned
+    // first, so it lands as construction in progress with the week it enters service on it.
+    if (!update.capexUnderConstruction) update.capexUnderConstruction = [];
+    update.capexUnderConstruction.push({
+      valueUSD: addedValueUSD,
+      entersServiceWeek: week + commissioningLeadWeeksOf(subUnitId),
+    });
     return;
   }
   if (kind === 'OPERATING') return;
@@ -652,9 +658,10 @@ function buildRegionSupplyPlans(
       const grossPPE = comp.grossPPEUSD ?? 0;
       const netPPE = Math.max(1, grossPPE - (comp.accumulatedDepreciationUSD ?? 0));
       const weeklyDepreciationUSD = grossPPE / ((SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12) * 52);
-      // IND1: real net investment is capital DELIVERED less depreciation — a plant grows when
-      // machines arrive, not when a budget is approved.
-      const netInvestmentRate = ((comp.capexDeliveredLastWeekUSD ?? 0) - weeklyDepreciationUSD) / netPPE;
+      // IND1/IND13: real net investment is capital COMMISSIONED less depreciation — a plant
+      // grows when machines are installed and running, not when a budget is approved (IND1) and
+      // not when a crate is unloaded (IND13).
+      const netInvestmentRate = ((comp.capexCommissionedLastWeekUSD ?? 0) - weeklyDepreciationUSD) / netPPE;
       line.weeklyCapacityUnits = Math.max(
         0.0001,
         line.weeklyCapacityUnits! * (1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate)))

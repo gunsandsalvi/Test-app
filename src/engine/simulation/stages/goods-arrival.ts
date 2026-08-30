@@ -15,7 +15,7 @@
 import { GameState } from '../../../types';
 import { InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
-import { purchaseKindOf } from '../../../domain/industry-registry';
+import { purchaseKindOf, commissioningLeadWeeksOf } from '../../../domain/industry-registry';
 
 /** A consignment bought, paid for, and still on its way. */
 export interface InTransitShipment {
@@ -61,7 +61,13 @@ export function runGoodsArrivalStage(state: GameState, ctx: WeeklyStepContext): 
     const kind = purchaseKindOf(shipment.subUnitId);
     if (kind !== 'RECIPE_INPUT') {
       if (kind === 'CAPITAL_GOOD') {
-        update.capexDeliveredUSD = (update.capexDeliveredUSD ?? 0) + shipment.units * shipment.landedCostPerUnit;
+        // IND13 — landing is not entering service. An imported machine is commissioned on the
+        // same lead a domestic one is; the ocean crossing was the other half of the wait.
+        if (!update.capexUnderConstruction) update.capexUnderConstruction = [];
+        update.capexUnderConstruction.push({
+          valueUSD: shipment.units * shipment.landedCostPerUnit,
+          entersServiceWeek: ctx.nextWeek + commissioningLeadWeeksOf(shipment.subUnitId),
+        });
       }
       arrivedUnits += shipment.units;
       return;

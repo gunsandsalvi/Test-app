@@ -260,7 +260,18 @@ export interface Company {
   grossPPEUSD: number;
   accumulatedDepreciationUSD: number;
   /** IND1: capital goods that actually ARRIVED last week, at landed cost. Real net investment. */
-  capexDeliveredLastWeekUSD?: number;
+  /**
+   * IND13 — ASSETS UNDER CONSTRUCTION: capital that has arrived and is not yet plant.
+   *
+   * A machine on the loading dock produces nothing; it is installed and commissioned first, and
+   * only then does gross PP&E — and the capacity that grows off it — move. Each lot carries the
+   * week it enters service, from the good's own commissioning lead. IND1 separated ordering from
+   * delivery and this is the second half: investment shows up AFTER the demand that justified
+   * it, which is what makes a capacity cycle a cycle.
+   */
+  assetsUnderConstruction?: { valueUSD: number; entersServiceWeek: number }[];
+  /** IND13 — what actually entered service last week: what the plant really grew by. */
+  capexCommissionedLastWeekUSD?: number;
   rndExpense?: number;
   baselineGrowthCapexToRevenueRatio: number;
   maintenanceShortfallStreak: number;
@@ -498,6 +509,11 @@ export function getOutputInventoryUnits(comp: Company, subUnitId?: string): numb
 }
 
 /** IND10 — units of this company's output that are started but not yet finished. */
+/** IND13 — capital delivered and not yet in service: the construction-in-progress asset. */
+export function assetsUnderConstructionUSD(comp: Company): number {
+  return (comp.assetsUnderConstruction ?? []).reduce((s, l) => s + l.valueUSD, 0);
+}
+
 export function getWipUnits(comp: Company, subUnitId?: string): number {
   const wip = comp.wipBySubUnit;
   if (!wip) return 0;
