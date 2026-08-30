@@ -916,16 +916,47 @@ const hhModule: HarnessModule = (() => {
         const depGap = Math.abs(((hs.depositsUSD ?? 0) - (hs.pendingBankSettlementUSD ?? 0)) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
       });
-      out.push('--- the mortgage book against the curve that prices its losses ---');
+      out.push('--- the mortgage book as a CROSS-SECTION: E[f(LTV)] against f(E[LTV]) ---');
       REGIONS.forEach(r => {
-        const h = s.regions[r].householdState;
-        const stock = Math.max(0, h.housingStockUSD ?? 0);
-        const debt = Math.max(0, h.mortgageDebtUSD ?? 0);
-        const ltv = stock > 0 ? debt / stock : 0;
-        // The severity curve is flat at its floor below LTV ~0.75 and only bites above it, so
-        // where the book's MEAN sits decides whether the mechanism is live at all.
-        const recovery = Math.min(1, 0.75 / Math.max(0.05, ltv));
-        out.push(`  ${r}: mortgage ${B(debt)} / housing ${B(stock)} = LTV ${ltv.toFixed(3)}  ->  severity ${Math.max(0.05, 1 - recovery).toFixed(3)} [floor is 0.05]`);
+        const price = Math.max(0, s.regions[r].housingMarket?.medianHomePriceUSD ?? 0);
+        const vs: any[] = [];
+        s.companies.forEach(c => {
+          if (c.region !== r || !c.bankBalanceSheet) return;
+          ((c.bankBalanceSheet as any).householdLoans ?? []).forEach((pl: any) => {
+            if (pl.kind === 'MORTGAGE') (pl.vintages ?? []).forEach((v: any) => vs.push(v));
+          });
+        });
+        if (vs.length === 0) { out.push(`  ${r}: no vintages`); return; }
+        const book = vs.reduce((a, v) => a + v.principalUSD, 0);
+        const ltvOf = (v: any) => v.principalUSD / Math.max(1, v.originationCollateralUSD * (price / Math.max(1, v.originationHomePriceUSD)));
+        const sev = (l: number) => Math.max(0.05, 1 - Math.min(1, 0.75 / Math.max(0.05, l)));
+        // E[f(LTV)] — principal-weighted over the real cross-section, which is what the engine
+        // now charges. f(E[LTV]) — the single average the engine used to charge. The ratio is
+        // the size of the Jensen gap that was being thrown away.
+        const eOfF = vs.reduce((a, v) => a + v.principalUSD * sev(ltvOf(v)), 0) / Math.max(1, book);
+        const meanLtv = vs.reduce((a, v) => a + v.principalUSD * ltvOf(v), 0) / Math.max(1, book);
+        const fOfE = sev(meanLtv);
+        const sorted = vs.map(ltvOf).sort((a, b) => a - b);
+        const q = (f: number) => sorted[Math.min(sorted.length - 1, Math.floor(f * sorted.length))];
+        const underwaterUSD = vs.filter(v => ltvOf(v) > 0.75).reduce((a, v) => a + v.principalUSD, 0);
+        out.push(`  ${r}: ${vs.length} vintages, ${B(book)} | LTV p10 ${q(0.1).toFixed(2)} p50 ${q(0.5).toFixed(2)} p90 ${q(0.9).toFixed(2)} (mean ${meanLtv.toFixed(3)})`);
+        out.push(`      E[f(LTV)] ${eOfF.toFixed(4)}  vs  f(E[LTV]) ${fOfE.toFixed(4)}  = ${(eOfF / Math.max(1e-9, fOfE)).toFixed(2)}x  | above the kink: ${pct(book > 0 ? underwaterUSD / book : 0)} of the book`);
+        // CAN THIS BOOK HAVE A CREDIT EVENT? An analytic stress on the CURRENT cross-section —
+        // not a simulation, just the same severity curve at marked-down collateral — against
+        // what the old single-average LTV would have said at the same price fall. The old book
+        // divided total mortgage debt by the WHOLE housing stock (outright-owned homes included)
+        // and got 0.34, so no fall short of ~55% moved it off the floor at all.
+        const oldStyleLtv = (() => {
+          const h = s.regions[r].householdState;
+          const stock = Math.max(0, h.housingStockUSD ?? 0);
+          return stock > 0 ? Math.max(0, h.mortgageDebtUSD ?? 0) / stock : 0;
+        })();
+        [0.20, 0.35].forEach(fall => {
+          const k = 1 / (1 - fall);
+          const stressed = vs.reduce((a, v) => a + v.principalUSD * sev(ltvOf(v) * k), 0) / Math.max(1, book);
+          const oldStressed = sev(oldStyleLtv * k);
+          out.push(`      −${(fall * 100).toFixed(0)}% homes: severity ${stressed.toFixed(4)} (${(stressed / Math.max(1e-9, eOfF)).toFixed(1)}x today)   [one-average book would say ${oldStressed.toFixed(4)}, ${(oldStressed / 0.05).toFixed(1)}x its floor]`);
+        });
       });
       out.push('--- labor market relations ---');
       const du = series.u.slice(1).map((x, i) => x - series.u[i]);

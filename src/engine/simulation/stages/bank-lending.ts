@@ -38,6 +38,8 @@ import {
   BankingSector, BankLoan, HouseholdLoanPool, HouseholdLoanKind,
   MORTGAGE_RISK_WEIGHT, CONSUMER_CREDIT_RISK_WEIGHT, householdBookRwaUSD, annuityWeeklyPrincipalUSD,
   MORTGAGE_TERM_WEEKS, MORTGAGE_SEED_WAM_WEEKS, CONSUMER_TERM_WEEKS, CONSUMER_TERM_SEED_WAM_WEEKS,
+  MORTGAGE_SEED_VINTAGE_COHORTS, MortgageVintage, bookMortgageSeverity, vintageCurrentLtv,
+  mortgageSeverityAtLtv,
   MORTGAGE_SPREAD_OVER_10Y_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
   CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_RATE_ANNUAL, MORTGAGE_LTV_AT_ORIGINATION,
@@ -417,12 +419,66 @@ export function migrateHouseholdDebtAtSeed(
     const sheet = bank.bankBalanceSheet!;
     const share = sheet.depositsUSD / totalDepositsUSD;
     const pools: HouseholdLoanPool[] = ([
-      {
-        kind: 'MORTGAGE',
-        principalUSD: Math.round((hs.mortgageDebtUSD ?? 0) * share),
-        wacAnnual: Number(mortgageRate.toFixed(4)),
-        wamWeeks: MORTGAGE_SEED_WAM_WEEKS,
-      },
+      // DIST/HSG — THE BOOK IS SEEDED AS VINTAGES, NOT AS ONE AVERAGE LOAN.
+      //
+      // A real mortgage book is decades of lending stacked up: loans written at different prices,
+      // at different rates, at different points through their term. Seeding one blended loan at
+      // one LTV is what put the whole book on the flat part of the severity curve (§6.1). The
+      // spread here is not a stated LTV distribution — it is the ARITHMETIC of a book in steady
+      // state: a vintage written `age` years ago at `MORTGAGE_LTV_AT_ORIGINATION` has amortised
+      // for `age` years and its collateral has been marked for `age` years, and both of those
+      // this seed knows. What comes out is a cross-section, and it comes out rather than being
+      // put in.
+      (() => {
+        const bookUSD = Math.round((hs.mortgageDebtUSD ?? 0) * share);
+        const priceNowUSD = Math.max(1, reg.housingMarket?.medianHomePriceUSD ?? 1);
+        const cohorts = MORTGAGE_SEED_VINTAGE_COHORTS;
+        const raw: MortgageVintage[] = [];
+        for (let i = 0; i < cohorts; i++) {
+          // Evenly through the term: the oldest vintage is nearly repaid, the newest just written.
+          const ageWeeks = Math.round(((i + 0.5) / cohorts) * MORTGAGE_TERM_WEEKS);
+          const remainingWeeks = Math.max(1, MORTGAGE_TERM_WEEKS - ageWeeks);
+          // What an equal-instalment loan has left after `ageWeeks` of its term, as a share of
+          // what it started at. Straight annuity arithmetic at the seed rate.
+          const r = Math.max(0.0001, mortgageRate) / 52;
+          const remainingShare =
+            (Math.pow(1 + r, MORTGAGE_TERM_WEEKS) - Math.pow(1 + r, ageWeeks))
+            / (Math.pow(1 + r, MORTGAGE_TERM_WEEKS) - 1);
+          // EVERY COHORT LENT THE SAME AMOUNT AGAINST THE SAME HOUSE. What differs is how much
+          // of it has been PAID OFF, and that is the whole cross-section: collateral stays at
+          // what the home was worth, principal walks down the annuity. So an old vintage sits at
+          // a low LTV and a new one at the origination LTV — which is what a real book looks
+          // like, and it is arithmetic rather than a stated spread.
+          //
+          // Scaling the collateral by the REMAINING principal instead would hold every cohort at
+          // the origination LTV forever, which is the bug this replaced: 156 vintages all reading
+          // 0.78, a cross-section with no cross-section in it.
+          raw.push({
+            principalUSD: Math.max(0, remainingShare),
+            originationCollateralUSD: 1 / MORTGAGE_LTV_AT_ORIGINATION,
+            originationHomePriceUSD: priceNowUSD,
+            rateAnnual: Number(mortgageRate.toFixed(4)),
+            wamWeeks: remainingWeeks,
+            originatedWeek: -ageWeeks,
+          });
+        }
+        // One scale factor for the whole cohort set, applied to BOTH legs so the loan-to-value
+        // each vintage was written at survives the scaling.
+        const rawTotal = raw.reduce((a, v) => a + v.principalUSD, 0) || 1;
+        const scale = bookUSD / rawTotal;
+        const vintages = raw.map((v) => ({
+          ...v,
+          principalUSD: v.principalUSD * scale,
+          originationCollateralUSD: v.originationCollateralUSD * scale,
+        }));
+        return {
+          kind: 'MORTGAGE' as const,
+          principalUSD: bookUSD,
+          vintages,
+          wacAnnual: Number(mortgageRate.toFixed(4)),
+          wamWeeks: MORTGAGE_SEED_WAM_WEEKS,
+        };
+      })(),
       {
         kind: 'CREDIT_CARD',
         principalUSD: Math.round((hs.creditCardDebtUSD ?? 0) * share),
@@ -530,7 +586,9 @@ export function runBankHouseholdLending(
   bank: Company,
   sheet: BankingSector,
   reg: Region,
-  adjustedUnemploymentRate: number
+  adjustedUnemploymentRate: number,
+  /** DIST/HSG — stamped on each new mortgage vintage, so a cohort knows its own age. */
+  currentWeek: number
 ): HouseholdLendingResult {
   const policyRate = reg.policyRate;
   const hs = reg.householdState;
@@ -560,9 +618,18 @@ export function runBankHouseholdLending(
   // price crash walks severity up as LTV approaches 1.
   const housingStockUSD = Math.max(0, hs?.housingStockUSD ?? 0);
   const mortgageBookUSD = Math.max(1, hs?.mortgageDebtUSD ?? 1);
-  const avgLtv = housingStockUSD > 0 ? Math.min(2, mortgageBookUSD / housingStockUSD) : 1;
-  const mortgageRecovery = Math.min(1, (1 - FORECLOSURE_COST_SHARE) / Math.max(0.05, avgLtv));
-  const mortgageSeverity = Math.max(MORTGAGE_MIN_LOSS_SEVERITY, 1 - mortgageRecovery);
+  // DIST/HSG — SEVERITY IS `E[f(LTV)]` NOW, NOT `f(E[LTV])`.
+  //
+  // It used to read one average LTV for the whole region — measured at 0.340 — into a curve that
+  // is flat at its floor below 0.75. So `MORTGAGE_MIN_LOSS_SEVERITY` was 100% of mortgage loss
+  // severity in every region in every week, the comment promising that "a price crash walks
+  // severity up" described something that needed a 55% fall to begin, and the model could not
+  // produce a mortgage credit event at all (§6.1). The book is vintages now, each marked against
+  // the price it was written at, so the losses come from the part of the distribution that is
+  // actually above the kink — which is where every dollar of real mortgage loss comes from.
+  const medianHomePriceUSD = Math.max(0, reg.housingMarket?.medianHomePriceUSD ?? 0);
+  const mortgagePool = pools.find((p) => p.kind === 'MORTGAGE');
+  const mortgageSeverity = bookMortgageSeverity(mortgagePool?.vintages, medianHomePriceUSD);
   const mortgageLossRateAnnual = unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * mortgageSeverity;
 
   const equityUSD = sheet.bankEquityUSD;
@@ -577,21 +644,47 @@ export function runBankHouseholdLending(
 
   pools.forEach((pl) => {
     if (pl.kind === 'MORTGAGE') {
-      const rate = pl.wacAnnual ?? currentMortgageRateAnnual(reg);
-      const interestUSD = (pl.principalUSD * rate) / 52;
-      const scheduledUSD = annuityWeeklyPrincipalUSD(pl.principalUSD, rate, pl.wamWeeks ?? MORTGAGE_SEED_WAM_WEEKS);
-      const lossUSD = (pl.principalUSD * mortgageLossRateAnnual) / 52;
+      // DIST/HSG — EVERY LOAN IS SERVICED ON ITS OWN TERMS. Each vintage pays interest at the
+      // rate IT was written at and amortises on its OWN clock, so a book of old cheap loans and
+      // new expensive ones behaves like one — which is what makes a mortgage book slow to
+      // reprice, and what the single blended WAC could only approximate.
+      const vintages = pl.vintages ?? [];
+      let interestUSD = 0;
+      let scheduledUSD = 0;
+      let lossUSD = 0;
+      vintages.forEach((v) => {
+        if (!(v.principalUSD > 0)) return;
+        const vInterestUSD = (v.principalUSD * v.rateAnnual) / 52;
+        const vScheduledUSD = Math.min(
+          v.principalUSD,
+          annuityWeeklyPrincipalUSD(v.principalUSD, v.rateAnnual, v.wamWeeks));
+        // Losses fall on a vintage at ITS OWN severity: the underwater cohorts carry them, which
+        // is the entire reason the book is cut this way.
+        const vSeverity = mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceUSD));
+        const vLossUSD = (v.principalUSD
+          * unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * vSeverity) / 52;
+        interestUSD += vInterestUSD;
+        scheduledUSD += vScheduledUSD;
+        lossUSD += vLossUSD;
+        v.principalUSD = Math.max(0, v.principalUSD - vScheduledUSD - vLossUSD);
+        v.wamWeeks = Math.max(0, v.wamWeeks - 1);
+      });
       interestWeeklyUSD += interestUSD;
       principalWeeklyUSD += scheduledUSD;
       debtServicePrincipalWeeklyUSD += scheduledUSD;
       lossWeeklyUSD += lossUSD;
-      pl.principalUSD -= scheduledUSD + lossUSD;
 
       // A sale discharges the seller's remaining loan out of the buyer's proceeds — the churn
-      // that keeps gross origination from reading as pure net money creation.
+      // that keeps gross origination from reading as pure net money creation. It retires whole
+      // loans from across the book, so it comes off the vintages pro rata.
+      const bookBeforeUSD = vintages.reduce((a, v) => a + v.principalUSD, 0);
       const salesVolumeUSD = (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52) * bankShare;
-      const dischargeUSD = Math.min(pl.principalUSD, salesVolumeUSD * avgLtv);
-      pl.principalUSD -= dischargeUSD;
+      const bookLtv = housingStockUSD > 0 ? Math.min(2, bookBeforeUSD / (housingStockUSD * bankShare)) : 1;
+      const dischargeUSD = Math.min(bookBeforeUSD, salesVolumeUSD * bookLtv);
+      if (dischargeUSD > 0 && bookBeforeUSD > 0) {
+        const keep = 1 - dischargeUSD / bookBeforeUSD;
+        vintages.forEach((v) => { v.principalUSD *= keep; });
+      }
       mortgageDischargeUSD += dischargeUSD;
 
       // Origination: this bank's share of the real housing turnover, at the current rate.
@@ -601,15 +694,33 @@ export function runBankHouseholdLending(
       const grantedUSD = Math.min(demandUSD, headroomUSD() / Math.max(0.01, MORTGAGE_RISK_WEIGHT));
       declinedOriginationUSD += demandUSD - grantedUSD;
       if (grantedUSD > 0) {
-        // New vintage joins at the current rate and a full term; WAC and WAM blend.
-        const total = pl.principalUSD + grantedUSD;
-        pl.wacAnnual = Number((((pl.wacAnnual ?? newRate) * pl.principalUSD + newRate * grantedUSD) / Math.max(1, total)).toFixed(4));
-        pl.wamWeeks = Math.round((((pl.wamWeeks ?? MORTGAGE_SEED_WAM_WEEKS) - 1) * pl.principalUSD + MORTGAGE_TERM_WEEKS * grantedUSD) / Math.max(1, total));
-        pl.principalUSD = total;
+        // DIST/HSG — A NEW VINTAGE, WRITTEN AGAINST TODAY'S HOUSES AT TODAY'S RATE. It used to
+        // blend into a single WAC and WAM, which is exactly how a book of distinguishable loans
+        // became one average loan. Now it joins the cross-section and stays distinguishable: it
+        // is this cohort that is underwater if prices fall next year, and the twenty-year-old
+        // one that is not.
+        vintages.push({
+          principalUSD: grantedUSD,
+          originationCollateralUSD: grantedUSD / MORTGAGE_LTV_AT_ORIGINATION,
+          originationHomePriceUSD: Math.max(1, medianHomePriceUSD),
+          rateAnnual: Number(newRate.toFixed(4)),
+          wamWeeks: MORTGAGE_TERM_WEEKS,
+          originatedWeek: currentWeek,
+        });
         mortgageOriginationUSD += grantedUSD;
-      } else if (pl.wamWeeks) {
-        pl.wamWeeks = Math.max(1, pl.wamWeeks - 1);
       }
+      // Vintages that have amortised away leave the book rather than lingering at zero.
+      pl.vintages = vintages.filter((v) => v.principalUSD > 1);
+      // `principalUSD`, `wacAnnual` and `wamWeeks` are MEASUREMENTS of the vintages now — kept
+      // so every existing reader still finds the one number it expects (rule 3).
+      const bookUSD = pl.vintages.reduce((a, v) => a + v.principalUSD, 0);
+      pl.principalUSD = bookUSD;
+      pl.wacAnnual = bookUSD > 0
+        ? Number((pl.vintages.reduce((a, v) => a + v.principalUSD * v.rateAnnual, 0) / bookUSD).toFixed(4))
+        : Number(newRate.toFixed(4));
+      pl.wamWeeks = bookUSD > 0
+        ? Math.round(pl.vintages.reduce((a, v) => a + v.principalUSD * v.wamWeeks, 0) / bookUSD)
+        : MORTGAGE_TERM_WEEKS;
     } else if (pl.kind === 'CREDIT_CARD') {
       const rate = policyRate + (pl.marginBps ?? 1000) / 10000;
       const interestUSD = (pl.principalUSD * rate) / 52;

@@ -158,9 +158,46 @@ export interface BankingSector {
  */
 export type HouseholdLoanKind = 'MORTGAGE' | 'CREDIT_CARD' | 'CONSUMER_TERM';
 
+/**
+ * DIST/HSG — ONE MORTGAGE VINTAGE: a year's worth of lending that shares an origination.
+ *
+ * The book used to be one principal at one blended LTV, and `bank-lending.ts` priced its loss
+ * severity off that single average — a curve that is FLAT at its floor below LTV 0.75 and only
+ * bites above it. Measured average LTV was 0.340, so severity sat on the floor constant in every
+ * region in every week and house prices had to fall 55% before the mechanism did anything
+ * (§6.1). That is `f(E[LTV])` where the honest question is `E[f(LTV)]`, and the two diverge
+ * hardest exactly at the kink that matters.
+ *
+ * A vintage carries the collateral it was written against, so it can be MARKED: a price fall
+ * moves every vintage's LTV at once and pushes a real mass of the book across the kink, which is
+ * the mechanism of every mortgage crisis and the one the average could not express.
+ */
+export interface MortgageVintage {
+  principalUSD: number;
+  /** The home value this vintage was written against, in the week it was written. */
+  originationCollateralUSD: number;
+  /** The region's median home price when it was written — the base its mark is measured from. */
+  originationHomePriceUSD: number;
+  /** Fixed at origination: what this borrower actually pays, not what the book averages to. */
+  rateAnnual: number;
+  /** Weeks left on this vintage's own annuity clock. At zero it must refinance (HSG). */
+  wamWeeks: number;
+  originatedWeek: number;
+}
+
 export interface HouseholdLoanPool {
   kind: HouseholdLoanKind;
+  /**
+   * MORTGAGE: the SUM of `vintages` — a measurement of them, not a second stock (rule 3).
+   * Every other kind: the pool's own principal.
+   */
   principalUSD: number;
+  /**
+   * MORTGAGE only — the book, loan cohort by loan cohort. This is the truth; `principalUSD`,
+   * `wacAnnual` and `wamWeeks` are derived from it and kept so the rest of the model reads one
+   * number where it used to.
+   */
+  vintages?: MortgageVintage[];
   /**
    * MORTGAGE: the pool's weighted-average coupon, FIXED at each vintage's origination (new
    * money joins at the current 10Y + spread and blends in) — which is what makes a mortgage
@@ -194,6 +231,15 @@ export const CONSUMER_CREDIT_RISK_WEIGHT = 0.75;
 /** A new mortgage is a 30-year annuity; a steady-state book of them averages ~21y remaining. */
 export const MORTGAGE_TERM_WEEKS = 30 * 52;
 export const MORTGAGE_SEED_WAM_WEEKS = 21 * 52;
+
+/**
+ * DIST/HSG — how many cohorts the seed book is cut into.
+ *
+ * A RESOLUTION parameter, not a shape one (§5-DIST-P): it says how finely the vintage
+ * cross-section is discretised, and the answer must not depend on it. Thirty is one per year of
+ * a thirty-year term, which is the natural grid for a book whose loans are annual cohorts.
+ */
+export const MORTGAGE_SEED_VINTAGE_COHORTS = 30;
 /** Auto/personal term credit: 5-year annuities, seeded mid-life. */
 export const CONSUMER_TERM_WEEKS = 5 * 52;
 export const CONSUMER_TERM_SEED_WAM_WEEKS = Math.round(2.5 * 52);
@@ -260,6 +306,51 @@ export function householdBookRwaUSD(pools: HouseholdLoanPool[] | undefined): num
  * The scheduled principal a level-payment annuity retires this week: payment minus interest,
  * from the pool's own principal, rate and remaining term. Replaces the paydown constants.
  */
+/**
+ * DIST/HSG — a vintage's CURRENT loan-to-value, marked to today's home prices.
+ *
+ * The collateral is worth what the housing market says it is worth now, so the mark is the
+ * region's median price against the price this vintage was written at. A loan from twenty years
+ * ago at 80% is a loan at 20% today; one written last year at a peak is underwater after a 15%
+ * fall. That spread across vintages IS the distribution the average was hiding.
+ */
+export function vintageCurrentLtv(v: MortgageVintage, medianHomePriceNowUSD: number): number {
+  const base = Math.max(1, v.originationHomePriceUSD);
+  const markedCollateralUSD = Math.max(1, v.originationCollateralUSD) * (Math.max(0, medianHomePriceNowUSD) / base);
+  return markedCollateralUSD > 0 ? v.principalUSD / markedCollateralUSD : 2;
+}
+
+/**
+ * DIST/HSG — loss severity for ONE loan at ONE loan-to-value: foreclosure recovers the house
+ * less the cost of selling it, against the loan. Unchanged arithmetic; what changed is that it
+ * is now asked per vintage and averaged, rather than asked once of an average.
+ */
+export function mortgageSeverityAtLtv(ltv: number): number {
+  const recovery = Math.min(1, (1 - FORECLOSURE_COST_SHARE) / Math.max(0.05, ltv));
+  return Math.max(MORTGAGE_MIN_LOSS_SEVERITY, 1 - recovery);
+}
+
+/**
+ * DIST/HSG — the book's expected severity: `E[f(LTV)]`, principal-weighted over the vintages.
+ *
+ * This is the whole point of carrying them. With one average LTV the answer was `f(E[LTV])`,
+ * which sat on the floor constant and could not move; here the tail of the distribution that is
+ * actually above the kink contributes the losses, which is where every dollar of mortgage loss
+ * comes from in reality.
+ */
+export function bookMortgageSeverity(vintages: MortgageVintage[] | undefined, medianHomePriceNowUSD: number): number {
+  if (!vintages || vintages.length === 0) return MORTGAGE_MIN_LOSS_SEVERITY;
+  let weighted = 0;
+  let total = 0;
+  vintages.forEach((v) => {
+    const w = Math.max(0, v.principalUSD);
+    if (w <= 0) return;
+    total += w;
+    weighted += w * mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceNowUSD));
+  });
+  return total > 0 ? weighted / total : MORTGAGE_MIN_LOSS_SEVERITY;
+}
+
 export function annuityWeeklyPrincipalUSD(principalUSD: number, rateAnnual: number, wamWeeks: number): number {
   if (!(principalUSD > 0)) return 0;
   const weeks = Math.max(1, wamWeeks);

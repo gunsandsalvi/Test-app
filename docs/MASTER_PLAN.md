@@ -2051,7 +2051,8 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 
 | Defect | State and next action |
 |---|---|
-| **MORTGAGE LOSS SEVERITY IS A FLOOR CONSTANT, AND THE MEAN IS WHY — measured 2026-08-30** | `bank-lending.ts`: `avgLtv = mortgageDebtUSD / housingStockUSD`, ONE average LTV for a whole region's book, into `severity = max(0.05, 1 − min(1, 0.75/avgLtv))`. That curve is FLAT AT ITS FLOOR below LTV 0.75 and only bites above it. **Measured LTV: 0.340 in all four regions**, so severity is pinned at `MORTGAGE_MIN_LOSS_SEVERITY = 0.05` — the constant is 100% of mortgage loss severity in every region in every week, and the comment above it ("a price crash walks severity up as LTV approaches 1") describes something that cannot happen until house prices fall **55%**. A floor doing a mechanism's job (rule 2), and the mean is what lets it. **Two separate errors:** the LEVEL — with a realistic vintage spread (sd 0.20-0.30: a loan written last year at 80% beside one from twenty years ago at 20%) true `E[severity]` is **1.4x-1.9x** the mean-based figure; and the CONVEXITY, which matters more — a 15% price fall moves the mean 0.34 → 0.40 and changes losses by NOTHING, while it pushes a real mass of loans across the kink at once. **The model cannot produce a mortgage credit event.** Owner: DIST + HSG (item 10). |
+| ~~**MORTGAGE LOSS SEVERITY IS A FLOOR CONSTANT, AND THE MEAN IS WHY**~~ | **CLOSED 2026-08-30 (§7.159): the book is vintages now.** Kept below for the record of what it was. |
+| **(closed, for the record) Mortgage loss severity was a floor constant** | `bank-lending.ts`: `avgLtv = mortgageDebtUSD / housingStockUSD`, ONE average LTV for a whole region's book, into `severity = max(0.05, 1 − min(1, 0.75/avgLtv))`. That curve is FLAT AT ITS FLOOR below LTV 0.75 and only bites above it. **Measured LTV: 0.340 in all four regions**, so severity is pinned at `MORTGAGE_MIN_LOSS_SEVERITY = 0.05` — the constant is 100% of mortgage loss severity in every region in every week, and the comment above it ("a price crash walks severity up as LTV approaches 1") describes something that cannot happen until house prices fall **55%**. A floor doing a mechanism's job (rule 2), and the mean is what lets it. **Two separate errors:** the LEVEL — with a realistic vintage spread (sd 0.20-0.30: a loan written last year at 80% beside one from twenty years ago at 20%) true `E[severity]` is **1.4x-1.9x** the mean-based figure; and the CONVEXITY, which matters more — a 15% price fall moves the mean 0.34 → 0.40 and changes losses by NOTHING, while it pushes a real mass of loans across the kink at once. **The model cannot produce a mortgage credit event.** Owner: DIST + HSG (item 10). |
 | **THE SAME DISTRESS RULE IS A THRESHOLD FOR NAMED FIRMS AND A SUM FOR POOLS — found 2026-08-30** | `labor-market.ts` applies `cash < 0 → layoffs = current x DISTRESS_LAYOFF_SPEED` per firm to the named tier (correct: each firm crosses or does not) and to `seg.cashUSD` — the POOL'S TOTAL — for the SME segments. So either every firm in a pool has distress layoffs or none does. **DIST already gave these same pools a leverage cross-section, and already integrates their DEFAULT rate and cash stress over it (§7.141)** — so one population now has a distribution for its credit outcome and a mean for its employment outcome, from two different stages. Identical code, two resolutions, one of them wrong (rule 3, and §5-DIST's own argument). |
 | **THE HOUSEHOLD CREDIT DISTRIBUTION EXISTS AND CANNOT MOVE — found 2026-08-30** | `consumerAnnualLossRate` is the ONE place that already does this right in shape: it carries four credit tiers with a **0.2 / 1.0 / 3.0 / 10.0** loss multiplier, which is exactly the convexity that makes a mean wrong. But `shareOfHouseholds` is STATED and never changes, so **nobody migrates**: no household falls from PRIME to NEAR_PRIME in a downturn, and migration is where most of the loss dynamics in a real consumer book live. A different failure from a missing distribution — a frozen one — and the fix is to make the shares an outcome of the same cohort balance sheets §7.145 already derives. Owner: CRD (item 9), which already lists the imposed shares. |
 | **CAPEX DOES NOT COVER DEPRECIATION — measured 2026-08-30 by IND13's new stock** | Assets under construction total **$2.2B against $2,452B of gross PP&E (0.09%)** with a p50 wait of 9 weeks, which puts capital ARRIVING at roughly $0.25B/week — about **0.5% of the capital stock a year against a straight-line depreciation of ~8%** (`SECTOR_PPE_USEFUL_LIFE_YEARS` ~12y). The plant is being consumed several times faster than it is replaced. It partly self-corrects — a shrinking net PP&E shrinks the capital charge the labour rule sheds against — which is exactly why it is invisible without measuring the stock. Suspect: the capex BUDGET (what a firm decides to spend) rather than the delivery path, which IND1/IND13 now make explicit end to end. Owner: CAP (item 4), whose capacity decisions this is. |
@@ -5821,3 +5822,37 @@ that proved it, the lesson.
       and not from scratch. **What the next attempt needs FIRST:** a household balance sheet that
       distinguishes transaction balances from accumulated savings — at which point the buffer has
       something to be a buffer OF.
+
+159. **DIST/HSG — THE MORTGAGE BOOK IS A CROSS-SECTION, AND THE MODEL CAN NOW HAVE A MORTGAGE
+    CREDIT EVENT. It structurally could not before.** First of the four §7.157 sweep targets, and
+    the sharpest.
+    - **What it was.** One `avgLtv` per region into a severity curve flat at its floor below 0.75.
+      `MORTGAGE_MIN_LOSS_SEVERITY = 0.05` was 100% of mortgage loss severity in every region in
+      every week. `f(E[LTV])` where the honest question is `E[f(LTV)]`.
+    - **A SECOND error was hiding inside the first, and it is worth more than the Jensen gap.**
+      The old ratio was `mortgageDebtUSD / housingStockUSD` — total mortgage debt over the WHOLE
+      housing stock, **outright-owned homes included as collateral**. That is not a
+      loan-to-value; it is debt over the nation's houses. It read **0.340**. Measured against the
+      collateral each loan was actually written on, the book's mean LTV is **0.592**. The old
+      number was not merely a mean instead of a distribution — it was the wrong quantity.
+    - **`MortgageVintage`**: principal, the collateral it was written against, the price then, its
+      own fixed rate, its own annuity clock. Each is MARKED to today's median price, so a loan
+      from twenty years ago sits at a low LTV and one written last year sits at the origination
+      LTV. `principalUSD`, `wacAnnual` and `wamWeeks` survive as MEASUREMENTS of the vintages, so
+      every existing reader finds the one number it expects (rule 3).
+    - **The seed spread is arithmetic, not a stated distribution.** Every cohort lent the same
+      amount against the same house; what differs is how much has been PAID OFF. Collateral stays
+      at what the home was worth while principal walks down the annuity, so the cross-section
+      falls out of the term structure. **`MORTGAGE_SEED_VINTAGE_COHORTS = 30` is a RESOLUTION
+      parameter, not a shape one** (§5-DIST-P) — one per year of a thirty-year term.
+      **A bug worth recording:** the first version scaled collateral by the REMAINING principal,
+      which pins every cohort at the origination LTV forever — 156 vintages all reading 0.78, a
+      cross-section with no cross-section in it. Collateral does not amortise.
+    - **Measured: LTV p10 0.16, p50 0.63, p90 0.79, 16.9% of the book above the kink.**
+    - **THE RESULT THAT MATTERS, analytically on the current book:** a **−20%** house-price move
+      takes severity to **2.1x** today's, a **−35%** move to **4.2x**. **The one-average book says
+      0.0500 at both — its floor, unmoved, no credit event possible at any price fall short of
+      ~55%.** That is the difference between a mechanism and a constant.
+    - Losses now fall on each vintage at ITS OWN severity, and each vintage services at its own
+      rate on its own clock, which is what makes a book of old cheap loans and new expensive ones
+      behave like one. Harness green, 0 violations.
