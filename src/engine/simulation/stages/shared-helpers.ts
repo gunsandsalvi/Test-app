@@ -577,10 +577,19 @@ export function applyHolderInterestAccruals(
     const entCol = holdings.entityRow;
     accrualsByType.forEach((byId, type) => {
       const [lo, hi] = holdings.typeRange(type as never);
+      if (hi <= lo) return;
+      // The accruing instruments are interned ONCE per type, so the row test below is an integer
+      // compare against a dense array — not a string rebuilt from an id and looked up in a map,
+      // which would have handed back with one hand what the columns give with the other.
+      const accruingRow: string[] = [];
+      byId.forEach((_v, instrumentText) => {
+        const id = INSTRUMENT_IDS.peek(instrumentText);
+        if (id >= 0) accruingRow[id] = instrumentText;
+      });
       for (let i = lo; i < hi; i++) {
         const row = byTypeRows[i];
-        const instrumentText = INSTRUMENT_IDS.text(instCol[row]);
-        if (!byId.has(instrumentText)) continue;
+        const instrumentText = accruingRow[instCol[row]];
+        if (instrumentText === undefined) continue;
         const key = `${type}:${instrumentText}`;
         const qtyUSD = qtyCol[row];
         totalByKey.set(key, (totalByKey.get(key) ?? 0) + qtyUSD);
