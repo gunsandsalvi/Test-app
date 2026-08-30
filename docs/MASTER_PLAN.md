@@ -430,7 +430,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 9 | markets | **G3 — one dealer system (all three of them)** | **CLOSED 2026-08-30 (§7.185–187).** There is one dealer system: a desk per named bank, an ordinary participant in its book's auction, sized by its own leverage headroom and funded by its own reserves. The regional arrays are derived views; the player's three invented counterparties are gone and its fill price is the desk's quote, not a React component's; all five fixed bank prices — the wholesale spread, the deposit beta, the ROE hurdle, the underwriting fee and the hash-drawn lead bank — come out of the bank's own sheet. Primary is now a firm commitment. **Unblocks: CRD's CDS half, DER, ETF2.** Its damper half (G3d) and the equity-float change are the two things a measurement run has to check.
 | 10 | markets | **REPO — secured funding is a market with counterparties** | **CLOSED 2026-08-30 (§7.188).** A repo is a CONTRACT — named lender, named borrower, struck rate, maturity, and the specific paper pledged — stored once on the region's book with both parties named; every scalar the sheets carried is derived from it, the standing facility included. Collateral is cheapest-to-deliver and encumbrance is per bucket. There is a TERM book, and a term need the private market will not fund falls back to overnight, which is what a funding squeeze is. **Deliberately NOT done: `AssetType.REPO` and an `ItemizedHolding` row** — the position is already real and named, and a second representation to satisfy a checklist is the exact defect this row removed. A player financing a position belongs with **HF**'s prime brokerage. |
 | 11 | markets | **XB — cross-border portfolios and trade** | **XB6 CLOSED 2026-08-30 (§7.189); XB3a-5 is now unblocked.** The FX leg of the damper defect was a GEOMETRY error: the engine clears a float to buyers, so a bigger float always clears at a lower stat — right when the float is the currency being SUPPLIED, inverted when the base was in demand. The auction now runs on whichever currency is being sold. Two one-way flows went with it: the desks' own books dumped into the float at any price, and the residual warehoused on them by capacity share after the fact. **Remains: XB3a-5** (invoice currency and transaction FX exposure), which XB6 gated. |
-| 12 | markets | **HF — hedge fund strategies + prime brokerage** | Grown: speculator schedules from own capital (the FX elastic side), hedge ratios onto mandate profiles, home bias as a LIMIT not a weight, the LBO debt share as a financing outcome. |
+| 12 | markets | **HF — hedge fund strategies + prime brokerage** | **CLOSED 2026-08-30 (§7.190).** Four funds instead of one, each in the markets its strategy is actually in; leverage is a real prime-brokerage line from a named bank, at a derived haircut, consuming the broker's balance sheet, priced, and withdrawable — so a margin call is a mechanism. Three of the four folded constants are gone: the FX elastic side is the pair's own volatility against the fund's own capital, the hedge ratio is a mandate property, the LBO debt share is 07d's answer. **The fourth, `HOME_BIAS_BY_ENTITY_TYPE` used as a weight, was CHECKED and the review's claim does not hold** — see §7.190. **Not built: a real equity SHORT** (borrow, locate, recall, squeeze), which is what would make long-short a paired book rather than a long one; it needs a securities-lending market and belongs with DER's margin machinery. |
 | 13 | markets | **DER — derivatives and the people who hedge with them** | Prereq G3. Adds: the cross-currency basis becomes a cleared price, not `150 × utilization × invented split`. |
 | 14 | markets | **G5 — default resolution: recovery as an outcome** | Adds: the defaults-count × 12bps contagion coefficient becomes real losses on real holders' books. |
 | 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | Re-scoped by the review: every seeded commodity price is a real market price back-solved into a "scarcity index" — the primitive becomes extraction cost and ore grade. Weather gets a calendar and a geography; two dead impact fields (14 writes, 0 reads) die; the third becomes a YIELD. |
@@ -1394,60 +1394,28 @@ reconcile to who bought from whom.
 
 ---
 
-### HF — Hedge fund strategies and prime brokerage  *(item 12; sized like G2)*
+### HF — Hedge fund strategies and prime brokerage  *(item 12)*  **CLOSED 2026-08-30**
 
-Two defects, and the second is the same shape as every infinite-supply problem already deleted.
+What landed is §7.190. What this section keeps is the part that did NOT land and why.
 
-**1. One `HEDGE_FUND` type does every strategy.** Real strategies are not variations of one fund;
-they are different businesses with different books, different counterparties and different failure
-modes. At minimum:
-- **Global macro** — directional rates and FX. This is the elastic side of the FX market XB2f
-  built, and today ALL hedge funds play that role, which is wrong: an equity long-short fund has
-  no view on the yen.
-- **Long-short equity** — paired longs and shorts, so it needs a real SHORT: borrowed stock, a
-  locate, a borrow fee, and a squeeze when the borrow is recalled. None of that exists yet.
-- **Long-short credit** — the same in bonds and loans, and the natural buyer of the basis trades
-  the dealer desks cannot carry.
-- **Distressed** — already referenced in 07b as the marginal buyer at the wides with a 0.22
-  hurdle; it should be a type rather than a coefficient on the generic fund.
+**A real equity SHORT was not built.** Long-short equity is a long book with a strategy label
+today. A short needs borrowed stock: a locate, a borrow fee, and a RECALL that forces a buy-in —
+which is a securities-lending market, with the lenders being exactly the long-only institutions
+already on the register. It belongs with **DER**'s margin machinery, and until it exists
+`LONG_SHORT_EQUITY` is a mandate rather than a book. The same gap makes `LONG_SHORT_CREDIT` a
+long credit book.
 
-Each type gets its own mandate, hurdle and market participation, replacing the single
-`LEVERAGE_ALLOWANCE.HEDGE_FUND` and `liabilityDrivenCoreShare` special cases.
+**The prime-brokerage cascade is built but unmeasured.** A broker cutting a line forces its funds
+to sell into a falling market, which moves the price, which cuts the line again. Every piece of
+that loop now exists — a derived haircut, a line bounded by the broker's own balance sheet, a
+debit-balance sweep, and a purchase budget that goes to zero when the line does. **The
+measurement run owes it the verify:** does a shock to a prime broker's capital measurably
+deleverage its funds, does the forced selling show up as real supply in the clearing books, and
+can a fund fail from a margin call rather than only from marks?
 
-**2. Leverage has no lender.** `LEVERAGE_ALLOWANCE.HEDGE_FUND = 0.22` is a static constant: a fund
-is simply *allowed* 22% leverage by nobody, funded by no one, at no price. The real thing is
-**prime brokerage** — a named bank lends against posted collateral, at a haircut, for a fee, and
-**can pull it**.
-- Leverage becomes a real liability of the fund and a real asset of the prime broker, consuming
-  the broker's own balance-sheet capacity exactly as the FX desk's PFE does (XB2b).
-- The haircut is the price, and it widens with the fund's concentration and the collateral's
-  volatility.
-- **Withdrawal is the point.** A broker cutting lines forces the fund to sell into a falling
-  market, which moves the price, which triggers the next margin call. That cascade is a real and
-  central mechanism this model cannot currently produce, because leverage is a constant.
-- **Verify:** a shock to a prime broker's capital measurably deleverages its funds; forced selling
-  shows up in the clearing books as real supply; a fund can fail from a margin call rather than
-  only from marks.
-
-**Folded from the review — four constants that are really fund decisions, with fixes:**
-- **The FX elastic side** (`domain/fx-market.ts`): `SPECULATOR_RESERVATION_MOVE_PCT 1.2`,
-  `FULL_SIZE_RANGE 4.0`, `FX_RISK_BUDGET 0.15` — three invented numbers that decide how much flow
-  the FX market can absorb, i.e. the other half of the damper defect. A speculator's schedule
-  comes from its own capital, its own carry view and the volatility it has observed — the same
-  shape every other participant posts. (The central-bank reservation next to them is correctly
-  DERIVED from the speculators' exhaustion point; that pattern generalises.)
-- **`HEDGE_RATIO_EQUITY = 0.35`** — an observed average of published policies applied to every
-  entity type alike. A hedge ratio is a MANDATE property: onto the entity profile, so a pension
-  fund and a hedge fund differ and the ratio can respond to what hedging costs (the basis DER
-  makes real).
-- **`HOME_BIAS_BY_ENTITY_TYPE` used as a WEIGHT** (`mandateWeightForIssuer`): a mandate LIMIT
-  ("no more than X% foreign") acting as a preference ("always exactly X% domestic"). Rule 5: the
-  bound stays as a cap; the actual allocation is tactical, from the entity's own relative-value
-  view.
-- **`LBO_DEBT_SHARE = 0.55`** (`pe-lifecycle.ts`): the deal's capital structure decided before
-  the market prices it. A sponsor levers as far as 07d will fund at a margin it accepts — the
-  machinery exists (the offering's walk-away, the book's decline). The share becomes the OUTCOME
-  of the financing.
+**`HOME_BIAS_BY_ENTITY_TYPE` is corrected, not fixed.** The review's claim that a limit was acting
+as a preference does not survive reading the code (§7.190); the levels themselves stay as mandate
+primitives.
 
 ---
 
@@ -6350,3 +6318,52 @@ that proved it, the lesson.
     - **Not measured (rule 12).** The structural probe is clean and the fiscal-band violation this
       run used to carry is gone, but the number that matters — the FX pins per pair over 60 weeks
       — belongs to the measurement run with everything else.
+
+190. **HF — four funds instead of one, and leverage gets a lender.**
+    - **One `HEDGE_FUND` type did every strategy at once.** The same fund was the entire elastic
+      side of the FX market, the distressed bid in corporate credit and a loan buyer: not a fund,
+      four businesses on one balance sheet, and it meant an equity long-short book was taking a
+      view on the yen. There are now four, splitting the sector's share on the same firm-size
+      curve every other cohort uses — global macro is the only fund in FX, distressed is the only
+      one pricing off discounted recovery at the wides, and the credit long-short book beside it
+      prices like the ordinary relative-value buyer it is.
+    - **`LEVERAGE_ALLOWANCE.HEDGE_FUND` was the last infinite-supply constant of its kind**: a
+      share of assets a fund was allowed to borrow by nobody, from nobody, at no price, and never
+      withdrawable. It is now a prime-brokerage line from a NAMED bank. The haircut is derived —
+      the most each market's own clearing engine lets its level move in a week, the same reasoning
+      the repo desk's sovereign haircuts already use, widened by the fund's own concentration
+      because a concentrated book is not only riskier but slower to sell and the broker is who
+      would have to sell it. What the fund may borrow is the margin identity on its own capital at
+      that haircut; the loan consumes the broker's leverage ratio one-for-one; the rate is the
+      broker's own cost of money plus the return on the capital it ties up.
+    - **What it draws is its DEBIT BALANCE**, which is what a margin account actually finances:
+      the broker sweeps, funding cash below the fund's own sleeve target and taking repayment
+      above it. So a fund that spent its cash on securities draws to fund them, one sitting on
+      cash does not borrow, and the line CONSTRAINS that rather than driving it.
+    - **Withdrawal is the point, and it now exists.** When haircuts widen or collateral falls the
+      line drops below what the sweep needs, the fund's purchasing capacity goes with it, and the
+      clearing books see real selling into the market that just moved against it.
+    - **The FX elastic side stopped being three chosen numbers.** The required move is one sigma
+      of the pair's OWN observed weekly moves (below its own noise there is nothing to trade), full
+      size two sigma further, and the position the margin identity on the fund's own capital at
+      that pair's own haircut. A market's depth is now its own property. The central bank's
+      reservation stays derived from the speculators' exhaustion point and therefore moves too.
+    - **The hedge ratio became a mandate property**: liability-driven books hedge everything
+      because the claim they match is in their own money; return-seeking books hedge the part the
+      mandate says is not the position; a macro fund hedges nothing, because the currency IS the
+      trade. Making it respond to what the hedge COSTS still needs DER's cleared basis.
+    - **The LBO's capital structure became the outcome.** The ask is the covenant maximum, the
+      equity cheque is the remainder, and whether the deal happens is 07d's answer — the
+      machinery (a real primary offering, a walk-away margin, a book that can decline) was already
+      there and the constant was sitting in front of it.
+    - **THE ONE THING THE REVIEW GOT WRONG, checked rather than inherited (rule 10's discipline
+      applied to a claim instead of a number).** `HOME_BIAS_BY_ENTITY_TYPE` was recorded as "a
+      mandate LIMIT acting as a preference". It is not: `mandateWeightForIssuer` feeds
+      `structuralSizeUSD`, which becomes `maxHoldingUSD × overweightMultiple` — a CEILING, with
+      the fill between zero and it decided tactically by the entity's own reservation against the
+      cleared level. The bound is already a bound. What remains genuinely stated is the home-bias
+      LEVELS themselves, which is a different and smaller finding; §6's row is corrected to say so.
+    - **Not built, and named so it is not forgotten: a real equity SHORT.** Long-short equity is
+      currently a long book with a strategy label, because a short needs borrowed stock, a locate,
+      a borrow fee and a recall — a securities-lending market this model does not have. It belongs
+      with DER's margin machinery, and until it exists the strategy is a mandate, not a book.

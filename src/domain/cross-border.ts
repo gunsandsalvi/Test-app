@@ -27,10 +27,13 @@ import { InstitutionalEntityType } from './institutions';
  * auction decides what it ends up owning.
  *
  * RULE 5, OPEN: a real home-bias mandate is a LIMIT ("no more than X% foreign"), but
- * `mandateWeightForIssuer` below returns it as a WEIGHT that scales demand directly — so the
- * constraint is acting as a preference, and an entity always wants exactly 75% domestic rather
- * than being merely allowed up to 25% abroad. Rule 5: the target is the guide, the actual
- * purchase is tactical. Owner: HF, which gives entities real strategies to be tactical with.
+ * HF4 CHECKED THIS AND THE CLAIM DOES NOT HOLD. The review recorded it as "a mandate LIMIT
+ * acting as a preference". It is not: `mandateWeightForIssuer` feeds `structuralSizeUSD`, which
+ * becomes `maxHoldingUSD x overweightMultiple` — a CEILING — and the fill between zero and it is
+ * decided tactically by the entity's own reservation against the cleared level. The bound is
+ * already a bound. What IS still stated is the seven LEVELS below: they are mandate primitives
+ * (rule 19's PREFERENCE category), and deriving them would mean deriving what a pension fund's
+ * trustees will tolerate, which is not a market outcome.
  */
 export const HOME_BIAS_BY_ENTITY_TYPE: Record<InstitutionalEntityType, number> = {
   PENSION_FUND: 0.75,
