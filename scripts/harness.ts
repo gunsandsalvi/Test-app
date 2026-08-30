@@ -1386,6 +1386,73 @@ const indModule: HarnessModule = (() => {
       });
     }
 
+    out.push('--- DIST 1(c): CUT-POINT INVARIANCE — do the resolution parameters do any work? ---');
+    // Rule 19 splits numbers into SHAPE (a claim about the answer) and RESOLUTION (a numerical
+    // choice). A resolution parameter is only legitimate if the answer does not depend on it, and
+    // this is the test: recompute each integral on a COARSENED cross-section (adjacent cells
+    // merged, K -> K/2) and report the gap. A converged discretisation barely moves; a gap means K
+    // is too coarse and the number is secretly doing work.
+    {
+      const coarsen = <T extends { weight: number }>(xs: T[], mid: (a: T, b: T) => T): T[] => {
+        const out2: T[] = [];
+        for (let k = 0; k + 1 < xs.length; k += 2) out2.push(mid(xs[k], xs[k + 1]));
+        if (xs.length % 2 === 1) out2.push(xs[xs.length - 1]);
+        return out2;
+      };
+      // (1) SME pool leverage — the default integral, which is NONLINEAR (a coverage threshold).
+      const pools: any[] = (s.regions.USA as any).smePools ?? [];
+      let fine = 0, coarse = 0, n = 0;
+      pools.forEach(p2 => {
+        const st: any[] = p2.strata ?? [];
+        if (st.length < 4) return;
+        const f = (lev: number) => Math.max(0, 1 - 1 / Math.max(0.05, lev));
+        const wsum = st.reduce((a, x) => a + x.weight, 0) || 1;
+        fine += st.reduce((a, x) => a + (x.weight / wsum) * f(x.leverageMultiple), 0);
+        const c = coarsen(st, (a, b) => ({ weight: a.weight + b.weight,
+          leverageMultiple: (a.weight * a.leverageMultiple + b.weight * b.leverageMultiple) / Math.max(1e-9, a.weight + b.weight) } as any));
+        const cw = c.reduce((a, x) => a + x.weight, 0) || 1;
+        coarse += c.reduce((a, x) => a + (x.weight / cw) * f(x.leverageMultiple), 0);
+        n++;
+      });
+      if (n > 0) out.push(`  SME leverage (K=20 -> 10), NONLINEAR: ${(fine / n).toFixed(5)} vs ${(coarse / n).toFixed(5)}  gap ${(Math.abs(fine - coarse) / Math.max(1e-9, fine) * 100).toFixed(2)}%`);
+      // (2) Tenure — the experience premium is AFFINE in tenure, so E[f(x)] = f(E[x]) EXACTLY and
+      // coarsening must change nothing. A control: it shows the test can detect the difference.
+      const st2: any[] = (s.regions.USA as any).occupationPools?.GENERAL?.tenureStrata ?? [];
+      if (st2.length >= 4) {
+        const g = (t: number) => 1 + 0.02 * t;
+        const w2 = st2.reduce((a, x) => a + x.weight, 0) || 1;
+        const f2 = st2.reduce((a, x) => a + (x.weight / w2) * g(x.tenureYears), 0);
+        const c2 = coarsen(st2, (a, b) => ({ weight: a.weight + b.weight,
+          tenureYears: (a.weight * a.tenureYears + b.weight * b.tenureYears) / Math.max(1e-9, a.weight + b.weight) } as any));
+        const cw2 = c2.reduce((a, x) => a + x.weight, 0) || 1;
+        const cc2 = c2.reduce((a, x) => a + (x.weight / cw2) * g(x.tenureYears), 0);
+        out.push(`  tenure (K=20 -> 10), AFFINE control: ${f2.toFixed(5)} vs ${cc2.toFixed(5)}  gap ${(Math.abs(f2 - cc2) / Math.max(1e-9, f2) * 100).toFixed(4)}% [must be ~0]`);
+      }
+      // (3) Mortgage vintages — severity, NONLINEAR (a kink at LTV 0.75).
+      const vs2: any[] = [];
+      s.companies.forEach(c => {
+        if (c.region !== 'USA' || !c.bankBalanceSheet) return;
+        ((c.bankBalanceSheet as any).householdLoans ?? []).forEach((pl: any) => {
+          if (pl.kind === 'MORTGAGE') (pl.vintages ?? []).forEach((v: any) => vs2.push(v));
+        });
+      });
+      if (vs2.length >= 4) {
+        const price = Math.max(1, (s.regions.USA as any).housingMarket?.medianHomePriceUSD ?? 1);
+        const ltv = (v: any) => v.principalUSD / Math.max(1, v.originationCollateralUSD * (price / Math.max(1, v.originationHomePriceUSD)));
+        const sev = (l: number) => Math.max(0.05, 1 - Math.min(1, 0.75 / Math.max(0.05, l)));
+        const sorted = vs2.slice().sort((a, b) => ltv(a) - ltv(b));
+        const bk = sorted.reduce((a, v) => a + v.principalUSD, 0) || 1;
+        const fineS = sorted.reduce((a, v) => a + (v.principalUSD / bk) * sev(ltv(v)), 0);
+        let coarseS = 0;
+        for (let k = 0; k + 1 < sorted.length; k += 2) {
+          const w = sorted[k].principalUSD + sorted[k + 1].principalUSD;
+          const l = (sorted[k].principalUSD * ltv(sorted[k]) + sorted[k + 1].principalUSD * ltv(sorted[k + 1])) / Math.max(1e-9, w);
+          coarseS += (w / bk) * sev(l);
+        }
+        out.push(`  mortgage vintages (merged pairwise), NONLINEAR: ${fineS.toFixed(5)} vs ${coarseS.toFixed(5)}  gap ${(Math.abs(fineS - coarseS) / Math.max(1e-9, fineS) * 100).toFixed(2)}%`);
+      }
+    }
+
     out.push('--- DIST 1(b): the EXPERIENCE cross-section, and the wage spread it produces ---');
     {
       const reg: any = s.regions.USA;

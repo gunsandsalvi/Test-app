@@ -768,7 +768,8 @@ is 23.7 weeks of committed outflow — a threshold a real shock crosses — so t
 once dissaving exists. **Re-diagnose the §7.158 stash rather than trusting its stated cause,
 which §7.163 withdrew.**
 **(b) The named tier as a node of weight one** — one representation at N resolutions.
-**(c) Cut-point invariance**, which needs (b) to be testable.
+**(c) Cut-point invariance — DONE (§7.175).** All three resolution parameters proved not to do
+work, with an affine control at exactly 0.0000% showing the test can detect a difference.
 
 **§5-DIST-P is this row's governing idea** and holds the primitive scoreboard.
 
@@ -5966,3 +5967,26 @@ that proved it, the lesson.
     - **Not flipped here, deliberately.** It materially changes the income distribution, which
       every household mechanism reads, and rule 7 wants that as its own bounded slice with a
       measured before/after — not as the tail of a long pass.
+
+175. **DIST 1(c) — CUT-POINT INVARIANCE: the resolution parameters do no work, and the affine
+    control proves the test can tell.** Rule 19 splits numbers into SHAPE (a claim about the
+    answer) and RESOLUTION (a numerical choice), and a resolution parameter is legitimate only if
+    the answer does not depend on it. This is that test, run on the live state: recompute each
+    integral on a COARSENED cross-section (adjacent cells merged, K → K/2) and report the gap.
+    - **SME leverage strata, K=20 → 10, NONLINEAR (a coverage threshold): 0.52176 → 0.52250, a
+      0.14% gap.** Converged.
+    - **Mortgage vintages, merged pairwise, NONLINEAR (a kink at LTV 0.75): 0.05004 → 0.05002, a
+      0.05% gap.** Converged.
+    - **Tenure strata, K=20 → 10, AFFINE — the control: 1.34262 → 1.34262, a 0.0000% gap.** The
+      experience premium is `1 + 0.02 x tenure`, so `E[f(x)] = f(E[x])` EXACTLY, and coarsening
+      cannot change it. **This is §5-DIST's founding equation verified in the running model**, and
+      it is what makes the two numbers above meaningful: a test that reported ~0 for everything
+      would prove nothing.
+    - **The subtlety it exposes, and it sharpens where a distribution is needed.** Because the
+      experience premium is AFFINE, the tenure strata add nothing to the MEAN wage — the mean
+      tenure would give the same answer. They are needed for the tier SPLIT, which is a quantile
+      operation and therefore nonlinear. **"Carry the distribution where the decision is
+      nonlinear" has to be read against the DECISION, not the quantity**: the same cross-section
+      is redundant for one consumer and essential for the next.
+    - Reported, not asserted — the battery pattern (§1.10): a threshold on this gap would be a
+      stated number doing exactly what rule 19 forbids.
