@@ -1345,6 +1345,37 @@ const indModule: HarnessModule = (() => {
     }, 0);
     out.push(`  work in progress carried across every firm: ${B(totalWipUSD)}`);
 
+    out.push('--- DIST 1(b): is there enough real wage dispersion to DERIVE the tier split? ---');
+    // TIER_WAGE_MULTIPLIER states 0.40x/1.05x/3.4x/13.0x within an occupation. The only real
+    // source of within-occupation dispersion in the model is that firms pay differently
+    // (`offeredWageIndex`, HH6). If that spread is narrow, the stated 13x is standing in for a
+    // mechanism that does not exist — and deleting it would flatten the income distribution
+    // rather than derive it (rule 19's caveat).
+    {
+      const wi = s.companies.filter(c => isActiveCompany(c) && (c.employeeCount ?? 0) > 0)
+        .map(c => c.offeredWageIndex ?? 1).sort((a, b) => a - b);
+      if (wi.length > 2) {
+        const q = (f: number) => wi[Math.min(wi.length - 1, Math.floor(f * wi.length))];
+        out.push(`  offeredWageIndex across ${wi.length} employers: p10 ${q(0.1).toFixed(3)}  p50 ${q(0.5).toFixed(3)}  p90 ${q(0.9).toFixed(3)}  p99 ${q(0.99).toFixed(3)}`);
+        out.push(`      p99/p10 = ${(q(0.1) > 0 ? q(0.99) / q(0.1) : 0).toFixed(2)}x  against the 13.0x/0.40x = 32.5x the stated table asserts`);
+      }
+      // And where the top tier's income actually comes from: if it is capital rather than wages,
+      // the 13x wage multiplier is standing in for concentration that belongs elsewhere.
+      REGIONS.slice(0, 1).forEach(r => {
+        const co: any[] = ((s.regions[r] as any).householdState?.cohorts) ?? (s.regions[r] as any).cohorts ?? [];
+        if (co.length === 0) return;
+        (['BOTTOM_50', 'NEXT_40', 'TOP_9', 'TOP_1'] as const).forEach(t => {
+          const rows = co.filter(c => c.tier === t);
+          const wage = rows.reduce((a, c) => a + (c.wageIncomeUSD ?? 0), 0);
+          const cap = rows.reduce((a, c) => a + (c.capitalIncomeUSD ?? 0), 0);
+          const tr = rows.reduce((a, c) => a + (c.transferIncomeUSD ?? 0) + (c.unemploymentBenefitsUSD ?? 0), 0);
+          const tot = wage + cap + tr;
+          if (tot <= 0) return;
+          out.push(`  ${r} ${t.padEnd(10)}: wages ${pct(wage / tot)}  capital ${pct(cap / tot)}  transfers ${pct(tr / tot)}`);
+        });
+      });
+    }
+
     out.push('--- DIST/CRD: the credit tiers, and whether they can move BOTH ways ---');
     REGIONS.forEach(r => {
       const books: any[] = (s.regions[r].householdState as any).creditTierBooks ?? [];

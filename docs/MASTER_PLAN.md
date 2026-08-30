@@ -1809,7 +1809,7 @@ saving available and it is already banked.
 | ~~`LifeCycleStageData.savingsRate` + `consumptionMultiplier` (8)~~ | **DELETED §7.170** — read by nothing; the life-cycle rate is the retired share |
 | `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN, item 22 |
 | ~~the average LTV~~, `WEALTH_SPENDDOWN_YEARS` | **the LTV RETIRED §7.159** (the book is vintages); the spend-down horizon still waits on housing that clears — HSG, item 5 |
-| **`TIER_OCCUPATION_MIXES` (14)** | **NOTHING — no owner assigned. The largest stated block with no mechanism scheduled to kill it.** A tier's occupation mix should be an outcome of who got hired into what, over time. |
+| **`TIER_OCCUPATION_MIXES` (14) + `TIER_WAGE_MULTIPLIER` (4)** | **RENT-SHARING — the firm wage premium (§7.172).** They jointly define the (occupation x tier) income distribution, and deriving either needs within-occupation wage dispersion. **Measured: the model has 1.01x of it against the 32.5x the table asserts** — every firm pays the same. The missing mechanism is that a more productive firm pays more. **Do not delete these first: the stated multiplier carries 56% of the top tier's income**, so removing it before rent-sharing exists flattens the distribution rather than deriving it (rule 19's caveat). |
 
 ### DYN — Entry, exit, and industry structure  *(item 22; needs IND, BP1)*
 
@@ -5874,3 +5874,33 @@ that proved it, the lesson.
       occupation currently earns the same wage, so a tier split of them is degenerate. **That
       distribution is DIST 1(b)'s** (the named tier as a node of weight one). The count cannot
       fall much further until it exists.
+
+172. **RULE 19, THIRD PASS — WHY THE COUNT STOPS FALLING HERE, MEASURED. The last two big blocks
+    are load-bearing, and the missing mechanism is the firm wage premium.**
+    - `TIER_OCCUPATION_MIXES` (14) and `TIER_WAGE_MULTIPLIER` (4) jointly define the
+      (occupation x tier) income distribution. Deriving either needs WITHIN-OCCUPATION wage
+      dispersion — otherwise every worker in an occupation earns the same and a tier split of them
+      is degenerate.
+    - **The only real source of that dispersion in the model is that firms pay differently
+      (`offeredWageIndex`, HH6). Measured across 2,512 employers: p10 0.988, p50 0.994, p90 0.999,
+      p99 1.002 — a p99/p10 of 1.01x, against the 32.5x (13.0/0.40) the stated table asserts.**
+      Firms all pay the same. The wage rule has firm-specific terms — its own unfilled-vacancy
+      share and its own margin shortfall — but both mean-revert, so nothing accumulates.
+    - **AND THE STATED MULTIPLIER IS LOAD-BEARING, which is the number that decides the order.**
+      Measured income composition (USA): BOTTOM_50 wages 45.4% / capital 1.6% / transfers 53.1%;
+      TOP_1 wages **55.8%** / capital 37.6% / transfers 6.7%. **So 13.0x carries over half of the
+      top tier's income.** Deleting it before the mechanism exists would flatten the income
+      distribution, not derive it — **rule 19's caveat, quantified, and the reason this pass stops
+      rather than pressing on.**
+    - **THE MISSING MECHANISM IS RENT-SHARING: a more productive firm pays more.** It is where
+      most within-occupation dispersion comes from in reality, and the model has every ingredient
+      and uses none of them — revenue per worker varies across firms, and
+      `QUIT_ELASTICITY_TO_RELATIVE_WAGE` already prices what a raise buys in retention.
+      **The design, and it needs no new primitive:** a firm loses its own surplus per worker when
+      one quits, so it pays up to where the marginal cost of a raise equals the marginal value of
+      the quits it prevents — `baseWage = quitRate x elasticity x surplusPerHead`. A firm with no
+      surplus offers nothing extra; a productive one pays a real premium, and the premium is the
+      dispersion. Owner: DIST 1(b) with LAB.
+    - **Not started deliberately.** It changes wage-setting, the most sensitive price in the model,
+      and rule 7 wants one bounded verified slice — not a risky rewrite bolted onto the end of a
+      long pass. The measurement above is what the next session needs to start it.
