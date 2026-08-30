@@ -152,6 +152,30 @@ These are standing user directives. They are not suggestions.
       foundation row. It is a CONSEQUENCE row, it belongs after the mechanism tier, and its
       evidence must be re-measured before it is scoped — never inherited.
 
+19. **THE FEWEST PRIMITIVES THAT GENERATE THE WORLD.** (User directive, 2026-08-30. The most
+    basic rule: 1, 4 and 13 are corollaries of it.) A number is a legitimate primitive **only if no
+    mechanism in the model can produce it**, which leaves exactly three kinds:
+    **TECHNOLOGY** — what a process physically takes (a recipe, a lead time, a value density).
+    **PREFERENCE** — how an agent trades the present against the future, and its aversion to risk.
+    **POLICY** — what an institution chooses (a tax schedule, a lending standard, a product term).
+    Everything else is an OUTCOME, and a stated value for it is a defect with a scheduled death.
+    - **Three kinds of number get confused, and the distinction is the whole rule.**
+      **RESOLUTION** parameters — strata count, tier count, grid size — are numerical choices, not
+      primitives; the test is INVARIANCE (the answer must not change when they do).
+      **SHAPE** parameters — a Pareto alpha, tier shares, an MPC ladder, an average LTV — are
+      claims about THE ANSWER, and every one is a place the model cannot surprise you.
+      **TRUE** primitives are the three kinds above, and there should be very few.
+    - **The count of stated shape parameters is a direct measure of how much mechanism is
+      missing.** Each dies exactly when its mechanism lands. Keep the count falling; it may never
+      rise. §5-DIST-P holds the scoreboard.
+    - **Where an aggregate sits far from a threshold its own mechanism turns on, that mechanism is
+      not inaccurate — it is SWITCHED OFF, and a constant is standing in for it.** Measured five
+      times in one session (§7.146, §7.149, §7.159, §7.167, §7.169). Before believing a mechanism
+      exists, print the number and check it can bind.
+    - **The corollary that costs the most to forget:** a shape parameter STANDS IN FOR a missing
+      mechanism, so deleting it before the mechanism exists does not make the model more
+      bottom-up — it makes it wrong (§7.158). The order is forced.
+
 ### 1.10 Verification ladder (every work item)
 
 **There is ONE test script: `scripts/harness.ts`** (user directive 2026-08-29, §7.101). One
@@ -482,46 +506,6 @@ home. Aurora inherits the convention rather than re-inventing it.
 
 ---
 
-### OWN8 — The ceiling that is an identity  *(CLOSED — §7.102)*
-
-**Found 2026-08-29 by a direct question about repo usage, not by the harness — which is the
-lesson.** OWN3 replaced 07c/07f's imposed `sovBondOwnership.bankShare x outstanding` target with
-`investableSurplusUSD = funding + equity - loans - cash - repoLent` as the bank's holding
-ceiling. But the balance sheet already says `funding + equity = loans + cash + repoLent +
-sovereign`, so **that expression IS the sovereign book, rearranged**. Verified empirically: it
-equals `sovBook` to the cent, every bank, every week.
-
-So `maxHoldingUSD = sovBook x bucketShare` — strictly BELOW current holdings. A bank can never
-add a bond; the book only rolls off, and the cash that would have bought it accumulates.
-
-**Measured, A/B against 86817cb (pre-OWN), USA banks:**
-
-| | pre-OWN | now |
-|---|---|---|
-| sovereign book w0 -> w10 | 147B -> **285B** | 78B -> **53B** |
-| cash / deposits at w10 | **2.2%** | **47-68%** |
-| repo borrowed at w10 | **23.0B** | **0** |
-| cash vs the 2% operating buffer | binding | **22.9x -> 29.1x and rising** |
-
-**The knock-on, which is how it was found:** with every bank ~29x its own cash buffer, no bank is
-ever short, so `totalNeedUSD = 0`, so `runRegionalRepoSession` returns before the auction and the
-repo market prints **zero volume in all four regions for all ten weeks** at the ON RRP floor —
-which is an early-return literal, not a cleared price.
-
-**The fix.** A ceiling must be a CONSTRAINT, not an accounting identity. Bound the sovereign book
-by what the bank's own capital supports — `leverageHeadroomUSD` is already imported in both
-stages and is the real, non-circular bound (equity against unweighted assets, the one constraint
-that sees a zero-risk-weight book) — plus the liquidity floor, which is correct and stays. Delete
-`investableSurplusUSD`. **REPO (item 9) later replaces even this**, because a real treasury's
-securities book is bounded by what it can finance, not by leftover deposits — which is exactly
-why a residual ceiling looked necessary in the first place.
-
-**Verify:** the sovereign book can grow; `investableSurplusUSD` is gone; the repo market has
-borrowers, non-zero volume and a rate that is not the corridor floor by construction; the harness
-re-measured once (rule 12) with the count attributed against 488.
-
----
-
 ### MAC — The price level has no anchor  *(CONSEQUENCE row, demoted under rule 18 2026-08-30)*
 
 **READ THIS BEFORE SCOPING ANYTHING BELOW.** This row was item 1 and was scoped around a
@@ -612,185 +596,8 @@ moves in response to slack.
 
 ### IND — Industry operating models  *(CLOSED except IND16 — §7.146-156)*
 
-**GUARD handed IND a live invariant (§7.105).** `Σ categoryMarketShare ≈ 1` per region per
-sub-unit is asserted every week now, and it fires on `enterprise_software` at **160-166% in all
-four regions**, plus three UK service categories and USA defense systems. That is the 646%
-finding turned into a standing measurement rather than a hand count, and the harness will say
-when IND has closed it.
-
-**The problem, stated plainly: every non-financial corporate in this model is the same firm.**
-
-What varies by sector today is four coefficients — `SECTOR_PRICING_POWER`, `SECTOR_PPE_INTENSITY`,
-`SECTOR_PPE_USEFUL_LIFE_YEARS`, `SECTOR_WAGE_SENSITIVITY` — plus input recipes by category. Those
-are coefficients on ONE operating model. Underneath them, all 2,004 companies:
-
-- produce **storable units** into stage 05's auction, whatever they make;
-- hold output inventory decaying at `inventoryCarryingCostRate ?? 0.02`, hardcoded identical for
-  every firm in the world — **measured: enterprise software sits in physical inventory, 159 units
-  worth 5.9M, spoiling like steel** (§7.50);
-- book revenue only on **settled unit sales** — there is no subscription, backlog, deferred or
-  royalty revenue anywhere in the model;
-- run one COGS decomposition (base cost, wage pressure, input prices, capacity decay, crowding).
-
-A firm with 90% gross margins and no warehouse is not expressible. Neither is one that sells a
-contract in Q1 and delivers it over three years.
-
-**The model already knows this is wrong and fixes it for exactly one sector.**
-`financialStatementProfile` gives banks, insurers and asset managers genuinely different P&L
-paths. The rest of the economy shares one.
-
-**IND1 — Storability and what a purchase IS.  *(DONE §7.85)*** Storability and carrying cost
-derive from each registry entry's own physics (value density, shelf life); software and buildings
-hold no inventory. `purchaseKindOf` routes purchases to lots / PP&E-on-delivery / expensed,
-closing §6's lot leak at the root and making investment supply-constrained.
-
-**IND-R6 — ONE FIRM MODEL, ONE PATH. *(DONE §7.121)*** The listing branch in stage 08 is deleted,
-107 lines: `if (!isPubliclyListed(comp)) { ...abbreviated rebuild...; return; }` was not a
-different model but a shortened copy of the same one, skipping payroll, capex, PP&E, inventory,
-input consumption, cost drivers, the debt lifecycle and offerings. Every firm now runs one
-operating model and the genuinely public-only behaviour is guarded where it happens — sell-side
-consensus and the earnings surprise, and buybacks. **All three debt-offering paths stay common**:
-refinancing, the maintenance bridge and opportunistic issuance are things a private firm does too,
-which is exactly the distinction a fork cannot make. What the fork had cost, all measured: three
-fields silently dropped by its fixed rebuild list (§7.41); 8.20M people paid no wages, so 67% of
-the USA's named wage bill never reached a household; 2.91B a week moving outside the settlement
-layer; and a headcount rule that drifted out of agreement with the listed tier's (§7.119).
-**Attempted first and recorded because the pull toward it is strong:** giving the private path
-equivalent-but-parallel economics, which is the same mistake in a new form.
-
-
-**IND2 — Revenue mechanism.  *(SUBSCRIPTION done §7.114; PROJECT/ROYALTY deferred to IND10/11)***
-How a cleared transaction becomes REVENUE is a property of what was sold, from the registry.
-`UNIT_SALE` is recognised on delivery and production that did not sell is not revenue — which was
-every good in the model, whatever it was. `SUBSCRIPTION` buys a CONTRACT: it keeps paying until
-it churns, so the seller carries a real `recurringRevenueBaseUSD` that survives a quarter with no
-new sales, and a week it cannot ship does not cost it the contract. Eight sub-units are contracts
-(enterprise and consumer software, network infrastructure, media, education, rental, facilities,
-repair). **Verified: over a quarter a subscription seller's revenue moves −1.2% against a unit
-seller's −6.5%**, which is the criterion this slice was written for. **PROJECT** (booked to
-backlog, recognised as delivered) and **ROYALTY** (a share of someone else's volume) need a
-backlog STOCK to live on: they land with **IND10/IND11**, which build it, so the stock has one
-owner rather than two.
-
-**IND3 — Cost structure. *(CORE DONE §7.121; cost SHAPES remain.)*** EBITDA is now revenue less
-what the firm actually spent — real input lots at the prices paid, the real wage bill at the real
-headcount, and an other-opex rate derived from the firm's own opening books (§7.4), so opening
-EBITDA is unchanged at week 0 and every later move is a real cost moving. Payroll enters in full;
-the deviation form was only needed against a margin that already contained a wage bill. **The
-rule-3 defect this slice was written around is closed:**
-`realInputConsumptionCostUSD` in stage 08 is the real dollar cost of the real lots a firm actually
-consumed, at the prices it actually paid — **and it reaches only the display COGS breakdown.**
-EBITDA is `revenue x newEbitdaMargin − payrollAboveBaseline`, where the margin is a walked stated
-number nudged by `inputPriceDrag * 0.03`, an INDEX. So input cost has two representations, and the
-measured one sits unused beside the formula — §7.100's FRM shape. **This is why deepening the
-recipes was safe** (input cost cannot reach the P&L, so nothing could collapse) **and why depth is
-currently visible on the demand side only.** Charging the real cost is not an addition: the stated
-margin already implicitly contains COGS, so this is a DECOMPOSITION — revenue − inputs − payroll −
-opex — and adding the real cost on top of the stated margin is the §7.115 double-count trap in a
-new place. Do it as part of this slice, not before it.
-
-The rest of IND3: the fixed/variable split and the COGS-versus-opex balance by industry:
-a software firm's marginal cost is near zero and its costs are people; a smelter's are inputs and
-energy. Both are currently the same decomposition with different coefficients. Operating leverage —
-which is what makes a downturn hurt some industries far more than others — is not expressible
-until this is.
-
-**IND4 — Financial profile** (the original #51): per-sector `{capexIntensity, cyclicalityBeta,
-financingPreference (bond/loan/equity mix), payoutPolicy, hedgingPolicy}`, consumed by stage 08,
-`corporate-financing.ts` — which market an issuer taps stops being uniform — and DER's hedging
-slice. **Also where several stated primitives become outcomes:** the ETF expense ratios, the
-underwriting fee schedule, and the research-capacity constant behind who indexes.
-
-**IND5 — Electricity.  *(DONE §7.112)*** A real good in the registry, produced by Energy-sector
-firms, with a recipe line in **every** industry at its own energy intensity (0.010 luxury goods →
-0.080 materials and chemicals — a technological primitive, not an outcome). Its physics carry it:
-`IN_PLACE` means it is delivered where it is consumed, so it takes no freight and cannot cross a
-border, which is what a grid is — and `isStorable` reads that mode, making electricity **the
-model's one genuinely non-storable good**, produced the week it is used. Linked to natural gas at
-the margin, so an energy shock now reaches every industry's cost base through a real input rather
-than a correlation. **Mean recipe intensity 0.138 → 0.164** (§7.111's root-cause number), and
-verified: 237 suppliers, USA shares summing to exactly 100%, no firm holding it in inventory.
-
-**IND6 — Share-versus-margin strategy** (#55): a per-company posture expressed ONLY through its
-real stage-05 offer price relative to cost — underpricing within contribution-margin bounds buys
-real share because the auction fills cheaper offers first. No synthetic share variable.
-
-**IND7 — Antitrust** (#45): real `categoryMarketShare` above a threshold for N sustained weeks
-forces a divestiture — split the company into two real companies through the existing generation
-machinery, dividing product lines, debt and holders — plus an M&A freeze flag stage 10 respects.
-
-**IND-R5 *(DONE §7.109)* — a bank's seed revenue is a Pareto draw, and it spends years converging
-on its real scale.** Found while verifying IND-R1 (§7.108). `bankProfile` blends 85/15 toward the
-NIM-implied figure and its own comment says the generation-time seed "has no relation to the
-region's actual banking-sector balance sheet". Measured: a USA bank opens at **1.68B of revenue
-against 7.47B NIM-implied**, and climbs 1.68 → 2.55 → 3.30 → 4.19 → 4.94B in four weeks — a
-model artifact that every consumer reads as real output growth, the labor market's hiring signal
-among them. §7.4's rule applies exactly: seed by the engine's own code, so a bank's opening
-revenue should BE what its opening balance sheet earns. **Not done here on purpose** — it
-multiplies bank revenue ~4x at week 0, which moves market caps, index levels and the labour
-demand signal together, and it wants measuring alongside §6.1's seed-employment slice.
-**DONE as part of EMP:** a bank's opening revenue is now `earning assets × the region's NIM`, and
-its opening EBITDA follows from it. Measured after: 7% payroll-to-revenue, $644k revenue per
-employee, and the years-long convergence artifact is gone.
-
-**IND8 — Rating generation.  *(DONE §7.113)*** The seed's leverage was a deterministic function
-of (sector, rank) — every firm of a given sector and size opened with an IDENTICAL balance sheet,
-so the universe's credit quality was a projection of seven sector curves: 98% investment grade,
-**zero BBB and zero high yield**. Leverage is now drawn as a share of each firm's own covenant
-capacity (`COVENANT_LEVERAGE_CEILING`, the engine's own rule) at its unlevered quality, and the
-rating follows from the leverage that produces — one rater, seed and week. **BBB 0% → 14%,
-p90 leverage 3.5x → 4.2x.** Seed HY stays near zero and that is correct: the covenant rule is
-what stops a firm ISSUING its way to high yield, so HY arrives through deterioration (BBB 39% /
-HY 16% by week 40, as the dynamics always did) and from HC's LBO tier, measured at p50 3.8x.
-
-**IND9 — The segment debt primitive.  *(DONE — by G2, confirmed by measurement §7.113)*** G2's
-`migrateSmeDebtAtSeed` already recalibrated `debtUSD = 2 × revenue` to min(serviceable,
-capital-carriable) and deleted the remainder. **Measured at seed: 2.7x EBITDA and 0.38x revenue
-in all four regions**, against the ~17.8x the row was opened for. Nothing left to do; §7.18's
-want/have was re-measured at the same time.
-
-**IND10 — Production time and WIP.** Fulfilment time as a stock: an order in production is
-work-in-progress between input lots and finished output, with a per-sub-unit production lead time
-in BP1's registry. XB3a priced the shipping half of delivery time; this is the making half, and
-for long-cycle industries (machinery, aerospace, construction) WIP IS the balance sheet.
-Verify: order-to-delivery = production + transit; WIP scales with lead time x throughput; quoted
-delivery lengthens as backlog grows.
-
-**IND11 — Backlog, cancellations, and contract breaks.** One mechanism, three sides. Stage 05's
-unfilled demand stops evaporating: a committed order persists on the seller's backlog AND as the
-buyer's commitment (rule 14), ages, and can be cancelled at a real cost — backlog cancellation in
-downturns is the amplifier that makes capital-goods cycles violent, so it must be able to happen.
-Chronic under-delivery lets the buyer terminate for non-performance and re-source through the
-merit order; damages are a real payable; renewal reprices at the current market; long contracts
-carry escalation/indexation so input costs pass through instead of silently assigning the
-inflation risk to one side. Verify: backlog reconciles orders − deliveries − cancellations; a
-demand shock shows cancellations, not just missing new orders; a chronic under-deliverer loses
-its contracts.
-
-**IND12 — Domestic trade credit: the working-capital cycle.** XB3a-5's invoices and payment terms
-extend inward: every B2B sale on terms, receivables and payables on both books, the
-cash-conversion cycle as each firm's real liquidity constraint — trade credit outstanding exceeds
-bank credit in reality — and a customer default hitting its suppliers' receivables, the real
-cascade channel. Follow-on once real: factoring / supply-chain finance / inventory finance.
-Verify: aggregate receivables = aggregate payables; a default propagates measured losses to named
-suppliers; long-cycle firms carry visibly more short-term funding.
-
-**IND13 — Assets under construction: capex lead time.** Completes §6's capex-becomes-capital
-design: a capital good ordered is construction-in-progress until it enters service quarters
-later — PP&E and the capacity it adds arrive AFTER the demand that justified them, which is the
-mechanism of every capacity cycle. Verify: capacity responds to investment at the registry's
-lead; an overbuild is producible.
-
-**IND14 — Reliability is a supplier attribute.** A stockout does not lose a week's sale, it loses
-the relationship: buyers re-source after repeated failure and STAY re-sourced, and reliability is
-priced into sourcing beside landed cost (half of §6's logistics-share gap). Verify: the
-supply-relationship graph rewires after sustained failure and does not rewire back on one good
-week.
-
-**IND15 — Labor constrains output.** Production = what the plant AND the staffed hours allow; a
-firm that cannot hire cannot produce — without this, HH5/6's labor market is decorative and
-IND3's "costs are people" industries are not real. Verify: an unfilled-vacancy firm's output
-measurably binds on labor, not only on PP&E.
+**Closed: every slice but one. The record is §7.108-156 and is not repeated here.** What
+follows is the only open slice.
 
 **IND16 — The distribution tier.  *(THE ONE IND SLICE STILL OPEN — designed 2026-08-30, NOT
 built, and the reason it was not built is the finding.)*** Wholesale/retail between the factory
@@ -1974,62 +1781,22 @@ terms on offer. The constant dies when orders, not demand, go upstream.
 
 ---
 
-### DIST-P — How few primitives does the cross-section need?  *(governing idea, 2026-08-30, from a user question)*
+### DIST-P — The primitive scoreboard  *(the rule is §1.19; this is its live count)*
 
-**The test.** A number is irreducible only if NO mechanism in the model can produce it. That leaves
-exactly three legitimate categories, and everything else must be an outcome:
+**The answer, measured 2026-08-30:** the household cross-section needs **two** permanent
+primitives — PATIENCE (what makes a wealth distribution stationary rather than divergent)
+and RISK AVERSION (the precautionary motive a confidence shock should work through) — plus
+one temporary, the illiquidity friction, which HSG retires. Firms need **zero to one**
+(entry scale, probably derivable from technology). Against roughly **90** stated numbers in
+the household layer today.
 
-  1. **TECHNOLOGY** — what a process physically takes. Recipes, lead times, value density. Not
-     DIST's; they belong to the registry.
-  2. **PREFERENCE** — how an agent trades the present against the future, and its aversion to risk.
-  3. **POLICY** — tax progressivity, transfer means-testing. A real government CHOOSES these; they
-     are instruments, not facts to derive. `TIER_TAX_RATE_MULTIPLIER` and `TIER_TRANSFER_WEIGHT`
-     are therefore legitimate and are not shape parameters.
+**It can be this small because this model generates its own idiosyncratic income risk.** A
+standard Bewley/Aiyagari model must STATE the income process — persistence, variance, a
+transition matrix, fitted to data, which rule 4 forbids outright. Here a household is
+unemployed because a real firm laid it off at a real vacancy. That is the largest single
+saving available and it is already banked.
 
-**THE ANSWER: two permanent, one temporary, for the whole household cross-section.**
-
-  1. **PATIENCE** — the household's discount rate against the return on saving. This is the engine:
-     it is what makes a wealth distribution STATIONARY rather than divergent (Aiyagari's condition).
-     `WEALTH_SPENDDOWN_YEARS = 8` is one reduced form of it and a buffer target would be another;
-     they are the same number twice and should collapse.
-  2. **RISK AVERSION** — separable from patience, and needed separately: patience sets the LEVEL of
-     wealth, risk aversion sets the EXTRA held against income uncertainty. One number does it in a
-     buffer-stock reduced form, but then a confidence shock cannot raise saving — which is exactly
-     what `−0.1 x CCI` in the old aggregate formula was faking.
-  3. *(temporary)* **THE ILLIQUIDITY FRICTION** — what makes a house or a pension unspendable. A
-     primitive only while housing and pensions are not real markets with real transaction costs.
-     **HSG (item 5) retires it.**
-
-**Firms/SMEs: zero to one.** Entry scale — how big a firm is when born — and that is probably
-derivable from technology (the smallest scale at which the recipe's fixed costs are covered). The
-size distribution must be entirely output: random growth (auctions won, contracts kept, IND14's
-reliability compounding) + entry + DIST's absorbing barrier generates Pareto by Gabaix/Luttmer's
-own mechanism. **`PARETO_ALPHA = 1.16` states the answer to a process the model already runs.**
-
-**WHY IT CAN BE THIS SMALL, AND THIS PART IS ALREADY BANKED.** A standard Bewley/Aiyagari model
-MUST state the income process — persistence, variance, a transition matrix, 4-6 numbers, fitted to
-data, which rule 4 forbids outright. This model does not need one: a household is unemployed
-because a real firm laid it off, at a real vacancy, after a real matching process. **The
-idiosyncratic risk that drives the entire wealth distribution is already endogenous**, and that is
-the single largest saving available.
-
-**THREE KINDS OF NUMBER, AND CONFLATING THEM IS WHERE THE DAMAGE HAPPENS.**
-
-  - **RESOLUTION parameters** — K strata, tier count, grid size. NOT primitives; numerical choices.
-    The test is INVARIANCE: the answer must not change when they change. §5-DIST's cut-point
-    invariance test is exactly this, and it is what proves K is not secretly doing work.
-  - **SHAPE parameters** — Pareto alpha, tier shares, savings rates, an MPC ladder, an average LTV.
-    Each is a claim about THE ANSWER, and each is a place the model cannot surprise you. **§6.1's
-    mortgage finding is what that costs**: a stated mean put the whole book on the flat part of the
-    severity curve and switched the mechanism off entirely.
-  - **TRUE primitives** — the three categories above.
-
-**THE SCOREBOARD, and it is the useful part. The count of stated SHAPE parameters is a direct
-measure of how much mechanism is missing**, and each block dies exactly when its mechanism lands.
-Roughly 90 of them in the household layer today: 14 in `TIER_OCCUPATION_MIXES`, 32 in
-`TIER_BALANCE_SHEET_WEIGHTS`, 4 each in the wage/tax/transfer/residual/debt-service weights, 4 tier
-population shares, 4 savings-rate coefficients, 16 across the credit tiers, plus the spend-down
-horizon and the savings cap.
+**Each stated block dies when its mechanism lands. Keep this falling; it may never rise.**
 
 | Stated block | Dies with |
 |---|---|
@@ -2040,15 +1807,6 @@ horizon and the savings cap.
 | `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN, item 22 |
 | ~~the average LTV~~, `WEALTH_SPENDDOWN_YEARS` | **the LTV RETIRED §7.159** (the book is vintages); the spend-down horizon still waits on housing that clears — HSG, item 5 |
 | **`TIER_OCCUPATION_MIXES` (14)** | **NOTHING — no owner assigned. The largest stated block with no mechanism scheduled to kill it.** A tier's occupation mix should be an outcome of who got hired into what, over time. |
-
-Run it like §6.1's unmodeled-financial-assets line: **a count that must fall and may never rise**,
-printed by the harness, so "how bottom-up is DIST" is a number rather than an opinion.
-
-**THE CAVEAT, and it decides the ORDER.** You cannot reach two before the mechanisms land. A shape
-parameter is what STANDS IN FOR a missing mechanism, so deleting one early does not make the model
-more bottom-up — it makes it wrong. §7.158 is what that looks like when you try.
-
----
 
 ### DYN — Entry, exit, and industry structure  *(item 22; needs IND, BP1)*
 
@@ -3359,91 +3117,35 @@ that proved it, the lesson.
       USD; every pair is derived from two of those. Four independently drifting pairs could
       violate triangular arbitrage; three cleared values cannot.
 
-76. **XB3a: a good has a world price, and trade stops being a formula.** `exportShareCapture`
-    handed an exporter a clamped share of the importer's aggregate demand on a competitiveness-
-    and-FX score, and stage 08 credited the resulting revenue to firms — **a second, independent
-    way for a company to make a sale, beside the stage-05 auction already selling its output.**
-    Now every sub-unit clears in five books: one WORLD book all four regions bid and offer into,
-    and one LOCAL book per region, split by `CATEGORY_TRADABILITY`. An export is a fill whose two
-    sides sat in different regions.
-    - **The continuous parameter did the work.** Option (b) of the three the user chose between
-      needed no new threshold: tradability is already a number between 0.02 and 0.85, so a firm
-      offers that share of its output to the world and keeps the rest at home. **Measured, and it
-      is the test that the split is real:** at tau 0.80 the four regions' local prices sit 2.5%
-      apart while the four posted prices sit 0.5% apart — the law of one price EMERGING, not
-      imposed; at tau 0.02 the local spread is 45% and the posted prices barely move off it.
-    - **Settle once, clear twice.** Production, inventory and the cash ledger settle ONCE per firm
-      per sub-unit against the sum of its fills in both books. The obvious build — split the firm
-      and let each auction settle its own inventory — is §7.5's shared-field collision waiting to
-      happen: the second write silently wins.
-    - **Two conservation checks, both exact.** World exports = world imports to the dollar, and
-      23,104 input lots on real firms name a foreign seller. A trade flow that does not reconcile
-      to who bought from whom is not accounting, it is still a formula.
-    - **The invoice currency is contested per TRADE, and getting that wrong first is the lesson.**
-      The first version chose it once per MARKET. That makes each market a 0/1 outcome, so the
-      largest region took all of them in week 1 — before coalescing carried any information — and
-      the network term then made it permanent. **That was a property of an argmax over a
-      market-wide score, not of any mechanism**, and it would have meant no seed could ever
-      produce a different answer, which is the exact failure rule 4 exists to prevent. The choice
-      belongs to the transaction: a Japanese seller may invoice a European buyer in euros and an
-      American one in dollars in the same market. Moving it there produced a genuinely contested
-      week 1 — USA 69.9% / EUR 18.2% / JPN 11.8% / UK 0.1% from a dead-level seed.
-    - **What it still does, recorded in §6 rather than tuned away.** It locks to 100% USD by week
-      5 because the coalescing weight (0.45) exceeds the maximum the market-power term can reach
-      (0.35), so a 100% share is absorbing. **A corner solution produced by the relative size of
-      two stated constants is a fact about the constants, not a finding about the world** — and
-      turning them until the output looked less extreme would be the thing §7.66 draws the line
-      at. The weights are the user's call.
-    - **Transaction FX exposure, with no re-denomination.** A cross-border sale is delivered now
-      and paid a week later at whatever the invoice currency is then worth; revenue and cost stay
-      recognised in USD at delivery and only the cash moves. Measured: 4,191 non-USD invoices
-      booked in week 1 settled in week 2 for **-10.46m** of realised FX loss as EUR/USD ran
-      1.3915 -> 1.2802. USD invoices realise exactly zero, correctly — USD is the numéraire, and
-      local cost bases are XB3b's.
-    - **Both legs, same pass (rule 14).** A settled pair moves by the same USD amount and nets to
-      zero. Of every invoice outstanding, ZERO have neither party exposed: a cross-border trade
-      always leaves at least one side off its own currency, and where a third currency wins the
-      deal, both. An invoice whose counterparty has defaulted is written off rather than
-      half-settled — paying a seller out of a buyer that no longer exists mints the money.
-    - **`companyUpdates.cashChange` was dead and had been for as long as the S5 ledger has
-      existed.** Stage 05 wrote it in three places; stage 08 rebuilds cash from `salesUSD` and
-      `purchasesUSD` through `post()` and has never read it. Found by §7.58's own instruction —
-      grep for the readers before trusting a field — while looking for somewhere to put the
-      deferred export cash. Deleted.
-    - **The cold start seeds by running the market.** Opening every region at zero trade made
-      week 1 read the structural balance as a collapse in output; a formula estimating what the
-      world book would clear is the second representation this slice deletes. So the seed runs
-      the real world book once on a structural copy and restores the RNG position — §7.4's
-      strictest form, and the same trick is available to anything else that needs an opening
-      position the engine alone can compute.
-    - **Cost, measured before and after as the user asked.** Stage 05 **265.1 -> 361.3 ms/week**;
-      whole step **1,577 -> 1,755 ms**; trade-settlement 3.0 ms. 28 world books on top of 112
-      local ones are cheap because the participant plans were already being built — only the
-      clearing walk is duplicated at a different partition. **The plan's recorded 604 ms/week
-      baseline was stale by 2.6x**, and stage 05 is no longer the expensive stage: the credit
-      books are 50.6% of the step against its 20.5%. §1.10 updated.
-    - **CORRECTION, same day: half of this was reverted, and the half that was wrong was the
-      premise.** `CATEGORY_TRADABILITY` is a real-world EQUILIBRIUM — the observed trade share of
-      each category — not a primitive. Splitting supply and demand by it imports the answer, so
-      the model could never say what gets traded or why; the world-book architecture built on it
-      went with it. **A parameter can be perfectly real, perfectly measured, and still be the
-      answer rather than an input** — the test is not "is this number true", it is "is this number
-      a RESULT of the history I am trying to simulate". The physical primitives underneath — how
-      much it costs to move a dollar of a good, and how long it takes — are what the model was
-      missing, and it had NONE of them: no distance between regions, no freight, no lead time, no
-      physical property of any good.
-    - **And the invoice-currency half was worse.** Three weights (0.45/0.35/0.20), a
-      `depth/(1+vol)` form invented on the spot, a 26-week window, and an argmax over the
-      resulting score. Nobody chooses an invoice currency by scoring four options on three
-      weighted axes; it is a formula wearing a mechanism's clothes, which §7.52 already names as
-      this project's most likely failure once deriving things becomes the habit. **The corner
-      solution I then "recorded rather than tuned" was not a finding about the world — it was
-      arithmetic between two of my own invented numbers, and reporting it as a result was the
-      real error.** Deleted rather than patched.
-    - **What stands:** the per-firm settle-ONCE restructure across books, the global counterparty
-      lookup, cross-border contracts filed in the customer's region, trade as accounting from the
-      auction's own lots, seeding the opening position by running the engine, and the deletion of
-      the dead `companyUpdates.cashChange`. The rescoped project is §5-XB3a.
+76. **XB3a: a good has a world price — built, then HALF REVERTED, and the reverted half is the
+    lesson.** `exportShareCapture` handed an exporter a clamped share of the importer's demand on a
+    competitiveness-and-FX score while stage 05 was already selling the same output — a second,
+    independent way to make a sale. Replaced by clearing every sub-unit in a WORLD book plus one
+    LOCAL book per region, split by `CATEGORY_TRADABILITY`.
+    - **THEN REVERTED, AND THE PREMISE WAS WHAT WAS WRONG. `CATEGORY_TRADABILITY` is a real-world
+      EQUILIBRIUM** — the observed trade share of a category — not a primitive. Splitting supply by
+      it imports the answer, so the model could never say what gets traded or why. **A parameter
+      can be perfectly real, perfectly measured, and still be the answer rather than an input: the
+      test is not "is this number true" but "is this number a RESULT of the history I am
+      simulating".** The physical primitives underneath — cost to move a dollar of a good, and how
+      long — were what the model lacked entirely: no distance, no freight, no lead time.
+    - **The invoice-currency half was worse and is the sharper lesson.** Three weights
+      (0.45/0.35/0.20), a `depth/(1+vol)` form invented on the spot, and an argmax over the score.
+      Nobody picks an invoice currency by scoring four options on three weighted axes — a formula
+      wearing a mechanism's clothes. It locked to 100% USD by week 5 because one invented weight
+      (0.45) exceeded another's reach (0.35). **I recorded that corner solution as a finding about
+      the world; it was arithmetic between two of my own numbers, and reporting it as a result was
+      the real error.**
+    - **What stands:** the per-firm settle-ONCE restructure across books (splitting the firm per
+      auction is §7.5's shared-field collision waiting to happen — the second write silently wins);
+      the global counterparty lookup; cross-border contracts filed in the customer's region; trade
+      as accounting from the auction's own lots (world exports = world imports to the dollar);
+      seeding an opening position by RUNNING the engine on a structural copy and restoring the RNG
+      (§7.4's strictest form); and the deletion of `companyUpdates.cashChange`, dead since the S5
+      ledger existed — found by §7.58's instruction to grep for readers before trusting a field.
+    - **Cost, measured:** stage 05 265.1 → 361.3 ms/week, whole step 1,577 → 1,755 ms. The plan's
+      recorded 604 ms/week baseline was stale by 2.6x, and the credit books, not stage 05, are the
+      expensive half of the step.
 
 77. **XB3a rebuilt, XB3b, XB5, and the battery: tradability became an outcome.**
     - **The premise was the defect.** `CATEGORY_TRADABILITY` is an observed trade share — a
@@ -4725,76 +4427,39 @@ that proved it, the lesson.
       recipes was safe:** input cost does not reach the P&L, so nothing could collapse. It is also
       why depth is currently visible on the demand side only.
 
-118. **CHAIN-E — intermediate demand exists, headcount is value added over productivity, and EMP's
-    symptom went with it.** The slice §7.117 specified, built and measured. Two halves of one
-    accounting truth, and **either alone breaks employment**, which is why they are one entry.
-    - **Demand.** `C + I + G` is a FINAL-demand identity — corporate demand in it is investment
-      only — so a product's demand carried no room for what other producers consume of it. It is
-      now final demand PLUS the intermediate half, solved from the registry's own BOM matrix as
-      `X = F + AX` by iteration; the column sums are each product's own intensity, all well under
-      one, so convergence is asserted rather than assumed. Applied in **both** places that build
-      the identity — the seed and the weekly rebuild — because two copies of an identity is how
-      it drifts (rule 3).
-    - **Headcount.** `regionProductivityPerCapita` is value added per worker and `annualRevenue`
-      is GROSS output, so dividing one by the other needs the ratio between them — which is
-      exactly `1/(1 − a)` for what the firm makes. That replaces the seven stated per-sector
-      `revPerEmployeeMultiple` entries **whose own comment said the multiples "follow the recipes,
-      not the other way round" while nothing derived them**. Employment is now value added over
-      productivity: pinned to what the economy PRODUCES, not to gross output through a separately
-      chosen multiple. The stated table survives only as the fallback for a firm with no product
-      lines (a bank, an insurer) — owner IND3/IND-R4, with the other stated financial ratios.
-    - **Harness 18 → 2 violations, five families → two**, both remaining a single firm's revenue
-      outlier rather than anything systemic.
-    - **EVERY UNEMPLOYMENT VIOLATION IS GONE — 15 of the 18.** Seed unemployment
-      USA/EUR/UK/JPN **10.5/25.7/17.9/23.5% → 7.5/6.5/3.8/7.8%**, in band in all four regions in
-      every week. §6.1's seed-employment row measured those opening rates as the proof that the
-      seed's three employment primitives disagreed; **they agree now because the invented one was
-      deleted, not because anything was reconciled to anything.** Productivity is an independent
-      Zipf primitive, the labour force comes from population and participation, and value added
-      comes from demand — three unrelated derivations that now land in the same place. **The fix
-      was not tautological and it is worth checking why:** had productivity been defined as
-      GDP-over-employment, `employment = valueAdded / productivity` would have been an identity
-      and the result meaningless. It is not.
-    - **§7.111's own criterion, met:** revenue per worker against productivity per worker,
-      **Consumer 0.92x → 1.42x** and **Industrials 0.93x → 1.30x** — the two figures that were
-      below one and therefore impossible by definition. USA all-firm **1.13x → 1.39x**. The
-      aggregate is an OUTCOME of the matrix; it lands below the unweighted 1.70x because
-      employment concentrates in low-intensity services, which is what it should do.
-    - **Deflation is less severe throughout and weeks 4-6 print POSITIVE inflation** (before:
-      −3.90/−2.91/−3.52). The escape is not closed — week 10 still runs −12.50 against −15.42 —
-      and that remains G1b/MAC's, not this.
-    - **WHAT IS NOT FIXED, MEASURED AT HORIZON — AND EMP DOES NOT CLOSE.** The ten-week result
-      does not hold: over a 60-week run with shocks on, unemployment escapes to ~40% and inflation
-      to −36% by week 37, the two moving together monotonically. **A/B against the pre-CHAIN-D
-      tree at the same seed says the escape is PRE-EXISTING, and that CHAIN-E is better or equal
-      at every checkpoint** — u(USA/EUR/UK/JPN) and inflation, baseline against after:
-
-      | wk | baseline u | after u | baseline pi | after pi |
-      |---|---|---|---|---|
-      | 1 | 10.5/25.7/17.9/23.5 | **7.5/6.5/3.8/7.8** | −0.79 | −0.52 |
-      | 7 | 18.7/33.7/28.3/31.4 | **13.4/15.3/12.2/14.5** | −6.70 | −3.53 |
-      | 13 | 23.7/37.4/33.4/33.7 | 19.1/19.0/19.0/19.4 | −22.33 | −19.97 |
-      | 25 | 36.2/47.1/44.6/45.6 | 34.3/33.3/35.2/36.1 | −33.03 | −29.60 |
-      | 43 | 39.1/48.8/48.7/50.4 | 40.0/33.3/43.3/41.0 | −40.31 | −32.89 |
-
-      The two trees start far apart and converge as both drown in the same deflation spiral. **So
-      the seed disagreement is fixed and the early collapse is gone; the horizon escape was never
-      the employment primitives' and is not CHAIN's.** It is §6.1's G1b inflation escape, dragging
-      employment behind it — a firm whose nominal revenue falls 30% is below its cost of capital
-      whatever its headcount was derived from. **EMP's remaining blocker therefore moves from
-      CHAIN to G1b/MAC**, and EMP's own criterion (stable or mean-reverting over 60 weeks) cannot
-      be met until the price level stops escaping. Do not read the ten-week harness figure as EMP
-      closing.
-    - **A process note worth keeping.** Both 60-week runs were killed mid-flight by running
-      `git checkout` on `src/` while they were executing — twice, losing two final summaries and
-      ~10 minutes. **Do not swap the tree under a running probe;** use a separate worktree or wait.
-      The week-by-week rows above survived and were enough, which was luck rather than method.
-    - **The lesson, and it is §7.117's continued one order deeper:** three primitives "agreeing"
-      is not evidence they are right. §7.111 found recipes, demand and revenue-per-worker all
-      consistent at 1.16x and read that as confirmation. They were consistent because two of them
-      were stated to match the third. **Consistency between numbers you chose is not a
-      measurement.** What broke the tie was deriving one of them from something none of the three
-      could see.
+118. **CHAIN-E — intermediate demand exists, headcount is value added over productivity, and
+    EMP's ten-week symptom went with it.** Two halves of one accounting truth; either alone breaks
+    employment.
+    - **Demand.** `C + I + G` is a FINAL-demand identity, so a product's demand carried no room for
+      what other producers consume of it. Now final demand PLUS the intermediate half, solved from
+      the registry's own BOM as `X = F + AX`; column sums are each product's intensity, all well
+      under one, so convergence is ASSERTED. Applied in BOTH places that build the identity — two
+      copies of an identity is how it drifts (rule 3).
+    - **Headcount.** `regionProductivityPerCapita` is value added per worker; `annualRevenue` is
+      GROSS output. Dividing one by the other needs the ratio between them, which is exactly
+      `1/(1 − a)` for what the firm makes. That derives the seven stated `revPerEmployeeMultiple`
+      entries **whose own comment said the multiples "follow the recipes" while nothing derived
+      them.**
+    - **Measured: harness 18 → 2 violations; every unemployment violation gone.** Seed
+      unemployment 10.5/25.7/17.9/23.5% → **7.5/6.5/3.8/7.8%**. §7.111's criterion met: Consumer
+      0.92x → 1.42x and Industrials 0.93x → 1.30x, the two ratios that were below one and
+      therefore impossible.
+    - **Why the fix was not tautological, which is worth checking:** had productivity been defined
+      as GDP-over-employment, `employment = valueAdded / productivity` would be an identity and the
+      result meaningless. It is an independent Zipf primitive, so three unrelated derivations now
+      land in the same place.
+    - **AND EMP DOES NOT CLOSE.** Over 60 weeks unemployment still escapes to ~40% and inflation to
+      −36% by week 37. A/B against the pre-CHAIN tree at the same seed: the escape is PRE-EXISTING
+      and CHAIN-E is better or equal at every checkpoint (wk 7: 18.7/33.7/28.3/31.4 → 13.4/15.3/
+      12.2/14.5; wk 43: 39.1/48.8/48.7/50.4 → 40.0/33.3/43.3/41.0). The two trees converge as both
+      drown in the same deflation. **Do not read the ten-week figure as EMP closing.**
+    - **Process note: do not swap the tree under a running probe.** Two 60-week runs were killed by
+      `git checkout` on `src/` mid-flight.
+    - **The lesson, one order deeper than §7.117's:** §7.111 found recipes, demand and
+      revenue-per-worker all consistent at 1.16x and read that as confirmation. They were
+      consistent because two were STATED to match the third. **Consistency between numbers you
+      chose is not a measurement.** What broke the tie was deriving one from something none of the
+      three could see.
 
 119. **One headcount rule for all three tiers — and what it exposed: the firm universe's value
     added is 53% of GDP.** IND-R6's argument, proven with numbers, and then a seed defect that
@@ -5561,137 +5226,62 @@ that proved it, the lesson.
       that section said COH would be REWRITTEN rather than executed). **§5-COH should be re-read
       before it is started; most of what it describes has happened.**
 
-146. **IND15 — labour constrains output, and the labour market stopped being decorative.** Stage
-    05's production plan was the plant alone: `weeklyCapacityUnits x responseFactor x throttle`.
-    A firm that could not hire produced exactly as much as one fully staffed, so an unfilled
-    vacancy had no consequence anywhere in the goods economy — HH5/6's hiring machinery ran, and
-    nothing downstream could tell the difference.
-    - **The fix is one `min`.** Production = `min(plant, plant x staffedShare)` where
-      `staffedShare = employeeCount / baselineEmployeeCount` — the firm's own headcount against
-      the headcount its baseline output needed. **Both numbers were already measured**; no new
-      field, no new coefficient, and nothing to calibrate. A firm that has shed half its people
-      ships half its output; one that hired above baseline is not rewarded with extra output,
-      because the plant still binds — hence the `min` rather than a bare multiply.
-    - **It moved the headline more than CAP's production rule did.** Week-10 deflation
-      −24.76% → **−19.82%**, harness green, 0 violations. That is the size of the answer to
-      MAC(a): part of what looked like a demand shortfall was firms producing at plant capacity
-      while under-staffed, dumping unsellable supply into the merit order and pushing clearing
-      prices down. Supply that no one could have made is still supply, and it priced.
-    - **The general point, again (§7.121, §7.125).** Every mechanism that exists but binds on
-      nothing is a mechanism that is not there. The labour market cleared, wages moved, hiring
-      succeeded and failed — and none of it reached a price until output could feel it.
+146. **IND15 — labour constrains output.** Stage 05's production plan was the plant alone, so a
+    firm that could not hire produced exactly as much as one fully staffed and an unfilled vacancy
+    reached nothing. Output is now `min(plant, plant x staffedShare)`, `staffedShare` being the
+    firm's own headcount against the headcount its baseline output needed — both already measured,
+    no new field. Week-10 deflation **−24.76% → −19.82%**, harness green.
+    **Lesson: a mechanism that binds on nothing is a mechanism that is not there.** The labour
+    market cleared, wages moved, hiring succeeded and failed, and none of it reached a price until
+    output could feel it.
 
-147. **IND10 — production takes time, and the field that said so had been sitting at zero with no
-    reader.** `SubUnitSpec.productionLeadWeeks` existed on all 37 goods, was `0` in every one of
-    them, and was read nowhere. Production was instantaneous for a shipyard and a hairdresser
-    alike: a week's plan became sellable output in the same pass that decided it.
-    - **The lead times are technological primitives** (rule 4 allows the primitive): 0 for
-      services, software and electricity — made on demand; 1 for a refinery's residence time;
-      12 for a semiconductor fab and a growing season; 26 for defence systems and a house;
-      40 for an airliner; 52 for a commercial building.
-    - **WIP is now a real stock.** `Company.wipBySubUnit` is a queue whose index `i` is the lot
-      completing in `i` weeks, so its LENGTH is the good's lead. Each week the front lot arrives
-      and this week's start is pushed on the back. A firm offers what it HOLDS plus what its
-      plant FINISHED — not what it started, which is what stage 05 used to sell.
-    - **Measured (new IND battery in the harness):** WIP carried = the lead, bucket by bucket —
-      1.00 weeks at lead 1, 12.04 at lead 12, 26.35 at 26, 53.68 at 52. **$69.5B of work in
-      progress that did not exist before.** The small overshoots are honest: a queue holds lots
-      started at different production rates, so it equals the lead exactly only in a flat week.
-    - **A structural invariant, not a behavioural one, guards it.** `checkProductionPipelines`
-      asserts every queue's length equals its good's lead. A short queue is the §7.41 trap —
-      a rebuild from a fixed field list dropping the pipeline; a long one is a double advance.
-      Stage 08's rebuild names `wipBySubUnit` for exactly that reason.
-    - **Steady state is the opening condition.** A pipeline's first touch seeds it FULL at that
-      week's rate. Seeding it empty would have given every construction firm a year of zero
-      output at week one — an opening condition nobody chose, and not a statement about
-      production time. Deflation −19.82% → −19.85% at week 10, harness green: **no behavioural
-      change at rest, which is the correct result.** The lead binds when something moves.
-    - **A pool has no pipeline, and that is not an omission.** An SME pool's offer is a RATE —
-      its own measured weekly goods revenue — not a stock drawn from a warehouse, so there is no
-      production start for a lead time to sit between. Its lag is the measurement's own.
-    - **Still open from §5-IND10:** quoted delivery lengthening as backlog grows needs a backlog,
-      which is IND11's.
+147. **IND10 — production takes time; WIP is a real stock.** `productionLeadWeeks` existed on all
+    37 goods, was 0 in every one, and was read nowhere. Leads are now technological primitives
+    (0 services/software/electricity, 12 a fab and a growing season, 26 a house, 52 a commercial
+    building). `Company.wipBySubUnit` is a queue whose index `i` completes in `i` weeks, so its
+    LENGTH is the lead; a firm offers what it holds plus what its plant FINISHED, not what it
+    started. Measured: WIP carried = the lead, bucket by bucket (1.00 at lead 1, 26.35 at 26,
+    53.68 at 52); **$69.5B of work in progress that did not exist before**. Deflation −19.82% →
+    −19.85%: **no behavioural change at rest, which is the correct result** — the lead binds when
+    something moves. A structural invariant asserts every queue's length equals its good's lead
+    (the §7.41 trap: a rebuild from a fixed field list drops what it does not name).
+    A pool has no pipeline and that is not an omission: its offer is a RATE, not a stock.
 
-148. **IND11 — the backlog is a stock, and building it exposed an ordering defect older than
-    itself: A FIRM'S OWN PRODUCTION WAS NEVER AVAILABLE TO ITS OWN CONTRACTS.**
-    - **What IND11 built.** `SupplyContract` carries `backlogUnits`, `shortWeeks` and
-      `escalationBaseUSD`. Undelivered units no longer evaporate: what a supplier owes is this
-      week's quantity plus everything it failed to ship before. A contract on the clock for a
-      full quarter is TERMINATED for non-performance and the buyer re-sources through the merit
-      order. A buyer whose own demand has collapsed CANCELS the backlog it no longer needs.
-      Contracts of a year or more are INDEXED to the price they were struck against, so
-      inflation passes through instead of being silently assigned to one side (31.5% of the book).
-    - **BOTH damages legs are the same legal primitive, and neither has a free coefficient.**
-      A cancelling buyer pays the seller `units x max(0, contractPrice − marketPrice)` — the
-      seller must resell into the market, so its loss is the differential. A breaching seller
-      pays the buyer `units x max(0, marketPrice − contractPrice)` — the buyer must cover in the
-      market, so its loss is the same differential the other way. **When the market has moved in
-      the wronged party's favour the breach costs nothing, which is correct**, and there is no
-      penalty rate anywhere to tune (rule 2, rule 15).
-    - **THE DEFECT IT EXPOSED.** Contracts settled at step 2 against `getOutputInventoryUnits` —
-      LAST week's closing stock — while this week's production reached the warehouse at step 8,
-      after the auction. So a contract could only be filled from what the previous week's auction
-      left unsold, and since the offer already reserved the contract volume, what it left was
-      exactly the shortfall. **Every contract in the economy under-delivered, permanently, and
-      nobody noticed because an unfilled order evaporated.** The moment backlog accumulated it
-      was visible: 69% of the book short at week 10, 37,492 contracts on the non-performance
-      clock, the whole economy's contract book due to terminate at week 13.
-      Two suppliers reading the same warehouse fresh inside their own contract loop could also
-      each ship the same units. The order is now PRODUCE → DELIVER COMMITMENTS → AUCTION THE
-      REST, against one drawn-down balance. **69% short → 15.6%; quoted delivery 1.52 → 0.20
-      weeks.** `contractSalesCommittedUnits` died with it: the offer is what the contracts left.
-    - **Deflation −19.85% → −12.90% at week 10.** Contract volume is real demand paid in real
-      money now; it used to be netted out of buyers' open-market bids and then not delivered.
-    - **AND THE 10-WEEK PROBE IS NOW RED — one assertion, honestly.** JPN unemployment 30.41%
-      against the harness band's 30%. **A/B'd to the cause:** with damages disabled the number is
-      unchanged (32.6 vs 32.8 at week 11), with backlog disabled it is unchanged (33.1) — **the
-      ordering fix alone carries all of it**, and the baseline breaches the same band at week 11
-      anyway (31.47%). **The mechanism is a subsidy being removed, not a new bug.** Input cost is
-      charged FIFO off real lots (§7.121), so a buyer that received nothing on contract held no
-      lots, consumed nothing, and WAS NOT CHARGED for 60% of its inputs. Its EBITDA was
-      overstated, and `earningsShortfallUSD = capitalCharge − ebitda` is exactly what the layoff
-      rule reads. Making the deliveries real makes the costs real.
-    - **Not tuned, not clamped, not banded away** (rules 2 and 12). The economy has run at 21-29%
-      unemployment for the whole probe with the harness green — the band is a tripwire the known
-      labour collapse was always going to hit. **The root is CHAIN-E**, §4 item 21: the demand
-      seed is `C + I + G`, a final-demand identity with NO intermediate demand in it, so output
-      is sized for final demand while firms need inputs too. It is taken next, out of order and
-      deliberately, because it is what this red is.
+148. **IND11 — the backlog is a stock, and it exposed an ordering defect older than itself.**
+    `SupplyContract` carries `backlogUnits`, `shortWeeks`, `escalationBaseUSD`: undelivered units
+    no longer evaporate, a quarter on the clock TERMINATES the contract, a buyer whose demand
+    collapsed CANCELS, and contracts of a year or more INDEX to the price they were struck against
+    (31.5% of the book). **Both damages legs are the cover measure** — `units x the contract/market
+    differential`, each way — so neither has a free coefficient and a breach costs nothing when the
+    market moved the wronged party's way (rules 2, 15).
+    **THE DEFECT.** Contracts settled at step 2 against LAST week's closing stock while production
+    reached the warehouse at step 8, after the auction — so a firm's own output was never available
+    to its own committed orders, and since the offer already reserved the contract volume, what it
+    left was exactly the shortfall. **Every contract in the economy under-delivered, permanently,
+    and nobody noticed because an unfilled order evaporated.** Two contracts on one supplier could
+    also ship the same units. Order is now PRODUCE → DELIVER COMMITMENTS → AUCTION THE REST against
+    one drawn-down balance: **69% of the book short → 15.6%**, quoted delivery 1.52 → 0.20 weeks,
+    deflation −19.85% → −12.90%.
+    **The probe went RED on one assertion** (JPN unemployment 30.41% vs a 30% band) and it was
+    A/B'd to the cause: the ordering fix alone carries it, and the baseline breaches the same band
+    at week 11 anyway. **Input cost is charged FIFO off real lots, so a buyer that received nothing
+    on contract held no lots, consumed nothing, and WAS NOT CHARGED for 60% of its inputs.** Making
+    the deliveries real made the costs real. Not tuned, not banded away (rules 2, 12).
 
-149. **LAB — THE HIRING BRANCH HAD NEVER FIRED. One half of the employment decision was nominal
-    and the other was real, and only the shedding half could happen.**
-    - Found by chasing §7.148's red rather than working around it. `labor-market.ts` decides
-      headcount twice: `desiredEmploymentGrowthAnnual` takes the GROWTH path and correctly
-      deflates (`nominalGrowthAnnual − inflationAnnual`), and §7.109's level path — added to give
-      the shedding rule its missing symmetric half — computes
-      `outputNeedHeads = comp.annualRevenue / (baselineAnnualRevenue / baselineEmployeeCount)`.
-      **`annualRevenue` is this week's dollars; `baselineAnnualRevenue` is the seed's.** No
-      deflator anywhere.
-    - **So with prices falling, every firm in the world reads as overstaffed** — its
-      current-dollar revenue divided by its seed-dollar revenue per head lands below its actual
-      headcount — `understaffedHeads` is zero for everybody, and the hiring branch is gated on
-      exactly that. Meanwhile the shedding branch reads REAL earnings against a REAL capital
-      charge and fires for the 26-44% of firms below the line (measured, new in the IND battery).
-      **§7.109 built the symmetric half and a unit error kept it switched off.**
-    - **The deflator is a measurement, not an index anyone chose:** each good's own cleared price
-      against the price it was seeded at (`unitPriceUSD / baseUnitPriceUSD`, a field the seed
-      already stores and never rewrites), revenue-weighted across the firm's own lines. A firm
-      whose product has halved in price is not overstaffed.
-    - **Measured: unemployment FALLS for the first five weeks for the first time** — 20.3% →
-      18.0% — instead of rising monotonically from week 1, which is what every run since EMP has
-      done. Week 10: 28.8% red → **25.7% green**, better than the pre-IND11 baseline's 27.5%.
-      The 10-week probe passes with 0 violations and §7.148's band trip is gone.
-    - **What is still open.** The curve turns at week 6 and climbs again (30.4% JPN at week 11,
-      against the old baseline's 31.5%). That is the remaining labour collapse and it is not this
-      defect: the IND battery now prints what it sheds against — **netPPE/revenue at 1.35-1.58x**
-      against a ~7.5% cost of capital is a ~10% -of-revenue capital charge on a 12-18% EBITDA
-      margin, so the distribution straddles the line and any shock pushes a third of it under.
-      **inputs/revenue at 14-20%** against a real economy's ~45-55% is CHAIN's shallow-recipe
-      finding, measured on live firms rather than at the seed. Both are §5-CHAIN's and §5-EMP's.
-    - **The lesson, and it is §7.146's again in a different coat.** A mechanism that exists but
-      cannot fire is a mechanism that is not there — and this one could not fire for a reason no
-      reading of the logic would show, because the logic was right and the UNITS were wrong.
-      Rule 9 is about periodicity; this is its sibling. **A price level is part of the number.**
+149. **LAB — THE HIRING BRANCH HAD NEVER FIRED.** One half of the employment decision was nominal
+    and the other real, so only shedding could happen. `desiredEmploymentGrowthAnnual` deflates
+    correctly; §7.109's level path computed `outputNeedHeads = annualRevenue / (baselineAnnualRevenue
+    / baselineEmployeeCount)` — **this week's dollars over the seed's dollars, no deflator.** With
+    prices falling every firm read as overstaffed, `understaffedHeads` was zero for everybody, and
+    the hiring branch is gated on exactly that; meanwhile the shedding branch reads REAL earnings
+    against a REAL capital charge and fired for the 26-44% of firms below the line.
+    The deflator is each good's own cleared price against the price it was seeded at, revenue-
+    weighted over the firm's lines. **Unemployment falls for the first five weeks for the first
+    time** (20.3% → 18.0%) instead of rising monotonically from week 1; week 10 28.8% red → **25.7%
+    green**. Still open: the curve turns at week 6 — netPPE/revenue 1.35-1.58x against a ~7.5% cost
+    of capital, and inputs/revenue 14-20% against a real ~45-55%, both measured in the IND battery.
+    **Lesson: §7.146's again, in the one costume no code reading finds — the logic was right and
+    the UNITS were wrong. Rule 9 is about periodicity; a price level is part of the number too.**
 
 150. **IND12 — domestic trade credit: the machinery was already built and gated to cross-border
     by ONE LINE.** `if (!seller || origin === plan.regionId) return;` in stage 05. Everything
@@ -5763,26 +5353,17 @@ that proved it, the lesson.
       only 65% of the way to the truth in ten weeks, so this is what a slow EMA looks like early.
       It needs a longer run or a supply shock to bite, and that is the correct shape.
 
-153. **IND19 — corporates already buy insurance; what the row was actually hiding was a DOUBLE
-    CHARGE that §7.125 created.** The slice as written ("property and business-interruption
-    premiums paid to the real insurers; a loss event has a payer on both sides") was built by
-    HH1c and is live: `insurance-and-pensions.ts` splits the insurers' own written premium across
-    every operating firm by `grossPPE + annualRevenue` — what a firm has to lose, which is
-    property and business interruption exactly — and the claims come back against it, both legs
-    on real cash. **Nothing to build. Verified by reading, then measured.**
-    - **The defect it exposed.** The cash leg still subtracted `premiums x INSURER_EXPENSE_RATIO`,
-      and its own comment named the dependency: *"the P&L already charges an expense ratio against
-      premiums"*. **§7.125 deleted that charge** — an insurer's operating cost became its real
-      wage bill and its real input basket, charged by the profile caller like any other firm's —
-      **and this cash leg was left behind, so the same expense was taken twice**: once as real
-      staff and premises, once as a flat fifth of premiums (rule 3). The household mirror went
-      with it: an insurer's payroll reaches households through the wage bill now, not through a
-      ratio.
-    - `INSURER_EXPENSE_RATIO` is deleted from `domain/institutions.ts` — the constant §7.125's
-      record already claimed was gone, and was not. **A cleanup that removes a charge must chase
-      every cash leg that was balancing it**, and the comment explaining the dependency is where
-      to look.
-    - Deflation −15.72% → −9.71% at week 10, harness green.
+153. **IND19 — corporates already buy insurance; the row was hiding a DOUBLE CHARGE.** HH1c
+    already splits the insurers' written premium across every operating firm by `grossPPE +
+    annualRevenue` — property and business interruption exactly — with claims back on real cash.
+    Nothing to build. But the cash leg still subtracted `premiums x INSURER_EXPENSE_RATIO`, and its
+    own comment named the dependency: *"the P&L already charges an expense ratio against premiums"*.
+    §7.125 deleted that charge — an insurer's operating cost became its real wage bill and input
+    basket — **and this leg was left behind, so the same expense was taken twice** (rule 3). The
+    household mirror went with it. `INSURER_EXPENSE_RATIO` is deleted: the constant §7.125's record
+    already claimed was gone, and was not. Deflation −15.72% → −9.71%.
+    **Lesson: a cleanup that removes a charge must chase every cash leg balancing it, and the
+    comment explaining the dependency is where to look.**
 
 154. **IND17 — prepayments: negative working capital, and IND10 is what decides who gets it.**
     A long-cycle order is funded as the work is done, not on handover — the buyer's money pays
@@ -5932,39 +5513,25 @@ that proved it, the lesson.
       distinguishes transaction balances from accumulated savings — at which point the buffer has
       something to be a buffer OF.
 
-159. **DIST/HSG — THE MORTGAGE BOOK IS A CROSS-SECTION, AND THE MODEL CAN NOW HAVE A MORTGAGE
-    CREDIT EVENT. It structurally could not before.** First of the four §7.157 sweep targets, and
-    the sharpest.
-    - **What it was.** One `avgLtv` per region into a severity curve flat at its floor below 0.75.
-      `MORTGAGE_MIN_LOSS_SEVERITY = 0.05` was 100% of mortgage loss severity in every region in
-      every week. `f(E[LTV])` where the honest question is `E[f(LTV)]`.
-    - **A SECOND error was hiding inside the first, and it is worth more than the Jensen gap.**
-      The old ratio was `mortgageDebtUSD / housingStockUSD` — total mortgage debt over the WHOLE
-      housing stock, **outright-owned homes included as collateral**. That is not a
-      loan-to-value; it is debt over the nation's houses. It read **0.340**. Measured against the
-      collateral each loan was actually written on, the book's mean LTV is **0.592**. The old
-      number was not merely a mean instead of a distribution — it was the wrong quantity.
-    - **`MortgageVintage`**: principal, the collateral it was written against, the price then, its
-      own fixed rate, its own annuity clock. Each is MARKED to today's median price, so a loan
-      from twenty years ago sits at a low LTV and one written last year sits at the origination
-      LTV. `principalUSD`, `wacAnnual` and `wamWeeks` survive as MEASUREMENTS of the vintages, so
-      every existing reader finds the one number it expects (rule 3).
-    - **The seed spread is arithmetic, not a stated distribution.** Every cohort lent the same
-      amount against the same house; what differs is how much has been PAID OFF. Collateral stays
-      at what the home was worth while principal walks down the annuity, so the cross-section
-      falls out of the term structure. **`MORTGAGE_SEED_VINTAGE_COHORTS = 30` is a RESOLUTION
-      parameter, not a shape one** (§5-DIST-P) — one per year of a thirty-year term.
-      **A bug worth recording:** the first version scaled collateral by the REMAINING principal,
-      which pins every cohort at the origination LTV forever — 156 vintages all reading 0.78, a
-      cross-section with no cross-section in it. Collateral does not amortise.
-    - **Measured: LTV p10 0.16, p50 0.63, p90 0.79, 16.9% of the book above the kink.**
-    - **THE RESULT THAT MATTERS, analytically on the current book:** a **−20%** house-price move
-      takes severity to **2.1x** today's, a **−35%** move to **4.2x**. **The one-average book says
-      0.0500 at both — its floor, unmoved, no credit event possible at any price fall short of
-      ~55%.** That is the difference between a mechanism and a constant.
-    - Losses now fall on each vintage at ITS OWN severity, and each vintage services at its own
-      rate on its own clock, which is what makes a book of old cheap loans and new expensive ones
-      behave like one. Harness green, 0 violations.
+159. **DIST/HSG — the mortgage book is a cross-section, and the model can now have a mortgage
+    credit event. It structurally could not before.**
+    - One `avgLtv` per region fed a severity curve flat at its floor below 0.75, so
+      `MORTGAGE_MIN_LOSS_SEVERITY = 0.05` was 100% of severity in every region in every week.
+    - **A second error hid inside the first:** the ratio was `mortgageDebtUSD / housingStockUSD` —
+      debt over the WHOLE housing stock, outright-owned homes counted as collateral. That is not a
+      loan-to-value. It read **0.340**; measured against the collateral each loan was written on,
+      the book's mean is **0.592**.
+    - `MortgageVintage` carries principal, its collateral, the price then, its own rate and clock,
+      marked to today's price. `principalUSD`/`wacAnnual`/`wamWeeks` survive as MEASUREMENTS of it
+      (rule 3). The seed spread is arithmetic, not a stated distribution: every cohort lent the
+      same against the same house and differs only in how much is paid off.
+      `MORTGAGE_SEED_VINTAGE_COHORTS = 30` is a RESOLUTION parameter (§1.19).
+    - **Measured: LTV p10 0.16, p50 0.63, p90 0.79, 16.9% above the kink. A −20% house-price move
+      takes severity to 2.1x today's and −35% to 4.2x — where the one-average book says its floor
+      at both**, no credit event possible short of a ~55% crash.
+    - **A bug worth keeping:** the first seed scaled collateral by the REMAINING principal, pinning
+      every cohort at the origination LTV forever — 156 vintages all reading 0.78, a cross-section
+      with no cross-section in it. **Collateral does not amortise.**
 
 160. **HSG — THE RATE REACHES A HOUSEHOLD NOW, BY BOTH ROUTES.** Second half of the user's
     mortgage question (§6.1), built on §7.159's vintages.
