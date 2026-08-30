@@ -28,9 +28,9 @@ import { BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
 /** Swaps are struck for their tenor and run to it — there is no secondary market here yet. */
 const swapInstrumentId = (regionId: RegionId, key: SwapTenorKey) => `${regionId}-IRS-${key}`;
 
-/** The coverage a lender's covenant expects: below it a floating borrower is in trouble, which is
- *  what makes the hedge worth paying for. The same 2x every credit stage already tests against. */
-const COVENANT_INTEREST_COVERAGE = 2.0;
+/** The coverage a lender's covenant expects — one owner now (corporate-financing.ts), because
+ *  G5's committed line is sized off exactly the same test from the lender's side (rule 3). */
+import { COVENANT_INTEREST_COVERAGE } from './corporate-financing';
 
 /**
  * The two-sigma one-week move in this region's own yields, in bps — the repricing every hedger

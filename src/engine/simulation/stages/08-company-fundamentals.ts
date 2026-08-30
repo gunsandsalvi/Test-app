@@ -28,7 +28,7 @@ import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_Y
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, applyHolderInterestAccruals, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate, accrueHoldersInterest, payHoldersAccruedInterest } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks, findRegionMmf } from './money-market-fund';
-import { decideCorporateFinancing } from './corporate-financing';
+import { decideCorporateFinancing, committedLineHeadroomUSD } from './corporate-financing';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { leadBankAllocator } from './dealer-desks';
 import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
@@ -1080,10 +1080,55 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // not (rule 15 — a bound is not a measurement either).
     const newCoverage = isFinite(rawCoverage) ? Number(rawCoverage.toFixed(2)) : 1.5;
 
+    // G5 — THE COMMITTED LINE IS DRAWN BEFORE ANYTHING DEFAULTS.
+    //
+    // The public default rate ran at ~10%/yr against ~1-2% in reality, while the private tier with
+    // real ladders showed ZERO — which §5-G5 read, correctly, as the public path's cash accounting
+    // rather than a credit story. This is what was missing between a bad week and a default:
+    // nothing at all. A real firm draws its revolver, and it defaults when the line is exhausted,
+    // which is a different event and a far rarer one.
+    //
+    // The line is sized by what the firm can service inside its own coverage covenant
+    // (`committedLineHeadroomUSD`), so it closes exactly when a lender really would stop lending —
+    // and a firm whose earnings cannot carry another dollar of interest gets nothing, which is the
+    // case the default trigger is FOR.
+    const drawnRevolverTranches: DebtTranche[] = [];
+    if (!comp.isDefaulted && !comp.mergerAcquired && newCash < 0) {
+      const revolverRateAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
+      const alreadyDrawnUSD = (comp.debtTranches || [])
+        .filter(t => t.isBankFacility).reduce((a, t) => a + t.principalUSD, 0);
+      const headroomUSD = Math.max(0, committedLineHeadroomUSD({
+        ebitAnnualUSD: newEbit,
+        currentAnnualInterestUSD: annualInterest,
+        revolverRateAnnual,
+      }) - alreadyDrawnUSD);
+      const drawUSD = Math.min(-newCash, headroomUSD);
+      if (drawUSD > 1) {
+        const revolver: DebtTranche = {
+          id: `${comp.id}-REVOLVER-LIQ-${nextWeek}`,
+          principalUSD: drawUSD,
+          rateType: 'FLOATING',
+          floatingMarginBps: REVOLVER_MARGIN_BPS,
+          originationWeek: nextWeek,
+          maturityWeek: nextWeek + 52,
+          seniority: 'SENIOR',
+          // G2: a committed line is BANK debt on the house bank's own itemized book.
+          isBankFacility: true,
+          facilityBankTicker: comp.homeBankTicker,
+        };
+        drawnRevolverTranches.push(revolver);
+        recordCredit(revolver.id, drawUSD, REVOLVER_MARGIN_BPS, 52, false);
+        newTotalDebt += drawUSD;
+        post('revolver drawn: liquidity shortfall', drawUSD,
+          comp.homeBankTicker ? { kind: 'BANK_CREDIT', ticker: comp.homeBankTicker } : undefined);
+      }
+    }
+
     // Default trigger: cash exhausted AND coverage below the shared floor (or previously
     // defaulted, provided not merger-acquired). DEFAULT_COVERAGE_FLOOR is the single definition
     // of this trigger — the same object the credit market prices its hazard against
-    // (computeAnnualDefaultProbability), so priced risk and realized risk are one model.
+    // (computeAnnualDefaultProbability), so priced risk and realized risk are one model. It is
+    // reached now only AFTER the committed line above has been drawn to whatever it will bear.
     let isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < DEFAULT_COVERAGE_FLOOR));
 
     let newRating = comp.creditRating;
@@ -1155,7 +1200,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // dealer desk before this stage ever runs. Nothing here computes or smooths either one.
 
     // Pre-refinancing trigger roughly one year before maturity
-    let companyTranches = comp.debtTranches.map(t => ({ ...t }));
+    let companyTranches = [...comp.debtTranches.map(t => ({ ...t })), ...drawnRevolverTranches];
     // The issuer's real float BEFORE any of this week's corporate actions — the accretive call
     // below, the maturity and refinancing further down, all of it. Everything that changes the
     // amount of this issuer's paper in existence is settled against its holders once, at the end,

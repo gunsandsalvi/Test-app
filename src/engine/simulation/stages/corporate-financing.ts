@@ -30,6 +30,39 @@
 
 import { Company, CreditRating } from '../../../types';
 
+/**
+ * The undrawn headroom on a firm's committed line: the extra debt its own earnings can service at
+ * the revolver's rate while staying inside the coverage covenant. Zero when it cannot.
+ */
+export function committedLineHeadroomUSD(params: {
+  ebitAnnualUSD: number;
+  currentAnnualInterestUSD: number;
+  revolverRateAnnual: number;
+}): number {
+  const affordableInterestUSD = Math.max(0, params.ebitAnnualUSD) / COVENANT_INTEREST_COVERAGE;
+  const spareInterestUSD = affordableInterestUSD - Math.max(0, params.currentAnnualInterestUSD);
+  if (!(spareInterestUSD > 0) || !(params.revolverRateAnnual > 0)) return 0;
+  return spareInterestUSD / params.revolverRateAnnual;
+}
+
+/**
+ * G5 — WHAT A COMMITTED REVOLVING LINE IS WORTH, and why a firm short of cash is not yet in
+ * default.
+ *
+ * The public default rate ran at ~10%/yr against the private tier's zero, and §5-G5 isolated the
+ * cause to the public path's cash accounting: the trigger was `cash < 0 AND coverage below the
+ * floor`, and nothing stood between a bad week and a default. **A real firm draws its committed
+ * line first.** It cuts the dividend, it delays payables, and it draws — and it defaults when the
+ * line is exhausted, which is a different event and a much rarer one.
+ *
+ * The SIZE of that line needs no new number. A bank lends what the borrower can service, which is
+ * the same test the covenant below already states from the other side: the additional debt whose
+ * interest still leaves coverage at the covenant level. So the line is
+ * `(EBIT / covenant − interest already paid) / the revolver's own rate`, and it goes to zero
+ * exactly when the firm stops being able to carry more — which is when a lender really does stop.
+ */
+export const COVENANT_INTEREST_COVERAGE = 2.0;
+
 /** Leverage (debt / EBITDA) beyond which lenders stop funding, by rating. */
 export const COVENANT_LEVERAGE_CEILING: Record<CreditRating, number> = {
   AAA: 3.0, AA: 3.5, A: 4.0, BBB: 4.5, BB: 5.5, B: 6.5, CCC: 7.0, D: 0,
