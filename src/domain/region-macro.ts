@@ -3,6 +3,7 @@
 
 import { RegionId } from './geography';
 import { RepoContract } from './repo';
+import { PrimeBrokerageLine } from './prime-brokerage';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSector, AssetOwnershipShares } from './banking';
@@ -613,6 +614,12 @@ export interface Region {
    * `srfBorrowingUSD` and encumbrance are all derived from it (domain/repo.ts).
    */
   repoBook?: RepoContract[];
+  /**
+   * HF1 — this region's live prime-brokerage lines: which bank finances which fund, how much is
+   * drawn, at what haircut and what rate. Stored once with both parties named, the same shape as
+   * the repo book; the brokers' `primeBrokerageLoansUSD` and the funds' leverage are derived.
+   */
+  primeBrokerageBook?: PrimeBrokerageLine[];
   /** REPO3 — the cleared TERM secured rate (annualised decimal), when the term book traded.
    *  A bank funding a long book at overnight and being caught by it is the mechanism a funding
    *  squeeze actually is, and it needs two prices to exist. */

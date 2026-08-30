@@ -101,6 +101,9 @@ export interface BankingSector {
    * exclude it from further borrowing capacity.
    */
   repoEncumberedCollateralUSD: number;
+  /** HF1 — margin loans this bank has out to hedge funds, derived from the region's
+   *  prime-brokerage book. A real asset, consuming the leverage ratio like any other loan. */
+  primeBrokerageLoansUSD?: number;
   /** G3c: the deposit rate this bank decided to pay (annualised decimal), out of its own
    *  alternative funding cost and the share of its base actually in play. One writer
    *  (evolveBankingSector); anyone who needs the rate reads it here rather than restating it. */

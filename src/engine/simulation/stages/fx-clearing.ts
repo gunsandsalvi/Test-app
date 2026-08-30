@@ -195,7 +195,9 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const participants: ClearingParticipant[] = [];
 
     ctx.updatedInstitutionalEntities.forEach((e: any) => {
-      if (e.entityType !== 'HEDGE_FUND') return;
+      // HF1: the elastic side of an FX market is a GLOBAL MACRO book. Every hedge fund used to
+      // be in here, which meant an equity long-short fund was taking a view on the yen.
+      if (e.entityType !== 'HEDGE_FUND' || e.hedgeFundStrategy !== 'GLOBAL_MACRO') return;
       const capUSD = Math.max(0, e.totalAssetsUSD) * SPECULATOR_FX_RISK_BUDGET;
       if (capUSD <= 0) return;
       const demand = new Map<string, ParticipantDemand>();

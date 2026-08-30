@@ -28,6 +28,23 @@ export const PREMIUM_TO_SURPLUS_RATIO = 1.2;
 
 export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND' | 'ETF';
 
+/**
+ * HF1 — what kind of hedge fund. One `HEDGE_FUND` type did every strategy at once: the same fund
+ * was the entire elastic side of the FX market AND the distressed bid in corporate credit AND a
+ * loan buyer, which is not a fund, it is four businesses on one balance sheet. An equity
+ * long-short fund has no view on the yen. Real strategies are different books with different
+ * counterparties and different ways of failing, so they get to be different entities.
+ */
+export type HedgeFundStrategy =
+  /** Directional rates and FX — the elastic side of the FX market, and the only fund in it. */
+  | 'GLOBAL_MACRO'
+  /** Paired longs and shorts in equity. Needs a real short (borrow, locate, recall) to be whole. */
+  | 'LONG_SHORT_EQUITY'
+  /** The same in bonds and loans: the natural buyer of what the dealer desks cannot carry. */
+  | 'LONG_SHORT_CREDIT'
+  /** The marginal buyer at the wides, pricing off expected recovery rather than expected loss. */
+  | 'DISTRESSED';
+
 export interface AssetAllocationTarget {
   equityPct: number;
   corpBondPct: number;
@@ -52,6 +69,12 @@ export interface InstitutionalEntity {
    * blind spot that hid a 64B double-count (§7.90). */
   homeBankTicker?: string;
   entityType: InstitutionalEntityType;
+  /** HF1 — set on HEDGE_FUND entities only; decides which markets this fund is actually in. */
+  hedgeFundStrategy?: HedgeFundStrategy;
+  /** HF1 — what this fund's prime broker will still lend it beyond what it has already drawn.
+   *  Its purchasing capacity above its own cash, and the replacement for a leverage ALLOWANCE
+   *  that no one granted and no one could withdraw. Written by the prime-brokerage stage. */
+  primeBrokerageAvailableUSD?: number;
   totalAssetsUSD: number;
   equityCapitalUSD: number;
   /**

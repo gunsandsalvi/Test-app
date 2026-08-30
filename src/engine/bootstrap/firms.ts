@@ -8,6 +8,7 @@
  */
 
 import { RegionId, Sector, CreditRating } from '../../types';
+import { HedgeFundStrategy } from '../../domain/institutions';
 import { determineCreditRating } from '../simulation/credit';
 import { COVENANT_LEVERAGE_CEILING } from '../simulation/stages/corporate-financing';
 import { GENERATED_COMMODITIES } from './commodities-and-fx';
@@ -28,8 +29,14 @@ export interface FirmSeedTemplate {
   bankMarketShare?: number;
   institutionalRole?: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | null;
   institutionalMarketShare?: number;
+  /** HF1 — which strategy this hedge fund runs. */
+  hedgeFundStrategy?: HedgeFundStrategy;
   producedCommodityId?: string;
 }
+
+/** HF1: the four books, in size order — macro is the largest, as it is in reality. */
+export const HEDGE_FUND_STRATEGIES: HedgeFundStrategy[] =
+  ['GLOBAL_MACRO', 'LONG_SHORT_EQUITY', 'LONG_SHORT_CREDIT', 'DISTRESSED'];
 
 const NAME_PREFIXES = [
   'Apex', 'Meridian', 'Quantum', 'Summit', 'Pinnacle', 'Vanguard', 'Stellar', 'Nexus', 'Horizon', 'Nova',
@@ -328,10 +335,18 @@ export function generateFirmSeeds(
     institutionalRole: 'PENSION_FUND',
     institutionalMarketShare: 0.18,
   }));
-  seeds.push(buildTemplate(region, 'Financials', 3.5, existingTickers, existingNames, {
-    institutionalRole: 'HEDGE_FUND',
-    institutionalMarketShare: 0.07,
-  }));
+  // HF1: four funds, not one. The single hedge fund was the whole elastic side of the FX market
+  // and the whole distressed bid at once. They split the sector's share on the same firm-size
+  // curve every other cohort is generated from, so no new concentration number is introduced.
+  const hfShareSum = HEDGE_FUND_STRATEGIES
+    .reduce((a, _s, i) => a + Math.pow(FIRM_CONCENTRATION_DECAY, i), 0);
+  HEDGE_FUND_STRATEGIES.forEach((strategy, i) => {
+    seeds.push(buildTemplate(region, 'Financials', 3.5 + i * 0.25, existingTickers, existingNames, {
+      institutionalRole: 'HEDGE_FUND',
+      institutionalMarketShare: 0.07 * (Math.pow(FIRM_CONCENTRATION_DECAY, i) / hfShareSum),
+      hedgeFundStrategy: strategy,
+    }));
+  });
 
   // OWN5: a bank's opening share of its region is its own size on the SAME firm-size curve
   // every other sector is generated from, normalised across the cohort. It replaces a private

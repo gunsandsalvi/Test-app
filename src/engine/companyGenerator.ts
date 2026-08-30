@@ -668,6 +668,7 @@ export function generateInitialCompanies(
         institutionalEntityType: tmpl.institutionalRole as any,
         institutionalRole: (tmpl.institutionalRole ?? null) as any,
         institutionalMarketShare: tmpl.institutionalMarketShare,
+        hedgeFundStrategy: tmpl.hedgeFundStrategy,
         beta: tmpl.beta,
         
         seniorBondYield: 0.05 + oasSpreadBps / 10000,

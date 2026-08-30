@@ -79,7 +79,9 @@ export function bankTotalAssetsUSD(sheet: BankingSector): number {
   // which is precisely what let a book with no capital behind it absorb any imbalance.
   return sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD
     + Math.max(0, sheet.cashReservesUSD) + (sheet.repoLentUSD ?? 0)
-    + dealerDeskGrossUSD(sheet.dealerDeskInventory);
+    + dealerDeskGrossUSD(sheet.dealerDeskInventory)
+    // HF1: a margin loan to a fund consumes the leverage ratio like any other loan.
+    + (sheet.primeBrokerageLoansUSD ?? 0);
 }
 
 /** How much balance sheet the bank's equity still supports under the leverage floor. */
@@ -458,6 +460,8 @@ export function evolveBankingSector(
     // that own it. This return rebuilds the sheet from a fixed field list, so leaving it out
     // deleted every desk's book every week with no cash leg.
     dealerDeskInventory: prevBanking.dealerDeskInventory,
+    // HF1: the margin book is owned by the prime-brokerage stage; carried through untouched.
+    primeBrokerageLoansUSD: prevBanking.primeBrokerageLoansUSD ?? 0,
     // G2: the itemized book and the corporate-deposit view are owned by the G2 stages
     // (bank-lending.ts / 02b); carried through evolution untouched.
     businessLoans: prevBanking.businessLoans || [],
@@ -482,6 +486,7 @@ export function evolveBankingSector(
       // and the per-bank identity broke by exactly the surviving repo (measured: 9.70B on one
       // USA bank, constant from the week its first term contract was struck).
       + dealerDeskGrossUSD(prevBanking.dealerDeskInventory) + survivingRepoLentUSD
+      + (prevBanking.primeBrokerageLoansUSD ?? 0)
       - depositsUSD - corporateDepositsUSD
       - (prevBanking.institutionalDepositsUSD ?? 0) - (prevBanking.unmodeledDepositsUSD ?? 0)
       - (prevBanking.smeDepositsUSD ?? 0)

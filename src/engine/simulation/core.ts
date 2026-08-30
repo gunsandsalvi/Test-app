@@ -1,5 +1,6 @@
 import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
+import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { createInitialContext } from './stages/context';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
@@ -103,6 +104,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // HH5: the labor market clears between credit (02b) and goods demand (03) — employment is
   // determined before the income it generates is spent.
   run('labor-market', () => runLaborMarketStage(state, ctx));
+  // HF1: the funds' lines are re-struck before any book opens, so a line cut this week is a
+  // fund that has to sell in this week's auctions.
+  run('prime-brokerage', () => runPrimeBrokerageStage(state, ctx));
   run('03-category-demand', () => runCategoryDemandStage(state, ctx));
   run('04-input-output', () => runInputOutputStage(state, ctx));
   // XB3a: the week's first two passes. A buyer forms its sourcing plan against observed prices

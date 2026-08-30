@@ -280,7 +280,11 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       const entityShare = entityShareOfSector / sectorTotal;
       const entitySubIGFactor = subInvestmentGradeSizeFactor(entity.entityType);
       const requiredReturn = entityRequiredReturn(entity);
-      const isHedgeFund = entity.entityType === 'HEDGE_FUND';
+      // HF1: the distressed bid is a DISTRESSED fund's, not every hedge fund's. Pricing off
+      // discounted expected recovery instead of expected loss, and running the conviction size
+      // that goes with it, is one strategy — the credit long-short book beside it is an ordinary
+      // relative-value buyer and prices like one.
+      const isHedgeFund = entity.entityType === 'HEDGE_FUND' && entity.hedgeFundStrategy === 'DISTRESSED';
       const hedgeAdjBps = entity.region === regionId ? 0 : hedgedReservationAdjustmentBps(
         ctx.updatedRegions[entity.region]?.policyRate ?? reg.policyRate, reg.policyRate);
       const overweightMultiple = isHedgeFund ? DISTRESSED_CONVICTION_MULTIPLE : MAX_OVERWEIGHT_MULTIPLE;

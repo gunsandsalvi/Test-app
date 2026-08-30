@@ -1913,7 +1913,9 @@ function runHarness() {
         - ((bs as any).repoLentUSD ?? 0) - (bs.onRrpLendingUSD ?? 0)
         // G3a: the desks' own inventory is this bank's asset, bought with its own reserves.
         - Object.values((bs.dealerDeskInventory || {}) as Record<string, { inventoryUSD: number }[]>)
-            .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
+            .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0)
+        // HF1: margin loans to hedge funds are this bank's asset too.
+        - (bs.primeBrokerageLoansUSD ?? 0);
       if (Math.abs(residualUSD) > 5e6) {
         violations.push({
           week: w,

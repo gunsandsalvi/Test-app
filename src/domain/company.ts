@@ -7,6 +7,7 @@ import { RegionId } from './geography';
 import { defect } from './defect';
 import { Industry } from './industry';
 import { ItemizedHolding, BankingSector } from './banking';
+import { HedgeFundStrategy } from './institutions';
 
 export type FinancialStatementProfile = 'STANDARD_OPERATING' | 'INSURER' | 'ASSET_MANAGER' | 'BANK' | 'REIT' | 'CARRIER';
 
@@ -421,6 +422,8 @@ export interface Company {
   defaultedWeek?: number;
   institutionalRole: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | null;
   institutionalMarketShare?: number;
+  /** HF1 — which strategy this hedge fund runs; carried onto its InstitutionalEntity. */
+  hedgeFundStrategy?: HedgeFundStrategy;
   beta: number;
 
   // Debt & CDS Pricing

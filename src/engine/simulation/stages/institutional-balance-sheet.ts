@@ -30,7 +30,7 @@
  *     relative-value framework depends on.
  */
 
-import { Company, InstitutionalEntity, InstitutionalEntityType } from '../../../types';
+import { Company, InstitutionalEntity } from '../../../types';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
@@ -43,19 +43,14 @@ import { sovBucketKey } from './shared-helpers';
  * balance sheet, not a tuning knob: it lets a hedge fund's cash run temporarily negative up to
  * its financing capacity, and nobody else's.
  */
-const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
-  INSURER: 0,
-  PENSION_FUND: 0,
-  ASSET_MANAGER: 0,
-  HEDGE_FUND: 0.5,
-  // The fund itself does not lever; the leverage lives on the portfolio companies' own ladders.
-  PRIVATE_EQUITY: 0,
-  // An index fund holds exactly what it was given money for. It cannot borrow to buy more of its
-  // benchmark — that would be a leveraged product, which is a different fund.
-  ETF: 0,
-  // A $1-NAV fund is unlevered by construction.
-  MONEY_MARKET_FUND: 0,
-};
+/**
+ * HF1 — LEVERAGE_ALLOWANCE is gone for the one type that used it. A hedge fund's borrowing is now
+ * a real prime-brokerage line from a named bank (domain/prime-brokerage.ts): sized by the fund's
+ * own capital against the haircut on its own book, bounded by the broker's balance sheet, priced,
+ * and withdrawable. Every other entity type borrowed nothing, and still does — an insurer, a
+ * pension fund, an index fund and a $1-NAV money fund are all unlevered by construction, and a PE
+ * fund's leverage lives on its portfolio companies' own ladders.
+ */
 
 /**
  * An entity's real purchasing capacity right now, across all asset classes.
@@ -66,7 +61,12 @@ const LEVERAGE_ALLOWANCE: Record<InstitutionalEntityType, number> = {
  * It is part of the BOOK (markInstitutionalBooks), never of the budget.
  */
 export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, unsettledUSD = 0): number {
-  const allowanceUSD = LEVERAGE_ALLOWANCE[entity.entityType] * Math.max(0, entity.totalAssetsUSD);
+  // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
+  // Negative when the line has been CUT below the draw — which makes the fund a net seller in
+  // this week's auctions, at whatever they clear, which is what a margin call is.
+  const allowanceUSD = entity.entityType === 'HEDGE_FUND'
+    ? (entity.primeBrokerageAvailableUSD ?? 0)
+    : 0;
   // A fund does not spend to the last dollar: it runs a CASH SLEEVE, and what it invests is the
   // excess over it. The target is the entity's own `cashPct` — already its stated policy, so no
   // number is invented here — and keeping it is what makes a balance a MANAGED position rather
