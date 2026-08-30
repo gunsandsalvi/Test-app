@@ -432,7 +432,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 11 | markets | **XB — cross-border portfolios and trade** | **XB6 CLOSED 2026-08-30 (§7.189); XB3a-5 is now unblocked.** The FX leg of the damper defect was a GEOMETRY error: the engine clears a float to buyers, so a bigger float always clears at a lower stat — right when the float is the currency being SUPPLIED, inverted when the base was in demand. The auction now runs on whichever currency is being sold. Two one-way flows went with it: the desks' own books dumped into the float at any price, and the residual warehoused on them by capacity share after the fact. **Remains: XB3a-5** (invoice currency and transaction FX exposure), which XB6 gated. |
 | 12 | markets | **HF — hedge fund strategies + prime brokerage** | **CLOSED 2026-08-30 (§7.190).** Four funds instead of one, each in the markets its strategy is actually in; leverage is a real prime-brokerage line from a named bank, at a derived haircut, consuming the broker's balance sheet, priced, and withdrawable — so a margin call is a mechanism. Three of the four folded constants are gone: the FX elastic side is the pair's own volatility against the fund's own capital, the hedge ratio is a mandate property, the LBO debt share is 07d's answer. **The fourth, `HOME_BIAS_BY_ENTITY_TYPE` used as a weight, was CHECKED and the review's claim does not hold** — see §7.190. **Not built: a real equity SHORT** (borrow, locate, recall, squeeze), which is what would make long-short a paired book rather than a long one; it needs a securities-lending market and belongs with DER's margin machinery. |
 | 13 | markets | **DER — derivatives and the people who hedge with them** | **TWO SLICES DONE 2026-08-30 (§7.191): IRS and the cross-currency basis.** The swap market clears par rates at 2/5/10Y off exposures the model already measures, and prints the SWAP SPREAD — the first cross-market basis, and the first test that two of its markets agree. The basis is a cleared price: hedger demand against what the desks can write, with the walk-away tolerance derived from the currency's own volatility and the mandate's own hedge ratio. **Remains: CDS (which CRD's second half needs), equity options and the implied vol that kills `\|\| 0.3`, commodity futures, and corporate/bank hedging.** Each is an adapter on machinery that now exists. |
-| 14 | markets | **G5 — default resolution: recovery as an outcome** | Adds: the defaults-count × 12bps contagion coefficient becomes real losses on real holders' books. |
+| 14 | markets | **G5 — default resolution: recovery as an outcome** | **FIRST SLICE DONE 2026-08-30 (§7.192) — the one it was scoped around.** A default opens an ESTATE; assets leave at the rate the markets that would buy them absorb them; proceeds waterfall by real seniority; the residual is written off the holders' books. Recovery is an OUTPUT and displaces the 0.4 prior. Both folded constants are gone — the ×12 contagion coefficient and the 0.10 recovery floor. **Remains: the public default rate (~10%/yr against the private tier's zero, isolating the cause to the public path's cash accounting), and the PE exit by SALE.** |
 | 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | Re-scoped by the review: every seeded commodity price is a real market price back-solved into a "scarcity index" — the primitive becomes extraction cost and ore grade. Weather gets a calendar and a geography; two dead impact fields (14 writes, 0 reads) die; the third becomes a YIELD. |
 | 16 | depth | **CAL — payment calendars** | Coupons, loan interest and dividends on real dates instead of smooth 1/52 accruals. |
 | 17 | depth | **ETF2 — a real price for ETF shares** | Prereq G3. Adds: re-measure `AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY`, whose value contradicts its own comment by an order of magnitude. |
@@ -6399,3 +6399,35 @@ that proved it, the lesson.
       whose width was the posted 150; where a cleared basis has printed, that is what their
       balance sheet is actually fetching this week, and the constant survives only as the scale
       before the first print — a scale, not a price, that nobody pays.
+
+192. **G5 — a default resolves, and the last conservation violation closes.**
+    - **What it replaced was an ABSENCE, not a formula.** A defaulted issuer stopped being priced
+      (it leaves `isActiveCompany`, so no book quotes its paper again) while its holders kept the
+      position at its last mark forever. The claim outlived the borrower. OWN7 could not close it
+      from the ownership side because nothing was ever going to take the paper off — the missing
+      thing was a RESOLUTION, and it did not exist.
+    - **Nothing here states a liquidation horizon**, which was the trap. Each asset leaves at the
+      rate the market that would buy it actually absorbs it: cash at once; receivables on the terms
+      the issuer itself extended, read off its own outstanding invoices; inventory at the company's
+      own measured turnover, the rate its market was taking the goods before it failed; plant to
+      peers as cheap capex at the rate its region buys capital goods against the plant already
+      installed there. **The discount is the buyer's own required return over the time its money is
+      tied up**, so the slowest asset is the cheapest — which is why recoveries will disperse by
+      asset-heaviness without anything saying they should.
+    - **The waterfall is real seniority**: secured lenders (loans and bank facilities together),
+      then bondholders, then equity's residual. What the workout cannot pay is written off the
+      holders' books, and a write-off is a write-down: the asset goes and equity takes it.
+    - **Recovery is an OUTPUT.** The realised rate is recorded per region and displaces the 0.4
+      prior in proportion to how much experience the world has — one resolution does not overturn
+      a prior, twenty do. That closes the one-default-model loop whose hazard side landed in §7.20:
+      the loss the credit market prices is the loss it has seen.
+    - **Both folded constants died with the mechanism, which is the test that a mechanism is
+      real.** `creditContagionBps = recentDefaults × 12` added basis points to a cleared price by
+      formula; contagion is real losses landing on real books and tightening what those books can
+      still do, and that channel now exists. The systemic stress factor is a MEASUREMENT now — how
+      much worse this world's own workouts are recovering than the prior — not a count times a
+      coefficient. And the 0.10 recovery floor went with it: an issuer with nothing to sell
+      recovers nothing, and that is the answer, not a bound.
+    - **Not done, and named:** the public default rate (~10%/yr against the private tier's zero,
+      which isolates the cause to the public path's cash accounting) and the PE exit by SALE. Both
+      are in §5-G5, and the estate machinery is the natural home for the second.
