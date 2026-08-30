@@ -14,7 +14,7 @@
  * goods — and the discount a buyer takes is the return it needs for the time it is tied up.
  */
 
-import { GameState, RegionId, Company } from '../../../types';
+import { GameState, RegionId, Company, InstitutionalEntity } from '../../../types';
 import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingUSD,
   realisedDebtRecoveryRate,
@@ -33,11 +33,48 @@ const holderRef = (c: EstateClaim): PartyRef =>
     : c.holder.kind === 'BANK' ? { kind: 'BANK', ticker: c.holder.ticker }
       : { kind: 'COMPANY', ticker: c.holder.ticker };
 
+/**
+ * SCALE — the indices this stage's inner loops used to rebuild from scratch.
+ *
+ * Every helper below was a full walk of the universe, run PER ESTATE and, in `reduceHolding`,
+ * PER CLAIM: an open workout re-derived its region's plant absorption from all ~2,500 companies,
+ * its receivable term from every trade invoice in the world, and — the expensive one — every
+ * distribution rebuilt the ENTIRE institutional-entity array to change one holder's book. Estates
+ * stay open for weeks, so this was not a default-week cost: it was 209 ms of every week, 11% of
+ * the whole cycle, for a stage that touches a handful of failed firms.
+ *
+ * Nothing about the arithmetic changes — same operations in the same order on the same values.
+ * What changes is that each answer is computed once instead of once per claim.
+ */
+interface EstateIndex {
+  entityById: Map<string, InstitutionalEntity>;
+  bankByTicker: Map<string, Company>;
+  companyById: Map<string, Company>;
+  receivableTermWeeksByTicker: Map<string, number>;
+  ppeWeeksByRegion: Map<string, number>;
+}
+
+function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
+  const entityById = new Map<string, InstitutionalEntity>();
+  ctx.updatedInstitutionalEntities.forEach((e) => entityById.set(e.id, e));
+  const bankByTicker = new Map<string, Company>();
+  const companyById = new Map<string, Company>();
+  ctx.updatedCompanies.forEach((c) => {
+    companyById.set(c.id, c);
+    if (c.bankBalanceSheet) bankByTicker.set(c.ticker, c);
+  });
+  return {
+    entityById, bankByTicker, companyById,
+    receivableTermWeeksByTicker: new Map(), ppeWeeksByRegion: new Map(),
+  };
+}
+
 export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContext): void {
   void state;
   const week = ctx.nextWeek;
   const estates: Estate[] = ctx.estates ?? [];
   const byCompanyId = new Map(estates.map((e) => [e.companyId, e]));
+  const index = buildEstateIndex(ctx);
 
   // ---- Open an estate for every issuer that has just defaulted. ----
   ctx.updatedCompanies.forEach((comp) => {
@@ -54,14 +91,14 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (estate.closedWeek !== undefined) return;
     const reg = ctx.updatedRegions[estate.regionId];
     if (!reg) return;
-    const comp = ctx.updatedCompanies.find((c) => c.id === estate.companyId);
+    const comp = index.companyById.get(estate.companyId);
 
     // What the markets take this week, each at its own rate.
     const collectedUSD = estate.assets.cashUSD;
     estate.assets.cashUSD = 0;
 
     // Receivables settle on the terms the issuer itself extended: its own mean invoice term.
-    const termWeeks = Math.max(1, meanReceivableTermWeeks(ctx, estate.ticker));
+    const termWeeks = Math.max(1, meanReceivableTermWeeks(ctx, index, estate.ticker));
     const receiptsUSD = Math.min(estate.assets.receivablesUSD, estate.assets.receivablesUSD / termWeeks);
     estate.assets.receivablesUSD -= receiptsUSD;
 
@@ -74,7 +111,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     // Plant goes to peers as cheap capex, at the rate its region actually buys capital goods
     // against the plant already installed there. Slow, and the discount is the largest, because
     // the buyer's money is tied up longest.
-    const ppeWeeks = Math.max(1, regionalPpeAbsorptionWeeks(ctx, estate.regionId));
+    const ppeWeeks = Math.max(1, regionalPpeAbsorptionWeeks(ctx, index, estate.regionId));
     const ppeSoldUSD = Math.min(estate.assets.ppeUSD, estate.assets.ppeUSD / ppeWeeks);
     estate.assets.ppeUSD -= ppeSoldUSD;
 
@@ -83,12 +120,12 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
       + invSoldUSD * (1 - Math.min(0.9, (hurdle * turnoverWeeks) / 52))
       + ppeSoldUSD * (1 - Math.min(0.9, (hurdle * ppeWeeks) / 52));
 
-    if (proceedsUSD > 1) distribute(ctx, estate, proceedsUSD);
+    if (proceedsUSD > 1) distribute(ctx, index, estate, proceedsUSD);
 
     // Closed when there is nothing left to sell: the residual claims are written off.
     if (estateAssetsUSD(estate.assets) <= 1) {
       estate.closedWeek = week;
-      writeOffResidual(ctx, estate);
+      writeOffResidual(ctx, index, estate);
       const realised = realisedDebtRecoveryRate(estate);
       if (realised !== undefined) {
         const history = [...(reg.realisedRecoveryRates ?? []), Number(realised.toFixed(4))];
@@ -101,7 +138,9 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
 }
 
 /** The waterfall: secured first, then unsecured, then whatever is left for equity. */
-function distribute(ctx: WeeklyStepContext, estate: Estate, proceedsUSD: number): void {
+function distribute(
+  ctx: WeeklyStepContext, index: EstateIndex, estate: Estate, proceedsUSD: number
+): void {
   let remainingUSD = proceedsUSD;
   [CLAIM_SENIORITY.SECURED, CLAIM_SENIORITY.UNSECURED, CLAIM_SENIORITY.EQUITY].forEach((seniority) => {
     if (remainingUSD <= 1) return;
@@ -124,18 +163,18 @@ function distribute(ctx: WeeklyStepContext, estate: Estate, proceedsUSD: number)
         amountUSD: shareUSD,
         reason: 'estate distribution',
       });
-      reduceHolding(ctx, claim, estate.companyId, shareUSD, false);
+      reduceHolding(ctx, index, claim, estate.companyId, shareUSD, false);
     });
     remainingUSD -= payUSD;
   });
 }
 
 /** Whatever the workout could not pay comes off the holders' books as a loss. */
-function writeOffResidual(ctx: WeeklyStepContext, estate: Estate): void {
+function writeOffResidual(ctx: WeeklyStepContext, index: EstateIndex, estate: Estate): void {
   estate.claims.forEach((claim) => {
     const lostUSD = Math.max(0, claim.principalUSD - claim.recoveredUSD);
     if (lostUSD <= 0) return;
-    reduceHolding(ctx, claim, estate.companyId, lostUSD, true);
+    reduceHolding(ctx, index, claim, estate.companyId, lostUSD, true);
   });
 }
 
@@ -145,31 +184,29 @@ function writeOffResidual(ctx: WeeklyStepContext, estate: Estate): void {
  * capital says so — which is the contagion channel, made of real losses on real books.
  */
 function reduceHolding(
-  ctx: WeeklyStepContext, claim: EstateClaim, companyId: string, amountUSD: number, isLoss: boolean
+  ctx: WeeklyStepContext, index: EstateIndex, claim: EstateClaim,
+  companyId: string, amountUSD: number, isLoss: boolean
 ): void {
   if (claim.holder.kind === 'INSTITUTION') {
-    const id = claim.holder.id;
-    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-      if (e.id !== id) return e;
-      let leftUSD = amountUSD;
-      const holdings = (e.itemizedHoldings || []).map((h) => {
-        if (h.instrumentId !== companyId || leftUSD <= 0) return h;
-        const takeUSD = Math.min(leftUSD, h.quantityOrNotionalUSD ?? 0);
-        leftUSD -= takeUSD;
-        return { ...h, quantityOrNotionalUSD: (h.quantityOrNotionalUSD ?? 0) - takeUSD };
-      }).filter((h) => (h.quantityOrNotionalUSD ?? 0) > 1);
-      return {
-        ...e,
-        itemizedHoldings: holdings,
-        totalAssetsUSD: Math.max(0, e.totalAssetsUSD - (isLoss ? amountUSD : 0)),
-        equityCapitalUSD: Math.max(0, (e.equityCapitalUSD ?? 0) - (isLoss ? amountUSD : 0)),
-      };
-    });
+    // SCALE: the holder is looked up, not searched for, and its book is written in place. This
+    // rebuilt the whole entity array once per claim — the single largest cost in the stage.
+    const e = index.entityById.get(claim.holder.id);
+    if (!e) return;
+    let leftUSD = amountUSD;
+    const holdings = (e.itemizedHoldings || []).map((h) => {
+      if (h.instrumentId !== companyId || leftUSD <= 0) return h;
+      const takeUSD = Math.min(leftUSD, h.quantityOrNotionalUSD ?? 0);
+      leftUSD -= takeUSD;
+      return { ...h, quantityOrNotionalUSD: (h.quantityOrNotionalUSD ?? 0) - takeUSD };
+    }).filter((h) => (h.quantityOrNotionalUSD ?? 0) > 1);
+    e.itemizedHoldings = holdings;
+    e.totalAssetsUSD = Math.max(0, e.totalAssetsUSD - (isLoss ? amountUSD : 0));
+    e.equityCapitalUSD = Math.max(0, (e.equityCapitalUSD ?? 0) - (isLoss ? amountUSD : 0));
     return;
   }
   if (claim.holder.kind === 'BANK') {
     const ticker = claim.holder.ticker;
-    const company = ctx.updatedCompanies.find((c) => c.ticker === ticker && c.bankBalanceSheet);
+    const company = index.bankByTicker.get(ticker);
     if (!company) return;
     const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
     let leftUSD = amountUSD;
@@ -243,11 +280,18 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
 }
 
 /** The issuer's own mean invoice term, from the invoices it is still owed. */
-function meanReceivableTermWeeks(ctx: WeeklyStepContext, ticker: string): number {
+function meanReceivableTermWeeks(
+  ctx: WeeklyStepContext, index: EstateIndex, ticker: string
+): number {
+  // SCALE: one pass over the invoice book per issuer per week, not one per estate per week. The
+  // book does not change inside this stage, so the memo is the same number by construction.
+  const memo = index.receivableTermWeeksByTicker.get(ticker);
+  if (memo !== undefined) return memo;
   const invoices = (ctx.tradeInvoicesBooked ?? []).filter((iv) => iv.sellerTicker === ticker);
-  if (invoices.length === 0) return 8;
-  const total = invoices.reduce((a, iv) => a + Math.max(1, iv.weekDue - iv.weekBooked), 0);
-  return total / invoices.length;
+  const out = invoices.length === 0 ? 8
+    : invoices.reduce((a, iv) => a + Math.max(1, iv.weekDue - iv.weekBooked), 0) / invoices.length;
+  index.receivableTermWeeksByTicker.set(ticker, out);
+  return out;
 }
 
 /** Weeks of sales the inventory represents — the rate its own market was taking it. */
@@ -258,7 +302,13 @@ function inventoryTurnoverWeeks(comp: Company | undefined, inventoryUSD: number)
 }
 
 /** How long it takes a region to absorb a plant: its own installed base against what it buys. */
-function regionalPpeAbsorptionWeeks(ctx: WeeklyStepContext, regionId: RegionId): number {
+function regionalPpeAbsorptionWeeks(
+  ctx: WeeklyStepContext, index: EstateIndex, regionId: RegionId
+): number {
+  // SCALE: a property of the REGION, so it is computed once per region per week however many of
+  // its firms are in workout. Nothing in this stage moves plant or capex, so the memo holds.
+  const memo = index.ppeWeeksByRegion.get(regionId);
+  if (memo !== undefined) return memo;
   let installedUSD = 0;
   let weeklyCapexUSD = 0;
   ctx.updatedCompanies.forEach((c) => {
@@ -266,7 +316,9 @@ function regionalPpeAbsorptionWeeks(ctx: WeeklyStepContext, regionId: RegionId):
     installedUSD += Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0));
     weeklyCapexUSD += Math.max(0, (c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) / 52;
   });
-  if (!(weeklyCapexUSD > 0) || !(installedUSD > 0)) return 52;
-  // One plant is a small share of the base; the weeks it takes is that share of the turnover.
-  return Math.max(4, Math.min(260, installedUSD / weeklyCapexUSD / 100));
+  const out = (!(weeklyCapexUSD > 0) || !(installedUSD > 0)) ? 52
+    // One plant is a small share of the base; the weeks it takes is that share of the turnover.
+    : Math.max(4, Math.min(260, installedUSD / weeklyCapexUSD / 100));
+  index.ppeWeeksByRegion.set(regionId, out);
+  return out;
 }

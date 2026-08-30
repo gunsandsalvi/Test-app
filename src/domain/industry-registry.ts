@@ -1202,16 +1202,31 @@ export function financingProfileOf(industry: Industry): { fixedRateTilt: number;
  * The weighting across sectors is each sector's own share of the economy's OUTPUT, from the
  * registry's own sub-unit composition — not a chosen mix.
  */
+/** SCALE: the owning industry of each sub-unit, built once. The `Object.values(...).find(...)`
+ *  this replaces ran INSIDE the per-sub-unit loop below, so one call to the derivation was
+ *  quadratic in the registry — and the derivation is called per company per week. */
+const sectorBySubUnitId: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  Object.values(INDUSTRY_REGISTRY).forEach((i) =>
+    i.subUnits.forEach((su) => { if (!m.has(su.unitId)) m.set(su.unitId, i.sector); }));
+  return m;
+})();
+
+/** SCALE: the answer depends only on the registry and the cost of capital, both of which are
+ *  fixed for a run. Memoised on the one argument that varies between callers. */
+const labourShareByCostOfCapital = new Map<number, number>();
+
 export function derivedLabourShareOfValueAdded(args: {
   ppeIntensityBySector: Record<string, number>;
   usefulLifeYearsBySector: Record<string, number>;
   costOfCapitalAnnual: number;
 }): number {
+  const memo = labourShareByCostOfCapital.get(args.costOfCapitalAnnual);
+  if (memo !== undefined) return memo;
   let weighted = 0;
   let total = 0;
   allSubUnits.forEach((su) => {
-    const spec = Object.values(INDUSTRY_REGISTRY).find((i) => i.subUnits.includes(su));
-    const sector = spec?.sector;
+    const sector = sectorBySubUnitId.get(su.unitId);
     if (!sector) return;
     const intensity = args.ppeIntensityBySector[sector];
     const life = args.usefulLifeYearsBySector[sector];
@@ -1225,5 +1240,7 @@ export function derivedLabourShareOfValueAdded(args: {
     weighted += Math.max(0, 1 - surplusShare);
     total += 1;
   });
-  return total > 0 ? weighted / total : 0;
+  const out = total > 0 ? weighted / total : 0;
+  labourShareByCostOfCapital.set(args.costOfCapitalAnnual, out);
+  return out;
 }

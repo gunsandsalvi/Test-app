@@ -70,7 +70,16 @@ const BASELINE_WEIGHTED_TIER_PREMIUM = (Object.keys(OCCUPATION_SKILL_TIER) as Oc
  * scaled so that paying this table across the baseline occupation mix costs exactly
  * LABOR_SHARE_OF_OUTPUT of the region's output.
  */
+const baseWageTableByRegion = new Map<RegionId, Record<OccupationType, number>>();
+
 export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType, number> {
+  // SCALE: every input below is fixed for the whole run — the region's productivity, its neutral
+  // rate, the equity risk premium and the registry the labour share is derived from. Stage 08
+  // calls this TWICE PER COMPANY, so ~5,000 times a week, and COH3 turned the body from a constant
+  // multiply into a walk of the whole registry. Read-only at every call site (checked), so one
+  // table per region is shared rather than rebuilt.
+  const memo = baseWageTableByRegion.get(regionId);
+  if (memo !== undefined) return memo;
   const productivity = getRegionProductivityPerCapitaUSD(regionId);
   // COH3 — THE WAGE LEVEL IS NO LONGER A STATED LABOUR SHARE. `LABOR_SHARE_OF_OUTPUT = 0.62` set
   // every occupation's base wage, and through it household income, the labour market, every
@@ -93,6 +102,7 @@ export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType,
     const relativePremium = Math.pow(SKILL_TIER_WAGE_STEP, tier - 1) / BASELINE_WEIGHTED_TIER_PREMIUM;
     result[occ] = Number((averageWage * relativePremium).toFixed(0));
   });
+  baseWageTableByRegion.set(regionId, result);
   return result;
 }
 
