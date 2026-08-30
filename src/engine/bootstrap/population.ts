@@ -100,6 +100,24 @@ export function mortalityHazardAnnual(ageYears: number): number {
   return Math.min(1, GOMPERTZ_HAZARD_AT_BIRTH_ANNUAL * Math.exp(b * Math.max(0, ageYears)));
 }
 
+/**
+ * DEM — REMAINING LIFE EXPECTANCY AT AN AGE, from the hazard alone.
+ *
+ * The one demographic number a pension needs and the model could not previously say: how long a
+ * retiree has left to draw. `PENSION_BENEFIT_RATE_ANNUAL = 0.05` stated it as a flat 5% drawdown
+ * — a twenty-year retirement asserted rather than derived, and unable to change when the
+ * population ages. A fund pays out its entitlement over the years its members actually have.
+ */
+export function remainingLifeExpectancyYears(ageYears: number): number {
+  let survive = 1;
+  let years = 0;
+  for (let a = Math.max(0, Math.floor(ageYears)); a < MAX_AGE_YEARS; a++) {
+    survive *= Math.max(0, 1 - mortalityHazardAnnual(a));
+    years += survive;
+  }
+  return Math.max(1, years);
+}
+
 /** DEM — the oldest age the structure carries. Nobody survives the hazard past it. */
 export const MAX_AGE_YEARS = 100;
 

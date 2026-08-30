@@ -33,6 +33,7 @@
 import { GameState, RegionId, Company, InstitutionalEntity } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany } from '../../../domain/company';
+import { remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS } from '../../bootstrap/population';
 
 /**
  * The share of household income paid into pension schemes. A real policy parameter — every country
@@ -41,11 +42,10 @@ import { isActiveCompany } from '../../../domain/company';
  */
 export const PENSION_CONTRIBUTION_RATE = 0.09;
 /**
- * The share of accumulated entitlements paid out as benefits each year. A mature scheme pays out
- * roughly what it earns; the same HH4 caveat applies — with real cohorts this becomes the retired
- * share drawing down, not a rate.
+ * RULE 19 — `PENSION_BENEFIT_RATE_ANNUAL = 0.05` is GONE (§7.182). It asserted a twenty-year
+ * retirement as a flat drawdown rate and could not respond to an ageing population. The rate is
+ * now `1 / remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS)` — derived from the hazard.
  */
-export const PENSION_BENEFIT_RATE_ANNUAL = 0.05;
 
 /** What a firm has to lose, and therefore insures: its plant and the revenue that runs through it. */
 const corporateInsurableBaseUSD = (c: Company) => Math.max(0, c.grossPPEUSD ?? 0) + Math.max(0, c.annualRevenue);
@@ -122,13 +122,25 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     });
 
     // ---- Pensions: contributions out of wages, benefits back to the people who earned them. ----
+    // COH2 — CONTRIBUTIONS COME FROM THE PEOPLE WHO ARE WORKING, and benefits go to the people
+    // who are not. A cohort has an age via DEM now (§7.181), so the split is real: applying the
+    // contribution rate to the whole sector's income charged retirees a pension contribution.
+    const lc = reg.lifeCycleDistribution;
+    const retiredShare = Math.max(0, Math.min(1, lc?.RETIRED?.shareOfPopulation ?? 0.2));
+    const workingShare = Math.max(0, 1 - retiredShare);
     const weeklyContributionsUSD =
-      (Math.max(0, reg.estimatedHouseholdIncomeUSD) * PENSION_CONTRIBUTION_RATE) / 52;
+      (Math.max(0, reg.estimatedHouseholdIncomeUSD) * workingShare * PENSION_CONTRIBUTION_RATE) / 52;
     const pensionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === region && e.entityType === 'PENSION_FUND' && !e.isDefaulted
     );
     const entitlementsUSD = pensionEntities.reduce((a, e) => a + (e.beneficiaryLiabilityUSD ?? 0), 0);
-    const weeklyBenefitsUSD = (entitlementsUSD * PENSION_BENEFIT_RATE_ANNUAL) / 52;
+    // COH2 — AND THE DRAWDOWN IS THE RETIREE'S OWN REMAINING LIFE, not a stated 5%.
+    //
+    // `PENSION_BENEFIT_RATE_ANNUAL = 0.05` asserted a twenty-year retirement and could not change
+    // when the population aged — the exact shape rule 19 forbids. A fund pays its entitlement out
+    // over the years its members actually have, which the Gompertz hazard now says (§7.181).
+    const drawdownYears = remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS);
+    const weeklyBenefitsUSD = (entitlementsUSD / drawdownYears) / 52;
     if (pensionEntities.length > 0 && entitlementsUSD > 0) {
       pensionEntities.forEach((e) => {
         const share = (e.beneficiaryLiabilityUSD ?? 0) / entitlementsUSD;

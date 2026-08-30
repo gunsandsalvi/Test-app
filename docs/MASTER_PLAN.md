@@ -6161,3 +6161,32 @@ that proved it, the lesson.
       primitives (a retirement age is legislated, not derived).
     - Also restored now their blockers are closed: **capacity read off PP&E** (§7.177) and the
       **beneficiary-liability reversal** (§7.179), both as designed and recorded there.
+
+182. **COH2 — the pension flows are the age structure's now.** Contributions came off the WHOLE
+    sector's income, which charges retirees a pension contribution; they come off the working
+    share. And `PENSION_BENEFIT_RATE_ANNUAL = 0.05` asserted a twenty-year retirement as a flat
+    drawdown and could not respond to an ageing population — the shape rule 19 forbids. A fund
+    pays its entitlement out over the years its members actually have:
+    `1 / remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS)`, integrated from the Gompertz hazard
+    (§7.181). **A cohort has an age now, so COH2's own prerequisite is met.**
+
+183. **HSG — THE HOUSE PRICE CLEARS. Every term in what it replaces was stated.**
+    - `priceIndex += (1 − supplyDemandRatio) x 0.002 x creditFactor`, bounded to [0.5, 3.0] and
+      multiplied by a 400,000 baseline: a stated speed, a stated credit nudge (±0.02 either side of
+      a policy-rate threshold), a clamp on the outcome, and a stated level. **A bound is not a
+      price** (rule 15), and none of it was anybody's decision.
+    - **A house sells at what the MARGINAL BUYER can pay.** Each wealth tier's affordability is its
+      own income against the going mortgage rate — the same `DSTI x income / annuity factor` that
+      sizes borrowing capacity (§7.160), grossed up by the origination LTV because the buyer funds
+      the deposit too. Rank the tiers by what they can pay, walk down until the week's supply
+      (owners selling plus completions) is absorbed, and **the price is what the last buyer needed
+      to bid.** More supply reaches further down the distribution and prices lower; a rate rise
+      cuts every tier's capacity and prices lower; richer households price higher.
+    - **The floor is the build cost**, not a number: a house cannot clear below what the
+      construction sector's own cleared price says it costs to make, exactly as for every other
+      produced good (§7.130).
+    - **It closes the loop §7.160 left open.** The DSTI limit had slack because prices were 3.1x
+      income and drifting on an index; now the price is SET by what households can borrow, so
+      affordability and the price determine each other and the limit is live in both directions.
+    - `mortgageOriginationVolumeUSD` goes with it: it was `income x 5% x creditFactor`, a statistic
+      beside the real lending rather than a measure of it. It is what the banks originated.

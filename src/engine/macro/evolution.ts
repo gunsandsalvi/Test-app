@@ -8,9 +8,13 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
-import { CREDIT_FILE_CURE_WEEKLY, CONSUMER_CREDIT_RISK_WEIGHT, CARD_OPERATING_COST_BPS } from '../../domain/banking';
+import {
+  CREDIT_FILE_CURE_WEEKLY, CONSUMER_CREDIT_RISK_WEIGHT, CARD_OPERATING_COST_BPS,
+  MORTGAGE_SPREAD_OVER_10Y_BPS, MORTGAGE_TERM_WEEKS, MORTGAGE_DSTI_LIMIT, MORTGAGE_LTV_AT_ORIGINATION,
+  HOUSING_TURNOVER_RATE_ANNUAL,
+} from '../../domain/banking';
 import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
-import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
+import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE } from '../../domain/region-macro';
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
@@ -863,10 +867,49 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   const supplyDemandRatio = resDemandUnits > 0
     ? resSupplyUnits / resDemandUnits
     : 1.0; // no real demand cleared this week — treat as balanced rather than inventing pressure
-  const creditFactor = Math.max(0.5, Math.min(1.5, 1.0 + (newPolicyRate < 0.05 ? 0.02 : -0.02)));
-  const priceIndexDelta = (1.0 - supplyDemandRatio) * 0.002 * creditFactor;
-  const newPriceIndex = Math.max(0.5, Math.min(3.0, prevHousing.priceIndex + priceIndexDelta));
-  const newMedianHomePriceUSD = Math.round((prevHousing.baselineHomePriceUSD || 400000) * newPriceIndex);
+  // ---- HSG: THE HOUSE PRICE CLEARS. It was a walked index and every term in it was stated. ----
+  //
+  // `priceIndex += (1 − supplyDemandRatio) x 0.002 x creditFactor`, bounded to [0.5, 3.0] and
+  // multiplied by a 400,000 baseline: a stated speed, a stated credit nudge (±0.02 on one side of
+  // a policy-rate threshold), a clamp on the outcome, and a stated level. **A bound is not a
+  // price** (rule 15), and none of it was anybody's decision.
+  //
+  // A house sells at what the MARGINAL BUYER can pay. Each wealth tier's affordability is its own
+  // income against the going mortgage rate — the same `DSTI x income / annuity factor` that sizes
+  // borrowing capacity (§7.160), grossed up by the origination LTV because the buyer funds the
+  // deposit too. Rank the tiers by what they can pay, walk down until the week's supply is
+  // absorbed, and the price is what the last buyer needed to bid. More supply reaches further
+  // down the distribution and prices lower; a rate rise cuts every tier's capacity and prices
+  // lower; richer households price higher. Nothing is walked and nothing is clamped.
+  const householdsCount = Math.max(1, newTotalPopulation / AVERAGE_HOUSEHOLD_SIZE);
+  const mortgageRateForPricing = Math.max(0.005,
+    (region.zeroRates?.tenor10Y ?? newPolicyRate) + MORTGAGE_SPREAD_OVER_10Y_BPS / 10000);
+  const rWeekly = mortgageRateForPricing / 52;
+  const annuityFactorForPricing = rWeekly / (1 - Math.pow(1 + rWeekly, -MORTGAGE_TERM_WEEKS));
+  const affordabilityByTier = WEALTH_TIERS.map((t) => {
+    const tier = region.wealthDistribution?.[t];
+    const tierHouseholds = Math.max(1, householdsCount * Math.max(0, tier?.shareOfHouseholds ?? 0.25));
+    const weeklyIncomePerHouseholdUSD = Math.max(0, tier?.shareOfIncomeUSD ?? 0) / 52 / tierHouseholds;
+    const affordableLoanUSD = (weeklyIncomePerHouseholdUSD * MORTGAGE_DSTI_LIMIT) / annuityFactorForPricing;
+    return { households: tierHouseholds, priceUSD: affordableLoanUSD / MORTGAGE_LTV_AT_ORIGINATION };
+  }).sort((a, b) => b.priceUSD - a.priceUSD);
+  // The week's supply: existing owners selling, plus what construction actually completed.
+  const owningHouseholdsCount = householdsCount * Math.max(0, prevHousing.ownershipRatePct ?? 0.6);
+  const supplyUnitsThisWeek = owningHouseholdsCount * (HOUSING_TURNOVER_RATE_ANNUAL / 52) + resSupplyUnits;
+  let absorbed = 0;
+  let marginalPriceUSD = affordabilityByTier[affordabilityByTier.length - 1]?.priceUSD ?? 0;
+  for (const tier of affordabilityByTier) {
+    marginalPriceUSD = tier.priceUSD;
+    absorbed += tier.households * (HOUSING_TURNOVER_RATE_ANNUAL / 52);
+    if (absorbed >= supplyUnitsThisWeek) break;
+  }
+  // A house cannot clear below what it costs to build: the construction sector's own cleared
+  // price is the seller's floor, exactly as it is for every other produced good (§7.130).
+  const buildCostUSD = Math.max(0, (resCat?.unitPriceUSD ?? 0));
+  const newMedianHomePriceUSD = Math.round(Math.max(marginalPriceUSD, buildCostUSD));
+  const newPriceIndex = (prevHousing.baselineHomePriceUSD || 400000) > 0
+    ? newMedianHomePriceUSD / (prevHousing.baselineHomePriceUSD || 400000)
+    : 1;
   const histPrices = [...(prevHousing.historicalPrices || []).slice(-51), newMedianHomePriceUSD];
 
   const updatedHousingMarket: HousingMarket = {
@@ -875,7 +918,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     baselineHomePriceUSD: prevHousing.baselineHomePriceUSD || 400000,
     priceIndex: Number(newPriceIndex.toFixed(4)),
     historicalPrices: histPrices,
-    mortgageOriginationVolumeUSD: Number((newEstimatedHouseholdIncomeUSD * 0.05 * creditFactor).toFixed(0)),
+    // HSG — what the banks actually originated, summed by the bank pass. The 5%-of-income x a
+    // credit nudge this replaces was a statistic beside the real lending, not a measure of it.
+    mortgageOriginationVolumeUSD: Number((region.housingMarket?.mortgageOriginationVolumeUSD ?? 0).toFixed(0)),
   };
 
   // ---- DEM: PEOPLE AGE. The age structure is a real stock now, not four drifting shares. ----
