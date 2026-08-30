@@ -1394,6 +1394,25 @@ const indModule: HarnessModule = (() => {
       }, 0);
       const capexA = firms.reduce((a, c) => a + (c.capex ?? 0), 0);
       out.push(`  ${r}: capex ${B(capexA)}/yr vs depreciation ${B(dep)}/yr = ${(dep > 0 ? capexA / dep : 0).toFixed(2)}x [1.0x replaces the stock]`);
+      // CAP — WHERE THE CAPEX BIDS DIE. The five capex weights sum to 1, so the bids ARE the
+      // capex figure; if deliveries are a fraction of it, the capital-goods sector cannot make
+      // what the economy is asking for. Per category, so it is visible whether it is one
+      // industry or all five.
+      if (r === 'USA') {
+        // TWO REPRESENTATIONS OF INVESTMENT? The seed sizes each capex industry from the demand
+        // solve; the firms bid their OWN capex figure. If those disagree the sector was built to
+        // supply one number and asked for another (rule 3).
+        const capexCats = ['heavy_equipment', 'industrial_automation', 'commercial_fleet', 'enterprise_software', 'commercial_construction'];
+        const seededUSD = capexCats.reduce((a, su) => a + (((s.regions[r] as any).categoryDemand?.[su]?.demandLevelUSD) ?? 0), 0);
+        out.push(`      capex industries sized for ${B(seededUSD)}/yr of demand; firms bid ${B(capexA)}/yr = ${(seededUSD > 0 ? capexA / seededUSD : 0).toFixed(2)}x what was built`);
+        capexCats.forEach(su => {
+          const cd: any = (s.regions[r] as any).categoryDemand?.[su];
+          if (!cd) return;
+          const d = cd.totalUnitsDemandedThisWeek ?? 0;
+          const sup = cd.totalUnitsSuppliedThisWeek ?? 0;
+          out.push(`      ${su.padEnd(24)} supplied/demanded ${(d > 0 ? sup / d : 0).toFixed(2)}x  (px ${(cd.unitPriceUSD ?? 0).toFixed(0)} vs base ${(cd.baseUnitPriceUSD ?? 0).toFixed(0)})`);
+        });
+      }
       out.push(`  ${r}: EBITDA/rev ${pct(ebitda / rev)}  inputs/rev ${pct(inputs / rev)}  netPPE/rev ${(netPpe / rev).toFixed(2)}x  |  below cost of capital: ${below}/${firms.length} (${pct(below / firms.length)})`);
     });
 
