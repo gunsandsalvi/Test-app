@@ -5221,3 +5221,20 @@ that proved it, the lesson.
     - **Next in DIST:** the household side (COH's redesign), the absorbing barrier with reinjection
       on the SME side, and the strata responding to their own stratum's cash rather than the
       pool's.
+
+141. **DIST — the cash term too, which is the half that is live.** §7.140 made the coverage term an
+    integral and found it dormant at today's leverage. The `cashStress` term is the same defect and
+    is the one that actually fires.
+    - **It read the pool's MEAN cash cover**, so a pool holding six weeks of wages on average
+      showed no distress even when a third of its firms held two. **Cash is not spread evenly
+      across a pool:** what a firm has left is what its earnings leave after ITS OWN debt service,
+      so the strata paying the most interest hold the least — which is exactly why they are the
+      ones that fail. The pool's cash is now allocated on that residual, so it distributes the
+      pool's own money rather than inventing a second stock (rule 3).
+    - **Measured, and it is the boundary case that matters:** at exactly the target six weeks of
+      cover the scalar reports **0.0000** stress while the cross-section reports **0.0357** — the
+      levered strata are already under. Below target the two converge, because once the mean is
+      stressed everyone is. **A scalar is blind precisely in the approach to a threshold, which is
+      where a credit cycle is decided.**
+    - Harness green, 0 violations, numbers unchanged — these pools are not distressed, so a
+      distress function correctly reports nothing. Both terms are structural and arm under stress.

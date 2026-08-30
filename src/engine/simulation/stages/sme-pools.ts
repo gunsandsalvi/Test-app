@@ -102,7 +102,6 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       const annualEarningsUSD = pool.annualRevenueUSD * pool.marginPct;
       const annualDebtServiceUSD = Math.max(1, pool.debtUSD * (reg.policyRate + 0.03));
       const cashCoverWeeks = weeklyWageBillUSD > 0 ? cashUSD / weeklyWageBillUSD : TARGET_CASH_WEEKS_OF_WAGES;
-      const cashStress = Math.max(0, 1 - cashCoverWeeks / TARGET_CASH_WEEKS_OF_WAGES);
 
       // DIST — THE DEFAULT RATE IS AN INTEGRAL OVER THE POOL, NOT A FUNCTION OF ITS MEAN.
       //
@@ -134,8 +133,25 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       const coverageDistress = strata.reduce(
         (a, st) => a + st.weight * Math.max(0, 1 - coverageOf(st.leverageMultiple)), 0);
 
+      // DIST — AND THE CASH TERM IS THE SAME DEFECT, in the half that is actually LIVE today.
+      //
+      // `cashStress` read the pool's mean cash cover, so a pool holding six weeks of wages on
+      // average showed no distress even when a third of its firms held two. Cash is not spread
+      // evenly across a pool: what a firm has left is what its earnings leave after ITS OWN debt
+      // service, so the strata that pay the most interest hold the least — which is why they are
+      // the ones that fail. The pool's cash is allocated on exactly that residual, so it is a
+      // distribution of the pool's own money and not a second stock (rule 3).
+      const residualOf = (lev: number) => Math.max(0, 1 - lev * recentre * (reg.policyRate + 0.03));
+      const meanResidual = strata.reduce((a, st) => a + st.weight * residualOf(st.leverageMultiple), 0);
+      const cashStressIntegral = meanResidual > 0
+        ? strata.reduce((a, st) => {
+            const stratumCoverWeeks = cashCoverWeeks * (residualOf(st.leverageMultiple) / meanResidual);
+            return a + st.weight * Math.max(0, 1 - stratumCoverWeeks / TARGET_CASH_WEEKS_OF_WAGES);
+          }, 0)
+        : Math.max(0, 1 - cashCoverWeeks / TARGET_CASH_WEEKS_OF_WAGES);
+
       pool.defaultRateAnnualPct = Number(Math.max(0,
-        0.015 + coverageDistress * 0.04 + cashStress * 0.06
+        0.015 + coverageDistress * 0.04 + cashStressIntegral * 0.06
       ).toFixed(4));
     });
   });
