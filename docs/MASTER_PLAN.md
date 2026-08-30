@@ -132,6 +132,19 @@ Standing user directives. Not suggestions.
       mechanism, so deleting it before the mechanism exists makes the model wrong, not more
       bottom-up (§7.158, §7.177). The order is forced.
 
+1.20 **NEVER ROLL BACK.** When a change makes a print worse, the answer is never to put the old
+    number back. A derivation that replaced an invented constant does not become wrong because the
+    world it now describes is uglier — the ugliness was there, and the constant was covering it.
+    §7.209 is the case that named this rule: COH4's ladder posts the households' own MEASURED
+    reservation, the goods market cannot supply the registry's own stated per-capita want, and the
+    price level says so. Reverting the ladder would restore a quiet CPI and a hidden shortage,
+    which is the same trade the deleted clamps used to make.
+    - **A bad print is a finding, not a regression.** Record it, own it, and work the mechanism it
+      exposed. The only thing that may be undone is a change that is WRONG on its own terms — a
+      ratchet, a resolution artefact, a broken identity — and that is a fix, not a rollback.
+    - **This binds hardest exactly where the temptation is strongest**: at the end of a project,
+      when one number is embarrassing and the old constant is one line away.
+
 ### 1.10 Verification ladder
 
 | Command | Cost | When |
