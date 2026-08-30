@@ -267,10 +267,12 @@ a clamp cannot be deleted before the mechanism under it exists.
 
 ### THE MEASUREMENT DEBT — owed before anything is judged
 
-**Nothing has been measured since §7.199.** Records 200–208 are all UNMEASURED, and two of them
-relabel the world: NAT's reseed changed every energy and metal price (§7.193), and HC3b removed an
-RNG draw per operating firm per week (§7.207), so **no same-seed comparison across that commit is
-valid and no number measured before 2026-08-30 is a baseline.**
+**Records 200–207 remain UNMEASURED; §7.208 is measured, by §7.209's run.** The gap was not a
+deferral — the harness could not start (§7.209), and a red harness is a broken instrument, not a
+debt. Everything below still needs its own read. Two of these records relabel the world: NAT's reseed
+changed every energy and metal price (§7.193), and HC3b removed an RNG draw per operating firm per
+week (§7.207), so **no same-seed comparison across those commits is valid and no number measured
+before 2026-08-30 is a baseline.**
 
 Read in this order:
 1. **The capital-goods fill rate**, against §7.168's 8% and the per-category table. Everything in
@@ -286,12 +288,11 @@ Read in this order:
 6. **Bank NIM and household interest income**, which G3c's deposit rate can take to zero for a
    liquid bank whose depositors are not leaving.
 7. **The price level and the JPN fiscal band**, against NAT's reseed and nothing earlier.
-8. **The four §7.208 derivations, each against the number it replaced.** The wage level (0.62 →
-   ~0.79, so household income and every payroll move together), the tier wage multiplier (32.5x →
-   ~2.5x, which moves top-tier income from wages toward capital and should show in the cohorts'
-   income split), the household demand ladder (a step at a 0.019 premium → a six-rung schedule, in
-   the stage that sets every consumer price), and CAL's calendar (the sovereign coupon is lumpy in
-   cash now, so bank reserves and the TGA both swing on the coupon weeks while NIM does not).
+8. **§7.208's four derivations — READ, at 12 weeks (§7.209).** The tier wage multiplier is inert
+   at the aggregate, the wage level owns the whole real-side move, the ladder owns the whole price
+   move, and CAL's two checks are green every week. What is still owed is the LONG read: whether
+   the price level in §6.1 settles or compounds over 60, and whether JPN's labour market recovers
+   or stays at ~25%.
 9. **§5-DER's verify list** — the swap spread and CDS-cash basis in calm weeks and under stress,
    contango when inventories are high and backwardation when scarce, expiry convergence, and
    hedged firms feeling less P&L from the shocks they hedged.
@@ -475,6 +476,8 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 
 | Defect | State and next action |
 |---|---|
+| **JPN UNEMPLOYMENT PRINTS 66.8% IN WEEK 1** | Bisected to COH3's wage level (§7.208): the baseline prints 11.2% and the commit before it is identical. **It is not a regional artefact** — the derived labour share is 0.775/0.768/0.771/0.769 across USA/EUR/UK/JPN, a spread of 0.006, and the same +24% wage lands in all four. USA, EUR and UK all IMPROVE on it (19.0/13.6/12.6 → 9.1/3.4/4.6); only JPN inverts, and it decays to ~25% by week 4 and stays, so it is a seed-reconciliation transient in JPN's labour market rather than a wage-level error. **Next action: read JPN's opening occupation pools and employer headcounts against the wage the derivation now sets — the question is what JPN's seed does that the other three do not.** Owner: COH3. |
+| **THE PRICE LEVEL RUNS TO ~90% ANNUALISED** | Bisected to COH4's demand ladder (§7.208): the commit before it prints −4.78 and this one 34.96, on identical everything else. **The ladder is not obviously wrong and that is the point.** It posts the households' own derived reservation — a staple can draw on the whole budget, so the reservation is ~3.3× the going price — and a supply-short goods market clears there. Forcing the reach multiple to 1 drops week 1 from 29% to 3.3%, so the reservation is the driver; but the reservation is measured, and **the shortage it is meeting is §6's own damper defect, which the retired 1.9% bid premium was suppressing as rationing.** So the ladder did not create this; it stopped hiding it. **Do not put the premium back and do not cap the bid.** The well-posed question is why the goods market cannot supply the registry's own stated per-capita want. Owners: the supply-side work (SCALE/PROD), with COH4. |
 | **THE CAPITAL-GOODS SECTOR CANNOT SUPPLY THE ECONOMY'S CAPEX** | Firms bid their real capex and the basket weights sum to 1, so the bids ARE the capex figure: **~163B/yr of bids against ~13B/yr of deliveries, an 8% fill** (§7.167), four of five categories short at 65–174% over base (§7.168). §7.178 made the demand LEVEL honest (gap 1.55x → 1.29x) and §7.199 closed the seed's investment fixed point. **Both are UNMEASURED and this is measurement item 1.** It is the accumulated cost behind the ~29% unemployment that has been blocking unrelated work (§7.179). |
 | **THE BOOKS PRINT THEIR DAMPERS** | The engine states its own failure condition: a name clamped for weeks means the posted schedules disagree with the printed level and **the print is the damper, not the market.** Last measured **947 persistently bound** (890 before the OWN7 sweep, peaking at 1042 before the desk-position fix). §7.197 records the rise as the honest shape of deleting the residual dealer: **the pressure was always there.** **Do not widen the damper.** The well-posed question is: who buys when the holders as a group want less than they hold? Owners: SCALE (the float half), and the measurement run. |
 | **A SHOCK TEST STOPPED MOVING ITS PRICE** | `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an identical control world — no longer moves the name's price. Same signature as the sovereign-auction shock test: demand so far below the enlarged float that both A/B worlds pin at the damper. Re-measure after G3e's float change. |
@@ -1332,3 +1335,46 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        a closed item's section is deleted; §4's preamble still described a work order that had been
        overtaken; §2 and §3 described a model that no longer exists. **§7 keeps all 208 records and
        every number in them** — records are never renumbered and never dropped.
+209. **THE FIRST RUN SINCE §7.199 — and the reason there had not been one.** The measurement debt
+     was not being deferred. It was uncollectable: the harness died in week 1 of every run, at
+     every commit going back well past this branch, on an assert that named the wrong thing.
+     - **`0/0`, and NaN travels.** `fundingPressure` asks what share of the saving headed for a
+       deposit walked to the money fund instead. §7.204 made the liquid-saving share a MEASURED
+       number, and a week in which none of the saving was headed for a deposit makes it zero — so
+       the question was `0/0`. **Nothing downstream stopped the answer:** NaN passes straight
+       through `Math.max` and `Math.min`, into the deposit RATE, into the deposit STOCK — and the
+       household deposit line IS that stock (HH4d, one number reconciled off the banks' own
+       books). The whole household balance sheet was NaN in week 1, in all four regions, and the
+       goods market's final-demand vector with it. **The guard belongs on the denominator:** a
+       zero denominator is not infinite pressure. If no saving was on offer as a deposit, none of
+       it can have walked.
+     - **An assert that sends the reader to the wrong file is worse than no assert.** It surfaced
+       as "the input-output matrix did not converge — some product consumes more than a dollar per
+       dollar of output". The recipes were fine; the INPUT was NaN, and a non-finite input never
+       converges either. The solve checks its input is a number now and names the caller's
+       offending entries.
+     - **A defect that hid for nine records because the run that would have caught it was the run
+       that could not start.** Rule 12 says build the whole thing before measuring; it does not
+       say the harness may stay red, and a red harness is not a measurement debt, it is a broken
+       instrument.
+     - **BISECTED, 3 weeks each, shocks off, from the reorganised plan forward.** DIST's tier wage
+       multiplier is inert at the aggregate — identical prints to the baseline, which is what a
+       change that redistributes within a total should look like. COH3's wage level owns the whole
+       real-side move. COH4's ladder owns the whole price move. CAL's two new checks are green in
+       every week: the per-bank identity carrying the receivable, and the treasury's payable
+       against what its bank holders carry.
+     - **MEASURED, 12 weeks, against the same run with only the NaN fix.** Violations 12 → 9 (the
+       rest are the pre-existing fund overdrafts, worse on the baseline). Persistently bound books
+       2145 → 1863. Unemployment 23.3/17.2/15.0 → 18.3/14.2/11.8, rising on both. GDP 0.75T →
+       0.91T.
+     - **Two corrections to COH4's ladder, both found by running it.** The reach is a multiple of
+       the BUDGET and never of a price: bounding the bid at `last week's price × the multiple`
+       looks equivalent and is not, because the reference moves with the price the bid itself
+       sets, so the ceiling climbed at whatever rate it had just caused — measured, the level
+       compounded 10% → 21% → 35% → 455% by week five. And the ladder is TRUNCATED at the
+       reservation for the whole want: an untruncated `money / quantity` curve is unbounded as the
+       quantity goes to zero, so the highest price the ladder POSTED was `rungs × the going
+       price`, and where supply is short the top of the demand curve IS the clearing price. **A
+       resolution parameter must not move the answer (rule 19), and that one moved it linearly.**
+     - **What the run FOUND, recorded rather than patched.** Two live defects, both in §6.1 now.
+       Neither gets a clamp.
