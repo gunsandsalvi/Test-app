@@ -1,55 +1,118 @@
-import { AssetType, Dealer } from '../types';
+/**
+ * G3b — the player's dealers ARE the named banks' desks.
+ *
+ * What this replaces: three invented counterparties (Alpha, Beta, Gamma) with declared axes,
+ * a `baseSpreadBps x spreadMultiplier`, an `axeDiscountPct` and a stated credit limit — a second
+ * dealer system with no balance sheet, quoting the player while the banks ran real inventories
+ * in the clearing books. Rule 3: one real thing, two representations, and only one of them
+ * could ever run out.
+ *
+ * Now there is one. Each named bank is a dealer the player can trade with. Its AXE is where it
+ * is actually long paper this week, read off its own desk inventory — which is what an axe means
+ * — so it changes as the desk's book changes rather than being a fixed label. Its credit limit
+ * is its real dealer capacity, so a desk that is full genuinely cannot take the other side. And
+ * the spread it quotes is the one its book charges everyone else, plus the impact the order has
+ * on the desk's own schedule.
+ */
 
-export const DEALERS: Dealer[] = [
-  {
-    id: 'alpha',
-    name: 'Alpha Global Markets',
-    tagline: 'Credit & Rates Specialist | Tight CDS & Sovereign Pricing',
-    inventoryAxe: 'Axe: Tight Credit/CDS & Rates',
-    axeBadge: 'Axe: Credit/CDS Tight',
-    axeDescription: 'Tighter spreads on sovereign curves, corporate credit bonds, CDS protection, and IRS.',
-    axeAssetClasses: ['CORP_BOND', 'LEVERAGED_LOAN', 'CDS', 'SOV_BOND', 'IRS'],
-    axeDiscountPct: 0.45,
-    spreadMultiplier: 1.0,
-    baseSpreadBps: 6,
-    creditLimitUSD: 75_000_000,
-    currentExposureUSD: 0,
-    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION', 'FX_SPOT'],
-    color: '#3b82f6', // blue
-  },
-  {
-    id: 'beta',
-    name: 'Beta Securities Inc.',
-    tagline: 'Macro, FX & Energy Desk | Cross-Currency Basis Leader',
-    inventoryAxe: 'Axe: FX & Commodities 0-Slippage',
-    axeBadge: 'Axe: FX/Commodities',
-    axeDescription: 'Best liquidity and lowest slippage for cross-currency basis swaps, FX forwards, and commodities.',
-    axeAssetClasses: ['COMMODITY', 'XCS', 'FX_SPOT'],
-    axeDiscountPct: 0.50,
-    spreadMultiplier: 1.0,
-    baseSpreadBps: 8,
-    creditLimitUSD: 100_000_000,
-    currentExposureUSD: 0,
-    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION', 'FX_SPOT'],
-    color: '#10b981', // emerald
-  },
-  {
-    id: 'gamma',
-    name: 'Gamma Structured Solutions',
-    tagline: 'Equity Derivatives & Exotics Desk | Tight BSM Options & TRS',
-    inventoryAxe: 'Axe: Equities, Options & TRS Flow',
-    axeBadge: 'Axe: Options/TRS Flow',
-    axeDescription: 'Tightest execution on single-stock equity options, index derivatives, and Total Return Swaps.',
-    axeAssetClasses: ['EQUITY', 'OPTION', 'TRS'],
-    axeDiscountPct: 0.45,
-    spreadMultiplier: 1.0,
-    baseSpreadBps: 10,
-    creditLimitUSD: 150_000_000,
-    currentExposureUSD: 0,
-    acceptedAssetClasses: ['EQUITY', 'CORP_BOND', 'LEVERAGED_LOAN', 'SOV_BOND', 'CDS', 'IRS', 'TRS', 'XCS', 'COMMODITY', 'OPTION', 'FX_SPOT'],
-    color: '#8b5cf6', // purple
-  },
-];
+import { AssetType, Company, Dealer } from '../types';
+import { dealerDeskCapacityUSD, dealerDeskGrossUSD, DESK_SPREAD_BPS_BY_BOOK } from '../domain/dealer-desk';
+
+export { DESK_SPREAD_BPS_BY_BOOK };
+import { BASEL_MIN_LEVERAGE_RATIO, leverageHeadroomUSD } from './macro/banking';
+
+/** The desk book each tradable asset class lands in — the same names the clearing adapters use.
+ *  A derivative consumes the desk through a PFE add-on rather than at notional, exactly as the
+ *  FX forward book does, so all eight classes move a real balance sheet. */
+export const DESK_BOOK_BY_ASSET_TYPE: Record<AssetType, string> = {
+  EQUITY: 'equity',
+  CORP_BOND: 'corporate bond',
+  LEVERAGED_LOAN: 'leveraged loan',
+  SOV_BOND: 'sovereign bond',
+  COMMODITY: 'commodity',
+  CDS: 'derivatives',
+  IRS: 'derivatives',
+  TRS: 'derivatives',
+  XCS: 'derivatives',
+  OPTION: 'derivatives',
+  FX_SPOT: 'derivatives',
+};
+
+const DEALER_COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6'];
+const ALL_ASSET_CLASSES = Object.keys(DESK_BOOK_BY_ASSET_TYPE) as AssetType[];
+
+/** The region's named banks, as the desks a player can deal with. Derived every week. */
+export function dealersFromBanks(banks: Company[]): Dealer[] {
+  return banks
+    .filter((b) => b.isBankEntity && b.bankBalanceSheet)
+    .map((bank, i) => {
+      const sheet = bank.bankBalanceSheet!;
+      const grossUSD = dealerDeskGrossUSD(sheet.dealerDeskInventory);
+      const capacityUSD = dealerDeskCapacityUSD({
+        balanceSheetCapacityUSD: sheet.bankEquityUSD / BASEL_MIN_LEVERAGE_RATIO,
+        leverageHeadroomUSD: leverageHeadroomUSD(sheet),
+        inventory: sheet.dealerDeskInventory,
+        book: '',
+      });
+      // The axe: the books this desk is genuinely long, so the classes it can fill from stock.
+      const longBooks = new Set(
+        Object.entries(sheet.dealerDeskInventory ?? {})
+          .filter(([, rows]) => rows.reduce((a, r) => a + r.inventoryUSD, 0) > 0)
+          .map(([book]) => book)
+      );
+      const axeAssetClasses = ALL_ASSET_CLASSES.filter((a) => longBooks.has(DESK_BOOK_BY_ASSET_TYPE[a]));
+      return {
+        id: bank.ticker,
+        name: bank.name,
+        tagline: `${bank.region} dealer desk`,
+        inventoryAxe: axeAssetClasses.length > 0 ? `Long: ${axeAssetClasses.join(', ')}` : 'Flat',
+        axeBadge: axeAssetClasses.length > 0 ? 'Axe: has the paper' : 'No axe',
+        axeDescription: 'Fills from its own book where it is long; elsewhere it has to source the '
+          + 'paper and its own schedule prices the size.',
+        axeAssetClasses,
+        creditLimitUSD: Math.round(capacityUSD),
+        currentExposureUSD: Math.round(grossUSD),
+        acceptedAssetClasses: ALL_ASSET_CLASSES,
+        color: DEALER_COLORS[i % DEALER_COLORS.length],
+      };
+    });
+}
+
+/** What this desk holds of one instrument right now. */
+export function deskInventoryUSD(bank: Company | undefined, book: string, instrumentId: string): number {
+  const rows = bank?.bankBalanceSheet?.dealerDeskInventory?.[book] ?? [];
+  return rows.filter((r) => r.instrumentId === instrumentId).reduce((a, r) => a + r.inventoryUSD, 0);
+}
+
+/**
+ * The desk's quote for one player order, in bps away from the market.
+ *
+ * Two terms, both the desk's own. The SPREAD is what its book charges every participant, half of
+ * it on each side. The IMPACT is the desk's own schedule: it goes from its current inventory to
+ * full capacity across one spread, so an order that consumes a share of its capacity moves the
+ * level by that share of the spread. An order the desk can fill from stock has no impact — that
+ * is what an axe IS, and it falls out rather than being granted as a discount.
+ */
+export function quoteDeskFillBps(args: {
+  bookSpreadBps: number;
+  /** What the desk is long in this instrument (negative = short). */
+  deskInventoryUSD: number;
+  /** What it could still take on, across all its books. */
+  deskCapacityUSD: number;
+  orderUSD: number;
+  isBuy: boolean;
+}): { spreadBps: number; impactBps: number; totalBps: number } {
+  const spreadBps = args.bookSpreadBps / 2;
+  // Buying, the desk sells from stock first and sources the rest; selling, everything it takes
+  // is new inventory.
+  const sourcedUSD = args.isBuy
+    ? Math.max(0, args.orderUSD - Math.max(0, args.deskInventoryUSD))
+    : args.orderUSD;
+  const impactBps = args.deskCapacityUSD > 0
+    ? args.bookSpreadBps * (sourcedUSD / args.deskCapacityUSD)
+    : args.bookSpreadBps * 10; // a full desk quotes a level nobody wants to trade at
+  return { spreadBps, impactBps, totalBps: spreadBps + impactBps };
+}
 
 /**
  * Standard Unified Margin Requirements across Prime Brokers:
@@ -80,58 +143,4 @@ export function getUnifiedInitialMarginRate(assetType: AssetType): number {
     default:
       return 0.15;
   }
-}
-
-/**
- * Dynamic bid-ask spread engine based on dealer inventory axes, asset class, order size, and market volatility
- */
-export function calculateDynamicSpreadBps(
-  dealer: Dealer,
-  assetType: AssetType,
-  notionalUSD: number,
-  marketVolatility: number = 0.20
-): { spreadBps: number; hasAxeDiscount: boolean; originalSpreadBps: number } {
-  let assetClassMultiplier = 1.0;
-  switch (assetType) {
-    case 'SOV_BOND':
-    case 'IRS':
-    case 'FX_SPOT':
-      assetClassMultiplier = 0.6;
-      break;
-    case 'EQUITY':
-    case 'COMMODITY':
-      assetClassMultiplier = 1.0;
-      break;
-    case 'CORP_BOND':
-    case 'LEVERAGED_LOAN':
-    case 'TRS':
-      assetClassMultiplier = 1.4;
-      break;
-    case 'CDS':
-    case 'XCS':
-    case 'OPTION':
-      assetClassMultiplier = 2.0;
-      break;
-  }
-
-  // Size penalty: Orders above $10M start moving spreads due to market impact
-  const sizeFactor = Math.max(1.0, 1.0 + notionalUSD / 30_000_000);
-  const volFactor = Math.max(0.8, marketVolatility / 0.20);
-
-  const rawSpread = dealer.baseSpreadBps * assetClassMultiplier * sizeFactor * volFactor;
-  const originalSpreadBps = Math.max(2, Math.round(rawSpread));
-
-  const hasAxeDiscount = dealer.axeAssetClasses.includes(assetType);
-  const discount = hasAxeDiscount ? (1 - dealer.axeDiscountPct) : 1.0;
-  
-  // Illiquid penalty if dealer is Gamma (options/equity desk) pricing illiquid CDS or Credit
-  const nonSpecialistPenalty = (!hasAxeDiscount && dealer.id === 'gamma' && (assetType === 'CDS' || assetType === 'CORP_BOND')) ? 1.4 : 1.0;
-
-  const finalSpreadBps = Math.max(1, Math.round(rawSpread * discount * nonSpecialistPenalty));
-
-  return {
-    spreadBps: finalSpreadBps,
-    hasAxeDiscount,
-    originalSpreadBps,
-  };
 }

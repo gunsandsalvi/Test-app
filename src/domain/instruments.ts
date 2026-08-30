@@ -1,11 +1,11 @@
 /** Tradeable asset types, the player's positions, the player-facing dealers, and commodities.
  *
- *  RULE 3, OPEN: `Dealer` below is a SECOND dealer system. It quotes the player by formula
- *  (`baseSpreadBps × spreadMultiplier`, an `axeDiscountPct`, a `creditLimitUSD`) while the banks
- *  run real dealer inventories in the clearing books off their own balance sheets. Two
- *  representations of one real thing, and only one of them has a balance sheet. It also carries
- *  presentation fields (`tagline`, `axeBadge`, `color`) on a domain trading entity.
- *  Owner: G3 — "one dealer system" is its name. */
+ *  G3b closed the rule-3 defect this file used to carry: `Dealer` was a SECOND dealer system,
+ *  quoting the player by formula while the banks ran real inventories off their own balance
+ *  sheets. It is now a VIEW of the named banks' desks — one entry per bank, its axe read off
+ *  the books it actually holds paper in, its limit its real dealer capacity — built by
+ *  `dealersFromBanks` and refreshed every week. Nothing decides off it; the quote and the fill
+ *  both come from the desk. */
 
 import { RegionId } from './geography';
 import { VIEW_BASE_COMMODITY_CATEGORY_LINKAGE } from './industry-registry';
@@ -74,17 +74,18 @@ export interface Position {
 }
 
 export interface Dealer {
+  /** The bank's ticker. A player order is an order to THAT bank's desk. */
   id: string;
   name: string;
   tagline: string;
   inventoryAxe: string;
   axeBadge: string;
   axeDescription: string;
+  /** Where this desk is actually long paper right now — a real axe, measured, not declared. */
   axeAssetClasses: AssetType[];
-  axeDiscountPct: number;
-  spreadMultiplier: number;
-  baseSpreadBps: number;
+  /** What the desk could still take on: its own dealer capacity. */
   creditLimitUSD: number;
+  /** What it already carries, gross, across every book. */
   currentExposureUSD: number;
   acceptedAssetClasses: AssetType[];
   color: string;

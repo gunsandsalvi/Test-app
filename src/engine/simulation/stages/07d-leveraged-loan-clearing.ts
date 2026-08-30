@@ -42,6 +42,7 @@ import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
+import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand , YIELD_LIKE_MIN_WEEKLY_MOVE_BPS } from './financial-clearing-engine';
 
@@ -59,7 +60,8 @@ const WEEKLY_TACTICAL_REBALANCE_RATE = 0.20;
 // Senior-secured first-lien loans trade at a real, structural discount to the same issuer's
 // unsecured bond spread — collateral and seniority mean less loss given default.
 const SENIOR_LIEN_DISCOUNT = 0.85;
-const DEALER_SPREAD_BPS = 20; // loan secondary markets trade a bit wider than investment-grade bonds
+/** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
+const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['leveraged loan'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'leveraged loan';

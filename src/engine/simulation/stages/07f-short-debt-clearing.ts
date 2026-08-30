@@ -41,9 +41,11 @@ import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
+import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
-const DEALER_SPREAD_BPS = 2; // the tightest market there is
+/** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
+const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['bill'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'bill';

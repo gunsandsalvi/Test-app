@@ -10,7 +10,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { GameState, Position, TradeableInstrument, Region } from '../types';
-import { calculateDynamicSpreadBps, getUnifiedInitialMarginRate } from '../engine/dealers';
+import { quoteDeskFillBps, deskInventoryUSD, getUnifiedInitialMarginRate, DESK_BOOK_BY_ASSET_TYPE, DESK_SPREAD_BPS_BY_BOOK } from '../engine/dealers';
 import { calculateExpectedCarry } from '../engine/carryCalculator';
 import { calculateBlackScholesGreeks } from '../engine/blackScholes';
 import { calculateNelsonSiegelZeroRate } from '../engine/nelsonSiegel';
@@ -29,13 +29,17 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   onClose,
   onExecuteTrade,
 }) => {
-  const [selectedDealerId, setSelectedDealerId] = useState<string>('alpha');
+  const [selectedDealerId, setSelectedDealerId] = useState<string>('');
   const [notionalUSD, setNotionalUSD] = useState<number>(1_000_000); // Default $1M
   const [direction, setDirection] = useState<'BUY' | 'SELL'>('BUY');
 
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const dealer = state.dealers.find((d) => d.id === selectedDealerId) || state.dealers[0];
+  // G3b: the dealer IS a named bank. Its desk's own book, inventory and capacity price the fill.
+  const dealerBank = state.companies.find((c) => c.ticker === dealer?.id);
+  const deskBook = DESK_BOOK_BY_ASSET_TYPE[instrument.assetType];
+  const bookSpreadBps = DESK_SPREAD_BPS_BY_BOOK[deskBook] ?? 20;
   const region = state.regions[instrument.region];
   // GUARD: no fabricated rate. This read used to fall back to 4.75% — a recognisably
   // real-world number — so a missing region priced the player's financing off a constant that
@@ -43,10 +47,25 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   // where the rate is absent the carry is not computed and the panel renders an em dash.
   const policyRate = region?.policyRate;
 
-  // Calculate dynamic spread & axe discount
+  // G3b: the quote is the desk's own — half its book's spread, plus what the order does to its
+  // own schedule. There is no formula here and no discount to grant: a desk that already holds
+  // the paper fills from stock and the impact term is zero, which is what an axe IS.
   const { spreadBps, hasAxeDiscount, originalSpreadBps } = useMemo(() => {
-    return calculateDynamicSpreadBps(dealer, instrument.assetType, notionalUSD, 0.20);
-  }, [dealer, instrument.assetType, notionalUSD]);
+    const instrumentKey = (instrument as any).details?.trancheId ?? instrument.id ?? instrument.symbol;
+    const inventoryUSD = deskInventoryUSD(dealerBank as any, deskBook, instrumentKey);
+    const q = quoteDeskFillBps({
+      bookSpreadBps: bookSpreadBps,
+      deskInventoryUSD: inventoryUSD,
+      deskCapacityUSD: dealer?.creditLimitUSD ?? 0,
+      orderUSD: notionalUSD,
+      isBuy: direction === 'BUY',
+    });
+    return {
+      spreadBps: Math.max(1, Math.round(q.totalBps)),
+      hasAxeDiscount: q.impactBps <= 0,
+      originalSpreadBps: Math.max(1, Math.round(q.spreadBps + bookSpreadBps)),
+    };
+  }, [dealer, dealerBank, deskBook, bookSpreadBps, instrument, notionalUSD, direction]);
 
   // Transaction spread cost
   const spreadCostUSD = (notionalUSD * spreadBps) / 10000;
@@ -179,32 +198,18 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
   // (S7) rebuilt from the real books every week and therefore not a position anyone can trade
   // against. The side matters: a buyer lifts the offer, a seller hits the bid. The previous
   // version marked the fill UP for both, so a round trip lost the spread twice.
-  const resolveCounterpartyFill = (instrument: any, quantityUSD: number, region: Region, spreadCostUSD: number, isBuy: boolean) => {
-    const instrumentKey = instrument.details?.trancheId ?? instrument.id ?? instrument.symbol;
-    const deskBooks = [
-      ...(region.bankingSector.corpBondDealerInventory ?? []),
-      ...(region.bankingSector.loanDealerInventory ?? []),
-    ];
-    const deskInventoryUSD = deskBooks
-      .filter((p: any) => p.companyId === instrumentKey || p.companyId === instrument.id || p.companyId === instrument.symbol)
-      .reduce((s: number, p: any) => s + Math.max(0, p.inventoryUSD), 0);
-    const sideSign = isBuy ? 1 : -1;
-    if (deskInventoryUSD >= quantityUSD) {
-      // The desk has the axe: it fills from its own book at the quoted side, no sourcing fee.
-      return { fillPrice: instrument.price, counterpartyFeeUSD: 0, sourcedFrom: 'Dealer inventory', spreadCostUSD };
-    }
-    // The desk must go find the paper (or place it), and charges for the intermediation.
-    const shortfallUSD = quantityUSD - deskInventoryUSD;
-    const intermediationFeeRate = 0.0015;
+  const executionDetails = useMemo(() => {
+    // G3b: the fill price is the desk's quote applied to the market, computed in the engine.
+    // It used to be `price x (1 + side x 0.0015)` — a price made up inside a React component,
+    // outside the engine entirely and unknown to every other participant in the same book.
+    const sideSign = direction === 'BUY' ? 1 : -1;
     return {
-      fillPrice: instrument.price * (1 + sideSign * intermediationFeeRate),
-      counterpartyFeeUSD: shortfallUSD * intermediationFeeRate,
-      sourcedFrom: 'Dealer intermediated (sourced externally)',
+      fillPrice: instrument.price * (1 + (sideSign * spreadBps) / 10000),
+      counterpartyFeeUSD: 0,
+      sourcedFrom: hasAxeDiscount ? 'Filled from the desk\'s own book' : 'Desk sourced the paper',
       spreadCostUSD,
     };
-  };
-
-  const executionDetails = useMemo(() => resolveCounterpartyFill(instrument, notionalUSD, region, spreadCostUSD, direction === 'BUY'), [instrument, notionalUSD, region, spreadCostUSD, direction]);
+  }, [instrument, direction, spreadBps, hasAxeDiscount, spreadCostUSD]);
 
   const handleConfirm = () => {
     if (!canAfford) return;
@@ -451,7 +456,7 @@ export const TradeTicketModal: React.FC<TradeTicketModalProps> = ({
                     {d.axeBadge}
                   </div>
                   <div className="text-[8px] text-slate-500 mt-0.5">
-                    {hasAxe ? `-${Math.round(d.axeDiscountPct * 100)}% Spread` : `${d.baseSpreadBps} bps base`}
+                    {hasAxe ? 'Has the paper' : `${(d.creditLimitUSD / 1e9).toFixed(1)}B capacity`}
                   </div>
                 </button>
               );

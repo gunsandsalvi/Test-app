@@ -283,7 +283,7 @@ export default function App() {
 
         {/* Quant Desk Manual & Cheatsheet Modal */}
         {showManual && (
-          <ManualModal onClose={() => setShowManual(false)} />
+          <ManualModal onClose={() => setShowManual(false)} dealers={state.dealers} />
         )}
 
         {/* Developer Diagnostics / Vector Inspector Modal */}

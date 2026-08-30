@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { DEALERS, getUnifiedInitialMarginRate } from '../engine/dealers';
+import { getUnifiedInitialMarginRate } from '../engine/dealers';
+import { Dealer } from '../types';
 import {
   Activity,
   BookOpen,
@@ -15,9 +16,11 @@ import {
 
 interface ManualModalProps {
   onClose: () => void;
+  /** G3b: the live desks — the named banks, with the capacity and inventory they actually have. */
+  dealers: Dealer[];
 }
 
-export const ManualModal: React.FC<ManualModalProps> = ({ onClose }) => {
+export const ManualModal: React.FC<ManualModalProps> = ({ onClose, dealers }) => {
   const [activeSection, setActiveSection] = useState<'MACRO' | 'DERIVATIVES' | 'CARRY_MARGIN' | 'DEALERS'>('MACRO');
 
   return (
@@ -214,30 +217,23 @@ export const ManualModal: React.FC<ManualModalProps> = ({ onClose }) => {
                 Counterparty Inventory Axes & Flow
               </h4>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Dealers quote tighter bid-ask spreads when executing trades that match their desired inventory rebalancing:
+                Your counterparties are the model's own named banks. Each one quotes half its book's
+                bid-ask, plus what your order does to its desk: an order it can fill from paper it
+                already holds moves nothing, and one it has to source moves the level by the share
+                of its capacity you just took. A desk that is full cannot take the other side at all.
               </p>
 
               <div className="space-y-1.5 mt-2">
-                <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                  <span className="font-bold text-white block text-[11px]">Dealer Alpha (Credit/Rates Specialist)</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Offers <strong className="text-emerald-400">-{Math.round((DEALERS[0]?.axeDiscountPct ?? 0.5) * 100)}% spread discounts</strong> on Corporate Bonds, CDS, and Sovereign Rates.
-                  </p>
-                </div>
-
-                <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                  <span className="font-bold text-white block text-[11px]">Dealer Beta (FX & Energy Specialist)</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Best liquidity and <strong className="text-emerald-400">-{Math.round((DEALERS[1]?.axeDiscountPct ?? 0.5) * 100)}% spread discounts</strong> on Cross-Currency Basis Swaps and Commodities.
-                  </p>
-                </div>
-
-                <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                  <span className="font-bold text-white block text-[11px]">Dealer Gamma (Equities & Volatility Specialist)</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Tightest spreads and <strong className="text-emerald-400">-{Math.round((DEALERS[2]?.axeDiscountPct ?? 0.5) * 100)}% discounts</strong> on Single-Stock Options and Equity cash baskets.
-                  </p>
-                </div>
+                {dealers.map((d) => (
+                  <div key={d.id} className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="font-bold text-white block text-[11px]">{d.name} ({d.id})</span>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {d.inventoryAxe}. Capacity{' '}
+                      <strong className="text-emerald-400">${(d.creditLimitUSD / 1e9).toFixed(1)}B</strong>,
+                      carrying <strong className="text-white">${(d.currentExposureUSD / 1e9).toFixed(1)}B</strong>.
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

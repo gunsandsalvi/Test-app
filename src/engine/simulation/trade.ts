@@ -1,5 +1,8 @@
 import { GameState, Position } from '../../types';
 import { random } from '../rng';
+import { DESK_BOOK_BY_ASSET_TYPE } from '../dealers';
+import { regionalDeskView } from '../../domain/dealer-desk';
+import { FX_PFE_ADD_ON_RATE } from '../../domain/dealer-derivatives';
 
 export function executeTrade(
   state: GameState,
@@ -25,56 +28,83 @@ export function executeTrade(
   const navUSD = updatedCash + updatedPositions.reduce((s, p) => s + p.unrealizedPnL, 0);
   const marginUtilizationPct = navUSD > 0 ? Math.round((totalMarginReq / navUSD) * 100) : 100;
 
+  // G3b: a player order is an order to a NAMED bank's desk — the same desk that makes markets
+  // in this book for every other participant. `dealerId` is that bank's ticker.
+  //
+  // What this replaces: the desk's earnings were credited to the REGIONAL aggregate with no cash
+  // leg (07b states the rule this breaks — "an equity write with no cash leg breaks the per-bank
+  // identity"), and only two of the eight asset classes moved any inventory at all, because the
+  // regional arrays only existed for corporate bonds and loans.
+  //
+  // Both legs, same pass. The desk's inventory moves by the notional and its reserves move the
+  // other way — it paid for the paper, or was paid for it — so total assets are unchanged and
+  // the per-bank identity holds; a derivative consumes the desk through the same PFE add-on the
+  // FX forward book uses rather than at notional. The spread and any fee are income: cash and
+  // equity together.
+  let updatedCompanies = state.companies;
   const updatedRegions = { ...state.regions };
   if (executionDetails) {
-    const region = updatedRegions[posData.region];
-    if (region) {
-      // S9: a player order is client flow to a real dealer desk, and the desk's INVENTORY is
-      // where it lands. The previous version sourced the position by walking down the sector
-      // itemizedHoldings — which S7 turned into a derived view, rebuilt from the real books every
-      // week, so those writes were silently discarded and the trade touched nothing at all.
-      //
-      // Inventory is the right home for a second reason: the clearing engines already read prior
-      // dealer inventory and lean on it, so a player buy leaves the desk short and next week's
-      // auction prices that shortfall. The player's market impact arrives through the mechanism
-      // that already exists, not through a bespoke impact formula.
+    const bankIndex = state.companies.findIndex((c) => c.ticker === posData.dealerId && c.bankBalanceSheet);
+    if (bankIndex >= 0) {
+      const bank = state.companies[bankIndex];
+      const sheet = bank.bankBalanceSheet!;
+      const book = DESK_BOOK_BY_ASSET_TYPE[posData.assetType] ?? 'derivatives';
       const instrumentId = posData.trancheId || posData.symbol;
+      const balanceSheetUseUSD = book === 'derivatives'
+        ? posData.notional * FX_PFE_ADD_ON_RATE
+        : posData.notional;
       // Buying takes paper OFF the desk; selling puts it on. A short sale is the desk taking the
-      // other side, which leaves it long, exactly as a real client short does.
-      const inventoryDeltaUSD = posData.direction === 'LONG' ? -posData.notional : posData.notional;
+      // other side, which leaves it long, exactly as a real client short does. A derivative
+      // consumes the desk either way — the add-on is charged on gross notional, not net.
+      const inventoryDeltaUSD = book === 'derivatives'
+        ? balanceSheetUseUSD
+        : (posData.direction === 'LONG' ? -balanceSheetUseUSD : balanceSheetUseUSD);
+      const incomeUSD = executionDetails.counterpartyFeeUSD + executionDetails.spreadCostUSD;
 
-      const applyToInventory = (book: { companyId: string; inventoryUSD: number }[] | undefined) => {
-        const next = [...(book ?? [])];
-        const idx = next.findIndex(p => p.companyId === instrumentId);
-        if (idx >= 0) next[idx] = { ...next[idx], inventoryUSD: next[idx].inventoryUSD + inventoryDeltaUSD };
-        else next.push({ companyId: instrumentId, inventoryUSD: inventoryDeltaUSD });
-        return next;
-      };
+      const inventory = { ...(sheet.dealerDeskInventory ?? {}) };
+      const rows = [...(inventory[book] ?? [])];
+      const at = rows.findIndex((r) => r.instrumentId === instrumentId);
+      if (at >= 0) rows[at] = { instrumentId, inventoryUSD: rows[at].inventoryUSD + inventoryDeltaUSD };
+      else rows.push({ instrumentId, inventoryUSD: inventoryDeltaUSD });
+      inventory[book] = rows.filter((r) => Math.abs(r.inventoryUSD) > 1);
 
-      // §6: 'LEV_LOAN' never existed in the AssetType union — the one producer (CompanyDeepDive)
-      // now emits 'LEVERAGED_LOAN' like everything else, so the string-match tolerance is gone.
-      const isLoan = posData.assetType === 'LEVERAGED_LOAN';
-      const isCorpBond = posData.assetType === 'CORP_BOND';
-
-      updatedRegions[posData.region] = {
-        ...region,
-        bankingSector: {
-          ...region.bankingSector,
-          // The desk's real earnings on the flow it facilitated.
-          // RULE 14, OPEN: equity is credited with NO CASH LEG, and to the REGIONAL aggregate
-          // rather than a named bank. 07b does the same thing correctly and says why — "an
-          // equity write with no cash leg breaks the balance-sheet identity the invariants
-          // harness now asserts per bank per week". Owner: G3.
-          bankEquityUSD: region.bankingSector.bankEquityUSD + executionDetails.counterpartyFeeUSD + executionDetails.spreadCostUSD,
-          ...(isCorpBond ? { corpBondDealerInventory: applyToInventory(region.bankingSector.corpBondDealerInventory) } : {}),
-          ...(isLoan ? { loanDealerInventory: applyToInventory(region.bankingSector.loanDealerInventory) } : {}),
+      updatedCompanies = [...state.companies];
+      updatedCompanies[bankIndex] = {
+        ...bank,
+        bankBalanceSheet: {
+          ...sheet,
+          dealerDeskInventory: inventory,
+          cashReservesUSD: sheet.cashReservesUSD - inventoryDeltaUSD + incomeUSD,
+          bankEquityUSD: sheet.bankEquityUSD + incomeUSD,
         },
       };
+
+      // The region's view of that book, kept in step for the readers that want one aggregate.
+      const region = updatedRegions[posData.region];
+      if (region) {
+        const view = (b: string) => Array.from(regionalDeskView(
+          updatedCompanies
+            .filter((c) => c.region === posData.region && c.isBankEntity)
+            .map((c) => c.bankBalanceSheet?.dealerDeskInventory),
+          b
+        ).entries())
+          .filter(([, usd]) => Math.abs(usd) > 1)
+          .map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD }));
+        updatedRegions[posData.region] = {
+          ...region,
+          bankingSector: {
+            ...region.bankingSector,
+            corpBondDealerInventory: view('corporate bond'),
+            loanDealerInventory: view('leveraged loan'),
+          },
+        };
+      }
     }
   }
 
   return {
     ...state,
+    companies: updatedCompanies,
     regions: updatedRegions,
     portfolio: {
       ...state.portfolio,

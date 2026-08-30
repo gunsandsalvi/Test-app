@@ -39,13 +39,15 @@ import { settlePricedOfferings } from './primary-settlement';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
+import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
 import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 
-const DEALER_SPREAD_BPS = 8;
+/** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
+const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
 
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'equity';

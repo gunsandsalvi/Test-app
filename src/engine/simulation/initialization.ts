@@ -39,7 +39,7 @@ import { SECTOR_OCCUPATION_MIX } from '../../domain/region-macro';
 import { EQUITY_RISK_PREMIUM } from '../equity-valuation';
 import { mandateAllocator } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
-import { DEALERS } from '../dealers';
+import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies } from '../companyGenerator';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
@@ -1060,7 +1060,8 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...base, intensityShare: calibratedShare };
   });
 
-  const dealers = DEALERS;
+  // G3b: the dealers the player trades with ARE the named banks' desks.
+  const dealers = dealersFromBanks(companies);
   const compositeIndices = calculateCompositeIndices(companies, regions, commodities);
   const recentIPOs: { ticker: string; name: string; category: string; week: number }[] = [];
   const recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[] = [];

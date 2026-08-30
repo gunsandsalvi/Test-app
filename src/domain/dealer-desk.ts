@@ -47,6 +47,22 @@
  */
 export const DEALER_DESK_SHARE_OF_BALANCE_SHEET = 0.25;
 
+/**
+ * The bid/ask each book's desks charge on the gross flow they facilitate — one number per book,
+ * read by that book's clearing adapter AND by the player's ticket, because they are the same
+ * quote. It also sets the WIDTH of a desk's schedule: the level a spread away in the desk's
+ * favour is where it goes to full capacity.
+ */
+export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
+  'sovereign bond': 5,
+  bill: 2,               // the tightest market there is
+  'corporate bond': 15,
+  'leveraged loan': 20,  // loan secondary markets trade wider than investment grade
+  equity: 8,
+  commodity: 15,
+  derivatives: 20,
+};
+
 /** One name a desk is long (or short, when negative) in one book. */
 export interface DealerDeskPosition {
   instrumentId: string;
