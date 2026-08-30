@@ -36,11 +36,22 @@ import { isActiveCompany } from '../../../domain/company';
 import { remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS } from '../../bootstrap/population';
 
 /**
- * The share of household income paid into pension schemes. A real policy parameter — every country
- * sets one — stated here with a single owner and read by nothing else. It becomes an outcome in
- * HH4, where cohorts have ages and a contribution is something a working cohort does.
+ * RULE 19 — `PENSION_CONTRIBUTION_RATE = 0.09` is GONE (COH2). Its own comment carried the exit
+ * condition — *"it becomes an outcome in HH4, where cohorts have ages and a contribution is
+ * something a working cohort does"* — and DEM's age structure (§7.181) met it.
+ *
+ * A contribution is not a share of income a country sets; it is the LIFE-CYCLE half of the saving
+ * a household already decides to do. The cohort build has computed exactly that number since
+ * §7.181 — `disposable x the retired share of the population`, the rate at which the working
+ * population must set aside income to support the population that is not working — and it was
+ * being accumulated into the household's own liquid stock while a flat 9% of the sector's income
+ * went into the pension funds beside it. **Two representations of one motive** (rule 3), and the
+ * stated one was the larger.
+ *
+ * The stage now collects the measured flow. A cohort squeezed out of saving contributes nothing,
+ * which is what a contribution holiday is; an ageing population contributes more, because the
+ * retired share IS the rate.
  */
-export const PENSION_CONTRIBUTION_RATE = 0.09;
 /**
  * RULE 19 — `PENSION_BENEFIT_RATE_ANNUAL = 0.05` is GONE (§7.182). It asserted a twenty-year
  * retirement as a flat drawdown rate and could not respond to an ageing population. The rate is
@@ -125,11 +136,10 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     // COH2 — CONTRIBUTIONS COME FROM THE PEOPLE WHO ARE WORKING, and benefits go to the people
     // who are not. A cohort has an age via DEM now (§7.181), so the split is real: applying the
     // contribution rate to the whole sector's income charged retirees a pension contribution.
-    const lc = reg.lifeCycleDistribution;
-    const retiredShare = Math.max(0, Math.min(1, lc?.RETIRED?.shareOfPopulation ?? 0.2));
-    const workingShare = Math.max(0, 1 - retiredShare);
-    const weeklyContributionsUSD =
-      (Math.max(0, reg.estimatedHouseholdIncomeUSD) * workingShare * PENSION_CONTRIBUTION_RATE) / 52;
+    // COH2: the contribution IS the life-cycle saving the cohorts decided on — measured, squeezed
+    // by each cohort's own budget, and already excluding retirees because it is a share of the
+    // WORKING population's disposable income (household-cohorts.ts).
+    const weeklyContributionsUSD = Math.max(0, reg.householdState?.lifeCycleSavingAnnualUSD ?? 0) / 52;
     const pensionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === region && e.entityType === 'PENSION_FUND' && !e.isDefaulted
     );

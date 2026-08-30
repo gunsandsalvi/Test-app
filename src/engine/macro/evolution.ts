@@ -1001,14 +1001,22 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     // before it sells anything, so the liquid stock drains first and only what it cannot cover
     // comes out of the invested one. That is what makes forced selling (§7.166) the END of a
     // squeeze rather than its beginning.
+    // COH2 — THE SPLIT IS BY MOTIVE, not by a portfolio weight. A household saves for two
+    // different reasons and the two go to different places: the BUFFER half stays where it can be
+    // spent, and the LIFE-CYCLE half is a pension contribution — it leaves as cash and comes back
+    // as an entitlement (`insurance-and-pensions.ts` collects exactly this number). Splitting the
+    // flow by `equityExposureShare` instead was a portfolio weight standing in for a decision the
+    // model already makes.
     const exposure = Math.max(0, Math.min(1, updatedWealthDist[t].equityExposureShare ?? 0.25));
     let liquidUSD = Math.max(0, updatedWealthDist[t].liquidSavingsUSD
       ?? Math.max(0, priorAccumulated ?? 0) * (1 - exposure));
     let investedUSD = Math.max(0, updatedWealthDist[t].investedSavingsUSD
       ?? Math.max(0, priorAccumulated ?? 0) * exposure);
+    const lifeCycleThisWeekUSD = Math.max(0,
+      Math.min(savedThisWeekUSD, (cohortResult.tierLifeCycleSavingUSD[t] ?? 0) / 52));
     if (savedThisWeekUSD >= 0) {
-      liquidUSD += savedThisWeekUSD * (1 - exposure);
-      investedUSD += savedThisWeekUSD * exposure;
+      liquidUSD += savedThisWeekUSD - lifeCycleThisWeekUSD;
+      investedUSD += lifeCycleThisWeekUSD;
     } else {
       const drawUSD = -savedThisWeekUSD;
       const fromLiquidUSD = Math.min(liquidUSD, drawUSD);
@@ -1115,6 +1123,9 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       unmodeledFinancialAssetsUSD: prevHS.unmodeledFinancialAssetsUSD ?? newEquityHoldingsUSD,
       // HH4: this week's cohort decomposition — the cross-section the aggregates above sum from.
       cohorts: cohortResult.cohorts,
+      // COH2: the life-cycle half of the saving flow, which the pension stage collects as the
+      // contribution. Measured here so the flat `PENSION_CONTRIBUTION_RATE` has nothing to do.
+      lifeCycleSavingAnnualUSD: Number(cohortResult.lifeCycleSavingAnnualUSD.toFixed(0)),
       capitalReceiptsAnnualUSD: Number((annualCapitalReceiptsUSD.depositInterestUSD + annualCapitalReceiptsUSD.dividendsUSD + annualCapitalReceiptsUSD.residualUSD).toFixed(0)),
       unmodeledCapitalReceiptShareOfIncome: prevHS.unmodeledCapitalReceiptShareOfIncome,
       // HH3: derived sums of the banks' itemized pools, carried through and overwritten by the

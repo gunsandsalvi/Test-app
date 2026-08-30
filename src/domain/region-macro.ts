@@ -258,6 +258,16 @@ export interface HouseholdState {
   /** HH4 — the ~20 occupation x wealth-tier cohorts this aggregate decomposes into. Built by
    * `macro/household-cohorts.ts` each week; their sums ARE the aggregates (asserted). */
   cohorts?: HouseholdCohort[];
+  /**
+   * COH2 — the LIFE-CYCLE half of this week's saving flow, annual USD.
+   *
+   * A household saves for two different reasons and the two go to different places: the BUFFER
+   * half stays in its own liquid stock, and this half — what it sets aside to fund the years it
+   * will not earn — is a PENSION CONTRIBUTION. It is measured in the cohort build, where the
+   * motive lives, so that `insurance-and-pensions.ts` collects a real flow instead of applying a
+   * flat rate to the whole sector's income.
+   */
+  lifeCycleSavingAnnualUSD?: number;
   /** HH4d — the households' money-fund share stock: the savings the WS7 gate diverted from
    * deposits, now a real asset line instead of money that vanished from the household view. */
   mmfSharesUSD?: number;

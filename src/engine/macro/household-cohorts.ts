@@ -247,6 +247,14 @@ export interface CohortBuildResult {
   tierSavingsUSD: Record<WealthTier, number>;
   /** Budget-weighted spend shares — the region's staple/standard/luxury split, derived. */
   spendShares: { staple: number; standard: number; luxury: number };
+  /**
+   * COH2 — the LIFE-CYCLE half of the saving flow, annual USD: what households set aside to fund
+   * the years they will not earn. It is the PENSION CONTRIBUTION, and it is carried out of here
+   * so that the pension stage stops applying a flat rate to the whole sector's income.
+   */
+  lifeCycleSavingAnnualUSD: number;
+  /** The same flow by tier, so the wealth distribution can put it where it actually goes. */
+  tierLifeCycleSavingUSD: Record<WealthTier, number>;
 }
 
 export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildResult {
@@ -429,6 +437,10 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const tierIncomeUSD = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => { tierIncomeUSD[t] = 0; });
   preliminary.forEach((x) => { tierIncomeUSD[x.c.tier] += x.dispUSD; });
+  // COH2 — the LIFE-CYCLE half of the plan, kept separately because it is a different flow with a
+  // different destination: it is the pension contribution (insurance-and-pensions.ts), where the
+  // buffer half stays in the household's own liquid stock.
+  const cohortLifeCycleSavingUSD: number[] = [];
   const cohortSavingsUSD = preliminary.map((x) => {
     const tier = x.c.tier;
     // This cohort's slice of its tier's liquid assets, by its slice of its tier's income.
@@ -443,12 +455,15 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     // rate is exactly the retired share of the population (§7.169) — no coefficient, and it comes
     // from the real age structure now that one exists.
     const lifeCycleSavingUSD = x.dispUSD * Math.max(0, Math.min(1, retiredShareOfPopulation));
+    cohortLifeCycleSavingUSD.push(lifeCycleSavingUSD);
     return lifeCycleSavingUSD + (targetBufferUSD - liquidUSD) / WEALTH_SPENDDOWN_YEARS;
   });
 
   const tierDisposableUSD = {} as Record<WealthTier, number>;
   const tierSavingsUSD = {} as Record<WealthTier, number>;
-  WEALTH_TIERS.forEach((t) => { tierDisposableUSD[t] = 0; tierSavingsUSD[t] = 0; });
+  let lifeCycleSavingAnnualUSD = 0;
+  const tierLifeCycleSavingUSD = {} as Record<WealthTier, number>;
+  WEALTH_TIERS.forEach((t) => { tierDisposableUSD[t] = 0; tierSavingsUSD[t] = 0; tierLifeCycleSavingUSD[t] = 0; });
 
   const exposureNorm = WEALTH_TIERS.reduce(
     (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfNetWorthUSD ?? 0) * (wealthDistribution[t]?.equityExposureShare ?? 0.25),
@@ -485,6 +500,13 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     );
     tierDisposableUSD[c.tier] += dispUSD;
     tierSavingsUSD[c.tier] += squeezedSavingsUSD;
+    // The squeeze falls on the whole plan, so the life-cycle half is scaled by what survived it:
+    // a cohort that cannot save cannot contribute either, which is what a contribution holiday IS.
+    const cohortLifeCycleAfterSqueezeUSD = plannedSavingsUSD > 0
+      ? cohortLifeCycleSavingUSD[i] * (squeezedSavingsUSD / plannedSavingsUSD)
+      : 0;
+    lifeCycleSavingAnnualUSD += cohortLifeCycleAfterSqueezeUSD;
+    tierLifeCycleSavingUSD[c.tier] += cohortLifeCycleAfterSqueezeUSD;
     return {
       occupation: c.occ,
       tier: c.tier,
@@ -530,5 +552,5 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     : { staple: 0.35, standard: 0.50, luxury: 0.15 };
 
   const totalConsumptionBudgetUSD = cohorts.reduce((a, c) => a + c.consumptionBudgetUSD, 0);
-  return { cohorts, totalConsumptionBudgetUSD, totalDisposableIncomeUSD, tierDisposableUSD, tierSavingsUSD, spendShares };
+  return { cohorts, totalConsumptionBudgetUSD, totalDisposableIncomeUSD, tierDisposableUSD, tierSavingsUSD, spendShares, lifeCycleSavingAnnualUSD, tierLifeCycleSavingUSD };
 }
