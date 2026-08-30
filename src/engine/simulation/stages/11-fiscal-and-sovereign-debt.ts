@@ -389,7 +389,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // smooth expectation; the PAYMENT is per segment.
     let smeAccrualWeeklyUSD = 0;
     (reg.smePools || []).forEach((sg) => {
-      const accrualUSD = Math.max(0, sg.annualRevenueUSD * sg.marginPct) * (reg.effectiveTaxRate ?? 0.21) / 52;
+      const accrualUSD = Math.max(0, sg.annualRevenueUSD * sg.marginPct) * reg.effectiveTaxRate / 52;
       smeAccrualWeeklyUSD += accrualUSD;
       sg.accruedTaxUSD = (sg.accruedTaxUSD ?? 0) + accrualUSD;
       if (isQuarterEnd && (sg.accruedTaxUSD ?? 0) > 0) {

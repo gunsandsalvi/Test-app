@@ -237,7 +237,12 @@ const NET_MIGRATION_RATE_ANNUAL = 0.0;
  *  tier at 2.7x EBITDA in all four regions; the shape is struck around that and re-centred on the
  *  pool's real book weekly, so this sets the opening spread and never the debt itself. */
 const SME_SEED_LEVERAGE_MULTIPLE = 2.7;
-const EFFECTIVE_TAX_RATE = 0.31;
+/**
+ * TAXR — the corporate tax rate a region OPENS at. One owner (rule 3): every corporate tax
+ * number in the model reads `region.effectiveTaxRate`, which starts here and which the fiscal
+ * stance then moves. It is a seed, not a weekly input (§7.4).
+ */
+export const EFFECTIVE_TAX_RATE = 0.31;
 /**
  * The size of the opening sovereign stack, as a multiple of nominal GDP. A SEED primitive with
  * one use: it sizes `govDebtTranches` at week 0 and nothing thereafter. FRM deleted the weekly

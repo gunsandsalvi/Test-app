@@ -336,12 +336,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       .filter(t => !t.isBankFacility && t.rateType !== 'FIXED')
       .reduce((sum, t) => sum + dueCashUSD(t), 0);
     const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
-    // RULE 3, OPEN: the CORPORATE tax rate is a bare literal here, and it is the only one the
-    // model has — `region.effectiveTaxRate` (which the fiscal stance drifts weekly) and
-    // `HOUSEHOLD_EFFECTIVE_TAX_RATE` govern the other two bases, and neither reaches this. So the
-    // government's own tax policy cannot touch corporate taxation at all, while stage 11 collects
-    // the proceeds as `taxCollectedCorporateUSD` and counts them in revenue. Owner: TAXR.
-    const taxRate = 0.21;
+    // TAXR — THE CORPORATE RATE HAS AN OWNER NOW, AND IT IS THE ONE POLICY SETS.
+    //
+    // This was a bare `0.21` literal, and the model had THREE tax rates with no owner between
+    // them: this one governed corporate NET INCOME, `region.effectiveTaxRate` (which the fiscal
+    // stance drifts weekly, seeded at 0.31) governed the corporate tax ACCRUAL forty lines below
+    // and the SME pools' in stage 11, and `HOUSEHOLD_EFFECTIVE_TAX_RATE` governed households. So
+    // a firm reported its earnings after 21% tax and remitted cash at 31% — the P&L and the
+    // payment disagreed about the same liability (rule 14) — and the government's own tax policy
+    // could not touch corporate taxation at all however hard it pulled its one lever (rule 13).
+    //
+    // One rate, from the region that sets it. It is the same number the accrual, the SME pools
+    // and the WACC already use, so the four of them stop being four opinions.
+    const taxRate = reg.effectiveTaxRate;
 
     let updatedProductLines = comp.productLines || []; let newRevenue = 0;
     let baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
@@ -1057,7 +1064,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       void marketFixedInterestWeeklyUSD; void marketFloatingInterestWeeklyUSD;
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
-      const weeklyAccrualUSD = Math.max(0, (newEbit - annualInterest)) * (reg.effectiveTaxRate ?? 0.21) / 52;
+      const weeklyAccrualUSD = Math.max(0, (newEbit - annualInterest)) * taxRate / 52;
       accruedTaxUSD += weeklyAccrualUSD;
       ctx.taxAccruedByRegion[comp.region] = (ctx.taxAccruedByRegion[comp.region] ?? 0) + weeklyAccrualUSD;
       // currentWeekMod13 runs 1..13, never 0 — the quarter ends on 13.

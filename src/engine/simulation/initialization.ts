@@ -7,6 +7,7 @@ import { PREMIUM_TO_SURPLUS_RATIO, INSTITUTIONAL_CAPITAL_RATIO } from '../../dom
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit } from './stages/bank-lending';
 import { leverageHeadroomUSD } from '../macro/banking';
+import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
 
 /**
  * OWN6 — the institutional sector's OPENING BOOK, and the one thing it is not.
@@ -919,7 +920,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
 
     // The same effective rate the macro bootstrap uses, so the seed's after-tax shape matches
     // what stage 08 will produce from week 1.
-    const INSTITUTIONAL_EFFECTIVE_TAX_RATE = 0.31;
+    // TAXR: an institution is taxed on its earnings like any other company, so it opens on the
+    // same rate rather than on a second copy of the number (rule 3).
+    const INSTITUTIONAL_EFFECTIVE_TAX_RATE = EFFECTIVE_TAX_RATE;
     // ---- HH1b: seed an institution at the size it actually manages (§7.4, seed shape = engine
     // shape). The Company shell and the InstitutionalEntity are the SAME firm, and their two
     // notions of AUM disagreed: the generator seeded `aumUSD` as a multiple of an operating
