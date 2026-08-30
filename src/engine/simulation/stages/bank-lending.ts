@@ -39,6 +39,7 @@ import {
   MORTGAGE_RISK_WEIGHT, CONSUMER_CREDIT_RISK_WEIGHT, householdBookRwaUSD, annuityWeeklyPrincipalUSD,
   MORTGAGE_TERM_WEEKS, MORTGAGE_SEED_WAM_WEEKS, CONSUMER_TERM_WEEKS, CONSUMER_TERM_SEED_WAM_WEEKS,
   MORTGAGE_SEED_VINTAGE_COHORTS, MortgageVintage, bookMortgageSeverity, vintageCurrentLtv,
+  MORTGAGE_FIXED_PERIOD_WEEKS, MORTGAGE_DSTI_LIMIT,
   mortgageSeverityAtLtv,
   MORTGAGE_SPREAD_OVER_10Y_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
@@ -459,6 +460,10 @@ export function migrateHouseholdDebtAtSeed(
             originationHomePriceUSD: priceNowUSD,
             rateAnnual: Number(mortgageRate.toFixed(4)),
             wamWeeks: remainingWeeks,
+            // Where each cohort sits in its own fix cycle. A book written continuously has its
+            // resets spread continuously, so some share comes due every week rather than the
+            // whole book repricing on one day.
+            fixedForWeeks: Math.max(1, MORTGAGE_FIXED_PERIOD_WEEKS - (ageWeeks % MORTGAGE_FIXED_PERIOD_WEEKS)),
             originatedWeek: -ageWeeks,
           });
         }
@@ -628,6 +633,7 @@ export function runBankHouseholdLending(
   // the price it was written at, so the losses come from the part of the distribution that is
   // actually above the kink — which is where every dollar of real mortgage loss comes from.
   const medianHomePriceUSD = Math.max(0, reg.housingMarket?.medianHomePriceUSD ?? 0);
+  const marketMortgageRate = currentMortgageRateAnnual(reg);
   const mortgagePool = pools.find((p) => p.kind === 'MORTGAGE');
   const mortgageSeverity = bookMortgageSeverity(mortgagePool?.vintages, medianHomePriceUSD);
   const mortgageLossRateAnnual = unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * mortgageSeverity;
@@ -649,6 +655,7 @@ export function runBankHouseholdLending(
       // new expensive ones behaves like one — which is what makes a mortgage book slow to
       // reprice, and what the single blended WAC could only approximate.
       const vintages = pl.vintages ?? [];
+      let resetPrincipalUSD = 0;
       let interestUSD = 0;
       let scheduledUSD = 0;
       let lossUSD = 0;
@@ -661,13 +668,32 @@ export function runBankHouseholdLending(
         // Losses fall on a vintage at ITS OWN severity: the underwater cohorts carry them, which
         // is the entire reason the book is cut this way.
         const vSeverity = mortgageSeverityAtLtv(vintageCurrentLtv(v, medianHomePriceUSD));
+        // HSG — AND AT ITS OWN FREQUENCY. What makes a borrower default is the payment against
+        // the income, so a cohort paying above the market rate it could get today is under more
+        // strain than one paying below it. That is how a reset turns into a delinquency instead
+        // of only into a cash-flow line, and it is measured off the vintage's own coupon rather
+        // than stated.
+        const vBurden = Math.max(0.25, Math.min(4, v.rateAnnual / Math.max(0.005, marketMortgageRate)));
         const vLossUSD = (v.principalUSD
-          * unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * vSeverity) / 52;
+          * unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * vBurden * vSeverity) / 52;
         interestUSD += vInterestUSD;
         scheduledUSD += vScheduledUSD;
         lossUSD += vLossUSD;
         v.principalUSD = Math.max(0, v.principalUSD - vScheduledUSD - vLossUSD);
         v.wamWeeks = Math.max(0, v.wamWeeks - 1);
+
+        // HSG — THE RESET. A fix runs out and the loan reprices to whatever the market is now.
+        // This is the mechanism the model had none of: before it, a borrower only ever paid the
+        // rate it agreed to, no existing household was ever reached by a rate rise, and
+        // "difficulty refinancing when rates are high" could not happen to anyone (§6.1). A
+        // household that borrowed at 3% now owes payments at 7%, its debt service jumps, and
+        // that lands in consumption and in its own default risk below.
+        v.fixedForWeeks -= 1;
+        if (v.fixedForWeeks <= 0) {
+          v.rateAnnual = Number(currentMortgageRateAnnual(reg).toFixed(4));
+          v.fixedForWeeks = MORTGAGE_FIXED_PERIOD_WEEKS;
+          resetPrincipalUSD += v.principalUSD;
+        }
       });
       interestWeeklyUSD += interestUSD;
       principalWeeklyUSD += scheduledUSD;
@@ -687,10 +713,36 @@ export function runBankHouseholdLending(
       }
       mortgageDischargeUSD += dischargeUSD;
 
-      // Origination: this bank's share of the real housing turnover, at the current rate.
-      const newRate = currentMortgageRateAnnual(reg);
+      // HSG — WHAT A BORROWER CAN AFFORD, AND THEREFORE WHAT IT BORROWS.
+      //
+      // Origination was `turnover x LTV x bank appetite` with the mortgage rate NOWHERE IN IT:
+      // the rate was computed on the line above and used only to set the coupon, so the same
+      // volume of houses changed hands at 3% and at 12%, and the only thing that could ever
+      // decline a household was the BANK's capital position — a lender constraint wearing a
+      // borrower's clothes (§6.1).
+      //
+      // What is constrained in reality is the PAYMENT, so borrowing capacity is the loan whose
+      // annuity payment fits inside the lending standard: `DSTI x income / annuity factor`. The
+      // annuity factor rises with the rate, so the same household borrows less at 7% than at 3%,
+      // against the same house. That is how policy reaches a housing market.
+      const newRate = marketMortgageRate;
+      const householdsCount = Math.max(1, (reg.totalPopulation ?? 0) / AVERAGE_HOUSEHOLD_SIZE);
+      const weeklyIncomePerHouseholdUSD = Math.max(0, reg.estimatedHouseholdIncomeUSD) / 52 / householdsCount;
+      const affordablePaymentUSD = weeklyIncomePerHouseholdUSD * MORTGAGE_DSTI_LIMIT;
+      // Invert the annuity: the principal whose weekly payment is exactly what is affordable.
+      const rWeekly = Math.max(0.00001, newRate / 52);
+      const annuityFactor = rWeekly / (1 - Math.pow(1 + rWeekly, -MORTGAGE_TERM_WEEKS));
+      const affordableLoanUSD = affordablePaymentUSD / annuityFactor;
+      const affordableLtv = medianHomePriceUSD > 0 ? affordableLoanUSD / medianHomePriceUSD : MORTGAGE_LTV_AT_ORIGINATION;
+      // A buyer borrows the lesser of what the lending standard allows on LTV and what its own
+      // income supports. When affordability binds, the deal is smaller.
+      const bindingLtv = Math.max(0, Math.min(MORTGAGE_LTV_AT_ORIGINATION, affordableLtv));
+      // ...and when it binds hard enough, the deal does not happen at all: a buyer who cannot
+      // raise the loan does not complete, so TRANSACTIONS fall too, not just loan sizes. This is
+      // the half of `HOUSING_TURNOVER_RATE_ANNUAL`'s constancy that belongs to the borrower.
+      const affordabilityGate = Math.max(0, Math.min(1, affordableLtv / Math.max(0.01, MORTGAGE_LTV_AT_ORIGINATION)));
       const demandUSD = (housingStockUSD * HOUSING_TURNOVER_RATE_ANNUAL / 52)
-        * MORTGAGE_LTV_AT_ORIGINATION * appetite * bankShare;
+        * bindingLtv * affordabilityGate * appetite * bankShare;
       const grantedUSD = Math.min(demandUSD, headroomUSD() / Math.max(0.01, MORTGAGE_RISK_WEIGHT));
       declinedOriginationUSD += demandUSD - grantedUSD;
       if (grantedUSD > 0) {
@@ -705,6 +757,7 @@ export function runBankHouseholdLending(
           originationHomePriceUSD: Math.max(1, medianHomePriceUSD),
           rateAnnual: Number(newRate.toFixed(4)),
           wamWeeks: MORTGAGE_TERM_WEEKS,
+          fixedForWeeks: MORTGAGE_FIXED_PERIOD_WEEKS,
           originatedWeek: currentWeek,
         });
         mortgageOriginationUSD += grantedUSD;

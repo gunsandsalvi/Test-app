@@ -951,6 +951,28 @@ const hhModule: HarnessModule = (() => {
           const stock = Math.max(0, h.housingStockUSD ?? 0);
           return stock > 0 ? Math.max(0, h.mortgageDebtUSD ?? 0) / stock : 0;
         })();
+        // HSG — does the RATE reach a borrower? Two things it must do: shrink what a household
+        // can borrow (affordability), and reach households who already borrowed (resets).
+        const reg2 = s.regions[r];
+        const hh = Math.max(1, (reg2.totalPopulation ?? 0) / 2.5);
+        const wkInc = Math.max(0, reg2.estimatedHouseholdIncomeUSD) / 52 / hh;
+        const mortRate = Math.max(0.005, (reg2.zeroRates?.tenor10Y ?? reg2.policyRate) + 0.017);
+        const afford = (rate: number) => {
+          const rw = Math.max(0.00001, rate / 52);
+          const af = rw / (1 - Math.pow(1 + rw, -30 * 52));
+          return (wkInc * 0.35) / af;
+        };
+        // Affordability is a constraint WITH SLACK, not a dead one: report where it starts to
+        // bind, so "it is not binding" is a statement about house prices rather than about the
+        // mechanism. A DSTI limit is supposed to have slack in a cheap market and bite in an
+        // expensive one — that is what caps a housing boom.
+        const priceToIncome = price / Math.max(1, wkInc * 52);
+        const bindsAbove = (afford(mortRate) / Math.max(1, wkInc * 52)) / 0.80;
+        out.push(`      rate ${pct(mortRate)}: affordable LTV ${(afford(mortRate) / Math.max(1, price)).toFixed(2)} (cap 0.80) | at +300bps ${(afford(mortRate + 0.03) / Math.max(1, price)).toFixed(2)}`);
+        out.push(`      house price ${priceToIncome.toFixed(1)}x income; the DSTI limit starts binding above ${bindsAbove.toFixed(1)}x — slack, not inert`);
+        const resettingUSD = vs.filter((v: any) => v.fixedForWeeks <= 52).reduce((a, v) => a + v.principalUSD, 0);
+        const coupons = vs.map((v: any) => v.rateAnnual).sort((a, b) => a - b);
+        out.push(`      coupons p10 ${pct(coupons[Math.floor(coupons.length * 0.1)])} p90 ${pct(coupons[Math.floor(coupons.length * 0.9)])} | resetting within a year: ${pct(book > 0 ? resettingUSD / book : 0)} of the book`);
         [0.20, 0.35].forEach(fall => {
           const k = 1 / (1 - fall);
           const stressed = vs.reduce((a, v) => a + v.principalUSD * sev(ltvOf(v) * k), 0) / Math.max(1, book);

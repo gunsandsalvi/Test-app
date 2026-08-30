@@ -180,8 +180,14 @@ export interface MortgageVintage {
   originationHomePriceUSD: number;
   /** Fixed at origination: what this borrower actually pays, not what the book averages to. */
   rateAnnual: number;
-  /** Weeks left on this vintage's own annuity clock. At zero it must refinance (HSG). */
+  /** Weeks left on this vintage's own annuity clock. */
   wamWeeks: number;
+  /**
+   * HSG — weeks until this vintage's RATE RESETS to whatever the market is then. A 30-year loan
+   * on a 5-year fix, which is what makes a rate rise reach existing borrowers instead of only
+   * new ones.
+   */
+  fixedForWeeks: number;
   originatedWeek: number;
 }
 
@@ -240,6 +246,28 @@ export const MORTGAGE_SEED_WAM_WEEKS = 21 * 52;
  * a thirty-year term, which is the natural grid for a book whose loans are annual cohorts.
  */
 export const MORTGAGE_SEED_VINTAGE_COHORTS = 30;
+
+/**
+ * HSG — how long a mortgage's rate is FIXED FOR, which is not how long the loan runs.
+ *
+ * A PRODUCT primitive (§5-DIST-P's third category — an institution's terms, chosen, not derived).
+ * It is the single most important thing about a mortgage book that this model did not have: a
+ * 30-year loan on a 5-year fix RESETS, and a household that borrowed at 3% discovers it owes
+ * payments at 7%. Without it no borrower ever faced a rate they did not agree to, and "difficulty
+ * refinancing when rates are high" could not happen to anybody (§6.1).
+ */
+export const MORTGAGE_FIXED_PERIOD_WEEKS = 5 * 52;
+
+/**
+ * HSG — the share of income a lender will let a borrower commit to mortgage payments.
+ *
+ * A LENDING STANDARD: an institutional rule a regulator and a credit committee choose, not a
+ * fact to be derived (§5-DIST-P). It is what makes borrowing capacity depend on the RATE — the
+ * same house at 7% needs a smaller loan than at 3%, because the payment is what is constrained —
+ * and it is the channel by which monetary policy actually reaches a housing market. Origination
+ * volume used to be `turnover x LTV x bank appetite`, with the rate nowhere in it.
+ */
+export const MORTGAGE_DSTI_LIMIT = 0.35;
 /** Auto/personal term credit: 5-year annuities, seeded mid-life. */
 export const CONSUMER_TERM_WEEKS = 5 * 52;
 export const CONSUMER_TERM_SEED_WAM_WEEKS = Math.round(2.5 * 52);
