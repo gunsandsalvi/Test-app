@@ -408,8 +408,12 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   // and this explains it: a tier whose net worth is a house and a pension holds little LIQUID,
   // sits below its buffer, and saves out of income like a poor household — which is what
   // wealthy-hand-to-mouth IS, arrived at rather than assumed.
-  const accumulatedNorm = WEALTH_TIERS.reduce(
-    (a, t) => a + Math.max(0, wealthDistribution[t]?.accumulatedSavingsUSD ?? 0), 0);
+  // COH1: the LIQUID stock, not the whole accumulation. A buffer is what a household can spend
+  // this week; a house and a pension are not it, and using the total made every tier look as
+  // liquid as its saving history rather than as its portfolio.
+  const liquidOf = (t: WealthTier): number => Math.max(0,
+    wealthDistribution[t]?.liquidSavingsUSD ?? wealthDistribution[t]?.accumulatedSavingsUSD ?? 0);
+  const accumulatedNorm = WEALTH_TIERS.reduce((a, t) => a + liquidOf(t), 0);
   // Who holds the liquid assets is whose saving accumulated (§7.144's own finding). Before any
   // saving has accumulated there is nothing to split by, so it follows income — which is what
   // the opening weeks of a cold start look like (§7.4).
@@ -420,7 +424,7 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
   const incomeNorm = WEALTH_TIERS.reduce(
     (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0), 0);
   const tierLiquidShare = (t: WealthTier): number => accumulatedNorm > 0
-    ? Math.max(0, wealthDistribution[t]?.accumulatedSavingsUSD ?? 0) / accumulatedNorm
+    ? liquidOf(t) / accumulatedNorm
     : (incomeNorm > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0) / incomeNorm : 0.25);
   const tierIncomeUSD = {} as Record<WealthTier, number>;
   WEALTH_TIERS.forEach((t) => { tierIncomeUSD[t] = 0; });

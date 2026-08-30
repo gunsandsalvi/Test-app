@@ -43,6 +43,10 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
       // accumulated savings or income; with a stock here from week 1 the fallbacks are never
       // reached, so the table has nothing left to do (§7.171).
       accumulatedSavingsUSD: Number((inc * 0.15).toFixed(0)),
+      // COH1: the opening stock split by this tier's own exposure — spendable and invested
+      // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
+      liquidSavingsUSD: Number((inc * 0.15 * 0.95).toFixed(0)),
+      investedSavingsUSD: Number((inc * 0.15 * 0.05).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.02).toFixed(0)),
       savingsRate: 0.01,
       equityExposureShare: 0.05,
@@ -52,6 +56,10 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
       shareOfHouseholds: 0.40,
       shareOfIncomeUSD: Number((inc * 0.45).toFixed(0)),
       accumulatedSavingsUSD: Number((inc * 0.45).toFixed(0)),
+      // COH1: the opening stock split by this tier's own exposure — spendable and invested
+      // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
+      liquidSavingsUSD: Number((inc * 0.45 * 0.75).toFixed(0)),
+      investedSavingsUSD: Number((inc * 0.45 * 0.25).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.28).toFixed(0)),
       savingsRate: 0.06,
       equityExposureShare: 0.25,
@@ -61,6 +69,10 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
       shareOfHouseholds: 0.09,
       shareOfIncomeUSD: Number((inc * 0.25).toFixed(0)),
       accumulatedSavingsUSD: Number((inc * 0.25).toFixed(0)),
+      // COH1: the opening stock split by this tier's own exposure — spendable and invested
+      // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
+      liquidSavingsUSD: Number((inc * 0.25 * 0.5).toFixed(0)),
+      investedSavingsUSD: Number((inc * 0.25 * 0.5).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.38).toFixed(0)),
       savingsRate: 0.18,
       equityExposureShare: 0.50,
@@ -70,6 +82,10 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
       shareOfHouseholds: 0.01,
       shareOfIncomeUSD: Number((inc * 0.15).toFixed(0)),
       accumulatedSavingsUSD: Number((inc * 0.15).toFixed(0)),
+      // COH1: the opening stock split by this tier's own exposure — spendable and invested
+      // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
+      liquidSavingsUSD: Number((inc * 0.15 * 0.3).toFixed(0)),
+      investedSavingsUSD: Number((inc * 0.15 * 0.7).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.32).toFixed(0)),
       savingsRate: 0.35,
       equityExposureShare: 0.70,

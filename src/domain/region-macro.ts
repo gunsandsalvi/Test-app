@@ -31,6 +31,28 @@ export interface WealthTierData {
    */
   accumulatedSavingsUSD?: number;
   /**
+   * COH1 — WHAT IS SPENDABLE NOW, AND WHAT IS ACCUMULATED. Two stocks, because they are two
+   * things, and one number was doing both jobs.
+   *
+   * `accumulatedSavingsUSD` above drove the DEPOSIT split, the equity-like split, the private-
+   * business split and the institutional-claims split — every asset class at once, off one stock
+   * that only ever tracked the saving FLOW and never where the saving went. A tier that put
+   * everything into a house and a pension therefore looked as liquid as one that held cash.
+   *
+   * The saving is allocated as it arrives, by the tier's own measured appetite for risky illiquid
+   * ownership: what it does not put at risk stays LIQUID, the rest is INVESTED. Dissaving runs
+   * the other way and draws the liquid stock FIRST — a household spends its buffer before it
+   * sells anything, which is what makes forced selling (§7.166) a thing that happens at the end
+   * of a squeeze rather than at the start of one.
+   *
+   * This is what the buffer rule needs to have something to be a buffer OF, and it makes the
+   * wealthy-hand-to-mouth middle causal: house-rich and pension-rich is a large INVESTED stock
+   * and a small LIQUID one, so the tier sits below its buffer and saves out of income like a poor
+   * household. `accumulatedSavingsUSD` remains their sum.
+   */
+  liquidSavingsUSD?: number;
+  investedSavingsUSD?: number;
+  /**
    * RULE 19 — this tier's MEASURED debt and institutional claims, so the cohort build can weight
    * by them instead of by a stated table.
    *

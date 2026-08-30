@@ -988,10 +988,41 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     // A tier that saves more now gets richer, which is the mechanism the stated split replaced.
     const priorAccumulated = updatedWealthDist[t].accumulatedSavingsUSD;
     const savedThisWeekUSD = (cohortResult.tierSavingsUSD[t] ?? 0) / 52;
+
+    // COH1 — THE SAVING IS ALLOCATED AS IT ARRIVES, and dissaving draws the buffer first.
+    //
+    // One stock was driving the deposit split, the equity split, the private-business split and
+    // the institutional-claims split at once — so a tier that put everything into a house and a
+    // pension looked exactly as liquid as one that held cash, and the buffer rule had nothing
+    // real to be a buffer of. What a tier does not put at risk stays LIQUID; the rest is
+    // INVESTED, by the appetite the model already measures for it.
+    //
+    // The dissaving branch is the half that matters behaviourally: a household spends its buffer
+    // before it sells anything, so the liquid stock drains first and only what it cannot cover
+    // comes out of the invested one. That is what makes forced selling (§7.166) the END of a
+    // squeeze rather than its beginning.
+    const exposure = Math.max(0, Math.min(1, updatedWealthDist[t].equityExposureShare ?? 0.25));
+    let liquidUSD = Math.max(0, updatedWealthDist[t].liquidSavingsUSD
+      ?? Math.max(0, priorAccumulated ?? 0) * (1 - exposure));
+    let investedUSD = Math.max(0, updatedWealthDist[t].investedSavingsUSD
+      ?? Math.max(0, priorAccumulated ?? 0) * exposure);
+    if (savedThisWeekUSD >= 0) {
+      liquidUSD += savedThisWeekUSD * (1 - exposure);
+      investedUSD += savedThisWeekUSD * exposure;
+    } else {
+      const drawUSD = -savedThisWeekUSD;
+      const fromLiquidUSD = Math.min(liquidUSD, drawUSD);
+      liquidUSD -= fromLiquidUSD;
+      investedUSD = Math.max(0, investedUSD - (drawUSD - fromLiquidUSD));
+    }
     updatedWealthDist[t] = {
       ...updatedWealthDist[t],
       shareOfIncomeUSD: Number(Math.max(1000, cohortResult.tierDisposableUSD[t] ?? updatedWealthDist[t].shareOfIncomeUSD).toFixed(0)),
-      accumulatedSavingsUSD: Number((Math.max(0, priorAccumulated ?? 0) + savedThisWeekUSD).toFixed(0)),
+      liquidSavingsUSD: Number(liquidUSD.toFixed(0)),
+      investedSavingsUSD: Number(investedUSD.toFixed(0)),
+      // Their SUM, kept as the one number readers that want the whole stock should use (rule 3:
+      // it is derived here, never accumulated separately).
+      accumulatedSavingsUSD: Number((liquidUSD + investedUSD).toFixed(0)),
     };
   });
 

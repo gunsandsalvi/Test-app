@@ -186,11 +186,16 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // The stated weights remain the OPENING CONDITION only, used until the accumulation has
       // anything in it (§7.4: a seed may state what the mechanism will then own). This is the
       // largest of the nine tables §6.3-A records, and the first of them to become a measurement.
+      // COH1 — DEPOSITS FOLLOW THE LIQUID STOCK, not the whole accumulation. One number used to
+      // drive this split and the three below it, so a tier's saving backed every asset class at
+      // once and a house-rich, pension-rich tier looked as cash-rich as one holding deposits.
       const accumulatedByTier = WEALTH_TIERS.map((t: WealthTier) =>
         Math.max(0, reg.wealthDistribution?.[t]?.accumulatedSavingsUSD ?? 0));
-      const accumulatedTotal = accumulatedByTier.reduce((a, b) => a + b, 0);
-      const depositShareOf = (t: WealthTier, i: number) =>
-        accumulatedTotal > 0 ? accumulatedByTier[i] / accumulatedTotal : 0;
+      const liquidByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
+        Math.max(0, reg.wealthDistribution?.[t]?.liquidSavingsUSD ?? accumulatedByTier[i]));
+      const liquidTotal = liquidByTier.reduce((a, b) => a + b, 0);
+      const depositShareOf = (_t: WealthTier, i: number) =>
+        liquidTotal > 0 ? liquidByTier[i] / liquidTotal : 0;
 
       // DIST/COH — AND THE OTHER FINANCIAL SPLITS FALL OUT OF THE SAME TWO MEASUREMENTS.
       //
@@ -210,10 +215,15 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       // Equity-like and private business share a driver deliberately: both are appetite for risky
       // illiquid ownership, and the model measures ONE such appetite. Two tables with one cause is
       // one derivation, not two (rule 3).
+      // ...and the INVESTED stock is what backs them. It is the saving that was actually put
+      // away, split by the same appetite that decided to put it there — so the two halves of the
+      // balance sheet are now two stocks rather than one wearing two hats.
+      const investedByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
+        Math.max(0, reg.wealthDistribution?.[t]?.investedSavingsUSD ?? accumulatedByTier[i]));
       const riskyByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        accumulatedByTier[i] * Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0));
+        investedByTier[i] * Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0));
       const cautiousByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
-        accumulatedByTier[i] * Math.max(0, 1 - Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0)));
+        investedByTier[i] * Math.max(0, 1 - Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0)));
       const riskyTotal = riskyByTier.reduce((a, b) => a + b, 0);
       const cautiousTotal = cautiousByTier.reduce((a, b) => a + b, 0);
       const riskyShareOf = (t: WealthTier, i: number) =>
