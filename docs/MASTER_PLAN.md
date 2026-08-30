@@ -1785,3 +1785,35 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        built and run once at the end rather than at each phase. It passed. Had it not, five phases
        of state-layer work would have had to be bisected — the commits are separate precisely so
        that would have been possible.
+219. **THE THREE CLAIMS UNDER THE REBUILD, TESTED.** §7.216–218 twice projected a speedup from a
+     number whose cause had not been established. These are the measurements that should have come
+     first, and one of them refutes the mechanism while confirming the conclusion.
+     - **A. WHERE THE CLEARING TIME GOES.** The clearing family is **563 ms/week** inclusive
+       (05-unit-bidding 278, corporate bonds 70, equities 59, loans 56, short debt 42, securities
+       lending 48, sovereigns 10). The actual clearing — `clearFinancialAsset` and `clearBook` and
+       everything beneath them — is **~120 ms**. **So ~440 ms is the FUNNEL, not the auction**, and
+       it is the largest single block in the engine. (Stage 08 is 327 ms INCLUSIVE; the 196 ms
+       quoted in §7.218 was self time, and that understatement is on me.)
+     - **B. THE SERIAL FRACTION IS 12%.** Classified over the whole stage profile: 1,050 ms is work
+       over independent entities (companies, books, sub-unit markets, funds, estates, register
+       rows) and 147 ms is whole-world reduction (settlement, fiscal, the central bank, the region
+       scalars). **88% shardable** — better than the 85% the projection assumed. Amdahl gives 2.92×
+       at four cores, 4.31× at eight.
+     - **C. THE ADAPTERS ARE NOT ARITHMETIC — 2.8 ms OF THEM IS.** Every named pricing function in
+       the books — reservation spread, expected loss, capital charge, the distressed reservation —
+       totals **2.8 ms a week**. The other ~437 ms is gathering inputs off the object graph,
+       building a plan object per (entity × issuer) pair and allocating an array per book.
+     - **WHICH KILLS THE MECHANISM I PROPOSED AND STRENGTHENS THE CASE.** "A participant's schedule
+       is STATE" is wrong: `expectedLossBps` and `liveFloatUSD` move every week, so most pairs must
+       be recomputed and caching them saves nothing. **The correct statement is that the schedule
+       should be computed INTO COLUMNS rather than into objects** — same arithmetic, same weekly
+       recomputation, written into preallocated `Float64Array`s the kernel already reads. 2.8 ms of
+       maths does not need 437 ms of packaging.
+     - **THE PROJECTION, REBUILT ON MEASURED PARTS:** funnel 440 → ~20, kernel 120 unchanged
+       (it IS the simulation), stage 08 327 → ~60, everything else ~515 → ~100 with the GC gone.
+       **Single-threaded ~300 ms; at 88% parallel on four cores ~100 ms.** That is AT the line, not
+       under it — eight cores or a sharded kernel puts it clear.
+     - **The rule this record exists to enforce:** three projections in this file were made from a
+       real number with an unestablished cause, and all three were wrong (§7.213's "no hot spot
+       left", §7.216's "columnar gives 10×", §7.218's own correction). **Establish the cause, then
+       project.** These three tests cost under an hour.
