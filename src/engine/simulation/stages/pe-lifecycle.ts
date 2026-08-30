@@ -77,15 +77,15 @@ export function publicComparableEvMultiple(
 /**
  * Share of the purchase price funded with new leveraged debt — the defining feature of an LBO.
  *
- * RULE 13, OPEN: the deal's capital structure is decided BEFORE the market prices it. A real
- * sponsor levers as far as lenders will fund at a margin it will accept, and this model has the
- * machinery to answer that — 07d clears the loan, WS8 lets the issuer walk away at its own
- * threshold, and the book can decline. So the debt share should be the OUTCOME of what the loan
- * market takes, not an input to it. As written, a sponsor uses 55% debt in a shut market and in
- * a wide-open one alike. Owner: HF or G5, whichever gives sponsors real financing
- * decisions.
+ * HF4 — the capital structure is now the OUTCOME, not the input. `LBO_DEBT_SHARE = 0.55` had a
+ * sponsor using 55% debt in a shut market and a wide-open one alike, decided before the market
+ * priced it. A real sponsor levers as far as the covenant allows and as far as lenders will fund
+ * at a margin it accepts, and the machinery to answer that is already here: the financing is a
+ * real primary offering in 07d, the sponsor rides a walk-away margin on it, and the deal simply
+ * does not happen when the loan market will not clear inside it. So the ask is the covenant
+ * maximum, the equity cheque is what is left, and the debt share of any completed deal is
+ * whatever the market and the covenant between them produced.
  */
-const LBO_DEBT_SHARE = 0.55;
 /** Leverage a sponsor will not exceed on a target, in debt/EBITDA — the lenders' covenant. */
 const LBO_MAX_LEVERAGE = 6.0;
 /** Weeks a sponsor holds before it will consider an exit. */
@@ -341,12 +341,15 @@ export function runPeLifecycleForRegion(
         && ebitdaOf(c) > 0
         && c.totalDebt / Math.max(1, ebitdaOf(c)) < LBO_MAX_LEVERAGE - 2
         && equityValueUSD(c, markEvMultiple) > 0
-        && equityValueUSD(c, markEvMultiple) * (1 - LBO_DEBT_SHARE) < availablePowderUSD
+        && equityValueUSD(c, markEvMultiple)
+             - Math.min(equityValueUSD(c, markEvMultiple), Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(c) - c.totalDebt))
+             < availablePowderUSD
       );
       if (target) {
         const priceUSD = equityValueUSD(target, markEvMultiple);
+        // As far as the covenant goes; the loan market decides whether it funds it.
         const debtUSD = Math.min(
-          priceUSD * LBO_DEBT_SHARE,
+          priceUSD,
           Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(target) - target.totalDebt)
         );
         const equityUSD = priceUSD - debtUSD;
@@ -407,7 +410,7 @@ export function runPeLifecycleForRegion(
         const takeoutPricePerShare = Math.max(listedTarget.stockPrice, patientValuePerShare);
         const takeoutValueUSD = takeoutPricePerShare * listedTarget.sharesOutstanding;
         const debtUSD = Math.min(
-          takeoutValueUSD * LBO_DEBT_SHARE,
+          takeoutValueUSD,
           Math.max(0, LBO_MAX_LEVERAGE * ebitdaOf(listedTarget) - listedTarget.totalDebt)
         );
         const equityUSD = takeoutValueUSD - debtUSD;

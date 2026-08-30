@@ -32,8 +32,8 @@
 import { RegionId, GameState } from '../../../types';
 import { WeeklyStepContext } from './context';
 import {
-  SPECULATOR_RESERVATION_MOVE_PCT, SPECULATOR_FULL_SIZE_RANGE_PCT, SPECULATOR_FX_RISK_BUDGET,
-  CENTRAL_BANK_RESERVATION_MOVE_PCT, CENTRAL_BANK_FULL_SIZE_RANGE_PCT,
+  fxWeeklySigma, speculatorReservationMoveFrac, speculatorFullSizeRangeFrac, speculatorMaxPositionUSD,
+  centralBankReservationMoveFrac, centralBankFullSizeRangeFrac,
   CENTRAL_BANK_FX_INTERVENTION_SHARE, MAX_WEEKLY_FX_MOVE_PCT,
 } from '../../../domain/fx-market';
 import {
@@ -182,6 +182,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const toBook = (rate: number) => (soldIsBase ? rate : 1 / rate);
     const fromBook = (stat: number) => (soldIsBase ? stat : 1 / stat);
     const bookRate = toBook(currentRate);
+    // HF3: this pair's own weekly volatility — what every schedule below is scaled by.
+    const sigma = fxWeeklySigma(fx.historicalRates);
 
     const instrument: ClearingInstrument = {
       id: `FX-${key}`,
@@ -198,14 +200,18 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       // HF1: the elastic side of an FX market is a GLOBAL MACRO book. Every hedge fund used to
       // be in here, which meant an equity long-short fund was taking a view on the yen.
       if (e.entityType !== 'HEDGE_FUND' || e.hedgeFundStrategy !== 'GLOBAL_MACRO') return;
-      const capUSD = Math.max(0, e.totalAssetsUSD) * SPECULATOR_FX_RISK_BUDGET;
+      // HF3: the size is the margin identity on this fund's OWN capital at this pair's own
+      // haircut, and the moves are the pair's own observed volatility — no risk budget, no
+      // required-move constant, no range constant. A quiet pair is tight and a volatile one wide.
+      const capUSD = speculatorMaxPositionUSD(Math.max(0, e.totalAssetsUSD), sigma);
       if (capUSD <= 0) return;
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
-        reservationStat: bookRate * (1 - SPECULATOR_RESERVATION_MOVE_PCT / 100),
+        reservationStat: bookRate * (1 - speculatorReservationMoveFrac(sigma)),
         maxHoldingUSD: capUSD,
-        fullSizeStatRange: bookRate * (SPECULATOR_FULL_SIZE_RANGE_PCT / 100),
-        maxNetPurchaseUSD: Math.max(0, e.cashUSD ?? 0),
+        fullSizeStatRange: bookRate * speculatorFullSizeRangeFrac(sigma),
+        // HF1: what it can actually pay with — its own cash plus what its prime broker will lend.
+        maxNetPurchaseUSD: Math.max(0, (e.cashUSD ?? 0) + (e.primeBrokerageAvailableUSD ?? 0)),
       });
       participants.push({ id: `${e.id}-${key}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });
     });
@@ -239,9 +245,9 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     if (cbDefend && defenceBudgetUSD > 0) {
       const demand = new Map<string, ParticipantDemand>();
       demand.set(instrument.id, {
-        reservationStat: bookRate * (1 - CENTRAL_BANK_RESERVATION_MOVE_PCT / 100),
+        reservationStat: bookRate * (1 - centralBankReservationMoveFrac(sigma)),
         maxHoldingUSD: defenceBudgetUSD,
-        fullSizeStatRange: bookRate * (CENTRAL_BANK_FULL_SIZE_RANGE_PCT / 100),
+        fullSizeStatRange: bookRate * centralBankFullSizeRangeFrac(sigma),
         maxNetPurchaseUSD: defenceBudgetUSD,
       });
       participants.push({ id: `CB-${defender}-${key}`, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId: demand });

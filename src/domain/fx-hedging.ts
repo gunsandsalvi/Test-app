@@ -38,13 +38,39 @@ export interface FxForward {
  * Share of a cross-border position that gets hedged. Fixed income at 1.0 is a genuine rule — an
  * insurer's regulator charges the mismatch, so it has no choice.
  *
- * RULE 4/17, OPEN: the equity 0.35 is not a rule, it is an observed average of published
- * policies — a real-world EQUILIBRIUM, and one constant applied to every entity type alike. A
- * hedge ratio is a MANDATE property: it belongs on the entity's profile, so a pension fund and a
- * hedge fund can differ, and so it can respond to what hedging costs. Owner: HF.
+ * HF4 — a hedge ratio is a MANDATE PROPERTY, not one number for everyone. The equity 0.35 this
+ * replaces was an observed average of published policies (rule 4: a real-world equilibrium)
+ * applied to every entity type alike, so a pension fund matching liabilities in its own currency
+ * and a macro fund taking currency risk on purpose hedged identically.
+ *
+ * The split that decides it is the one the model already makes everywhere else: a LIABILITY-DRIVEN
+ * book has a claim to match in its own money, and a currency mismatch on it is a real exposure its
+ * regulator prices — so it hedges everything, equity included. A RETURN-SEEKING book holds foreign
+ * equity partly FOR the currency: the exposure is part of the position, and it hedges the part its
+ * mandate says is not. And a global macro fund hedges nothing, because the currency IS the trade.
+ *
+ * Still open, and DER's: the ratio should also respond to what the hedge COSTS, which needs the
+ * basis to be a cleared price rather than a formula.
  */
 export const HEDGE_RATIO_FIXED_INCOME = 1.0;
-export const HEDGE_RATIO_EQUITY = 0.35;
+
+/** A liability-driven holder's equity hedge: the same as its bond book's, because the reason is
+ *  the same — the claim it is matching is in its own currency. */
+export const HEDGE_RATIO_EQUITY_LIABILITY_DRIVEN = 1.0;
+/** A return-seeking holder's: foreign equity is held partly for the currency, so the mandate
+ *  hedges the smaller half of the exposure and lives with the rest. */
+export const HEDGE_RATIO_EQUITY_RETURN_SEEKING = 0.35;
+
+/** This entity's own equity hedge ratio, off its mandate. */
+export function equityHedgeRatioFor(
+  entityType: string,
+  hedgeFundStrategy?: string
+): number {
+  if (entityType === 'INSURER' || entityType === 'PENSION_FUND') return HEDGE_RATIO_EQUITY_LIABILITY_DRIVEN;
+  // The currency is the position, not a side effect of it.
+  if (hedgeFundStrategy === 'GLOBAL_MACRO') return 0;
+  return HEDGE_RATIO_EQUITY_RETURN_SEEKING;
+}
 
 /** Short-dated forwards rolled continuously — how a bond book is actually hedged. */
 export const FX_FORWARD_TENOR_WEEKS = 13;

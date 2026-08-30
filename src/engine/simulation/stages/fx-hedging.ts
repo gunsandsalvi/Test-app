@@ -16,7 +16,7 @@ import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany } from '../../../domain/company';
 import {
-  FxForward, HEDGE_RATIO_FIXED_INCOME, HEDGE_RATIO_EQUITY, FX_FORWARD_TENOR_WEEKS,
+  FxForward, HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS,
   forwardMarkToMarketUSD,
 } from '../../../domain/fx-hedging';
 import {
@@ -31,7 +31,7 @@ function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
   (entity.itemizedHoldings || []).forEach((h: any) => {
     const issuer = h.issuerRegion as RegionId;
     if (!issuer || issuer === entity.region) return;
-    const ratio = h.instrumentType === 'EQUITY' ? HEDGE_RATIO_EQUITY
+    const ratio = h.instrumentType === 'EQUITY' ? equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy)
       : (h.instrumentType === 'GOV_BOND' || h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN')
         ? HEDGE_RATIO_FIXED_INCOME : 0;
     if (ratio <= 0) return;
