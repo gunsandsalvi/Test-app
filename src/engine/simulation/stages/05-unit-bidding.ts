@@ -60,6 +60,24 @@ const privateSegmentOfferId = (regionId: RegionId, industry: string) => `PRIVATE
  */
 const CONTRACTED_DEMAND_SHARE = 0.6;
 
+/**
+ * IND11 — how long a buyer tolerates a supplier that cannot deliver before it terminates.
+ *
+ * A quarter. It is a term of the contract rather than a behavioural dial: a cure period is what
+ * a supply agreement actually contains, and the alternative — terminating on the first missed
+ * week — would make every transient stockout fatal and every relationship meaningless.
+ */
+const CONTRACT_NON_PERFORMANCE_WEEKS = 13;
+
+/**
+ * IND11 — a contract at least this long is INDEXED to the market it was struck against.
+ *
+ * A year. Below it the parties live with the price they agreed; above it neither side will wear
+ * an open-ended bet on inflation, which is why real long-term supply agreements carry an
+ * escalation clause and short ones do not.
+ */
+const CONTRACT_INDEXATION_MIN_WEEKS = 52;
+
 // 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal
 // recipe (CATEGORY_INPUT_REQUIREMENTS) that 08-company-fundamentals.ts uses to draw down input
 // inventory — bidding to this real, recipe-derived need (instead of a generic revenue-share
@@ -301,7 +319,6 @@ interface SupplyPlan {
   arrivedProductionUnits: number;
   /** IND10 — the line's pipeline after this week's advance, to be persisted. */
   wipQueue?: WipLot[];
-  contractSalesCommittedUnits: number;
   openOfferUnits: number;
   minPriceUSD: number;
 }
@@ -411,7 +428,8 @@ function settleContracts(
   ownContracts: SupplyContract[],
   lookup: GlobalFirmLookup,
   regionReferencePrice: Record<RegionId, number>,
-  contractSalesUnitsBySupplier: Record<string, number>
+  contractSalesUnitsBySupplier: Record<string, number>,
+  availableBySupplier: Map<string, number>
 ): SupplyContract[] {
   const { companyUpdates, nextWeek } = ctx;
   const remainingContracts: SupplyContract[] = [];
@@ -433,12 +451,100 @@ function settleContracts(
     if (!isActiveCompany(customer)) continue;
 
     contract.weeksRemaining -= 1;
-    if (contract.weeksRemaining < 0) continue;
 
-    const supplierUnits = getOutputInventoryUnits(supplier, subUnitId);
-    const actualTransacted = Math.min(contract.quantityUnitsPerWeek, supplierUnits);
+    const marketPriceUSD = regionReferencePrice[customer.region as RegionId] ?? contract.priceUSD;
+
+    /**
+     * IND11 — THE BUYER'S COVER MEASURE. When a contract ends with units still owed, the buyer
+     * must buy them in the open market, so its loss is what the market charges over the price it
+     * was promised. This is contract law's own remedy rather than a chosen penalty rate: there
+     * is no free coefficient in it, and when the market has moved the buyer's way the breach
+     * costs the seller nothing, which is exactly right.
+     */
+    const settleUndeliveredBacklog = () => {
+      const shortfallUnits = contract.backlogUnits ?? 0;
+      const buyerLossUSD = shortfallUnits * Math.max(0, marketPriceUSD - contract.priceUSD);
+      if (buyerLossUSD > 0.01) {
+        pay(ctx, {
+          payer: { kind: 'COMPANY', ticker: supplier.ticker },
+          payee: { kind: 'COMPANY', ticker: customer.ticker },
+          amountUSD: buyerLossUSD,
+          reason: 'non-performance damages',
+        });
+      }
+    };
+
+    // Expiry is settled BEFORE this week's delivery: a contract does not ship in the week its
+    // term runs out, which is what it did before IND11 and still does. What is new is that
+    // running out of term while still owing units is a BREACH rather than a quiet deletion.
+    if (contract.weeksRemaining < 0) { settleUndeliveredBacklog(); continue; }
+
+    // IND11 — INDEXATION. A long contract's price moves with the market it was struck against,
+    // in proportion, so a decade of input-cost inflation is not silently assigned to the seller
+    // (or a decade of deflation to the buyer). A fixed-price contract carries no base and does
+    // not move — that is what makes it a different instrument, not a worse one.
+    if (contract.escalationBaseUSD && contract.escalationBaseUSD > 0.0001) {
+      contract.priceUSD = Number(
+        (contract.priceUSD * (marketPriceUSD / contract.escalationBaseUSD)).toFixed(4)
+      );
+      contract.escalationBaseUSD = marketPriceUSD;
+    }
+
+    // IND11 — THE ORDER SURVIVES THE WEEK IT WAS NOT FILLED. What the supplier owes is this
+    // week's quantity PLUS whatever it failed to ship before. The shortfall used to vanish: the
+    // seller simply did not deliver, nobody was owed anything, and a chronic under-deliverer
+    // was indistinguishable from a punctual one the following Monday.
+    const openingBacklogUnits = contract.backlogUnits ?? 0;
+    const owedUnits = contract.quantityUnitsPerWeek + openingBacklogUnits;
+
+    // IND11 — THE BUYER CANCELS WHAT IT NO LONGER NEEDS, AND PAYS FOR IT. A committed order is
+    // not a wish: when the buyer's own demand collapses, the units on order stop being wanted
+    // and the backlog is walked away from. This is the amplifier that makes capital-goods
+    // downturns violent — orders are not merely absent, they are TAKEN BACK — and it cannot
+    // happen unless a backlog exists to cancel.
+    //
+    // The buyer's real weekly need is its own recipe requirement at its current revenue, which
+    // is the same number its open-market bid is built from. Anything committed above that need
+    // is cancelled.
+    let cancelledUnits = 0;
+    if (openingBacklogUnits > 0.0001) {
+      const needUSD = computeRecipeInputNeedUSD(customer, subUnitId);
+      const needUnits = marketPriceUSD > 0.0001 ? needUSD / marketPriceUSD : owedUnits;
+      const excessUnits = owedUnits - needUnits;
+      if (excessUnits > 0.0001) {
+        cancelledUnits = Math.min(openingBacklogUnits, excessUnits);
+        // THE SELLER'S COVER MEASURE. It must now resell those units into the open market, so
+        // its loss is the contract price it was promised less the market price it can get. This
+        // is contract law's own remedy, not a chosen penalty rate: there is no free coefficient
+        // here, and when the market has moved the seller's way the cancellation costs nothing,
+        // which is exactly right.
+        const sellerLossUSD = cancelledUnits * Math.max(0, contract.priceUSD - marketPriceUSD);
+        if (sellerLossUSD > 0.01) {
+          pay(ctx, {
+            payer: { kind: 'COMPANY', ticker: customer.ticker },
+            payee: { kind: 'COMPANY', ticker: supplier.ticker },
+            amountUSD: sellerLossUSD,
+            reason: 'order cancellation damages',
+          });
+        }
+      }
+    }
+    const owedAfterCancellationUnits = owedUnits - cancelledUnits;
+
+    // What this supplier still has to give, this week, across every contract it holds. A
+    // supplier with no plan for this line is not producing it and has only its warehouse.
+    const supplierUnits = availableBySupplier.get(supplier.ticker)
+      ?? availableBySupplier.get(supplier.id)
+      ?? getOutputInventoryUnits(supplier, subUnitId);
+    const actualTransacted = Math.min(owedAfterCancellationUnits, supplierUnits);
+    availableBySupplier.set(supplier.ticker, supplierUnits - actualTransacted);
+    contract.backlogUnits = Math.max(0, owedAfterCancellationUnits - actualTransacted);
     const paymentUSD = actualTransacted * contract.priceUSD;
-    const fillRate = contract.quantityUnitsPerWeek > 0 ? actualTransacted / contract.quantityUnitsPerWeek : 1.0;
+    // The fill rate is measured against THIS WEEK's obligation: shipping down a backlog is
+    // catching up, not over-performing, so it cannot read above 1.
+    const fillRate = contract.quantityUnitsPerWeek > 0
+      ? Math.min(1, actualTransacted / contract.quantityUnitsPerWeek) : 1.0;
+    contract.shortWeeks = fillRate < 0.95 ? (contract.shortWeeks ?? 0) + 1 : 0;
 
     if (!companyUpdates[supplier.ticker]) companyUpdates[supplier.ticker] = {};
     if (!companyUpdates[customer.ticker]) companyUpdates[customer.ticker] = {};
@@ -447,7 +553,8 @@ function settleContracts(
     // The contract leg's own inventory write. For a supplier that still produces this sub-unit
     // the open-market settlement below overwrites it with the full week's arithmetic; for one
     // that has stopped producing and is only working off a live contract, this is the only write
-    // there is — and without it the units ship and the warehouse is never debited.
+    // there is — and without it the units ship and the warehouse is never debited. That supplier
+    // has no plan, so its balance above is its warehouse alone, which is what this writes down.
     setOutputInventory(
       supUp, subUnitId,
       Math.max(0, supplierUnits - actualTransacted),
@@ -478,6 +585,14 @@ function settleContracts(
       custUp.inputSupplyConstraintFactor = Math.min(custUp.inputSupplyConstraintFactor ?? 1.0, Math.max(0.3, fillRate));
     }
 
+    // IND11 — TERMINATION FOR NON-PERFORMANCE. A supplier that has missed its obligation for a
+    // full quarter loses the contract: the buyer re-sources through the merit order, which is
+    // where the open market already is. Damages settle on whatever it was still owed.
+    if ((contract.shortWeeks ?? 0) >= CONTRACT_NON_PERFORMANCE_WEEKS) {
+      settleUndeliveredBacklog();
+      continue;
+    }
+
     remainingContracts.push(contract);
   }
 
@@ -495,7 +610,6 @@ function buildRegionSupplyPlans(
   index: RegionMarketIndex,
   referencePriceUSD: number,
   supplierExpectedUnitPriceUSD: number,
-  contractUnitsBySupplier: Map<string, number>,
   isCapexSupplierCategory: boolean,
   capexSupplierWeight: number | undefined
 ): SupplyPlan[] {
@@ -583,7 +697,6 @@ function buildRegionSupplyPlans(
     const coversUnitCost = supplierExpectedUnitPriceUSD >= prospectiveUnitCostUSD;
     const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
-    const contractSales = (contractUnitsBySupplier.get(comp.ticker) ?? 0) + (contractUnitsBySupplier.get(comp.id) ?? 0);
     // IND10 — the firm offers what it HAS plus what its plant FINISHED this week, not what it
     // started. For a good made on demand these are the same number and nothing changes; for a
     // 26-week build the offer is what was begun half a year ago, which is the point.
@@ -593,7 +706,9 @@ function buildRegionSupplyPlans(
       targetProductionUnits,
       coversUnitCost ? weeklyOperatingCostUSD : 0
     );
-    const openOfferUnits = Math.max(0, pipeline.arrivedUnits + currentUnits - contractSales);
+    // The caller trims this to what the contracts left behind, once they have settled against
+    // the same stock (§7.148). Here it is simply everything the firm can sell.
+    const openOfferUnits = Math.max(0, pipeline.arrivedUnits + currentUnits);
 
     // CAP / RULE 15 — THE SELLER'S FLOOR IS ITS COST IN DOLLARS, NOT A FRACTION OF THE MARKET.
     //
@@ -643,7 +758,6 @@ function buildRegionSupplyPlans(
       targetProductionUSD: targetProductionUnits * referencePriceUSD,
       arrivedProductionUnits: pipeline.arrivedUnits,
       wipQueue: pipeline.queue,
-      contractSalesCommittedUnits: contractSales,
       openOfferUnits,
       // Cost per unit of what this plant actually makes, in dollars. Falls back to the
       // reference-anchored form only when the line has no production to divide by.
@@ -698,7 +812,6 @@ function buildRegionSupplyPlans(
           targetProductionUnits: 0,
           targetProductionUSD: 0,
           arrivedProductionUnits: 0,
-          contractSalesCommittedUnits: 0,
           openOfferUnits: poolOfferUnits,
           // Its own unit cost: a pool earning a 9% margin cannot sell below 91 cents on the
           // dollar of the reference price and stay solvent.
@@ -923,27 +1036,21 @@ function runSubUnitMarkets(
     anchorPrice[regionId] = published > 0 ? published : 1;
   });
 
-  // --- 2. Contracts settle first, region by region, against a global counterparty lookup.
-  const contractSalesUnitsBySupplier: Record<string, number> = {};
-  const survivingContracts = {} as Record<RegionId, SupplyContract[]>;
-  MARKET_REGION_IDS.forEach(regionId => {
-    survivingContracts[regionId] = settleContracts(
-      ctx, subUnitId, contractsByRegion[regionId] ?? [], lookup, anchorPrice, contractSalesUnitsBySupplier
-    );
-  });
-
-  const contractUnitsBySupplier = new Map<string, number>();
-  const contractUnitsByCustomer = new Map<string, number>();
-  MARKET_REGION_IDS.forEach(regionId => {
-    survivingContracts[regionId].forEach(c => {
-      contractUnitsBySupplier.set(c.supplierCompanyId, (contractUnitsBySupplier.get(c.supplierCompanyId) ?? 0) + c.quantityUnitsPerWeek);
-      contractUnitsByCustomer.set(c.customerCompanyId, (contractUnitsByCustomer.get(c.customerCompanyId) ?? 0) + c.quantityUnitsPerWeek);
-    });
-  });
-
-  // --- 3. Every participant's week, decided once.
+  // --- 2. What every supplier will MAKE and FINISH this week, decided before its contracts are
+  //        filled.
+  //
+  // IND11 EXPOSED AN ORDERING DEFECT OLDER THAN ITSELF. Contracts used to settle here, first,
+  // against `getOutputInventoryUnits` — which is LAST week's closing stock. This week's
+  // production only reached the warehouse at step 8, after the auction. So a firm's own output
+  // was never available to its own committed orders: a contract could be filled only out of
+  // whatever the previous week's auction happened to leave unsold, and since the offer already
+  // reserved the contract volume, what it left was exactly the shortfall. Every contract in the
+  // economy under-delivered, forever, and NOBODY NOTICED because an unfilled order evaporated
+  // (69% of the book was short at week 10 the moment backlog started accumulating).
+  //
+  // A firm ships its commitments out of what it has plus what it just finished. That is the
+  // order now: produce, deliver the contracts, auction the rest.
   const supplyPlans: SupplyPlan[] = [];
-  const demandPlans: DemandPlan[] = [];
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
     const demandState = reg.categoryDemand[subUnitId] as any;
@@ -953,13 +1060,53 @@ function runSubUnitMarkets(
 
     supplyPlans.push(...buildRegionSupplyPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceUSD,
-      contractUnitsBySupplier, isCapexSupplierCategory, capexSupplierWeight
+      isCapexSupplierCategory, capexSupplierWeight
     ));
+  });
+
+  // --- 3. Contracts settle, against what each supplier actually HAS: its opening stock plus
+  //        what its plant finished this week. The balance is drawn down as it ships, so a
+  //        supplier with three contracts cannot deliver the same units to all three — which is
+  //        what reading the warehouse fresh inside each contract used to let it do.
+  const availableBySupplier = new Map<string, number>();
+  supplyPlans.forEach(p => {
+    if (!p.company) return;
+    availableBySupplier.set(p.key, p.initialInventoryUnits + p.arrivedProductionUnits);
+  });
+  const contractSalesUnitsBySupplier: Record<string, number> = {};
+  const survivingContracts = {} as Record<RegionId, SupplyContract[]>;
+  MARKET_REGION_IDS.forEach(regionId => {
+    survivingContracts[regionId] = settleContracts(
+      ctx, subUnitId, contractsByRegion[regionId] ?? [], lookup, anchorPrice,
+      contractSalesUnitsBySupplier, availableBySupplier
+    );
+  });
+
+  // --- 4. What every buyer wants, net of the contract volume it is already committed to.
+  const contractUnitsByCustomer = new Map<string, number>();
+  MARKET_REGION_IDS.forEach(regionId => {
+    survivingContracts[regionId].forEach(c => {
+      contractUnitsByCustomer.set(c.customerCompanyId, (contractUnitsByCustomer.get(c.customerCompanyId) ?? 0) + c.quantityUnitsPerWeek);
+    });
+  });
+
+  const demandPlans: DemandPlan[] = [];
+  MARKET_REGION_IDS.forEach(regionId => {
+    const reg = ctx.updatedRegions[regionId];
+    const demandState = reg.categoryDemand[subUnitId] as any;
+    if (!demandState) return;
     demandPlans.push(...buildRegionDemandPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId],
       contractUnitsByCustomer, isCapexSupplierCategory, capexSupplierWeight, isRecipeInputCategory,
       govShare, hhShare
     ));
+  });
+
+  // The open market gets what the contracts did not take. A supplier not in the plans (one that
+  // has stopped producing this line) never offered anything to adjust.
+  supplyPlans.forEach(p => {
+    if (!p.company) return;
+    p.openOfferUnits = Math.max(0, availableBySupplier.get(p.key) ?? 0);
   });
 
   const offerRegionByKey = new Map<string, RegionId>();
@@ -1444,6 +1591,12 @@ function formContracts(
       priceUSD: Number(contractPrice.toFixed(2)),
       quantityUnitsPerWeek: Number(baseContractUnits.toFixed(2)),
       weeksRemaining: duration,
+      backlogUnits: 0,
+      shortWeeks: 0,
+      // IND11 — a long contract is indexed to the price it was struck against; a short one is
+      // not. Which of the two a firm signs is decided here, by the term it wanted.
+      escalationBaseUSD: duration >= CONTRACT_INDEXATION_MIN_WEEKS
+        ? regionPublishedPrice[bidPlan.regionId] : undefined,
     });
   });
 }

@@ -1185,8 +1185,36 @@ const xbModule: HarnessModule = (() => {
  * §5-IND's verify list, run on the shared state: production time as a real stock, and whatever
  * later IND slices add. It judges nothing; the numbers are for reading.
  */
-const indModule: HarnessModule = {
+const indModule: HarnessModule = (() => {
+  const contractKey = (c: any) => `${c.supplierCompanyId}|${c.customerCompanyId}|${c.subUnitId}`;
+  const allContracts = (s: GameState) => {
+    const out = new Map<string, any>();
+    REGIONS.forEach(r => ((s.regions[r] as any).activeContracts ?? []).forEach((c: any) => out.set(contractKey(c), c)));
+    return out;
+  };
+  return {
   name: 'IND battery',
+  /**
+   * IND11 — BACKLOG CONSERVATION. A contract's backlog is orders minus deliveries minus
+   * cancellations, so in one week it can grow by AT MOST one week's obligation: the seller can
+   * fail to ship everything it owed, and it cannot fail to ship more than that. Anything above
+   * the bound is an obligation being counted twice.
+   */
+  week(prev, s, w) {
+    const before = allContracts(prev);
+    allContracts(s).forEach((c, k) => {
+      const p = before.get(k);
+      if (!p) return;
+      const grew = (c.backlogUnits ?? 0) - (p.backlogUnits ?? 0);
+      if (grew > (p.quantityUnitsPerWeek ?? 0) + 0.01) {
+        violations.push({
+          week: w,
+          message: `contract ${k}: backlog grew ${grew.toFixed(2)} units in a week against a ${(p.quantityUnitsPerWeek ?? 0).toFixed(2)}-unit weekly obligation`,
+        });
+      }
+      if (isNaN(c.backlogUnits ?? 0)) violations.push({ week: w, message: `contract ${k}: NaN backlog` });
+    });
+  },
   report(s) {
     const out: string[] = [];
     out.push('--- IND10: production time is a stock (WIP = lead x weekly throughput) ---');
@@ -1217,9 +1245,26 @@ const indModule: HarnessModule = {
       return a + Object.values(wip).reduce((b, q) => b + q.reduce((x, l) => x + l.valueUSD, 0), 0);
     }, 0);
     out.push(`  work in progress carried across every firm: ${B(totalWipUSD)}`);
+
+    out.push('--- IND11: the backlog is a stock, and it is two-sided ---');
+    const contracts = [...allContracts(s).values()];
+    const owed = contracts.filter(c => (c.backlogUnits ?? 0) > 0.0001);
+    const weeklyObligation = contracts.reduce((a, c) => a + (c.quantityUnitsPerWeek ?? 0), 0);
+    const backlogUnits = contracts.reduce((a, c) => a + (c.backlogUnits ?? 0), 0);
+    const backlogUSD = contracts.reduce((a, c) => a + (c.backlogUnits ?? 0) * (c.priceUSD ?? 0), 0);
+    const indexed = contracts.filter(c => (c.escalationBaseUSD ?? 0) > 0).length;
+    const short = contracts.filter(c => (c.shortWeeks ?? 0) > 0);
+    out.push(`  ${contracts.length} live contracts, ${owed.length} of them owing units (${pct(contracts.length ? owed.length / contracts.length : 0)})`);
+    out.push(`  backlog outstanding ${backlogUnits.toFixed(0)} units / ${B(backlogUSD)}`);
+    // IND10's remaining verify: quoted delivery IS the backlog divided by the rate that works it
+    // off, so it lengthens exactly when a seller falls behind.
+    out.push(`  implied quoted delivery across every contract: ${(weeklyObligation > 0 ? backlogUnits / weeklyObligation : 0).toFixed(2)} weeks of obligation`);
+    out.push(`  under-delivering: ${short.length} contracts on the non-performance clock, worst streak ${short.reduce((a, c) => Math.max(a, c.shortWeeks ?? 0), 0)} weeks`);
+    out.push(`  indexed to the market: ${indexed} of ${contracts.length} (${pct(contracts.length ? indexed / contracts.length : 0)})`);
     return out;
   },
-};
+  };
+})();
 
 // ---- ADD NEW MODULES HERE, and nowhere else. ----
 const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule];

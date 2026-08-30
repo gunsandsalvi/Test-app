@@ -5400,3 +5400,49 @@ that proved it, the lesson.
       production start for a lead time to sit between. Its lag is the measurement's own.
     - **Still open from §5-IND10:** quoted delivery lengthening as backlog grows needs a backlog,
       which is IND11's.
+
+148. **IND11 — the backlog is a stock, and building it exposed an ordering defect older than
+    itself: A FIRM'S OWN PRODUCTION WAS NEVER AVAILABLE TO ITS OWN CONTRACTS.**
+    - **What IND11 built.** `SupplyContract` carries `backlogUnits`, `shortWeeks` and
+      `escalationBaseUSD`. Undelivered units no longer evaporate: what a supplier owes is this
+      week's quantity plus everything it failed to ship before. A contract on the clock for a
+      full quarter is TERMINATED for non-performance and the buyer re-sources through the merit
+      order. A buyer whose own demand has collapsed CANCELS the backlog it no longer needs.
+      Contracts of a year or more are INDEXED to the price they were struck against, so
+      inflation passes through instead of being silently assigned to one side (31.5% of the book).
+    - **BOTH damages legs are the same legal primitive, and neither has a free coefficient.**
+      A cancelling buyer pays the seller `units x max(0, contractPrice − marketPrice)` — the
+      seller must resell into the market, so its loss is the differential. A breaching seller
+      pays the buyer `units x max(0, marketPrice − contractPrice)` — the buyer must cover in the
+      market, so its loss is the same differential the other way. **When the market has moved in
+      the wronged party's favour the breach costs nothing, which is correct**, and there is no
+      penalty rate anywhere to tune (rule 2, rule 15).
+    - **THE DEFECT IT EXPOSED.** Contracts settled at step 2 against `getOutputInventoryUnits` —
+      LAST week's closing stock — while this week's production reached the warehouse at step 8,
+      after the auction. So a contract could only be filled from what the previous week's auction
+      left unsold, and since the offer already reserved the contract volume, what it left was
+      exactly the shortfall. **Every contract in the economy under-delivered, permanently, and
+      nobody noticed because an unfilled order evaporated.** The moment backlog accumulated it
+      was visible: 69% of the book short at week 10, 37,492 contracts on the non-performance
+      clock, the whole economy's contract book due to terminate at week 13.
+      Two suppliers reading the same warehouse fresh inside their own contract loop could also
+      each ship the same units. The order is now PRODUCE → DELIVER COMMITMENTS → AUCTION THE
+      REST, against one drawn-down balance. **69% short → 15.6%; quoted delivery 1.52 → 0.20
+      weeks.** `contractSalesCommittedUnits` died with it: the offer is what the contracts left.
+    - **Deflation −19.85% → −12.90% at week 10.** Contract volume is real demand paid in real
+      money now; it used to be netted out of buyers' open-market bids and then not delivered.
+    - **AND THE 10-WEEK PROBE IS NOW RED — one assertion, honestly.** JPN unemployment 30.41%
+      against the harness band's 30%. **A/B'd to the cause:** with damages disabled the number is
+      unchanged (32.6 vs 32.8 at week 11), with backlog disabled it is unchanged (33.1) — **the
+      ordering fix alone carries all of it**, and the baseline breaches the same band at week 11
+      anyway (31.47%). **The mechanism is a subsidy being removed, not a new bug.** Input cost is
+      charged FIFO off real lots (§7.121), so a buyer that received nothing on contract held no
+      lots, consumed nothing, and WAS NOT CHARGED for 60% of its inputs. Its EBITDA was
+      overstated, and `earningsShortfallUSD = capitalCharge − ebitda` is exactly what the layoff
+      rule reads. Making the deliveries real makes the costs real.
+    - **Not tuned, not clamped, not banded away** (rules 2 and 12). The economy has run at 21-29%
+      unemployment for the whole probe with the harness green — the band is a tripwire the known
+      labour collapse was always going to hit. **The root is CHAIN-E**, §4 item 21: the demand
+      seed is `C + I + G`, a final-demand identity with NO intermediate demand in it, so output
+      is sized for final demand while firms need inputs too. It is taken next, out of order and
+      deliberately, because it is what this red is.

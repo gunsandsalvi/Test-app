@@ -31,6 +31,21 @@ export interface SupplyContract {
   priceUSD: number;
   quantityUnitsPerWeek: number;
   weeksRemaining: number;
+  /**
+   * IND11 — UNITS OWED AND NOT DELIVERED. The seller's backlog and the buyer's claim are the
+   * same number because they are the same obligation, and this object is bilateral: one
+   * representation, not two that can disagree (rule 3). Undelivered demand used to evaporate.
+   */
+  backlogUnits?: number;
+  /** IND11 — consecutive weeks this supplier has under-delivered: the non-performance clock. */
+  shortWeeks?: number;
+  /**
+   * IND11 — the published price this contract was struck against. An INDEXED contract (set at
+   * formation for long durations) reprices in proportion to how far the market has moved from
+   * it, so input-cost inflation passes through instead of being silently assigned to one side.
+   * Absent = a fixed-price contract, which assigns it to the seller.
+   */
+  escalationBaseUSD?: number;
 }
 
 export interface CategoryDemandState {
