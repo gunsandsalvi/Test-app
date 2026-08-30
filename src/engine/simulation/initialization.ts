@@ -3,7 +3,7 @@ import { createSeedCategoryDemandState, CAPEX_SUPPLIER_WEIGHTS } from '../../dom
 import { getSimulationDate } from '../formatters';
 import { publicComparableEvMultiple } from './stages/pe-lifecycle';
 import { INDEX_DEFINITIONS } from '../../domain/indexes';
-import { PREMIUM_TO_SURPLUS_RATIO } from '../../domain/institutions';
+import { PREMIUM_TO_SURPLUS_RATIO, INSTITUTIONAL_CAPITAL_RATIO } from '../../domain/institutions';
 import { ETF_EXPENSE_RATIO_ANNUAL } from '../../domain/etf';
 import { migrateSmeDebtAtSeed, migrateHouseholdDebtAtSeed, applyBankFundingSplit } from './stages/bank-lending';
 import { leverageHeadroomUSD } from '../macro/banking';
@@ -72,7 +72,7 @@ import { GameState } from '../../types';
 import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount } from '../companyGenerator';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
-import { getRegionProductivityPerCapitaUSD } from '../bootstrap/population';
+import { getRegionProductivityPerCapitaUSD, remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../bootstrap/population';
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { unitMassTonnes } from '../../domain/goods-physical';
@@ -842,8 +842,44 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         (macroSector.sovBondHoldingsUSD || 0) +
         (macroSector.cashUSD || 0);
 
-      const totalAssetsUSD = totalMacroAssetsUSD * share;
-      const equityCapitalUSD = totalAssetsUSD * 0.12; // 12% capital ratio
+      // COH2 — A PENSION FUND IS AS BIG AS THE ENTITLEMENTS IT OWES, and at week 0 that stock is
+      // derived rather than left circular.
+      //
+      // `beneficiaryLiabilityUSD` was reversed weekly — it accumulates from real contributions,
+      // benefits and investment return — but the SEED still fell back to `totalAssets −
+      // equityCapital`, so week 0 anchored the obligation on the holdings after all, which is the
+      // circularity `INSTITUTIONAL_OPENING_BOOK_SHARE`'s own doc names as the reason it survives.
+      //
+      // The stock follows from the age structure and nothing else. In a stationary population the
+      // entitlement stock is the contribution FLOW times how long a contributed dollar stays in
+      // the system: it waits out the rest of a working life and is then drawn down over the years
+      // a retiree actually has, so averaged over contribution ages that is
+      // `(workingLife + drawdown) / 2`. The flow is the life-cycle saving rate the cohorts
+      // already use — the retired share of the population (§7.181, §7.169) — so no number is
+      // stated here that the demography does not already say.
+      const pensionEntitlementStockUSD = (() => {
+        const retiredShare = Math.max(0, Math.min(1,
+          reg.lifeCycleDistribution?.RETIRED?.shareOfPopulation ?? 0.2));
+        const annualContributionsUSD = Math.max(0, reg.estimatedHouseholdIncomeUSD) * retiredShare;
+        const workingLifeYears = Math.max(1, RETIREMENT_AGE_YEARS - WORKFORCE_ENTRY_AGE_YEARS);
+        const drawdownYears = Math.max(1, remainingLifeExpectancyYears(RETIREMENT_AGE_YEARS));
+        return annualContributionsUSD * ((workingLifeYears + drawdownYears) / 2);
+      })();
+      const pensionShareNorm = regionalInstCompanies
+        .filter(c => c.institutionalEntityType === 'PENSION_FUND')
+        .reduce((a, c) => a + (c.institutionalMarketShare ?? 0.33), 0);
+      // The fund's own capital is its SURPLUS against what it owes — the number that means
+      // something — and its assets are the two together. Every other entity type keeps the
+      // sector-share sizing: an asset manager owes nobody an entitlement, it runs other people's
+      // money, and what anchors IT is HH4's household fund holdings (COH2's remaining half).
+      const isPensionFund = role === 'PENSION_FUND';
+      const beneficiaryLiabilityUSD = isPensionFund && pensionShareNorm > 0
+        ? pensionEntitlementStockUSD * ((comp.institutionalMarketShare ?? 0.33) / pensionShareNorm)
+        : undefined;
+      const totalAssetsUSD = beneficiaryLiabilityUSD !== undefined
+        ? beneficiaryLiabilityUSD / (1 - INSTITUTIONAL_CAPITAL_RATIO)
+        : totalMacroAssetsUSD * share;
+      const equityCapitalUSD = totalAssetsUSD * INSTITUTIONAL_CAPITAL_RATIO;
 
       const entCorpShareUSD = rawEntityCorpTargetsUSD.get(comp.id) ?? 0;
       const entSovShareUSD = rawEntitySovTargetsUSD.get(comp.id) ?? 0;
@@ -867,6 +903,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         hedgeFundStrategy: comp.hedgeFundStrategy,
         financialStatementProfile: comp.financialStatementProfile,
         totalAssetsUSD,
+        beneficiaryLiabilityUSD,
         // Real opening cash: the entity's own policy cash weight against its own book. Every
         // clearing fill from here on settles against this balance.
         cashUSD: totalAssetsUSD * targetFor(role, comp.hedgeFundStrategy).cashPct,

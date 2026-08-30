@@ -26,6 +26,14 @@ export interface InstitutionalSector {
  */
 export const PREMIUM_TO_SURPLUS_RATIO = 1.2;
 
+/**
+ * The capital a regulated institution holds against its book — a real regulatory primitive of the
+ * same kind as the bank leverage floor (rule 4 allows those). It had no owner: the seed wrote
+ * `totalAssets x 0.12` with the ratio inline and a `// 12% capital ratio` comment, and COH2 needs
+ * it in two places now — sizing a fund from what it OWES is `liability / (1 - this)`.
+ */
+export const INSTITUTIONAL_CAPITAL_RATIO = 0.12;
+
 export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND' | 'ETF';
 
 /**
