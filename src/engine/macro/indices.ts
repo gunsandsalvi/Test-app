@@ -97,7 +97,7 @@ const getCapWeightedAvgPrice = (firms: Company[], baseIndex: number) => {
   const newUS = Number((prevUS * (1 + (prevIndices ? usChange : 0))).toFixed(1));
   const newEU = Number((prevEU * (1 + (prevIndices ? euChange : 0))).toFixed(1));
   const newUK = Number((prevUK * (1 + (prevIndices ? ukChange : 0))).toFixed(1));
-  const newJP = Number((prevJP * (1 + (prevIndices ? jpChange : 0))).toFixed(0));
+  const newJP = Math.round((prevJP * (1 + (prevIndices ? jpChange : 0))));
 
   const newTech = Number((prevTech * (1 + (prevIndices ? techChange : 0))).toFixed(1));
   const newFin = Number((prevFin * (1 + (prevIndices ? finChange : 0))).toFixed(1));

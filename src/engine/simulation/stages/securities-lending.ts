@@ -457,7 +457,7 @@ function publishBook(
   book.forEach((l) => { parties.add(l.lender.id); parties.add(l.borrower.id); });
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (!parties.has(e.id)) return;
-    e.stockLoanNetUSD = Number(stockLoanNetUSD(book, e.id, priceOf).toFixed(0));
+    e.stockLoanNetUSD = Math.round(stockLoanNetUSD(book, e.id, priceOf));
   });
 }
 

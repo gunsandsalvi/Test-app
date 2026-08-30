@@ -35,60 +35,60 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
   return {
     BOTTOM_50: {
       shareOfHouseholds: 0.50,
-      shareOfIncomeUSD: Number((inc * 0.15).toFixed(0)),
+      shareOfIncomeUSD: Math.round((inc * 0.15)),
       // RULE 19 — THE OPENING ACCUMULATION REFLECTS THE INCOME THAT PRODUCED IT, and this one
       // line retires `TIER_BALANCE_SHEET_WEIGHTS` — 32 stated numbers that existed ONLY as the
       // opening condition for §7.145's derived splits. Every one of those splits keys off
       // accumulated savings or income; with a stock here from week 1 the fallbacks are never
       // reached, so the table has nothing left to do (§7.171).
-      accumulatedSavingsUSD: Number((inc * 0.15).toFixed(0)),
+      accumulatedSavingsUSD: Math.round((inc * 0.15)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Number((inc * 0.15 * 0.95).toFixed(0)),
-      investedSavingsUSD: Number((inc * 0.15 * 0.05).toFixed(0)),
-      shareOfNetWorthUSD: Number((nw * 0.02).toFixed(0)),
+      liquidSavingsUSD: Math.round((inc * 0.15 * 0.95)),
+      investedSavingsUSD: Math.round((inc * 0.15 * 0.05)),
+      shareOfNetWorthUSD: Math.round((nw * 0.02)),
       savingsRate: 0.01,
       equityExposureShare: 0.05,
-      homeEquityUSD: Number((nw * 0.01).toFixed(0)),
+      homeEquityUSD: Math.round((nw * 0.01)),
     },
     NEXT_40: {
       shareOfHouseholds: 0.40,
-      shareOfIncomeUSD: Number((inc * 0.45).toFixed(0)),
-      accumulatedSavingsUSD: Number((inc * 0.45).toFixed(0)),
+      shareOfIncomeUSD: Math.round((inc * 0.45)),
+      accumulatedSavingsUSD: Math.round((inc * 0.45)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Number((inc * 0.45 * 0.75).toFixed(0)),
-      investedSavingsUSD: Number((inc * 0.45 * 0.25).toFixed(0)),
-      shareOfNetWorthUSD: Number((nw * 0.28).toFixed(0)),
+      liquidSavingsUSD: Math.round((inc * 0.45 * 0.75)),
+      investedSavingsUSD: Math.round((inc * 0.45 * 0.25)),
+      shareOfNetWorthUSD: Math.round((nw * 0.28)),
       savingsRate: 0.06,
       equityExposureShare: 0.25,
-      homeEquityUSD: Number((nw * 0.18).toFixed(0)),
+      homeEquityUSD: Math.round((nw * 0.18)),
     },
     TOP_9: {
       shareOfHouseholds: 0.09,
-      shareOfIncomeUSD: Number((inc * 0.25).toFixed(0)),
-      accumulatedSavingsUSD: Number((inc * 0.25).toFixed(0)),
+      shareOfIncomeUSD: Math.round((inc * 0.25)),
+      accumulatedSavingsUSD: Math.round((inc * 0.25)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Number((inc * 0.25 * 0.5).toFixed(0)),
-      investedSavingsUSD: Number((inc * 0.25 * 0.5).toFixed(0)),
-      shareOfNetWorthUSD: Number((nw * 0.38).toFixed(0)),
+      liquidSavingsUSD: Math.round((inc * 0.25 * 0.5)),
+      investedSavingsUSD: Math.round((inc * 0.25 * 0.5)),
+      shareOfNetWorthUSD: Math.round((nw * 0.38)),
       savingsRate: 0.18,
       equityExposureShare: 0.50,
-      homeEquityUSD: Number((nw * 0.12).toFixed(0)),
+      homeEquityUSD: Math.round((nw * 0.12)),
     },
     TOP_1: {
       shareOfHouseholds: 0.01,
-      shareOfIncomeUSD: Number((inc * 0.15).toFixed(0)),
-      accumulatedSavingsUSD: Number((inc * 0.15).toFixed(0)),
+      shareOfIncomeUSD: Math.round((inc * 0.15)),
+      accumulatedSavingsUSD: Math.round((inc * 0.15)),
       // COH1: the opening stock split by this tier's own exposure — spendable and invested
       // are two things from week 0, and the weekly rule only accumulates from here (§7.4).
-      liquidSavingsUSD: Number((inc * 0.15 * 0.3).toFixed(0)),
-      investedSavingsUSD: Number((inc * 0.15 * 0.7).toFixed(0)),
-      shareOfNetWorthUSD: Number((nw * 0.32).toFixed(0)),
+      liquidSavingsUSD: Math.round((inc * 0.15 * 0.3)),
+      investedSavingsUSD: Math.round((inc * 0.15 * 0.7)),
+      shareOfNetWorthUSD: Math.round((nw * 0.32)),
       savingsRate: 0.35,
       equityExposureShare: 0.70,
-      homeEquityUSD: Number((nw * 0.04).toFixed(0)),
+      homeEquityUSD: Math.round((nw * 0.04)),
     },
   };
 }
@@ -102,7 +102,7 @@ const HOME_OWNERSHIP_RATE = 0.62;
 export function createHousingMarket(regionId: RegionId, estimatedHouseholdIncomeUSD: number, population: number): HousingMarket {
   const households = Math.max(1, population / AVG_HOUSEHOLD_SIZE);
   const perHouseholdIncome = estimatedHouseholdIncomeUSD / households;
-  const basePrice = Number((perHouseholdIncome * HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE).toFixed(0));
+  const basePrice = Math.round((perHouseholdIncome * HOME_PRICE_TO_HOUSEHOLD_INCOME_MULTIPLE));
   return {
     regionId,
     medianHomePriceUSD: basePrice,
@@ -312,7 +312,7 @@ const HOUSEHOLD_SAVINGS_RATE = 0.065;
 function seedNominalGdpHistory(currentLevelUSD: number, nominalAnnualGrowth: number): number[] {
   const weeks = 52;
   return Array.from({ length: weeks }, (_, i) =>
-    Number((currentLevelUSD * Math.pow(1 + nominalAnnualGrowth, (i - (weeks - 1)) / 52)).toFixed(0))
+    Math.round((currentLevelUSD * Math.pow(1 + nominalAnnualGrowth, (i - (weeks - 1)) / 52)))
   );
 }
 
@@ -331,7 +331,7 @@ function buildRegion(regionId: RegionId): Region {
 
   const totalLaborForce = totalPopulation * (1 - NON_EMPLOYABLE_PCT) * LABOR_FORCE_PARTICIPATION;
   const totalEmployed = totalLaborForce * (1 - UNEMPLOYMENT_RATE);
-  const estimatedNominalGdpUSD = Number((totalEmployed * productivityPerCapita).toFixed(0));
+  const estimatedNominalGdpUSD = Math.round((totalEmployed * productivityPerCapita));
   const governmentEmployment = Math.round(totalPopulation * GOV_EMPLOYMENT_SHARE_OF_POPULATION);
 
   const baseAnnualWageUSD = getBaseAnnualWageUSD(regionId);
@@ -345,7 +345,7 @@ function buildRegion(regionId: RegionId): Region {
     };
   });
 
-  const governmentRevenueUSD = Number(((estimatedNominalGdpUSD * EFFECTIVE_TAX_RATE) / 52).toFixed(0));
+  const governmentRevenueUSD = Math.round(((estimatedNominalGdpUSD * EFFECTIVE_TAX_RATE) / 52));
 
   // Household income comes from the one shared national-accounts derivation (wages + capital
   // income + government transfers, net of household tax) that the weekly evolution also uses,
@@ -362,7 +362,7 @@ function buildRegion(regionId: RegionId): Region {
   const totalGovDebtUSD = estimatedNominalGdpUSD * DEBT_TO_GDP_PCT;
   const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
     id: `${regionId}-GOV-${tenorYears}Y-INIT`,
-    principalUSD: Number((totalGovDebtUSD * weight).toFixed(0)),
+    principalUSD: Math.round((totalGovDebtUSD * weight)),
     couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
     originationWeek: -Math.round(tenorWeeks / 2),
     maturityWeek: Math.round(tenorWeeks / 2),
@@ -395,11 +395,11 @@ function buildRegion(regionId: RegionId): Region {
     averageAnnualWageUSD: seedAvgAnnualWageUSD,
     fiscalStanceScore: 0,
   });
-  const governmentSpendingUSD = Number(seedObligations.totalUSD.toFixed(0));
-  const estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+  const governmentSpendingUSD = Math.round(seedObligations.totalUSD);
+  const estimatedHouseholdIncomeUSD = Math.round(computeHouseholdDisposableIncomeUSD({
     wageIncomeUSD: totalWageIncomeUSD,
     transfersWeeklyUSD: seedObligations.transfersUSD,
-  }).toFixed(0));
+  }));
   // COH3 — `assertHouseholdIncomeIdentity` is GONE, and the reason is that it could not fail.
   // Both sides of it came from the same four constants, so it was a tautology dressed as a check
   // — and its real effect was to PIN the seed to an identity the model stopped using in week 1,
@@ -437,22 +437,22 @@ function buildRegion(regionId: RegionId): Region {
   // the income-ranked 15/45/25/15 shape the raw seed carried was a different ranking (income
   // deciles) misapplied to wealth tiers, and week 1 would overwrite it anyway.
   (Object.keys(seedWealthDistribution) as WealthTier[]).forEach((t) => {
-    seedWealthDistribution[t].shareOfIncomeUSD = Number((seedCohorts.tierDisposableUSD[t] ?? 0).toFixed(0));
+    seedWealthDistribution[t].shareOfIncomeUSD = Math.round((seedCohorts.tierDisposableUSD[t] ?? 0));
   });
 
   const netInterestMarginPct = Number(Math.max(NIM_FLOOR, policyRate * NIM_TO_POLICY_RATE_RATIO + 0.005).toFixed(4));
   const bankingSector = {
-    businessLoanBookUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.businessLoanBookToGdp).toFixed(0)),
-    consumerLoanBookUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.consumerLoanBookToGdp).toFixed(0)),
-    depositsUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.depositsToGdp).toFixed(0)),
-    sovereignBondHoldingsUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp).toFixed(0)),
-    cashReservesUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp).toFixed(0)),
-    bankEquityUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp).toFixed(0)),
+    businessLoanBookUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.businessLoanBookToGdp)),
+    consumerLoanBookUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.consumerLoanBookToGdp)),
+    depositsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.depositsToGdp)),
+    sovereignBondHoldingsUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.sovereignBondHoldingsToGdp)),
+    cashReservesUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.cashReservesToGdp)),
+    bankEquityUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.bankEquityToGdp)),
     bankCapitalRatio: BANK_CAPITAL_RATIO,
     netInterestMarginPct,
     loanLossProvisionRateAnnualPct: LOAN_LOSS_PROVISION_RATE,
     creditConditionsIndex: 0,
-    centralBankReservesUSD: Number((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp).toFixed(0)),
+    centralBankReservesUSD: Math.round((estimatedNominalGdpUSD * BANK_BALANCE_SHEET_RATIOS.centralBankReservesToGdp)),
     moneySupplyM2USD: 0,
     itemizedHoldings: [],
     srfBorrowingUSD: 0,
@@ -476,18 +476,18 @@ function buildRegion(regionId: RegionId): Region {
     corpBondHoldingsUSD: 0,
     sovBondHoldingsUSD: 0,
     equityHoldingsUSD: 0,
-    cashUSD: Number((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.cashToGdp).toFixed(0)),
-    sectorEquityUSD: Number((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.sectorEquityToGdp).toFixed(0)),
+    cashUSD: Math.round((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.cashToGdp)),
+    sectorEquityUSD: Math.round((estimatedNominalGdpUSD * INSTITUTIONAL_SECTOR_RATIOS.sectorEquityToGdp)),
     investmentIncomeMarginPct: INSTITUTIONAL_SECTOR_RATIOS.investmentIncomeMargin,
     itemizedHoldings: [],
   };
 
 
-  const creditCardDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome).toFixed(0));
-  const otherConsumerLoanDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome).toFixed(0));
-  const mortgageDebtUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.mortgageToIncome).toFixed(0));
-  const depositsUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.depositsToIncome).toFixed(0));
-  const equityHoldingsUSD = Number((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.equityHoldingsToIncome).toFixed(0));
+  const creditCardDebtUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.creditCardToIncome));
+  const otherConsumerLoanDebtUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.otherConsumerLoanToIncome));
+  const mortgageDebtUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.mortgageToIncome));
+  const depositsUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.depositsToIncome));
+  const equityHoldingsUSD = Math.round((estimatedHouseholdIncomeUSD * HOUSEHOLD_DEBT_RATIOS.equityHoldingsToIncome));
   const householdDebtToIncomeRatio = Number(((mortgageDebtUSD + creditCardDebtUSD + otherConsumerLoanDebtUSD) / Math.max(1, estimatedHouseholdIncomeUSD)).toFixed(3));
 
   // SEG-A: the SME pools are seeded from the region's REAL demand, so they are built after
@@ -546,7 +546,7 @@ function buildRegion(regionId: RegionId): Region {
     exportsUSD: 0,
     importsUSD: 0,
     currentAccountPctGdp: 0,
-    fxReservesUSD: Number((estimatedNominalGdpUSD * 0.002).toFixed(0)),
+    fxReservesUSD: Math.round((estimatedNominalGdpUSD * 0.002)),
     fiscalStanceScore: 0,
     // FRM: an outcome of this region's own seeded position, through the weekly rater's own
     // thresholds — not a label.
@@ -574,9 +574,9 @@ function buildRegion(regionId: RegionId): Region {
     effectiveTaxRate: EFFECTIVE_TAX_RATE,
     governmentRevenueUSD,
     governmentSpendingUSD,
-    governmentPayrollWeeklyUSD: Number(seedPayrollWeeklyUSD.toFixed(0)),
-    governmentInterestWeeklyUSD: Number(seedInterestWeeklyUSD.toFixed(0)),
-    employerPayrollTaxWeeklyUSD: Number((seedWageSplit.employerPayrollTaxUSD / 52).toFixed(0)),
+    governmentPayrollWeeklyUSD: Math.round(seedPayrollWeeklyUSD),
+    governmentInterestWeeklyUSD: Math.round(seedInterestWeeklyUSD),
+    employerPayrollTaxWeeklyUSD: Math.round((seedWageSplit.employerPayrollTaxUSD / 52)),
     // PUB2 (§7.4): the CB opens holding its real share of the stock, with the TGA at its
     // operating balance and currency as the residual that closes the balance sheet. Bank
     // reserves are the banks' own cash and are not stored here — one representation.
@@ -587,7 +587,7 @@ function buildRegion(regionId: RegionId): Region {
         acc[k] = (acc[k] ?? 0) + t.principalUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
         return acc;
       }, {} as Record<string, number>),
-      treasuryAccountUSD: Number((governmentSpendingUSD * TGA_TARGET_WEEKS_OF_SPENDING).toFixed(0)),
+      treasuryAccountUSD: Math.round((governmentSpendingUSD * TGA_TARGET_WEEKS_OF_SPENDING)),
       // Closes the balance sheet at birth; the weekly stage re-derives it (§7.4).
       currencyInCirculationUSD: 0,
       unbackedBankCashUSD: 0,
@@ -683,7 +683,7 @@ function buildRegion(regionId: RegionId): Region {
       revenueByIndustry.set(industry, industryDemandUSD * INDUSTRY_REGISTRY[industry].smeShareOfActivity);
     });
     SME_POOL_INDUSTRIES.forEach((industry) => {
-      const annualRevenueUSD = Number((revenueByIndustry.get(industry) ?? 0).toFixed(0));
+      const annualRevenueUSD = Math.round((revenueByIndustry.get(industry) ?? 0));
       if (annualRevenueUSD <= 0) return;
       const sector = INDUSTRY_REGISTRY[industry].sector;
       smePools.push({
@@ -699,7 +699,7 @@ function buildRegion(regionId: RegionId): Region {
         // uses. Its debt is migrated later (bank-lending's seed), so the mean is re-centred on
         // the pool's real book every week; what is seeded here is the SHAPE.
         strata: seedPoolLeverageStrata(SME_SEED_LEVERAGE_MULTIPLE, SME_POOL_STRATA_COUNT),
-        capexUSD: Number((annualRevenueUSD * 0.05).toFixed(0)),
+        capexUSD: Math.round((annualRevenueUSD * 0.05)),
       });
     });
   }

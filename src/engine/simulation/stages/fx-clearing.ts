@@ -434,8 +434,8 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
     const prior = state.fxPairs.find(p => pairKey(p.base, p.quote) === key)?.rate ?? 0;
     const now = clearedRateByPair.get(key) ?? prior;
     reg.fxClearedMovePct = Number((prior > 0 ? (now / prior - 1) * 100 : 0).toFixed(4));
-    reg.fxUnclearedResidualUSD = Number((residualByPair.get(key) ?? 0).toFixed(0));
-    reg.fxGrossDemandUSD = Number((grossByPair.get(key) ?? 0).toFixed(0));
+    reg.fxUnclearedResidualUSD = Math.round((residualByPair.get(key) ?? 0));
+    reg.fxGrossDemandUSD = Math.round((grossByPair.get(key) ?? 0));
   });
 }
 

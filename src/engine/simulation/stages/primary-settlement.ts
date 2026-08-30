@@ -128,7 +128,7 @@ export function settlePricedOfferings(
       // that paper has to exist for the lead to own it. Creating the tranche at the market take
       // instead had the lead's desk holding a claim on nothing.
       issuedUSD: firmCommitment ? offering.sizeUSD : outcome.marketTakeUSD,
-      proceedsUSD: Number((grossUSD - feeUSD).toFixed(0)),
+      proceedsUSD: Math.round((grossUSD - feeUSD)),
     });
   });
 

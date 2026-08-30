@@ -291,10 +291,10 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // yet migrated onto payment instructions, and carries the matching reserve leg with it so
       // the identity cannot drift. The size of this adjustment is the migration's own progress
       // meter: it goes to zero when every stage records instructions.
-      const trueCorporateUSD = Number((corporateDepositsByBank.get(bank.ticker) ?? 0).toFixed(0));
-      const trueInstitutionalUSD = Number((institutionalDepositsByBank.get(bank.ticker) ?? 0).toFixed(0));
+      const trueCorporateUSD = Math.round((corporateDepositsByBank.get(bank.ticker) ?? 0));
+      const trueInstitutionalUSD = Math.round((institutionalDepositsByBank.get(bank.ticker) ?? 0));
       const trueSmeUSD = regionBankShareTotal > 0
-        ? Number((segmentCashUSD * ((bank.bankMarketShare ?? 0) / regionBankShareTotal)).toFixed(0))
+        ? Math.round((segmentCashUSD * ((bank.bankMarketShare ?? 0) / regionBankShareTotal)))
         : 0;
       const reconcileUSD = (trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0))
         + (trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0))
@@ -335,7 +335,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         poolTotals.set(l.borrowerId, (poolTotals.get(l.borrowerId) ?? 0) + l.principalUSD);
       }));
       (reg.smePools || []).forEach((seg) => {
-        seg.debtUSD = Number((poolTotals.get(smePoolId(regionId, seg.industry)) ?? 0).toFixed(0));
+        seg.debtUSD = Math.round((poolTotals.get(smePoolId(regionId, seg.industry)) ?? 0));
       });
     }
 
@@ -349,8 +349,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     reg.repoRateAnnual = Number(session.repoRateAnnual.toFixed(6));
     // GUARD: what the session had to fund and what it actually lent, so the harness can tell a
     // quiet week from a dead market — the distinction the corridor assertion cannot make.
-    reg.repoFundableNeedUSD = Number(session.fundableNeedUSD.toFixed(0));
-    reg.repoClearedVolumeUSD = Number(session.clearedVolumeUSD.toFixed(0));
+    reg.repoFundableNeedUSD = Math.round(session.fundableNeedUSD);
+    reg.repoClearedVolumeUSD = Math.round(session.clearedVolumeUSD);
     // The fund's quote for next week's yield-gap decision comes off its post-session book.
     refreshMmfQuotes(regionId, reg, ctx);
     newSheets.forEach((entry) => {
@@ -435,8 +435,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
 
     // HH: what the region's banks actually paid household depositors this week — measured, so
     // household income can read it instead of re-deriving it at `policyRate x 0.6`.
-    reg.householdDepositInterestWeeklyUSD = Number(newSheets.reduce(
-      (a, { sheet }) => a + (sheet.householdDepositInterestWeeklyUSD ?? 0), 0).toFixed(0));
+    reg.householdDepositInterestWeeklyUSD = Math.round(newSheets.reduce(
+      (a, { sheet }) => a + (sheet.householdDepositInterestWeeklyUSD ?? 0), 0));
 
     // ---- HH3: the household sector's debt lines become what they now are — DERIVED SUMS of
     // the itemized pools on the named banks — and the week's real flows are recorded for the
@@ -449,9 +449,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     );
     const hs = reg.householdState;
     const priorMortgageDebtUSD = hs.mortgageDebtUSD ?? 0;
-    const mortgageDebtUSD = Number(sumPools('MORTGAGE').toFixed(0));
-    const creditCardDebtUSD = Number(sumPools('CREDIT_CARD').toFixed(0));
-    const otherConsumerLoanDebtUSD = Number(sumPools('CONSUMER_TERM').toFixed(0));
+    const mortgageDebtUSD = Math.round(sumPools('MORTGAGE'));
+    const creditCardDebtUSD = Math.round(sumPools('CREDIT_CARD'));
+    const otherConsumerLoanDebtUSD = Math.round(sumPools('CONSUMER_TERM'));
     let interestUSD = 0; let servicePrincipalUSD = 0; let mortgageOriginationUSD = 0;
     let mortgageDischargeUSD = 0; let consumerCreditUSD = 0;
     // HSG: a borrower shops, so the region's going mortgage rate is the KEENEST quote it can
@@ -485,8 +485,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const bankHouseholdDepositsUSD = newSheets.reduce((a, { sheet }) => a + sheet.depositsUSD, 0);
     reg.householdState = {
       ...hs,
-      depositsUSD: Number(bankHouseholdDepositsUSD.toFixed(0)),
-      mmfSharesUSD: Number(((hs.mmfSharesUSD ?? 0) + regionDivertedUSD).toFixed(0)),
+      depositsUSD: Math.round(bankHouseholdDepositsUSD),
+      mmfSharesUSD: Math.round(((hs.mmfSharesUSD ?? 0) + regionDivertedUSD)),
       pendingBankSettlementUSD: 0,
       mortgageDebtUSD,
       creditCardDebtUSD,
@@ -497,15 +497,15 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         : hs.householdDebtToIncomeRatio,
       // Burden is interest plus REQUIRED principal (annuity schedules and card minimums);
       // transactor turnover is consumption already counted, cycled through a card.
-      weeklyDebtServiceUSD: Number((interestUSD + servicePrincipalUSD).toFixed(0)),
+      weeklyDebtServiceUSD: Math.round((interestUSD + servicePrincipalUSD)),
       // The household sector's NET deposit credit from housing: buyers' new loans minus the
       // sellers' loans the sale proceeds retired.
-      weeklyMortgageOriginationUSD: Number((mortgageOriginationUSD - mortgageDischargeUSD).toFixed(0)),
-      weeklyNewConsumerCreditUSD: Number(consumerCreditUSD.toFixed(0)),
+      weeklyMortgageOriginationUSD: Math.round((mortgageOriginationUSD - mortgageDischargeUSD)),
+      weeklyNewConsumerCreditUSD: Math.round(consumerCreditUSD),
     };
     // The housing-market stat becomes the real number the banks actually wrote this week.
     if (reg.housingMarket) {
-      reg.housingMarket.mortgageOriginationVolumeUSD = Number(mortgageOriginationUSD.toFixed(0));
+      reg.housingMarket.mortgageOriginationVolumeUSD = Math.round(mortgageOriginationUSD);
       if (Number.isFinite(bestMortgageRateAnnual)) {
         reg.housingMarket.bestMortgageRateAnnual = Number(bestMortgageRateAnnual.toFixed(5));
       }

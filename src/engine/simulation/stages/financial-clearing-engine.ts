@@ -769,7 +769,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
     // residual dealer to name; the flow books keep theirs, and it is a real measurement there.
     out.dealerInventory[o] = packed.unsoldStaysWithHolder
       ? 0
-      : Number((liveFloatUSD - allocatedUSD).toFixed(0));
+      : Math.round((liveFloatUSD - allocatedUSD));
 
     if (offeringUSD > 0) {
       out.hasPrimary[o] = 1;
@@ -777,7 +777,7 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       const marketTakeUSD = offeringWithdrawn
         ? 0
         : Math.max(0, Math.min(offeringUSD, allocatedUSD - priorTotalUSD));
-      out.primaryMarketTake[o] = Number(marketTakeUSD.toFixed(0));
+      out.primaryMarketTake[o] = Math.round(marketTakeUSD);
     }
   }
   return out;

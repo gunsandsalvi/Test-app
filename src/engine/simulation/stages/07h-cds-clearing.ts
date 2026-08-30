@@ -255,7 +255,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
             referenceIssuerId: issuer.id,
             buyer: d.party,
             seller,
-            notionalUSD: Number(notionalUSD.toFixed(0)),
+            notionalUSD: Math.round(notionalUSD),
             spreadBps: Number(clearedBps.toFixed(1)),
             struckWeek: ctx.nextWeek,
             maturityWeek: ctx.nextWeek + CDS_TENOR_WEEKS,

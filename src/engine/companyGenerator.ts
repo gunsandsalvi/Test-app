@@ -618,7 +618,7 @@ export function generateInitialCompanies(
         stockPrice,
         historicalPrices,
         forwardPE: eps > 0 ? Number((stockPrice / eps).toFixed(2)) : sectorConfig.basePE,
-        marketCap: Number((stockPrice * tmpl.shares).toFixed(0)),
+        marketCap: Math.round((stockPrice * tmpl.shares)),
         dividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         baselineDividendYield: Number(((tmpl.initialRating === 'AAA' ? 0.025 : 0.015)).toFixed(3)),
         bankMarketShare: tmpl.bankMarketShare,

@@ -344,7 +344,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>()
         );
         reg.centralBankSheet.lastOpenMarketPurchasesUSD =
-          Number(((reg.centralBankSheet.lastOpenMarketPurchasesUSD ?? 0) + filled).toFixed(0));
+          Math.round(((reg.centralBankSheet.lastOpenMarketPurchasesUSD ?? 0) + filled));
       }
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} bill`);
@@ -396,7 +396,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
           ...existingSheet,
           sovereignBondHoldingsByTenor: byTenor,
-          sovereignBondHoldingsUSD: Number(Object.values(byTenor).reduce((s, v) => s + v, 0).toFixed(0)),
+          sovereignBondHoldingsUSD: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
           bankEquityUSD: existingSheet.bankEquityUSD - feeUSD,
         };
       });

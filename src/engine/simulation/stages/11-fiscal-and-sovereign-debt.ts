@@ -242,7 +242,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           bankBalanceSheet: {
             ...c.bankBalanceSheet,
             sovereignBondHoldingsByTenor: newByTenor,
-            sovereignBondHoldingsUSD: Number(Object.values(newByTenor).reduce((sum, v) => sum + v, 0).toFixed(0)),
+            sovereignBondHoldingsUSD: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
             repoEncumberedCollateralUSD: Number(
               ((c.bankBalanceSheet.repoEncumberedCollateralUSD ?? 0) * survivingShare).toFixed(0)
             ),
@@ -431,30 +431,30 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     }
 
     const corporateTaxWeeklyUSD = ctx.taxCollectedByRegion[regionId] ?? 0;
-    reg.taxCollectedCorporateUSD = Number(corporateTaxWeeklyUSD.toFixed(0));
-    reg.taxCollectedSmeUSD = Number(smeTaxWeeklyUSD.toFixed(0));
-    reg.taxCollectedHouseholdUSD = Number(householdTaxWeeklyUSD.toFixed(0));
-    reg.taxCollectedPayrollUSD = Number(payrollTaxWeeklyUSD.toFixed(0));
-    reg.taxCollectedConsumptionUSD = Number(consumptionTaxWeeklyUSD.toFixed(0));
+    reg.taxCollectedCorporateUSD = Math.round(corporateTaxWeeklyUSD);
+    reg.taxCollectedSmeUSD = Math.round(smeTaxWeeklyUSD);
+    reg.taxCollectedHouseholdUSD = Math.round(householdTaxWeeklyUSD);
+    reg.taxCollectedPayrollUSD = Math.round(payrollTaxWeeklyUSD);
+    reg.taxCollectedConsumptionUSD = Math.round(consumptionTaxWeeklyUSD);
     // The gap is sized against the SMOOTH expectation (corporate ACCRUAL, not the quarterly
     // remittance), so revenue keeps the real lumpiness instead of the residual absorbing it —
     // which is what makes a tax date swing the treasury's account at all.
     const smoothRealUSD = (ctx.taxAccruedByRegion[regionId] ?? 0)
       + smeAccrualWeeklyUSD + householdAccrualWeeklyUSD + consumptionAccrualWeeklyUSD + payrollAccrualWeeklyUSD;
-    reg.unmodeledTaxRevenueUSD = Number(Math.max(0, reg.governmentRevenueUSD - smoothRealUSD).toFixed(0));
+    reg.unmodeledTaxRevenueUSD = Math.round(Math.max(0, reg.governmentRevenueUSD - smoothRealUSD));
     // Revenue IS what arrived: real collections on their own calendars, plus whatever base the
     // model still cannot tax.
-    reg.governmentRevenueUSD = Number((
+    reg.governmentRevenueUSD = Math.round((
       corporateTaxWeeklyUSD + smeTaxWeeklyUSD + householdTaxWeeklyUSD
       + payrollTaxWeeklyUSD + consumptionTaxWeeklyUSD + reg.unmodeledTaxRevenueUSD
-    ).toFixed(0));
+    ));
 
     // PUB1: the government's real interest bill. The treasury's ACCOUNT is the TGA, a liability
     // of the central bank — see stages/central-bank.ts, which moves it and the reserves with it.
     const interestWeeklyUSD = weeklyInterestExpenseUSD(reg.govDebtTranches);
-    reg.governmentInterestWeeklyUSD = Number(interestWeeklyUSD.toFixed(0));
+    reg.governmentInterestWeeklyUSD = Math.round(interestWeeklyUSD);
     // Reported, never debited — the bill's cost is already in the redemption leg (PUB3d).
-    reg.governmentBillDiscountAccrualUSD = Number(weeklyBillDiscountAccrualUSD(reg.govDebtTranches).toFixed(0));
+    reg.governmentBillDiscountAccrualUSD = Math.round(weeklyBillDiscountAccrualUSD(reg.govDebtTranches));
     // What the bill pays to holders that exist. The rest is the named boundary above.
     {
       const cb = sovereignCouponByBucket(reg.govDebtTranches, sovBucketKey);
@@ -467,7 +467,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           .reduce((a, e) => a + e.itemizedHoldings
             .filter(h => h.instrumentType === 'GOV_BOND' && h.issuerRegion === regionId)
             .reduce((x, h) => x + ((h.quantityOrNotionalUSD ?? 0) * (cb[h.instrumentId.replace(`${regionId}-GOV-`, '')] ?? 0)) / 52, 0), 0);
-      reg.governmentInterestToUnmodeledHoldersUSD = Number(Math.max(0, interestWeeklyUSD - held).toFixed(0));
+      reg.governmentInterestToUnmodeledHoldersUSD = Math.round(Math.max(0, interestWeeklyUSD - held));
     }
 
     // ---- PUB1e: what actually left the account. Interest and transfers are contractual and are
@@ -480,12 +480,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       reg.governmentPayrollWeeklyUSD ?? 0
     );
     const procurementSpentUSD = reg.governmentProcurementSpentUSD ?? 0;
-    reg.governmentOutlaysUSD = Number(governmentOutlaysUSD({
+    reg.governmentOutlaysUSD = Math.round(governmentOutlaysUSD({
       interestUSD: govBudget.interestUSD,
       payrollUSD: govBudget.payrollUSD,
       transfersUSD: govBudget.transfersUSD,
       procurementSpentUSD,
-    }).toFixed(0));
+    }));
     reg.unspentProcurementBudgetUSD = Number(
       Math.max(0, govBudget.procurementBudgetUSD - procurementSpentUSD).toFixed(0)
     );
@@ -516,7 +516,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       treasuryAccountUSD: reg.centralBankSheet?.treasuryAccountUSD ?? 0,
       weeklyOutlaysUSD: reg.governmentOutlaysUSD ?? reg.governmentSpendingUSD,
     });
-    reg.cashBridgeBillIssuanceUSD = Number(cashBridgeIssuanceUSD.toFixed(0));
+    reg.cashBridgeBillIssuanceUSD = Math.round(cashBridgeIssuanceUSD);
 
     // Weekly bill issuance: the roll plus the bill share of new money, split across the three
     // programs, priced off the real cleared bill curve (07f ran before this stage).
@@ -589,7 +589,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     }
 
     if (updatedBankingSector.centralBankReservesUSD < 0) throw new Error("Invariant Violation: centralBankReservesUSD cannot be negative");
-    updatedBankingSector.centralBankReservesUSD = Number(updatedBankingSector.centralBankReservesUSD.toFixed(0));
+    updatedBankingSector.centralBankReservesUSD = Math.round(updatedBankingSector.centralBankReservesUSD);
 
     // PUB1d: the new issue is NOT force-placed. It exists, and 07c prices the enlarged bucket
     // next week against budget-constrained demand, the dealer holding what finds no buyer —
@@ -633,14 +633,14 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // MEASURE OF UNDERSUBSCRIPTION at the front of the ladder, not a payment.
     {
       const cbRedeemedUSD = Array.from(cbRedeemedByBucket.values()).reduce((a, v) => a + v, 0);
-      reg.lastUnsoldMaturedUSD = Number(
-        Math.max(0, maturedPrincipalUSD - redemptionPaidUSD - cbRedeemedUSD).toFixed(0));
+      reg.lastUnsoldMaturedUSD = Math.round(
+        Math.max(0, maturedPrincipalUSD - redemptionPaidUSD - cbRedeemedUSD));
     }
     // The TGA's own debit is the settlement layer's now, so the central-bank stage must not take
     // it a second time; what stays here is the REPORTED figure.
     // Only what was actually repaid: the unsold remainder above never left the account.
-    reg.lastRedemptionPaidUSD = Number(
-      (maturedPrincipalUSD - (reg.lastUnsoldMaturedUSD ?? 0)).toFixed(0));
+    reg.lastRedemptionPaidUSD = Math.round(
+      (maturedPrincipalUSD - (reg.lastUnsoldMaturedUSD ?? 0)));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);
 

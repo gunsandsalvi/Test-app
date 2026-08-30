@@ -594,14 +594,14 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
       tier: c.tier,
       earnerCount: Math.round(c.employed + c.unemployed),
       employedCount: Math.round(c.employed),
-      wageIncomeUSD: Number(c.wageUSD.toFixed(0)),
-      unemploymentBenefitsUSD: Number(c.benefitsUSD.toFixed(0)),
-      transferIncomeUSD: Number((excessTransfersUSD * (TIER_TRANSFER_WEIGHT[c.tier] * (c.employed + c.unemployed)) / transferNorm).toFixed(0)),
-      capitalIncomeUSD: Number((tierCapitalUSD[c.tier] * share).toFixed(0)),
-      grossIncomeUSD: Number(grossUSD.toFixed(0)),
-      taxUSD: Number(taxUSD.toFixed(0)),
-      disposableIncomeUSD: Number(dispUSD.toFixed(0)),
-      debtServiceUSD: Number(effectiveDebtServiceUSD.toFixed(0)),
+      wageIncomeUSD: Math.round(c.wageUSD),
+      unemploymentBenefitsUSD: Math.round(c.benefitsUSD),
+      transferIncomeUSD: Math.round((excessTransfersUSD * (TIER_TRANSFER_WEIGHT[c.tier] * (c.employed + c.unemployed)) / transferNorm)),
+      capitalIncomeUSD: Math.round((tierCapitalUSD[c.tier] * share)),
+      grossIncomeUSD: Math.round(grossUSD),
+      taxUSD: Math.round(taxUSD),
+      disposableIncomeUSD: Math.round(dispUSD),
+      debtServiceUSD: Math.round(effectiveDebtServiceUSD),
       // HH4b: debt service DEBITS the budget and the capital receipts CREDIT it — both sides of
       // the loop together (one alone is the HH1c leak). At seed the two net to zero by the
       // residual's construction; from week 1 they diverge with rates, which is the household
@@ -609,14 +609,14 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
       // payouts later and land mostly at the top. A cohort whose obligations exceed its budget
       // STOPS SAVING before it stops eating (squeezedSavingsUSD below) — the real order of a
       // distressed household's cuts.
-      savingsUSD: Number(squeezedSavingsUSD.toFixed(0)),
+      savingsUSD: Math.round(squeezedSavingsUSD),
       // PUB1c: consumption tax is a wedge inside the budget — the cohort's money is unchanged,
       // what it buys is smaller, and the difference is remitted by merchants. Recorded so the
       // treasury can collect it; the budget below is what actually reaches the goods market.
-      consumptionTaxUSD: Number((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
-        * (CONSUMPTION_TAX_RATE / (1 + CONSUMPTION_TAX_RATE))).toFixed(0)),
-      consumptionBudgetUSD: Number((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
-        / (1 + CONSUMPTION_TAX_RATE)).toFixed(0)),
+      consumptionTaxUSD: Math.round((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
+        * (CONSUMPTION_TAX_RATE / (1 + CONSUMPTION_TAX_RATE)))),
+      consumptionBudgetUSD: Math.round((Math.max(0, dispUSD - squeezedSavingsUSD - effectiveDebtServiceUSD + capitalReceiptsUSD)
+        / (1 + CONSUMPTION_TAX_RATE))),
     };
   });
 

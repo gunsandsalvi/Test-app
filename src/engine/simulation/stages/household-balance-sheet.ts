@@ -60,8 +60,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
         if (amountUSD > 0) { receiptsUSD += amountUSD; return; }
         if (reason.includes('tax')) taxPaidUSD += -amountUSD;
       });
-      reg.lastWeekHouseholdReceiptsUSD = Number(receiptsUSD.toFixed(0));
-      reg.lastWeekHouseholdTaxPaidUSD = Number(taxPaidUSD.toFixed(0));
+      reg.lastWeekHouseholdReceiptsUSD = Math.round(receiptsUSD);
+      reg.lastWeekHouseholdTaxPaidUSD = Math.round(taxPaidUSD);
     });
   }
 
@@ -274,11 +274,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
           // RULE 19 — published so the cohort build can weight by MEASURED debt and MEASURED
           // claims rather than by `TIER_DEBT_SERVICE_WEIGHT` and `TIER_RESIDUAL_RECEIPT_WEIGHT`.
           // Both were computed here already and thrown away.
-          debtUSD: Number(tierDebtUSD.toFixed(0)),
-          institutionalClaimsUSD: Number(tierClaimsUSD.toFixed(0)),
-          shareOfNetWorthUSD: Number((tierAssetsUSD - tierDebtUSD).toFixed(0)),
-          homeEquityUSD: Number((housingStockUSD * incomeShareOf(t, i)
-            - mortgageUSD * incomeShareOf(t, i)).toFixed(0)),
+          debtUSD: Math.round(tierDebtUSD),
+          institutionalClaimsUSD: Math.round(tierClaimsUSD),
+          shareOfNetWorthUSD: Math.round((tierAssetsUSD - tierDebtUSD)),
+          homeEquityUSD: Math.round((housingStockUSD * incomeShareOf(t, i)
+            - mortgageUSD * incomeShareOf(t, i))),
         };
       });
     }
@@ -291,7 +291,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       homeEquityUSD,
       depositsUSD,
       mmfSharesUSD,
-      pendingBankSettlementUSD: Number(((hs.pendingBankSettlementUSD ?? 0) - boughtUSD).toFixed(0)),
+      pendingBankSettlementUSD: Math.round(((hs.pendingBankSettlementUSD ?? 0) - boughtUSD)),
       etfShares,
       etfHoldingsUSD,
       directEquityUSD,

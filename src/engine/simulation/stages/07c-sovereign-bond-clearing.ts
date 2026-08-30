@@ -573,7 +573,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
         ...existingSheet,
         sovereignBondHoldingsByTenor: newBuckets,
-        sovereignBondHoldingsUSD: Number(newTotalUSD.toFixed(0)),
+        sovereignBondHoldingsUSD: Math.round(newTotalUSD),
         bankEquityUSD: existingSheet!.bankEquityUSD - feeUSD,
       };
     });
@@ -591,7 +591,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         reg.centralBankSheet, bondBucketKeys, (k) => bucketInstrumentId(regionId, k),
         result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>()
       );
-      reg.centralBankSheet.lastOpenMarketPurchasesUSD = Number(filled.toFixed(0));
+      reg.centralBankSheet.lastOpenMarketPurchasesUSD = Math.round(filled);
     }
 
     // Apply: the desks' inventory, owned by the banks that took it. This auction prices the

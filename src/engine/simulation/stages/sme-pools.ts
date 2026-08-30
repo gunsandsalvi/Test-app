@@ -74,10 +74,10 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // Smoothed for the same reason the margin is: one week of clearing is not a year of trade.
       // ----
       if (receiptsUSD > 0) {
-        pool.annualRevenueUSD = Math.max(1, Number((
+        pool.annualRevenueUSD = Math.max(1, Math.round((
           pool.annualRevenueUSD * (1 - MARGIN_MEASUREMENT_WEIGHT)
           + (receiptsUSD * 52) * MARGIN_MEASUREMENT_WEIGHT
-        ).toFixed(0)));
+        )));
       }
 
       // The revenue history the labor market hires against — the pool's own measured output, so
@@ -93,10 +93,10 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       const weeklyWageBillUSD = operatingCostUSD > 0 ? operatingCostUSD : 0;
       const bufferUSD = weeklyWageBillUSD * TARGET_CASH_WEEKS_OF_WAGES;
       const investableUSD = Math.max(0, cashUSD - bufferUSD);
-      pool.capexUSD = Number(Math.max(0, Math.min(
+      pool.capexUSD = Math.round(Math.max(0, Math.min(
         pool.annualRevenueUSD * TARGET_CAPEX_TO_REVENUE,
         investableUSD * 52
-      )).toFixed(0));
+      )));
 
       // ---- 5. Distress, measured in cash. A pool short of its payroll buffer is a pool whose
       // firms are failing, and its pooled default rate is what the banks lending to it price

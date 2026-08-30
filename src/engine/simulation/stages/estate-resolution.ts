@@ -264,7 +264,7 @@ function reduceHolding(
     ctx.companyUpdates[ticker].bankBalanceSheet = {
       ...sheet,
       businessLoans: loans,
-      businessLoanBookUSD: Number(bookUSD.toFixed(0)),
+      businessLoanBookUSD: Math.round(bookUSD),
       // A write-off is a write-down: the asset goes and equity takes it. A recovery is cash
       // arriving against the asset, and the reserves leg settles through the ledger.
       bankEquityUSD: sheet.bankEquityUSD - (isLoss ? amountUSD : 0),

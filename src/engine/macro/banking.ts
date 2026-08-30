@@ -465,20 +465,20 @@ export function evolveBankingSector(
     // HH: a reported FLOW, not a balance-sheet line — what this bank actually paid its household
     // depositors this week, at its own deposit rate. Read by 02b and summed per region so
     // household income can MEASURE it instead of re-deriving it as `policyRate x 0.6`.
-    householdDepositInterestWeeklyUSD: Number(weeklyDepositInterestUSD.toFixed(0)),
-    businessLoanBookUSD: Number(businessLoanUSD.toFixed(0)),
-    consumerLoanBookUSD: Number(consumerLoanUSD.toFixed(0)),
-    depositsUSD: Number(depositsUSD.toFixed(0)),
-    sovereignBondHoldingsUSD: Number(sovereignUSD.toFixed(0)),
-    cashReservesUSD: Number(cashUSD.toFixed(0)),
-    bankEquityUSD: Number(equityUSD.toFixed(0)),
+    householdDepositInterestWeeklyUSD: Math.round(weeklyDepositInterestUSD),
+    businessLoanBookUSD: Math.round(businessLoanUSD),
+    consumerLoanBookUSD: Math.round(consumerLoanUSD),
+    depositsUSD: Math.round(depositsUSD),
+    sovereignBondHoldingsUSD: Math.round(sovereignUSD),
+    cashReservesUSD: Math.round(cashUSD),
+    bankEquityUSD: Math.round(equityUSD),
     bankCapitalRatio: Number(newBankCapitalRatio.toFixed(4)),
     netInterestMarginPct: Number(netInterestMarginPct.toFixed(4)),
     // G2: reported from the REAL book by bank-lending.ts after its write-offs; carried here.
     loanLossProvisionRateAnnualPct: prevBanking.loanLossProvisionRateAnnualPct,
     creditConditionsIndex: Number(newCreditConditionsIndex.toFixed(3)),
-    centralBankReservesUSD: Number(newCentralBankReservesUSD.toFixed(0)),
-    moneySupplyM2USD: Number(newMoneySupplyM2USD.toFixed(0)),
+    centralBankReservesUSD: Math.round(newCentralBankReservesUSD),
+    moneySupplyM2USD: Math.round(newMoneySupplyM2USD),
     itemizedHoldings: prevBanking.itemizedHoldings || [],
     // REPO1: this week's secured positions are struck AFTER this function, once the week's cash
     // position is final — all of them in the repo session, the standing facility included, since
@@ -511,7 +511,7 @@ export function evolveBankingSector(
     // funding its own customers had already provided (measured: NIM breaches 33 → 45 the moment
     // institutional balances arrived — the deposits were on the sheet and the funding line had
     // not noticed).
-    wholesaleFundingUSD: Number((
+    wholesaleFundingUSD: Math.round((
       businessLoanUSD + consumerLoanUSD + sovereignUSD + cashUSD
       // CAL: the accrued coupon is an asset like any other, and leaving it out moved the whole
       // receivable into wholesale funding the week after it was first posted.
@@ -541,7 +541,7 @@ export function evolveBankingSector(
       - (prevBanking.smeDepositsUSD ?? 0)
       - ((prevBanking.repoBorrowedUSD ?? 0) + (prevBanking.srfBorrowingUSD ?? 0))
       - equityUSD
-    ).toFixed(0)),
+    )),
     corporateDepositsUSD,
     // This return rebuilds the sheet from a FIXED FIELD LIST, so anything not named here is
     // silently dropped — these two vanished every week until the identity caught it (804

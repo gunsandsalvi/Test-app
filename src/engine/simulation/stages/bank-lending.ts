@@ -172,9 +172,9 @@ export function migrateSmeDebtAtSeed(
     sheet.businessLoanBookUSD = loans.reduce((a, l) => a + l.principalUSD, 0);
     // Funding side re-derived so the sheet still balances (same discipline as the WS6 seed).
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    sheet.depositsUSD = Number((
+    sheet.depositsUSD = Math.round((
       sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
-    ).toFixed(0));
+    ));
   });
 
   // The segments' recorded debt becomes the loans that actually exist.
@@ -342,7 +342,7 @@ export function runBankWeeklyLending(
     // does with a credit line when it is squeezed.
   });
 
-  const businessLoanBookUSD = Number(loans.reduce((a, l) => a + l.principalUSD, 0).toFixed(0));
+  const businessLoanBookUSD = Math.round(loans.reduce((a, l) => a + l.principalUSD, 0));
   return {
     sheet: {
       ...sheet,
@@ -543,11 +543,11 @@ export function migrateHouseholdDebtAtSeed(
     sheet.consumerLoanBookUSD = pools.reduce((a, pl) => a + pl.principalUSD, 0);
     // Equity scales with the risk the books add, at the ratio this bank already ran — no new
     // constant, and the opening capital ratio is preserved by construction.
-    sheet.bankEquityUSD = Number((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio).toFixed(0));
+    sheet.bankEquityUSD = Math.round((sheet.bankEquityUSD + Math.max(0, newHouseholdRwaUSD - replacedRwaUSD) * priorRatio));
     const sovUSD = Object.values(sheet.sovereignBondHoldingsByTenor || {}).reduce((a, v) => a + (Number(v) || 0), 0);
-    const fundingNeedUSD = Number((
+    const fundingNeedUSD = Math.round((
       sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD + sheet.cashReservesUSD - sheet.bankEquityUSD
-    ).toFixed(0));
+    ));
     applyBankFundingSplit(sheet, Math.round((hs.depositsUSD ?? 0) * share));
     sheet.bankCapitalRatio = Number((sheet.bankEquityUSD / Math.max(1, bankRwaUSD(sheet))).toFixed(4));
   });
@@ -563,14 +563,14 @@ export function migrateHouseholdDebtAtSeed(
   hs.otherConsumerLoanDebtUSD = sumKind('CONSUMER_TERM');
   hs.priorMortgageDebtUSD = hs.mortgageDebtUSD;
   const policyRate = reg.policyRate;
-  hs.weeklyDebtServiceUSD = Number((
+  hs.weeklyDebtServiceUSD = Math.round((
     (hs.mortgageDebtUSD * mortgageRate
       + hs.creditCardDebtUSD * (policyRate + cardMarginBps / 10000)
       + hs.otherConsumerLoanDebtUSD * (policyRate + termMarginBps / 10000)) / 52
     + annuityWeeklyPrincipalUSD(hs.mortgageDebtUSD, mortgageRate, MORTGAGE_SEED_WAM_WEEKS)
     + annuityWeeklyPrincipalUSD(hs.otherConsumerLoanDebtUSD, policyRate + termMarginBps / 10000, CONSUMER_TERM_SEED_WAM_WEEKS)
     + hs.creditCardDebtUSD * CARD_MIN_PRINCIPAL_RATE_WEEKLY
-  ).toFixed(0));
+  ));
   const housingStockUSD = hs.housingStockUSD && hs.housingStockUSD > 0
     ? hs.housingStockUSD
     : (reg.housingMarket
@@ -579,13 +579,13 @@ export function migrateHouseholdDebtAtSeed(
   // Seeded as the engine's own shape: NET mortgage credit — buyers' new loans at the
   // origination LTV minus sellers' remaining loans (at the book's average LTV) the sales retire.
   const seedAvgLtv = housingStockUSD > 0 ? Math.min(2, hs.mortgageDebtUSD / housingStockUSD) : 1;
-  hs.weeklyMortgageOriginationUSD = Number((
+  hs.weeklyMortgageOriginationUSD = Math.round((
     (housingStockUSD * HOUSING_TURNOVER_SEED_RATE_ANNUAL / 52) * Math.max(0, MORTGAGE_LTV_AT_ORIGINATION - seedAvgLtv)
-  ).toFixed(0));
-  hs.weeklyNewConsumerCreditUSD = Number((
+  ));
+  hs.weeklyNewConsumerCreditUSD = Math.round((
     hs.creditCardDebtUSD * CARD_POOL_PAYMENT_RATE_WEEKLY
     + annuityWeeklyPrincipalUSD(hs.otherConsumerLoanDebtUSD, policyRate + termMarginBps / 10000, CONSUMER_TERM_SEED_WAM_WEEKS)
-  ).toFixed(0));
+  ));
 }
 
 export interface HouseholdLendingResult {
@@ -908,10 +908,10 @@ export function runBankHouseholdLending(
         pl.wamWeeks = Math.max(1, pl.wamWeeks - 1);
       }
     }
-    pl.principalUSD = Math.max(0, Number(pl.principalUSD.toFixed(0)));
+    pl.principalUSD = Math.max(0, Math.round(pl.principalUSD));
   });
 
-  const consumerLoanBookUSD = Number(pools.reduce((a, pl) => a + pl.principalUSD, 0).toFixed(0));
+  const consumerLoanBookUSD = Math.round(pools.reduce((a, pl) => a + pl.principalUSD, 0));
   return {
     sheet: {
       ...sheet,
@@ -974,10 +974,10 @@ export function applyBankFundingSplit(
   // `bankTotalAssetsUSD` is the one asset side; the secured funding lines are the liabilities
   // this split is not responsible for. Whatever is left is what deposits and wholesale money
   // have to cover.
-  const fundingNeedUSD = Number((
+  const fundingNeedUSD = Math.round((
     bankTotalAssetsUSD(sheet) + pendingCashUSD - sheet.bankEquityUSD
       - (sheet.repoBorrowedUSD ?? 0) - (sheet.srfBorrowingUSD ?? 0)
-  ).toFixed(0));
+  ));
   sheet.depositsUSD = Math.min(fundingNeedUSD, Math.max(0, householdDepositsUSD));
   const afterHouseholdUSD = Math.max(0, fundingNeedUSD - sheet.depositsUSD);
   const realDepositsUSD = Math.max(0, sheet.corporateDepositsUSD ?? 0)

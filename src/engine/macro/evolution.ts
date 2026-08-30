@@ -558,15 +558,15 @@ export function evolveRegionMacro(
   // this measurement exists.
   const measuredWeeklyReceiptsUSD = region.lastWeekHouseholdReceiptsUSD;
   const newEstimatedHouseholdIncomeUSD = measuredWeeklyReceiptsUSD !== undefined
-    ? Number(Math.max(0,
+    ? Math.round(Math.max(0,
       (measuredWeeklyReceiptsUSD - (region.lastWeekHouseholdTaxPaidUSD ?? 0)) * 52
       + annualCapitalReceiptsUSD.dividendsUSD
       + annualCapitalReceiptsUSD.residualUSD
-    ).toFixed(0))
-    : Number(computeHouseholdDisposableIncomeUSD({
+    ))
+    : Math.round(computeHouseholdDisposableIncomeUSD({
       wageIncomeUSD: totalWageIncomeUSD,
       transfersWeeklyUSD: govObligations.transfersUSD,
-    }).toFixed(0));
+    }));
 
   // HH4: the same income, decomposed — ~20 occupation x wealth-tier cohorts built from the
   // same pools, wages and transfer arithmetic, so their sums reproduce the aggregate above to
@@ -973,7 +973,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     historicalPrices: histPrices,
     // HSG — what the banks actually originated, summed by the bank pass. The 5%-of-income x a
     // credit nudge this replaces was a statistic beside the real lending, not a measure of it.
-    mortgageOriginationVolumeUSD: Number((region.housingMarket?.mortgageOriginationVolumeUSD ?? 0).toFixed(0)),
+    mortgageOriginationVolumeUSD: Math.round((region.housingMarket?.mortgageOriginationVolumeUSD ?? 0)),
   };
 
   // ---- DEM: PEOPLE AGE. The age structure is a real stock now, not four drifting shares. ----
@@ -1088,12 +1088,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     }
     updatedWealthDist[t] = {
       ...updatedWealthDist[t],
-      shareOfIncomeUSD: Number(Math.max(1000, cohortResult.tierDisposableUSD[t] ?? updatedWealthDist[t].shareOfIncomeUSD).toFixed(0)),
-      liquidSavingsUSD: Number(liquidUSD.toFixed(0)),
-      investedSavingsUSD: Number(investedUSD.toFixed(0)),
+      shareOfIncomeUSD: Math.round(Math.max(1000, cohortResult.tierDisposableUSD[t] ?? updatedWealthDist[t].shareOfIncomeUSD)),
+      liquidSavingsUSD: Math.round(liquidUSD),
+      investedSavingsUSD: Math.round(investedUSD),
       // Their SUM, kept as the one number readers that want the whole stock should use (rule 3:
       // it is derived here, never accumulated separately).
-      accumulatedSavingsUSD: Number((liquidUSD + investedUSD).toFixed(0)),
+      accumulatedSavingsUSD: Math.round((liquidUSD + investedUSD)),
     };
   });
 
@@ -1155,8 +1155,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     governmentSpendingUSD: newGovernmentSpendingUSD,
     governmentPayrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
     governmentTransfersWeeklyUSD: govObligations.transfersUSD,
-    governmentInterestWeeklyUSD: Number(govInterestWeeklyUSD.toFixed(0)),
-    employerPayrollTaxWeeklyUSD: Number((employerPayrollTaxUSD / 52).toFixed(0)),
+    governmentInterestWeeklyUSD: Math.round(govInterestWeeklyUSD),
+    employerPayrollTaxWeeklyUSD: Math.round((employerPayrollTaxUSD / 52)),
     householdState: {
       consumerConfidence: newCCI,
       creditTierBooks: normalizedTiers,
@@ -1196,8 +1196,8 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
       cohorts: cohortResult.cohorts,
       // COH2: the life-cycle half of the saving flow, which the pension stage collects as the
       // contribution. Measured here so the flat `PENSION_CONTRIBUTION_RATE` has nothing to do.
-      lifeCycleSavingAnnualUSD: Number(cohortResult.lifeCycleSavingAnnualUSD.toFixed(0)),
-      capitalReceiptsAnnualUSD: Number((annualCapitalReceiptsUSD.depositInterestUSD + annualCapitalReceiptsUSD.dividendsUSD + annualCapitalReceiptsUSD.residualUSD).toFixed(0)),
+      lifeCycleSavingAnnualUSD: Math.round(cohortResult.lifeCycleSavingAnnualUSD),
+      capitalReceiptsAnnualUSD: Math.round((annualCapitalReceiptsUSD.depositInterestUSD + annualCapitalReceiptsUSD.dividendsUSD + annualCapitalReceiptsUSD.residualUSD)),
       unmodeledCapitalReceiptShareOfIncome: prevHS.unmodeledCapitalReceiptShareOfIncome,
       // HH3: derived sums of the banks' itemized pools, carried through and overwritten by the
       // bank-diversification stage after its lending passes run.

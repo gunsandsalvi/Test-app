@@ -149,7 +149,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
           regionId,
           brokerTicker,
           fundId: fund.id,
-          drawnUSD: Number(targetDrawnUSD.toFixed(0)),
+          drawnUSD: Math.round(targetDrawnUSD),
           haircutRate: Number(haircutRate.toFixed(4)),
           rateAnnual: Number(rateAnnual.toFixed(6)),
           struckWeek: ctx.nextWeek,
@@ -169,7 +169,7 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
       ctx.companyUpdates[ticker].bankBalanceSheet = {
         ...sheet,
-        primeBrokerageLoansUSD: Number(lentByBroker(nextBook, ticker).toFixed(0)),
+        primeBrokerageLoansUSD: Math.round(lentByBroker(nextBook, ticker)),
       };
     });
   });

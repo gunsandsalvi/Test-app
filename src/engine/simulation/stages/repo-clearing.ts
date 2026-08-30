@@ -324,9 +324,9 @@ export function runRegionalRepoSession(
       if (!sheet) return;
       sheetByTicker.set(bank.ticker, {
         ...sheet,
-        repoBorrowedUSD: Number((repoBorrowedUSD(book, bank.ticker) - srfBorrowedUSD(book, bank.ticker)).toFixed(0)),
-        srfBorrowingUSD: Number(srfBorrowedUSD(book, bank.ticker).toFixed(0)),
-        repoLentUSD: Number(repoLentUSD(book, { kind: 'BANK', ticker: bank.ticker }).toFixed(0)),
+        repoBorrowedUSD: Math.round((repoBorrowedUSD(book, bank.ticker) - srfBorrowedUSD(book, bank.ticker))),
+        srfBorrowingUSD: Math.round(srfBorrowedUSD(book, bank.ticker)),
+        repoLentUSD: Math.round(repoLentUSD(book, { kind: 'BANK', ticker: bank.ticker })),
         repoEncumberedCollateralUSD: Number(
           Array.from(encumberedFaceByBucket(book, bank.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
@@ -338,7 +338,7 @@ export function runRegionalRepoSession(
       lentByEntityId.set(c.lender.id, (lentByEntityId.get(c.lender.id) ?? 0) + c.principalUSD);
     });
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) =>
-      e.region === regionId ? { ...e, repoLentUSD: Number((lentByEntityId.get(e.id) ?? 0).toFixed(0)) } : e
+      e.region === regionId ? { ...e, repoLentUSD: Math.round((lentByEntityId.get(e.id) ?? 0)) } : e
     );
     return { repoRateAnnual: onRateAnnual, sheetByTicker, fundableNeedUSD: totalNeedUSD, clearedVolumeUSD };
   };
@@ -529,11 +529,11 @@ export function runRegionalRepoSession(
           regionId,
           lender,
           borrowerTicker: ticker,
-          principalUSD: Number(principalUSD.toFixed(0)),
+          principalUSD: Math.round(principalUSD),
           rateAnnual,
           struckWeek: week,
           maturityWeek: week + termWeeks,
-          collateral: pledges.map((pl) => ({ bucketKey: pl.bucketKey, faceUSD: Number(pl.faceUSD.toFixed(0)) })),
+          collateral: pledges.map((pl) => ({ bucketKey: pl.bucketKey, faceUSD: Math.round(pl.faceUSD) })),
         });
         struckUSD += principalUSD;
       });
@@ -678,8 +678,8 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
       ctx.companyUpdates[ticker].bankBalanceSheet = {
         ...sheet,
-        repoBorrowedUSD: Number((repoBorrowedUSD(book, ticker) - srfBorrowedUSD(book, ticker)).toFixed(0)),
-        srfBorrowingUSD: Number(srfBorrowedUSD(book, ticker).toFixed(0)),
+        repoBorrowedUSD: Math.round((repoBorrowedUSD(book, ticker) - srfBorrowedUSD(book, ticker))),
+        srfBorrowingUSD: Math.round(srfBorrowedUSD(book, ticker)),
         repoEncumberedCollateralUSD: Number(
           Array.from(encumberedFaceByBucket(book, ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),

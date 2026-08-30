@@ -459,7 +459,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // — so this reads the same number rather than the walked field it used to.
     const totalSovDebt = reg.debtToGdpPctBottomUp * reg.derivedNominalGdpUSD;
 
-    reg.institutionalSector.equityHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.equity * totalMarketCap).toFixed(0));
+    reg.institutionalSector.equityHoldingsUSD = Math.round((INSTITUTIONAL_OPENING_BOOK_SHARE.equity * totalMarketCap));
     // OWN6: the sovereign pool is the RESIDUAL, set after the bank pass below once the central
     // bank's and the banks' books are known. Opened at zero so the bank pass reserves nothing.
     reg.institutionalSector.sovBondHoldingsUSD = 0;
@@ -494,7 +494,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // OWN6: the opening credit book is the tradable stock itself. Placed here, once the candidate
     // list that defines that stock exists — holdings-view.ts rederives this scalar from the
     // entities' own books every week after, so the seed must open in the same shape.
-    reg.institutionalSector.corpBondHoldingsUSD = Number(totalCorpCandidatesUSD.toFixed(0));
+    reg.institutionalSector.corpBondHoldingsUSD = Math.round(totalCorpCandidatesUSD);
 
     const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
@@ -630,10 +630,10 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         // ledger maintains from here on. G2 later replaces this stock with real loan-created
         // deposits and real household flows.
         const bs = bank.bankBalanceSheet!;
-        bs.depositsUSD = Number((
+        bs.depositsUSD = Math.round((
           bs.businessLoanBookUSD + bs.consumerLoanBookUSD + bs.sovereignBondHoldingsUSD +
           bs.cashReservesUSD - bs.bankEquityUSD
-        ).toFixed(0));
+        ));
       });
 
       // The region aggregate is the derived sum of the named banks (the 02b/S7 doctrine),
@@ -645,16 +645,16 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         });
       });
       const sumBank = (f: (bs: import('../../types').BankingSector) => number) =>
-        Number(regionBanksForSov.reduce((sum, b) => sum + f(b.bankBalanceSheet!), 0).toFixed(0));
+        Math.round(regionBanksForSov.reduce((sum, b) => sum + f(b.bankBalanceSheet!), 0));
       reg.bankingSector.sovereignBondHoldingsByTenor = aggByTenor;
       reg.bankingSector.sovereignBondHoldingsUSD = sumBank(bs => bs.sovereignBondHoldingsUSD);
       // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
       // institutions'. Every bond now has a holder, which is what stops the float minting claims
       // and stops a redemption paying somebody who is not there.
-      reg.institutionalSector.sovBondHoldingsUSD = Number(Math.max(0,
+      reg.institutionalSector.sovBondHoldingsUSD = Math.round(Math.max(0,
         totalSovBucketedUSD
         - totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE
-        - reg.bankingSector.sovereignBondHoldingsUSD).toFixed(0));
+        - reg.bankingSector.sovereignBondHoldingsUSD));
       reg.bankingSector.depositsUSD = sumBank(bs => bs.depositsUSD);
       reg.bankingSector.cashReservesUSD = sumBank(bs => bs.cashReservesUSD);
       reg.bankingSector.bankEquityUSD = sumBank(bs => bs.bankEquityUSD);
@@ -686,7 +686,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         hs.unmodeledCapitalReceiptShareOfIncome = reg.estimatedHouseholdIncomeUSD > 0
           ? Number((Math.max(0, annualDsUSD - seedDepositInterestUSD) / reg.estimatedHouseholdIncomeUSD).toFixed(6))
           : 0;
-        hs.capitalReceiptsAnnualUSD = Number(annualDsUSD.toFixed(0));
+        hs.capitalReceiptsAnnualUSD = Math.round(annualDsUSD);
       }
       reg.bankingSector.businessLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0);
       reg.bankingSector.consumerLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.consumerLoanBookUSD, 0);
@@ -700,9 +700,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       const cbSheet = reg.centralBankSheet;
       if (cbSheet) {
         const reservesUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0);
-        cbSheet.currencyInCirculationUSD = Number(centralBankCurrencyResidualUSD(cbSheet, reservesUSD).toFixed(0));
-        cbSheet.unbackedBankCashUSD = Number(unbackedBankCashUSD(cbSheet, reservesUSD).toFixed(0));
-        reg.centralBankBalanceSheet = Number(centralBankAssetsUSD(cbSheet).toFixed(0));
+        cbSheet.currencyInCirculationUSD = Math.round(centralBankCurrencyResidualUSD(cbSheet, reservesUSD));
+        cbSheet.unbackedBankCashUSD = Math.round(unbackedBankCashUSD(cbSheet, reservesUSD));
+        reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cbSheet));
       }
 
       // Every company banks somewhere: its cash IS a deposit at its house bank (the same
@@ -1029,9 +1029,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       const earningAssetsUSD = sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sovUSD;
       const nimRevenueUSD = earningAssetsUSD * reg.bankingSector.netInterestMarginPct;
       if (!(nimRevenueUSD > 0)) return;
-      c.annualRevenue = Number(nimRevenueUSD.toFixed(0));
+      c.annualRevenue = Math.round(nimRevenueUSD);
       c.baselineAnnualRevenue = c.annualRevenue;
-      c.ebitda = Number((c.annualRevenue * (c.baselineEbitdaMargin ?? 0.40)).toFixed(0));
+      c.ebitda = Math.round((c.annualRevenue * (c.baselineEbitdaMargin ?? 0.40)));
       c.ebit = c.ebitda;
       c.revenueHistory = [];
     });
@@ -1094,11 +1094,11 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       averageAnnualWageUSD: realEmployedForWages > 0 ? realWageIncomeUSD / realEmployedForWages : 0,
       fiscalStanceScore: reg.fiscalStanceScore,
     });
-    reg.governmentSpendingUSD = Number(seedObligations.totalUSD.toFixed(0));
-    reg.estimatedHouseholdIncomeUSD = Number(computeHouseholdDisposableIncomeUSD({
+    reg.governmentSpendingUSD = Math.round(seedObligations.totalUSD);
+    reg.estimatedHouseholdIncomeUSD = Math.round(computeHouseholdDisposableIncomeUSD({
       wageIncomeUSD: realWageIncomeUSD,
       transfersWeeklyUSD: seedObligations.transfersUSD,
-    }).toFixed(0));
+    }));
 
     // With income now on its real footing, restate the reported GDP series to what this
     // economy's own components actually sum to. estimatedNominalGdpUSD stays the supply-side
@@ -1124,11 +1124,11 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // Weights are what households actually spend on each good; base prices are today's.
     reg.cpiBasket = buildCpiBasket(reg, 1, CPI_BASE_LEVEL);
 
-    reg.derivedNominalGdpUSD = Number(bottomUpGdpUSD.toFixed(0));
+    reg.derivedNominalGdpUSD = Math.round(bottomUpGdpUSD);
     reg.lastWeekNominalGdpUSD = reg.derivedNominalGdpUSD;
     const nominalTrendGrowth = reg.potentialGdpGrowth + reg.targetInflation;
     reg.nominalGdpHistory = reg.nominalGdpHistory.map((_, i, arr) =>
-      Number((reg.derivedNominalGdpUSD * Math.pow(1 + nominalTrendGrowth, (i - (arr.length - 1)) / 52)).toFixed(0))
+      Math.round((reg.derivedNominalGdpUSD * Math.pow(1 + nominalTrendGrowth, (i - (arr.length - 1)) / 52)))
     );
   });
 
@@ -1157,8 +1157,8 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
       regions[b.to].importsUSD += valueUSD;
     });
     (Object.keys(regions) as RegionId[]).forEach(r => {
-      regions[r].exportsUSD = Number(regions[r].exportsUSD.toFixed(0));
-      regions[r].importsUSD = Number(regions[r].importsUSD.toFixed(0));
+      regions[r].exportsUSD = Math.round(regions[r].exportsUSD);
+      regions[r].importsUSD = Math.round(regions[r].importsUSD);
       regions[r].tradeBalance = regions[r].exportsUSD - regions[r].importsUSD;
     });
     const clearing = runFreightClearing({
@@ -1220,7 +1220,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const book: Record<string, number> = {};
     (Object.keys(sourcesUSD) as RegionId[]).forEach(origin => {
       const share = totalSourced > 0 ? sourcesUSD[origin] / totalSourced : 1 / 3;
-      book[origin] = Number((quarterlyImportsUSD * share).toFixed(0));
+      book[origin] = Math.round((quarterlyImportsUSD * share));
     });
     cb.fxReservesByRegion = book;
   });

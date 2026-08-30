@@ -34,7 +34,7 @@ export function getRegionPopulation(regionId: RegionId): number {
 }
 
 export function getRegionProductivityPerCapitaUSD(regionId: RegionId): number {
-  return Number((PRODUCTIVITY_UNIT_USD * zipfMultiple(PRODUCTIVITY_RANK[regionId], PRODUCTIVITY_ZIPF_EXPONENT)).toFixed(0));
+  return Math.round((PRODUCTIVITY_UNIT_USD * zipfMultiple(PRODUCTIVITY_RANK[regionId], PRODUCTIVITY_ZIPF_EXPONENT)));
 }
 
 

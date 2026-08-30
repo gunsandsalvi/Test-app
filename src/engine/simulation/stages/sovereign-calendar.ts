@@ -133,8 +133,8 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
 
     // ---- 4. The treasury's own side of the same balance, so its expense can stay smooth while
     // its account moves on the dates (stages/central-bank.ts reads the change in this level). ----
-    reg.sovereignCouponPayableUSD = Number(sovereignAccruedPayableUSD(accrued, regionId).toFixed(0));
-    reg.sovereignCouponPaidUSD = Number(paidUSD.toFixed(0));
+    reg.sovereignCouponPayableUSD = Math.round(sovereignAccruedPayableUSD(accrued, regionId));
+    reg.sovereignCouponPaidUSD = Math.round(paidUSD);
   });
 
   // ---- 5. The banks' books. The receivable is SET to the ledger — one writer, so the holder's

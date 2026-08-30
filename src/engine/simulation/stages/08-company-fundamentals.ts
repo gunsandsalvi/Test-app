@@ -240,7 +240,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     pendingOfferingIssuerIds.add(o.issuerId);
   };
 
-  ctx.updatedCompanies = state.companies.map((comp) => {
+  ctx.updatedCompanies = state.companies.map(function companyWeekKernel(comp) {
     /**
      * Earnings PER SHARE, for a company that has shares. A private firm's register is empty until
      * it lists (HC7's `postIssueSharesOutstanding` creates it), so there is nothing to divide by
@@ -985,7 +985,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // as later slices name each flow, not a plug (rule 13).
     const post = (label: string, amountUSD: number, counterparty?: PartyRef, settle = true) => {
       if (!isFinite(amountUSD) || amountUSD === 0) return;
-      cashLedger.push({ label, amountUSD: Number(amountUSD.toFixed(0)) });
+      cashLedger.push({ label, amountUSD: Math.round(amountUSD) });
       newCash += amountUSD;
       // `settle: false` = the line is REPORTED here but the money moves elsewhere, itemised. A
       // dividend is the case: the issuer owes the register, and the register pays each holder by
@@ -1916,7 +1916,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         payHoldersCash(ctx, comp.id, 'EQUITY', buybacksThisWeek);
       }
     }
-    const newMarketCap = Number((newStockPrice * updatedSharesOutstanding).toFixed(0));
+    const newMarketCap = Math.round((newStockPrice * updatedSharesOutstanding));
     const newSeniorBondYield = reg.zeroRates.tenor5Y + newOasBps / 10000;
 
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
@@ -1999,9 +1999,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const share = line.revenueShare || 1.0;
       return {
         subUnitId: line.subUnitId,
-        revenueUSD: Number((newRevenue * share).toFixed(0)),
-        ebitdaUSD: Number((newEbitda * share).toFixed(0)),
-        capexUSD: Number((newCapex * share).toFixed(0)),
+        revenueUSD: Math.round((newRevenue * share)),
+        ebitdaUSD: Math.round((newEbitda * share)),
+        capexUSD: Math.round((newCapex * share)),
       };
     });
 
@@ -2035,7 +2035,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       baselineRecoveryRate: newBaselineRecoveryRate,
       baselineDividendYield: newBaselineDividendYield,
       previousEmployeeCount: comp.employeeCount,
-      accruedTaxLiabilityUSD: Number(accruedTaxUSD.toFixed(0)),
+      accruedTaxLiabilityUSD: Math.round(accruedTaxUSD),
       // HH6: the wage this firm offers and the hiring difficulty behind it are the labor
       // market stage's decisions — carried through explicitly, like employeeCount above,
       // because this stage rebuilds the company from a fixed field list and anything not
@@ -2086,7 +2086,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         return prior * 0.9 + Math.max(0, Math.min(1, shipped / owed)) * 0.1;
       })().toFixed(4)),
       recurringRevenueBaseUSD: newRecurringBaseUSD === undefined
-        ? undefined : Number(newRecurringBaseUSD.toFixed(0)),
+        ? undefined : Math.round(newRecurringBaseUSD),
       employeeCount: isDefaulted ? 0 : newEmployeeCount,
       recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
       debtTranches: updatedTranches,

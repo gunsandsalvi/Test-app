@@ -55,7 +55,7 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
       ctx.companyUpdates[c.ticker].bankBalanceSheet = {
         ...existing,
         sovereignBondHoldingsByTenor: byTenor,
-        sovereignBondHoldingsUSD: Number((Object.values(byTenor) as any[]).reduce((a: number, v: any) => a + (Number(v) || 0), 0).toFixed(0)),
+        sovereignBondHoldingsUSD: Math.round((Object.values(byTenor) as any[]).reduce((a: number, v: any) => a + (Number(v) || 0), 0)),
         bankEquityUSD: existing.bankEquityUSD + gainUSD,
       };
       return c;
@@ -90,7 +90,7 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
       });
       if (gainUSD > 0) {
         cb.sovereignHoldingsByTenor = book;
-        cb.lastBillAccretionUSD = Number(gainUSD.toFixed(0));
+        cb.lastBillAccretionUSD = Math.round(gainUSD);
       } else {
         cb.lastBillAccretionUSD = 0;
       }

@@ -218,7 +218,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
             tenorKey: k,
             payer: d.party,
             receiver: { kind: 'INSTITUTION', id: entityId },
-            notionalUSD: Number(notionalUSD.toFixed(0)),
+            notionalUSD: Math.round(notionalUSD),
             fixedRateAnnual: parByTenor[k],
             struckWeek: ctx.nextWeek,
             maturityWeek: ctx.nextWeek + Math.round(SWAP_TENOR_YEARS[k] * 52),

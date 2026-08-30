@@ -182,7 +182,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       ...hs,
       depositsUSD: Math.max(0, (hs.depositsUSD ?? 0) + householdNetUSD),
       // HH4d: the banks post this flow next week (T+1) — see pendingBankSettlementUSD's doc.
-      pendingBankSettlementUSD: Number(((hs.pendingBankSettlementUSD ?? 0) + householdNetUSD).toFixed(0)),
+      pendingBankSettlementUSD: Math.round(((hs.pendingBankSettlementUSD ?? 0) + householdNetUSD)),
     };
   });
 

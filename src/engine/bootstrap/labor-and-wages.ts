@@ -100,7 +100,7 @@ export function getBaseAnnualWageUSD(regionId: RegionId): Record<OccupationType,
   (Object.keys(OCCUPATION_SKILL_TIER) as OccupationType[]).forEach((occ) => {
     const tier = OCCUPATION_SKILL_TIER[occ];
     const relativePremium = Math.pow(SKILL_TIER_WAGE_STEP, tier - 1) / BASELINE_WEIGHTED_TIER_PREMIUM;
-    result[occ] = Number((averageWage * relativePremium).toFixed(0));
+    result[occ] = Math.round((averageWage * relativePremium));
   });
   baseWageTableByRegion.set(regionId, result);
   return result;

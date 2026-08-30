@@ -74,25 +74,25 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
       // them here too would debit the account twice for one repayment.
       + (reg.lastIssuanceProceedsUSD ?? 0)
       - settledTgaUSD;
-    cb.treasuryAccountUSD = Number((cb.treasuryAccountUSD + tgaFlowUSD).toFixed(0));
-    cb.lastRemittanceUSD = Number(remitUSD.toFixed(0));
+    cb.treasuryAccountUSD = Math.round((cb.treasuryAccountUSD + tgaFlowUSD));
+    cb.lastRemittanceUSD = Math.round(remitUSD);
 
     // ---- 3. The reserve leg is the settlement pass's, and posting it here as well is the trap
     // §7.62 recorded: it broke the per-bank balance-sheet identity by exactly the coupon, on every
     // bank. Under CAL the coupon is a real payment from the treasury to a named holder, so its
     // reserve leg is struck where every other payment's is, and what is reported here is what the
     // treasury's account did — which is what a reserve drain means. ----
-    cb.lastReserveDrainUSD = Number((-(reg.sovereignCouponPaidUSD ?? 0)).toFixed(0));
+    cb.lastReserveDrainUSD = Math.round((-(reg.sovereignCouponPaidUSD ?? 0)));
 
     // ---- 4. Currency closes the balance sheet. The CB is the one book allowed to issue the
     // liability that balances it — no capital constraint, never defaults. ----
     const reservesAfter = ctx.updatedCompanies
       .filter((c) => c.region === regionId && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
       .reduce((a, c) => a + c.bankBalanceSheet!.cashReservesUSD, 0);
-    cb.currencyInCirculationUSD = Number(centralBankCurrencyResidualUSD(cb, reservesAfter).toFixed(0));
-    cb.unbackedBankCashUSD = Number(unbackedBankCash(cb, reservesAfter).toFixed(0));
+    cb.currencyInCirculationUSD = Math.round(centralBankCurrencyResidualUSD(cb, reservesAfter));
+    cb.unbackedBankCashUSD = Math.round(unbackedBankCash(cb, reservesAfter));
 
     // Statistic, not a driver: the old `centralBankBalanceSheet` scalar's replacement.
-    reg.centralBankBalanceSheet = Number(centralBankAssetsUSD(cb).toFixed(0));
+    reg.centralBankBalanceSheet = Math.round(centralBankAssetsUSD(cb));
   });
 }

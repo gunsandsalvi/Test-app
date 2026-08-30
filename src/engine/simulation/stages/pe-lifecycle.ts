@@ -631,7 +631,7 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
     comp.listingStatus = 'PUBLIC';
     comp.sharesOutstanding = shares;
     comp.stockPrice = Number(settlement.clearedStat.toFixed(2));
-    comp.marketCap = Number((shares * comp.stockPrice).toFixed(0));
+    comp.marketCap = Math.round((shares * comp.stockPrice));
     comp.cash += settlement.proceedsUSD;
     comp.lastCashLedger = [...(comp.lastCashLedger ?? []), { label: 'IPO primary proceeds', amountUSD: settlement.proceedsUSD }];
     comp.ownership = { ...(comp.ownership ?? { founderPct: 0.05 }), peSponsorPct: 0.70 };
