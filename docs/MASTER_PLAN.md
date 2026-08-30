@@ -433,7 +433,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 12 | markets | **HF — hedge fund strategies + prime brokerage** | **CLOSED 2026-08-30 (§7.190).** Four funds instead of one, each in the markets its strategy is actually in; leverage is a real prime-brokerage line from a named bank, at a derived haircut, consuming the broker's balance sheet, priced, and withdrawable — so a margin call is a mechanism. Three of the four folded constants are gone: the FX elastic side is the pair's own volatility against the fund's own capital, the hedge ratio is a mandate property, the LBO debt share is 07d's answer. **The fourth, `HOME_BIAS_BY_ENTITY_TYPE` used as a weight, was CHECKED and the review's claim does not hold** — see §7.190. **Not built: a real equity SHORT** (borrow, locate, recall, squeeze), which is what would make long-short a paired book rather than a long one; it needs a securities-lending market and belongs with DER's margin machinery. |
 | 13 | markets | **DER — derivatives and the people who hedge with them** | **TWO SLICES DONE 2026-08-30 (§7.191): IRS and the cross-currency basis.** The swap market clears par rates at 2/5/10Y off exposures the model already measures, and prints the SWAP SPREAD — the first cross-market basis, and the first test that two of its markets agree. The basis is a cleared price: hedger demand against what the desks can write, with the walk-away tolerance derived from the currency's own volatility and the mandate's own hedge ratio. **Remains: CDS (which CRD's second half needs), equity options and the implied vol that kills `\|\| 0.3`, commodity futures, and corporate/bank hedging.** Each is an adapter on machinery that now exists. |
 | 14 | markets | **G5 — default resolution: recovery as an outcome** | **FIRST SLICE DONE 2026-08-30 (§7.192) — the one it was scoped around.** A default opens an ESTATE; assets leave at the rate the markets that would buy them absorb them; proceeds waterfall by real seniority; the residual is written off the holders' books. Recovery is an OUTPUT and displaces the 0.4 prior. Both folded constants are gone — the ×12 contagion coefficient and the 0.10 recovery floor. **Remains: the public default rate (~10%/yr against the private tier's zero, isolating the cause to the public path's cash accounting), and the PE exit by SALE.** |
-| 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | Re-scoped by the review: every seeded commodity price is a real market price back-solved into a "scarcity index" — the primitive becomes extraction cost and ore grade. Weather gets a calendar and a geography; two dead impact fields (14 writes, 0 reads) die; the third becomes a YIELD. |
+| 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | **CLOSED 2026-08-30 (§7.193).** Commodity prices follow extraction cost per tonne and units per tonne; the seed is the marginal producer's cost and the market does the rest. Weather has a season index, an exposure read off what each region actually produces, and generated place names; the two dead impact fields are deleted and the third is a YIELD cut the commodity book prices. **The reseed changes every energy and metal price and therefore every recipe cost — the measurement run must read the price level and the JPN fiscal band against it, not against anything measured before today.** |
 | 16 | depth | **CAL — payment calendars** | Coupons, loan interest and dividends on real dates instead of smooth 1/52 accruals. |
 | 17 | depth | **ETF2 — a real price for ETF shares** | Prereq G3. Adds: re-measure `AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY`, whose value contradicts its own comment by an order of magnitude. |
 | 18 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
@@ -6431,3 +6431,36 @@ that proved it, the lesson.
     - **Not done, and named:** the public default rate (~10%/yr against the private tier's zero,
       which isolates the cause to the public path's cash accounting) and the PE exit by SALE. Both
       are in §5-G5, and the estate machinery is the natural home for the second.
+
+193. **NAT — the seed stopped importing prices, and weather stopped stating outcomes.**
+    - **The rule-4 violation was in the multiplication, which is why it survived a header denying
+      it.** `PRODUCTION_COST_UNIT × CATEGORY_COST_FACTOR × scarcityIndex` multiplied out to eight
+      recognisable real market prices, with `scarcityIndex` back-solved out of the other two to
+      produce them. The tell the review found is the one that proves it: HEAVY crude seeded ABOVE
+      light, where real heavy grades trade at a discount — an import faithful to the level and not
+      to the physics, which is what happens when numbers are fitted rather than derived.
+    - **The primitives are now physical**: extraction cost per tonne, and the saleable units a
+      tonne yields (ore grade, barrels per tonne, mmbtu per tonne, bushels per tonne). The seed
+      price is their quotient — the marginal producer's own cost, the level below which it will
+      not sell — and where the market trades is stage 07's from week one. **The prices are not the
+      observed ones and are not meant to be**, and heavy crude now seeds BELOW light for the
+      physical reason it does in reality.
+    - **Weather got a calendar.** `_week` was unused. A season index runs the annual cycle, each
+      event type belongs to its own half of it, and severity scales with how deep into that season
+      the week is — so a midsummer drought is worse than a shoulder-season one, which is the point
+      of having a calendar at all.
+    - **And a GENERATED geography.** Exposure is read off what each region actually produces: crops
+      give it drought, gas and crude give it freeze-offs, shipping gives it storms. That is
+      structure the firm population decides, not a table of real-world climates, and it is a real
+      mechanism besides — what can hurt you follows what you do. The five rule-4 place names went
+      with it.
+    - **An event cuts a YIELD (NAT3).** It stated a `commodityImpactPct` and that number was added
+      to the commodity's price drift: the event deciding the answer, beside a supply-and-demand
+      market that was already there. It now destroys supply and the clearing ratio prices the
+      shortage. `gdpImpactPct` and `inflationImpactPct` — 14 writes, 0 reads — are deleted.
+    - **One thing the reseed exposed, fixed at the root.** A bank could end a week holding less of
+      a bucket than it had pledged: the auctions that price the paper run after the repo session
+      and can ration a mandated core pro rata when the float cannot cover every core. The answer is
+      not a wider floor — **the pledge follows the paper.** Collateral that no longer exists is
+      called, the contract it secured shrinks, and the borrower repays what it raised against it.
+      That is a margin call on collateral, and the model could not previously have one.
