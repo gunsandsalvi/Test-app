@@ -540,6 +540,30 @@ export function isPubliclyListed(c: Pick<Company, 'listingStatus' | 'ticker'>): 
 
 export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && !c.mergerAcquired; }
 
+/**
+ * CASH — the corporate treasury's own sleeve, and why it is a bid rather than a bookkeeping line.
+ *
+ * A treasurer holds an operating buffer against the week's payments and parks what is genuinely
+ * surplus in short government paper. Both numbers are this firm's own: the buffer is a share of
+ * its revenue, the sleeve a share of what is left. That much was always here — inside stage 08,
+ * where the company MINTED the paper (`treasuryHoldings.push`) and paid an UNMODELED
+ * counterparty for it, then burned it back the same way. Measured at the boundary: 6.1B gross
+ * over ten weeks of sovereign paper appearing and disappearing with no seller and no buyer,
+ * while 07f's own float rule carved these very holdings out on the grounds that "corporate
+ * treasuries never bid".
+ *
+ * They bid now, in the bill auction, on this schedule. The arithmetic below is unchanged and has
+ * one owner: 07f sizes the bid with it, and nothing mints paper any more.
+ */
+export const TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE = 0.05;
+export const TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH = 0.6;
+
+/** What this firm wants to be holding in short government paper, given the cash it has now. */
+export function corporateTreasuryTargetUSD(cashUSD: number, annualRevenueUSD: number): number {
+  const investableUSD = Math.max(0, cashUSD - annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE);
+  return investableUSD * TREASURY_SLEEVE_SHARE_OF_SURPLUS_CASH;
+}
+
 export function getOutputInventoryUSD(comp: Company, subUnitId?: string): number {
   const inv = comp.outputInventoryBySubUnit;
   if (!inv) return 0;

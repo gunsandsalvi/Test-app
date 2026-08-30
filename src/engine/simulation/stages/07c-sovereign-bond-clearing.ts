@@ -231,7 +231,10 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     //     then, so it leaves the book holding ~15% of the stock while the float still counts it.
     //     On an order week it IS a participant (with `minHoldingUSD` = its book), so it is
     //     inside the float and nothing is subtracted.
-    //   - CORPORATE TREASURIES, which park cash in short paper (stage 08) and never bid.
+    //   - CORPORATE TREASURIES, if one ever holds a BOND. Their cash sleeve is short paper and
+    //     they bid for it in 07f now (CASH), so in practice this carve-out finds nothing here —
+    //     it stays because "a holder that does not bid in THIS book keeps its position" is the
+    //     rule, and a treasury is not a participant in this one.
     // An institution holds this book's paper under the BUCKET instrument id, a corporate treasury
     // under a TRANCHE id — two id spaces for one instrument. Reading the wrong one silently counts
     // a whole book as passive: measured when it happened, the float collapsed and every real

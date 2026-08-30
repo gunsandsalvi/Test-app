@@ -138,14 +138,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     });
   });
-  /** The nearest short government tranche a corporate treasury would park cash in. One lookup
-   *  per region per week: the ladder now carries weekly bill issuance, so this list grows all
-   *  run and was being re-scanned per company. */
-  const nearestShortGovTrancheByRegion = new Map<string, any>();
-  (Object.keys(updatedRegions) as (keyof typeof updatedRegions)[]).forEach(rid => {
-    const found = (updatedRegions[rid]?.govDebtTranches || []).find((t: any) => t.tenorAtIssuanceYears <= 2);
-    if (found) nearestShortGovTrancheByRegion.set(rid as string, found);
-  });
   const suppliedSubUnitsByRegion = new Map<string, Set<string>>();
   prevActiveFirms.forEach(c => {
     let set = suppliedSubUnitsByRegion.get(c.region);
@@ -1658,34 +1650,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // balance-sheet equity, so this stage reads their price exactly as it reads everyone else's.
     const hist = [...comp.historicalPrices.slice(-51), newStockPrice];
 
-    // Company Treasury Holdings (Part MF) - Fixed Cash Leak & Liquidations
-    const investableCashUSD = Math.max(0, newCash - newRevenue * 0.05);
-    const targetTreasuryUSD = investableCashUSD * 0.6;
-    const currentTreasuryUSD = (comp.treasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
-    let newTreasuryHoldings = [...(comp.treasuryHoldings || [])];
-    if (targetTreasuryUSD > currentTreasuryUSD) {
-      const nearestGovTranche = nearestShortGovTrancheByRegion.get(comp.region);
-      if (nearestGovTranche) {
-        const purchaseAmountUSD = targetTreasuryUSD - currentTreasuryUSD;
-        newTreasuryHoldings.push({
-          instrumentId: nearestGovTranche.id,
-          instrumentType: 'GOV_BOND',
-          issuerRegion: comp.region,
-          quantityOrNotionalUSD: purchaseAmountUSD
-        });
-        post('treasury purchase (sovereign)', -purchaseAmountUSD);
-      }
-    } else if (targetTreasuryUSD < currentTreasuryUSD) {
-      const sellAmountUSD = currentTreasuryUSD - targetTreasuryUSD;
-      if (currentTreasuryUSD > 0) {
-        const scale = targetTreasuryUSD / currentTreasuryUSD;
-        newTreasuryHoldings = newTreasuryHoldings.map(h => ({
-          ...h,
-          quantityOrNotionalUSD: h.quantityOrNotionalUSD * scale
-        })).filter(h => h.quantityOrNotionalUSD > 0.01);
-        post('treasury sale (sovereign)', sellAmountUSD);
-      }
-    }
+    // CASH — the corporate treasury book. It is not decided here any more.
+    //
+    // What this replaces: the block that stood here compared a target sleeve to the current book
+    // and closed the gap by MINTING the paper — `treasuryHoldings.push(...)` against an UNMODELED
+    // payer — or by scaling every row down and taking cash from the same nowhere. It was a
+    // holding decided by a formula and a purchase with no seller, which is rule 13 and rule 1 in
+    // one block. 07f runs the treasurer's bid through the bill auction against real sellers
+    // (domain/company.ts owns the sleeve arithmetic), and this stage now simply carries what
+    // that auction filled.
+    const newTreasuryHoldings = ctx.companyUpdates[comp.ticker]?.treasuryHoldings ?? comp.treasuryHoldings ?? [];
 
     // Buyback Execution (Part AH)
     let updatedSharesOutstanding = comp.sharesOutstanding;

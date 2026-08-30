@@ -33,7 +33,7 @@ import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche,
 import { WeeklyStepContext } from './context';
 import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
-import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { encumberedFaceByBucket } from '../../../domain/repo';
@@ -215,6 +215,54 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         participants.push({ id: entity.id, currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
       });
 
+      // CASH — CORPORATE TREASURIES, bidding for the paper they used to mint.
+      //
+      // A treasurer parks surplus cash in short government paper. Stage 08 used to do that by
+      // pushing a holding onto the company and paying an UNMODELED counterparty, and selling it
+      // back the same way — 6.1B gross over ten weeks of sovereign paper with no seller and no
+      // buyer, and the reason 07f's float rule had to carve these holdings out as a holder that
+      // never bids. It bids here now, on the same sleeve arithmetic (domain/company.ts), against
+      // the same banks and institutions, and its fills settle through the clearing house.
+      //
+      // It is the most price-INSENSITIVE holder in this book, and honestly so: a treasurer parks
+      // cash because it has cash, not because the yield tempted it. So its reservation is the
+      // policy rate itself — below the bank arbitrage floor there is no reason to lock the money
+      // up at all — and its size is its own sleeve, bounded by the cash it actually holds.
+      const treasuryParticipantId = (ticker: string) => `TREASURY-${ticker}`;
+      const treasuryBidders = [...ctx.prevActiveFirms, ...ctx.prevActivePrivateFirms].filter(
+        (c) => c.region === regionId && isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
+      );
+      const treasuryByTicker = new Map<string, typeof treasuryBidders[number]>();
+      treasuryBidders.forEach((comp) => {
+        const heldByBucket = new Map<string, number>();
+        (comp.treasuryHoldings || []).forEach((h) => {
+          const key = h.instrumentId.startsWith(`${regionId}-GOV-`)
+            ? h.instrumentId.slice(`${regionId}-GOV-`.length)
+            : bucketKeyByTrancheId.get(h.instrumentId);
+          if (!key || !key.startsWith('b')) return;
+          heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
+        });
+        const targetUSD = corporateTreasuryTargetUSD(comp.cash ?? 0, comp.annualRevenue ?? 0);
+        const heldUSD = Array.from(heldByBucket.values()).reduce((a, v) => a + v, 0);
+        if (!(targetUSD > 1) && !(heldUSD > 1)) return;
+        const budgetUSD = Math.max(0, (comp.cash ?? 0)
+          + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: comp.ticker }));
+        const holdings = new Map<string, number>();
+        const demand = new Map<string, ParticipantDemand>();
+        activeBuckets.forEach((b) => {
+          const bucketShare = (outstandingByBucket.get(b.key) ?? 0) / totalBillStockUSD;
+          holdings.set(billInstrumentId(regionId, b.key), heldByBucket.get(b.key) ?? 0);
+          demand.set(billInstrumentId(regionId, b.key), {
+            reservationStat: reg.policyRate * 10000,
+            maxHoldingUSD: targetUSD * bucketShare,
+            fullSizeStatRange: BILL_FULL_SIZE_YIELD_RANGE_BPS,
+            maxNetPurchaseUSD: budgetUSD * bucketShare,
+          });
+        });
+        treasuryByTicker.set(comp.ticker, comp);
+        participants.push({ id: treasuryParticipantId(comp.ticker), currentHoldingsByInstrumentId: holdings, demandByInstrumentId: demand });
+      });
+
       const priorDealerInventory = new Map<string, number>();
       (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => {
         if (p.tenorKey.startsWith('b')) priorDealerInventory.set(billInstrumentId(regionId, p.tenorKey), p.inventoryUSD);
@@ -335,6 +383,26 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ctx.holdingsStore!.append(entity.id, billHoldings);
       });
 
+      // CASH: the treasuries' own books, rewritten from their fills. The rows are keyed by the
+      // BUCKET id every other holder in this book uses — the tranche ids stage 08 used to write
+      // were a second id space for one instrument (rule 3), and 07c had to read both.
+      treasuryByTicker.forEach((comp, ticker) => {
+        const fills = result.newParticipantHoldings.get(treasuryParticipantId(ticker));
+        if (!fills) return;
+        const kept = (comp.treasuryHoldings || []).filter((h) => {
+          const key = h.instrumentId.startsWith(`${regionId}-GOV-`)
+            ? h.instrumentId.slice(`${regionId}-GOV-`.length)
+            : bucketKeyByTrancheId.get(h.instrumentId);
+          return !(key && key.startsWith('b'));
+        });
+        const billRows: ItemizedHolding[] = [];
+        fills.forEach((usd, instrumentId) => {
+          if (usd > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
+        });
+        if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
+        ctx.companyUpdates[ticker].treasuryHoldings = [...kept, ...billRows];
+      });
+
       // SETL6: the book's whole cash side, through the clearing house — participants, the
       // desks' fees, and the dealer's own inventory leg.
       const billEntityIds = new Set(regionEntities.map((e) => e.id));
@@ -343,8 +411,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         result.netCashDeltaByParticipantId,
         (id) => (billEntityIds.has(id) ? { kind: 'INSTITUTION', id }
           : id.startsWith('BANK-') ? { kind: 'BANK_SECURITIES', ticker: id.slice(5) }
-            : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
-              : dealerDeskPartyOf(id, deskTickers)),
+            : id.startsWith('TREASURY-') ? { kind: 'COMPANY', ticker: id.slice('TREASURY-'.length) }
+              : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
+                : dealerDeskPartyOf(id, deskTickers)),
         { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
         feeDesksForRegion(ctx, regionId)
       );
