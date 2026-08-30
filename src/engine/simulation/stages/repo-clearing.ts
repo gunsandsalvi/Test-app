@@ -46,6 +46,7 @@ import {
   repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBucket,
 } from '../../../domain/repo';
 import { WeeklyStepContext } from './context';
+import { pay, PartyRef } from './settlement';
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
   YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
@@ -593,5 +594,80 @@ function creditRrpOnUnlentSleeves(
     const parkedUSD = (sleeveByEntity.get(e.id) ?? 0) - (lentByEntity.get(e.id) ?? 0);
     if (parkedUSD <= 0) return e;
     return { ...e, cashUSD: (e.cashUSD ?? 0) + (parkedUSD * (rrpBps / 10000)) / 52 };
+  });
+}
+
+/**
+ * REPO2 — A MARGIN CALL ON THE COLLATERAL. A pledge is a claim on specific paper, and the auctions
+ * that price that paper run after the repo session: a bank whose bucket is rationed down can end
+ * the week holding less of it than it pledged. The floor 07c and 07f post is what should stop
+ * that, and it does when the book is deep enough to honour every mandated core — but the engine
+ * rations cores pro rata when the float cannot cover them, and a rationed bank is one that had to
+ * sell paper the repo book says cannot move.
+ *
+ * The honest answer is not to widen the floor: it is that the pledge FOLLOWS the paper. Collateral
+ * that no longer exists is called, the contracts it secured shrink, and the borrower repays the
+ * cash it raised against it — which is what a margin call is, and it is a real mechanism this
+ * model could not previously have.
+ */
+export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
+  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    const book = reg?.repoBook;
+    if (!reg || !book || book.length === 0) return;
+    const borrowers = new Set(book.map((c) => c.borrowerTicker));
+    borrowers.forEach((ticker) => {
+      const company = ctx.updatedCompanies.find((c) => c.ticker === ticker && c.bankBalanceSheet);
+      if (!company) return;
+      const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
+      const pledged = encumberedFaceByBucket(book, ticker);
+      const shortfallByBucket = new Map<string, number>();
+      pledged.forEach((faceUSD, bucketKey) => {
+        const heldUSD = Number(sheet.sovereignBondHoldingsByTenor?.[bucketKey] ?? 0);
+        if (faceUSD > heldUSD + 1) shortfallByBucket.set(bucketKey, faceUSD - heldUSD);
+      });
+      if (shortfallByBucket.size === 0) return;
+
+      let repaidUSD = 0;
+      book.forEach((c) => {
+        if (c.borrowerTicker !== ticker || c.principalUSD <= 0) return;
+        let releasedFaceUSD = 0;
+        let pledgedFaceUSD = 0;
+        c.collateral = c.collateral.map((p) => {
+          pledgedFaceUSD += p.faceUSD;
+          const shortfall = shortfallByBucket.get(p.bucketKey) ?? 0;
+          if (shortfall <= 0) return p;
+          const totalPledged = pledged.get(p.bucketKey) ?? 1;
+          const takeUSD = Math.min(p.faceUSD, shortfall * (p.faceUSD / totalPledged));
+          releasedFaceUSD += takeUSD;
+          return { ...p, faceUSD: p.faceUSD - takeUSD };
+        }).filter((p) => p.faceUSD > 1);
+        if (releasedFaceUSD <= 0 || pledgedFaceUSD <= 0) return;
+        // The loan shrinks by the share of its collateral that is gone.
+        const callUSD = Math.min(c.principalUSD, c.principalUSD * (releasedFaceUSD / pledgedFaceUSD));
+        c.principalUSD -= callUSD;
+        repaidUSD += callUSD;
+        const payee: PartyRef = c.lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: c.lender.ticker }
+          : c.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.lender.id }
+            : { kind: 'CENTRAL_BANK', region: regionId };
+        pay(ctx, {
+          payer: { kind: 'BANK_SECURITIES', ticker },
+          payee,
+          amountUSD: callUSD,
+          reason: 'repo collateral call',
+        });
+      });
+      if (repaidUSD <= 0) return;
+      if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
+      ctx.companyUpdates[ticker].bankBalanceSheet = {
+        ...sheet,
+        repoBorrowedUSD: Number((repoBorrowedUSD(book, ticker) - srfBorrowedUSD(book, ticker)).toFixed(0)),
+        srfBorrowingUSD: Number(srfBorrowedUSD(book, ticker).toFixed(0)),
+        repoEncumberedCollateralUSD: Number(
+          Array.from(encumberedFaceByBucket(book, ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
+        ),
+      };
+    });
+    reg.repoBook = book.filter((c) => c.principalUSD > 1);
   });
 }

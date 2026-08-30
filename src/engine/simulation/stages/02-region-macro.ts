@@ -82,7 +82,9 @@ export function runRegionMacroStage(state: GameState, ctx: WeeklyStepContext): v
       },
       ctx.nextWeek,
       equityRet,
-      state.commodities
+      state.commodities,
+      // NAT2: what this region produces is what its weather can take from it.
+      ctx.prevActiveFirms
     );
     ctx.updatedRegions[regionId] = updatedRegion;
 

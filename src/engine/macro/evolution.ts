@@ -98,7 +98,9 @@ export function evolveRegionMacro(
   },
   week: number,
   equityReturn: number = 0,
-  prevCommodities: Commodity[] = []
+  prevCommodities: Commodity[] = [],
+  /** NAT2: the firms in this region — what it produces is what its weather can take from it. */
+  allCompanies: Company[] = []
 ): {
   updatedRegion: Region;
   rateChanged: boolean;
@@ -109,7 +111,7 @@ export function evolveRegionMacro(
   const { updatedBuffer: newPolicyRateLagBuffer, laggedValue: laggedPolicyRate } = pushAndReadLagged(region.policyRateLagBuffer || [], region.policyRate, 6);
   const { updatedBuffer: newDemandShockLagBuffer, laggedValue: laggedDemandShock } = pushAndReadLagged(region.demandShockLagBuffer || [], globalShock.gdpShock, 4);
   
-  const updatedWeather = evolveRegionalWeather(region.id, region.weather, week);
+  const updatedWeather = evolveRegionalWeather(region.id, region.weather, week, allCompanies);
 
   // A weather event's effect on inflation is no longer injected into a CPI formula here. It was
   // an assumed 3% "share of CPI basket" applied to one commodity's price change — a second,
@@ -1234,18 +1236,25 @@ export function evolveCommodity(
   const demandShock = globalGrowth * 0.8;
   const randomEps = (random() - 0.5) * comm.volatility * Math.sqrt(dt);
 
-  let weatherBoost = 0;
+  // NAT3: an event does not move the price. It destroys SUPPLY — the share of this commodity's
+  // yield it took — and the clearing ratio below prices the shortage, input costs rise through
+  // the recipes, and the measured index reports it. That is the chain this comment used to name
+  // while the code added the event's own price impact to the drift instead.
+  let yieldLossShare = 0;
   Object.values(regions).forEach((r) => {
     if (r.weather.affectedCommodityId === comm.id || r.weather.affectedCommodityId === comm.symbol) {
       const decay = Math.pow(0.55, Math.max(0, (r.weather.weeksActive || 0) - 1));
-      weatherBoost += r.weather.commodityImpactPct * decay;
+      yieldLossShare += (r.weather.yieldImpactPct ?? 0) * decay;
     }
   });
+  yieldLossShare = Math.max(0, Math.min(0.9, yieldLossShare));
 
-  const drift = demandShock * dt + randomEps + weatherBoost * dt * 4;
+  const drift = demandShock * dt + randomEps;
   
   const privateSegmentSupplyUSD = computePrivateSegmentCommoditySupplyUSD(comm.id, regions);
-  const { ratio: clearingRatio, supplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyUSD);
+  const { ratio: rawClearingRatio, supplyUnits: rawSupplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyUSD);
+  const supplyUnits = rawSupplyUnits * (1 - yieldLossShare);
+  const clearingRatio = rawClearingRatio * (1 - yieldLossShare);
   const supplyDemandDrift = Math.max(-0.04, Math.min(0.04, (clearingRatio - 1.0) * 0.12));
   const rawDriftExponent = drift * 0.4 + supplyDemandDrift;
   const safeDriftExponent = isFinite(rawDriftExponent) ? rawDriftExponent : 0;
@@ -1259,7 +1268,7 @@ export function evolveCommodity(
 
   const hist = [...comm.historicalPrices.slice(-51), newSpot];
 
-  const inventoryLevelPct = Math.max(0, Math.min(100, Math.round(comm.inventoryLevelPct + (random() - 0.5) * 3 - (weatherBoost > 0 ? 4 : 0))));
+  const inventoryLevelPct = Math.max(0, Math.min(100, Math.round(comm.inventoryLevelPct + (random() - 0.5) * 3 - yieldLossShare * 40)));
   // Derived from the same clearing ratio actually driving price/supply/demand above, not the
   // independent inventoryLevelPct random walk — previously the two could (and regularly did)
   // disagree, e.g. showing "Balanced" next to a ~2x demand/supply gap.

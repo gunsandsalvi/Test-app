@@ -126,17 +126,18 @@ export interface WeatherAnomaly {
   tempDeltaC: number;
   economicImpact: string;
   affectedCommodityId?: string;
-  /** The only impact field anything reads (`evolution.ts`, the commodity supply/demand balance). */
-  commodityImpactPct: number;
   /**
-   * DEAD: written at 14 sites in `macro/weather.ts`, read at NONE. Rule 13 in its purest form —
-   * a weather event stating its own GDP and inflation outcome instead of cutting a real crop
-   * yield and letting the commodity book, input costs and the price index do the work.
-   * `evolution.ts:75` already deleted the CPI shortcut for exactly this reason. Delete both, and
-   * turn `commodityImpactPct` into a YIELD so the chain runs. Owner: NAT.
+   * NAT3 — WHAT AN EVENT DOES: it cuts the affected commodity's YIELD, as a fraction of the
+   * region's supply of it. The commodity book then prices the shortage, input costs rise through
+   * the recipes, and the measured index reports it — the chain `evolution.ts` already names as
+   * the real one.
+   *
+   * This replaces `commodityImpactPct`, which stated a PRICE impact and was added to the spot's
+   * drift: an event deciding the answer instead of moving a quantity (rule 1). Its two siblings,
+   * `gdpImpactPct` and `inflationImpactPct`, were written at 14 sites and read at none — rule 13
+   * in its purest form, a weather event stating its own GDP and inflation outcome — and are gone.
    */
-  gdpImpactPct: number;
-  inflationImpactPct: number;
+  yieldImpactPct: number;
   weeksActive: number;
   minDurationWeeks?: number;
 }
