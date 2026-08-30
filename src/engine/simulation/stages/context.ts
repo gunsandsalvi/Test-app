@@ -160,6 +160,13 @@ export interface WeeklyStepContext {
   /** XB3a-2 — what each carrier earned and carried this week, in its OWN money, from real
    *  shipments. Read by stage 08 to build the carriers' P&L. */
   carrierFreightRevenue: Record<string, number>;
+  /** IND16 — what each distribution firm earned this week running the channel: the margin
+   * households paid inside the shelf price of every physical good they bought. Booked as real
+   * revenue in stage 08, exactly as the carriers' freight is. */
+  channelMarginRevenue: Record<string, number>;
+  /** IND16 — who runs the channel in each region, and each firm's share of it, by the size of its
+   * own distribution line. Built once a week; the settlement legs read it per lot. */
+  channelShareByRegion: Record<string, Map<string, number>>;
   carrierTonneNm: Record<string, number>;
   /** XB3a-4 — units that completed transit this week. */
   goodsArrivedUnits: number;
@@ -280,6 +287,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     shippedTonnesByLane: {},
     laneBookings: [],
     carrierFreightRevenue: {},
+    channelMarginRevenue: {},
+    channelShareByRegion: {},
     carrierTonneNm: {},
     goodsArrivedUnits: 0,
     shipmentsDispatched: [],

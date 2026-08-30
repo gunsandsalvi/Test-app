@@ -64,7 +64,11 @@ export function buildCpiBasket(region: Region, week: number, baseIndexLevel: num
     subUnits.forEach((su) => {
       if (su.buyerMix.HOUSEHOLD <= 0) return;
       const demand = region.categoryDemand[su.unitId as keyof typeof region.categoryDemand];
-      const price = demand?.unitPriceUSD;
+      // IND16: a consumer price index prices what a CONSUMER pays, which is the shelf price —
+      // the landed price plus what the channel charges to hold the stock it is sold out of. The
+      // landed price is what a business pays for the same good, and reading it here left the
+      // channel's cost out of the household's cost of living entirely.
+      const price = demand?.shelfUnitPriceUSD ?? demand?.unitPriceUSD;
       if (!demand || !price || !(price > 0)) return;
       const spendUSD = demand.demandLevelUSD * su.buyerMix.HOUSEHOLD;
       if (!(spendUSD > 0)) return;
@@ -96,7 +100,8 @@ export function computeCpiLevel(region: Region, basket: CpiBasket, excludeFoodAn
   Object.entries(basket.weightBySubUnit).forEach(([unitId, weight]) => {
     if (excludeFoodAndEnergy && FOOD_AND_ENERGY_SUBUNITS.has(unitId)) return;
     const basePrice = basket.basePriceBySubUnit[unitId];
-    const currentPrice = region.categoryDemand[unitId as keyof typeof region.categoryDemand]?.unitPriceUSD;
+    const cd = region.categoryDemand[unitId as keyof typeof region.categoryDemand];
+    const currentPrice = cd?.shelfUnitPriceUSD ?? cd?.unitPriceUSD;
     if (!basePrice || !(basePrice > 0) || !currentPrice || !(currentPrice > 0)) return;
     weightedRatioSum += weight * (currentPrice / basePrice);
     includedWeight += weight;

@@ -692,7 +692,12 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         householdUnitsPerCapitaAnnual: 2.0, corporateUnitsPerFirmAnnual: 18.0,
         recipeInputs: { refined_products: 0.14, commercial_fleet: 0.05, housing_rental_services: 0.05, enterprise_software: 0.02, electricity: 0.03, professional_services: 0.02, repair_and_maintenance: 0.05 },
         label: "Facilities & Logistics Services",
-        buyerMix: { HOUSEHOLD: 0.04, GOVERNMENT: 0.12, CORPORATE: 0.84 },
+        // IND16: NO HOUSEHOLD SHARE. A household does not buy distribution as a good — it pays
+        // for it inside the price of everything else it buys, which is what a channel margin IS
+        // (domain/distribution.ts). Leaving the 0.04 here as well would have sold this sector's
+        // work to households twice, once in this book and once in every other one (rule 3), and
+        // both numbers would have looked like real revenue with a real payer.
+        buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.125, CORPORATE: 0.875 },
         deliveryMode: 'IN_PLACE',
         productionLeadWeeks: 0,
         revenueMechanism: 'SUBSCRIPTION',

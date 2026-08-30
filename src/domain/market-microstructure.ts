@@ -82,6 +82,14 @@ export interface CategoryDemandState {
    * against their own anchor below.
    */
   unitPriceUSD?: number;
+  /**
+   * IND16 — what this good costs a HOUSEHOLD: the landed price above plus the channel's margin
+   * for holding the stock it is sold out of (domain/distribution.ts). Three real price levels
+   * now, each a real cost step with a real payee — ex-works is what the producer received,
+   * `unitPriceUSD` is what a business pays delivered, and this is what is on the shelf. Recipes
+   * and input costs keep reading the landed one, because that is genuinely what a firm pays.
+   */
+  shelfUnitPriceUSD?: number;
   /** The local book's own last cleared price — its anchor next week (XB3a). */
   localUnitPriceUSD?: number;
   smoothedUnitPriceUSD?: number; // Slow-moving average of the LOCAL book's cleared price, which its suppliers set production against (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price

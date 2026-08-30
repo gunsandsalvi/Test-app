@@ -139,8 +139,10 @@ const BOUNDARY_FRONTIERS: Record<string, string> = {
   // the registry. Owner: the goods-market completeness work (SCALE/PROD).
   'non-auction operating receipts': 'buyers outside the modelled registry',
   'other opex beyond auction settlements': 'suppliers outside the modelled registry',
-  // Warehousing is a service nobody sells yet. Owner: SVC.
-  'inventory carrying cost': 'warehousing, unmodelled seller',
+  // IND16 gave warehousing a seller: the distribution tier holds a firm's stock and is paid for
+  // it by name. What still reaches the boundary is a region with no distribution firm at all,
+  // which is a fact about that region. Owner: IND16.
+  'inventory carrying cost': 'a region with no distribution firm to hold the stock',
   // A lane no carrier serves is priced at the SPEC marginal rate and the goods still move, so
   // there is nobody to pay. Shrinks to nothing as the fleet reaches every lane; the served part
   // is paid to the carrier by name (stage 05). Owner: the freight book.

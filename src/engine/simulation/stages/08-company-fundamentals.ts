@@ -145,6 +145,30 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     (c.productLines || []).forEach(pl => set!.add(pl.subUnitId));
   });
 
+  // IND16 — WHAT WAREHOUSING EARNS THIS WEEK, computed BEFORE any firm's own week so the sector
+  // that holds the goods recognises the revenue in the same week the firms holding costs are
+  // charged. Doing it inside the per-firm loop would have booked a distributor's income out of
+  // whichever firms happened to be processed before it.
+  const carryingCostByTicker = new Map<string, number>();
+  prevActiveFirms.forEach(c => {
+    let total = 0;
+    Object.entries(c.outputInventoryBySubUnit || {}).forEach(([su, inv]) => {
+      total += (inv as { valueUSD: number }).valueUSD * (annualCarryingCostRateOf(su) / 52);
+    });
+    if (total > 0) carryingCostByTicker.set(c.ticker, total);
+  });
+  carryingCostByTicker.forEach((costUSD, ticker) => {
+    const owner = prevActiveFirms.find(c => c.ticker === ticker);
+    if (!owner) return;
+    ctx.channelShareByRegion[owner.region]?.forEach((share, holderTicker) => {
+      if (holderTicker === ticker) return; // a distributor warehouses its own stock
+      const amountUSD = costUSD * share;
+      if (amountUSD > 0) {
+        ctx.channelMarginRevenue[holderTicker] = (ctx.channelMarginRevenue[holderTicker] ?? 0) + amountUSD;
+      }
+    });
+  });
+
   // WS7: per-region redemption capacity for the treasury sweeps below — the funds' real cash.
   const mmfSweepBooks = openCorporateSweepBooks(ctx);
 
@@ -928,7 +952,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // its freight is settled, by name, by the buyers who shipped with it (stage 05). Counting
       // it here is what keeps the whole of its revenue out of `non-auction operating receipts`,
       // which would otherwise pay it a second time out of the boundary.
-      const settledSalesUSD = (update?.salesUSD ?? 0) + (ctx.carrierFreightRevenue[comp.ticker] ?? 0);
+      // IND16: and a DISTRIBUTOR's channel margin, on the same reasoning — it sells no units into
+      // the household's book, it is paid inside the shelf price by the households that bought out
+      // of its stock (stage 05). Counting it here is what keeps it out of the boundary line,
+      // which would otherwise pay the sector a second time.
+      const settledSalesUSD = (update?.salesUSD ?? 0)
+        + (ctx.carrierFreightRevenue[comp.ticker] ?? 0)
+        + (ctx.channelMarginRevenue[comp.ticker] ?? 0);
       const settledPurchasesUSD = update?.purchasesUSD ?? 0;
       post('settled sales (real auction receipts)', settledSalesUSD, undefined, false);
       post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD, undefined, false);
@@ -984,7 +1014,26 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // an allocation standing in for a purchasing decision — the thing rule 13 forbids — and it
       // is deleted rather than tuned.
       post('other opex beyond auction settlements', -Math.max(0, opexOutflowUSD - wagesPaidUSD));
-      post('inventory carrying cost', -carryingCostUSD);
+      // IND16: WAREHOUSING HAS A SELLER NOW. This was a declared boundary frontier — "warehousing,
+      // unmodelled seller" — because nothing in the model held goods for anybody. The distribution
+      // tier is that sector: the same firms that run the household channel hold a firm's stock for
+      // it, and they are paid for it by name. What is left on the boundary is only a region with
+      // no distribution firm at all, which is a fact about that region rather than a gap.
+      if (carryingCostUSD > 0) {
+        const holders = ctx.channelShareByRegion[comp.region];
+        let paidUSD = 0;
+        holders?.forEach((share, holderTicker) => {
+          if (holderTicker === comp.ticker) return; // a distributor warehouses its own stock
+          const amountUSD = carryingCostUSD * share;
+          if (!(amountUSD > 0)) return;
+          paidUSD += amountUSD;
+          post('inventory carrying cost', -amountUSD, { kind: 'COMPANY', ticker: holderTicker });
+        });
+        // Only a region with no distribution firm at all still reaches the boundary here, and
+        // that is a fact about the region rather than a gap in the model.
+        const unheldUSD = carryingCostUSD - paidUSD;
+        if (unheldUSD > 0.01) post('inventory carrying cost', -unheldUSD);
+      }
       // SETL4: reported here, paid itemised below — the house bank for its facilities, the
       // register for market paper. One aggregate line on the cash walk, three real payees.
       post('interest paid', -weeklyInterest, undefined, false);

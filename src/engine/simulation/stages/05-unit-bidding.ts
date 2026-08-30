@@ -26,6 +26,7 @@ import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS } from '../../../domain/market-microstructure';
+import { channelMarginRate, DISTRIBUTION_SUBUNIT_ID } from '../../../domain/distribution';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
@@ -1045,14 +1046,19 @@ function buildRegionDemandPlans(
     // IND18 — coats in winter, gifts in December. The seasonal swing is on the HOUSEHOLD leg
     // because that is where a retail peak lives; a firm's demand for its own inputs follows its
     // own production, which already carries the production side of the same calendar.
-    let hhDemandUnits = ((demandState.demandLevelUSD * hhShare) / 52) / referencePriceUSD
+    // IND16: a household's money buys what it buys AT THE SHELF, which is the landed price plus
+    // what the channel charges to hold the stock it is buying out of. Dividing the budget by the
+    // factory-gate price was the model paying no one to move the goods.
+    const channelMargin = channelMarginRate(subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
+    const shelfPriceUSD = referencePriceUSD * (1 + channelMargin);
+    let hhDemandUnits = ((demandState.demandLevelUSD * hhShare) / 52) / shelfPriceUSD
       * seasonalFactor(subUnitId, week, 'demand');
 
     if (subUnitId === 'passenger_vehicles') {
-      const initialStock = reg.householdState.durableGoodsStockUnits ?? (((demandState.demandLevelUSD * hhShare) / referencePriceUSD) * 3.5);
+      const initialStock = reg.householdState.durableGoodsStockUnits ?? (((demandState.demandLevelUSD * hhShare) / shelfPriceUSD) * 3.5);
       const scrappageRate = 0.12 / 52;
       const replacementDemandUnits = initialStock * scrappageRate;
-      const targetStock = (reg.estimatedHouseholdIncomeUSD * (1 - reg.householdState.savingsRate) * 0.10) / referencePriceUSD;
+      const targetStock = (reg.estimatedHouseholdIncomeUSD * (1 - reg.householdState.savingsRate) * 0.10) / shelfPriceUSD;
       const expansionDemandUnits = Math.max(0, (targetStock - initialStock) * 0.05);
       hhDemandUnits = replacementDemandUnits + expansionDemandUnits;
       // Scrappage happens once a week, not once per book: the stock is retired here and this
@@ -1071,7 +1077,11 @@ function buildRegionDemandPlans(
         regionId,
         isHouseholdAggregate: true,
         demandUnits: hhDemandUnits,
-        maxPriceUSD: referencePriceUSD * (1.0 + priceElasticityPremium),
+        // IND16: this book clears at the FACTORY GATE, so what the household can bid there is
+        // what its willingness to pay leaves once the channel has taken its cut. A costly channel
+        // means less reaches the producer — which is the transmission the tier exists for, and
+        // the reason it is not merely a bookkeeping layer.
+        maxPriceUSD: (referencePriceUSD * (1.0 + priceElasticityPremium)) / (1 + channelMargin),
       });
     }
   }
@@ -1619,6 +1629,31 @@ function runSubUnitMarkets(
         const hhUSD = ((book.householdFillUnitsByRegion[buyerRegion] ?? 0) * book.clearedPriceUSD / claimUSD) * aggregateUSD * sellerShare;
         const govUSD = ((book.governmentSpendUSDByRegion[buyerRegion] ?? 0) / claimUSD) * aggregateUSD * sellerShare;
         pay(ctx, { payer: { kind: 'HOUSEHOLD', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: hhUSD, reason: 'household goods purchase' });
+        // IND16: AND THE CHANNEL'S CUT, paid by the household that bought out of its stock, to
+        // the firms that held it — by name, exactly as the carriers are paid their freight. The
+        // producer received the factory gate above; this is the rest of what the household spent.
+        // A household's distribution spend used to reach this sector as a buyer-mix share of the
+        // logistics book instead, which paid it for the same work in a second place (rule 3).
+        const buyerReg = ctx.updatedRegions[buyerRegion];
+        const channelUSD = hhUSD * channelMarginRate(
+          subUnitId, buyerReg?.zeroRates?.tenor3M ?? buyerReg?.policyRate ?? 0);
+        if (channelUSD > 0) {
+          const shares = ctx.channelShareByRegion[buyerRegion];
+          shares?.forEach((share, distributorTicker) => {
+            const amountUSD = channelUSD * share;
+            if (!(amountUSD > 0)) return;
+            ctx.channelMarginRevenue[distributorTicker] = (ctx.channelMarginRevenue[distributorTicker] ?? 0) + amountUSD;
+            pay(ctx, {
+              payer: { kind: 'HOUSEHOLD', region: buyerRegion },
+              payee: { kind: 'COMPANY', ticker: distributorTicker },
+              amountUSD,
+              reason: 'distribution margin paid to the channel',
+            });
+          });
+          // A region with no distribution firm has no channel to pay and no margin is charged —
+          // nothing goes to the boundary here, because the margin only exists where somebody
+          // earns it.
+        }
         pay(ctx, { payer: { kind: 'GOVERNMENT', region: buyerRegion }, payee: partyOfKey(sellerKey, origin, lookup), amountUSD: govUSD, reason: 'government procurement' });
       });
     });
@@ -1655,6 +1690,14 @@ function runSubUnitMarkets(
     if (!demandState) return;
     demandState.exWorksUnitPriceUSD = Number(results[regionId].clearedPriceUSD.toFixed(2));
     demandState.unitPriceUSD = Number(publishedPrice[regionId].toFixed(2));
+    // IND16: the third price level, and the one a household actually faces. Ex-works is what the
+    // producer received, `unitPriceUSD` is what it cost delivered — what a BUSINESS pays for its
+    // inputs — and this is what it costs on a shelf, once the channel's cover is paid for. Three
+    // real steps, each with a real payee; recipes and the price indices keep reading the landed
+    // one, because that is genuinely what a firm pays.
+    const reg05 = ctx.updatedRegions[regionId];
+    demandState.shelfUnitPriceUSD = Number((publishedPrice[regionId]
+      * (1 + channelMarginRate(subUnitId, reg05?.zeroRates?.tenor3M ?? reg05?.policyRate ?? 0))).toFixed(2));
 
     const contracts = survivingContracts[regionId];
     const contractUnits = contracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
@@ -1784,6 +1827,24 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   });
   ctx.shippedTonnesByLane = {};
   ctx.carrierFreightRevenue = {};
+  // IND16: who runs the channel in each region, weighted by the size of each firm's own
+  // distribution line — the same sector that sells the service, earning the margin households pay
+  // inside the shelf price rather than buying-mix revenue it was being paid twice for.
+  ctx.channelMarginRevenue = {};
+  ctx.channelShareByRegion = {};
+  MARKET_REGION_IDS.forEach((regionId) => {
+    const weights = new Map<string, number>();
+    let total = 0;
+    ctx.prevActiveFirms.forEach((c) => {
+      if (c.region !== regionId) return;
+      const w = (c.productLines || []).reduce((a, line) => (
+        line.subUnitId === DISTRIBUTION_SUBUNIT_ID
+          ? a + Math.max(0, c.annualRevenue) * (line.revenueShare ?? 0) : a), 0);
+      if (w > 0) { weights.set(c.ticker, w); total += w; }
+    });
+    if (total > 0) weights.forEach((w, t) => weights.set(t, w / total));
+    ctx.channelShareByRegion[regionId] = total > 0 ? weights : new Map();
+  });
   ctx.carrierTonneNm = {};
   ctx.shipmentsDispatched = [];
   ctx.tradeInvoicesBooked = [];
