@@ -19,7 +19,7 @@ import {
 } from '../../domain/government';
 import { EFFECTIVE_LOWER_BOUND } from '../../domain/central-bank';
 import { splitWageBill } from '../bootstrap/national-accounts';
-import { buildHouseholdCohorts, TIER_WEALTH_MPC } from './household-cohorts';
+import { buildHouseholdCohorts, tierWealthMpc, WEALTH_TIERS } from './household-cohorts';
 import { getRegionDeathRateAnnual } from '../bootstrap/population';
 
 /**
@@ -411,12 +411,14 @@ export function evolveRegionMacro(
   // consumption roughly twice as hard per dollar as an equity rally (top-held, low MPC), which
   // is what the literature finds and the single constant could not express. Falls back to the
   // aggregate constant only while the tier marks have not run yet.
-  const tierWealthEffectUSD = (Object.keys(TIER_WEALTH_MPC) as WealthTier[]).reduce((a, t) => {
+  const tierWealthEffectUSD = WEALTH_TIERS.reduce((a, t) => {
     const tier = region.wealthDistribution?.[t];
     if (!tier || tier.priorNetWorthUSD === undefined) return a;
-    return a + TIER_WEALTH_MPC[t] * (tier.shareOfNetWorthUSD - tier.priorNetWorthUSD);
+    // DIST/COH: the propensity is DERIVED from this tier's own savings rate and how much of its
+    // wealth is actually liquid — not a stated per-tier constant (§7.142).
+    return a + tierWealthMpc(tier) * (tier.shareOfNetWorthUSD - tier.priorNetWorthUSD);
   }, 0);
-  const anyTierMarked = (Object.keys(TIER_WEALTH_MPC) as WealthTier[])
+  const anyTierMarked = WEALTH_TIERS
     .some((t) => region.wealthDistribution?.[t]?.priorNetWorthUSD !== undefined);
   const wealthChangeUSD = (prevHS.netWorthUSD ?? 0) - (prevHS.priorNetWorthUSD ?? prevHS.netWorthUSD ?? 0);
   const balanceSheetWealthEffect = (anyTierMarked

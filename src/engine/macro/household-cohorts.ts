@@ -121,19 +121,37 @@ export const TIER_BALANCE_SHEET_WEIGHTS: Record<
 };
 
 /**
- * HH4c — cents of extra consumption per dollar of extra wealth, PER TIER: the bottom spends
- * nearly a dime of a windfall dollar, the top a cent and a half. Replaces HH2's single 0.04.
- * (Stated from the empirical literature; the honest version falls out of a budget constraint —
- * a household near subsistence spends a windfall because it has unmet needs, which the price
- * tiers already express. Owner: COH.)
- * The tier-weighted blend at the seed wealth shares is ~0.035, so the aggregate effect opens
- * where the constant stood — but a housing move (middle-held, high-MPC) now moves consumption
- * roughly twice as hard as an equity rally of the same dollar size (top-held, low-MPC), which
- * is what the empirical literature finds and a single constant cannot express.
+ * DIST/COH — HOW MUCH OF A WINDFALL A TIER SPENDS, DERIVED FROM ITS OWN BALANCE SHEET.
+ *
+ * This was four stated numbers (0.10 / 0.06 / 0.03 / 0.015) whose own comment admitted the
+ * source — "stated from the empirical literature" — and named the honest version: it falls out
+ * of a budget constraint. Rule 4 forbids the observed cross-section; the mechanism behind it is
+ * fair game, and the model already measures everything the mechanism needs.
+ *
+ * Two things decide whether a household spends a windfall, and both are per-tier measurements:
+ *
+ *   1. **Whether it saves at all.** A tier consuming its whole income has unmet needs and
+ *      consumes the windfall too; one saving a third of its income saves a third of the windfall.
+ *      `savingsRate` is measured per tier from the cohorts' own budgets.
+ *   2. **Whether the wealth is SPENDABLE.** This is the liquid/illiquid split §5-DIST calls
+ *      not-optional: a tier whose net worth is a house and a pension cannot spend it however much
+ *      it would like to, and the top tier's wealth is overwhelmingly of that kind. That is the
+ *      real reason the top's MPC is a fraction of the bottom's — not a different preference.
+ *
+ * A stock is spent over years, not at once, so the flow propensity is divided by the horizon a
+ * household spreads a windfall over — a behavioural primitive, and the only stated number left.
  */
-export const TIER_WEALTH_MPC: Record<WealthTier, number> = {
-  BOTTOM_50: 0.10, NEXT_40: 0.06, TOP_9: 0.03, TOP_1: 0.015,
-};
+export const WEALTH_SPENDDOWN_YEARS = 8;
+
+export function tierWealthMpc(tier: WealthTierData | undefined): number {
+  if (!tier) return 0;
+  const netWorth = Math.max(1, tier.shareOfNetWorthUSD);
+  const illiquidUSD = Math.max(0, tier.homeEquityUSD ?? 0)
+    + Math.max(0, tier.equityExposureShare) * netWorth;
+  const liquidShare = Math.max(0, Math.min(1, 1 - illiquidUSD / netWorth));
+  const consumePropensity = Math.max(0, Math.min(1, 1 - tier.savingsRate));
+  return (consumePropensity * liquidShare) / WEALTH_SPENDDOWN_YEARS;
+}
 
 export interface CohortBuildInputs {
   occupationPools: Record<OccupationType, OccupationPool>;

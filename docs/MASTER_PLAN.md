@@ -5238,3 +5238,30 @@ that proved it, the lesson.
       where a credit cycle is decided.**
     - Harness green, 0 violations, numbers unchanged — these pools are not distressed, so a
       distress function correctly reports nothing. Both terms are structural and arm under stress.
+
+142. **DIST/COH — the wealth MPC is derived from each tier's own balance sheet, and the mechanism
+    reproduces a pattern the stated table assumed away.**
+    - **What it replaces.** Four stated numbers (0.10 / 0.06 / 0.03 / 0.015) whose own comment
+      admitted the source — *"stated from the empirical literature"* — and named the honest
+      version: it falls out of a budget constraint. Rule 4 forbids the observed cross-section; the
+      mechanism behind it is fair game, and the model already measures everything that mechanism
+      needs.
+    - **The derivation, from two per-tier measurements.** Whether a tier SAVES at all (a tier
+      consuming its whole income has unmet needs and consumes a windfall too), and whether its
+      wealth is SPENDABLE — the liquid/illiquid split §5-DIST calls not-optional. A stock is spent
+      over years, so the flow propensity is divided by a spend-down horizon, which is the only
+      stated number left.
+    - **AND THE RESULT IS NOT MONOTONE, which is the finding.** Measured at seed:
+      BOTTOM_50 **0.0557** (savings 0.010, liquid 0.450), TOP_9 0.0189, TOP_1 0.0142, and
+      **NEXT_40 the LOWEST at 0.0126** — because its wealth is 89% home equity. That is the
+      **wealthy-hand-to-mouth** household: asset-rich, cash-poor, and unable to spend a windfall
+      it cannot reach. §5-DIST cited exactly this as why the liquid/illiquid split is not
+      optional, and **the stated table could not express it at all** — it was monotone by
+      construction, so the second tier had to sit between the first and third whatever its balance
+      sheet said.
+    - **A mechanism that reproduces a known real-world pattern WITHOUT BEING TOLD IT is the whole
+      point of rule 4.** The stated table imported the answer and got the shape wrong; the budget
+      constraint derived it and got the shape right.
+    - Harness green, 0 violations, week-10 numbers unchanged — wealth effects are second-order
+      over ten weeks. The levels are uniformly lower than the stated table's, which is a real
+      change to the aggregate wealth effect and will show at horizon.
