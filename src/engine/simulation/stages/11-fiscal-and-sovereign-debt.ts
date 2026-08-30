@@ -185,6 +185,10 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     /** PUB2b: what the central bank's own book was repaid this week, by bucket — the size of
      * next week's reinvestment order. */
     const cbRedeemedByBucket = new Map<string, number>();
+    // CASH: what the treasury actually paid out to NAMED holders this week. The rest of the
+    // maturity is owed to holders this model does not name, and is posted to the boundary below
+    // rather than leaving the account with nothing recording where it went.
+    let redemptionPaidUSD = 0;
     if (maturedPrincipalUSD > 0) {
       // sovBucketKey covers bills and bonds alike (WS5): a maturing 13-week bill redeems out of
       // its holders' b13 positions, never out of the two-year bucket a nearest-of-[2,5,10,30]
@@ -216,6 +220,16 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           newByTenor[key] = heldUSD * (1 - fraction);
         });
         if (redeemedUSD <= 0) return c;
+        // CASH: the treasury REPAYS this holder. It used to be reserves appearing on the bank's
+        // book while the TGA was debited in another stage — two direct mutations that paired,
+        // which is not the same as being recorded.
+        redemptionPaidUSD += redeemedUSD;
+        pay(ctx, {
+          payer: { kind: 'GOVERNMENT', region: regionId },
+          payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
+          amountUSD: redeemedUSD,
+          reason: 'sovereign redemption',
+        });
         // Collateral that matured is collateral that no longer exists, so the repo it secured
         // must release it — in reality the position is unwound or substituted out of the
         // redemption proceeds. Without this the pledge outlived the bond and every bank in a
@@ -229,7 +243,6 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
             ...c.bankBalanceSheet,
             sovereignBondHoldingsByTenor: newByTenor,
             sovereignBondHoldingsUSD: Number(Object.values(newByTenor).reduce((sum, v) => sum + v, 0).toFixed(0)),
-            cashReservesUSD: c.bankBalanceSheet.cashReservesUSD + redeemedUSD,
             repoEncumberedCollateralUSD: Number(
               ((c.bankBalanceSheet.repoEncumberedCollateralUSD ?? 0) * survivingShare).toFixed(0)
             ),
@@ -271,9 +284,17 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         // used to describe ended when S11 gave every entity a real cashUSD — and bills (WS5)
         // made the gap weekly instead of quarterly, which is how the missing leg finally
         // showed up as a conservation violation.
-        return touched
-          ? { ...entity, cashUSD: (entity.cashUSD ?? 0) + redeemedCashUSD, itemizedHoldings: newHoldings }
-          : entity;
+        if (!touched) return entity;
+        if (redeemedCashUSD > 0) {
+          redemptionPaidUSD += redeemedCashUSD;
+          pay(ctx, {
+            payer: { kind: 'GOVERNMENT', region: regionId },
+            payee: { kind: 'INSTITUTION', id: entity.id },
+            amountUSD: redeemedCashUSD,
+            reason: 'sovereign redemption',
+          });
+        }
+        return { ...entity, itemizedHoldings: newHoldings };
       });
     }
 
@@ -530,6 +551,22 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         : t.principalUSD),
       0
     ).toFixed(0));
+    // The share owed to holders outside the model: real money leaving the treasury, named as a
+    // boundary line instead of vanishing from the account with no payee.
+    {
+      const cbRedeemedUSD = Array.from(cbRedeemedByBucket.values()).reduce((a, v) => a + v, 0);
+      const unmodeledUSD = Math.max(0, maturedPrincipalUSD - redemptionPaidUSD - cbRedeemedUSD);
+      if (unmodeledUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'GOVERNMENT', region: regionId },
+          payee: { kind: 'UNMODELED', region: regionId },
+          amountUSD: unmodeledUSD,
+          reason: 'sovereign redemption (unmodeled holders)',
+        });
+      }
+    }
+    // The TGA's own debit is the settlement layer's now, so the central-bank stage must not take
+    // it a second time; what stays here is the REPORTED figure.
     reg.lastRedemptionPaidUSD = Number(maturedPrincipalUSD.toFixed(0));
 
     const totalGovDebtUSD = [...liveTranches, ...newTranches].reduce((s, t) => s + t.principalUSD, 0);

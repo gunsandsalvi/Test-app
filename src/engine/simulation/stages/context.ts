@@ -161,6 +161,9 @@ export interface WeeklyStepContext {
   cashReconcileUSD: Partial<Record<RegionId, number>>;
   /** CASH — the same meter split by which holder class's balance moved unrouted. */
   cashReconcileByClassUSD: { corporate: number; institutional: number; sme: number };
+  /** CASH — balances that are NEGATIVE and clamped to zero by the deposit reconciliation: a
+   *  holder spending money it does not have, which the plug then hides. Not unrouted flow. */
+  cashOverdraftUSD: number;
   pendingHolderAccrualUSD: Map<string, number>;
   /** CAL — the instruments whose coupon falls due this week: their accrued balances become cash. */
   pendingHolderAccrualPayout: Set<string>;
@@ -267,6 +270,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     estates: (state as any).estates ?? [],
     cashReconcileUSD: {},
     cashReconcileByClassUSD: { corporate: 0, institutional: 0, sme: 0 },
+    cashOverdraftUSD: 0,
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),
     holderAccruedInterestUSD: new Map(Object.entries((state as any).holderAccruedInterestUSD ?? {})),

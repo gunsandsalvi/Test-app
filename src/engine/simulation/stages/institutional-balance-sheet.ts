@@ -30,10 +30,10 @@
  *     relative-value framework depends on.
  */
 
-import { Company, InstitutionalEntity } from '../../../types';
+import { RegionId, Company, InstitutionalEntity } from '../../../types';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
-import { pendingSettlementUSD } from './settlement';
+import { pendingSettlementUSD, pay } from './settlement';
 import { sovereignCouponByBucket } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 
@@ -146,6 +146,9 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     let weeklyIncomeUSD = 0;
+    // CASH: which treasury owes what, so the coupon is PAID by the government that issued the
+    // paper rather than appearing on the holder's book.
+    const couponByIssuerRegion = new Map<string, number>();
     entity.itemizedHoldings.forEach((h) => {
       const notional = h.quantityOrNotionalUSD ?? 0;
       if (notional <= 0) return;
@@ -176,17 +179,26 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       // two sides disagreeing by exactly the lumpiness — measured immediately, as the boundary
       // line `governmentInterestToUnmodeledHolders` swinging on coupon weeks. The sovereign
       // calendar is one change to `weeklyInterestExpenseUSD` and both readers of it, together.
-      weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * coupon) / 52;
+      const couponUSD = ((h.quantityOrNotionalUSD ?? 0) * coupon) / 52;
+      weeklyIncomeUSD += couponUSD;
+      couponByIssuerRegion.set(h.issuerRegion, (couponByIssuerRegion.get(h.issuerRegion) ?? 0) + couponUSD);
     });
     if (weeklyIncomeUSD <= 0) return entity;
-    // Recorded as well as credited: the entity's income statement and its cash are the same
-    // event, and stage 08 reports it on the listed shell rather than inventing a portfolio yield
-    // of its own (HH1b — one institution, not two).
-    return {
-      ...entity,
-      cashUSD: (entity.cashUSD ?? 0) + weeklyIncomeUSD,
-      lastWeeklyInvestmentIncomeUSD: weeklyIncomeUSD,
-    };
+    // CASH: the coupon is a PAYMENT from the treasury that owes it. Stage 11 already debits the
+    // government for it; this is the leg that used to arrive as cash on the holder's book with
+    // nothing recording that it had moved. Recorded as well as paid: the entity's income
+    // statement and its cash are the same event, and stage 08 reports it on the listed shell
+    // rather than inventing a portfolio yield of its own (HH1b — one institution, not two).
+    couponByIssuerRegion.forEach((amountUSD, issuerRegion) => {
+      if (!(amountUSD > 0)) return;
+      pay(ctx, {
+        payer: { kind: 'GOVERNMENT', region: issuerRegion as RegionId },
+        payee: { kind: 'INSTITUTION', id: entity.id },
+        amountUSD,
+        reason: 'sovereign coupon',
+      });
+    });
+    return { ...entity, lastWeeklyInvestmentIncomeUSD: weeklyIncomeUSD };
   });
 }
 

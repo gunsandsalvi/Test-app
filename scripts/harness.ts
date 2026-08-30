@@ -1275,6 +1275,10 @@ const xbModule: HarnessModule = (() => {
       if (byClass) {
         out.push(`    by holder class: corporate ${B(byClass.corporate)}, institutional ${B(byClass.institutional)}, SME ${B(byClass.sme)}`);
       }
+      const overdraftUSD = Number((s as any).lastCashOverdraftUSD ?? 0);
+      if (overdraftUSD > 0) {
+        out.push(`    of which clamped OVERDRAFTS (a holder spending money it does not have): ${B(overdraftUSD)}`);
+      }
     }
   }
 
@@ -1960,6 +1964,25 @@ function runHarness() {
         });
       }
     });
+    // 5c-1. CASH: a FUND CANNOT BE OVERDRAWN. An institution's cash is a bank deposit; nothing
+    // in this model lends it an unsecured overdraft, and the one entity type that can borrow
+    // (a hedge fund, through HF1's prime broker) receives that borrowing AS CASH. So a negative
+    // balance is a holder spending money it does not have.
+    //
+    // It was invisible because the deposit reconciliation clamps the line at zero
+    // (`Math.max(0, cashUSD)`), which keeps the BANK's identity intact and re-plugs the same gap
+    // every week — the defect paying for its own cover. Found by the settlement sweep.
+    state.institutionalEntities.forEach((e: any) => {
+      if (e.isDefaulted) return;
+      const cashUSD = Number(e.cashUSD ?? 0);
+      if (cashUSD < -1e6) {
+        violations.push({
+          week: w,
+          message: `${e.ticker ?? e.id} is overdrawn by ${(-cashUSD / 1e9).toFixed(2)}B — a fund spending money it does not have`,
+        });
+      }
+    });
+
     // 5c-2. REPO1/REPO2: the region's repo book is the register, and every scalar is derived
     // from it. Three things must hold, and none of them could even be ASKED while a position was
     // a scalar with no counterparty: what a bank borrows equals the contracts naming it as

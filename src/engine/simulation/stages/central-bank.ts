@@ -64,7 +64,10 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // The statement remains the treasury's week; what settlement executed is subtracted from it.
     const settledTgaUSD = ctx.lastSettlementReport?.tgaDeltaByRegion.get(regionId) ?? 0;
     const tgaFlowUSD = reg.governmentRevenueUSD - outlaysUSD + remitUSD
-      + (reg.lastIssuanceProceedsUSD ?? 0) - (reg.lastRedemptionPaidUSD ?? 0)
+      // CASH: redemptions leave the TGA through the settlement layer now — one payment per named
+      // holder, plus a boundary line for the ones this model does not name (stage 11). Taking
+      // them here too would debit the account twice for one repayment.
+      + (reg.lastIssuanceProceedsUSD ?? 0)
       - settledTgaUSD;
     cb.treasuryAccountUSD = Number((cb.treasuryAccountUSD + tgaFlowUSD).toFixed(0));
     cb.lastRemittanceUSD = Number(remitUSD.toFixed(0));

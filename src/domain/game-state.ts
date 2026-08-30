@@ -63,6 +63,8 @@ export interface GameState {
   /** CASH — reserves 02b invented this week to cover balances that moved outside settlement. */
   lastCashReconcileUSD?: Partial<Record<import('./geography').RegionId, number>>;
   lastCashReconcileByClassUSD?: { corporate: number; institutional: number; sme: number };
+  /** CASH — clamped negative balances, summed over the week's reconciliations. */
+  lastCashOverdraftUSD?: number;
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   /** GUARD — books that could not trade this week: no participant's ceiling exceeded its own

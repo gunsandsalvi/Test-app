@@ -130,6 +130,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.region !== regionId || !e.homeBankTicker) return;
       institutionalDepositsByBank.set(e.homeBankTicker, (institutionalDepositsByBank.get(e.homeBankTicker) ?? 0) + Math.max(0, e.cashUSD ?? 0));
+      // CASH: an entity whose balance is NEGATIVE is overdrawn, and the clamp above hides it —
+      // the reconcile then re-plugs the same gap every week and the bypass meter reads it as
+      // unrouted flow. It is neither: it is a fund spending money it does not have, and it needs
+      // its own line so the meter measures what it claims to.
+      ctx.cashOverdraftUSD += Math.max(0, -(e.cashUSD ?? 0));
     });
     const corporateDepositsByBank = new Map<string, number>();
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {

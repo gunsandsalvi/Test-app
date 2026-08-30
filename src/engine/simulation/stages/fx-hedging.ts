@@ -14,6 +14,7 @@
 
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { pay } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
 import {
   FxForward, HEDGE_RATIO_FIXED_INCOME, equityHedgeRatioFor, FX_FORWARD_TENOR_WEEKS,
@@ -219,6 +220,13 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       const m = forwardMarkToMarketUSD(f, rate);
       markUSD += m;
       bankMarkByTicker.set(f.counterpartyTicker, (bankMarkByTicker.get(f.counterpartyTicker) ?? 0) - m);
+      // CASH: variation margin is a real payment between two named parties, and it is P&L for
+      // both of them — so it settles as income (`BANK`), with equity the other side on the desk.
+      if (Math.abs(m) > 0) {
+        pay(ctx, m > 0
+          ? { payer: { kind: 'BANK', ticker: f.counterpartyTicker }, payee: { kind: 'INSTITUTION', id: entity.id }, amountUSD: m, reason: 'fx forward variation margin' }
+          : { payer: { kind: 'INSTITUTION', id: entity.id }, payee: { kind: 'BANK', ticker: f.counterpartyTicker }, amountUSD: -m, reason: 'fx forward variation margin' });
+      }
     });
 
     // Re-hedge to the book that actually exists — but only as far as a dealer will write it, and
@@ -245,6 +253,14 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       const marginUSD = writableUSD * FX_INITIAL_MARGIN_RATE;
       if (marginUSD > Math.max(0, entity.cashUSD ?? 0) + markUSD) return;
       marginPostedUSD += marginUSD;
+      // Initial margin is the CLIENT'S money sitting with the desk: reserves move, equity does
+      // not, and the desk carries it on its funding line as the liability it is.
+      pay(ctx, {
+        payer: { kind: 'INSTITUTION', id: entity.id },
+        payee: { kind: 'BANK_SECURITIES', ticker: dealer.ticker },
+        amountUSD: marginUSD,
+        reason: 'fx forward initial margin',
+      });
 
       desk.book.grossNotionalUSD += writableUSD;
       // The client SELLS the foreign currency forward to hedge a long foreign asset, so the desk
@@ -269,11 +285,8 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       });
     });
 
-    return {
-      ...entity,
-      cashUSD: (entity.cashUSD ?? 0) + markUSD - marginPostedUSD,
-      fxForwards: [...live, ...newForwards],
-    };
+    // Both legs are instructions now; nothing here moves a balance.
+    return { ...entity, fxForwards: [...live, ...newForwards] };
   });
 
   // XB2f: the desk offers its WHOLE net position to the FX market — it does not decide how much
@@ -303,9 +316,9 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
     const nextSheet = {
       ...sheet,
-      cashReservesUSD: sheet.cashReservesUSD + markUSD + desk.marginReceivedUSD,
-      // Only the MARK is earnings. The margin is somebody else's money.
-      bankEquityUSD: sheet.bankEquityUSD + markUSD,
+      // CASH: the desk's reserves and its P&L both arrive through the ledger, posted against the
+      // named clients that sent them. What stays here is the LIABILITY for margin held — the
+      // client's money is not the desk's earnings, and its funding line has to say so.
       wholesaleFundingUSD: (sheet.wholesaleFundingUSD ?? 0) + desk.marginReceivedUSD,
       fxDealerBook: desk.book,
     };
