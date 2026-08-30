@@ -266,6 +266,6 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     },
     // SEG1: payments recorded after this week's settlement cutoff settle next cycle instead of
     // dying with the context (they used to be silently dropped — tender proceeds never landed).
-    pendingPaymentInstructions: ctx.paymentInstructions,
+    pendingPaymentJournal: ctx.paymentJournal,
   }, timings };
 }

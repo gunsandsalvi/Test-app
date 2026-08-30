@@ -10,6 +10,7 @@
  * instead of being an accident of variable scope.
  */
 
+import { newPaymentJournal } from './settlement';
 import {
   GameState, Company, Region, Position, FxPair, Commodity, CompositeBenchmarkIndices,
   InstitutionalEntity, NewsItem, RegionId,
@@ -62,7 +63,8 @@ export interface WeeklyStepContext {
   /** SCALE: the register's CSR index, cached across stages and dropped by `bumpRegister`
    *  whenever a stage changes WHICH ROWS EXIST (stages/register-index.ts). */
   registerIndex?: import('./register-index').RegisterIndex;
-  paymentInstructions: import('./settlement').PaymentInstruction[];
+  /** SCALE: the week's payments as four parallel columns (stages/settlement.ts). */
+  paymentJournal: import('./settlement').PaymentJournal;
   /** SETL6 — the running net of those instructions per party: what each has committed to pay or
    * is due to receive before the settlement pass runs. Read through
    * `pendingSettlementUSD` (stages/settlement.ts); maintained by `pay`. */
@@ -256,7 +258,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     deadCeilingBooks: [],
     // SEG1: last week's after-cutoff payments (recorded by stages that run after the
     // settlement stage) roll into this cycle — a real system's next-day settlement.
-    paymentInstructions: [...(state.pendingPaymentInstructions ?? [])],
+    paymentJournal: (state as { pendingPaymentJournal?: import('./settlement').PaymentJournal })
+      .pendingPaymentJournal ?? newPaymentJournal(),
     pendingNetById: [],
     pendingTouchedIds: [],
     creditEventsThisWeek: [],

@@ -4,6 +4,7 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
+import { journalPayment } from './settlement';
 import { getRegisterIndex, typeSlice } from './register-index';
 import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
@@ -297,7 +298,7 @@ export function applyPendingCorporateActionSettlements(
     pendingHolderCashUSD?: Map<string, number>;
     /** SETL3/4: present once the settlement layer is live — the register's payments become real
      *  payments from the issuer rather than cash appearing on the holder's book. */
-    paymentInstructions?: import('./settlement').PaymentInstruction[];
+    paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
   }
 ): void {
@@ -363,8 +364,8 @@ export function applyPendingCorporateActionSettlements(
             // holder's book while the issuer's ledger says it left.
             const shareUSD = owedUSD * (h.quantityOrNotionalUSD / totalUSD);
             const issuerTicker = ctx.issuerTickerById?.get(h.instrumentId);
-            if (ctx.paymentInstructions && issuerTicker) {
-              ctx.paymentInstructions.push({
+            if (ctx.paymentJournal && issuerTicker) {
+              journalPayment(ctx.paymentJournal, {
                 payer: { kind: 'COMPANY', ticker: issuerTicker },
                 payee: { kind: 'INSTITUTION', id: entity.id },
                 amountUSD: shareUSD,
@@ -405,8 +406,8 @@ export function applyPendingCorporateActionSettlements(
         // of one payment, neither of them attached to the other (rule 14). A float INCREASE runs
         // the same instruction backwards, because a placement is paid for.
         const principalIssuerTicker = ctx.issuerTickerById?.get(h.instrumentId);
-        if (ctx.paymentInstructions && principalIssuerTicker && Math.abs(principalCashUSD) > 0) {
-          ctx.paymentInstructions.push(principalCashUSD > 0
+        if (ctx.paymentJournal && principalIssuerTicker && Math.abs(principalCashUSD) > 0) {
+          journalPayment(ctx.paymentJournal, principalCashUSD > 0
             ? {
               payer: { kind: 'COMPANY', ticker: principalIssuerTicker },
               payee: { kind: 'INSTITUTION', id: entity.id },
@@ -508,7 +509,7 @@ export function applyHolderInterestAccruals(
     pendingHolderAccrualUSD: Map<string, number>;
     pendingHolderAccrualPayout: Set<string>;
     holderAccruedInterestUSD: Map<string, Map<string, number>>;
-    paymentInstructions?: import('./settlement').PaymentInstruction[];
+    paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
   }
 ): void {
@@ -582,8 +583,8 @@ export function applyHolderInterestAccruals(
       ? ({ kind: 'COMPANY', ticker } as import('./settlement').PartyRef) : undefined;
     byHolder.forEach((accruedUSD, holderId) => {
       if (!(accruedUSD > 0)) return;
-      if (payer && ctx.paymentInstructions) {
-        ctx.paymentInstructions.push({
+      if (payer && ctx.paymentJournal) {
+        journalPayment(ctx.paymentJournal, {
           payer,
           payee: { kind: 'INSTITUTION', id: holderId },
           amountUSD: accruedUSD,

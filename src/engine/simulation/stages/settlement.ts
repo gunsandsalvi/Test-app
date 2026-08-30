@@ -73,6 +73,53 @@ export interface PaymentInstruction {
 }
 
 /**
+ * SCALE wave 2, decision 5 — THE WEEK'S PAYMENTS AS COLUMNS.
+ *
+ * 145,000 payments a week, each an object holding two more objects. The journal is four parallel
+ * arrays instead: payer id, payee id, amount, and an interned reason. The `pay` signature is
+ * unchanged, so no call site moves — the instruction it is handed is read into the columns and
+ * dropped, which is what takes the short-lived objects out of the nursery.
+ *
+ * The apply pass rebuilds a `PartyRef` from `partyRefById`: the first ref seen for an id, which is
+ * structurally identical to every later one, because the id IS the identity.
+ */
+export interface PaymentJournal {
+  payerId: number[];
+  payeeId: number[];
+  amountUSD: number[];
+  reasonId: number[];
+}
+
+export function newPaymentJournal(): PaymentJournal {
+  return { payerId: [], payeeId: [], amountUSD: [], reasonId: [] };
+}
+
+const reasonIdByText = new Map<string, number>();
+const reasonById: string[] = [];
+function internReason(reason: string): number {
+  const existing = reasonIdByText.get(reason);
+  if (existing !== undefined) return existing;
+  const id = reasonById.length;
+  reasonIdByText.set(reason, id);
+  reasonById.push(reason);
+  return id;
+}
+/** The text behind an interned reason — the ledgers still key by it. */
+export const reasonText = (id: number): string => reasonById[id];
+/** Append to the journal from a stage that holds only a slice of the context. Same encoding as
+ *  `pay`, minus the running-net update, which those callers do not participate in. */
+export function journalPayment(j: PaymentJournal, instruction: PaymentInstruction): void {
+  if (!(instruction.amountUSD > 0) || !isFinite(instruction.amountUSD)) return;
+  j.payerId.push(partyId(instruction.payer));
+  j.payeeId.push(partyId(instruction.payee));
+  j.amountUSD.push(instruction.amountUSD);
+  j.reasonId.push(internReason(instruction.reason));
+}
+
+/** The party behind an id, for the apply pass. */
+export const partyOf = (id: number): PartyRef => partyRefById[id];
+
+/**
  * Record a payment. The only way a stage should move money.
  *
  * SCALE, MEASURED AND REJECTED: coalescing on the way in — one row per (payer, payee, reason) —
@@ -83,9 +130,15 @@ export interface PaymentInstruction {
  */
 export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): void {
   if (!(instruction.amountUSD > 0) || !isFinite(instruction.amountUSD)) return;
-  ctx.paymentInstructions.push(instruction);
-  addPending(ctx, partyId(instruction.payer), -instruction.amountUSD);
-  addPending(ctx, partyId(instruction.payee), instruction.amountUSD);
+  const payer = partyId(instruction.payer);
+  const payee = partyId(instruction.payee);
+  const j = ctx.paymentJournal;
+  j.payerId.push(payer);
+  j.payeeId.push(payee);
+  j.amountUSD.push(instruction.amountUSD);
+  j.reasonId.push(internReason(instruction.reason));
+  addPending(ctx, payer, -instruction.amountUSD);
+  addPending(ctx, payee, instruction.amountUSD);
 }
 
 /** The running net, as a dense array indexed by party id. Touched ids are remembered so the
@@ -296,9 +349,10 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
 
 export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const priorReport = ctx.lastSettlementReport;
-  const instructions = ctx.paymentInstructions;
+  const journal = ctx.paymentJournal;
+  const nInstructions = journal.amountUSD.length;
   const report: SettlementReport = {
-    instructions: instructions.length,
+    instructions: nInstructions,
     grossUSD: 0,
     depositDeltaByBank: new Map(),
     reserveDeltaByBank: new Map(),
@@ -319,7 +373,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     centralBankResidualUSD: 0,
     unresolvedUSD: 0,
   };
-  if (instructions.length === 0) {
+  if (nInstructions === 0) {
     ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
     return ctx.lastSettlementReport;
   }
@@ -336,19 +390,31 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     if (netById[id] === undefined) { netById[id] = deltaUSD; netRef[id] = party; netTouched.push(id); }
     else netById[id] += deltaUSD;
   };
-  instructions.forEach((i) => {
-    report.grossUSD += i.amountUSD;
-    add(i.payer, -i.amountUSD);
-    add(i.payee, i.amountUSD);
-    // Attribute the boundary as it is created, by the flow responsible.
-    if (i.payer.kind === 'UNMODELED') addTo(report.unmodeledByReason, i.reason, i.amountUSD);
-    if (i.payee.kind === 'UNMODELED') addTo(report.unmodeledByReason, i.reason, -i.amountUSD);
-    // SEG-D: the pools' income statement, built from the payments themselves.
-    if (i.payer.kind === 'SEGMENT') addToPool(report, i.payer.region, i.payer.industry, i.reason, -i.amountUSD);
-    if (i.payee.kind === 'SEGMENT') addToPool(report, i.payee.region, i.payee.industry, i.reason, i.amountUSD);
-    if (i.payer.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, i.payer.region, i.reason, -i.amountUSD);
-    if (i.payee.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, i.payee.region, i.reason, i.amountUSD);
-  });
+  for (let n = 0; n < nInstructions; n++) {
+    const amountUSD = journal.amountUSD[n];
+    const payerRef = partyOf(journal.payerId[n]);
+    const payeeRef = partyOf(journal.payeeId[n]);
+    report.grossUSD += amountUSD;
+    add(payerRef, -amountUSD);
+    add(payeeRef, amountUSD);
+    // The ledgers below key by the reason's TEXT, so it is un-interned only for the few payments
+    // whose payer or payee is one of the kinds that keeps a per-reason ledger.
+    const payerKind = payerRef.kind;
+    const payeeKind = payeeRef.kind;
+    if (payerKind === 'UNMODELED' || payeeKind === 'UNMODELED'
+      || payerKind === 'SEGMENT' || payeeKind === 'SEGMENT'
+      || payerKind === 'HOUSEHOLD' || payeeKind === 'HOUSEHOLD') {
+      const reason = reasonText(journal.reasonId[n]);
+      // Attribute the boundary as it is created, by the flow responsible.
+      if (payerRef.kind === 'UNMODELED') addTo(report.unmodeledByReason, reason, amountUSD);
+      if (payeeRef.kind === 'UNMODELED') addTo(report.unmodeledByReason, reason, -amountUSD);
+      // SEG-D: the pools' income statement, built from the payments themselves.
+      if (payerRef.kind === 'SEGMENT') addToPool(report, payerRef.region, payerRef.industry, reason, -amountUSD);
+      if (payeeRef.kind === 'SEGMENT') addToPool(report, payeeRef.region, payeeRef.industry, reason, amountUSD);
+      if (payerRef.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, payerRef.region, reason, -amountUSD);
+      if (payeeRef.kind === 'HOUSEHOLD') addToNested(report.householdFlowsByRegion, payeeRef.region, reason, amountUSD);
+    }
+  }
 
   // ---- 2. Apply each party's net change to the balance it actually holds, and record which
   // bank's book that balance sits on. A party banking at the central bank (the government) moves
@@ -563,7 +629,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
 
   report.centralBankResidualUSD = centralBankResidualUSD(report);
   ctx.lastSettlementReport = priorReport ? mergeSettlementReports(priorReport, report) : report;
-  ctx.paymentInstructions = [];
+  ctx.paymentJournal = newPaymentJournal();
   clearPendingNet(ctx);
   return report;
 }
