@@ -5315,3 +5315,35 @@ that proved it, the lesson.
       that the accumulation can ask it. Before this, the question could not even be posed.
     - Harness green, 0 violations. **Eight tables of §6.3-A remain**; this one and the wealth MPC
       (§7.142) are done.
+
+145. **DIST — ALL NINE of §6.3-A's stated cross-section tables are now measurements.** The
+    reframing §5-COH was built on ("nine imposed tables are ONE missing mechanism") is discharged,
+    and each table turned out to have a DIFFERENT cause — which is exactly why nobody had derived
+    them: they were nine separate stated numbers because nobody had asked what produced each one.
+    - **Deposits** (§7.144) — the stock a tier's own saving built. **Wealth MPC** (§7.142) — its
+      savings rate times how much of its wealth is liquid.
+    - **Equity-like and private business** — the same accumulated stock allocated by the tier's own
+      `equityExposureShare`. They share a driver deliberately: both are appetite for risky illiquid
+      ownership and the model measures ONE such appetite, so two tables with one cause is one
+      derivation (rule 3).
+    - **Institutional claims** — the long, non-equity half of the same saving. A pension
+      entitlement is what a cautious saver holds.
+    - **Unmodeled** — split by the same accumulated stock. It is a residual placeholder that should
+      shrink; **a stated split of an unknown is the worst of both**, so it follows the one thing
+      known about who saved.
+    - **Housing and mortgage — BORROWING CAPACITY, not wealth.** A house is bought with a mortgage
+      and what a lender advances is a multiple of INCOME, so housing concentrates in the tiers
+      that have income rather than the tiers that have assets. **That is the cause of the
+      wealthy-hand-to-mouth middle**, and using income here produces it instead of assuming it:
+      NEXT_40's derived MPC stays lowest at 0.0126 after the change.
+    - **Consumer debt — who does not cover their spending.** A tier saving a third of its income
+      does not run a card balance; one saving a hundredth does. The split is
+      `(1 − savings rate) x income`: the propensity to borrow times the base it is borrowed
+      against, both measured.
+    - **The stated tables survive only as OPENING CONDITIONS**, used until the accumulations have
+      anything in them (§7.4). Harness green, 0 violations, through every step.
+    - **What this leaves COH.** Its premise — give cohorts balance sheets and eight of nine tables
+      become measurements — is now done by a different route than it planned: not a balance sheet
+      per cohort, but a distribution whose moments are derived (§5-DIST's argument, and the reason
+      that section said COH would be REWRITTEN rather than executed). **§5-COH should be re-read
+      before it is started; most of what it describes has happened.**

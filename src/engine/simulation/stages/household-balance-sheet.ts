@@ -172,21 +172,77 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       const depositShareOf = (t: WealthTier, i: number) =>
         accumulatedTotal > 0 ? accumulatedByTier[i] / accumulatedTotal : W.deposits[t];
 
+      // DIST/COH — AND THE OTHER FINANCIAL SPLITS FALL OUT OF THE SAME TWO MEASUREMENTS.
+      //
+      // A tier's holding of an asset class is the stock its own saving built, allocated by its own
+      // appetite for risk — and the model measures both: `accumulatedSavingsUSD` (§7.144) and
+      // `equityExposureShare`, which HH already derives per tier. So four more of §6.3-A's stated
+      // tables become one derivation:
+      //
+      //   equity-like and private business — RISKY OWNERSHIP, weighted by risk appetite;
+      //   institutional claims            — the long, non-equity half of the same saving
+      //                                     (a pension entitlement is what a cautious saver holds);
+      //   unmodeled                       — the residual placeholder, split by the same stock
+      //                                     rather than by a table, since nothing better is known
+      //                                     about it and a stated split of an unknown is the
+      //                                     worst of both.
+      //
+      // Equity-like and private business share a driver deliberately: both are appetite for risky
+      // illiquid ownership, and the model measures ONE such appetite. Two tables with one cause is
+      // one derivation, not two (rule 3).
+      const riskyByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
+        accumulatedByTier[i] * Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0));
+      const cautiousByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
+        accumulatedByTier[i] * Math.max(0, 1 - Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0)));
+      const riskyTotal = riskyByTier.reduce((a, b) => a + b, 0);
+      const cautiousTotal = cautiousByTier.reduce((a, b) => a + b, 0);
+      const riskyShareOf = (t: WealthTier, i: number, fallback: number) =>
+        riskyTotal > 0 ? riskyByTier[i] / riskyTotal : fallback;
+      const cautiousShareOf = (t: WealthTier, i: number, fallback: number) =>
+        cautiousTotal > 0 ? cautiousByTier[i] / cautiousTotal : fallback;
+
+      // DIST/COH — HOUSING AND DEBT FOLLOW DIFFERENT MEASUREMENTS AGAIN, and that is the point:
+      // each of §6.3-A's tables was a separate stated number precisely because nobody had asked
+      // what CAUSED it.
+      //
+      //   HOUSING and MORTGAGE follow BORROWING CAPACITY, not wealth. A house is bought with a
+      //   mortgage, and what a lender will advance is a multiple of INCOME — so housing
+      //   concentrates in the tiers that have income rather than the tiers that have assets. That
+      //   is why the middle of the distribution is house-rich and cash-poor (§7.142's
+      //   wealthy-hand-to-mouth result), and it falls straight out of using income here.
+      //
+      //   CONSUMER DEBT follows WHO DOES NOT COVER THEIR SPENDING. A tier saving a third of its
+      //   income does not run a card balance; one saving a hundredth does. `savingsRate` is
+      //   measured per tier from the cohorts' own budgets, so the split is `(1 − savings rate) x
+      //   income` — the propensity to borrow times the base it is borrowed against.
+      const incomeByTier = WEALTH_TIERS.map((t: WealthTier) =>
+        Math.max(0, reg.wealthDistribution?.[t]?.shareOfIncomeUSD ?? 0));
+      const incomeTotal = incomeByTier.reduce((a, b) => a + b, 0);
+      const incomeShareOf = (t: WealthTier, i: number, fallback: number) =>
+        incomeTotal > 0 ? incomeByTier[i] / incomeTotal : fallback;
+      const borrowByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
+        incomeByTier[i] * Math.max(0, 1 - Math.max(0, Math.min(1, reg.wealthDistribution?.[t]?.savingsRate ?? 0))));
+      const borrowTotal = borrowByTier.reduce((a, b) => a + b, 0);
+      const borrowShareOf = (t: WealthTier, i: number, fallback: number) =>
+        borrowTotal > 0 ? borrowByTier[i] / borrowTotal : fallback;
+
       WEALTH_TIERS.forEach((t: WealthTier, i: number) => {
         const tierAssetsUSD =
           (depositsUSD + mmfSharesUSD) * depositShareOf(t, i)
-          + (etfHoldingsUSD + directEquityUSD) * W.equityLike[t]
-          + privateBusinessEquityUSD * W.privateBusiness[t]
-          + institutionalClaimsUSD * W.institutionalClaims[t]
-          + unmodeledFinancialAssetsUSD * W.unmodeled[t]
-          + housingStockUSD * W.housing[t];
-        const tierDebtUSD = mortgageUSD * W.mortgage[t] + consumerDebtUSD * W.consumerDebt[t];
+          + (etfHoldingsUSD + directEquityUSD) * riskyShareOf(t, i, W.equityLike[t])
+          + privateBusinessEquityUSD * riskyShareOf(t, i, W.privateBusiness[t])
+          + institutionalClaimsUSD * cautiousShareOf(t, i, W.institutionalClaims[t])
+          + unmodeledFinancialAssetsUSD * depositShareOf(t, i)
+          + housingStockUSD * incomeShareOf(t, i, W.housing[t]);
+        const tierDebtUSD = mortgageUSD * incomeShareOf(t, i, W.mortgage[t])
+          + consumerDebtUSD * borrowShareOf(t, i, W.consumerDebt[t]);
         const prev = reg.wealthDistribution[t];
         reg.wealthDistribution[t] = {
           ...prev,
           priorNetWorthUSD: prev.shareOfNetWorthUSD,
           shareOfNetWorthUSD: Number((tierAssetsUSD - tierDebtUSD).toFixed(0)),
-          homeEquityUSD: Number((housingStockUSD * W.housing[t] - mortgageUSD * W.mortgage[t]).toFixed(0)),
+          homeEquityUSD: Number((housingStockUSD * incomeShareOf(t, i, W.housing[t])
+            - mortgageUSD * incomeShareOf(t, i, W.mortgage[t])).toFixed(0)),
         };
       });
     }
