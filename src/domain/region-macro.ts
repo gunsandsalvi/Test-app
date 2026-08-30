@@ -6,6 +6,7 @@ import { RepoContract } from './repo';
 import { PrimeBrokerageLine } from './prime-brokerage';
 import { SwapContract } from './swaps';
 import { CdsContract } from './credit-default-swap';
+import { SecurityLoan } from './securities-lending';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
 import { BankingSector, AssetOwnershipShares } from './banking';
@@ -687,6 +688,11 @@ export interface Region {
    * derived from this list, never carried beside it.
    */
   cdsBook?: CdsContract[];
+  /** HF — the stock loans outstanding in this region: who lent what to whom, at what fee. The
+   * short interest in every name is a measurement of this book. */
+  securityLoanBook?: SecurityLoan[];
+  /** HF — the last cleared borrow fee per name, in annual bps; this book's own prior print. */
+  borrowFeeBpsByCompanyId?: Record<string, number>;
   /** DER1 — the cleared par swap rate per tenor (annualised decimal). */
   swapParRateByTenor?: Record<string, number>;
   /**

@@ -71,6 +71,14 @@ export interface WeeklyStepContext {
    * set, entity `itemizedHoldings` arrays are stale week-start snapshots: read positions
    * through the store. */
   holdingsStore?: import('./holdings-store').HoldingsStore;
+  /** HF — what the securities-lending stage struck this week, read by 07e in the same pass.
+   * `lentShares` is exposure a lender still has through a loan receivable, so its holding
+   * ceiling in the equity book comes down by it rather than sending it out to re-buy what it
+   * just lent. `buyInShares` is a recalled borrower's delivery obligation: a purchase with no
+   * reservation price, which is what a squeeze is made of. Both keyed
+   * `entityId + '|' + companyId`. */
+  lentSharesByLender: Map<string, number>;
+  buyInSharesByBorrower: Map<string, number>;
   /** WS8 — this week's working copy of the offering queue: adapters consume entries they
    * price (recording outcomes below), stage 08 appends new enqueues, core writes the
    * survivors back to state. */
@@ -223,6 +231,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     earningsReportedThisTurn: [],
     defaultedTickers: [],
     damperBoundInstrumentIds: [],
+    lentSharesByLender: new Map(),
+    buyInSharesByBorrower: new Map(),
     deadCeilingBooks: [],
     // SEG1: last week's after-cutoff payments (recorded by stages that run after the
     // settlement stage) roll into this cycle — a real system's next-day settlement.

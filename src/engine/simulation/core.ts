@@ -3,6 +3,7 @@ import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runSwapClearingStage } from './stages/07g-swap-clearing';
 import { runCdsClearingStage } from './stages/07h-cds-clearing';
+import { runSecuritiesLendingStage } from './stages/securities-lending';
 import { runEstateResolutionStage } from './stages/estate-resolution';
 import { reconcileRepoPledges } from './stages/repo-clearing';
 import { createInitialContext } from './stages/context';
@@ -137,6 +138,9 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('07c-sovereign-bond-clearing', () => runSovereignBondClearingStage(state, ctx));
   run('07d-leveraged-loan-clearing', () => runLeveragedLoanClearingStage(state, ctx));
   run('07f-short-debt-clearing', () => runShortDebtClearingStage(state, ctx));
+  // HF: the borrow is located and struck BEFORE the equity book opens, so a short sells its
+  // borrowed shares into this week's real bid and a recalled one buys in against it.
+  run('securities-lending', () => runSecuritiesLendingStage(state, ctx));
   run('07e-equity-clearing', () => runEquityClearingStage(state, ctx));
   // DER1: after the sovereign curve is this week's cleared one, which every schedule reads.
   run('07g-swap-clearing', () => runSwapClearingStage(state, ctx));

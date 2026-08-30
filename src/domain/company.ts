@@ -455,6 +455,9 @@ export interface Company {
    * than the synthetic one.
    */
   cdsBasisBps?: number;
+  /** HF — shares of this name out on loan, i.e. sold short. A measurement of the region's stock
+   * loan book (domain/securities-lending.ts), never a stated number. */
+  shortInterestShares?: number;
   // Rolling weekly history of real cleared oasSpreadBps (most recent last, capped length) — real
   // credit investors weigh recent spread momentum (a name that's been widening fast is a riskier
   // "catch the falling knife" buy even if it already looks cheap) alongside static fair value.

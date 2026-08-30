@@ -38,7 +38,7 @@ const BOOK_TYPES: ItemizedHolding['instrumentType'][] = [
 
 interface EntitySlot {
   entity: InstitutionalEntity;
-  /** Week-start rows. Never mutated; the write-back builds a new array. */
+  /** Week-start rows, plus any delivered outside an auction (see `addShares`). */
   rows: ItemizedHolding[];
   /** 0 = unclaimed; otherwise the epoch (region-pass) that claimed the row. */
   claimed: Uint16Array;
@@ -121,6 +121,59 @@ export class HoldingsStore {
     }
     for (const r of slot.appended) sum += r.quantityOrNotionalUSD ?? 0;
     return sum;
+  }
+
+  /**
+   * Move SHARES of one instrument onto an entity's book outside any auction (HF: a stock loan's
+   * delivery leg). The books read positions by scanning `rows`, so a transfer has to land there
+   * rather than in `appended`, which `scan` never walks: an existing unclaimed row is adjusted in
+   * place, and a party with no position yet gets a real row indexed like any other. Pass a
+   * negative `shares` for the delivering side.
+   */
+  addShares(
+    entityId: string,
+    type: ItemizedHolding['instrumentType'],
+    instrumentId: string,
+    issuerRegion: ItemizedHolding['issuerRegion'],
+    shares: number,
+    pricePerShare: number
+  ): void {
+    const slot = this.slots.get(entityId);
+    if (!slot || !(Math.abs(shares) > 0)) return;
+    const indices = slot.byType.get(type);
+    let remaining = shares;
+    if (indices) {
+      for (const i of indices) {
+        if (slot.claimed[i]) continue;
+        const row = slot.rows[i];
+        if (row.instrumentId !== instrumentId) continue;
+        const held = row.quantityShares ?? 0;
+        // A position can be split across rows, so a withdrawal draws from each in turn and never
+        // takes a row negative; a deposit lands whole on the first one.
+        const take = remaining < 0 ? -Math.min(held, -remaining) : remaining;
+        const next = held + take;
+        row.quantityShares = next;
+        row.quantityOrNotionalUSD = next * pricePerShare;
+        remaining -= take;
+        if (Math.abs(remaining) <= 1e-9) return;
+      }
+    }
+    if (remaining < 0) return; // nothing left here to deliver from
+    shares = remaining;
+    const row: ItemizedHolding = {
+      instrumentId,
+      instrumentType: type,
+      issuerRegion,
+      quantityShares: shares,
+      quantityOrNotionalUSD: shares * pricePerShare,
+    };
+    slot.rows = [...slot.rows, row];
+    const grown = new Uint16Array(slot.rows.length);
+    grown.set(slot.claimed);
+    slot.claimed = grown;
+    const list = slot.byType.get(type);
+    if (list) list.push(slot.rows.length - 1);
+    else slot.byType.set(type, [slot.rows.length - 1]);
   }
 
   /** Append this auction's fill rows; they land after every unclaimed row at write-back. */

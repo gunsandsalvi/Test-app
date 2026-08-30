@@ -45,6 +45,7 @@ import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
+import { positionKey } from './securities-lending';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -52,9 +53,9 @@ const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'equity';
 /** Equity gaps more than credit; this is discrete-time damping, not a bound. */
-const MAX_WEEKLY_PRICE_MOVE_PCT = 0.18;
+export const MAX_WEEKLY_PRICE_MOVE_PCT = 0.18;
 /** How far below its fair value a holder must see the price before it takes full size. */
-const FULL_SIZE_PRICE_DISCOUNT = 0.30;
+export const FULL_SIZE_PRICE_DISCOUNT = 0.30;
 
 export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
@@ -287,10 +288,20 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         const cashShare = totalCashDemandWeightUSD > 0
           ? (cashDemandWeightByCompany.get(c.id) ?? 0) / totalCashDemandWeightUSD
           : 0;
+        // HF: exposure this holder already has through a stock loan it wrote. The shares are out
+        // of its hands but the position is not, so its ceiling here comes down by them — without
+        // this a lender walks straight back into the auction to re-buy what it has just lent.
+        const lentShares = ctx.lentSharesByLender.get(positionKey(entity.id, c.id)) ?? 0;
+        // HF: and what a recalled short has to DELIVER. A buy-in is an obligation to produce
+        // shares, not a view on their price, so it enters as a mandated core with no reservation
+        // — which is exactly what makes a squeeze move the print.
+        const buyInShares = ctx.buyInSharesByBorrower.get(positionKey(entity.id, c.id)) ?? 0;
+        const structuralCeiling = Math.max(0, structuralShares * MAX_OVERWEIGHT_MULTIPLE - lentShares);
         demandByIndex[ci] = {
           reservationStat: fair,
-          maxHoldingUSD: structuralShares * MAX_OVERWEIGHT_MULTIPLE,
+          maxHoldingUSD: Math.max(structuralCeiling, buyInShares),
           fullSizeStatRange: Math.max(0.01, fair * FULL_SIZE_PRICE_DISCOUNT),
+          minHoldingUSD: buyInShares > 0 ? buyInShares : undefined,
           // Budget in SHARES at the current price — a holder cannot buy what it cannot fund.
           maxNetPurchaseUSD: (budgetUSD * cashShare) / Math.max(0.01, refPrice),
         };

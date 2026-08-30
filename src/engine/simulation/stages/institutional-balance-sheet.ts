@@ -229,7 +229,7 @@ export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
       }, 0);
       return { ...entity, totalAssetsUSD: Math.round((entity.cashUSD ?? 0)
         + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })
-        + (entity.repoLentUSD ?? 0) + portfolioUSD) };
+        + (entity.repoLentUSD ?? 0) + (entity.stockLoanNetUSD ?? 0) + portfolioUSD) };
     }
     const holdingsUSD = entity.itemizedHoldings.reduce(
       (a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
@@ -241,6 +241,10 @@ export function markInstitutionalBooks(ctx: WeeklyStepContext): void {
     // Cash lent overnight (WS6) is still the entity's money — a secured claim maturing next
     // session, not a security; leaving it out would mark the book down by the position's size
     // every week and back up the week after.
-    return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + unsettledUSD + (entity.repoLentUSD ?? 0) + holdingsUSD };
+    // HF: and its stock-loan book, which is the shares it is owed (or owes) against the cash
+    // collateral standing behind them — zero the week a loan is struck, and the short's running
+    // profit or loss every week after.
+    return { ...entity, totalAssetsUSD: (entity.cashUSD ?? 0) + unsettledUSD + (entity.repoLentUSD ?? 0)
+      + (entity.stockLoanNetUSD ?? 0) + holdingsUSD };
   });
 }

@@ -139,6 +139,10 @@ export interface InstitutionalEntity {
    * securities with money it had already lent.
    */
   repoLentUSD?: number;
+  /** HF — this entity's stock-loan book, netted to one number the way `repoLentUSD` nets the repo
+   * one. Positive for whichever side the mark has moved toward; a short's P&L lives here.
+   * Derived every week from the region's loan book — never set by hand. */
+  stockLoanNetUSD?: number;
   /**
    * XB2 — the FX forwards hedging this entity's cross-border book. Real contracts with a named
    * bank on the other side, marked every week, not a discount applied to a yield.
