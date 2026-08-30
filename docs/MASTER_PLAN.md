@@ -1848,3 +1848,39 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        wrong, and each cost more to discover than the measurement that would have prevented it.
        **A projection without an established cause is not an estimate, it is a hope with a number
        attached.**
+221. **AUDIT OF §7.220: THE MEASUREMENTS HOLD, THE CONCLUSION DOES NOT.** §7.220 was written to
+     forbid projecting from a number whose cause was assumed, and then did it three more times in
+     its own final paragraph. Sorted by what each claim actually rests on:
+     - **MEASURED, and they stand:** 07b's adapter at 9 ms against 27 ms of engine (three runs:
+       11.7 / 8.5 / 9.0); 05's three named blocks at ~100 ms of its 278 (three runs: 86 / 94 / 102);
+       stage 08 at 327 ms inclusive; the clearing family at 563 ms and its kernel at ~120 ms; the
+       flat CPU profile and the flat per-line profile; every bit-exactness result; 1,872 → 1,205 ms.
+     - **NOT MEASURED, and §7.220 states them as if they were.** (a) **"88% shardable" is a hand
+       classification of stage NAMES into two buckets, not a measurement**, and it assumes a
+       within-stage independence never tested — 05's sub-unit markets and stage 08 both write
+       shared `ctx`, which is direct counter-evidence that was in front of me and not weighed. The
+       true serial fraction is unknown and can only be LARGER. (b) "allocation removal gives ~1.3×"
+       is extrapolated from GC being ~8% of the profile; removing allocation is not the same act as
+       removing GC time. (c) **"~370 ms" is (a) × (b)** and inherits both, as do the eight- and
+       sixteen-core figures, which are pure Amdahl on (a). (d) "no measured 4.8× of single-threaded
+       waste left" is absence of evidence — five probes failing to find a block is real, but 10–60 ms
+       distributed items (ETF quadratic, supply-graph quadratic, the `toFixed` sweep) kept appearing
+       to the last hour, each invisible to the probe before it. (e) "2.8 ms of pricing arithmetic"
+       is a LOWER BOUND: it name-matched profile frames, so inlined and anonymously-called pricing
+       code is not in it. (f) §7.219's rebuilt projection (funnel 440→20, stage 08 327→60, the rest
+       515→100) is three more unestablished-cause projections.
+     - **ALSO:** 05's per-item figures in §7.220 (~45 / ~26 / ~28) are a mid-value across noisy
+       runs — settle ranged 35–54, clear 22–37. Only the ~100-of-278 aggregate is stable. Quote the
+       aggregate, not the items.
+     - **WHAT IS ACTUALLY ESTABLISHED:** five independent attempts to find one dominant block have
+       failed and agree, and no single item found exceeds 16% of its own stage. **"Under 100 ms on
+       four cores is not reachable" is NOT established** — the parallel fraction, the one number the
+       whole arithmetic rests on, has never been measured.
+     - **THE EXPERIMENT THAT SETTLES IT, AND IT IS NOT A REWRITE:** shard ONE real stage — 05 or 08
+       — and find out whether the cross-writes permit it. That measures the serial fraction
+       directly. If 88% survives contact the arithmetic stands; if it comes back at 60% the ceiling
+       is ~600 ms and the data-oriented rewrite is not worth its cost. **Do this before scoping
+       anything on the parallel fraction again.**
+     - **The rule, sharpened:** it is not enough to demand an established cause for a projection.
+       **A classification is not a measurement.** §7.220's "88%" reads like a profile result and is
+       an opinion about stage names.
