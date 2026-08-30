@@ -489,7 +489,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 
 | Defect | State and next action |
 |---|---|
-| **JPN UNEMPLOYMENT PRINTS 66.8% IN WEEK 1** | Bisected to COH3's wage level (§7.208): the baseline prints 11.2% and the commit before it is identical. **It is not a regional artefact** — the derived labour share is 0.775/0.768/0.771/0.769 across USA/EUR/UK/JPN, a spread of 0.006, and the same +24% wage lands in all four. USA, EUR and UK all IMPROVE on it (19.0/13.6/12.6 → 9.1/3.4/4.6); only JPN inverts, and it decays to ~25% by week 4 and stays, so it is a seed-reconciliation transient in JPN's labour market rather than a wage-level error. **Next action: read JPN's opening occupation pools and employer headcounts against the wage the derivation now sets — the question is what JPN's seed does that the other three do not.** Owner: COH3. |
+| **EUR GOVERNMENT OUTLAYS EXCEED ITS BUDGET** | New in §7.210's run, twice in twelve weeks (3.96B against 2.63B at week 11) and only in EUR. Interest and transfers are contractual and paid in full (PUB1e), so an outlay above budget means one of those grew past what the stance allows — most likely the interest bill, which CAL now pays on real dates. **Next action: print EUR's `decomposeGovernmentSpending` parts against `governmentOutlaysUSD` in the weeks it trips.** Owner: MAC. |
 | **THE PRICE LEVEL RUNS TO ~90% ANNUALISED** | Bisected to COH4's demand ladder (§7.208): the commit before it prints −4.78 and this one 34.96, on identical everything else. **The ladder is not obviously wrong and that is the point.** It posts the households' own derived reservation — a staple can draw on the whole budget, so the reservation is ~3.3× the going price — and a supply-short goods market clears there. Forcing the reach multiple to 1 drops week 1 from 29% to 3.3%, so the reservation is the driver; but the reservation is measured, and **the shortage it is meeting is §6's own damper defect, which the retired 1.9% bid premium was suppressing as rationing.** So the ladder did not create this; it stopped hiding it. **Do not put the premium back and do not cap the bid.** The well-posed question is why the goods market cannot supply the registry's own stated per-capita want. Owners: the supply-side work (SCALE/PROD), with COH4. |
 | **THE CAPITAL-GOODS SECTOR CANNOT SUPPLY THE ECONOMY'S CAPEX** | Firms bid their real capex and the basket weights sum to 1, so the bids ARE the capex figure: **~163B/yr of bids against ~13B/yr of deliveries, an 8% fill** (§7.167), four of five categories short at 65–174% over base (§7.168). §7.178 made the demand LEVEL honest (gap 1.55x → 1.29x) and §7.199 closed the seed's investment fixed point. **Both are UNMEASURED and this is measurement item 1.** It is the accumulated cost behind the ~29% unemployment that has been blocking unrelated work (§7.179). |
 | **THE BOOKS PRINT THEIR DAMPERS** | The engine states its own failure condition: a name clamped for weeks means the posted schedules disagree with the printed level and **the print is the damper, not the market.** Last measured **947 persistently bound** (890 before the OWN7 sweep, peaking at 1042 before the desk-position fix). §7.197 records the rise as the honest shape of deleting the residual dealer: **the pressure was always there.** **Do not widen the damper.** The well-posed question is: who buys when the holders as a group want less than they hold? Owners: SCALE (the float half), and the measurement run. |
@@ -1391,3 +1391,39 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        resolution parameter must not move the answer (rule 19), and that one moved it linearly.**
      - **What the run FOUND, recorded rather than patched.** Two live defects, both in §6.1 now.
        Neither gets a clamp.
+210. **JPN's 66.8% — and §7.209's bisect was right about the commit and wrong about the cause.**
+     The wage level did not break JPN's labour market. It moved the seed close enough to the edge
+     for something else to fire, and **a bisect names a commit, not a mechanism** — which is worth
+     recording on its own, because the row §7.209 opened proposed reading JPN's seed pools against
+     the wage, and that would have found nothing.
+     - **The measurement that turned it round: revenue was FLAT.** JPN's firms lost 3.72M of 3.72M
+       heads while their revenue moved −0.9%, the same as UK and EUR. **A labour market destroying
+       itself with nothing happening in the economy is not a demand story and not a wage story.**
+       The wage indices confirmed it: JPN's pools moved 1.377 → 1.377 and its firms' offered index
+       1.000 → 1.004, indistinguishable from the three regions that were fine.
+     - **HOW EASILY A JOB IS FOUND HAD TWO REPRESENTATIONS IN ONE FILE (rule 3).** A quit is a bet
+       on finding another job, so the quit rate moves with the rate at which a seeker actually
+       finds one — and `labor-market.ts` computes that rate two hundred lines below its own quit
+       rate: `f(θ) = A·θ^MATCHING_ELASTICITY`, concave, because a vacancy takes time to fill. The
+       quit rate was LINEAR in tightness. **That is the same claim with an elasticity of 1** — that
+       every extra vacancy finds its worker instantly — and it contradicted the matching function
+       beneath it. It was not normalised to the rest point either, so a neutral market quit 5%
+       below baseline.
+     - **And tightness is `vacancies / seekers`, a ratio whose denominator the seed can drive to
+       nothing.** JPN opens at 0.31% unemployment and a tightness of **215**, where the linear form
+       put the WEEKLY quit rate at 1.69 — clipped to 1, so every worker in the country quit in week
+       one and firms could rehire only what a single week of matching allows. That is the whole of
+       the 66.8%.
+     - **The same shape as §7.209's `0/0`, two commits apart: an unguarded ratio the seed drives to
+       its limit.** The bank one printed NaN and stopped the world. This one printed a number, so
+       it looked like economics for as long as anyone was willing to read it as one. **Prefer the
+       defect that crashes.**
+     - **MEASURED, 12 weeks.** JPN week 1 66.8% → 5.6%, holding in 4–9% rather than settling at
+       ~25%; all four regions open at 9.1/3.2/2.3/5.6. Week 1 has zero violations. **The
+       unemployment-band family is gone**; of the 11 remaining, 9 are the pre-existing fund
+       overdrafts and 2 are a new EUR outlays row in §6.1. CAL's identity checks green every week.
+       The price level is untouched — §7.209's other finding, and it belongs to the goods market.
+     - **§1.20 was written between these two records and this is what it buys.** The cheap move at
+       §7.209 was to put `LABOR_SHARE_OF_OUTPUT = 0.62` back, which would have hidden a quit rate
+       that says everyone quits and left it waiting for whichever future change tightened a labour
+       market next.
