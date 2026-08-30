@@ -1809,7 +1809,7 @@ saving available and it is already banked.
 | ~~`LifeCycleStageData.savingsRate` + `consumptionMultiplier` (8)~~ | **DELETED §7.170** — read by nothing; the life-cycle rate is the retired share |
 | `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN, item 22 |
 | ~~the average LTV~~, `WEALTH_SPENDDOWN_YEARS` | **the LTV RETIRED §7.159** (the book is vintages); the spend-down horizon still waits on housing that clears — HSG, item 5 |
-| **`TIER_OCCUPATION_MIXES` (14) + `TIER_WAGE_MULTIPLIER` (4)** | **WITHIN-OCCUPATION SKILL HETEROGENEITY — not the firm premium, which is now built (§7.173).** Rent-sharing was the obvious candidate and it is real: dispersion 1.01x → **1.40x**. But its equilibrium is **1.23x**, and the table asserts 32.5x, so the stated number is NOT mainly about firm premia — it stands in for workers differing WITHIN an occupation, which the model does not have at all (every worker in an occupation is identical). Earlier framing (§7.172): They jointly define the (occupation x tier) income distribution, and deriving either needs within-occupation wage dispersion. **Measured: the model has 1.01x of it against the 32.5x the table asserts** — every firm pays the same. The missing mechanism is that a more productive firm pays more. **Do not delete these first: the stated multiplier carries 56% of the top tier's income**, so removing it before rent-sharing exists flattens the distribution rather than deriving it (rule 19's caveat). |
+| **`TIER_OCCUPATION_MIXES` (14) + `TIER_WAGE_MULTIPLIER` (4)** | **BOTH MECHANISMS NOW EXIST (§7.173-174): firm premium 1.40x, experience premium 1.77x, ~2.5x combined, from 1.01x.** The remaining question is no longer mechanical but a JUDGEMENT: the table asserts 32.5x WITHIN an occupation, which is not a plausible wage fact — it is the whole income concentration crammed into a wage multiplier, and capital income (37.6% of the top tier) is already measured separately. Deriving would be more correct and would lower top-tier wage income materially. **Own slice, with a before/after.** Earlier framing: Rent-sharing was the obvious candidate and it is real: dispersion 1.01x → **1.40x**. But its equilibrium is **1.23x**, and the table asserts 32.5x, so the stated number is NOT mainly about firm premia — it stands in for workers differing WITHIN an occupation, which the model does not have at all (every worker in an occupation is identical). Earlier framing (§7.172): They jointly define the (occupation x tier) income distribution, and deriving either needs within-occupation wage dispersion. **Measured: the model has 1.01x of it against the 32.5x the table asserts** — every firm pays the same. The missing mechanism is that a more productive firm pays more. **Do not delete these first: the stated multiplier carries 56% of the top tier's income**, so removing it before rent-sharing exists flattens the distribution rather than deriving it (rule 19's caveat). |
 
 ### DYN — Entry, exit, and industry structure  *(item 22; needs IND, BP1)*
 
@@ -5937,3 +5937,32 @@ that proved it, the lesson.
       measurement that shows a new mechanism working can also show it is the wrong mechanism for
       the thing you meant to retire.** Build it because it is real; do not let it justify a
       deletion it cannot support.
+
+174. **DIST 1(b) — WORKERS DIFFER NOW: the experience cross-section, on DIST's own machinery.**
+    - Every worker in an occupation earned the same wage, so a tier split of them was degenerate.
+      §7.173 showed the firm premium is not what the stated table stands in for — **workers differ
+      from each other, not just their employers** — and what they differ by is EXPERIENCE, whose
+      distribution this stage already produces: hires enter at tenure zero, survivors age,
+      separations remove weight.
+    - **`OccupationPool.tenureStrata` is the same machinery DIST proved on SME leverage strata
+      (§7.140-143), pointed at people instead of firms:** weights, an integral, an absorbing
+      barrier and reinjection. `wageIndex` stays the first moment and every existing reader finds
+      the number it wants (rule 3); this is what it is the mean OF.
+    - **One TECHNOLOGY primitive: `RETURN_TO_EXPERIENCE_ANNUAL = 0.02`** — how fast a person gets
+      better at a job is a fact about the job. `TENURE_COHORTS = 20` is a RESOLUTION parameter
+      (rule 19) and `WORKING_LIFE_YEARS = 40` is a placeholder the cold start needs, **owed to DEM:
+      §7.169 measured that the current mortality primitive implies a 133-year working life, so the
+      demographics cannot say it yet.**
+    - **Measured: experience premium p10 1.005, p50 1.344, p90 1.704, p99 1.784 — a 1.77x spread;
+      weights sum to exactly 1.0000; mean tenure 17.1 years. With §7.173's firm premium the
+      within-occupation dispersion is ~2.5x, against 1.01x a session ago.** Harness green.
+    - **THE DERIVATION IS NOW A JUDGEMENT, NOT A BLOCKER, AND THAT IS THE FINDING.** ~2.5x derived
+      against 32.5x stated — **but 32.5x WITHIN one occupation is not a plausible wage fact.** A
+      top practitioner does not out-earn a junior one thirty-fold in the same job. That number is
+      the whole income concentration crammed into a wage multiplier, and **the model already
+      measures the part that actually belongs elsewhere: capital income is 37.6% of the top tier's
+      income.** So deriving would be MORE correct than the table, and would move top-tier income
+      from wages toward capital — where it belongs.
+    - **Not flipped here, deliberately.** It materially changes the income distribution, which
+      every household mechanism reads, and rule 7 wants that as its own bounded slice with a
+      measured before/after — not as the tail of a long pass.

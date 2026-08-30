@@ -50,7 +50,9 @@ import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
-import { RENT_SHARE_TO_LABOUR } from '../../../domain/region-macro';
+import {
+  RENT_SHARE_TO_LABOUR, RETURN_TO_EXPERIENCE_ANNUAL, TenureStratum, TENURE_COHORTS, WORKING_LIFE_YEARS,
+} from '../../../domain/region-macro';
 
 const OCCUPATIONS: OccupationType[] = [
   'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
@@ -348,6 +350,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       SPECIALIZED_PROFESSIONAL: 0, MANAGERIAL_FINANCIAL: 0,
     };
     const carriedVacanciesByOcc = { ...hiresByOcc };
+    const nextTenureStrataByOcc = {} as Record<OccupationType, TenureStratum[]>;
 
     OCCUPATIONS.forEach((occ) => {
       const supplyForOcc = totalLaborForce * (shares[occ] ?? BASELINE_OCCUPATION_LABOR_FORCE_SHARE[occ] ?? 0.2);
@@ -371,6 +374,49 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const hires = Math.max(0, Math.min(matches, openVacancies, seekers));
 
       hiresByOcc[occ] = hires;
+
+      // ---- DIST 1(b): THE EXPERIENCE CROSS-SECTION MOVES ON THE REAL FLOWS. ----
+      //
+      // Every worker in an occupation earned the same wage, so a tier split of them was
+      // degenerate and `TIER_WAGE_MULTIPLIER` had to STATE the spread (§7.172-173). Workers
+      // differ by EXPERIENCE, and this stage already computes what produces its distribution:
+      // hires enter at tenure zero, survivors age a week, separations take weight out.
+      //
+      // Same machinery DIST proved on SME leverage strata (§7.140-143) — weights, an integral,
+      // an absorbing barrier and reinjection — pointed at people instead of firms. Separations
+      // are drawn ACROSS the cross-section (a layoff does not select on tenure here), and the
+      // reinjection is the hires, at the bottom.
+      {
+        const priorStrata = pools[occ]?.tenureStrata;
+        const strata = (priorStrata && priorStrata.length > 0)
+          ? priorStrata.map((st) => ({ ...st }))
+          // Cold start: one cohort per year of a working life, spread evenly — the steady state
+          // of a workforce hiring and separating at a constant rate (§7.4).
+          : Array.from({ length: TENURE_COHORTS }, (_, k) => ({
+              weight: 1 / TENURE_COHORTS,
+              tenureYears: (k + 0.5) * (WORKING_LIFE_YEARS / TENURE_COHORTS),
+            }));
+        const afterSeparationsShare = employedBefore > 0
+          ? Math.max(0, 1 - separations / employedBefore) : 1;
+        const survivingHeads = employedBefore * afterSeparationsShare;
+        const totalHeads = survivingHeads + hires;
+        if (totalHeads > 0) {
+          strata.forEach((st) => {
+            // Survivors age a week and keep their share of a smaller workforce.
+            st.tenureYears += 1 / 52;
+            st.weight = (st.weight * survivingHeads) / totalHeads;
+          });
+          // The hires re-enter at the bottom, at tenure zero.
+          const entrantWeight = hires / totalHeads;
+          if (entrantWeight > 0) {
+            const bottom = strata.reduce((lo, st) => (st.tenureYears < lo.tenureYears ? st : lo), strata[0]);
+            const merged = bottom.weight + entrantWeight;
+            bottom.tenureYears = merged > 0 ? (bottom.weight * bottom.tenureYears) / merged : 0;
+            bottom.weight = merged;
+          }
+        }
+        nextTenureStrataByOcc[occ] = strata;
+      }
       // What is left open is carried forward LESS the postings employers withdraw — see
       // VACANCY_WITHDRAWAL_RATE_WEEKLY. Without it an occupation nobody can staff accumulates
       // vacancies without bound and its "tightness" stops meaning anything.
@@ -544,7 +590,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // reconciler below, which also runs at the end of the week so that a firm defaulting in
     // stage 08 (after this stage) releases its workers in the same week rather than leaving the
     // pools holding phantom employment until the next labor session. ----
-    reconcileEmploymentView(reg, employers, carriedVacanciesByOcc, hiresByOcc, separationsByOcc);
+    reconcileEmploymentView(reg, employers, carriedVacanciesByOcc, hiresByOcc, separationsByOcc, nextTenureStrataByOcc);
   });
 }
 
@@ -560,7 +606,10 @@ export function reconcileEmploymentView(
   employers: Company[],
   carriedVacanciesByOcc?: Record<OccupationType, number>,
   hiresByOcc?: Record<OccupationType, number>,
-  separationsByOcc?: Record<OccupationType, number>
+  separationsByOcc?: Record<OccupationType, number>,
+  /** DIST 1(b) — the experience cross-section this week's flows produced, when the labour
+   *  session computed one. The end-of-week reconciliation (defaults, acquisitions) does not. */
+  nextTenureStrataByOcc?: Record<OccupationType, TenureStratum[]>
 ): void {
   const pools = reg.occupationPools;
   if (!pools) return;
@@ -600,6 +649,8 @@ export function reconcileEmploymentView(
       ...pools[occ],
       employed: Math.round(employed),
       vacancies: Math.round(vacancies),
+      // DIST 1(b) — the experience cross-section this week's flows produced.
+      ...(nextTenureStrataByOcc?.[occ] ? { tenureStrata: nextTenureStrataByOcc[occ] } : {}),
       ...(hiresByOcc ? { hiresThisWeek: Math.round(hiresByOcc[occ]) } : {}),
       ...(separationsByOcc ? { separationsThisWeek: Math.round(separationsByOcc[occ]) } : {}),
     };

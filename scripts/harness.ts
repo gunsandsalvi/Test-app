@@ -1386,6 +1386,29 @@ const indModule: HarnessModule = (() => {
       });
     }
 
+    out.push('--- DIST 1(b): the EXPERIENCE cross-section, and the wage spread it produces ---');
+    {
+      const reg: any = s.regions.USA;
+      const occs = Object.keys(reg.occupationPools ?? {});
+      // The combined within-occupation spread: a worker's wage is its firm's premium times its
+      // own experience premium. Both are outcomes now; neither existed a session ago.
+      let allW: number[] = [];
+      occs.forEach(o => {
+        const st: any[] = reg.occupationPools[o]?.tenureStrata ?? [];
+        if (st.length === 0) return;
+        st.forEach(x => { for (let n = 0; n < Math.round(x.weight * 1000); n++) allW.push(1 + 0.02 * x.tenureYears); });
+      });
+      if (allW.length > 2) {
+        allW.sort((a, b) => a - b);
+        const q = (f: number) => allW[Math.min(allW.length - 1, Math.floor(f * allW.length))];
+        out.push(`  experience premium across the workforce: p10 ${q(0.1).toFixed(3)}  p50 ${q(0.5).toFixed(3)}  p90 ${q(0.9).toFixed(3)}  p99 ${q(0.99).toFixed(3)} (p99/p10 ${(q(0.99) / Math.max(0.001, q(0.1))).toFixed(2)}x)`);
+        const st0: any[] = reg.occupationPools[occs[0]]?.tenureStrata ?? [];
+        const wsum = st0.reduce((a, x) => a + x.weight, 0);
+        const meanTen = st0.reduce((a, x) => a + x.weight * x.tenureYears, 0) / Math.max(1e-9, wsum);
+        out.push(`  ${occs[0]}: ${st0.length} tenure cohorts, weights sum ${wsum.toFixed(4)} [must be 1], mean tenure ${meanTen.toFixed(1)}y`);
+      }
+    }
+
     out.push('--- DIST/CRD: the credit tiers, and whether they can move BOTH ways ---');
     REGIONS.forEach(r => {
       const books: any[] = (s.regions[r].householdState as any).creditTierBooks ?? [];

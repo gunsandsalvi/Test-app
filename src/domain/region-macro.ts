@@ -357,8 +357,56 @@ export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERI
 // Base annual wage by occupation is generated per-region from productivity — see
 // engine/bootstrap/labor-and-wages.ts's getBaseAnnualWageUSD(regionId).
 
+/**
+ * DIST 1(b) — ONE TENURE COHORT INSIDE AN OCCUPATION.
+ *
+ * Every worker in an occupation earned exactly the same wage, so a tier split of them was
+ * degenerate and `TIER_WAGE_MULTIPLIER` had to STATE a 32.5x spread that nothing produced
+ * (§7.172-173). Rent-sharing gave firms a real premium — 1.23x at equilibrium — and measuring it
+ * showed that is not what the stated number stands in for: workers differ from each other, not
+ * just their employers.
+ *
+ * What differs is EXPERIENCE, and the model already simulates what produces its distribution —
+ * hiring, quits and layoffs. A new hire enters at tenure zero, survivors age, separations remove
+ * weight. So the wage cross-section becomes an OUTCOME of labour turnover, on exactly the
+ * machinery DIST already proved on SME leverage strata (§7.140-143): weights, an integral, an
+ * absorbing barrier and reinjection.
+ */
+export interface TenureStratum {
+  /** Share of the occupation's workers in this cohort. Weights sum to 1. */
+  weight: number;
+  /** Years of experience the cohort carries — what its productivity premium is measured on. */
+  tenureYears: number;
+}
+
+/**
+ * DIST 1(b) — what a year of experience adds to a worker's productivity, and therefore its wage.
+ *
+ * A TECHNOLOGY primitive (rule 19): how fast a person gets better at a job is a fact about the
+ * job, not an outcome of anything else the model runs. One number, and the entire wage
+ * cross-section within an occupation is derived from it plus real turnover.
+ */
+export const RETURN_TO_EXPERIENCE_ANNUAL = 0.02;
+
+/**
+ * DIST 1(b) — how finely the experience cross-section is cut, and how long a working life runs.
+ *
+ * `TENURE_COHORTS` is a RESOLUTION parameter (rule 19): it says how the distribution is
+ * discretised and the answer must not depend on it. `WORKING_LIFE_YEARS` is the span the cold
+ * start spreads them over — the one demographic fact the tenure ladder needs, and a placeholder
+ * until DEM's age structure can say it (§7.169: the current mortality primitive implies a
+ * 133-year working life, so it cannot).
+ */
+export const TENURE_COHORTS = 20;
+export const WORKING_LIFE_YEARS = 40;
+
 export interface OccupationPool {
   employed: number;
+  /**
+   * DIST 1(b) — the occupation's EXPERIENCE cross-section. `wageIndex` below is its first moment
+   * and stays the number every existing reader wants (rule 3); this is what it is the mean OF.
+   */
+  tenureStrata?: TenureStratum[];
   wageIndex: number;
   wageGrowthAnnual: number;
   /** HH5 — open positions employers are actually trying to fill in this occupation, carried
