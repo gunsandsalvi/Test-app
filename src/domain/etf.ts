@@ -32,14 +32,44 @@ export interface EtfFund {
    * could NOT absorb, signed the way the market would feel it (positive = unmet buying). Zero
    * whenever the arbitrage is unconstrained, which is most weeks.
    *
-   * This is the PRESSURE that produces a premium or discount, deliberately not called one: a real
-   * premium is a price, and pricing ETF shares means clearing them in a book of their own against
-   * the float the APs are willing to create. That book is the next slice. Reporting unmet flow as
-   * if it were a price would be a made-up number wearing a real name — and an early version that
-   * divided the unabsorbed flow by the fund's own NAV printed a 173% "premium" on a fund whose
-   * NAV was smaller than one week of inflow, which is what that mistake looks like.
+   * This is the PRESSURE that produces a premium, and it is still not the premium itself — the
+   * premium is `premiumToNavBps` below, cleared in the share book. The two are a quantity and a
+   * price about the same fact and both are worth having: unmet flow says how much of the week's
+   * demand the arbitrage could not carry, the premium says what that cost. Reporting the first as
+   * if it were the second would be a made-up number wearing a real name — an early version that
+   * divided unabsorbed flow by the fund's own NAV printed a 173% "premium" on a fund whose NAV was
+   * smaller than one week of inflow, which is what that mistake looks like.
    */
   unmetFlowShare: number;
+  /**
+   * ETF2 — WHAT A SHARE ACTUALLY TRADES AT. Cleared in a book of its own (stages/etf-flows.ts):
+   * the float is what the fund's investors hold between them, the primary offering is what the
+   * APs will create, and no AP creates below net asset value — which is what holds the top of the
+   * discount without a bound anywhere (rule 15: a participant's price, not a bracket).
+   *
+   * Undefined before the book has run for this fund.
+   */
+  marketPricePerShare?: number;
+  /**
+   * ...and the PREMIUM, which `unmetFlowShare` above was deliberately not: the cleared price
+   * against the fund's own net asset value, in bps. Positive when the arbitrage could not create
+   * fast enough to meet the buying, which is exactly when a real ETF trades rich.
+   */
+  premiumToNavBps?: number;
+}
+
+/**
+ * What an investor would pay to hold the fund rather than assemble the index itself — the
+ * indifference point that gives the share book its demand curve, and the reason a premium is
+ * bounded by something real rather than by a number.
+ *
+ * Buying the basket directly costs the constituent books' dealer spread on every name in it. An
+ * investor will therefore pay up to that same cost as a premium over net asset value and not a
+ * basis point more, because past it the cheaper route is to go and buy the shares. One input, and
+ * it is a price the model already sets.
+ */
+export function basketAssemblyCostRate(bookSpreadBps: number): number {
+  return Math.max(0, bookSpreadBps) / 10000;
 }
 
 /**

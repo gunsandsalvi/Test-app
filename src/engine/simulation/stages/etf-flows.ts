@@ -28,13 +28,15 @@ import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
 import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
-import { apWeeklyCapacityUSD, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
+import { apWeeklyCapacityUSD, basketAssemblyCostRate, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
 import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { MAX_WEEKLY_PRICE_MOVE_PCT } from './07e-equity-clearing';
+import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
@@ -494,6 +496,94 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
   }
 
+  // ---- 4c. THE SHARE BOOK — the row's actual title, and the thing `unmetFlowShare` was standing
+  // in for. Until now a fund's shares were carried at net asset value and the arbitrage residual
+  // was reported as a fraction of unmet flow, deliberately NOT called a premium, because a premium
+  // is a price and that was not one. Now the shares clear:
+  //
+  //   THE FLOAT is what this fund's investors hold between them — the same OWN7 rule every other
+  //   book uses: the float is what the participants in THIS book hold, plus the primary offering.
+  //   THE PRIMARY OFFERING is what the APs will create this week, and no AP creates below net
+  //   asset value, because creating at a discount is selling a dollar for less than a dollar.
+  //   That withdraw level is what holds the top of a discount — a participant's price, not a
+  //   bracket around someone else's (rule 15).
+  //   THE PARTICIPANTS are the investors, and their reservation is the point at which they would
+  //   rather go and assemble the index themselves: net asset value plus what the constituent
+  //   books charge to buy every name in it. That is what bounds a premium by something real.
+  //
+  // So a week the APs can absorb prints at net asset value and a week they cannot prints a
+  // premium — which is what an ETF's premium IS, rather than a number derived from one.
+  const shareBookSpreadBps = DESK_SPREAD_BPS_BY_BOOK['equity'];
+  const assemblyCostRate = basketAssemblyCostRate(shareBookSpreadBps);
+  funds.forEach((fund) => {
+    const plan = flowPlanByFund.get(fund.id);
+    if (!plan) return;
+    const navPerShare = plan.navPerShare;
+    if (!(navPerShare > 0)) return;
+    const instrumentId = `ETFSHARE-${fund.id}`;
+
+    // What the investors hold between them, and what each of them wants to hold.
+    const heldSharesByInvestor = new Map<string, number>();
+    ctx.updatedInstitutionalEntities.forEach((e) => {
+      if (e.id === fund.id) return;
+      const held = (e.itemizedHoldings || []).reduce((a, h) => (
+        h.instrumentType === 'ETF_SHARE' && h.instrumentId === fund.id ? a + (h.quantityShares ?? 0) : a), 0);
+      const delta = holdingsDeltaByInvestor.get(e.id)?.get(fund.id) ?? 0;
+      const shares = held + delta;
+      if (shares > 1e-6) heldSharesByInvestor.set(e.id, shares);
+    });
+    const floatShares = Array.from(heldSharesByInvestor.values()).reduce((a, v) => a + v, 0);
+    const apCreationShares = Math.max(0, (capacityByFund.get(fund.id) ?? 0) / navPerShare);
+    if (!(floatShares > 0) && !(apCreationShares > 0)) return;
+
+    const instrument: ClearingInstrument = {
+      id: instrumentId,
+      outstandingUSD: fund.etf!.sharesOutstanding,
+      tradableFloatUSD: floatShares,
+      currentStat: fund.etf!.marketPricePerShare && fund.etf!.marketPricePerShare > 0
+        ? fund.etf!.marketPricePerShare : navPerShare,
+      statKind: 'PRICE_LIKE',
+      durationYears: 0,
+      primaryOfferingUSD: apCreationShares,
+      // An AP does not create shares to sell below what the basket behind them is worth.
+      primaryWithdrawStat: navPerShare,
+    };
+
+    const participants: ClearingParticipant[] = [];
+    heldSharesByInvestor.forEach((shares, investorId) => {
+      const wantUSD = plan.wantDelta.get(investorId) ?? 0;
+      const targetShares = Math.max(shares, shares + wantUSD / navPerShare);
+      participants.push({
+        id: investorId,
+        currentHoldingsByInstrumentId: new Map([[instrumentId, shares]]),
+        demandByInstrumentId: new Map<string, ParticipantDemand>([[instrumentId, {
+          // Indifferent between owning the fund here and assembling the index itself.
+          reservationStat: navPerShare * (1 + assemblyCostRate),
+          maxHoldingUSD: targetShares,
+          fullSizeStatRange: Math.max(0.01, navPerShare * assemblyCostRate),
+        }]]),
+      });
+    });
+    if (participants.length === 0) return;
+
+    const result = clearFinancialAsset([instrument], participants, new Map(), {
+      // The AP's own spread is its capacity constraint, already priced above; the book itself has
+      // no separate dealer standing in it.
+      dealerSpreadBps: 0,
+      // Undamped: a fund's shares can only move as far as the basket behind them plus the
+      // assembly cost, which is a real bound and does not need a second one.
+      maxWeeklyStatMovePct: Number.NaN,
+    });
+    const clearedPrice = result.newStatById.get(instrumentId);
+    if (clearedPrice === undefined || !(clearedPrice > 0)) return;
+    fund.etf = {
+      ...fund.etf!,
+      marketPricePerShare: Number(clearedPrice.toFixed(4)),
+      // THE PREMIUM. A price against the assets behind it, which is what a premium is.
+      premiumToNavBps: Number((((clearedPrice / navPerShare) - 1) * 10000).toFixed(1)),
+    };
+  });
+
   // ---- 5. Apply every cash and share movement in one pass, then re-mark every ETF claim. ----
   // A holder's shares are a claim on the fund's assets, so they have to be carried at the fund's
   // CURRENT net asset value per share — not at whatever NAV happened to prevail when the holder
@@ -543,11 +633,18 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     };
   });
 
-  // Every fund's final NAV per share, after this week's creations, fees and cash movements.
+  // Every fund's final price per share, after this week's creations, fees and cash movements.
+  // ETF2: what a holder's shares are WORTH is what they trade at, which is the share book's own
+  // cleared price — not the net asset value behind them. The two differ by the premium, and the
+  // premium is a transfer between holders (a buyer paid a seller for it), not wealth anybody
+  // created; a fund whose book has not cleared yet still marks at net asset value, because that
+  // is the only number about it that exists.
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.entityType !== 'ETF' || !e.etf) return;
     const shares = e.etf.sharesOutstanding;
-    finalNavPerShareByFund.set(e.id, shares > 0 ? fundNavUSD(e) / shares : ETF_INCEPTION_NAV_PER_SHARE);
+    const navPerShare = shares > 0 ? fundNavUSD(e) / shares : ETF_INCEPTION_NAV_PER_SHARE;
+    const marketPrice = e.etf.marketPricePerShare;
+    finalNavPerShareByFund.set(e.id, marketPrice && marketPrice > 0 ? marketPrice : navPerShare);
   });
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     if (!entity.itemizedHoldings.some((h) => h.instrumentType === 'ETF_SHARE')) return entity;
