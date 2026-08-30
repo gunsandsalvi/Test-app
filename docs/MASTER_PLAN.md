@@ -442,6 +442,62 @@ unacceptable, and what breaks first.
 - **It owns the float half of the damper defect:** thin books are why prints pin. **DIST challenges
   the premise** — depth in a book may be partly a RESOLUTION problem, obtainable at 10–20 weighted
   nodes per pool rather than tens of thousands of firms. Measure before spending the budget.
+
+#### WAVE 2 — the design, from the measurements (§7.212–216)
+
+**The diagnosis in one line: the economics is ~70 ms and the other ~1,330 is a graph of ~150,000
+heterogeneous JavaScript objects being walked by pointer, allocating as it goes.** Every remedy
+below follows from that and from nothing else. Numbers are this engine's, measured.
+
+1. **STRUCTURE OF ARRAYS, AND AN ENTITY IS AN `int32`.** One table per kind — companies, holdings,
+   tranches, contracts, pools, cohorts — each FIELD a typed-array column (`Float64Array revenue`,
+   `Int32Array region`, `Uint8Array flags`). No per-entity object exists at all; a company is a row
+   index. This is what kills the flat profile: the measured 78 µs FLOOR per company in stage 08
+   (p10, not the tail) is not arithmetic, it is chasing a 72-field object and building another one.
+2. **STRINGS DIE AT THE BOUNDARY.** Every ticker, id, instrument key and payment reason is interned
+   to an `int32` at load. Measured motivation: 145,000 distinct payments a week, each building four
+   party-key STRINGS, plus a `${type}:${id}` per holding row in every register walk. Identity
+   becomes an integer compare and `Map<string, X>` becomes a dense array indexed by id.
+3. **RELATIONSHIPS AS CSR, NOT NESTED ARRAYS.** The register is a bipartite graph (holders ×
+   instruments) traversed in BOTH directions every week. Hold it as compressed sparse rows:
+   holdings of entity `e` are `rows[start[e] … start[e+1]]`, and the transpose — holders of
+   instrument `i` — is rebuilt by counting sort in one linear pass, no maps, no allocation. **That
+   single structure retires all twenty-eight register sweeps and every "who holds X" lookup**,
+   which is what §7.216's ETF quadratic and §7.212's estate rescans both were.
+4. **ARENAS, NOT ALLOCATION.** Per-week scratch — plans, schedules, the payment journal — is
+   written into preallocated typed arrays with a bump pointer and reset at the week boundary. GC
+   measured a steady 8.5–8.9% of every profile and much of the "self time" in the big stages is
+   allocation wearing a function's name.
+5. **PAYMENTS AS A COLUMNAR JOURNAL.** `payer: Int32Array, payee: Int32Array, amount: Float64Array,
+   reason: Uint8Array`, appended by bump pointer. Netting is a counting sort by payer plus a prefix
+   sum — a linear pass over three columns instead of 145,000 objects and 580,000 string builds.
+   §7.215 measured coalescing as a dead end precisely BECAUSE the rows are genuinely distinct; the
+   answer is to make a row cheap, not to have fewer of them.
+6. **A STAGE IS A KERNEL OVER A RANGE**, not a `.map` over objects. Monomorphic loops over columns
+   are what V8 compiles well (the 405 "wrong map" deopts per four weeks are polymorphic object
+   shapes flowing through shared code), and — the real prize — **columns in a `SharedArrayBuffer`
+   are shardable across workers with NOTHING to clone.** §7.777's "the clone numbers say why
+   workers cannot touch it" is a statement about the object graph, not about the parallelism, and
+   it stops being true the moment the state is columnar. On 4 cores that is the difference between
+   the ~300 ms this design reaches single-threaded and something well under it.
+7. **DETERMINISM IS PRESERVED BY CONSTRUCTION, not by care.** Iteration order is row order; sharded
+   reductions combine in shard order. `financial-clearing-engine.ts` already does exactly this and
+   is byte-identical to serial — **it is the proof the pattern holds in this codebase**, and it is
+   why its kernel is the one part of the engine that does not appear in the profile.
+
+**What survives untouched:** the economics. The formulas, the clearing rules, the accounting
+identities are perhaps a tenth of the lines and a twentieth of the runtime. This is a rewrite of
+how state is LAID OUT and TRAVERSED, not of what the model says.
+
+**What must NOT be repeated from the current design:** one giant serialisable `GameState` object
+(§7.216 found 105,000 ledger keys being converted to a plain object and back every week for a
+reader that does not exist); string identity; and stages that allocate.
+
+**The migration, if it is taken:** strangler, not big-bang. The SoA store lands behind the existing
+accessors; stages convert one at a time with the object view kept as a debug-only materialiser; the
+20-week bit-exactness diff is the gate at every step. **The repo's determinism discipline is what
+makes this safe** — bit-exactness is checkable after every commit, which is not true of most
+rewrites.
 - **Stale, and left as the standing warning:** earlier text called `09-concentration-risk` "the
   cheapest win on the table: 98 ms a week for flags nothing prices off." **CRD-R1 gave it a
   consumer** (§7.184). Read the code before believing a row.
