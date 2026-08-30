@@ -597,6 +597,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 
 | Defect | State and next action |
 |---|---|
+| **THE ORDER OF A SOURCE-FILE DECLARATION SETS UNEMPLOYMENT** | §7.222 measured it: reverse the order `05-unit-bidding` walks `INDUSTRY_SUBUNITS` — a declaration order, nothing economic — and week 1 aggregate net income moves +3.8%, GDP −0.12%, **every one of 2,496 firms buys a different amount**, and by week 2 seven more firms are dead and unemployment prints 9.49% against 9.61%. Sub-unit markets open one after another and firms spend one budget across all of them, so whichever market opens first is served first. That coupling is REAL (a firm has one wallet); what is arbitrary is that the queue is a file's declaration order. **Rule 19: an arbitrary implementation detail is setting a macro outcome.** The well-posed question is what the opening order should BE — simultaneous clearing across a firm's budget, or an order derived from something economic. Do not paper over it by pre-allocating per-market budgets: that lets a firm overspend. Owner: IND/SCALE. |
 | **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | §7.213: 32,278 holding rows at seed → ~103,000 distinct positions by week 5, ~122,000 rows by week 15. **15% are duplicate `(holder, instrument)` rows and 9% are under $1,000.** §1's §7.4 rule is that the seed opens in the shape the weekly engine produces; this one does not, and every stage that walks the register pays for the gap. Consolidating duplicates and dust is ~25% off every register walk — the largest algorithmic item left. Owner: the seed, with SCALE. |
 | **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | Distinct from §7.210's quit rate, which is fixed and holds for ~12 weeks. Over 60, EUR reaches 65% unemployment and UK prints 0.0% at week 49 — 52 band violations across EUR and JPN. **Next action: the same treatment that worked in §7.210 — find the week it turns, and check what is FLAT while employment moves.** Owner: HH5/LAB. |
 | **SUPPLIER MARKET SHARES DO NOT SUM TO 100%** | ~120 violations over 60 weeks in `agricultural_commodities` and `network_infrastructure`, in all four regions. **A goods-market accounting defect with nothing to do with prices**, invisible until the harness could run this long. Cheapest of the open rows and probably the most self-contained. Owner: the goods market (IND). |
@@ -1884,3 +1885,50 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - **The rule, sharpened:** it is not enough to demand an established cause for a projection.
        **A classification is not a measurement.** §7.220's "88%" reads like a profile result and is
        an opinion about stage names.
+222. **THE PARALLEL FRACTION, MEASURED AT LAST — AND §7.220's 88% IS WRONG.** §7.221 said the one
+     number the whole "under 100 ms" arithmetic rests on had never been measured, and named the
+     experiment: permute the entity order inside one real stage and see whether the world changes.
+     Done, on both stages that matter, with a deep sha256 fingerprint of the whole state plus eight
+     macro aggregates printed to 17 significant digits.
+     - **THE TWO STAGES ARE THE WEEK.** Re-profiled: 1,165 ms/week, `08-company-fundamentals`
+       **305 ms (27.2%)**, `05-unit-bidding` **250 ms (22.3%)**, and the next largest stage is
+       58 ms (5.2%). These two are half the engine; everything else is a long tail.
+     - **STAGE 08, REVERSED: THE WORLD CHANGES.** Aggregate net income 281.31B → 286.93B (**+2.0%**)
+       in week 1; 2,448 of 2,496 firms hold different cash (median **0.056%**, p90 0.20%); by week 2
+       a different firm has defaulted (2,492 → 2,491). Same seed, same inputs, only the loop order.
+     - **THE CAUSE IS THE SHARED PRNG, AND IT IS NOT THE CONTENDED RESOURCES.** The obvious suspects
+       — the MMF's finite redeemable cash and the lead-bank allocator whose own comment says "the
+       winner's desk is that much less able to win the next one" — were both neutralised and the
+       hashes did not move by one bit. The real cause is `insurerProfile`'s
+       `lossRatio = 0.70 + (random() - 0.5) * 0.20` and its siblings: **a single sequential
+       mulberry32 stream drawn from inside a per-entity loop**, so which firm gets which draw IS the
+       iteration order. Exactly 4 firms' net income differs, all Financials, by ~28% each, and those
+       four are the whole 5.62B aggregate move.
+     - **RE-KEY THE STREAM AND STAGE 08 BECOMES ORDER-INVARIANT.** With the draw seeded per entity
+       (`hash(company.id) ^ week ^ seed`), forward and reverse order give **all eight aggregates
+       bit-identical to 17 digits across three weeks**. Every residual difference in the ENTIRE state
+       is 28 accumulator fields at **≤1.9e-15 relative — two ULP of float-summation associativity**,
+       which an ordered combine removes. **Stage 08 is shardable.**
+     - **STAGE 05 IS NOT, AND RE-KEYING DOES NOT SAVE IT.** Reverse the sub-unit order and week 1
+       revenue moves 1647.52B → 1648.28B, net income +3.8%, GDP −0.12%; by week 2 seven more firms
+       are dead and unemployment differs by 12bp. With the RNG scoped per sub-unit it is still
+       +1.8% net income and −0.11% GDP, and the field-level diff is total: **2,496 of 2,496 firms'
+       `lastWeekPurchasesUSD` differ, 2,480 cash, 2,351 net income.** The markets are coupled through
+       each firm's one budget and its inventory, spent down market by market. That is real economics,
+       not an artefact — and it is serial by construction.
+     - **SO THE ARITHMETIC, ON MEASURED PARTS.** Under "without changing the simulation", 08's RNG
+       re-key is not allowed (it changes every draw in the world), so **49.5% of the week is measured
+       serial**: four cores give 1.61×, **~723 ms**. Allow the re-key as a declared relabel and the
+       measured serial floor is 05's **22.3%**: four cores give 2.40×, **~486 ms** — and that already
+       assumes every untested stage in the 50% tail is perfectly parallel, which nothing has shown.
+       §7.220 claimed 2.92× and ~370 ms from a hand classification. **Neither number survives.**
+     - **AND THE 100 ms QUESTION IS ANSWERED PROPERLY FOR THE FIRST TIME.** Not "no dominant block
+       was found in five attempts" — that was absence of evidence. This: the largest stage is serial
+       because firms share a wallet across sequentially-opened markets, and the second largest is
+       parallel only if the simulation's entire random stream is re-keyed. **100 ms on four cores is
+       out of reach, and now there is a measurement behind that sentence rather than a hope.**
+     - **WHAT THE EXPERIMENT COST:** under two hours, no rewrite, one throwaway fingerprint driver
+       and four env-gated probes, all reverted (the clean tree reproduces the baseline fingerprints
+       exactly). §7.216, §7.218, §7.219 and §7.220 each spent longer than that being wrong.
+       **The permutation test is the tool: to find out whether a loop is parallel, run it backwards
+       and hash the world.**
