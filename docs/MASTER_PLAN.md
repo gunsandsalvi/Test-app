@@ -135,6 +135,23 @@ These are standing user directives. They are not suggestions.
     type — it asks the registry or calls the profile.** A new `if (sector === ...)` or
     `entityType === ...` branch in a stage is a defect under this rule even when it works.
 
+18. **Model updates come first; a misbehaving NUMBER is not a work item.** (User directive,
+    2026-08-30.) The priority is always the missing MECHANISM, never the statistic that looks
+    wrong. A number that misbehaves is evidence that something is not built — so the work is to
+    find and build it, and the number moves as a consequence. **Scoping a project around closing a
+    number is how a model gets tuned instead of built.**
+    - This is the third member of a family. Rule 10 says do not chase a MOVED number; rule 12 says
+      do not MEASURE mid-project; rule 18 says do not SCHEDULE around a number at all.
+    - **The evidence, measured across one session (§7.146-163).** Ten IND slices and three
+      root-cause fixes moved the week-10 price print from −25.5% to +4.3% without any of them ever
+      targeting it, and the largest single move came from a UNIT ERROR in the labour stage
+      (§7.149) that no amount of staring at the inflation series would have found. Meanwhile the
+      row scoped to "close the inflation escape" sat at the top of the work order against evidence
+      that was, by then, months of mechanism out of date.
+    - **The corollary for the work order:** a row whose content is "this number is wrong" is not a
+      foundation row. It is a CONSEQUENCE row, it belongs after the mechanism tier, and its
+      evidence must be re-measured before it is scoped — never inherited.
+
 ### 1.10 Verification ladder (every work item)
 
 **There is ONE test script: `scripts/harness.ts`** (user directive 2026-08-29, §7.101). One
@@ -155,6 +172,13 @@ WEEKS=10 SHOCKS=0 npm run verify   # quick wiring probe, ~15 s (structural, rule
                                    # SHOCKS=0 runs a clean RNG stream — counts are not
                                    # comparable with the SHOCKS=1 baseline (dirty stream,
                                    # preserved from the old harness for continuity).
+                                   # **AND SINCE IND18 (§7.155) A 10-WEEK RUN SAMPLES ONE
+                                   # SEASON.** Weeks 1-11 sit in the agricultural production
+                                   # trough and near the retail demand peak, so the headline
+                                   # price print is a SEASONAL reading, not a level. It stays
+                                   # comparable across commits (same seed, same calendar start)
+                                   # and must not be read as a steady state. Judge price
+                                   # behaviour on whole years only.
 npm run profile                    # the same run with per-stage timings (PROFILE=1).
                                    # Baseline 2026-08-29 (§7.107): 1,139 ms/week,
                                    # 05 46.8%, 08 11.9%, 09-concentration 8.5%, books ~14%.
@@ -344,51 +368,57 @@ in the tier it belongs to; its §5 entry appears in this same order and carries 
 every finding it owns. When it closes it leaves this table for §4.1 and its §5 entry is deleted —
 the substance is in §7, which is never renumbered.
 
-**2026-08-29 reorganisation, second pass.** The full-codebase review (§7.100) produced 90
-findings; every one is folded into the owning project's §5 plan below, three new projects exist
-because the findings demanded them (GUARD, FRM, COH), and several scopes changed shape — CAP
-starts with a clamp that was not in its inventory, MAC shrank because most of its content moved
-to FRM and COH, G3 roughly doubled. Code comments cite owners by NAME (`Owner: MAC`); the name is
-stable, the row number is not — trust the name.
+**2026-08-30 RESCOPE, under rule 18.** The foundation tier was ordered around two numbers —
+MAC's inflation escape and EMP's labour collapse — and rule 18 says a misbehaving number is not a
+work item. Both are demoted to CONSEQUENCE rows. **The evidence for doing so is measured, not
+argued:** across §7.146-163 the week-10 price print moved −25.5% → +4.3% and unemployment stopped
+rising monotonically, and NOT ONE of those changes targeted either number. The largest single move
+came from a unit error in the labour stage (§7.149). The foundation tier is now ordered by which
+MECHANISM is missing, and the numbers are re-measured after it lands, not before.
+
+**Earlier (2026-08-29 review, §7.100).** 90 findings, all folded into the owning project's §5
+plan; three projects exist because the findings demanded them (GUARD, FRM, COH). Code comments
+cite owners by NAME (`Owner: MAC`); the name is stable, the row number is not — trust the name.
 
 Work top to bottom. Never start an item whose prereqs aren't done.
 
 | # | Tier | Project | Why here |
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
-| 1 | foundation | **MAC — close the inflation escape, then confidence and saving become outcomes** *(clamps)* | **NOW ITEM 1: it gates EMP, and every horizon run is this.** G1b's price-level escape drags employment behind it — a firm whose nominal revenue falls 30% is below its cost of capital however its headcount was derived (§7.118, §7.121). Measured: inflation −0.5% → −36% by w37 with unemployment following it to ~40%, in BOTH the pre-CHAIN tree and the current one, so it is neither new nor CHAIN's. Narrowed otherwise: FRM took its fiscal half, COH its household half. After G1b, confidence and saving as outcomes and the bounds go. |
-| 2 | foundation | **EMP — the labour collapse** | **THE SEED HALF IS DONE (§7.118-121) AND THE 10-WEEK SYMPTOM IS GONE:** unemployment runs 20.3% → 30.0% over ten weeks, **in band in all four regions in every week**, against 10.5/25.7/17.9/23.5% at seed before. §7.111's two impossible sector ratios (Consumer 0.92x, Industrials 0.93x — gross output BELOW value added) are now 1.42x and 1.30x. **BLOCKED ON ITEM 1 for the rest:** its stated criterion is 60 weeks stable and at horizon the deflation spiral still takes it. Nothing here is startable until G1b closes. |
-| 3 | foundation | **IND — industry operating models** | **CLOSED except IND16, 2026-08-30 (§7.146-155).** Every non-financial corporate is one model with four coefficients, and every slice of the row is now built or measured shut. Earlier closes: IND1/IND2-subscription/IND5/IND8/IND9/IND-R1/IND-R2/IND-R4/IND-R5 (§7.108-109, §7.112-115); IND3, CAP0 and IND-R6 (§7.121) — the margin is an outcome of real costs, the clamp is gone, the listing branch is deleted; the profile contract inverted (§7.125). **This pass: IND15** labour constrains output (§7.146), **IND10** production takes time and WIP is a real stock (§7.147), **IND11** the backlog is a stock — which exposed that a firm's own production was never available to its own contracts (§7.148), **IND12** domestic trade credit (§7.150), **IND13** assets under construction (§7.151), **IND14** reliability priced into sourcing (§7.152), **IND19** already built, and hiding a double-charged expense ratio (§7.153), **IND17** prepayments (§7.154), **IND18** the calendar (§7.155). **Three defects were found by building it and fixed at the root, not worked around:** the contract-settlement ordering (§7.148), **LAB's nominal/real unit error that had kept the hiring branch switched off since EMP (§7.149)**, and the insurer expense double-charge (§7.153). **IND16 (the distribution tier) is the only slice left and it is a REFACTOR, not an addition** — see §5-IND16 for the double-representation trap and the full design. Also still open and owned elsewhere: `CARD_OPERATING_COST_BPS` (deliberately left — it prices a loan rather than stating a margin), §7.122 steps 1-2 (pure refactors), and the two CAP-owned defects IND13's new stock exposed (§6.1: capex does not cover depreciation; a ±2%/week clamp on capacity growth). |
-| 4 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **CAP0 DONE (§7.121): the [2%, 65%] margin clamp is gone**, deleted with IND3 because a margin that is the residual of real costs needs no band. A firm can report a loss now, so CAP's own mechanism — a firm that cannot cover unit cost STOPS producing rather than throttling — can finally fire. That and the capacity decisions are what remains. |
-| 5 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. |
-| 6 | foundation | **COH — cohorts accumulate: household balance sheets** | New, from the review's sharpest reframing: §6.3's "nine imposed household tables" are ONE missing mechanism — cohorts have no balance sheets. Give them one and eight of the nine become measurements; reverse `beneficiaryLiabilityUSD` and the institutional seed share goes too; retire `national-accounts.ts`, whose own exit condition is met. |
-| — | **IN PROGRESS** | **DIST — the distribution is the state** | **Substantially delivered (§7.140-145), started on user directive.** SME pools carry a leverage cross-section struck from the named tier's own rule; both distress terms are integrals over it rather than functions of the mean; the absorbing barrier removes the levered weight a default destroys and reinjects it unlevered; and **all nine of §6.3-A's stated household tables are now measurements**, including the wealthy-hand-to-mouth middle, which the derivation produces rather than assumes. Verified: aggregation exactness (K=1..50 identical), seed-flat-get-a-tail (1.00x → 19.32x in two years), weight conservation. **What remains is architectural, not behavioural:** the named tier as a node of weight one — one representation at N resolutions — plus cut-point invariance, which needs that unification to be testable. |
-| 7 | markets | **G3 — one dealer system (all three of them)** | The regional desk copied onto four sheets, the player-facing `Dealer` priced inside a React component, and every fixed bank price the review found: underwriting fees, the wholesale spread, the deposit-beta floor, the hash-drawn lead bank, `BANK_TARGET_ROE`. Also owns the dealer-capacity half of the promoted damper defect (§6.1). |
-| 8 | markets | **REPO — secured funding is a market with counterparties** | New 2026-08-29. Repo already CLEARS (`repo-clearing.ts` uses the generic engine, real reservations, the SRF as a seat) but it is not an asset class: no `AssetType`, no `ItemizedHolding`, no named counterparty, one anonymous pool per region, collateral as a scalar. Rules 3 and 14. It is also what should bound a bank's securities book, which is why OWN8's residual ceiling exists at all. |
-| 9 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | Needs G3 for the CDS half; the ratings half and the household credit-tier books (shares AND rates imposed) are independent. |
-| 10 | markets | **HSG — a housing market that clears** *(clamps)* | Independent. Adds the review's two: the 170bps mortgage spread every bank charges alike, and the observed 4% turnover rate that fixes origination volume. |
-| 11 | markets | **XB — cross-border portfolios and trade** | IN PROGRESS. **XB6** remains and owns the FX leg of the damper defect: the float is systematically one-way and the elastic side cannot absorb it. |
-| 12 | markets | **HF — hedge fund strategies + prime brokerage** | Grown: speculator schedules from own capital (the FX elastic side), hedge ratios onto mandate profiles, home bias as a LIMIT not a weight, the LBO debt share as a financing outcome. |
-| 13 | markets | **DER — derivatives and the people who hedge with them** | Prereq G3. Adds: the cross-currency basis becomes a cleared price, not `150 × utilization × invented split`. |
-| 14 | markets | **G5 — default resolution: recovery as an outcome** | Adds: the defaults-count × 12bps contagion coefficient becomes real losses on real holders' books. |
-| 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | Re-scoped by the review: every seeded commodity price is a real market price back-solved into a "scarcity index" — the primitive becomes extraction cost and ore grade. Weather gets a calendar and a geography; two dead impact fields (14 writes, 0 reads) die; the third becomes a YIELD. |
-| 16 | depth | **CAL — payment calendars** | Coupons, loan interest and dividends on real dates instead of smooth 1/52 accruals. |
-| 17 | depth | **ETF2 — a real price for ETF shares** | Prereq G3. Adds: re-measure `AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY`, whose value contradicts its own comment by an order of magnitude. |
-| 18 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
-| 19 | depth | **SCALE — universe scale-up under a wall-clock budget** | Wave 2 after IND. Owns the float half of the promoted damper defect: thin books are why prints pin. |
-| 20 | depth | **MNC — multinational production** | Prereqs IND, XB. |
-| 21 | depth | **CHAIN — multi-tier supply chains** | **CHAIN-D AND CHAIN-E DONE (§7.117-118, §7.120); it no longer gates the foundation tier.** The recipe-depth slice was split out and run first (user decision, 2026-08-29): mean intensity 0.164 → 0.412, harness 18 → 15, five families → two. **It did not move §7.111's ratio (0.878 → 0.879), and that is the finding** — the gross-output ratio is pinned by the DEMAND SEED (`C + I + G`, a final-demand identity with no intermediate demand in it), not by the recipes. **CHAIN-E — put intermediate demand in the seed, from the now-real recipe matrix — is the unblocking slice.** Earlier framing (§7.111, §7.116): It owns the root cause of EMP's labour collapse and the recipe depth IND3 needs, so two foundation items sit behind a depth-tier row. Prereqs BP1, IND10/11. Adds: `CONTRACTED_DEMAND_SHARE` becomes the buyer's own hedging decision. **OPEN QUESTION FOR THE USER — the table may not be reordered without asking:** promote CHAIN (or the recipe-depth slice of it) into the foundation tier beside IND, or leave items 1 and 2 parked until the depth tier is reached? |
-| 22 | depth | **DYN — entry, exit, and industry structure** | Prereqs IND, BP1. Adds: the named tier's cut point falls out of the Pareto tail instead of sitting beside it. |
-| 23 | depth | **PROD — firm productivity and innovation** | Prereq IND. |
-| 24 | depth | **CRE — commercial property and leases** | Prereqs HH, G2 (both done). |
-| 25 | depth | **TAXR — corporate tax, really** | Prereq PUB (done); MNC for the cross-border half. Adds: the model has three tax rates and no owner — the corporate one is a bare 0.21 literal policy cannot reach. |
-| 26 | last | **S-final — validation gate** | Everything above. |
-| 27 | last | **AU — Aurora, the UI rebuild** | Everything above. Adds: UI state moves out of `GameState`, which the determinism hash spans. |
+| 1 | foundation | **DIST — the distribution is the state** | **PROMOTED TO ITEM 1 (2026-08-30). Substantially delivered and the largest live mechanism row.** Done: SME pool leverage strata with both distress terms as integrals (§7.140-141), the absorbing barrier and its reinjection (§7.143), all nine §6.3-A household tables as measurements (§7.145), and **two of the four §7.157 sweep targets** — pool distress layoffs over the strata (§7.161) and the credit tiers' three one-way ratchets (§7.162). The mortgage half went to HSG (§7.159). **What remains: (a) the FOURTH one-way ratchet — cohort saving sits under a `Math.max(0,...)` so no tier can dissave (§7.163), which blocks both the savings rework and forced selling; (b) the named tier as a node of weight one, one representation at N resolutions; (c) cut-point invariance, which needs (b) to be testable.** §5-DIST-P is its governing idea and holds the primitive scoreboard. |
+| 2 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **CAP0 DONE (§7.121)** — the [2%,65%] margin clamp is gone and a firm can report a loss, so CAP's own mechanism (a firm that cannot cover unit cost STOPS) can fire. **IND13 handed it two measured defects (§6.1, §7.151):** capex covers ~0.5%/yr of a capital stock depreciating at ~8%, so the plant is being consumed several times faster than replaced; and a hard **±2%/week clamp on capacity growth** (rule 2). Both were invisible until the construction stock existed to measure them. The capacity DECISIONS are the rest. |
+| 3 | foundation | **COH — cohorts accumulate: household balance sheets** | **Mostly delivered by DIST from a different direction (§7.145) — re-read §5-COH before starting; most of what it describes has happened.** What is left and what makes it item 3: the household balance sheet still cannot distinguish what is spendable now from what is accumulated, and the savings rework needs that distinction to have a buffer to be a buffer OF. Also still owns `beneficiaryLiabilityUSD`'s reversal and retiring `national-accounts.ts`. |
+| 4 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. **Promoted in substance: its AGE STRUCTURE half is what gives the household sector a life-cycle**, and a life-cycle is what makes a positive steady-state savings rate an outcome rather than a coefficient (§5-DIST-P). |
+| 5 | markets | **HSG — a housing market that clears** *(clamps)* | **PROMOTED from item 10; substantially started 2026-08-30.** Done: the mortgage book is a cross-section of **vintages** each marked to today's prices, so severity is `E[f(LTV)]` and the model can have a mortgage credit event — a −20% price move now takes severity to 2.1x where the one-average book said its floor (§7.159); loans carry a **5-year fix and RESET** (17.5% of the book reprices a year) with per-vintage default frequency; and borrowing capacity is `DSTI x income / annuity factor` (§7.160). **What remains is the row's actual title: `medianHomePriceUSD` does not CLEAR.** Until it does, the affordability limit has slack it should not always have, and `HOUSING_TURNOVER_RATE_ANNUAL` is still a constant on the seller's side. |
+| 6 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | **The household half is DONE (§7.162):** tier migration is two-way on measured delinquency, delinquency heals instead of accumulating, and the tier rate is QUOTED from that tier's own measured loss rather than drifting `+cci x k` forever. **What remains:** the ratings half (ratings handling zero earnings) and the CDS half, which needs G3. |
+| 7 | foundation | **IND — industry operating models** | **CLOSED except IND16 (§7.146-156).** Kept in the table only because IND16 is open: the distribution tier, and it is a REFACTOR not an addition — a household already buys `facilities_and_logistics` as a good, so a channel margin on top would pay the same sector twice. Design in §5-IND16. |
+| — | consequence | **MAC — the price level has no anchor** *(was item 1)* | **DEMOTED under rule 18, and RESCOPED.** It was "close the inflation escape", scoped against a measurement (−36% by w37) taken before ten IND slices, three root-cause fixes and a calendar. **That evidence is void and may not be inherited.** The honest row: the price level's behaviour is a SYMPTOM, its cause is one or more missing mechanisms, and every mechanism landed so far has moved it without trying. **Re-measure on a whole number of years AFTER the foundation tier, then scope.** Its saving half is DIST's item 1(a) and its confidence half needs a precautionary motive, which needs DEM's age structure. |
+| — | consequence | **EMP — the labour collapse** *(was item 2)* | **DEMOTED under rule 18: this row has no build in it.** Its seed half is done (§7.118-121) and §7.149 fixed the defect that made the collapse one-directional — the hiring branch had never fired. What is left is a CRITERION ("60 weeks stable"), not a work item, so it belongs in §5's S-final validation gate rather than the work order. Nothing to start; watch it as the foundation tier lands. |
+| 8 | markets | **G3 — one dealer system (all three of them)** | The regional desk copied onto four sheets, the player-facing `Dealer` priced inside a React component, and every fixed bank price the review found: underwriting fees, the wholesale spread, the deposit-beta floor, the hash-drawn lead bank, `BANK_TARGET_ROE`. Also owns the dealer-capacity half of the promoted damper defect (§6.1). |
+| 9 | markets | **REPO — secured funding is a market with counterparties** | New 2026-08-29. Repo already CLEARS (`repo-clearing.ts` uses the generic engine, real reservations, the SRF as a seat) but it is not an asset class: no `AssetType`, no `ItemizedHolding`, no named counterparty, one anonymous pool per region, collateral as a scalar. Rules 3 and 14. It is also what should bound a bank's securities book, which is why OWN8's residual ceiling exists at all. |
+| 10 | markets | **XB — cross-border portfolios and trade** | IN PROGRESS. **XB6** remains and owns the FX leg of the damper defect: the float is systematically one-way and the elastic side cannot absorb it. |
+| 11 | markets | **HF — hedge fund strategies + prime brokerage** | Grown: speculator schedules from own capital (the FX elastic side), hedge ratios onto mandate profiles, home bias as a LIMIT not a weight, the LBO debt share as a financing outcome. |
+| 12 | markets | **DER — derivatives and the people who hedge with them** | Prereq G3. Adds: the cross-currency basis becomes a cleared price, not `150 × utilization × invented split`. |
+| 13 | markets | **G5 — default resolution: recovery as an outcome** | Adds: the defaults-count × 12bps contagion coefficient becomes real losses on real holders' books. |
+| 14 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | Re-scoped by the review: every seeded commodity price is a real market price back-solved into a "scarcity index" — the primitive becomes extraction cost and ore grade. Weather gets a calendar and a geography; two dead impact fields (14 writes, 0 reads) die; the third becomes a YIELD. |
+| 15 | depth | **CAL — payment calendars** | Coupons, loan interest and dividends on real dates instead of smooth 1/52 accruals. |
+| 16 | depth | **ETF2 — a real price for ETF shares** | Prereq G3. Adds: re-measure `AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY`, whose value contradicts its own comment by an order of magnitude. |
+| 17 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
+| 18 | depth | **SCALE — universe scale-up under a wall-clock budget** | Wave 2 after IND. Owns the float half of the promoted damper defect: thin books are why prints pin. |
+| 19 | depth | **MNC — multinational production** | Prereqs IND, XB. |
+| 20 | depth | **CHAIN — multi-tier supply chains** | **CHAIN-D AND CHAIN-E DONE (§7.117-118, §7.120); it no longer gates the foundation tier.** The recipe-depth slice was split out and run first (user decision, 2026-08-29): mean intensity 0.164 → 0.412, harness 18 → 15, five families → two. **It did not move §7.111's ratio (0.878 → 0.879), and that is the finding** — the gross-output ratio is pinned by the DEMAND SEED (`C + I + G`, a final-demand identity with no intermediate demand in it), not by the recipes. **CHAIN-E — put intermediate demand in the seed, from the now-real recipe matrix — is the unblocking slice.** Earlier framing (§7.111, §7.116): It owns the root cause of EMP's labour collapse and the recipe depth IND3 needs, so two foundation items sit behind a depth-tier row. Prereqs BP1, IND10/11. Adds: `CONTRACTED_DEMAND_SHARE` becomes the buyer's own hedging decision. **OPEN QUESTION FOR THE USER — the table may not be reordered without asking:** promote CHAIN (or the recipe-depth slice of it) into the foundation tier beside IND, or leave items 1 and 2 parked until the depth tier is reached? |
+| 21 | depth | **DYN — entry, exit, and industry structure** | Prereqs IND, BP1. Adds: the named tier's cut point falls out of the Pareto tail instead of sitting beside it. |
+| 22 | depth | **PROD — firm productivity and innovation** | Prereq IND. |
+| 23 | depth | **CRE — commercial property and leases** | Prereqs HH, G2 (both done). |
+| 24 | depth | **TAXR — corporate tax, really** | Prereq PUB (done); MNC for the cross-border half. Adds: the model has three tax rates and no owner — the corporate one is a bare 0.21 literal policy cannot reach. |
+| 25 | last | **S-final — validation gate** | Everything above. |
+| 26 | last | **AU — Aurora, the UI rebuild** | Everything above. Adds: UI state moves out of `GameState`, which the determinism hash spans. |
 
 *(clamps)* marks the survivors of the clamp-removal programme (§6.4). They are ordinary work
 items in their proper tiers, not a separate track.
 
-**Do not reorder this table without asking.** The sequence encodes prerequisites that are not all
+**Do not reorder this table without asking** — the 2026-08-30 rescope above was done on an
+explicit user directive. **The sequence encodes prerequisites that are not visible from a row:** The sequence encodes prerequisites that are not all
 visible from a row: a market cannot be honest before the demand side it prices against is, and a
 clamp cannot be deleted before the mechanism under it exists (§6.4).
 
@@ -492,7 +522,16 @@ re-measured once (rule 12) with the count attributed against 488.
 
 ---
 
-### MAC — Close the inflation escape, then confidence and saving become outcomes  *(item 1, clamp programme; GATES EMP)*
+### MAC — The price level has no anchor  *(CONSEQUENCE row, demoted under rule 18 2026-08-30)*
+
+**READ THIS BEFORE SCOPING ANYTHING BELOW.** This row was item 1 and was scoped around a
+measurement — inflation −0.5% → −36% by w37, unemployment following to ~40% — taken before ten
+IND slices, three root-cause fixes and a calendar. **That evidence is VOID and may not be
+inherited** (rule 18). Across §7.146-163 the week-10 print moved −25.5% → +4.3% with nothing
+targeting it, and the largest single move was a UNIT ERROR in the labour stage (§7.149). Re-measure
+on a whole number of years after the foundation tier, then scope. The saving half is DIST's; the
+confidence half needs a precautionary motive, which needs DEM's age structure. Everything below is
+the OLD scope, kept for its findings, not for its ordering:
 
 **Why this is item 1 now.** G1b stopped being a watch item and became the thing every horizon run
 prints. Measured over a 60-week run, both in the current tree and in the pre-CHAIN one at the same
@@ -503,7 +542,7 @@ capital however its headcount was derived — which is why EMP cannot close behi
 new: the pre-CHAIN tree escapes harder and earlier at every checkpoint.
 
 **Narrowed by the 2026-08-29 reorganisation:** FRM (closed, §7.106) took the fiscal formulas and the
-Phillips-curve wage; COH (item 5) took the household cross-section. What remains is expectations
+Phillips-curve wage; COH (item 3) took the household cross-section. What remains is expectations
 and policy behaviour.
 
 **Clamps it deletes:** expected inflation [−20%, +50%], Taylor output/inflation gaps ±10%, the
@@ -538,7 +577,12 @@ the stance responds to the budget position stage 11 measures.
 
 ---
 
-### EMP — The labour collapse  *(item 2; BLOCKED on item 1)*
+### EMP — The labour collapse  *(CONSEQUENCE row; no build in it — demoted 2026-08-30)*
+
+**There is nothing to start here.** The seed half is done (§7.118-121) and §7.149 fixed the defect
+that made the collapse one-directional: the hiring branch §7.109 built had never once fired,
+because the level path divided this week's revenue by the SEED's revenue per head. What remains is
+a CRITERION — 60 weeks stable — which belongs to S-final's validation gate, not the work order.
 
 **The seed half is done and the ten-week symptom is gone.** Unemployment runs 20.3% → 30.0% over
 ten weeks, in band in all four regions in every week, against 10.5/25.7/17.9/23.5% at seed before
@@ -566,7 +610,7 @@ moves in response to slack.
 
 ---
 
-### IND — Industry operating models  *(item 3; needs BP1, done; banks join it)*
+### IND — Industry operating models  *(CLOSED except IND16 — §7.146-156)*
 
 **GUARD handed IND a live invariant (§7.105).** `Σ categoryMarketShare ≈ 1` per region per
 sub-unit is asserted every week now, and it fires on `enterprise_software` at **160-166% in all
@@ -817,7 +861,13 @@ industry the way real ones do.
 
 ---
 
-### CAP — A firm can run a loss; then production and capacity decisions  *(item 4, clamp programme; runs with IND)*
+### CAP — A firm can run a loss; then production and capacity decisions  *(item 2, clamp programme)*
+
+**IND13 handed this row two MEASURED defects it did not have before (§6.1, §7.151), and they are
+the first things in it:** capex covers ~0.5%/yr of a capital stock depreciating at ~8%, so the
+plant is being consumed several times faster than it is replaced; and `05-unit-bidding.ts` carries
+a hard **±2%/week clamp on capacity growth** (rule 2), which is doing the work the investment
+decision should do. Neither was visible until IND13's construction stock existed to measure them.
 
 **CAP0 IS DONE (§7.121) — the clamp that gated this whole project is gone.** `08`'s
 `[2%, 65%]` EBITDA-margin band and its `[4%, 65%]` target twin were deleted with IND3, because a
@@ -864,7 +914,12 @@ moves week to week.
 
 ---
 
-### DEM — Demographic variability  *(item 5; small; takes the population-growth [−3%,+4%] and migration ±1% clamps)*
+### DEM — Demographic variability  *(item 4; takes the population-growth and migration clamps)*
+
+**Its AGE STRUCTURE half matters more than its size suggests.** A life-cycle — young cohorts
+accumulating, old ones drawing down — is what makes a positive steady-state savings rate an
+OUTCOME rather than a coefficient (§5-DIST-P). Without it, saving has no motive that survives a
+stationary economy, which is the wall §7.158 hit.
 
 The four regions currently share near-identical population dynamics: birth ~1.0%, death ~0.9%,
 migration ~0.2%, all constants, all alike — so populations differ only by their seeded level and
@@ -890,7 +945,25 @@ retired share; no demographic number re-rolls weekly.
 
 ---
 
-### DIST — The distribution is the state  *(PROPOSED, placement undecided; redesigns COH, changes DYN/SCALE/CRD/MAC/HSG)*
+### DIST — The distribution is the state  *(ITEM 1 — promoted 2026-08-30; substantially delivered)*
+
+**Delivered:** pool leverage strata with both distress terms as integrals (§7.140-141); the
+absorbing barrier and its reinjection (§7.143); all nine §6.3-A household tables as measurements
+(§7.145); and two of the four §7.157 sweep targets — pool distress layoffs over the strata
+(§7.161) and the credit tiers' three one-way ratchets (§7.162). The mortgage target went to HSG
+(§7.159-160).
+
+**WHAT REMAINS, in order:**
+**(a) THE FOURTH ONE-WAY RATCHET.** Cohort saving is `disp x tierRate x lambda` under a
+`Math.max(0,...)`, so **no tier can ever dissave** (§7.163). This blocks the savings rework AND
+forced selling, which has nothing to trigger on until a drawdown is possible. Household liquidity
+is 23.7 weeks of committed outflow — a threshold a real shock crosses — so the trigger is sound
+once dissaving exists. **Re-diagnose the §7.158 stash rather than trusting its stated cause,
+which §7.163 withdrew.**
+**(b) The named tier as a node of weight one** — one representation at N resolutions.
+**(c) Cut-point invariance**, which needs (b) to be testable.
+
+**§5-DIST-P is this row's governing idea** and holds the primitive scoreboard.
 
 **Origin: a user question, 2026-08-29 — "the household and SME sector is massive and ultimately
 impossible to model bottom up. Is there a way to model it statistically, the way physics does?"**
@@ -1045,13 +1118,19 @@ now the inflation escape, which is a DYNAMICS defect that no amount of resolutio
 The rule survives both: resolving a distribution whose location or trajectory is wrong buys a
 beautifully-resolved wrong answer, and invites tuning the distribution to fix it, which §6.4
 forbids. **Its prerequisite is now met** — IND-R6 delivered the one firm model DIST extends from
-two tiers to N resolutions — so it should land **before COH (item 6), which it redesigns, and
+two tiers to N resolutions — so it should land **before COH (item 3), which it redesigns, and
 before SCALE and DYN, whose premises it changes** — and it interacts with CAP, since "a firm can run a loss" is another threshold and
 profitability dispersion is exactly what makes it bite. Proposed: with or just after CAP.
 
 ---
 
-### COH — Cohorts accumulate: household balance sheets  *(item 6; new from the 2026-08-29 review)*
+### COH — Cohorts accumulate: household balance sheets  *(item 3)*
+
+**MOSTLY DELIVERED BY DIST FROM A DIFFERENT DIRECTION (§7.145) — re-read what follows before
+starting; most of it has happened.** What is left, and what makes it item 3: the household balance
+sheet still cannot distinguish what is SPENDABLE NOW from what is ACCUMULATED, and a buffer rule
+needs that distinction to have something to be a buffer of. Also still owns `beneficiaryLiabilityUSD`'s
+reversal and retiring `national-accounts.ts`.
 
 **READ §5-DIST FIRST — it proposes redesigning this project, not competing with it.** COH's plan
 is to give a cohort a balance sheet; DIST's argument is to give it a DISTRIBUTION over balance
@@ -1235,7 +1314,12 @@ short is visibly squeezed when the curve moves.
 
 ---
 
-### CRD — Credit prices cleared, ratings handle zero earnings  *(item 9, clamp programme; CDS half needs G3)*
+### CRD — Credit prices cleared, ratings handle zero earnings  *(item 6; household half DONE §7.162)*
+
+**Done:** tier migration is two-way on measured delinquency, delinquency heals rather than
+accumulating, and the tier rate is QUOTED from that tier's own measured loss instead of drifting
+`+cci x k` forever (which was also a second representation of household credit pricing).
+**Remains:** the ratings half, and the CDS half, which needs G3.
 
 **CRD-R1 — A RATING IS NOT TWO RATIOS.** *(User, 2026-08-29, on IND8's close.)*
 `determineCreditRating(leverage, coverage)` is the whole rater, seed and week. Real credit
@@ -1286,7 +1370,15 @@ is a clearing outcome.
 
 ---
 
-### HSG — A housing market that clears  *(item 10, clamp programme; independent)*
+### HSG — A housing market that clears  *(item 5 — promoted; substantially started §7.159-160)*
+
+**Done:** the mortgage book is a cross-section of VINTAGES marked to today's prices, so severity is
+`E[f(LTV)]` and a −20% price move takes it to 2.1x where the one-average book said its floor;
+loans carry a 5-year fix and RESET (17.5% of the book a year) with per-vintage default frequency;
+borrowing capacity is `DSTI x income / annuity factor`.
+**REMAINS — and it is the row's actual title: `medianHomePriceUSD` DOES NOT CLEAR.** Until it
+does, the affordability limit has slack it should not always have, and `HOUSING_TURNOVER_RATE_ANNUAL`
+is still a constant on the seller's side.
 
 **Clamps it deletes:** house price index [0.5, 3.0], credit factor [0.5, 1.5], the
 `|| 400000` price fallback, and the drift itself —
@@ -1894,7 +1986,7 @@ exactly three legitimate categories, and everything else must be an outcome:
      what `−0.1 x CCI` in the old aggregate formula was faking.
   3. *(temporary)* **THE ILLIQUIDITY FRICTION** — what makes a house or a pension unspendable. A
      primitive only while housing and pensions are not real markets with real transaction costs.
-     **HSG (item 10) retires it.**
+     **HSG (item 5) retires it.**
 
 **Firms/SMEs: zero to one.** Entry scale — how big a firm is when born — and that is probably
 derivable from technology (the smallest scale at which the recipe's fixed costs are covered). The
@@ -1930,11 +2022,11 @@ horizon and the savings cap.
 | Stated block | Dies with |
 |---|---|
 | `TIER_BALANCE_SHEET_WEIGHTS` (32) | mostly dead already — opening conditions only since §7.145 |
-| tier savings rates + the 4 aggregate coefficients + λ + the 90% cap | saving as a per-tier decision (MAC, item 1) |
-| credit tier shares and rates (16) | real migration between tiers — CRD, item 9 |
+| tier savings rates + the 4 aggregate coefficients + λ + the 90% cap | saving as a per-tier decision — **DIST item 1(a)**, and §6.1's live row |
+| ~~credit tier shares and rates (16)~~ | **RETIRED §7.162** — migration is two-way on measured delinquency and the rate is quoted |
 | `TIER_DEBT_SERVICE_WEIGHT` (4) | **its own comment already says "a stated primitive until HH4c gives cohorts their own balance sheets" — overdue** |
 | `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN, item 22 |
-| the average LTV, `WEALTH_SPENDDOWN_YEARS` | housing that clears — HSG, item 10 |
+| ~~the average LTV~~, `WEALTH_SPENDDOWN_YEARS` | **the LTV RETIRED §7.159** (the book is vintages); the spend-down horizon still waits on housing that clears — HSG, item 5 |
 | **`TIER_OCCUPATION_MIXES` (14)** | **NOTHING — no owner assigned. The largest stated block with no mechanism scheduled to kill it.** A tier's occupation mix should be an outcome of who got hired into what, over time. |
 
 Run it like §6.1's unmodeled-financial-assets line: **a count that must fall and may never rise**,
@@ -2049,19 +2141,18 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 
 ### 6.1 Live defects
 
+**Closed 2026-08-30, substance in §7 (never renumbered), not duplicated here:** mortgage loss
+severity was a floor constant because the book was one average LTV (§7.159); no household
+refinanced anything and mortgage demand was rate-blind (§7.160); the same distress rule was a
+threshold for named firms and a sum for pools (§7.161); the credit tiers had three one-way
+ratchets — **and the row as I first wrote it misdiagnosed them** (§7.162).
+
 | Defect | State and next action |
 |---|---|
-| ~~**MORTGAGE LOSS SEVERITY IS A FLOOR CONSTANT, AND THE MEAN IS WHY**~~ | **CLOSED 2026-08-30 (§7.159): the book is vintages now.** Kept below for the record of what it was. |
-| **(closed, for the record) Mortgage loss severity was a floor constant** | `bank-lending.ts`: `avgLtv = mortgageDebtUSD / housingStockUSD`, ONE average LTV for a whole region's book, into `severity = max(0.05, 1 − min(1, 0.75/avgLtv))`. That curve is FLAT AT ITS FLOOR below LTV 0.75 and only bites above it. **Measured LTV: 0.340 in all four regions**, so severity is pinned at `MORTGAGE_MIN_LOSS_SEVERITY = 0.05` — the constant is 100% of mortgage loss severity in every region in every week, and the comment above it ("a price crash walks severity up as LTV approaches 1") describes something that cannot happen until house prices fall **55%**. A floor doing a mechanism's job (rule 2), and the mean is what lets it. **Two separate errors:** the LEVEL — with a realistic vintage spread (sd 0.20-0.30: a loan written last year at 80% beside one from twenty years ago at 20%) true `E[severity]` is **1.4x-1.9x** the mean-based figure; and the CONVEXITY, which matters more — a 15% price fall moves the mean 0.34 → 0.40 and changes losses by NOTHING, while it pushes a real mass of loans across the kink at once. **The model cannot produce a mortgage credit event.** Owner: DIST + HSG (item 10). |
-| ~~**THE SAME DISTRESS RULE IS A THRESHOLD FOR NAMED FIRMS AND A SUM FOR POOLS**~~ | **CLOSED 2026-08-30 (§7.161).** Distress layoffs integrate over the strata now. Kept below for the record. |
-| **(closed, for the record) The same distress rule was a threshold for named firms and a sum for pools** | `labor-market.ts` applies `cash < 0 → layoffs = current x DISTRESS_LAYOFF_SPEED` per firm to the named tier (correct: each firm crosses or does not) and to `seg.cashUSD` — the POOL'S TOTAL — for the SME segments. So either every firm in a pool has distress layoffs or none does. **DIST already gave these same pools a leverage cross-section, and already integrates their DEFAULT rate and cash stress over it (§7.141)** — so one population now has a distribution for its credit outcome and a mean for its employment outcome, from two different stages. Identical code, two resolutions, one of them wrong (rule 3, and §5-DIST's own argument). |
-| ~~**THE HOUSEHOLD CREDIT DISTRIBUTION EXISTS AND CANNOT MOVE**~~ | **CLOSED 2026-08-30 (§7.162) — AND THE ROW AS WRITTEN WAS WRONG.** The shares were never frozen: `evolution.ts` migrates them. I logged "stated and never changes" from the SEED VALUES without reading the evolution path — the §7.126 mistake, repeated in the same session that recorded it. What was actually broken was three ONE-WAY RATCHETS, which is a different and worse defect. Kept below for the record. |
-| **(closed, and the diagnosis was wrong) The household credit distribution "could not move"** | `consumerAnnualLossRate` is the ONE place that already does this right in shape: it carries four credit tiers with a **0.2 / 1.0 / 3.0 / 10.0** loss multiplier, which is exactly the convexity that makes a mean wrong. But `shareOfHouseholds` is STATED and never changes, so **nobody migrates**: no household falls from PRIME to NEAR_PRIME in a downturn, and migration is where most of the loss dynamics in a real consumer book live. A different failure from a missing distribution — a frozen one — and the fix is to make the shares an outcome of the same cohort balance sheets §7.145 already derives. Owner: CRD (item 9), which already lists the imposed shares. |
-| **CAPEX DOES NOT COVER DEPRECIATION — measured 2026-08-30 by IND13's new stock** | Assets under construction total **$2.2B against $2,452B of gross PP&E (0.09%)** with a p50 wait of 9 weeks, which puts capital ARRIVING at roughly $0.25B/week — about **0.5% of the capital stock a year against a straight-line depreciation of ~8%** (`SECTOR_PPE_USEFUL_LIFE_YEARS` ~12y). The plant is being consumed several times faster than it is replaced. It partly self-corrects — a shrinking net PP&E shrinks the capital charge the labour rule sheds against — which is exactly why it is invisible without measuring the stock. Suspect: the capex BUDGET (what a firm decides to spend) rather than the delivery path, which IND1/IND13 now make explicit end to end. Owner: CAP (item 4), whose capacity decisions this is. |
+| **NO TIER OF HOUSEHOLDS CAN DISSAVE — the fourth one-way ratchet, measured 2026-08-30** | Cohort saving is `disp x tierRate x lambda` under a `Math.max(0, ...)` (`household-cohorts.ts`), so a tier's saving can never be negative whatever happens to it. **This is the blocker under two other items**: the savings rework (the aggregate rate cannot be an outcome while the parts cannot move both ways) and forced selling (§6.1's household-equity row has nothing to trigger on until a drawdown is possible). Household liquidity measures **23.7 weeks of committed outflow** (§7.163), so a liquidity threshold IS crossable once dissaving exists — the trigger is sound, the drawdown is not. Owner: DIST (item 1a). **Re-diagnose the §7.158 stash; its stated cause was withdrawn by §7.163.** |
+| **CAPEX DOES NOT COVER DEPRECIATION — measured 2026-08-30 by IND13's new stock** | Assets under construction total **$2.2B against $2,452B of gross PP&E (0.09%)** with a p50 wait of 9 weeks, which puts capital ARRIVING at roughly $0.25B/week — about **0.5% of the capital stock a year against a straight-line depreciation of ~8%** (`SECTOR_PPE_USEFUL_LIFE_YEARS` ~12y). The plant is being consumed several times faster than it is replaced. It partly self-corrects — a shrinking net PP&E shrinks the capital charge the labour rule sheds against — which is exactly why it is invisible without measuring the stock. Suspect: the capex BUDGET (what a firm decides to spend) rather than the delivery path, which IND1/IND13 now make explicit end to end. Owner: CAP (item 2), whose capacity decisions this is. |
 | **A HARD CLAMP ON WEEKLY CAPACITY GROWTH — found 2026-08-30 reading IND13's neighbours** | `05-unit-bidding.ts`: `line.weeklyCapacityUnits *= 1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate))`. A ±2%/week bound on an OUTCOME (rule 2, rule 13). It is doing the work the investment decision should do: a firm that commissioned a plant twice its size still grows 2%, and one whose capital evaporated still shrinks only 2%. Small and untouched deliberately — it belongs with CAP's capacity decisions, beside the row above, and removing it before the capex budget is real would only expose the same imbalance faster. |
 | **A HOUSEHOLD CAN BUY EQUITY AND CAN NEVER SELL IT — found 2026-08-30, from a user question** | **Measured in the code, not inferred from shape.** `etf-flows.ts`'s household leg is `intoFundsUSD = Math.max(0, weeklySavingUSD x equityShareOfSaving)`: the `max(0,...)` means a household buys funds or does not buy funds, and there is no household term in `grossRedeemUSD`, which is built from the institutional `wantDelta` loop alone. Unemployment does not enter the equity decision at all — `equityShareOfSaving` is earnings yield less deposit yield and nothing else — so a job loss slows PURCHASES and never forces a sale. Savings genuinely can drain (`02b`'s deposit inflow takes `savingsRate x income` SIGNED, so a negative rate pulls deposits down), and the equity book still does not move: `household-balance-sheet.ts` marks it as `realClaimsUSD + unmodeledFinancialAssetsUSD`, a valuation of what is held, and nothing reduces what is held. **What this suppresses is the amplifier**: forced selling into a falling market, lower prices, lower wealth, more selling. A drawdown currently has no household seller in it. Owner: HH/DIST tier — the seller is a THRESHOLD decision (sell when the buffer is gone), which is exactly the nonlinearity DIST says must be carried as a distribution rather than a mean. |
-| ~~**NO HOUSEHOLD REFINANCES ANYTHING, AND MORTGAGE DEMAND IS RATE-BLIND**~~ | **CLOSED 2026-08-30 (§7.160).** Loans carry a 5-year fix and RESET to the market — 17.5% of the book reprices each year — and borrowing capacity is now `DSTI x income / annuity factor`, so the rate decides what a household can borrow. Kept below for the record. |
-| **(closed, for the record) No household refinanced anything, and mortgage demand was rate-blind** | `refinanc` appears only in `08-company-fundamentals.ts`: corporates call, term out and get pulled at their walk-away; households have none of it. Three separate holes under one row. **(a) Borrower demand does not see the rate.** `bank-lending.ts`: `demandUSD = housingStock x HOUSING_TURNOVER_RATE_ANNUAL/52 x MORTGAGE_LTV_AT_ORIGINATION x appetite x bankShare` — the mortgage rate is computed on the line above and used only to set the coupon. Turnover is a CONSTANT, so the same volume of houses changes hands at 3% and at 12%. **(b) The only rationing is the lender's**: `grantedUSD = min(demandUSD, headroom / MORTGAGE_RISK_WEIGHT)`. A household is declined for the BANK's capital position, never for its own affordability — `declinedOriginationUSD` is a bank constraint wearing a borrower's clothes. **(c) A mortgage never matures.** `wamWeeks` blends on new vintages and decrements otherwise; there is no rollover event, so nobody ever holds a loan coming due into a higher market. Rates DO reach households (`debtServiceDrag`, the pool's interest), so a high rate COSTS more — it just never makes credit unavailable and never resets anyone. Rule 15 is the frame: a rate that cannot decline a borrower is not a price to that borrower. |
 | **SOVEREIGN BOOKS HOLD MORE PAPER THAN EXISTS — introduced 2026-08-29, and it is owed** | **Caused by §7.120's seed-scale slice; not a discovery, a debt.** All four regions: the real books together claim more sovereign bonds than `govDebtTranches` says is outstanding — the harness's "a ledger is minting claims" check, the one that catches a missing leg. **It GROWS week over week** (5 weeks per region in a 10-week run), so it is a FLOW and not a seed sizing: the books accumulate sovereign paper faster than issuance creates it, which points at 07c's float rather than the debt seed. The scale change moved GDP 639.2B → 695.7B and sovereign outstanding is `debtToGdpPctBottomUp x derivedNominalGdpUSD` computed at a different point in the seed than the holdings are built — an ordering SUSPECT, not a diagnosis. **These are the only violations left in the 10-week probe (20 of 20). Fix before anything else.** |
 | ~~**An MMF's shares have no holders**~~ | **CLOSED (§7.126), and the row's own framing was WRONG.** The shares DO have named holders on both sides — each corporate treasury carries `comp.mmfSharesUSD` and the household sector `hs.mmfSharesUSD`; only the fund-side total is a scalar, which is what a share register looks like when every holder keeps its own book. **What was actually broken were two legs:** the fund paid its yield by ISSUING shares and credited nobody (rule 14), and `evolution.ts` rebuilt `householdState` from a fixed field list that did not name `mmfSharesUSD`, so the household's claim was destroyed weekly and recreated from that week's diversion alone (§7.41, third occurrence). Measured: 41.39B outstanding against 40.34B held by week 6, growing ~0.25B a week; after, the ledger closes to **0.00 in every week**. **The lesson kept: I logged this row from the SHAPE of the code without measuring it, and the shape was fine while two flows were not.** |
 owns a pool across seven entity types, and HEDGE_FUND and PENSION_FUND are a manager and a vehicle
@@ -5026,7 +5117,7 @@ that proved it, the lesson.
       chain is now diagnosed end to end and two of its links are fixed; the third is that physical
       capacity does not grow toward a market that is permanently short.** `weeklyCapacityUnits`
       grows only with delivered net investment, which cannot answer a shortage of this size.
-      **Owner: CAP (item 4) for the capacity decision, NAT for extraction as an outcome of cost
+      **Owner: CAP (item 2) for the capacity decision, NAT for extraction as an outcome of cost
       and ore grade.** MAC(a) is blocked behind them; it was never about expectations or policy.
 
 129. **CAP — investment responds to a measured shortfall, and it costs something.** The third link
@@ -5889,7 +5980,7 @@ that proved it, the lesson.
       expensive one — that is what caps a housing boom. **This is the opposite of §7.159's floor**,
       which could not bind at any price short of a 55% crash: this one binds the moment prices
       rise, and the harness prints the threshold so the distinction stays visible. **It becomes
-      live when HSG makes `medianHomePriceUSD` clear** (item 10) instead of drifting.
+      live when HSG makes `medianHomePriceUSD` clear** (item 5) instead of drifting.
     - Harness green, 0 violations.
 
 161. **DIST — POOL DISTRESS LAYOFFS INTEGRATE OVER THE STRATA. Second of §7.157's sweep targets,
@@ -5975,3 +6066,31 @@ that proved it, the lesson.
       `disp x tierRate x lambda` under a `Math.max(0, ...)`, so no tier can ever dissave — a
       FOURTH one-way ratchet, next to §7.162's three. The chain is: make saving two-sided, then
       the drawdown is real, then forced selling has something to trigger on.
+
+164. **THE 2026-08-30 RESCOPE — the work order was ordered around two NUMBERS, and rule 18 now
+    forbids that.** User directive: *"priority is always model updates, not market measure fix."*
+    - **What changed, and the evidence for it.** MAC ("close the inflation escape") and EMP ("the
+      labour collapse") were items 1 and 2 — a foundation tier scoped around statistics that
+      looked wrong. Across §7.146-163 the week-10 price print moved **−25.5% → +4.3%** and
+      unemployment stopped rising monotonically, and **not one of those changes targeted either
+      number.** The largest single move came from a UNIT ERROR in the labour stage (§7.149) that
+      no amount of staring at an inflation series would have found. Both rows are now CONSEQUENCE
+      rows below the mechanism tier, and **MAC's evidence is void: it was measured before ten IND
+      slices, three root-cause fixes and a calendar, and may not be inherited.** EMP has no build
+      left in it at all — what remains is a criterion, which belongs to S-final.
+    - **The new foundation tier is ordered by which MECHANISM is missing:** 1 DIST (largest live
+      row, half delivered, owns the fourth one-way ratchet), 2 CAP (holds IND13's two measured
+      defects), 3 COH (the spendable/accumulated split the savings rework needs), 4 DEM (its age
+      structure is what makes a steady-state savings rate an outcome). HSG and CRD are promoted
+      into the markets tier at 5 and 6 because both were substantially advanced this session and
+      both are pure mechanism.
+    - **Rule 18 is the third of a family and the distinction is worth keeping.** Rule 10: do not
+      chase a MOVED number. Rule 12: do not MEASURE mid-project. Rule 18: do not SCHEDULE around a
+      number at all. The first two govern behaviour inside a project; the third governs what a
+      project IS.
+    - **Also brought up to date:** §1.10 records that a 10-week probe now samples ONE SEASON since
+      IND18, so the headline print is seasonal and price behaviour is judged on whole years only;
+      §6.1's four closed rows are compacted to one line pointing at §7 rather than duplicating it
+      (rule 11); §5's MAC/EMP/IND/CAP/DEM/DIST/COH/CRD/HSG headers carry their real state; and the
+      §5-DIST-P primitive scoreboard retires the two entries this session actually retired.
+    - **The rescope did not change any code.** It changed which code gets written next.
