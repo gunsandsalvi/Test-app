@@ -20,6 +20,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { TradeInvoice } from '../../../domain/trade-invoice';
 import { WeeklyStepContext } from './context';
 import { getFxToUsd } from './06-fx-and-trade';
+import { pay } from './settlement';
 
 export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext): void {
   ctx.tradeInvoiceFxGainUSD = 0;
@@ -57,6 +58,16 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
     seller.tradeReceivableCollectedUSD = (seller.tradeReceivableCollectedUSD ?? 0) + settledUSD;
     const buyer = companyUpdates[invoice.buyerTicker] ?? (companyUpdates[invoice.buyerTicker] = {});
     buyer.tradePayableSettledUSD = (buyer.tradePayableSettledUSD ?? 0) + settledUSD;
+    // CASH: the money goes from the buyer to the seller, because that is who owes whom. Stage
+    // 08 used to post each side against the UNMODELED boundary and let the two halves find each
+    // other in the aggregate — a payment whose counterparty is known has no business at a
+    // boundary. It settles at TODAY's rate, which is where the transaction FX exposure lands.
+    pay(ctx, {
+      payer: { kind: 'COMPANY', ticker: invoice.buyerTicker },
+      payee: { kind: 'COMPANY', ticker: invoice.sellerTicker },
+      amountUSD: settledUSD,
+      reason: 'trade invoice settled',
+    });
 
     // Both legs move by the same amount, so the pair nets to zero and no money is created. What
     // each side FEELS is the gap against what it booked, and that gap is only ever zero for a

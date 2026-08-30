@@ -1474,7 +1474,12 @@ function runSubUnitMarkets(
         const currency = invoiceCurrencyOf(invoiceRegion);
         const usdPerCurrency = sourcing.fxToUsd(invoiceRegion);
         if (!(usdPerCurrency > 0)) return;
-        const valueUSD = localToUsd(l.units * perUnit, plan.regionId, sourcing.fxToUsd);
+        // IND12 — the invoice is what the SELLER is owed: ex-works, not landed. The freight in
+        // `perUnit` belongs to the carrier and was paid to it above, so putting it on the
+        // receivable had the seller lending its customer money the carrier had already taken.
+        // It is also the amount the ex-works payment leg moves, so the credit extended below
+        // and the cash collected at maturity are the same figure in the same units.
+        const invoicedUSD = l.units * exWorksBuyerMoney;
         let buyerPd = sourcing.buyerAnnualPdByTicker.get(comp.ticker);
         if (buyerPd === undefined) {
           buyerPd = computeAnnualDefaultProbability(comp);
@@ -1491,13 +1496,26 @@ function runSubUnitMarkets(
           sellerTicker: l.sellerKey, sellerRegion: origin,
           buyerTicker: comp.ticker, buyerRegion: plan.regionId,
           subUnitId, currency,
-          amountCurrency: valueUSD / usdPerCurrency,
+          amountCurrency: invoicedUSD / usdPerCurrency,
           bookedUsdPerCurrency: usdPerCurrency,
           weekBooked: nextWeek,
           weekDue: nextWeek + termWeeks,
         });
-        deferredPurchaseUSD.set(plan.key!, (deferredPurchaseUSD.get(plan.key!) ?? 0) + l.units * perUnit);
-        deferredSaleKeyed.set(l.sellerKey, (deferredSaleKeyed.get(l.sellerKey) ?? 0) + l.units * perUnit);
+        deferredPurchaseUSD.set(plan.key!, (deferredPurchaseUSD.get(plan.key!) ?? 0) + invoicedUSD);
+        deferredSaleKeyed.set(l.sellerKey, (deferredSaleKeyed.get(l.sellerKey) ?? 0) + invoicedUSD);
+        // CASH — trade credit is a loan between two NAMED firms, so it moves between them.
+        // The buyer paid ex-works above, as it must (the seller's revenue is recognised at
+        // delivery); the seller hands it straight back as the credit it agreed to extend, and
+        // takes it again when the invoice falls due (trade-settlement.ts). Both legs used to be
+        // posted against the UNMODELED boundary on stage 08's cash walk — 9.2B gross over ten
+        // weeks passing through a counterparty that does not exist, when the counterparty is
+        // right here and has a name.
+        pay(ctx, {
+          payer: partyOfKey(l.sellerKey, origin, lookup),
+          payee: { kind: 'COMPANY', ticker: comp.ticker },
+          amountUSD: invoicedUSD,
+          reason: 'trade credit extended',
+        });
       });
     });
     if (units <= 0.0001) return;
