@@ -152,6 +152,9 @@ export interface WeeklyStepContext {
   shipmentsDispatched: import('./goods-arrival').InTransitShipment[];
   /** XB3a-5 — invoices struck this week, and the realised exposure on those that came due. */
   tradeInvoicesBooked: import('../../../domain/trade-invoice').TradeInvoice[];
+  /** G5 — the open workouts. A defaulted issuer's assets and the claims on them, carried across
+   *  weeks until the assets are gone and the residual is written off. */
+  estates: import('../../../domain/estate').Estate[];
   tradeInvoiceFxGainUSD: number;
   tradeInvoiceWriteOffUSD: number;
   /** XB3a-2 — what the freight market cleared, read by stage 08 for the carriers' P&L. */
@@ -248,6 +251,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     goodsArrivedUnits: 0,
     shipmentsDispatched: [],
     tradeInvoicesBooked: [],
+    estates: (state as any).estates ?? [],
     tradeInvoiceFxGainUSD: 0,
     tradeInvoiceWriteOffUSD: 0,
 

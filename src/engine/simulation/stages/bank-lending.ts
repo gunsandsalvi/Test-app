@@ -50,7 +50,7 @@ import {
 import { CreditTierBook, AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
-import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE } from './shared-helpers';
+import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
  * market's covenant ladder expresses (§5-RV's "lenders do not fund unlimited leverage"). */
@@ -92,8 +92,10 @@ export function quoteLoanMarginBps(params: {
   riskWeight: number;
   /** G3c: the quoting bank's own cost of equity. Omitted only where no one bank is quoting. */
   requiredReturnAnnual?: number;
+  /** G5: what this region's workouts have actually recovered. Omitted falls back to the prior. */
+  recoveryRate?: number;
 }): number {
-  const expectedLossBps = params.annualDefaultProbability * (1 - CREDIT_RECOVERY_RATE) * 10000;
+  const expectedLossBps = params.annualDefaultProbability * (1 - (params.recoveryRate ?? CREDIT_RECOVERY_RATE)) * 10000;
   const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO
     * (params.requiredReturnAnnual ?? BANK_TARGET_ROE) * 10000;
   return Math.max(25, Math.round(expectedLossBps + capitalCostBps));
@@ -156,7 +158,7 @@ export function migrateSmeDebtAtSeed(
         borrowerId: smePoolId(regionId, seg.industry),
         borrowerKind: 'SME_POOL',
         principalUSD,
-        marginBps: quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle }),
+        marginBps: quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle, recoveryRate: creditRecoveryRate(reg) }),
         originationWeek: 0,
         termWeeks: 52 * 5,
         status: 'PERFORMING',
@@ -271,7 +273,7 @@ export function runBankWeeklyLending(
     if (l.borrowerKind !== 'SME_POOL') return l;
     const seg = segByPool.get(l.borrowerId);
     if (!seg) return l;
-    const lossUSD = (l.principalUSD * smePoolAnnualPd(seg) * (1 - CREDIT_RECOVERY_RATE)) / 52;
+    const lossUSD = (l.principalUSD * smePoolAnnualPd(seg) * (1 - creditRecoveryRate(reg))) / 52;
     loanLossWeeklyUSD += lossUSD;
     return { ...l, principalUSD: l.principalUSD - lossUSD };
   });
@@ -297,6 +299,7 @@ export function runBankWeeklyLending(
     // pure quantity target and a +300bp hike moved origination 0.5% — priced but inert.
     const allInRateAnnual = policyRate + quoteLoanMarginBps({
       annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle,
+      recoveryRate: creditRecoveryRate(reg),
     }) / 10000;
     const poolReturnAnnual = Math.max(0.001, seg.marginPct);
     const appetite = Math.max(0, Math.min(1, (poolReturnAnnual - allInRateAnnual) / poolReturnAnnual));
@@ -313,7 +316,7 @@ export function runBankWeeklyLending(
     if (grantedUSD <= 0) return;
 
     smeOriginationBySegment.set(seg.industry, (smeOriginationBySegment.get(seg.industry) ?? 0) + grantedUSD);
-    const marginBps = quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle });
+    const marginBps = quoteLoanMarginBps({ annualDefaultProbability: smePoolAnnualPd(seg), riskWeight: 1.0, requiredReturnAnnual: bankHurdle, recoveryRate: creditRecoveryRate(reg) });
     if (poolLoan) {
       poolLoan.principalUSD += grantedUSD;
       // the pool's blended margin drifts toward the new quote as new money joins the book

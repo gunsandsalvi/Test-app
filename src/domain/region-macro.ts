@@ -637,6 +637,9 @@ export interface Region {
    *  bps. What a hedge costs, where hedger demand meets what the desks can carry — no longer a
    *  formula with an observed crisis-era ceiling. */
   crossCurrencyBasisBps?: Record<string, number>;
+  /** G5 — what workouts in this region ACTUALLY recovered, most recent last. The rolling mean
+   *  displaces `CREDIT_RECOVERY_RATE`, so the loss the market prices is the loss it has seen. */
+  realisedRecoveryRates?: number[];
   /** REPO3 — the cleared TERM secured rate (annualised decimal), when the term book traded.
    *  A bank funding a long book at overnight and being caught by it is the mechanism a funding
    *  squeeze actually is, and it needs two prices to exist. */

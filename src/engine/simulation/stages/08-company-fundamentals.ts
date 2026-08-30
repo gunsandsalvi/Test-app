@@ -26,7 +26,7 @@ import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
 import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
-import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, payHoldersCash, DEFAULT_COVERAGE_FLOOR } from './shared-helpers';
+import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks, findRegionMmf } from './money-market-fund';
 import { decideCorporateFinancing } from './corporate-financing';
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
@@ -1732,8 +1732,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       : comp.historicalFundamentals || [];
 
     const systemicStressFactor = systemicStressFactorGlobal + Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.3;
-    const newBaselineRecoveryRate = Number(((comp.baselineRecoveryRate ?? 0.40) * 0.998 + comp.recoveryRate * 0.002).toFixed(4));
-    const effectiveRecoveryRate = Math.max(0.10, newBaselineRecoveryRate * (1 - systemicStressFactor));
+    // G5: the baseline drifts toward what this REGION's workouts have actually recovered, not
+    // toward a prior nobody measured. And the 0.10 floor is gone with the mechanism that
+    // justified it — recovery is what selling real assets against real claims produces, and if
+    // that is near zero for an issuer with nothing to sell, that is the answer (rule 2).
+    const regionRecovery = creditRecoveryRate(reg);
+    const newBaselineRecoveryRate = Number(((comp.baselineRecoveryRate ?? regionRecovery) * 0.998 + regionRecovery * 0.002).toFixed(4));
+    const effectiveRecoveryRate = Math.max(0, newBaselineRecoveryRate * (1 - systemicStressFactor));
     const trendWeeklyGrowth = (reg.potentialGdpGrowth + reg.targetInflation) / 52;
     const newBaselineAnnualRevenue = isDefaulted
       ? Number((comp.baselineAnnualRevenue * 0.995).toFixed(1))

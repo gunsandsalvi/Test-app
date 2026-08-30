@@ -35,7 +35,7 @@ import {
   spreadRiskCapitalChargeRate,
   entityRequiredReturn,
 } from './asset-allocation';
-import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE } from './shared-helpers';
+import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
@@ -137,7 +137,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
         discountMarginBps: openingMarginBps,
         tenorYears: 5,
         seniority: 'Senior Secured First Lien',
-        recoveryRate: 1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE),
+        recoveryRate: 1 - SENIOR_LIEN_DISCOUNT * (1 - creditRecoveryRate(reg)),
       };
     });
 
@@ -235,7 +235,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
 
     // Per-company terms hoisted out of the per-entity loops — same expressions once instead of
     // per (entity x name) pair; see 07b's twin comment.
-    const loanRecoveryRate = 1 - SENIOR_LIEN_DISCOUNT * (1 - CREDIT_RECOVERY_RATE);
+    const loanRecoveryRate = 1 - SENIOR_LIEN_DISCOUNT * (1 - creditRecoveryRate(reg));
     const companyTerms = regionCompanies.map((c) => {
       const annualPd = pdByCompanyId.get(c.id)!;
       const durationYears = loanCreditDurationYears(c);

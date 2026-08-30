@@ -56,6 +56,8 @@ export interface GameState {
   /** XB3a-5 — cross-border sales delivered and not yet paid for, in the market's own emergent
    *  invoice currency, due on terms derived from the buyer's own credit. */
   tradeInvoices: import('./trade-invoice').TradeInvoice[];
+  /** G5 — open and just-closed workouts, carried across weeks. */
+  estates?: import('./estate').Estate[];
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   /** GUARD — books that could not trade this week: no participant's ceiling exceeded its own

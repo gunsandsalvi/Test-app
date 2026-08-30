@@ -7,6 +7,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { CREDIT_RECOVERY_RATE } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 
 /** How long a default keeps feeding credit contagion before it is treated as absorbed. */
@@ -50,12 +51,24 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   });
   const currentlyDistressed = state.companies.filter((c) => !c.isDefaulted && c.creditRating === 'CCC').length;
   ctx.recentDefaultsCount = Math.round(weightedRecentDefaults + currentlyDistressed);
-  // GUARD: the `creditContagionBps` PARAMETERS are gone (both `evolveRegionMacro`'s, which was
-  // passed a literal 0, and `evolveBankingSector`'s, which was never read). This value survives
-  // because `systemicStressFactorGlobal` IS live — stage 08 reads it — so the 12bps-per-default
-  // and the /500 below are real coefficients on a real channel: rule 1, a credit spread is a
-  // cleared price and this adds bps to one by formula. Owner: G5, which owns default and
-  // recovery.
-  ctx.creditContagionBps = ctx.recentDefaultsCount * 12;
-  ctx.systemicStressFactorGlobal = Math.min(0.3, ctx.creditContagionBps / 500);
+  // G5 — THE CONTAGION COEFFICIENT IS GONE. `recentDefaultsCount x 12` added basis points to a
+  // cleared price by formula (rule 1), and `/500` turned the same count into a systemic stress
+  // factor. Contagion is not a coefficient on a count: it is real losses landing on real books
+  // and tightening the capacity those books have left, and that channel now EXISTS — an estate
+  // writes its residual off its holders' equity (stages/estate-resolution.ts), which is what a
+  // credit loss is. The default count survives as the STATISTIC it always was.
+  //
+  // What replaces the stress factor is a measurement rather than a count: how much worse this
+  // world's own workouts are recovering than the prior a lender starts from. A run of severe
+  // resolutions IS a stressed credit market, and it is the market saying so about itself.
+  const recoveryStress = (Object.keys(ctx.updatedRegions) as (keyof typeof ctx.updatedRegions)[])
+    .map((r) => {
+      const realised = ctx.updatedRegions[r]?.realisedRecoveryRates ?? [];
+      if (realised.length === 0) return 0;
+      const mean = realised.reduce((a, b) => a + b, 0) / realised.length;
+      return Math.max(0, (CREDIT_RECOVERY_RATE - mean) / CREDIT_RECOVERY_RATE);
+    });
+  ctx.systemicStressFactorGlobal = recoveryStress.length > 0
+    ? Math.max(0, Math.min(1, recoveryStress.reduce((a, b) => a + b, 0) / recoveryStress.length))
+    : 0;
 }

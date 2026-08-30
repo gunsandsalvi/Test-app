@@ -31,7 +31,7 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -442,7 +442,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       // Priced as bills plus this issuer's own short-horizon expected loss — the annual
       // structural PD scaled to the paper's actual quarter of life.
-      const shortHorizonELbps = annualPD * (CP_TENOR_WEEKS / 52) * (1 - CREDIT_RECOVERY_RATE) * 10000;
+      const shortHorizonELbps = annualPD * (CP_TENOR_WEEKS / 52) * (1 - creditRecoveryRate(reg)) * 10000;
       const cpRate = (billYield13wBps + shortHorizonELbps + CP_LIQUIDITY_PREMIUM_BPS) / 10000;
 
       const survivingCP = existingCP.filter((t) => t.maturityWeek > ctx.nextWeek);

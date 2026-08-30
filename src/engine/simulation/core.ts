@@ -2,6 +2,7 @@ import { GameState, RegionId } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runSwapClearingStage } from './stages/07g-swap-clearing';
+import { runEstateResolutionStage } from './stages/estate-resolution';
 import { createInitialContext } from './stages/context';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
@@ -188,6 +189,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // which is the same claim seen from the other side.
   run('household-balance-sheet', () => runHouseholdBalanceSheetStage(state, ctx));
 
+  // G5: after stage 08 has named this week's defaults, so a workout opens the week it fails.
+  run('estate-resolution', () => runEstateResolutionStage(state, ctx));
   run('09-concentration-risk', () => runConcentrationRiskStage(state, ctx));
   run('10-mergers', () => runMergersStage(state, ctx));
   // PUB3d: bills accrete BEFORE the fiscal stage redeems them, so a maturing bill is repaid at
@@ -210,7 +213,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
-  return { state: { ...nextState, rngState: getRngState(),
+  return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
     dealers: dealersFromBanks(nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,

@@ -103,16 +103,38 @@ export function computeAnnualDefaultProbability(comp: Company): number {
   return normalCdf(-distance / annualEbitdaVol(comp));
 }
 
-export function computeExpectedLossSpreadBps(comp: Company): number {
-  return computeAnnualDefaultProbability(comp) * (1 - CREDIT_RECOVERY_RATE) * 10000;
+export function computeExpectedLossSpreadBps(comp: Company, reg?: { realisedRecoveryRates?: number[] }): number {
+  return computeAnnualDefaultProbability(comp) * (1 - creditRecoveryRate(reg)) * 10000;
 }
 
 /**
- * What a defaulted senior unsecured claim is worth. Used in the expected-loss pricing above and
- * in the distressed buyer's recovery arithmetic (asset-allocation.ts) — one assumption, two
- * consumers, and G5 will eventually replace the constant with realized resolution outcomes.
+ * What a defaulted borrower's lenders get back.
+ *
+ * G5 made this an OUTPUT. A workout sells the issuer's real assets into the markets that would
+ * buy them and pays the claims in the order they are owed (stages/estate-resolution.ts), and what
+ * it actually recovers is recorded on the region. `creditRecoveryRate` below is the rolling mean
+ * of those resolutions, so the loss the credit market PRICES is the loss it has SEEN — which
+ * closes the one-default-model loop whose hazard side landed in §7.20.
+ *
+ * The 0.4 survives as the prior: what a lender must assume before this world has resolved enough
+ * defaults to have an opinion of its own.
  */
 export const CREDIT_RECOVERY_RATE = 0.4;
+
+/** How many resolutions it takes before a region's own experience displaces the prior. */
+export const RECOVERY_PRIOR_WEIGHT = 8;
+
+/**
+ * This region's recovery rate: its own realised experience, weighted against the prior by how
+ * much experience it has. One resolution does not overturn the prior; twenty do.
+ */
+export function creditRecoveryRate(reg?: { realisedRecoveryRates?: number[] }): number {
+  const realised = reg?.realisedRecoveryRates ?? [];
+  if (realised.length === 0) return CREDIT_RECOVERY_RATE;
+  const mean = realised.reduce((a, b) => a + b, 0) / realised.length;
+  const w = realised.length / (realised.length + RECOVERY_PRIOR_WEIGHT);
+  return Math.max(0, Math.min(1, mean * w + CREDIT_RECOVERY_RATE * (1 - w)));
+}
 
 export function getRatingBucket(rating: string): 'IG' | 'HY' {
   return ['AAA', 'AA', 'A', 'BBB'].includes(rating) ? 'IG' : 'HY';
