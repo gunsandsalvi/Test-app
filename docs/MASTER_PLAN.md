@@ -5367,3 +5367,34 @@ that proved it, the lesson.
     - **The general point, again (§7.121, §7.125).** Every mechanism that exists but binds on
       nothing is a mechanism that is not there. The labour market cleared, wages moved, hiring
       succeeded and failed — and none of it reached a price until output could feel it.
+
+147. **IND10 — production takes time, and the field that said so had been sitting at zero with no
+    reader.** `SubUnitSpec.productionLeadWeeks` existed on all 37 goods, was `0` in every one of
+    them, and was read nowhere. Production was instantaneous for a shipyard and a hairdresser
+    alike: a week's plan became sellable output in the same pass that decided it.
+    - **The lead times are technological primitives** (rule 4 allows the primitive): 0 for
+      services, software and electricity — made on demand; 1 for a refinery's residence time;
+      12 for a semiconductor fab and a growing season; 26 for defence systems and a house;
+      40 for an airliner; 52 for a commercial building.
+    - **WIP is now a real stock.** `Company.wipBySubUnit` is a queue whose index `i` is the lot
+      completing in `i` weeks, so its LENGTH is the good's lead. Each week the front lot arrives
+      and this week's start is pushed on the back. A firm offers what it HOLDS plus what its
+      plant FINISHED — not what it started, which is what stage 05 used to sell.
+    - **Measured (new IND battery in the harness):** WIP carried = the lead, bucket by bucket —
+      1.00 weeks at lead 1, 12.04 at lead 12, 26.35 at 26, 53.68 at 52. **$69.5B of work in
+      progress that did not exist before.** The small overshoots are honest: a queue holds lots
+      started at different production rates, so it equals the lead exactly only in a flat week.
+    - **A structural invariant, not a behavioural one, guards it.** `checkProductionPipelines`
+      asserts every queue's length equals its good's lead. A short queue is the §7.41 trap —
+      a rebuild from a fixed field list dropping the pipeline; a long one is a double advance.
+      Stage 08's rebuild names `wipBySubUnit` for exactly that reason.
+    - **Steady state is the opening condition.** A pipeline's first touch seeds it FULL at that
+      week's rate. Seeding it empty would have given every construction firm a year of zero
+      output at week one — an opening condition nobody chose, and not a statement about
+      production time. Deflation −19.82% → −19.85% at week 10, harness green: **no behavioural
+      change at rest, which is the correct result.** The lead binds when something moves.
+    - **A pool has no pipeline, and that is not an omission.** An SME pool's offer is a RATE —
+      its own measured weekly goods revenue — not a stock drawn from a warehouse, so there is no
+      production start for a lead time to sit between. Its lag is the measurement's own.
+    - **Still open from §5-IND10:** quoted delivery lengthening as backlog grows needs a backlog,
+      which is IND11's.

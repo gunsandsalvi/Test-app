@@ -426,6 +426,19 @@ export interface Company {
   // not just an aggregate total), consumed oldest-lot-first in 08-company-fundamentals.ts.
   // A pool seller's id is "PRIVATE:<region>:<industry>" since SEG keyed the tier to the registry.
   inputInventoryBySubUnit?: Record<string, InputLot[]>;
+  /**
+   * IND10 — WORK IN PROGRESS: production started and not yet finished, by sub-unit.
+   *
+   * Index `i` is the lot that completes in `i` weeks, so index 0 completes this week and the
+   * queue's length is the sub-unit's production lead. A good with a lead of zero never has one:
+   * it is started and finished in the same pass, which is exactly what the model did for every
+   * good before this stock existed.
+   *
+   * It is a real balance-sheet stock — for a shipyard or a construction firm it is most of the
+   * asset side — and it is where a week's production cost sits between being spent and being
+   * sellable.
+   */
+  wipBySubUnit?: Record<string, { units: number; valueUSD: number }[]>;
   recentFulfillmentEMA: number;
   /** IND2 — the annualised CONTRACTED revenue base a subscription seller carries. It survives a
    *  week with no sales and decays only by churn, which is what makes a software firm's revenue
@@ -482,6 +495,24 @@ export function getOutputInventoryUnits(comp: Company, subUnitId?: string): numb
   if (!inv) return 0;
   if (subUnitId) return inv[subUnitId]?.unitsHeld ?? 0;
   return Object.values(inv).reduce((s, entry) => s + entry.unitsHeld, 0);
+}
+
+/** IND10 — units of this company's output that are started but not yet finished. */
+export function getWipUnits(comp: Company, subUnitId?: string): number {
+  const wip = comp.wipBySubUnit;
+  if (!wip) return 0;
+  const q = (lots: { units: number }[]) => lots.reduce((s, l) => s + l.units, 0);
+  if (subUnitId) return q(wip[subUnitId] ?? []);
+  return Object.values(wip).reduce((s, lots) => s + q(lots), 0);
+}
+
+/** IND10 — the cost sunk into that unfinished production: the WIP asset. */
+export function getWipUSD(comp: Company, subUnitId?: string): number {
+  const wip = comp.wipBySubUnit;
+  if (!wip) return 0;
+  const q = (lots: { valueUSD: number }[]) => lots.reduce((s, l) => s + l.valueUSD, 0);
+  if (subUnitId) return q(wip[subUnitId] ?? []);
+  return Object.values(wip).reduce((s, lots) => s + q(lots), 0);
 }
 
 export function getInputInventoryUSD(comp: Company, subUnitId?: string): number {

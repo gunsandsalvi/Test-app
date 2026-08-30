@@ -23,7 +23,7 @@ import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Compan
 import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY_TIER } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
-import { isStorable, purchaseKindOf } from '../../../domain/industry-registry';
+import { isStorable, purchaseKindOf, productionLeadWeeksOf } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
@@ -133,6 +133,41 @@ function addInputInventory(update: any, baseComp: Company, subUnitId: string, se
     update.inputInventoryBySubUnit[subUnitId] = lots;
   }
   lots.push({ sellerId, unitsHeld: addedUnits, unitPriceUSD: addedValueUSD / addedUnits, acquiredWeek: week });
+}
+
+/** One week's lot in a production pipeline: what was started, and what it cost to start it. */
+interface WipLot { units: number; valueUSD: number }
+
+/**
+ * IND10 — advance one product line's production pipeline by a week.
+ *
+ * A firm STARTS `startedUnits` this week at `startedCostUSD`, and what it has to SELL this week
+ * is whatever it started `productionLeadWeeks` ago. Those are two different numbers the moment
+ * anything changes, and the gap between them is the whole mechanism: demand arrives, output
+ * cannot, and price moves instead. With a lead of zero the two collapse into one, which is what
+ * every good in the model did before this existed.
+ *
+ * FIRST TOUCH SEEDS THE PIPELINE FULL. A firm that has never run this line is treated as already
+ * in steady state — `lead` weeks of work in progress at this week's rate — rather than as one
+ * that has just broken ground. The alternative is a year of zero output from every construction
+ * firm at week one, which is an opening condition nobody chose and not a statement about
+ * production time (§7.4: a stated table survives only until the mechanism has something in it).
+ */
+function advanceProductionPipeline(
+  existing: WipLot[] | undefined,
+  leadWeeks: number,
+  startedUnits: number,
+  startedCostUSD: number
+): { arrivedUnits: number; arrivedValueUSD: number; queue: WipLot[] } {
+  if (leadWeeks <= 0) {
+    return { arrivedUnits: startedUnits, arrivedValueUSD: startedCostUSD, queue: [] };
+  }
+  const queue = existing
+    ? existing.slice()
+    : Array.from({ length: leadWeeks }, () => ({ units: startedUnits, valueUSD: startedCostUSD }));
+  const arrived = queue.shift() ?? { units: 0, valueUSD: 0 };
+  queue.push({ units: startedUnits, valueUSD: startedCostUSD });
+  return { arrivedUnits: arrived.units, arrivedValueUSD: arrived.valueUSD, queue };
 }
 
 /**
@@ -259,8 +294,13 @@ interface SupplyPlan {
   company?: Company;
   industry?: string;
   initialInventoryUnits: number;
+  /** IND10 — what the firm STARTS this week. It becomes sellable `productionLeadWeeks` later. */
   targetProductionUnits: number;
   targetProductionUSD: number;
+  /** IND10 — what came OUT of the pipeline this week: what it can actually sell. */
+  arrivedProductionUnits: number;
+  /** IND10 — the line's pipeline after this week's advance, to be persisted. */
+  wipQueue?: WipLot[];
   contractSalesCommittedUnits: number;
   openOfferUnits: number;
   minPriceUSD: number;
@@ -544,7 +584,16 @@ function buildRegionSupplyPlans(
     const targetProductionUnits = coversUnitCost ? uncappedProductionUnits : 0;
     const currentUnits = getOutputInventoryUnits(comp, subUnitId);
     const contractSales = (contractUnitsBySupplier.get(comp.ticker) ?? 0) + (contractUnitsBySupplier.get(comp.id) ?? 0);
-    const openOfferUnits = Math.max(0, targetProductionUnits + currentUnits - contractSales);
+    // IND10 — the firm offers what it HAS plus what its plant FINISHED this week, not what it
+    // started. For a good made on demand these are the same number and nothing changes; for a
+    // 26-week build the offer is what was begun half a year ago, which is the point.
+    const pipeline = advanceProductionPipeline(
+      comp.wipBySubUnit?.[subUnitId],
+      productionLeadWeeksOf(subUnitId),
+      targetProductionUnits,
+      coversUnitCost ? weeklyOperatingCostUSD : 0
+    );
+    const openOfferUnits = Math.max(0, pipeline.arrivedUnits + currentUnits - contractSales);
 
     // CAP / RULE 15 — THE SELLER'S FLOOR IS ITS COST IN DOLLARS, NOT A FRACTION OF THE MARKET.
     //
@@ -592,6 +641,8 @@ function buildRegionSupplyPlans(
       initialInventoryUnits: currentUnits,
       targetProductionUnits,
       targetProductionUSD: targetProductionUnits * referencePriceUSD,
+      arrivedProductionUnits: pipeline.arrivedUnits,
+      wipQueue: pipeline.queue,
       contractSalesCommittedUnits: contractSales,
       openOfferUnits,
       // Cost per unit of what this plant actually makes, in dollars. Falls back to the
@@ -641,8 +692,12 @@ function buildRegionSupplyPlans(
           regionId,
           industry: owningIndustry,
           initialInventoryUnits: 0,
+          // IND10 — a pool's offer is a RATE (its own measured weekly goods revenue), not a
+          // stock drawn down from a warehouse, so there is no production start for a lead time
+          // to sit between. Its lag is the measurement's own, one week.
           targetProductionUnits: 0,
           targetProductionUSD: 0,
+          arrivedProductionUnits: 0,
           contractSalesCommittedUnits: 0,
           openOfferUnits: poolOfferUnits,
           // Its own unit cost: a pool earning a 9% margin cannot sell below 91 cents on the
@@ -1057,9 +1112,14 @@ function runSubUnitMarkets(
     const contractSalesUnitsThisSubUnit = contractSalesUnitsBySupplier[comp.ticker] ?? 0;
     setOutputInventory(
       supUp, subUnitId,
-      Math.max(0, plan.initialInventoryUnits + plan.targetProductionUnits - contractSalesUnitsThisSubUnit - soldUnits),
+      // IND10 — what lands in the warehouse is what the pipeline FINISHED, not what was started.
+      Math.max(0, plan.initialInventoryUnits + plan.arrivedProductionUnits - contractSalesUnitsThisSubUnit - soldUnits),
       results[plan.regionId].clearedPriceUSD
     );
+    if (plan.wipQueue) {
+      if (!supUp.wipBySubUnit) supUp.wipBySubUnit = { ...(comp.wipBySubUnit ?? {}) };
+      supUp.wipBySubUnit[subUnitId] = plan.wipQueue;
+    }
     if (soldUnits > 0) {
       supUp.salesUnits = (supUp.salesUnits ?? 0) + soldUnits;
       supUp.salesUSD = (supUp.salesUSD ?? 0) + soldValue;

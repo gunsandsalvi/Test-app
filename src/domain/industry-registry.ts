@@ -62,6 +62,15 @@ export interface SubUnitSpec {
   // ---- IND's dials. Storability and carrying cost are DERIVED from the physics above
   // (see isStorable / annualCarryingCostRateOf) rather than stated twice; these two are not
   // derivable from anything and are stated. ----
+  /**
+   * IND10 — how many weeks pass between starting a unit and having one to sell.
+   *
+   * The field existed with every value at 0 and no reader, so production was instantaneous for
+   * a fab and a shipyard alike. It is a TECHNOLOGICAL primitive — a process takes as long as it
+   * takes (rule 4 allows the primitive) — and it is what makes a supply response LATE, which is
+   * the mechanism behind every capacity cycle: demand arrives, output does not, price moves
+   * instead. 0 means made on demand (services, software, electricity).
+   */
   productionLeadWeeks: number;
   revenueMechanism: RevenueMechanism;
   /**
@@ -156,7 +165,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 400,
         linkedCommodities: [{ commodityId: 'CRUDE_OIL', intensityShare: 0.35 }, { commodityId: 'HEAVY_CRUDE_OIL', intensityShare: 0.3 }, { commodityId: 'NATURAL_GAS', intensityShare: 0.2 }],
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 2,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -168,7 +177,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 800,
         householdPriceTier: 'STAPLE',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 1,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -210,7 +219,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0, CORPORATE: 1 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 1_500,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 1,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -223,7 +232,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 3_000,
         shelfLifeWeeks: 104,
         householdPriceTier: 'STAPLE',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 1,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -234,7 +243,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.05, CORPORATE: 0.95 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 700,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 1,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -246,7 +255,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 5_000,
         linkedCommodities: [{ commodityId: 'GOLD', intensityShare: 0.05 }, { commodityId: 'SILVER', intensityShare: 0.08 }, { commodityId: 'COPPER', intensityShare: 0.15 }],
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 3,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -260,7 +269,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         shelfLifeWeeks: 26,
         householdPriceTier: 'STAPLE',
         linkedCommodities: [{ commodityId: 'WHEAT', intensityShare: 0.04 }, { commodityId: 'CORN', intensityShare: 0.04 }, { commodityId: 'SOYBEANS', intensityShare: 0.03 }],
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 12,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -279,7 +288,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 12_000,
         capexBasketWeight: 0.3,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 8,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -291,7 +300,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 40_000,
         capexBasketWeight: 0.2,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -309,7 +318,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.9, CORPORATE: 0.1 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 150_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 26,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -320,7 +329,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.05, GOVERNMENT: 0.1, CORPORATE: 0.85 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 800_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 40,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -338,7 +347,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.8, GOVERNMENT: 0.05, CORPORATE: 0.15 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 25_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 3,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -350,7 +359,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 15_000,
         capexBasketWeight: 0.1,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -368,7 +377,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.1, GOVERNMENT: 0.05, CORPORATE: 0.85 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 500_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 12,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -379,7 +388,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.85, GOVERNMENT: 0.02, CORPORATE: 0.13 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 150_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 3,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -425,7 +434,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.55, GOVERNMENT: 0.1, CORPORATE: 0.35 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 60_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 2,
         revenueMechanism: 'SUBSCRIPTION',
       },
     ],
@@ -456,7 +465,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 400_000,
         shelfLifeWeeks: 104,
         householdPriceTier: 'STAPLE',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -467,7 +476,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.15, GOVERNMENT: 0.5, CORPORATE: 0.35 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 200_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 4,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -487,7 +496,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         baselineValueDensityUsdPerTonne: 2_500,
         shelfLifeWeeks: 8,
         householdPriceTier: 'STAPLE',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 1,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -499,7 +508,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 4_000,
         householdPriceTier: 'STAPLE',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 1,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -517,7 +526,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.95, GOVERNMENT: 0, CORPORATE: 0.05 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 20_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 8,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -528,7 +537,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0, CORPORATE: 0.1 },
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 4_000,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 4,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -547,7 +556,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         deliveryMode: 'PHYSICAL',
         baselineValueDensityUsdPerTonne: 200_000,
         householdPriceTier: 'LUXURY',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 6,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -564,7 +573,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         label: "Media & Content",
         buyerMix: { HOUSEHOLD: 0.85, GOVERNMENT: 0, CORPORATE: 0.15 },
         deliveryMode: 'DIGITAL',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 12,
         revenueMechanism: 'SUBSCRIPTION',
       },
     ],
@@ -683,7 +692,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         label: "Residential Construction",
         buyerMix: { HOUSEHOLD: 0.9, GOVERNMENT: 0.05, CORPORATE: 0.05 },
         deliveryMode: 'IN_PLACE',
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 26,
         revenueMechanism: 'UNIT_SALE',
       },
       {
@@ -694,7 +703,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         buyerMix: { HOUSEHOLD: 0, GOVERNMENT: 0.45, CORPORATE: 0.55 },
         deliveryMode: 'IN_PLACE',
         capexBasketWeight: 0.25,
-        productionLeadWeeks: 0,
+        productionLeadWeeks: 52,
         revenueMechanism: 'UNIT_SALE',
       },
     ],
@@ -969,6 +978,11 @@ export const SUBSCRIPTION_WEEKLY_CHURN = 0.006;
 
 export function isStorable(unitId: string): boolean {
   return (byId.get(unitId)?.deliveryMode ?? 'PHYSICAL') === 'PHYSICAL';
+}
+
+/** IND10 — weeks from starting a unit to having one to sell. 0 = made on demand. */
+export function productionLeadWeeksOf(unitId: string): number {
+  return byId.get(unitId)?.productionLeadWeeks ?? 0;
 }
 
 /**

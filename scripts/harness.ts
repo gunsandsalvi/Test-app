@@ -43,6 +43,7 @@ import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/ce
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { sovBucketKey } from '../src/engine/simulation/stages/shared-helpers';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
+import { productionLeadWeeksOf } from '../src/domain/industry-registry';
 import { SUBUNIT_PHYSICAL, deliveryModeOf } from '../src/domain/goods-physical';
 import { laneDistanceNm } from '../src/domain/geography';
 import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
@@ -567,6 +568,32 @@ function checkBeneficiaryClaimsHaveHolders(state: GameState, week: number) {
         `A reserve or entitlement is an asset on one book and a liability on another, never one alone.`,
     });
   }
+}
+
+/**
+ * IND10 — a production pipeline is exactly as long as the good's production lead.
+ *
+ * The identity, not the behaviour: a queue whose index i completes in i weeks has `lead` slots,
+ * always. A shorter one is a pipeline that got dropped and rebuilt from nothing somewhere (the
+ * §7.41 trap), a longer one is one being advanced twice in a week.
+ */
+function checkProductionPipelines(state: GameState, week: number) {
+  state.companies.forEach(c => {
+    const wip = (c as any).wipBySubUnit as Record<string, { units: number }[]> | undefined;
+    if (!wip) return;
+    Object.entries(wip).forEach(([subUnitId, queue]) => {
+      const lead = productionLeadWeeksOf(subUnitId);
+      if (queue.length !== lead) {
+        violations.push({
+          week,
+          message: `${c.ticker}: ${subUnitId} pipeline holds ${queue.length} weeks against a ${lead}-week production lead`,
+        });
+      }
+      if (queue.some(l => isNaN(l.units) || !isFinite(l.units))) {
+        violations.push({ week, message: `${c.ticker}: NaN in the ${subUnitId} production pipeline` });
+      }
+    });
+  });
 }
 
 function checkNaNAndPurity(state: GameState, week: number) {
@@ -1152,8 +1179,50 @@ const xbModule: HarnessModule = (() => {
   };
 })();
 
+/**
+ * IND battery — the industry operating model's own measured numbers.
+ *
+ * §5-IND's verify list, run on the shared state: production time as a real stock, and whatever
+ * later IND slices add. It judges nothing; the numbers are for reading.
+ */
+const indModule: HarnessModule = {
+  name: 'IND battery',
+  report(s) {
+    const out: string[] = [];
+    out.push('--- IND10: production time is a stock (WIP = lead x weekly throughput) ---');
+    // Group every firm's pipeline by the good's production lead, and compare the WIP it holds
+    // against one week of what that pipeline delivers. The ratio IS the lead if the mechanism is
+    // real: a 26-week build carries 26 weeks of work, a service carries none.
+    const byLead = new Map<number, { wipUnits: number; weeklyUnits: number; lines: number }>();
+    s.companies.forEach(c => {
+      const wip = (c as any).wipBySubUnit as Record<string, { units: number }[]> | undefined;
+      if (!wip || !isActiveCompany(c)) return;
+      Object.entries(wip).forEach(([subUnitId, queue]) => {
+        const lead = productionLeadWeeksOf(subUnitId);
+        const held = queue.reduce((a, l) => a + l.units, 0);
+        // One week of throughput is the lot at the front of the queue: what this line delivers.
+        const weekly = queue.length > 0 ? queue[0].units : 0;
+        const e = byLead.get(lead) ?? { wipUnits: 0, weeklyUnits: 0, lines: 0 };
+        e.wipUnits += held; e.weeklyUnits += weekly; e.lines += 1;
+        byLead.set(lead, e);
+      });
+    });
+    [...byLead.entries()].sort((a, b) => a[0] - b[0]).forEach(([lead, e]) => {
+      const weeksHeld = e.weeklyUnits > 0 ? e.wipUnits / e.weeklyUnits : 0;
+      out.push(`  lead ${String(lead).padStart(2)}wk: ${String(e.lines).padStart(4)} lines  WIP ${weeksHeld.toFixed(2)} weeks of throughput [should be ${lead}]`);
+    });
+    const totalWipUSD = s.companies.reduce((a, c) => {
+      const wip = (c as any).wipBySubUnit as Record<string, { valueUSD: number }[]> | undefined;
+      if (!wip) return a;
+      return a + Object.values(wip).reduce((b, q) => b + q.reduce((x, l) => x + l.valueUSD, 0), 0);
+    }, 0);
+    out.push(`  work in progress carried across every firm: ${B(totalWipUSD)}`);
+    return out;
+  },
+};
+
 // ---- ADD NEW MODULES HERE, and nowhere else. ----
-const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule];
+const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule];
 
 // =============================================================================================
 // THE RUN
@@ -1347,6 +1416,7 @@ function runHarness() {
        }
     });
     checkNaNAndPurity(state, w);
+    checkProductionPipelines(state, w);
 
     // 3. Disjoint set: isDefaulted and mergerAcquired
     state.companies.forEach(c => {

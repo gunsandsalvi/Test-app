@@ -1754,6 +1754,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // inventory, since this stage (not stage05) is the one authoritative writer of the
       // post-consumption balance.
       inputInventoryBySubUnit: newInputInventoryBySubUnit,
+      // IND10 — the production pipeline stage 05 advanced. Named here because a rebuild from a
+      // fixed field list silently drops whatever it does not name (§7.41), and a dropped
+      // pipeline is a firm whose half-built output vanishes every week.
+      wipBySubUnit: update?.wipBySubUnit ?? comp.wipBySubUnit,
       recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
       recurringRevenueBaseUSD: newRecurringBaseUSD === undefined
         ? undefined : Number(newRecurringBaseUSD.toFixed(0)),
