@@ -56,7 +56,7 @@ import {
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion, primaryTakeUSD } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -479,7 +479,11 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
       feeDesksForRegion(ctx, regionId),
-      primaryTakeUSD(result)
+      // WS8: the CCP pays each issuer for the paper its deal actually placed.
+      primaryTakes(result, (issuerId) => {
+        const issuer = companyById.get(issuerId);
+        return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+      })
     );
   });
 }

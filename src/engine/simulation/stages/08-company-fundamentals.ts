@@ -1342,7 +1342,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
       if (placedUSD > 1000) updatedTranches = [...updatedTranches, newTranche];
       debtIssuanceThisWeek += placedUSD;
-      post(`primary ${o.purpose.toLowerCase()} proceeds (net of underwriting fee)`, settlement.proceedsUSD);
+      // WS8/CASH: reported here, PAID elsewhere by name — the clearing house pays the issuer for
+      // what the book took, and the lead pays it for the residual and charges it the fee
+      // (book-settlement.ts, primary-settlement.ts). This line settled the whole of it against
+      // the boundary while the CCP paid the boundary for the same paper.
+      post(`primary ${o.purpose.toLowerCase()} proceeds (net of underwriting fee)`, settlement.proceedsUSD, undefined, false);
     } else if (settlement && settlement.withdrawn && settlement.offering.purpose === 'REFINANCE' && maturingTranche) {
       // The market said no and the paper still matures: the revolver catches it — real market
       // access closing when spreads gap, with a real penalty cost.

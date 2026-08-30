@@ -22,6 +22,7 @@ import { PrimaryOffering, UNDERWRITING_FEE_BPS } from '../../../domain/primary-m
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
 import { WeeklyStepContext } from './context';
 import { ClearingResult } from './financial-clearing-engine';
+import { pay } from './settlement';
 
 /**
  * Settle every offering the given book priced this week. `statToProceeds` converts the cleared
@@ -73,26 +74,49 @@ export function settlePricedOfferings(
     const feeBps = feeBpsOf ? feeBpsOf(offering, outcome.clearedStat) : UNDERWRITING_FEE_BPS[instrumentType];
     const feeUSD = grossUSD * (feeBps / 10000);
 
-    // Lead bank: the fee (cash and equity together — an equity-only credit breaks the identity
-    // invariant) and the residual (cash out, inventory in — the security is the other leg, so
-    // equity does not move).
-    if (lead && (feeUSD > 0 || residualUSD > 0)) {
+    // Lead bank: the fee and the residual, both as REAL PAYMENTS between it and the issuer.
+    //
+    // They used to be a direct write on the lead's reserves (`cashReservesUSD + feeUSD -
+    // residualUSD`) while the issuer's proceeds were posted against the UNMODELED boundary on
+    // stage 08's cash walk — one transaction, two books, and neither leg pointed at the other.
+    // The issuer is paid on the whole deal (firm commitment): the CCP pays it for what the book
+    // took (book-settlement.ts), the lead pays it for the residual it is left holding, and it
+    // pays the lead the fee that is the price of that guarantee.
+    //
+    // The residual moves the lead's reserves only (BANK_SECURITIES: one asset became another —
+    // the security is the other leg, written below). The fee moves reserves AND equity (BANK: it
+    // is income), which is what an equity-only credit would have broken.
+    const issuerCompany = ctx.updatedCompanies.find((c: Company) => c.id === issuerId)
+      ?? ctx.prevActiveFirms.find((c: Company) => c.id === issuerId)
+      ?? ctx.prevActivePrivateFirms.find((c: Company) => c.id === issuerId);
+    if (lead && issuerCompany) {
+      if (residualUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'BANK_SECURITIES', ticker: lead.ticker },
+          payee: { kind: 'COMPANY', ticker: issuerCompany.ticker },
+          amountUSD: residualUSD,
+          reason: 'underwriting residual taken by the lead',
+        });
+      }
+      if (feeUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'COMPANY', ticker: issuerCompany.ticker },
+          payee: { kind: 'BANK', ticker: lead.ticker },
+          amountUSD: feeUSD,
+          reason: 'underwriting fee',
+        });
+      }
+    }
+    if (lead && deskBook && residualUSD > 0) {
       const existingSheet = ctx.companyUpdates[lead.ticker]?.bankBalanceSheet ?? lead.bankBalanceSheet!;
       const inventory: DealerDeskInventory = { ...(existingSheet.dealerDeskInventory ?? {}) };
-      if (deskBook && residualUSD > 0) {
-        const rows = [...(inventory[deskBook] ?? [])];
-        const at = rows.findIndex((r) => r.instrumentId === issuerId);
-        if (at >= 0) rows[at] = { instrumentId: issuerId, inventoryUSD: rows[at].inventoryUSD + residualUSD };
-        else rows.push({ instrumentId: issuerId, inventoryUSD: residualUSD });
-        inventory[deskBook] = rows;
-      }
+      const rows = [...(inventory[deskBook] ?? [])];
+      const at = rows.findIndex((r) => r.instrumentId === issuerId);
+      if (at >= 0) rows[at] = { instrumentId: issuerId, inventoryUSD: rows[at].inventoryUSD + residualUSD };
+      else rows.push({ instrumentId: issuerId, inventoryUSD: residualUSD });
+      inventory[deskBook] = rows;
       if (!ctx.companyUpdates[lead.ticker]) ctx.companyUpdates[lead.ticker] = {};
-      ctx.companyUpdates[lead.ticker].bankBalanceSheet = {
-        ...existingSheet,
-        cashReservesUSD: existingSheet.cashReservesUSD + feeUSD - residualUSD,
-        bankEquityUSD: existingSheet.bankEquityUSD + feeUSD,
-        dealerDeskInventory: inventory,
-      };
+      ctx.companyUpdates[lead.ticker].bankBalanceSheet = { ...existingSheet, dealerDeskInventory: inventory };
     }
 
     ctx.primarySettlements.set(offering.id, {

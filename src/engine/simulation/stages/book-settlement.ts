@@ -18,11 +18,18 @@
  *
  * **The dealer.** It is the counterparty to every fill, so it receives exactly what the
  * participants paid (`dealerNetCashUSD`). The fee half is the desks' revenue and goes to the
- * named banks by market share, cash and equity together. The rest funds the inventory it was
- * left holding — and that inventory sits on the REGION's dealer book, not on any named bank's
- * balance sheet, so its funder is `UNMODELED` under its own reason line. That is the §7.19 gap
- * every dealer-inventory acquisition has had since the desks existed; naming it here gives it a
- * size to watch, and G3 (one dealer system) is what closes it by putting the book on a bank.
+ * named banks by market share, cash and equity together. What is left is the week's PRIMARY
+ * placement, and it goes to the ISSUERS who brought the paper, by name and in proportion to
+ * what each one's deal actually placed — stage 08 reports the same proceeds on the issuer's cash
+ * walk and settles none of them.
+ *
+ * There is no third leg any more. The `<book> dealer inventory` line that used to stand here —
+ * an UNMODELED funder for a residual sitting on a region rather than on any balance sheet — is
+ * gone, because the residual is gone: OWN7's two-sided rationing means an unsold holding stays
+ * with its holder (financial-clearing-engine.ts, `unsoldStaysWithHolder`). What reaches this
+ * function now is participants, fees and the primary, and all three have names. The leg stays in
+ * the code as a GUARD: if a book ever leaves money over again, it prints under its own reason
+ * instead of vanishing.
  */
 
 import { RegionId } from '../../../types';
@@ -41,6 +48,9 @@ export interface FeeDesk { ticker: string; share: number }
  * money; a participant it cannot name settles against the boundary under its own reason, so an
  * unrouted book is a visible line rather than a silent loss.
  */
+/** What one issuer's deal placed with this book's participants, and who to pay for it. */
+export interface PrimaryTake { party: PartyRef; amountUSD: number }
+
 export function settleClearedBook(
   ctx: WeeklyStepContext,
   regionId: RegionId,
@@ -49,7 +59,7 @@ export function settleClearedBook(
   partyOf: (participantId: string) => PartyRef | undefined,
   dealer: { netCashUSD: number; feeUSD: number },
   feeDesks: FeeDesk[],
-  primaryTakeUSD = 0
+  primaryTakes: PrimaryTake[] = []
 ): void {
   const ccp: PartyRef = { kind: 'CLEARING_HOUSE', region: regionId };
   const reason = `${book} clearing`;
@@ -78,21 +88,26 @@ export function settleClearedBook(
     });
   }
 
-  // What is left after the fees is the dealer's own trading. Split so the boundary can be
-  // watched down line by line: new paper the desk DISTRIBUTED is a primary flow whose other
-  // half is the issuer's proceeds (stage 08 posts those, also against the boundary — WS8
-  // closes the pair); the rest is the inventory it was left holding, which is G3's.
-  const boundary: PartyRef = { kind: 'UNMODELED', region: regionId };
+  // What is left after the fees is what the week's PRIMARY placed, and it belongs to the issuers
+  // who brought the paper. Paid to each by name, pro rata to what its own deal placed — the
+  // `${book} primary distribution` line that used to carry the whole of it to the boundary was
+  // one half of a pair whose other half (stage 08's proceeds line) went to the boundary too.
   const tradingUSD = dealer.netCashUSD - dealer.feeUSD;
-  const primaryUSD = Math.max(0, Math.min(primaryTakeUSD, Math.max(0, tradingUSD)));
-  const legs: [number, string][] = [
-    [primaryUSD, `${book} primary distribution`],
-    [tradingUSD - primaryUSD, `${book} dealer inventory`],
-  ];
-  legs.forEach(([amountUSD, reason]) => {
-    if (amountUSD > 0) pay(ctx, { payer: ccp, payee: boundary, amountUSD, reason });
-    else if (amountUSD < 0) pay(ctx, { payer: boundary, payee: ccp, amountUSD: -amountUSD, reason });
-  });
+  const takeTotalUSD = primaryTakes.reduce((a, t) => a + Math.max(0, t.amountUSD), 0);
+  const primaryUSD = Math.max(0, Math.min(takeTotalUSD, Math.max(0, tradingUSD)));
+  if (primaryUSD > 0 && takeTotalUSD > 0) {
+    primaryTakes.forEach((t) => {
+      const amountUSD = Math.max(0, t.amountUSD) * (primaryUSD / takeTotalUSD);
+      if (amountUSD > 0) pay(ctx, { payer: ccp, payee: t.party, amountUSD, reason: `${book} primary proceeds` });
+    });
+  }
+
+  // GUARD, not a mechanism: with OWN7's two-sided rationing a stock book leaves nothing over, so
+  // this is zero. If one ever does again, it prints under its own reason rather than vanishing.
+  const boundary: PartyRef = { kind: 'UNMODELED', region: regionId };
+  const leftoverUSD = tradingUSD - primaryUSD;
+  if (leftoverUSD > 0) pay(ctx, { payer: ccp, payee: boundary, amountUSD: leftoverUSD, reason: `${book} dealer inventory` });
+  else if (leftoverUSD < 0) pay(ctx, { payer: boundary, payee: ccp, amountUSD: -leftoverUSD, reason: `${book} dealer inventory` });
 }
 
 /** The desks that share a region's clearing fees: its named banks, weighted by market share. */
@@ -101,9 +116,22 @@ export function feeDesksForRegion(ctx: WeeklyStepContext, regionId: RegionId): F
   return banks.map((b) => ({ ticker: b.ticker, share: b.bankMarketShare ?? 1 / Math.max(1, banks.length) }));
 }
 
-/** How much NEW paper this book's participants took off the desks this week (WS8). */
-export function primaryTakeUSD(result: ClearingResult): number {
-  let takeUSD = 0;
-  result.primaryOutcomeById.forEach((o) => { if (!o.withdrawn) takeUSD += o.marketTakeUSD; });
-  return takeUSD;
+/**
+ * What each issuer's deal placed with this book's participants this week (WS8), and who to pay.
+ * `valueOf` turns the engine's take into money — par for the credit books, shares x the cleared
+ * price for equity.
+ */
+export function primaryTakes(
+  result: ClearingResult,
+  partyOfIssuerId: (issuerId: string) => PartyRef | undefined,
+  valueOf: (marketTakeUSD: number, clearedStat: number) => number = (take) => take
+): PrimaryTake[] {
+  const takes: PrimaryTake[] = [];
+  result.primaryOutcomeById.forEach((o, issuerId) => {
+    if (o.withdrawn) return;
+    const amountUSD = valueOf(o.marketTakeUSD, o.clearedStat);
+    const party = partyOfIssuerId(issuerId);
+    if (party && amountUSD > 0) takes.push({ party, amountUSD });
+  });
+  return takes;
 }

@@ -37,7 +37,7 @@ import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, Participa
 const EMPTY_DEMAND_MAP = new Map<string, ParticipantDemand>();
 import { settlePricedOfferings } from './primary-settlement';
 import { pendingSettlementUSD } from './settlement';
-import { settleClearedBook, feeDesksForRegion } from './book-settlement';
+import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf, totalDeskCapacityUSD } from './dealer-desks';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { underwritingFeeBps, oneWeekPriceRiskBps } from '../../../domain/primary-market';
@@ -418,8 +418,16 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // house flat.
     let dealerNetUSD = 0;
     netCashByEntityId.forEach((v) => { dealerNetUSD -= v; });
-    let primaryUSD = 0;
-    result.primaryOutcomeById.forEach((o) => { if (!o.withdrawn) primaryUSD += o.marketTakeUSD * o.clearedStat; });
+    // WS8: the CCP pays each issuer for the shares its deal actually placed — the engine's take
+    // is in SHARES here, so it is valued at the level the same auction cleared.
+    const equityPrimaryTakes = primaryTakes(
+      result,
+      (issuerId) => {
+        const issuer = companyById.get(issuerId);
+        return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+      },
+      (takeShares, clearedStat) => takeShares * clearedStat
+    );
     const entityIds = new Set(bookEntities.map((e) => e.id));
     settleClearedBook(
       ctx, regionId, BOOK,
@@ -427,7 +435,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: dealerNetUSD, feeUSD: bookFeeUSD },
       feeDesksForRegion(ctx, regionId),
-      primaryUSD
+      equityPrimaryTakes
     );
   });
 }
