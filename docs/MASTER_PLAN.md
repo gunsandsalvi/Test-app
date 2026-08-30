@@ -2004,3 +2004,41 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        week 20 and the market-share violation at week 60; both are forty weeks downstream of a
        comparison whose units were wrong on the first tick. **When a long run fails, measure the
        first week, not the failure.**
+225. **THE SECTOR MISMATCH, LOCATED TO ONE SWITCH STATEMENT — AND ONE ATTEMPT AT IT, REVERTED.**
+     §7.224 found the seed's supply banded wrong by sector. The cause is `companyGenerator.ts`:
+     ```
+     if (sector === 'Tech')        primaryCat = 'SoftwareDigitalServices';
+     else if (sector === 'Energy') primaryCat = 'Energy';
+     ...
+     const regionDemandSeed = getCategoryDemandSeedUSD(primaryCat, region, initialRegions);
+     ```
+     **Every firm in a sector is sized off ONE hand-named industry**, through
+     `getCategoryDemandSeedUSD` — a switch of STATED shares of household income (`consumption * 0.10`,
+     `corpBase * 0.35`) that nothing else in the model reads. So Tech's 90 firms divide the
+     *software* slice and are blind to semiconductors and telecoms, which are most of what Tech
+     makes. Energy and Industrials come out right (1.06, 0.97) only because their hand-named
+     industry happens to be nearly the whole sector. **Two representations of one economy's size
+     (§1.3), and the one the firms use is not the one the goods market clears against.**
+     - **A SECOND DEFECT IN THE SAME LINES:** `Financials` and `Banks` map to
+       `SoftwareDigitalServices` too, so financial firms sit in Tech's rank curve and dilute it —
+       while their own revenue comes from a bank's balance sheet or a profile and never needed a
+       producing cohort at all.
+     - **THE OBVIOUS FIX OVERSHOOTS 3.4x, AND THIS IS THE TRAP.** Sizing each sector's cohort
+       against the demand for every sub-unit it produces — read from the same vector the lines are
+       dealt against — gives Tech 3.41x, Industrials 3.34x, Consumer 2.96x, Energy 2.33x. **The rank
+       curve is applied to the SEED TEMPLATES (10 per sector) and the roster is then padded with
+       procedurally scaled clones** to the per-region target (90 Tech firms from 10 templates), so a
+       curve that sums to 1 over the templates sums to several over the firms that actually trade.
+       Reverted; the seed is back to 0.41/1.06/0.97/1.45.
+     - **AND THE DEMAND VECTOR MOVES WITH THE ROSTER:** total demand went 1033B -> 1202B when
+       revenue went 672B -> 2247B. Weak coupling (16% for a 3.3x move), so a single normalisation
+       pass converges — but a fix that ignores it will chase its own tail.
+     - **SO THE FIX BELONGS AFTER THE PADDING, NOT BEFORE IT:** one normalisation over the FINAL
+       roster, scaling each producing sector's firms so the sector's revenue equals the demand for
+       what it produces net of its SME tier. It must carry the ratio through everything struck off
+       `revBase` — debt, cash, headcount — or it will fix the goods market and break every balance
+       sheet. That is the next action on §6.1's top row.
+     - **WHY THIS IS RECORDED RATHER THAN SHIPPED:** a 3.4x oversupply is a worse world than a 0.41x
+       undersupply, and §1.20 forbids rolling back a derivation for a bad print — but it does not
+       ask anyone to ship one. The measurement is the deliverable; the fix needs the padding path
+       understood first.
