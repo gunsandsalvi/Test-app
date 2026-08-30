@@ -103,6 +103,10 @@ export function runShardedKernel(packed: PackedClearing, sab: SharedArrayBuffer)
     sab, n, pCount: packed.pCount,
     dealerSpreadBps: packed.dealerSpreadBps,
     maxWeeklyStatMovePct: packed.maxWeeklyStatMovePct,
+    // Must travel with the job: the worker rebuilds the packed struct from these fields, and a
+    // flag left behind here would run a DIFFERENT market in the worker path than in the serial
+    // one — silently, because the rebuilt object is handed to the kernel as `never`.
+    unsoldStaysWithHolder: packed.unsoldStaysWithHolder,
   };
   for (let i = 0; i < w; i++) {
     const from = i * per;

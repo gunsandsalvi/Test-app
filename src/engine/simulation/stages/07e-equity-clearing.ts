@@ -298,6 +298,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], new Map(), {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
+      // OWN7: the float here is a stock these participants already hold, so an unsold
+      // position stays with its holder rather than falling to a dealer nobody names.
+      unsoldStaysWithHolder: true,
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} equity`);

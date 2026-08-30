@@ -145,6 +145,30 @@ export interface ClearingParams {
    * numerical artifact of discrete time rather than a market behaviour.
    */
   maxWeeklyStatMovePct: number;
+  /**
+   * OWN7 — **an unsold holding stays with its holder.**
+   *
+   * Every book here allocates the float across the participants and hands whatever is left over
+   * to a RESIDUAL DEALER: `tradableFloatUSD - allocatedUSD`, financed by nobody. Once OWN7's
+   * float rule made the float exactly "what these participants hold between them", that residual
+   * stopped being a market maker's inventory and became what it always was — a counterparty the
+   * model does not name, buying paper from holders who could not find a real buyer. Measured at
+   * the settlement boundary: 5.7B of corporate bonds, 4.5B of bills and 2.7B of loans over ten
+   * weeks, plus the equity book's own line.
+   *
+   * Set this where the float is a STOCK the participants already own (07b/07c/07d/07e/07f). The
+   * allocation is then rationed on BOTH sides — the same pro-rata the buyers have always had
+   * when a book is oversubscribed, now applied to the sellers when it is undersubscribed — so
+   * total holdings change only by what the primary offering actually placed. A seller that finds
+   * no buyer keeps its paper, which is what happens in a real market and is a far more honest
+   * illiquidity than an invisible bid.
+   *
+   * Leave it off where the float is an inelastic ORDER from outside the participant set — an
+   * exporter's receipts in fx-clearing, a borrower's cash need in repo-clearing, one side of a
+   * swap — because there the unabsorbed remainder is a REAL measurement (the flow that found no
+   * counterparty) and the adapters read it as one.
+   */
+  unsoldStaysWithHolder?: boolean;
 }
 
 export interface ClearingResult {
@@ -429,6 +453,7 @@ export interface PackedClearing {
   prevHolding: Float64Array;
   dealerSpreadBps: number;
   maxWeeklyStatMovePct: number;
+  unsoldStaysWithHolder: boolean;
 }
 
 /** One shard's raw results, in (instrument, participant) order within the shard. */
@@ -481,6 +506,7 @@ export function packClearing(
       present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
       dealerSpreadBps: params.dealerSpreadBps,
       maxWeeklyStatMovePct: params.maxWeeklyStatMovePct ?? Number.NaN,
+      unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
     // Shared memory is reused across calls; zero what the packers below only conditionally set.
     present.fill(0); skip.fill(0); yieldLike.fill(0);
@@ -503,6 +529,7 @@ export function packClearing(
       prevHolding: new Float64Array(n * pCount),
       dealerSpreadBps: params.dealerSpreadBps,
       maxWeeklyStatMovePct: params.maxWeeklyStatMovePct ?? Number.NaN,
+      unsoldStaysWithHolder: params.unsoldStaysWithHolder === true,
     };
   }
   instruments.forEach((inst, i) => {
@@ -682,8 +709,12 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       ? discretionaryFloatUSD / Math.max(1e-9, discretionaryWantedUSD)
       : 1;
 
-    let allocatedUSD = 0;
+    // What each participant would hold at the cleared level, and the two-sided flow that
+    // implies. Held separately from the emit pass below because the SELL side has to be
+    // rationed against the BUY side before either is booked (see unsoldStaysWithHolder).
     let priorTotalUSD = 0;
+    let grossBuysUSD = 0;
+    let grossSellsUSD = 0;
     for (let pi = 0; pi < pCount; pi++) {
       const k = pi * n + i;
       const previousUSD = packed.prevHolding[k];
@@ -691,7 +722,36 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
       const coreUSD = kernCore[pi] * coreScale;
       const discretionaryUSD = Math.max(0, kernWanted[pi] - kernCore[pi]);
       const filledUSD = coreUSD + discretionaryUSD * discretionaryScale;
+      kernFilled[pi] = filledUSD;
       const tradedUSD = filledUSD - previousUSD;
+      if (tradedUSD > 0) grossBuysUSD += tradedUSD; else grossSellsUSD -= tradedUSD;
+    }
+
+    // OWN7 — a trade needs two sides. Where the float is a stock these participants already own,
+    // the only paper for sale is what one of them is selling, plus what the issuer brought: the
+    // buyers can take no more than that, and the sellers can place no more than the buyers want.
+    // Whichever side is larger is rationed pro rata — the identical treatment an oversubscribed
+    // book has always given its buyers. Off (the flow books), both scales are 1 and the
+    // unabsorbed remainder falls to the residual below, which is what those adapters measure.
+    let buyScale = 1;
+    let sellScale = 1;
+    if (packed.unsoldStaysWithHolder) {
+      const takeUSD = Math.max(0, Math.min(offeringUSD, grossBuysUSD - grossSellsUSD));
+      const absorbableBuysUSD = grossSellsUSD + takeUSD;
+      if (grossBuysUSD > absorbableBuysUSD) {
+        buyScale = grossBuysUSD > 0 ? absorbableBuysUSD / grossBuysUSD : 1;
+      } else if (grossSellsUSD > grossBuysUSD - takeUSD) {
+        sellScale = grossSellsUSD > 0 ? Math.max(0, grossBuysUSD - takeUSD) / grossSellsUSD : 1;
+      }
+    }
+
+    let allocatedUSD = 0;
+    for (let pi = 0; pi < pCount; pi++) {
+      const k = pi * n + i;
+      const previousUSD = packed.prevHolding[k];
+      const wantedTradeUSD = kernFilled[pi] - previousUSD;
+      const tradedUSD = wantedTradeUSD > 0 ? wantedTradeUSD * buyScale : wantedTradeUSD * sellScale;
+      const filledUSD = previousUSD + tradedUSD;
       const feeUSD = Math.abs(tradedUSD) * (packed.dealerSpreadBps / 10000);
       allocatedUSD += filledUSD;
       // Emit only rows that can move anything: a participant with no demand and no prior
@@ -705,7 +765,11 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
         out.fillFee[f] = feeUSD;
       }
     }
-    out.dealerInventory[o] = Number((liveFloatUSD - allocatedUSD).toFixed(0));
+    // With both sides rationed there is nothing left over by construction, so there is no
+    // residual dealer to name; the flow books keep theirs, and it is a real measurement there.
+    out.dealerInventory[o] = packed.unsoldStaysWithHolder
+      ? 0
+      : Number((liveFloatUSD - allocatedUSD).toFixed(0));
 
     if (offeringUSD > 0) {
       out.hasPrimary[o] = 1;
@@ -722,12 +786,14 @@ export function runClearingKernel(packed: PackedClearing, from: number, to: numb
 // Kernel scratch for the settle pass, module-scope like the solve columns.
 let kernWanted = new Float64Array(64);
 let kernCore = new Float64Array(64);
+let kernFilled = new Float64Array(64);
 function growKernelScratch(pCount: number) {
   if (pCount <= kernWanted.length) return;
   let size = kernWanted.length;
   while (size < pCount) size *= 2;
   kernWanted = new Float64Array(size);
   kernCore = new Float64Array(size);
+  kernFilled = new Float64Array(size);
 }
 
 /**

@@ -14,6 +14,7 @@ interface Job {
   pCount: number;
   dealerSpreadBps: number;
   maxWeeklyStatMovePct: number; // NaN = undamped
+  unsoldStaysWithHolder: boolean;
   from: number;
   to: number;
 }
@@ -38,6 +39,7 @@ function packViewsOnly(job: Job) {
     present, dRes, dRange, dMaxH, dMaxNet, dMinH, prevHolding,
     dealerSpreadBps: job.dealerSpreadBps,
     maxWeeklyStatMovePct: job.maxWeeklyStatMovePct,
+    unsoldStaysWithHolder: job.unsoldStaysWithHolder === true,
   };
 }
 

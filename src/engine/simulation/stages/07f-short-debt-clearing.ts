@@ -247,6 +247,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
         dealerSpreadBps: DEALER_SPREAD_BPS,
         maxWeeklyStatMovePct: MAX_WEEKLY_YIELD_MOVE_PCT,
+        // OWN7: the float here is a stock these participants already hold, so an unsold
+        // position stays with its holder rather than falling to a dealer nobody names.
+        unsoldStaysWithHolder: true,
       });
       if (cbOrder && reg.centralBankSheet) {
         // Asset side only — the reserves that paid for it were created. See central-bank-demand.
