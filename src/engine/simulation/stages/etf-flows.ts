@@ -28,12 +28,13 @@ import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
 import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
-import { AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
+import { apWeeklyCapacityUSD, ETF_INCEPTION_NAV_PER_SHARE, NAMES_COVERED_AT_ONE_BILLION_AUM, RESEARCH_COVERAGE_SCALING_EXPONENT } from '../../../domain/etf';
 import { ItemizedHolding } from '../../../domain/banking';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
 import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
 import { publicComparableEvMultiple } from './pe-lifecycle';
+import { MAX_WEEKLY_PRICE_MOVE_PCT } from './07e-equity-clearing';
 
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
@@ -224,7 +225,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => {
     const banks = ctx.updatedCompanies.filter((c) => c.region === r && c.bankBalanceSheet);
     const equityUSD = banks.reduce((s, c) => s + (c.bankBalanceSheet?.bankEquityUSD ?? 0), 0);
-    apCapacityByRegion.set(r, Math.max(0, equityUSD) * AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY);
+    // ETF2: the desks' capital over the risk a basket consumes while they hold it — the equity
+    // book's own weekly move cap, which is the same number the prime brokers haircut equity by.
+    apCapacityByRegion.set(r, apWeeklyCapacityUSD({
+      dealerEquityUSD: equityUSD, bookWeeklyMoveCap: MAX_WEEKLY_PRICE_MOVE_PCT,
+    }));
   });
 
   // ---- 4. Creations and redemptions, and the residual the arbitrage could not absorb. ----
@@ -236,6 +241,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const cashDeltaByEntity = new Map<string, number>();
   const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
   const addCash = (id: string, usd: number) => cashDeltaByEntity.set(id, (cashDeltaByEntity.get(id) ?? 0) + usd);
+  /** ETF2: redeemer id -> fund id -> the value of the basket the fund owes it this week. */
+  const inKindRedemptionsByInvestor = new Map<string, Map<string, number>>();
 
   /** What each investor wants to move in each fund, and the fund's net — computed before any
    *  execution, because the AP capacity split depends on the whole week's demand at once. */
@@ -361,10 +368,18 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // cannot honour the redemption.
     const fundCashAvailableUSD = Math.max(0, (fund.cashUSD ?? 0)
       + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id }));
-    // The redemption side is rationed by the fund's own cash on top of the AP's capacity: both
-    // are real constraints and the tighter one binds.
-    const cashFillRatio = grossRedeemUSD > 0
-      ? Math.min(1, fundCashAvailableUSD / grossRedeemUSD)
+    // ETF2 — AND NOW IT IS IN KIND, which is what makes the cash cap unnecessary rather than
+    // merely honest. An institutional redemption hands over the BASKET: the fund delivers the
+    // redeemer its pro-rata slice of everything it owns — securities and cash together — and no
+    // money has to be found, because a fund that owns something can always deliver a fraction of
+    // it. That is why a real ETF cannot have a run in the way an open-ended fund can, and it is
+    // the property this mechanism existed to have.
+    //
+    // The HOUSEHOLD leg stays in cash, because a household cannot take delivery of a basket. Its
+    // redemption is the one that still needs the fund to find money, so the cash ration now
+    // applies where it is genuinely a constraint instead of to everybody.
+    const householdCashFillRatio = householdUSD < 0
+      ? Math.min(1, fundCashAvailableUSD / Math.max(1, -householdUSD))
       : 1;
     const executedByInvestor = new Map<string, number>();
     wantDeltaByInvestor.forEach((deltaUSD, id) => {
@@ -374,8 +389,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
                         : Math.min(grossCreateUSD, grossRedeemUSD) / Math.max(1, grossRedeemUSD))
         : 1;
       const imbalanceShare = 1 - nettedShare;
-      const apExecutedUSD = deltaUSD * (nettedShare + imbalanceShare * fillRatio);
-      const executedUSD = apExecutedUSD < 0 ? apExecutedUSD * cashFillRatio : apExecutedUSD;
+      const executedUSD = deltaUSD * (nettedShare + imbalanceShare * fillRatio);
       if (Math.abs(executedUSD) >= 1) executedByInvestor.set(id, executedUSD);
     });
 
@@ -383,14 +397,23 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // The household leg, rationed at the same fill the institutions get — the AP cannot choose
     // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
     // money genuinely leaves the household balance sheet to buy the shares.
-    const householdExecutedUSD = householdUSD * fillRatio * (householdUSD < 0 ? cashFillRatio : 1);
+    const householdExecutedUSD = householdUSD * fillRatio * householdCashFillRatio;
     if (householdExecutedUSD !== 0) {
       fundCashDeltaUSD += householdExecutedUSD;
       householdExecutedByFund.set(fund.id, householdExecutedUSD);
     }
     executedByInvestor.forEach((executedUSD, id) => {
-      addCash(id, -executedUSD);
-      fundCashDeltaUSD += executedUSD;
+      if (executedUSD < 0) {
+        // IN KIND: the basket goes out, not money. Recorded here and delivered in one pass below,
+        // because the fund's own book has to be sliced once for every redeemer at once rather
+        // than shrunk under each of them in turn.
+        const byFund = inKindRedemptionsByInvestor.get(id) ?? new Map<string, number>();
+        byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + -executedUSD);
+        inKindRedemptionsByInvestor.set(id, byFund);
+      } else {
+        addCash(id, -executedUSD);
+        fundCashDeltaUSD += executedUSD;
+      }
       const shares = executedUSD / navPerShare;
       const byFund = holdingsDeltaByInvestor.get(id) ?? new Map<string, number>();
       byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + shares);
@@ -398,7 +421,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
     addCash(fund.id, fundCashDeltaUSD);
 
-    const createdShares = fundCashDeltaUSD / navPerShare;
+    // Shares are cancelled whether the redemption paid cash or a basket, so the register moves on
+    // the whole executed flow — not just the part that moved money.
+    let executedNetUSD = householdExecutedUSD;
+    executedByInvestor.forEach((usd) => { executedNetUSD += usd; });
+    const createdShares = executedNetUSD / navPerShare;
     const unabsorbedUSD = Math.abs(netUSD) - absorbedUSD;
     fund.etf = {
       ...fund.etf!,
@@ -408,6 +435,64 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       unmetFlowShare: Math.abs(netUSD) > 0 ? (Math.sign(netUSD) * unabsorbedUSD) / Math.abs(netUSD) : 0,
     };
   });
+
+  // ---- 4b. DELIVER THE BASKETS. Every fund's book is sliced ONCE, for all of its redeemers at
+  // the same time: a fund that owes 10% of itself to one redeemer and 5% to another hands over
+  // 15% of every line, and each redeemer's slice is a real position it now holds. Nothing is
+  // created and nothing is sold — this is the transfer that makes an in-kind redemption need no
+  // cash, and it is why an ETF cannot be run on the way an open-ended fund can. ----
+  const inKindOwedByFund = new Map<string, number>();
+  inKindRedemptionsByInvestor.forEach((byFund) => {
+    byFund.forEach((usd, fundId) => inKindOwedByFund.set(fundId, (inKindOwedByFund.get(fundId) ?? 0) + usd));
+  });
+  if (inKindOwedByFund.size > 0) {
+    const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
+    const deliveredRowsByInvestor = new Map<string, ItemizedHolding[]>();
+    const fundAssetsUSD = new Map<string, number>();
+    inKindOwedByFund.forEach((_owed, fundId) => {
+      const fund = entityById.get(fundId);
+      if (!fund) return;
+      const holdingsUSD = (fund.itemizedHoldings || []).reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+      fundAssetsUSD.set(fundId, holdingsUSD + Math.max(0, fund.cashUSD ?? 0));
+    });
+    inKindRedemptionsByInvestor.forEach((byFund, investorId) => {
+      byFund.forEach((owedUSD, fundId) => {
+        const fund = entityById.get(fundId);
+        const totalUSD = fundAssetsUSD.get(fundId) ?? 0;
+        if (!fund || !(totalUSD > 0) || !(owedUSD > 0)) return;
+        // A redeemer cannot take more of the fund than there is; a fund whose whole book is owed
+        // out is a fund being wound up, which is a real outcome rather than a failure to settle.
+        const share = Math.min(1, owedUSD / totalUSD);
+        const rows = deliveredRowsByInvestor.get(investorId) ?? [];
+        (fund.itemizedHoldings || []).forEach((h) => {
+          const qty = (h.quantityOrNotionalUSD ?? 0) * share;
+          if (!(Math.abs(qty) > 0.0001)) return;
+          rows.push({
+            ...h,
+            quantityShares: h.quantityShares === undefined ? undefined : h.quantityShares * share,
+            quantityOrNotionalUSD: qty,
+          });
+        });
+        deliveredRowsByInvestor.set(investorId, rows);
+        // The cash slice of the basket travels with it: a pro-rata claim is on everything the
+        // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure cash.
+        const cashSliceUSD = Math.max(0, fund.cashUSD ?? 0) * share;
+        if (cashSliceUSD > 0) { addCash(investorId, cashSliceUSD); addCash(fundId, -cashSliceUSD); }
+        // And the fund's own book shrinks by exactly what left it.
+        fund.itemizedHoldings = (fund.itemizedHoldings || []).map((h) => ({
+          ...h,
+          quantityShares: h.quantityShares === undefined ? undefined : h.quantityShares * (1 - share),
+          quantityOrNotionalUSD: (h.quantityOrNotionalUSD ?? 0) * (1 - share),
+        }));
+        fundAssetsUSD.set(fundId, totalUSD * (1 - share));
+      });
+    });
+    deliveredRowsByInvestor.forEach((rows, investorId) => {
+      const investor = entityById.get(investorId);
+      if (!investor || rows.length === 0) return;
+      investor.itemizedHoldings = [...(investor.itemizedHoldings || []), ...rows];
+    });
+  }
 
   // ---- 5. Apply every cash and share movement in one pass, then re-mark every ETF claim. ----
   // A holder's shares are a claim on the fund's assets, so they have to be carried at the fund's

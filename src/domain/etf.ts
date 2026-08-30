@@ -55,23 +55,34 @@ export const ETF_EXPENSE_RATIO_ANNUAL: Record<'EQUITY' | 'CORP_BOND' | 'LEVERAGE
 };
 
 /**
- * How much basket a region's dealers can intermediate in a week, as a multiple of their equity.
+ * How much basket a region's dealers can intermediate in a week.
  *
- * An AP does not WAREHOUSE a creation basket — it buys and delivers inside the settlement cycle,
- * so what its capital limits is turnover, not inventory. Sizing it at 2% of equity made the
- * arbitrage the dominant fact of the whole mechanism: 95-98% of flow unabsorbed every week and
- * the funds never reaching target size.
+ * **This was a number, and the number argued with its own name.** `AP_WEEKLY_CAPACITY_MULTIPLE_
+ * OF_EQUITY = 0.25` is a QUARTER of equity, while the paragraph beside it argued that a desk
+ * turning baskets over inside the settlement cycle should move several times its equity. Either
+ * the value was an order of magnitude low or the reasoning was wrong, and picking between them by
+ * hand would have been choosing the answer (rule 13).
  *
- * NOTE THE NAME AGAINST THE VALUE: 0.25 is a quarter of equity, not a multiple of it, and the
- * paragraph above argues a desk should turn over several times its equity. Either the value is
- * an order of magnitude low or the reasoning is wrong; nobody has re-measured which. ETF2 (17).
+ * **So it is derived, and the reasoning wins.** An AP does not WAREHOUSE a creation basket — it
+ * buys and delivers it, so what its capital has to cover is not the notional but the PRICE MOVE
+ * over the time it is holding the thing. The most a basket can move against it while it holds it
+ * is what the equity book itself says a price can move in a week, which that book states about
+ * itself and which the prime brokers already read their equity haircut off. Capacity is therefore
+ * equity divided by that move: the same "capital over the risk a unit of the position consumes"
+ * every desk in this model is sized by.
+ *
+ * At the equity book's own 18% weekly cap that is about 5.6x equity — several times over, as the
+ * reasoning said, and it moves on its own if the book's volatility does.
  *
  * It is also not the constraint that decides where the money actually lands. The fund's basket
  * purchase is executed in the constituent books, where it is already rationed against real float
  * by the clearing engine — so this cap is a second-order friction that should bite in stress and
  * not otherwise, which is exactly what a real AP constraint does.
  */
-export const AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY = 0.25;
+export function apWeeklyCapacityUSD(args: { dealerEquityUSD: number; bookWeeklyMoveCap: number }): number {
+  const move = Math.max(0.0001, args.bookWeeklyMoveCap);
+  return Math.max(0, args.dealerEquityUSD) / move;
+}
 
 /** A fund's shares are struck at this NAV when it first issues them. */
 export const ETF_INCEPTION_NAV_PER_SHARE = 100;
