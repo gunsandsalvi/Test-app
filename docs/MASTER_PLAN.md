@@ -6065,3 +6065,34 @@ that proved it, the lesson.
       the SIGNAL — which is what drives the shortage-capex response — before it fixes the stock.
       The seed half carries the fixed point (firms are generated FROM category demand) and stays a
       bounded project with BP/CHAIN.
+
+179. **COH2 — THE BENEFICIARY LIABILITY REVERSAL: tried and reverted, and TWO CONSECUTIVE
+    REVERSALS ARE THE FINDING. The 30% band is now the binding constraint on progress.**
+    - **The defect is real and worth stating precisely.** `beneficiaryLiabilityUSD =
+      totalAssetsUSD − equityCapitalUSD`, and `equityCapitalUSD` is set ONCE at the seed (12% of
+      assets) and **never updated**. So a fund's obligation to households is whatever keeps that
+      ratio true forever, and **households' claims on institutions are an accounting residual of
+      the institutions' own asset growth** — rule 13 exactly. In reality a pension fund is as big
+      as the entitlements it owes, and what should be the residual is the fund's own CAPITAL: its
+      surplus or deficit against what it owes, which is the number that means something.
+    - **Built as designed:** the entitlement accumulates from contributions less benefits plus
+      credited return, and equity becomes `assets − liability`. **Measured: +0.9pp unemployment,
+      JPN 29.8% → 30.66%, over the band.** The channel is real — a fund whose assets fall below
+      what it owes is in deficit, buys less, and that reaches prices and then employment. It is
+      also a DC assumption (crediting the full realised return to beneficiaries leaves the fund no
+      buffer), which is a choice worth making deliberately rather than by default.
+    - **AND THAT IS THE SECOND CORRECT CHANGE IN A ROW THAT COULD NOT LAND** (§7.177 was capacity
+      off PP&E, −0.3pp). Both are right, both trace to a DIFFERENT missing mechanism, and both
+      trip the same tripwire. **The pattern: the economy runs at ~29% unemployment, so every
+      correct change that removes a cushion crosses 30%, and the band has become the binding
+      constraint on what can be built.** That is not a reason to widen the band (rule 2) or to
+      stop making correct changes.
+    - **What it says about the work order.** §7.164 demoted MAC and EMP to consequence rows under
+      rule 18, and that was right — a number is not a work item. **But this is the other half of
+      that argument: when a number is so far out that it blocks unrelated mechanism work, closing
+      the gap between it and reality IS mechanism work.** The 29% is not a labour-market defect
+      (§7.149 fixed the one that existed); it is the accumulated cost of the supply-side rows —
+      the capital-goods sector at 8% fill (§7.168), CHAIN's shallow recipes, and the capex seed.
+      **Those are the unblocking rows now, and they unblock by making the band stop binding.**
+    - Both reverted changes are written down in full, here and in §7.177, so neither needs
+      re-deriving when their blockers clear.
