@@ -384,19 +384,21 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   // keyed by a string rebuilt for each of ~290,000 legs a week.
   const netById: number[] = [];
   const netTouched: number[] = [];
-  const netRef: PartyRef[] = [];
-  const add = (party: PartyRef, deltaUSD: number) => {
-    const id = partyId(party);
-    if (netById[id] === undefined) { netById[id] = deltaUSD; netRef[id] = party; netTouched.push(id); }
+  // The journal already carries the id; looking it up again from a reconstructed ref was half of
+  // `partyId`'s calls for nothing.
+  const add = (id: number, deltaUSD: number) => {
+    if (netById[id] === undefined) { netById[id] = deltaUSD; netTouched.push(id); }
     else netById[id] += deltaUSD;
   };
   for (let n = 0; n < nInstructions; n++) {
     const amountUSD = journal.amountUSD[n];
-    const payerRef = partyOf(journal.payerId[n]);
-    const payeeRef = partyOf(journal.payeeId[n]);
+    const payerIdx = journal.payerId[n];
+    const payeeIdx = journal.payeeId[n];
+    const payerRef = partyOf(payerIdx);
+    const payeeRef = partyOf(payeeIdx);
     report.grossUSD += amountUSD;
-    add(payerRef, -amountUSD);
-    add(payeeRef, amountUSD);
+    add(payerIdx, -amountUSD);
+    add(payeeIdx, amountUSD);
     // The ledgers below key by the reason's TEXT, so it is un-interned only for the few payments
     // whose payer or payee is one of the kinds that keeps a per-reason ledger.
     const payerKind = payerRef.kind;
@@ -423,7 +425,7 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
 
   netTouched.forEach((id) => {
-    const party = netRef[id];
+    const party = partyOf(id);
     const deltaUSD = netById[id];
     if (deltaUSD === 0) return;
     switch (party.kind) {
