@@ -58,12 +58,20 @@ export interface GameState {
   tradeInvoices: import('./trade-invoice').TradeInvoice[];
   /** G5 — open and just-closed workouts, carried across weeks. */
   estates?: import('./estate').Estate[];
-  /** CAL — accrued-but-unpaid interest by (instrument, holder); see stages/shared-helpers.ts. */
-  holderAccruedInterestUSD?: Record<string, number>;
+  /**
+   * CAL — accrued-but-unpaid interest by (instrument, holder); see stages/shared-helpers.ts.
+   *
+   * SCALE: a **Map**, carried across the week boundary as itself. It was a plain object, so every
+   * week rebuilt it into a Map on the way in and back into an object on the way out — and this
+   * ledger holds ~105,000 keys. Those two lines were the #1 and #5 self-time lines in the whole
+   * program, 5.25% of all CPU, converting a container to another container and back. Nothing
+   * serialises or hashes GameState, so the object form was buying nothing at all.
+   */
+  holderAccruedInterestUSD?: Map<string, number>;
   /** CAL — accrued-but-unpaid SOVEREIGN interest by (region, tenor bucket, party); see
    *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
    *  government paper on its own balance sheet and is not on the institutional register. */
-  sovereignAccruedInterestUSD?: Record<string, number>;
+  sovereignAccruedInterestUSD?: Map<string, number>;
   /** CASH — reserves 02b invented this week to cover balances that moved outside settlement. */
   lastCashReconcileUSD?: Partial<Record<import('./geography').RegionId, number>>;
   lastCashReconcileByClassUSD?: { corporate: number; institutional: number; sme: number };

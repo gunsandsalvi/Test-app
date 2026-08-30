@@ -303,8 +303,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     cashOverdraftUSD: 0,
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),
-    holderAccruedInterestUSD: new Map(Object.entries((state as any).holderAccruedInterestUSD ?? {})),
-    sovereignAccruedInterestUSD: new Map(Object.entries((state as any).sovereignAccruedInterestUSD ?? {})),
+    holderAccruedInterestUSD: (state as any).holderAccruedInterestUSD ?? new Map<string, number>(),
+    sovereignAccruedInterestUSD: (state as any).sovereignAccruedInterestUSD ?? new Map<string, number>(),
     tradeInvoiceFxGainUSD: 0,
     tradeInvoiceWriteOffUSD: 0,
 

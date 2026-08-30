@@ -20,7 +20,7 @@ import { runUnitBiddingStage } from './stages/05-unit-bidding';
 import { runFxAndTradeStage } from './stages/06-fx-and-trade';
 import { runCommoditiesStage } from './stages/07-commodities';
 import { runCorporateBondClearingStage } from './stages/07b-corporate-bond-clearing';
-import { buildHoldingsStore, finalizeHoldingsStore } from './stages/holdings-store';
+import { buildHoldingsStore, finalizeHoldingsStore, consolidateRegister } from './stages/holdings-store';
 import { runSettlementStage } from './stages/settlement';
 import { runSmePoolStage } from './stages/sme-pools';
 import { accrueInstitutionalIncome, markInstitutionalBooks } from './stages/institutional-balance-sheet';
@@ -240,12 +240,15 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // its own liabilities: settling reserves after it reconciled left its sheet not closing.
   run('central-bank', () => runCentralBankStage(state, ctx));
   run('12-portfolio-and-positions', () => runPortfolioAndPositionsStage(state, ctx));
+  // SCALE: one row per position before the week closes, so next week's sweeps of the register
+  // walk positions rather than the fills that built them (stages/holdings-store.ts).
+  run('register-consolidation', () => consolidateRegister(ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
     commodityFuturesBook: ctx.commodityFuturesBook,
-    holderAccruedInterestUSD: Object.fromEntries(ctx.holderAccruedInterestUSD),
-    sovereignAccruedInterestUSD: Object.fromEntries(ctx.sovereignAccruedInterestUSD),
+    holderAccruedInterestUSD: ctx.holderAccruedInterestUSD,
+    sovereignAccruedInterestUSD: ctx.sovereignAccruedInterestUSD,
     lastCashReconcileUSD: ctx.cashReconcileUSD,
     lastCashReconcileByClassUSD: ctx.cashReconcileByClassUSD,
     lastCashOverdraftUSD: ctx.cashOverdraftUSD,

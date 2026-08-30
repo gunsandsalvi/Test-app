@@ -207,3 +207,49 @@ export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
   ctx.holdingsStore?.finalize();
   ctx.holdingsStore = undefined;
 }
+
+/**
+ * SCALE — ONE ROW PER POSITION.
+ *
+ * A fill appends a row; it does not merge into the position the holder already has. So the
+ * register fragments: measured at week 15, **122,164 rows carrying 103,633 distinct
+ * `(holder, instrument)` positions — 15% of every row walked is a duplicate of another row**, and
+ * the share was still climbing. Twenty-eight sweeps a week walk this register outside the
+ * clearing store, so a duplicate row is paid for twenty-eight times.
+ *
+ * Merging them is LOSSLESS: two rows in the same instrument on the same book are one position,
+ * which is what a position is. Dollars and shares add; nothing else in a row distinguishes them.
+ * Run at the CLOSE of the week, not at the books' write-back: the late stages — ETF creations,
+ * securities lending, primary settlement, the estates — append rows of their own after the books
+ * are done, and folding before them left 9,734 duplicates standing at week 15 out of the 18,531
+ * there were. Folding at the close means every sweep of the NEXT week walks one row per position.
+ */
+export function consolidateRegister(ctx: WeeklyStepContext): void {
+  ctx.updatedInstitutionalEntities.forEach((entity) => {
+    const rows = entity.itemizedHoldings;
+    if (!rows || rows.length < 2) return;
+    // First pass is a scan, not an allocation: the overwhelming majority of books have nothing
+    // to merge in a given week and must not pay for a map they do not need.
+    const seen = new Set<string>();
+    let hasDuplicate = false;
+    for (let i = 0; i < rows.length; i++) {
+      const k = `${rows[i].instrumentType}\u0000${rows[i].instrumentId}`;
+      if (seen.has(k)) { hasDuplicate = true; break; }
+      seen.add(k);
+    }
+    if (!hasDuplicate) return;
+    const byKey = new Map<string, ItemizedHolding>();
+    const merged: ItemizedHolding[] = [];
+    rows.forEach((h) => {
+      const k = `${h.instrumentType}\u0000${h.instrumentId}`;
+      const open = byKey.get(k);
+      if (!open) { byKey.set(k, h); merged.push(h); return; }
+      // The surviving row is the FIRST one, so the register keeps the order it already had.
+      open.quantityOrNotionalUSD = (open.quantityOrNotionalUSD ?? 0) + (h.quantityOrNotionalUSD ?? 0);
+      if (h.quantityShares !== undefined) {
+        open.quantityShares = (open.quantityShares ?? 0) + h.quantityShares;
+      }
+    });
+    entity.itemizedHoldings = merged;
+  });
+}

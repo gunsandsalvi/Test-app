@@ -515,6 +515,20 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // premium — which is what an ETF's premium IS, rather than a number derived from one.
   const shareBookSpreadBps = DESK_SPREAD_BPS_BY_BOOK['equity'];
   const assemblyCostRate = basketAssemblyCostRate(shareBookSpreadBps);
+  // SCALE: the ETF_SHARE rows of the whole register, once. Each fund below asked every entity for
+  // its holding of THAT fund by reducing over the entity's entire book — 27 funds x 75 entities x
+  // ~1,600 rows is 3.2M row visits a week to read a few thousand positions. One pass, indexed by
+  // fund, gives every fund its own holders directly.
+  const etfSharesByFundByInvestor = new Map<string, Map<string, number>>();
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    (e.itemizedHoldings || []).forEach((h) => {
+      if (h.instrumentType !== 'ETF_SHARE') return;
+      let byInvestor = etfSharesByFundByInvestor.get(h.instrumentId);
+      if (!byInvestor) { byInvestor = new Map(); etfSharesByFundByInvestor.set(h.instrumentId, byInvestor); }
+      byInvestor.set(e.id, (byInvestor.get(e.id) ?? 0) + (h.quantityShares ?? 0));
+    });
+  });
+
   funds.forEach((fund) => {
     const plan = flowPlanByFund.get(fund.id);
     if (!plan) return;
@@ -524,10 +538,10 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
     // What the investors hold between them, and what each of them wants to hold.
     const heldSharesByInvestor = new Map<string, number>();
+    const heldOfThisFund = etfSharesByFundByInvestor.get(fund.id);
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.id === fund.id) return;
-      const held = (e.itemizedHoldings || []).reduce((a, h) => (
-        h.instrumentType === 'ETF_SHARE' && h.instrumentId === fund.id ? a + (h.quantityShares ?? 0) : a), 0);
+      const held = heldOfThisFund?.get(e.id) ?? 0;
       const delta = holdingsDeltaByInvestor.get(e.id)?.get(fund.id) ?? 0;
       const shares = held + delta;
       if (shares > 1e-6) heldSharesByInvestor.set(e.id, shares);
