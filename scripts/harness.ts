@@ -120,6 +120,55 @@ const clone = (s: GameState): GameState => structuredClone(s);
  * are the residual and are not itemised anywhere, so `held` is legitimately below `outstanding`
  * — only exceeding it is a defect.
  */
+/**
+ * CASH — THE UNMODELED BOUNDARY BREAKS NOW.
+ *
+ * `{ kind: 'UNMODELED' }` is a settlement party that absorbs whatever is paid to it and pays
+ * whatever is asked of it. That is exactly what a leak looks like from the inside, and for as
+ * long as nothing checked it, a stage could route a flow to nobody and every invariant would
+ * still pass. Twenty-five reasons were crossing it when this check was written.
+ *
+ * Every reason below is a FRONTIER, not a routing gap: a real counterparty this model does not
+ * name yet, with the project that will name it. Anything NOT on this list is a defect — a flow
+ * whose counterparty exists and was not used — and it fails the harness on the week it appears.
+ * Do not add a line here to make a run pass. Route the flow.
+ */
+const BOUNDARY_FRONTIERS: Record<string, string> = {
+  // The goods market does not cover the whole economy yet: a firm's revenue and its operating
+  // costs beyond what the auction cleared are paid by, and to, customers and suppliers outside
+  // the registry. Owner: the goods-market completeness work (SCALE/PROD).
+  'non-auction operating receipts': 'buyers outside the modelled registry',
+  'other opex beyond auction settlements': 'suppliers outside the modelled registry',
+  // Warehousing is a service nobody sells yet. Owner: SVC.
+  'inventory carrying cost': 'warehousing, unmodelled seller',
+  // The carriers exist and earn this as revenue; what is missing is the leg from the buyer to
+  // the carrier that actually hauled it. Owner: the freight book.
+  'freight on goods purchase': 'carrier cash leg not yet routed by lane share',
+  // CP is issued at a derived rate with no cleared book, so its holder has no name. The money
+  // funds are the real buyer. Owner: WS7 / the CP book.
+  'commercial paper issued': 'commercial paper holders, no cleared book',
+  'commercial paper redeemed': 'commercial paper holders, no cleared book',
+  // Owner: G5 — the residual claimants an estate pays once the named ones are satisfied.
+  'estate distribution': 'unnamed residual claimants in a workout',
+};
+/** Below this, a week's line is rounding rather than a flow. */
+const BOUNDARY_DE_MINIMIS_USD = 1e6;
+
+function checkBoundaryFlows(state: GameState, week: number): Violation[] {
+  const byReason = ((state as any).lastSettlement?.unmodeledByReason ?? {}) as Record<string, number>;
+  const out: Violation[] = [];
+  Object.entries(byReason).forEach(([reason, v]) => {
+    const usd = Number(v) || 0;
+    if (Math.abs(usd) < BOUNDARY_DE_MINIMIS_USD) return;
+    if (BOUNDARY_FRONTIERS[reason]) return;
+    out.push({
+      week,
+      message: `"${reason}" settled ${(usd / 1e9).toFixed(2)}B against the UNMODELED boundary — a counterparty this model can name, and did not`,
+    });
+  });
+  return out;
+}
+
 function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
   const out: Violation[] = [];
   const regionIds = ['USA', 'EUR', 'UK', 'JPN'] as const;
@@ -134,7 +183,12 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
   const companyRegionById = new Map<string, string>();
   state.companies.forEach((c: any) => {
     companyRegionById.set(c.id, c.region);
-    if (c.isDefaulted || c.mergerAcquired) return;
+    // A DEFAULTED issuer's paper is still a claim. Its estate has not distributed yet, so its
+    // holders' rows are still on their books — and excluding its ladder here scored a workout in
+    // progress as a ledger minting claims (measured: a steady 6.5% "over" in the USA from the
+    // week defaults began). A MERGED one is different: 10-mergers reassigns the paper to the
+    // acquirer, whose ladder is counted, so counting it here as well would double it.
+    if (c.mergerAcquired) return;
     const o = outstanding[c.region];
     if (!o) return;
     (c.debtTranches || []).forEach((t: any) => {
@@ -159,9 +213,10 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     e.itemizedHoldings.forEach(addHolding);
   });
   state.companies.forEach((c: any) => {
-    if (c.isDefaulted || c.mergerAcquired) return;
-    // A corporate treasury parks cash in its own government's paper (stage 08).
+    if (c.mergerAcquired) return;
+    // A corporate treasury parks cash in its own government's paper (07f).
     (c.treasuryHoldings || []).forEach(addHolding);
+    if (c.isDefaulted) return;
     const bs = c.bankBalanceSheet;
     if (!bs) return;
     // A bank's liquidity buffer is its OWN sovereign — 07c/07f give it no foreign bucket, and
@@ -1277,11 +1332,14 @@ const xbModule: HarnessModule = (() => {
       }
       // CASH: every dollar that reached the boundary this week, by reason. A boundary that
       // absorbs silently is indistinguishable from a leak, which is the whole objection to it.
+      // Anything here that is NOT a declared frontier has already failed checkBoundaryFlows;
+      // what prints is the frontier itself, and it is a list to shorten.
       const byReason = ((s as any).lastSettlement?.unmodeledByReason ?? {}) as Record<string, number>;
       const reasons = Object.entries(byReason).filter(([, v]) => Math.abs(Number(v)) > 1e6)
         .sort((a, b) => Math.abs(Number(b[1])) - Math.abs(Number(a[1])));
       if (reasons.length > 0) {
-        out.push(`  UNMODELED boundary, by reason: ${reasons.map(([r, v]) => `${r} ${B(Number(v))}`).join('; ')}`);
+        out.push(`  UNMODELED boundary, by reason: ${reasons.map(([r, v]) =>
+          `${r} ${B(Number(v))}${BOUNDARY_FRONTIERS[r] ? '' : ' [UNDECLARED]'}`).join('; ')}`);
       }
       const overdraftUSD = Number((s as any).lastCashOverdraftUSD ?? 0);
       if (overdraftUSD > 0) {
@@ -1919,6 +1977,7 @@ function runHarness() {
     checkLaborMarketIdentity(state, w);
     checkCentralBankIdentity(state, w);
     violations.push(...checkHoldingsLedgerConservation(state, w));
+    violations.push(...checkBoundaryFlows(state, w));
     checkBeneficiaryClaimsHaveHolders(state, w);
     checkSettlementClosed(state, w);
     checkGuards(state, w);

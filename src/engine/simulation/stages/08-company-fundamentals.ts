@@ -150,7 +150,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
   // WS8: this week's priced offerings, indexed by issuer, and the pending queue by issuer so a
   // company never runs two books at once. Lead banks are chosen per region from the named banks.
-  const primarySettlementByIssuerId = new Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; proceedsUSD: number }>();
+  const primarySettlementByIssuerId = new Map<string, { offering: PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; issuedUSD: number; proceedsUSD: number }>();
   ctx.primarySettlements.forEach((s) => primarySettlementByIssuerId.set(s.offering.issuerId, s));
   const pendingOfferingIssuerIds = new Set(ctx.primaryOfferingsWorking.map((o) => o.issuerId));
   // G3c: mandates go to the bank that carries the issuer's credit, and — with no incumbent —
@@ -906,8 +906,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const update = companyUpdates[comp.ticker];
     if (comp.sector === 'Banks') {
       // A bank's real flows live on its named balance sheet (02b); the company-level cash line
-      // carries only the accrual bridge, as before, now as one visible entry.
-      post('bank net income accrual', newNetIncome / 52);
+      // carries only the accrual bridge. REPORTED, never settled: every line of a bank's P&L is
+      // already booked against `bankEquityUSD` in the sector ledger (macro/banking.ts — interest
+      // earned and paid, repo interest, wholesale and deposit funding, dividends), so settling
+      // this bridge as well credited the same income to the same equity twice, out of a boundary
+      // that does not exist. Two independent quantities for one balance is rule 3.
+      post('bank net income accrual', newNetIncome / 52, undefined, false);
       // IND-R1: and its staff. A bank paying wages settles like any other payer — reserves out,
       // households' deposits in — and because a bank's payment is on its OWN account the other
       // leg is its equity, which is where a real bank's wage bill lands.
@@ -1307,7 +1311,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const o = settlement.offering;
       // Best-efforts until G3: the tranche created is what the market actually took — a
       // partially-placed deal raises less, which is real.
-      const placedUSD = Math.max(0, Math.min(o.sizeUSD, (settlement as any).marketTakeUSD ?? o.sizeUSD));
+      // WS8: what came into EXISTENCE, not what the book bought. Under firm commitment the lead
+      // holds the residual, so the tranche is the whole deal — see `issuedUSD`.
+      const placedUSD = Math.max(0, Math.min(o.sizeUSD, settlement.issuedUSD ?? o.sizeUSD));
       const newTranche: DebtTranche = o.rateType === 'FIXED'
         ? {
             id: `${comp.id}-${o.purpose}-${nextWeek}`,

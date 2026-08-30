@@ -250,6 +250,66 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         };
       });
 
+      // G3a: A DESK IS A HOLDER. Its sovereign and bill inventory sits on the bank's own
+      // `dealerDeskInventory`, keyed by the bucket instrument id, and nothing here redeemed it —
+      // so a desk kept a claim on paper that had matured and the treasury paid somebody else's
+      // share of it to the boundary.
+      ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
+        if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
+        const sheet = c.bankBalanceSheet;
+        const inv = sheet.dealerDeskInventory;
+        if (!inv) return c;
+        let redeemedUSD = 0;
+        const newInv: typeof inv = { ...inv };
+        (['sovereign bond', 'bill'] as const).forEach(book => {
+          const rows = inv[book];
+          if (!rows) return;
+          newInv[book] = rows.map(r => {
+            const key = r.instrumentId.replace(`${regionId}-GOV-`, '');
+            const fraction = redeemedFractionByBucket.get(key) ?? 0;
+            if (fraction <= 0) return r;
+            redeemedUSD += r.inventoryUSD * fraction;
+            return { ...r, inventoryUSD: r.inventoryUSD * (1 - fraction) };
+          }).filter(r => Math.abs(r.inventoryUSD) > 1);
+        });
+        if (!(Math.abs(redeemedUSD) > 0)) return c;
+        redemptionPaidUSD += redeemedUSD;
+        pay(ctx, {
+          payer: { kind: 'GOVERNMENT', region: regionId },
+          payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
+          amountUSD: redeemedUSD,
+          reason: 'sovereign redemption',
+        });
+        // The write goes on `updatedCompanies`, not `companyUpdates`: stage 08 has already
+        // rebuilt the array from that map and nothing reads it again this week.
+        return { ...c, bankBalanceSheet: { ...sheet, dealerDeskInventory: newInv } };
+      });
+
+      // CASH: and the CORPORATE TREASURIES, which hold bills since they started bidding for them
+      // in 07f. Their paper matured like everyone else's and nothing repaid them.
+      ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
+        if (c.region !== regionId || c.isBankEntity) return c;
+        const held = c.treasuryHoldings;
+        if (!held || held.length === 0) return c;
+        let redeemedUSD = 0;
+        const newHeld = held.map(h => {
+          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
+          const fraction = redeemedFractionByBucket.get(key) ?? 0;
+          if (fraction <= 0) return h;
+          redeemedUSD += h.quantityOrNotionalUSD * fraction;
+          return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 - fraction) };
+        }).filter(h => h.quantityOrNotionalUSD > 1);
+        if (!(redeemedUSD > 0)) return c;
+        redemptionPaidUSD += redeemedUSD;
+        pay(ctx, {
+          payer: { kind: 'GOVERNMENT', region: regionId },
+          payee: { kind: 'COMPANY', ticker: c.ticker },
+          amountUSD: redeemedUSD,
+          reason: 'sovereign redemption',
+        });
+        return { ...c, treasuryHoldings: newHeld };
+      });
+
       // PUB2b: the central bank is a holder too, and used to be the one holder that never got
       // repaid — its book sat frozen at its seeded level while the tranches behind it matured,
       // so it held a claim on debt that no longer existed and its share of the stock drifted
@@ -267,8 +327,11 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         cbSheet.sovereignHoldingsByTenor = remaining;
       }
 
+      // XB1: a holder of THIS region's paper, wherever it is domiciled. The `entity.region !==
+      // regionId` filter that stood here repaid only the issuer's own institutions, so a foreign
+      // holder's position never shrank and never got its money — the row below already tests
+      // `h.issuerRegion`, which is the only test that belongs here.
       ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map(entity => {
-        if (entity.region !== regionId) return entity;
         let touched = false;
         let redeemedCashUSD = 0;
         const newHoldings = entity.itemizedHoldings.map(h => {

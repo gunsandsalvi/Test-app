@@ -27,6 +27,18 @@ import { leverageHeadroomUSD } from '../macro/banking';
  * its closing slice recorded in §6. It is not an ownership share and nothing may treat it as
  * one — `equityOwnership` and its siblings open at zero and are measured at the end of week 1.
  *
+ * THE SOVEREIGN SLICE IS GONE TOO, and for the reason the bank pass below already states in its
+ * own comment: banks are the residual holder of what the central bank and the institutions do not
+ * take, and their leverage headroom caps them well short of it. Measured at week 0, the named
+ * books held 79.6% of every region's sovereign stock and 20.4% — 137B in the USA alone — belonged
+ * to NOBODY. That residual is §7.124's, it is what OWN7 had to carve back out of the float so the
+ * ledger stopped minting claims, and it is what made a maturing tranche pay 55B to the UNMODELED
+ * boundary under `sovereign redemption (unmodeled holders)`. A bond nobody holds is not a bond.
+ * The institutions take whatever the central bank and the capital-constrained banks leave, because
+ * in this model they ARE the household and foreign-official holders — pensions and insurers is
+ * how those sectors own government paper. The share is computed after the bank pass, from what is
+ * actually left, rather than stated in front of it.
+ *
  * THE CREDIT SLICE IS GONE, and it was never a cold-start problem. `corpBond: 0.45` sized the
  * institutions' opening credit book at 45% of a debt stock that counts every tranche — floating,
  * bank facilities, commercial paper, public and private alike — and then placed the whole of it
@@ -43,7 +55,7 @@ import { leverageHeadroomUSD } from '../macro/banking';
  * founders, households, foreign official — and OWN7's float rule is what keeps their paper out
  * of the auction rather than a share pretending to own it.
  */
-const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42, sovBond: 0.30 };
+const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42 };
 
 import { isActiveCompany } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
@@ -343,7 +355,9 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const totalSovDebt = reg.debtToGdpPctBottomUp * reg.derivedNominalGdpUSD;
 
     reg.institutionalSector.equityHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.equity * totalMarketCap).toFixed(0));
-    reg.institutionalSector.sovBondHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.sovBond * totalSovDebt).toFixed(0));
+    // OWN6: the sovereign pool is the RESIDUAL, set after the bank pass below once the central
+    // bank's and the banks' books are known. Opened at zero so the bank pass reserves nothing.
+    reg.institutionalSector.sovBondHoldingsUSD = 0;
     // The credit book is placed whole, off the candidate lists below rather than off a share of
     // `totalCorpDebt` — see INSTITUTIONAL_OPENING_BOOK_SHARE's doc for what that share minted.
 
@@ -529,6 +543,13 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
         Number(regionBanksForSov.reduce((sum, b) => sum + f(b.bankBalanceSheet!), 0).toFixed(0));
       reg.bankingSector.sovereignBondHoldingsByTenor = aggByTenor;
       reg.bankingSector.sovereignBondHoldingsUSD = sumBank(bs => bs.sovereignBondHoldingsUSD);
+      // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
+      // institutions'. Every bond now has a holder, which is what stops the float minting claims
+      // and stops a redemption paying somebody who is not there.
+      reg.institutionalSector.sovBondHoldingsUSD = Number(Math.max(0,
+        totalSovBucketedUSD
+        - totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE
+        - reg.bankingSector.sovereignBondHoldingsUSD).toFixed(0));
       reg.bankingSector.depositsUSD = sumBank(bs => bs.depositsUSD);
       reg.bankingSector.cashReservesUSD = sumBank(bs => bs.cashReservesUSD);
       reg.bankingSector.bankEquityUSD = sumBank(bs => bs.bankEquityUSD);

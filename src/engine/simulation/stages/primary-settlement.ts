@@ -54,7 +54,7 @@ export function settlePricedOfferings(
 
     if (outcome.withdrawn) {
       ctx.primarySettlements.set(offering.id, {
-        offering, clearedStat: outcome.clearedStat, withdrawn: true, marketTakeUSD: 0, proceedsUSD: 0,
+        offering, clearedStat: outcome.clearedStat, withdrawn: true, marketTakeUSD: 0, issuedUSD: 0, proceedsUSD: 0,
       });
       return;
     }
@@ -124,6 +124,10 @@ export function settlePricedOfferings(
       clearedStat: outcome.clearedStat,
       withdrawn: false,
       marketTakeUSD: outcome.marketTakeUSD,
+      // Firm commitment issues the WHOLE deal — the lead owns what the book did not take, and
+      // that paper has to exist for the lead to own it. Creating the tranche at the market take
+      // instead had the lead's desk holding a claim on nothing.
+      issuedUSD: firmCommitment ? offering.sizeUSD : outcome.marketTakeUSD,
       proceedsUSD: Number((grossUSD - feeUSD).toFixed(0)),
     });
   });

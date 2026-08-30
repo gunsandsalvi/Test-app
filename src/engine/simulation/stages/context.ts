@@ -80,7 +80,11 @@ export interface WeeklyStepContext {
    * crunch, measurable rather than an index. Read by the diagnostics and (post-MS) by the
    * demand side that lost the funding. */
   g2DeclinedOriginationUSD: Record<import('../../../types').RegionId, number>;
-  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; proceedsUSD: number }>;
+  /** `issuedUSD` is the paper that came into EXISTENCE — the whole deal under firm commitment,
+   *  whatever the book took — while `marketTakeUSD` is only the part the book bought. They differ
+   *  by the residual the lead is left holding, and creating the tranche at the take instead of at
+   *  the issue is how the lead came to hold paper that did not exist (a ledger minting claims). */
+  primarySettlements: Map<string, { offering: import('../../../domain/primary-market').PrimaryOffering; clearedStat: number; withdrawn: boolean; marketTakeUSD: number; issuedUSD: number; proceedsUSD: number }>;
 
   // Main working state, threaded and reassigned stage to stage
   updatedRegions: Record<RegionId, Region>;
