@@ -264,7 +264,7 @@ a clamp cannot be deleted before the mechanism under it exists.
 | 3 | depth | **PROD — firm productivity and innovation** | **NOT STARTED.** Prereq IND. Productivity as something a firm invests in and gains. |
 | 4 | depth | **CRE — commercial property and leases** | **NOT STARTED.** Prereqs HH and G2. Firms rent premises from someone. |
 | 5 | depth | **TAXR — corporate tax, really** | **The folded finding closed (§7.206): one owner for the rate.** The row's own substance is untouched — a real tax BASE (depreciation shield, loss carry-forward, deferred tax) and the cross-border half, which needs MNC. |
-| 6 | depth | **SCALE — universe scale-up under a wall-clock budget** | **MEASUREMENT-GATED: its charter opens "profile first".** Owns the float half of the damper defect — thin books are why prints pin. Wave 1 landed (§7.81); wave 2 is columnar 05/contracts/plans. |
+| 6 | depth | **SCALE — universe scale-up under a wall-clock budget** | **PROFILED (§7.212): 1872 → 1756 ms against a 300 ms target, and the remainder is not defects.** Worker parallelism is measured DEAD on 4 cores, so wave 2's columnar state is the only route — and it is a world relabel that invalidates §7.211's measurement programme. **That trade is a decision, not a task.** Owns the float half of the damper defect — thin books are why prints pin. Wave 1 landed (§7.81); wave 2 is columnar 05/contracts/plans. |
 | 7 | last | **S-final — the validation gate** | Everything above, plus the measurement debt below. |
 | 8 | last | **AU — Aurora, the UI rebuild** | Everything above. UI state moves out of `GameState`, which the determinism hash spans. |
 
@@ -1460,3 +1460,36 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        the first collection says the honest thing: **the mechanisms are increasingly real and the
        OUTCOMES are not yet plausible.** Rule 12's "measure once at the end" assumes you can measure
        at all.
+212. **THE OPTIMIZATION PASS — profile first, and the target does not come out of bug-fixing.**
+     Target: under 300 ms per cycle. Start: **1872 ms.** After this pass: **1756 ms.** The gap is
+     not made of defects, and this record exists so the next attempt does not re-derive that.
+     - **ONE REAL REGRESSION, AND IT WAS MINE.** Stage 08 calls `getBaseAnnualWageUSD` twice per
+       company — ~5,000 times a week — and §7.208's COH3 turned that function's body from a
+       constant multiply into a walk of the whole registry. Worse, the derivation inside it ran
+       `Object.values(INDUSTRY_REGISTRY).find(...)` INSIDE its own per-sub-unit loop, so one call
+       was quadratic in the registry. Every input is fixed for a run, so the sub-unit→sector map is
+       built once and both the labour share and the per-region wage table are memoised. **Stage 08:
+       548 → 460 ms.** Same shape in `recipeIntensityOf`, which allocated and reduced an array per
+       call for a constant.
+     - **THE WORKER POOL BUYS NOTHING HERE, MEASURED.** `CLEARING_WORKERS` is opt-in and off by
+       default. At 4 workers stage 05 goes 363 → 369 ms; at 8, 390. **This box has 4 cores**, and
+       the pool's own gate only shards books of 32+ rows, so most sub-unit auctions never reach it
+       and the ones that do pay sharding overhead against three real cores. §7.773's "sub-300 needs
+       worker parallelism" is therefore **unreachable on this hardware at any amount of work.**
+     - **WHERE THE 1756 ms ACTUALLY IS.** 08 at 460 (26%) is 2,500 companies × an 1,800-line body,
+       and section timers say it is FLAT — no hot block, seven sections between 13 and 116 ms.
+       05 at 381 (22%) is **entirely** the auction engine (measured: 333–370 ms of the 363 ms
+       stage). estate-resolution at 176 (10%). The rest is spread across forty stages. **There is
+       no remaining hot spot; there is a universe being walked.**
+     - **§7.777's conclusion stands and this pass confirms it from the other side:** sub-300
+       requires the state itself to move to columnar typed arrays. **And that is a WORLD RELABEL** —
+       it reorders floating-point accumulation, so every number measured since §7.209 stops being
+       comparable. That is a real cost now in a way it was not before, because §7.211 finally has
+       a measurement programme running against those numbers.
+     - **Indexed the estate stage anyway** (it rebuilt the entire institutional-entity array once
+       per claim, searched companies linearly per claim, and re-derived per-estate scalars from
+       full-universe walks). **209 → 176 ms, which is less than it looks like it should be:** the
+       stage's real cost is the per-claim scan of one holder's book, and there were 11,000 claims
+       open by week 16 — a number that is itself a symptom of §7.211's divergence. **Part of this
+       cycle time is the broken economy, not the engine.**
+     - Everything in this pass is **bit-exact**: 20 weeks of prints identical field for field.
