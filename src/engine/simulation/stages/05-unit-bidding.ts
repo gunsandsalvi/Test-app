@@ -20,7 +20,7 @@
  */
 
 import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Company } from '../../../types';
-import { categoryPriceTier, householdPriceCeilingMultiple, householdDemandLadder } from '../../../domain/industry';
+import { categoryPriceTier, householdBudgetReachMultiple, householdDemandLadder } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
@@ -1075,13 +1075,12 @@ function buildRegionDemandPlans(
       // that single number was standing in for a whole schedule — which is why the two honest
       // derivations of it differed by two orders of magnitude (rule 15).
       //
-      // The ladder is the curve: saturating below at what the household physically has use for,
-      // budget-constrained above (`units = budget / price`), and reaching only as far up as the
-      // budget it could redirect onto this tier. Every input is measured. **No elasticity and no
-      // premium anywhere** — a household facing a dearer luxury buys less of it, which the curve
-      // says on its own.
+      // The ladder is the curve: saturating at what the household physically has use for, and
+      // sloping down because `units = money / price` and the money is finite. Every input is
+      // measured. **No elasticity, no premium and no price ceiling anywhere** — a household facing
+      // a dearer luxury buys less of it, which the curve says on its own.
       const hs = reg.householdState;
-      const ceilingMultiple = householdPriceCeilingMultiple(categoryPriceTier(subUnitId), {
+      const budgetReachMultiple = householdBudgetReachMultiple(categoryPriceTier(subUnitId), {
         STAPLE: hs.stapleSpendShare, STANDARD: hs.standardSpendShare, LUXURY: hs.luxurySpendShare,
       });
       // What it has use for: the registry's own per-capita consumption intensity, which is the
@@ -1096,7 +1095,7 @@ function buildRegionDemandPlans(
       householdDemandLadder({
         weeklyBudgetUSD: hhDemandUnits * shelfPriceUSD,
         referencePriceUSD,
-        ceilingMultiple,
+        budgetReachMultiple,
         satiationUnits,
       }).forEach((rung) => {
         if (rung.units <= 0.001) return;

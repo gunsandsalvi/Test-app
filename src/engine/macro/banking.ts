@@ -365,8 +365,17 @@ export function evolveBankingSector(
     policyRate + Math.max(0, ownWholesaleSpreadBps) / 10000,
     Math.max(0, competingMmfYieldAnnual)
   );
-  const fundingPressure = weeklySavingsInflowUSD > 0
-    ? Math.max(0, Math.min(1, householdMmfDiversionUSD / (weeklySavingsInflowUSD * savingsToDepositsShareValue)))
+  // What share of the saving that was HEADED FOR A DEPOSIT walked to the money fund instead. The
+  // guard has to be on the denominator, not on the inflow: §7.204 made the liquid-saving share a
+  // MEASURED number, and a week in which none of the saving was headed for a deposit makes it
+  // zero — at which point this asked `0/0` and got NaN. Nothing downstream stopped it: NaN passes
+  // straight through `Math.max`/`Math.min`, into the deposit RATE, into the deposit STOCK, and the
+  // household deposit line IS that stock (HH4d), so one such week turned the whole household
+  // balance sheet into NaN and the goods market's final-demand vector with it. A zero denominator
+  // is not infinite pressure — if no saving was on offer as a deposit, none of it can have walked.
+  const contestableInflowUSD = weeklySavingsInflowUSD * savingsToDepositsShareValue;
+  const fundingPressure = contestableInflowUSD > 0
+    ? Math.max(0, Math.min(1, householdMmfDiversionUSD / contestableInflowUSD))
     : 0;
   const stressedUSD = stressedOutflowUSD(prevBanking) * LIQUIDITY_COVERAGE_RATIO;
   const liquidityShortfallShare = stressedUSD > 0

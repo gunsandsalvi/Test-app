@@ -929,6 +929,13 @@ export function smePoolEmployment(industry: Industry, annualRevenueUSD: number, 
  */
 export function totalOutputFromFinalDemand(finalDemandBySubUnit: Record<string, number>): Record<string, number> {
   const ids = allSubUnits.map(su => su.unitId);
+  // A non-finite entry never converges either, and reporting that as a divergent matrix sends the
+  // reader to the recipes — which are fine. The input is the caller's, so name it as the caller's.
+  const bad = ids.filter(id => !isFinite(finalDemandBySubUnit[id] ?? 0));
+  if (bad.length > 0) {
+    defect(`final demand is not a finite number for: ${bad.slice(0, 6).join(', ')}`
+      + `${bad.length > 6 ? ` (+${bad.length - 6} more)` : ''}`);
+  }
   const X: Record<string, number> = {};
   ids.forEach(id => { X[id] = Math.max(0, finalDemandBySubUnit[id] ?? 0); });
 
