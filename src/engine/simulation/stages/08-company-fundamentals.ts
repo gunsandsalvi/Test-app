@@ -18,13 +18,14 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { recurringRevenueShare, SUBSCRIPTION_WEEKLY_CHURN } from '../../../domain/industry-registry';
+import { RECEIPTS_MEASUREMENT_WEIGHT } from '../../../domain/company';
 import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../../../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
 import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
-import { SECTOR_PRICING_POWER, SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
+import { SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, applyHolderInterestAccruals, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate, accrueHoldersInterest, payHoldersAccruedInterest } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks, findRegionMmf } from './money-market-fund';
@@ -428,12 +429,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // Consumer Revenue Beta
       const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
 
-      // Weekly revenue transition
-      const noise = (random() - 0.5) * 0.015;
+      // HC3b: `noise` and `pricingPowerBeta` were inputs to the revenue formula and went with it.
+      // A random draw is gone from every operating firm's week, which SHIFTS THE RNG STREAM — a
+      // declared world relabel (rule 10), recorded in the plan. `baseRev` stays: the capex
+      // decision below is genuinely sized against the firm's baseline scale.
       const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
-
-      // Re-anchor target annual revenue to baseline capacity adjusted for regional GDP and consumer momentum
-      const pricingPowerBeta = SECTOR_PRICING_POWER[comp.sector] ?? 0.65;
       // Operating margins update (Wage-Push compression, capacity decay, and competitive crowding)
       const capacityDecayPenalty = Math.min(0.08, (comp.maintenanceShortfallStreak ?? 0) * 0.003); // up to 8% margin erosion after ~27 consecutive underfunded weeks
       const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
@@ -600,7 +600,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
       const growthInvestmentSignal = (((estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))) * newExecutionQuality);
 
-      let categoryDrivenGrowth = 0;
       updatedProductLines = (comp.productLines || []).map((line) => {
         const catDemand = reg.categoryDemand[line.subUnitId];
         if (!catDemand) {
@@ -616,9 +615,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         const shareGainRate = (newCompetitiveness * 0.035 - dominanceDrag);
         const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // 0 floor only — a market share literally cannot go negative, this is a math guard not a behavioral clamp
 
-        const lineGrowth = categoryGrowth + shareGainRate;
-
-        categoryDrivenGrowth += (isFinite(lineGrowth) ? lineGrowth : 0) * (isFinite(line.revenueShare) ? line.revenueShare : 1);
+        // HC3b: the line's competitiveness and market share still evolve — they are what decides
+        // how much it WINS in the auction — but they no longer add up to a growth rate that is
+        // then applied to revenue. Revenue is what the auction settled; see below.
         const shouldSnapshot = nextWeek % 13 === 0;
         return {
           ...line,
@@ -629,34 +628,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         };
       });
 
-      let commodityPriceGrowthAdjustment = 0;
-      if ((comp as any).producedCommodityId) {
-        const ownCommodity = updatedCommodities.find((c: any) => c.id === (comp as any).producedCommodityId || c.symbol === (comp as any).producedCommodityId);
-        const baselinePrice = (ownCommodity as any)?.allTimeBaselinePrice ?? ownCommodity?.historicalPrices?.[0];
-        if (ownCommodity && baselinePrice > 0) {
-          const priceRatioVsBaseline = ownCommodity.spotPrice / baselinePrice;
-          commodityPriceGrowthAdjustment = 0.5 * Math.tanh((priceRatioVsBaseline - 1) * 1.5);
-        }
-      }
-      categoryDrivenGrowth += commodityPriceGrowthAdjustment;
-
-      const buffer = comp.demandShockLagBuffer || [];
-      const updatedBuffer = [...buffer, categoryDrivenGrowth].slice(-8);
-      const laggedCategoryGrowth = updatedBuffer.length > 2 ? updatedBuffer[updatedBuffer.length - 1 - 2] : updatedBuffer[0] ?? categoryDrivenGrowth;
-      comp.demandShockLagBuffer = updatedBuffer;
+      // HC3b: the commodity-price growth adjustment that stood here is gone with the formula it
+      // fed. A producer's revenue rises with its commodity's price because it SELLS units at that
+      // price, and the auction already charges it — adding a tanh of the price ratio on top was
+      // the same fact a second time (rule 3).
 
       // XB3a deleted the export revenue boost that used to sit here. A firm's foreign sales are
       // not a growth adjustment applied to a formula — they are its real fills in stage 05's
       // world book, already settled into salesUSD and cash by the time this stage runs. Adding a
       // second export term on top counted the same sale twice, from two mechanisms (rule 3).
-      const distressPenalty = comp.isDefaulted ? 0.50 : 1.0;
-      const annualGrowthRate = laggedCategoryGrowth + noise + reg.inflation * pricingPowerBeta;
-
-      const weeklyGrowthRate = Math.max(-0.05, Math.min(0.05, annualGrowthRate / 52));
-      const targetAnnualRevenue = baseRev * (1 + weeklyGrowthRate) * distressPenalty * newInputSupplyConstraintFactor;
-
-      // Smooth transition to target revenue (no exponential weekly compounding)
-      newRevenue = Math.max(10, (comp.annualRevenue * 0.90) + (targetAnnualRevenue * 0.10));
 
       const industrialLine = (comp.productLines || []).find(l => l.subUnitId === 'heavy_equipment' || l.subUnitId === 'industrial_automation' || l.subUnitId === 'industrial_chemicals');
       let unsoldThisWeekUSD = 0;
@@ -675,7 +655,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // reading stage05's own figures directly keeps one authoritative production number.
       const update = companyUpdates[comp.ticker];
       const salesUSD = update?.salesUSD ?? 0;
-      targetProductionUSD = update?._targetProductionUSD ?? newRevenue / 52;
+      // The production plan is stage 05's own, made against this firm's real capacity; the
+      // fallback is last week's run-rate, not a revenue this stage has not computed yet.
+      targetProductionUSD = update?._targetProductionUSD ?? comp.annualRevenue / 52;
       productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
       unsoldThisWeekUSD = Math.max(0, targetProductionUSD - salesUSD);
       newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
@@ -698,20 +680,55 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // between a software company and a steel mill, and the model could not express it** — the
       // verify criterion is that a subscription business's revenue survives a quarter with no
       // new sales while a unit seller's does not.
+      // HC3b — REVENUE IS WHAT WAS SOLD. THE FORMULA IS GONE.
+      //
+      // What stood above this was a statistical revenue path: last week's revenue grown by a
+      // lagged category-demand rate plus a random draw plus inflation times a sector pricing
+      // beta, the weekly rate clamped to +/-5%, smoothed 90/10 into the previous print, and then
+      // corrected DOWNWARD by half of whatever production had not sold. So a firm's revenue was a
+      // number about its CATEGORY with a real-sales correction bolted onto it — two
+      // representations of one quantity (rule 3), and a quantity that is an outcome stated as a
+      // formula (rule 13).
+      //
+      // It was also revenue with no payer, and the model already said so out loud:
+      // `non-auction operating receipts`, the largest declared line on the UNMODELED boundary, is
+      // exactly `newRevenue / 52 - what actually settled`. Every dollar of the gap was income from
+      // customers this model could not name (rule 14), and the frontier existed because the
+      // formula kept producing it.
+      //
+      // A sale is a buyer and a seller. Stage 05 ran this week's auction for every one of this
+      // firm's product lines against real named buyers before this stage ran, and what it sold is
+      // `salesUSD`. That is the revenue — annualised, and entering at the same measurement weight
+      // a pool's receipts do, for the same reason: one week of clearing is not a year of trade.
+      //
+      // Production that did not sell is not revenue BY CONSTRUCTION now, so the unsold correction
+      // goes with the formula it was correcting. And the 50% haircut a defaulted firm's revenue
+      // took goes too: a defaulted firm's revenue falls when its customers stop buying from it,
+      // and if nothing in the auction makes them, that is a finding for the estate work rather
+      // than a multiplier to keep here.
+      //
+      // A SUBSCRIPTION is still not a unit. The sale bought a contract, so it keeps paying until
+      // it churns, and a week the seller could not ship does not cost it the contract. That half
+      // is carried as a real base below — it is a recognition rule about what was sold, not a
+      // formula standing in for a market, which is why it survives the change intact.
       const recurringShare = recurringRevenueShare(comp.productLines || []);
       const unitShare = 1 - recurringShare;
-      // Unsold production only costs the UNIT half its revenue.
-      const revenueAdjustmentForUnsold = -unsoldThisWeekUSD * 0.5 * unitShare;
-      newRevenue = Math.max(10, newRevenue + revenueAdjustmentForUnsold);
+      const priorRecurringUSD = recurringShare > 0
+        ? (comp.recurringRevenueBaseUSD ?? comp.annualRevenue * recurringShare)
+        : 0;
+      // The unit book: what last week's unit revenue was, moved toward what this week actually
+      // sold.
+      const priorUnitAnnualUSD = Math.max(0, comp.annualRevenue - priorRecurringUSD);
+      const unitRevenueUSD = priorUnitAnnualUSD * (1 - RECEIPTS_MEASUREMENT_WEIGHT)
+        + (salesUSD * unitShare * 52) * RECEIPTS_MEASUREMENT_WEIGHT;
       if (recurringShare > 0) {
         // The base decays at its own churn and is renewed by the contracted share of what
         // cleared. Seeded from the firm's own opening revenue the first time it is read.
-        const priorBaseUSD = comp.recurringRevenueBaseUSD ?? comp.annualRevenue * recurringShare;
-        newRecurringBaseUSD = priorBaseUSD * (1 - SUBSCRIPTION_WEEKLY_CHURN)
+        newRecurringBaseUSD = priorRecurringUSD * (1 - SUBSCRIPTION_WEEKLY_CHURN)
           + salesUSD * recurringShare * 52 * SUBSCRIPTION_WEEKLY_CHURN;
-        // The firm's revenue is its contracted base plus whatever its unit lines sold.
-        newRevenue = Math.max(10, newRecurringBaseUSD + newRevenue * unitShare);
       }
+      // The firm's revenue is its contracted base plus what its unit lines sold.
+      newRevenue = Math.max(10, (recurringShare > 0 ? newRecurringBaseUSD ?? 0 : 0) + unitRevenueUSD);
       comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
 
       // LAB: PAYROLL IS A REAL COST. `newEbitdaMargin` carries the firm's non-labor cost

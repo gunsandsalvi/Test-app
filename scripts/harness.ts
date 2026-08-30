@@ -134,10 +134,15 @@ const clone = (s: GameState): GameState => structuredClone(s);
  * Do not add a line here to make a run pass. Route the flow.
  */
 const BOUNDARY_FRONTIERS: Record<string, string> = {
-  // The goods market does not cover the whole economy yet: a firm's revenue and its operating
-  // costs beyond what the auction cleared are paid by, and to, customers and suppliers outside
-  // the registry. Owner: the goods-market completeness work (SCALE/PROD).
-  'non-auction operating receipts': 'buyers outside the modelled registry',
+  // HC3b anchored revenue to what the auction actually settled, so this is no longer "revenue
+  // from customers nobody can name" — it is the ACCRUAL LAG between a week's sales and the
+  // annualised revenue they move, which `max(0, ...)` keeps only the positive side of. It should
+  // now be small and mean-reverting rather than structural; a line that stays large means the
+  // sales anchor is not binding somewhere. **Closing it entirely is a PAIR with the cost line
+  // below** — recognised revenue and recognised cost are both accruals, and removing one side's
+  // boundary settlement without the other makes every firm bleed cash. Owner: the goods-market
+  // completeness work (SCALE/PROD).
+  'non-auction operating receipts': 'the accrual lag between a week of sales and annual revenue',
   'other opex beyond auction settlements': 'suppliers outside the modelled registry',
   // IND16 gave warehousing a seller: the distribution tier holds a firm's stock and is paid for
   // it by name. What still reaches the boundary is a region with no distribution firm at all,

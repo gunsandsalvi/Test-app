@@ -19,6 +19,7 @@
 
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { RECEIPTS_MEASUREMENT_WEIGHT } from '../../../domain/company';
 
 /**
  * How fast a measured margin is allowed to move the pool's carried margin. A week of receipts is
@@ -26,7 +27,9 @@ import { WeeklyStepContext } from './context';
  * carried margin is an exponential average of what it measurably earned, the same way a firm's
  * reported margin is a quarter of trading rather than a day of it.
  */
-const MARGIN_MEASUREMENT_WEIGHT = 0.08;
+/** HC3b: one owner for the measurement weight — a pool's receipts and a named firm's revenue are
+ *  the same measurement of the same auction (domain/company.ts). */
+const MARGIN_MEASUREMENT_WEIGHT = RECEIPTS_MEASUREMENT_WEIGHT;
 
 /** Weeks of wages a pool wants in the bank. Below this it is cash-constrained and behaves like
  *  it: investment first, then headcount. Small firms really do run on a few weeks of payroll. */

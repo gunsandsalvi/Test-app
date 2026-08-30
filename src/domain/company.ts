@@ -540,7 +540,6 @@ export interface Company {
   lastWeekPurchasesUSD?: number;
   treasuryHoldings: ItemizedHolding[];
   producedCommodityId?: string;
-  demandShockLagBuffer?: number[];
 }
 /**
  * Public-market membership test.
@@ -684,3 +683,17 @@ export function tranchePaymentDue(t: DebtTranche, week: number): { due: boolean;
   const since = week - anchor;
   return { due: since > 0 && since % periodWeeks === 0, weeksCovered: periodWeeks };
 }
+
+/**
+ * HC3b — HOW FAST A MEASURED WEEK MOVES AN ANNUAL FIGURE.
+ *
+ * One week of clearing is not a year of trade: a firm that had a quiet week did not lose a
+ * twelfth of its business, and one that had a good week did not double. So an annualised receipt
+ * enters the firm's own revenue at this weight and the rest is what it was.
+ *
+ * It has one owner because it is one statement. `sme-pools.ts` had it privately as
+ * `MARGIN_MEASUREMENT_WEIGHT` for exactly the same purpose on exactly the same quantity — a
+ * pool's measured receipts and margin — and a named firm's revenue is the same measurement of
+ * the same auction (rule 3).
+ */
+export const RECEIPTS_MEASUREMENT_WEIGHT = 0.08;

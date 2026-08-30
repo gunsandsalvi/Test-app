@@ -340,7 +340,6 @@ function buildCarrierCompany(
     outputInventoryBySubUnit: {}, inputInventoryBySubUnit: {},
     recentFulfillmentEMA: 1.0,
     treasuryHoldings: [],
-    demandShockLagBuffer: [],
     revenueHistory: [annualRevenue],
     _carrierIndex: idx,
   } as unknown as Company;
