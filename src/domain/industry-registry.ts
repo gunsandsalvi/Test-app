@@ -119,6 +119,25 @@ export interface IndustrySpec {
    * outcome of where demand actually is rather than five hardcoded GDP shares (§5-SEG).
    */
   smeShareOfActivity: number;
+  /**
+   * IND4 — how an industry FUNDS itself and what it pays out. Two structural facts, both
+   * primitives in rule 4's sense (a relationship between an industry's assets and its balance
+   * sheet, not any real firm's observed capital structure).
+   *
+   * `fixedRateTilt` multiplies the rating-based fixed/floating split: long-lived assets are
+   * funded long (a grid, a network, a building), asset-light and fast-obsolescing ones borrow
+   * short and floating. Rating still decides the base — an issuer's access to the bond market is
+   * its credit quality's — and this tilts it by what the money is buying.
+   *
+   * `maxPayoutRatio` is the most of its earnings a board in this industry will distribute. It
+   * was one number, 0.6, for every firm in the model: a mature network operator and a growth
+   * software firm had identical payout discipline, which is the single clearest thing that is
+   * NOT alike across industries.
+   *
+   * NOT here, deliberately: `cyclicalityBeta`, which §5-IND4 originally listed. Beta is a
+   * MEASUREMENT now (§7.134) — stating one per industry would restore exactly what IDX deleted.
+   */
+  financingProfile: { fixedRateTilt: number; maxPayoutRatio: number };
   subUnits: SubUnitSpec[];
 }
 
@@ -126,6 +145,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Energy: {
     sector: 'Energy',
     smeShareOfActivity: 0.15,
+    financingProfile: { fixedRateTilt: 1.15, maxPayoutRatio: 0.7 },
     subUnits: [
       {
         unitId: 'upstream_extraction',
@@ -180,6 +200,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   MaterialsChemicals: {
     sector: 'Industrials',
     smeShareOfActivity: 0.25,
+    financingProfile: { fixedRateTilt: 1.1, maxPayoutRatio: 0.55 },
     subUnits: [
       {
         unitId: 'industrial_chemicals',
@@ -247,6 +268,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   IndustrialsMachinery: {
     sector: 'Industrials',
     smeShareOfActivity: 0.42,
+    financingProfile: { fixedRateTilt: 1.05, maxPayoutRatio: 0.5 },
     subUnits: [
       {
         unitId: 'heavy_equipment',
@@ -277,6 +299,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   AerospaceDefense: {
     sector: 'Industrials',
     smeShareOfActivity: 0.14,
+    financingProfile: { fixedRateTilt: 1.1, maxPayoutRatio: 0.45 },
     subUnits: [
       {
         unitId: 'defense_systems',
@@ -305,6 +328,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   AutomotiveTransport: {
     sector: 'Consumer',
     smeShareOfActivity: 0.22,
+    financingProfile: { fixedRateTilt: 1.05, maxPayoutRatio: 0.45 },
     subUnits: [
       {
         unitId: 'passenger_vehicles',
@@ -334,6 +358,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   TechHardwareSemis: {
     sector: 'Tech',
     smeShareOfActivity: 0.12,
+    financingProfile: { fixedRateTilt: 0.9, maxPayoutRatio: 0.3 },
     subUnits: [
       {
         unitId: 'semiconductors',
@@ -362,6 +387,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   SoftwareDigitalServices: {
     sector: 'Tech',
     smeShareOfActivity: 0.35,
+    financingProfile: { fixedRateTilt: 0.8, maxPayoutRatio: 0.2 },
     subUnits: [
       {
         unitId: 'enterprise_software',
@@ -389,6 +415,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   Telecommunications: {
     sector: 'Tech',
     smeShareOfActivity: 0.1,
+    financingProfile: { fixedRateTilt: 1.2, maxPayoutRatio: 0.75 },
     subUnits: [
       {
         unitId: 'network_infrastructure',
@@ -406,6 +433,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   HealthcarePharma: {
     sector: 'Consumer',
     smeShareOfActivity: 0.38,
+    financingProfile: { fixedRateTilt: 1.0, maxPayoutRatio: 0.45 },
     subUnits: [
       {
         unitId: 'health_services',
@@ -447,6 +475,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   ConsumerStaples: {
     sector: 'Consumer',
     smeShareOfActivity: 0.28,
+    financingProfile: { fixedRateTilt: 1.1, maxPayoutRatio: 0.65 },
     subUnits: [
       {
         unitId: 'food_beverage',
@@ -478,6 +507,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   ConsumerDiscretionaryRetail: {
     sector: 'Consumer',
     smeShareOfActivity: 0.52,
+    financingProfile: { fixedRateTilt: 0.95, maxPayoutRatio: 0.4 },
     subUnits: [
       {
         unitId: 'apparel_retail',
@@ -506,6 +536,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   LuxuryGoods: {
     sector: 'Consumer',
     smeShareOfActivity: 0.2,
+    financingProfile: { fixedRateTilt: 0.95, maxPayoutRatio: 0.5 },
     subUnits: [
       {
         unitId: 'luxury_goods',
@@ -524,6 +555,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   MediaEntertainment: {
     sector: 'Consumer',
     smeShareOfActivity: 0.45,
+    financingProfile: { fixedRateTilt: 0.85, maxPayoutRatio: 0.3 },
     subUnits: [
       {
         unitId: 'media_content',
@@ -547,6 +579,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   PersonalConsumerServices: {
     sector: 'Consumer',
     smeShareOfActivity: 0.72,
+    financingProfile: { fixedRateTilt: 0.9, maxPayoutRatio: 0.4 },
     subUnits: [
       {
         unitId: 'food_service',
@@ -590,6 +623,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   BusinessSupportServices: {
     sector: 'Industrials',
     smeShareOfActivity: 0.58,
+    financingProfile: { fixedRateTilt: 0.85, maxPayoutRatio: 0.45 },
     subUnits: [
       {
         unitId: 'professional_services',
@@ -626,6 +660,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
   RealEstateConstruction: {
     sector: 'Industrials',
     smeShareOfActivity: 0.78,
+    financingProfile: { fixedRateTilt: 1.2, maxPayoutRatio: 0.75 },
     subUnits: [
       {
         // SVC: the largest single line in household consumption in every developed economy, and
@@ -1048,4 +1083,10 @@ const INDUSTRY_BY_SUBUNIT: Map<string, Industry> = (() => {
 
 export function industryOfSubUnit(unitId: string): Industry | undefined {
   return INDUSTRY_BY_SUBUNIT.get(unitId);
+}
+
+
+/** IND4 — the one accessor for an industry's funding and payout posture (rule 17). */
+export function financingProfileOf(industry: Industry): { fixedRateTilt: number; maxPayoutRatio: number } {
+  return INDUSTRY_REGISTRY[industry].financingProfile;
 }

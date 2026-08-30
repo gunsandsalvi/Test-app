@@ -5115,3 +5115,21 @@ that proved it, the lesson.
       pension system's funding need cannot respond to a retired share that is the same everywhere.
       **Also unstarted:** housing reading demographics (it propagates for free once the above
       moves) and the 260-week divergence check, which is a long run and waits for a close.
+
+136. **IND4 — how an industry funds itself and what it pays out.** Two numbers that were the same
+    for every firm in the model.
+    - **Payout was `0.6` for everyone.** A mature network operator and a growth software firm had
+      identical payout discipline, which is the clearest single thing that is NOT alike across
+      industries. It is now `financingProfile.maxPayoutRatio` on the registry entry: 0.75 for the
+      long-asset, mature industries (telecoms, real estate), 0.20-0.30 for the asset-light growth
+      ones (software, media, tech hardware).
+    - **Funding mix was rating-only.** `FIXED_SHARE_BY_RATING` stays and should — an issuer's
+      ACCESS to the bond market is its credit quality's — but what the money BUYS decides the
+      term: long-lived assets are funded long, asset-light and fast-obsolescing ones borrow short
+      and floating. `financingProfile.fixedRateTilt` multiplies the rating base (1.20 telecoms and
+      real estate, 0.80 software), through one accessor so no stage switches on an industry
+      (rule 17).
+    - **`cyclicalityBeta` deliberately NOT added**, though §5-IND4 listed it. Beta is a
+      MEASUREMENT since §7.134 — stating one per industry would restore precisely what IDX just
+      deleted, one field over. **A work item's own brief can be stale; the rules are not.**
+    - Harness green, 0 violations.

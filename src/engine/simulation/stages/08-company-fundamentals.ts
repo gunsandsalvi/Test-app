@@ -18,7 +18,7 @@ import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { recurringRevenueShare, SUBSCRIPTION_WEEKLY_CHURN } from '../../../domain/industry-registry';
-import { industryOfSubUnit, firmInputIntensities } from '../../../domain/industry-registry';
+import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../../../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
@@ -68,8 +68,25 @@ const BASELINE_WAGE_POOLS = {
   MANAGERIAL_FINANCIAL: { wageIndex: 1 },
 } as Record<import('../../../types').OccupationType, { wageIndex: number }>;
 
-/** The most of its earnings a board will pay out as dividends — real payout discipline. */
-const MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
+/**
+ * IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. This was one number,
+ * 0.6, for every firm in the model: a mature network operator and a growth software firm had
+ * identical payout policy, which is the clearest single thing that is not alike across
+ * industries. The fallback is for a firm with no product line — a bank or a fund manager, whose
+ * own posture is its profile's to state when IND4's financial half lands.
+ */
+const DEFAULT_MAX_DIVIDEND_PAYOUT_RATIO = 0.6;
+function fixedShareOf(comp: Company): number {
+  const base = FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5;
+  const primary = (comp.productLines || [])[0];
+  const industry = primary ? industryOfSubUnit(primary.subUnitId) : undefined;
+  return industry ? base * financingProfileOf(industry).fixedRateTilt : base;
+}
+function maxDividendPayoutRatioOf(comp: Company): number {
+  const primary = (comp.productLines || [])[0];
+  const industry = primary ? industryOfSubUnit(primary.subUnitId) : undefined;
+  return industry ? financingProfileOf(industry).maxPayoutRatio : DEFAULT_MAX_DIVIDEND_PAYOUT_RATIO;
+}
 
 /**
  * CAP — the share of a measured capacity shortfall a firm tries to close in a year. A behavioural
@@ -911,7 +928,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // first week of existence: 15-25M/wk against 20M/wk of sales). A board pays out a share of
       // what the company earns; the declared yield stands only when earnings cover it.
       const declaredDividendWeekly = Math.max(0, (comp.dividendYield ?? 0) * comp.marketCap) / 52;
-      const maxSustainableWeekly = Math.max(0, newNetIncome) * MAX_DIVIDEND_PAYOUT_RATIO / 52;
+      const maxSustainableWeekly = Math.max(0, newNetIncome) * maxDividendPayoutRatioOf(comp) / 52;
       // SETL3: a dividend is paid to the REGISTER. It used to leave the payer and arrive nowhere
       // — the one-sided flow §6 half-knew about, listing "institutional dividend passthrough" as
       // an unbuilt receipt channel. The paying-agent path already exists for call premiums and
@@ -1148,7 +1165,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (tranche.isCommercialPaper) return;
       if (tranche.maturityWeek !== nextWeek + 1) return;
       if (pendingOfferingIssuerIds.has(comp.id)) return; // one live book per issuer
-      const refinanceAsFixed = (FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5) >= 0.5;
+      // IND4: rating decides an issuer's ACCESS to the bond market; the industry tilts it by
+      // what the money is buying. Long-lived assets are funded long, asset-light ones float.
+      const refinanceAsFixed = fixedShareOf(comp) >= 0.5;
       const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
       enqueueOffering({
         id: `PO-${comp.id}-${nextWeek}-REFI`,
@@ -1272,7 +1291,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const bridgeUSD = bridges.reduce((a, t) => a + t.principalUSD, 0);
       const totalDebtForGate = updatedTranches.reduce((a, t) => a + t.principalUSD, 0);
       if (bridgeUSD > Math.max(1e6, totalDebtForGate * 0.02)) {
-        const asFixed = (FIXED_SHARE_BY_RATING[comp.creditRating] ?? 0.5) >= 0.5;
+        const asFixed = fixedShareOf(comp) >= 0.5;  // IND4: rating's access, industry's tilt
         const revolverAllInAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
         enqueueOffering({
           id: `PO-${comp.id}-${nextWeek}-MAINT`,
