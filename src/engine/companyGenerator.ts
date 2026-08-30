@@ -958,7 +958,9 @@ export function generatePrivateCompanies(
     const da = revBase * 0.045;
     const ebit = Math.max(1, ebitda - da);
     const coverage = ebit / Math.max(0.5, annualInterest);
-    const rating = determineCreditRating(debtBase / Math.max(1, ebitda), coverage);
+    // CRD/§7.4: the seed rater sees the same facts the weekly one does, so a firm born without
+    // earnings opens at the rating the week would give it rather than at a bounded ratio's.
+    const rating = determineCreditRating(debtBase / Math.max(1, ebitda), coverage, { ebitdaUSD: ebitda });
     const capex = Math.round(revBase * 0.05);
     const maintenanceCapex = Math.round(capex * 0.6);
     const ppeIntensity = SECTOR_PPE_INTENSITY[sector] ?? 0.5;

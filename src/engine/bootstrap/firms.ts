@@ -213,7 +213,8 @@ function ratingFor(revBase: number, ebitdaMargin: number, debtBase: number): Cre
   const interestExpense = Math.max(1, debtBase * INTEREST_RATE_ASSUMPTION);
   const leverage = debtBase / Math.max(1, ebitda);
   const coverage = ebit / interestExpense;
-  return determineCreditRating(leverage, coverage);
+  // CRD/§7.4: same facts as the weekly rater, so a template with no earnings rates as one.
+  return determineCreditRating(leverage, coverage, { ebitdaUSD: ebitda });
 }
 
 function buildTemplate(

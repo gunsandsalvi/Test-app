@@ -1066,12 +1066,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const rawLeverage = comp.sector === 'Banks'
       ? (newTotalDebt / Math.max(1, newRevenue * 0.4))
       : (newTotalDebt / Math.max(1, newEbitda));
-    const newLeverage = isFinite(rawLeverage) ? Number(Math.max(0, Math.min(100, rawLeverage)).toFixed(2)) : 5.0;
+    // CRD — the [0, 100] bound is GONE. It existed because EBITDA passes through zero and the
+    // ratio explodes; the denominator is already floored, so the number is finite without it, and
+    // what the bound actually destroyed was the information that the firm has no earnings at all.
+    // `determineCreditRating` is told the earnings directly now and answers that case itself.
+    const newLeverage = isFinite(rawLeverage) ? Number(Math.max(0, rawLeverage).toFixed(2)) : 5.0;
 
     const rawCoverage = comp.sector === 'Banks'
       ? (reg.bankingSector.bankCapitalRatio < 0.05 ? 0.4 : 3.0)
       : (newEbit / Math.max(0.5, annualInterest));
-    const newCoverage = isFinite(rawCoverage) ? Number(Math.max(-50, Math.min(50, rawCoverage)).toFixed(2)) : 1.5;
+    // ...and the [-50, 50] bound with it, for the same reason: the denominator is floored, so
+    // coverage is finite, and a firm at -200x coverage is telling you something a firm at -50x is
+    // not (rule 15 — a bound is not a measurement either).
+    const newCoverage = isFinite(rawCoverage) ? Number(rawCoverage.toFixed(2)) : 1.5;
 
     // Default trigger: cash exhausted AND coverage below the shared floor (or previously
     // defaulted, provided not merger-acquired). DEFAULT_COVERAGE_FLOOR is the single definition
@@ -1111,6 +1118,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         maturityWallShare: wallUSD / ladderUSD,
         liquidityToDebt: Math.max(0, newCash) / ladderUSD,
         revenueVolatility: revVol,
+        // CRD: the earnings themselves, so the rater can answer the case the ratio clamps were
+        // covering up rather than inheriting a bounded number that has lost it.
+        ebitdaUSD: newEbitda,
       });
       // Wall Street: rating migration is deliberately sticky (a 25%/week chance to move even one
       // notch) to mirror how real rating agencies don't instantly re-rate every week — but the

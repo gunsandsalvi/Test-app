@@ -44,6 +44,12 @@ export interface CreditContext {
   liquidityToDebt?: number;
   /** Earnings volatility — `revenueHistory`'s own coefficient of variation. */
   revenueVolatility?: number;
+  /**
+   * CRD — the earnings the two ratios are computed FROM, so this function can say what happens
+   * when there are none. See the note on the ladder below: that is what the ratio clamps in stage
+   * 08 were standing in for, and it is the honest place for it.
+   */
+  ebitdaUSD?: number;
 }
 
 /**
@@ -60,6 +66,18 @@ export function determineCreditRating(
   interestCoverage: number,
   ctx?: CreditContext
 ): CreditRating {
+  // CRD — A FIRM WITH NO EARNINGS IS A DISTRESSED RATING BY DEFINITION, and this is where that
+  // belongs. Stage 08 used to bound leverage to [0, 100] and coverage to [-50, 50] for one
+  // reason: EBITDA passes through zero and `debt / EBITDA` explodes. But a clamp on a ratio
+  // throws away the very fact that produced it — a firm at "leverage 100" and one at leverage 8
+  // came out of the rater the same — and a bound is not an answer (rule 2: fix it at the root).
+  // With no earnings the two ratios carry no information, so the rating rests on what is left,
+  // which is liquidity: a firm that can cover its debt from cash and its committed line is not
+  // yet distressed, and one that cannot is.
+  if (ctx?.ebitdaUSD !== undefined && ctx.ebitdaUSD <= 0) {
+    return (ctx.liquidityToDebt ?? 0) >= 1 ? 'B' : 'CCC';
+  }
+
   let notch: number;
   if (interestCoverage < COVERAGE_FLOOR || leverage > LEVERAGE_CEILING) notch = 0;
   else if (interestCoverage < coverageCutoff(1) || leverage > leverageCutoff(1)) notch = 1;
