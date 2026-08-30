@@ -22,6 +22,7 @@
  */
 
 import { ItemizedHolding, InstitutionalEntity } from '../../../types';
+import { HoldingsTable } from '../../columns/holdings-table';
 
 /** The instrument types, in the order the index groups them. */
 export const REGISTER_TYPES: ItemizedHolding['instrumentType'][] = [
@@ -83,9 +84,35 @@ export function typeSlice(index: RegisterIndex, type: ItemizedHolding['instrumen
   return [index.start[slot], index.start[slot + 1]];
 }
 
-/** Drop the cached index. Call beside every write that changes which rows exist. */
-export function bumpRegister(ctx: { registerIndex?: RegisterIndex }): void {
+/** Drop the cached index AND the column table. Call beside every write that changes which rows
+ *  exist — the two are built from the same graph and go stale together. */
+export function bumpRegister(
+  ctx: { registerIndex?: RegisterIndex; holdingsTable?: import('../../columns/holdings-table').HoldingsTable }
+): void {
   ctx.registerIndex = undefined;
+  ctx.holdingsTable = undefined;
+}
+
+/**
+ * SCALE phase 2 — the register as COLUMNS, built on the same invalidation as the index above.
+ *
+ * The index holds positions into the object graph, so a sweep still chases a pointer per row to
+ * read a quantity. The table holds the quantity itself, so a converted sweep does not touch an
+ * object at all. Both exist while readers migrate; the table is the read path and the object
+ * arrays remain the write path, which is the seam that lets readers move one at a time.
+ */
+export function getHoldingsTable(
+  ctx: {
+    holdingsTable?: import('../../columns/holdings-table').HoldingsTable;
+    updatedInstitutionalEntities: InstitutionalEntity[];
+  }
+): import('../../columns/holdings-table').HoldingsTable {
+  if (!ctx.holdingsTable) {
+    const t = new HoldingsTable();
+    t.build(ctx.updatedInstitutionalEntities);
+    ctx.holdingsTable = t;
+  }
+  return ctx.holdingsTable;
 }
 
 /** The index for this moment, built if a writer has invalidated it. */

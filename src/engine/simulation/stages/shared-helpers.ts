@@ -5,7 +5,8 @@
  */
 
 import { journalPayment } from './settlement';
-import { getRegisterIndex, typeSlice } from './register-index';
+import { getHoldingsTable } from './register-index';
+import { INSTRUMENT_IDS } from '../../columns/intern';
 import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { SECTOR_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
@@ -562,20 +563,28 @@ export function applyHolderInterestAccruals(
     // of Int32Arrays grouped by type, so an EQUITY or GOV_BOND row is not visited at all rather
     // than visited and rejected. Within a type the index preserves register order, so the float
     // totals accumulate in exactly the order the nested walk produced.
+    // SCALE phase 2: reads the COLUMNS. The quantity comes out of a Float64Array and the
+    // instrument out of an Int32Array, so a row of an accruing type costs two typed-array loads
+    // and no object is touched at all. Within a type the table preserves register order, so the
+    // float totals accumulate exactly as the original nested walk produced them.
     const totalByKey = new Map<string, number>();
     const matched: { entityId: string; key: string; qtyUSD: number }[] = [];
-    const index = getRegisterIndex(ctx as never);
+    const holdings = getHoldingsTable(ctx as never);
     const entities = ctx.updatedInstitutionalEntities;
+    const byTypeRows = holdings.byType;
+    const qtyCol = holdings.qtyUSD;
+    const instCol = holdings.instrumentId;
+    const entCol = holdings.entityRow;
     accrualsByType.forEach((byId, type) => {
-      const [lo, hi] = typeSlice(index, type as never);
+      const [lo, hi] = holdings.typeRange(type as never);
       for (let i = lo; i < hi; i++) {
-        const entity = entities[index.entAt[i]];
-        const h = entity.itemizedHoldings[index.rowAt[i]];
-        if (!h || !byId.has(h.instrumentId)) continue;
-        const key = `${type}:${h.instrumentId}`;
-        const qtyUSD = h.quantityOrNotionalUSD ?? 0;
+        const row = byTypeRows[i];
+        const instrumentText = INSTRUMENT_IDS.text(instCol[row]);
+        if (!byId.has(instrumentText)) continue;
+        const key = `${type}:${instrumentText}`;
+        const qtyUSD = qtyCol[row];
         totalByKey.set(key, (totalByKey.get(key) ?? 0) + qtyUSD);
-        matched.push({ entityId: entity.id, key, qtyUSD });
+        matched.push({ entityId: entities[entCol[row]].id, key, qtyUSD });
       }
     });
     matched.forEach(({ entityId, key, qtyUSD }) => {

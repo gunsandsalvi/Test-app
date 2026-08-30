@@ -63,6 +63,8 @@ export interface WeeklyStepContext {
   /** SCALE: the register's CSR index, cached across stages and dropped by `bumpRegister`
    *  whenever a stage changes WHICH ROWS EXIST (stages/register-index.ts). */
   registerIndex?: import('./register-index').RegisterIndex;
+  /** SCALE phase 2: the register as typed-array columns, invalidated with the index above. */
+  holdingsTable?: import('../../columns/holdings-table').HoldingsTable;
   /** SCALE: the week's payments as four parallel columns (stages/settlement.ts). */
   paymentJournal: import('./settlement').PaymentJournal;
   /** SETL6 — the running net of those instructions per party: what each has committed to pay or
