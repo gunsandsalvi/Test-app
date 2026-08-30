@@ -98,6 +98,45 @@ function maxDividendPayoutRatioOf(comp: Company): number {
  */
 const CAPACITY_CATCHUP_SHARE_ANNUAL = 0.35;
 
+
+/** SCALE: the supply list's own derived indexes, memoised on the array that produced them. */
+interface GroupedSupply {
+  byCustomer: Map<string, { supplierCompanyId: string; category: string; weeklyVolumeUSD: number; relationshipStrength: number }[]>;
+  categoriesBySupplier: Map<string, Set<string>>;
+}
+const groupedSupplyByList = new WeakMap<object, GroupedSupply>();
+
+function groupSupplyRelationships(
+  updatedRegions: Record<string, { supplyRelationships?: unknown[] } | undefined>
+): GroupedSupply {
+  const lists: unknown[][] = [];
+  (Object.keys(updatedRegions) as string[]).forEach((rid) => {
+    const l = updatedRegions[rid]?.supplyRelationships;
+    if (l && l.length > 0) lists.push(l);
+  });
+  // One memo key for the whole world: the regions' four lists are replaced together, so any one
+  // of them being new means the grouping is stale. The first list stands for the set.
+  const key = lists.length > 0 ? (lists[0] as unknown as object) : undefined;
+  if (key) {
+    const memo = groupedSupplyByList.get(key);
+    if (memo) return memo;
+  }
+  const byCustomer = new Map<string, never[]>() as unknown as GroupedSupply['byCustomer'];
+  const categoriesBySupplier = new Map<string, Set<string>>();
+  lists.forEach((list) => {
+    (list as { customerCompanyId: string; supplierCompanyId: string; category: string }[]).forEach((rel) => {
+      const existing = byCustomer.get(rel.customerCompanyId);
+      if (existing) existing.push(rel as never); else byCustomer.set(rel.customerCompanyId, [rel as never]);
+      let set = categoriesBySupplier.get(rel.supplierCompanyId);
+      if (!set) { set = new Set(); categoriesBySupplier.set(rel.supplierCompanyId, set); }
+      set.add(rel.category);
+    });
+  });
+  const out: GroupedSupply = { byCustomer, categoriesBySupplier };
+  if (key) groupedSupplyByList.set(key, out);
+  return out;
+}
+
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
   const refinanceNews: NewsItem[] = [];
@@ -121,23 +160,25 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // Supply relationships indexed by customer. This was a full scan of the region's relationship
   // list for EVERY company — the same O(companies x list) shape that made corporate-action
   // settlement 12% of the weekly step. One grouping pass instead.
-  const supplyRelsByCustomer = new Map<string, any[]>();
-  (Object.keys(updatedRegions) as (keyof typeof updatedRegions)[]).forEach(rid => {
-    (updatedRegions[rid]?.supplyRelationships || []).forEach((rel: any) => {
-      const list = supplyRelsByCustomer.get(rel.customerCompanyId);
-      if (list) list.push(rel); else supplyRelsByCustomer.set(rel.customerCompanyId, [rel]);
-      const supplier = firmById.get(rel.supplierCompanyId);
-      if (supplier) {
-        let stats = supplierShockStats.get(rel.supplierCompanyId);
-        if (!stats) {
-          stats = { annualRevenue: supplier.annualRevenue, invUSDByCategory: new Map() };
-          supplierShockStats.set(rel.supplierCompanyId, stats);
-        }
-        if (!stats.invUSDByCategory.has(rel.category)) {
-          stats.invUSDByCategory.set(rel.category, getOutputInventoryUSD(supplier, rel.category));
-        }
-      }
+  //
+  // SCALE: THE GROUPING IS CACHED ON THE RELATIONSHIP LIST ITSELF. There are ~165,000
+  // relationships and `formSupplyRelationships` rebuilds them **every thirteenth week** — but this
+  // grouped all 165,000 of them WEEKLY, and with them the set of (supplier, category) pairs the
+  // shock statistics are keyed on. Both are properties of the relationship list, so both are
+  // memoised against that array's identity: when stage 03 regenerates the list it hands over a new
+  // array, and the memo lapses with it. What stays weekly is the only part that is actually
+  // weekly — each supplier's CURRENT revenue and inventory, read over the distinct pairs rather
+  // than over every relationship.
+  const grouped = groupSupplyRelationships(updatedRegions);
+  const supplyRelsByCustomer = grouped.byCustomer;
+  grouped.categoriesBySupplier.forEach((categories, supplierId) => {
+    const supplier = firmById.get(supplierId);
+    if (!supplier) return;
+    const invUSDByCategory = new Map<string, number>();
+    categories.forEach((category) => {
+      invUSDByCategory.set(category, getOutputInventoryUSD(supplier, category));
     });
+    supplierShockStats.set(supplierId, { annualRevenue: supplier.annualRevenue, invUSDByCategory });
   });
   const suppliedSubUnitsByRegion = new Map<string, Set<string>>();
   prevActiveFirms.forEach(c => {
