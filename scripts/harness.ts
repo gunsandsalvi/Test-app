@@ -1358,6 +1358,16 @@ const indModule: HarnessModule = (() => {
         const q = (f: number) => wi[Math.min(wi.length - 1, Math.floor(f * wi.length))];
         out.push(`  offeredWageIndex across ${wi.length} employers: p10 ${q(0.1).toFixed(3)}  p50 ${q(0.5).toFixed(3)}  p90 ${q(0.9).toFixed(3)}  p99 ${q(0.99).toFixed(3)}`);
         out.push(`      p99/p10 = ${(q(0.1) > 0 ? q(0.99) / q(0.1) : 0).toFixed(2)}x  against the 13.0x/0.40x = 32.5x the stated table asserts`);
+        // Where rent-sharing is HEADING: the equilibrium premium each firm's own surplus implies,
+        // which is what the slow pull converges to. If the targets are flat the mechanism cannot
+        // produce dispersion however long it runs; if they are wide, only the speed is at issue.
+        const tgt = s.companies.filter(c => isActiveCompany(c) && (c.employeeCount ?? 0) > 0 && c.annualRevenue > 0)
+          .map(c => 1 + 0.12 * ((c.annualRevenue - Math.max(0, c.annualRevenue - c.ebitda)) / Math.max(1, c.employeeCount) / Math.max(1, (c.annualRevenue * 0.3) / Math.max(1, c.employeeCount)) - 1))
+          .sort((a, b) => a - b);
+        if (tgt.length > 2) {
+          const tq = (f: number) => tgt[Math.min(tgt.length - 1, Math.floor(f * tgt.length))];
+          out.push(`      rent-share TARGETS: p10 ${tq(0.1).toFixed(3)}  p50 ${tq(0.5).toFixed(3)}  p90 ${tq(0.9).toFixed(3)}  p99 ${tq(0.99).toFixed(3)}  (p99/p10 ${(tq(0.1) !== 0 ? tq(0.99) / tq(0.1) : 0).toFixed(2)}x)`);
+        }
       }
       // And where the top tier's income actually comes from: if it is capital rather than wages,
       // the 13x wage multiplier is standing in for concentration that belongs elsewhere.

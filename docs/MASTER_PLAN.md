@@ -1809,7 +1809,7 @@ saving available and it is already banked.
 | ~~`LifeCycleStageData.savingsRate` + `consumptionMultiplier` (8)~~ | **DELETED §7.170** — read by nothing; the life-cycle rate is the retired share |
 | `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN, item 22 |
 | ~~the average LTV~~, `WEALTH_SPENDDOWN_YEARS` | **the LTV RETIRED §7.159** (the book is vintages); the spend-down horizon still waits on housing that clears — HSG, item 5 |
-| **`TIER_OCCUPATION_MIXES` (14) + `TIER_WAGE_MULTIPLIER` (4)** | **RENT-SHARING — the firm wage premium (§7.172).** They jointly define the (occupation x tier) income distribution, and deriving either needs within-occupation wage dispersion. **Measured: the model has 1.01x of it against the 32.5x the table asserts** — every firm pays the same. The missing mechanism is that a more productive firm pays more. **Do not delete these first: the stated multiplier carries 56% of the top tier's income**, so removing it before rent-sharing exists flattens the distribution rather than deriving it (rule 19's caveat). |
+| **`TIER_OCCUPATION_MIXES` (14) + `TIER_WAGE_MULTIPLIER` (4)** | **WITHIN-OCCUPATION SKILL HETEROGENEITY — not the firm premium, which is now built (§7.173).** Rent-sharing was the obvious candidate and it is real: dispersion 1.01x → **1.40x**. But its equilibrium is **1.23x**, and the table asserts 32.5x, so the stated number is NOT mainly about firm premia — it stands in for workers differing WITHIN an occupation, which the model does not have at all (every worker in an occupation is identical). Earlier framing (§7.172): They jointly define the (occupation x tier) income distribution, and deriving either needs within-occupation wage dispersion. **Measured: the model has 1.01x of it against the 32.5x the table asserts** — every firm pays the same. The missing mechanism is that a more productive firm pays more. **Do not delete these first: the stated multiplier carries 56% of the top tier's income**, so removing it before rent-sharing exists flattens the distribution rather than deriving it (rule 19's caveat). |
 
 ### DYN — Entry, exit, and industry structure  *(item 22; needs IND, BP1)*
 
@@ -5904,3 +5904,36 @@ that proved it, the lesson.
     - **Not started deliberately.** It changes wage-setting, the most sensitive price in the model,
       and rule 7 wants one bounded verified slice — not a risky rewrite bolted onto the end of a
       long pass. The measurement above is what the next session needs to start it.
+
+173. **RENT-SHARING — a more productive firm pays more. Built, and the measurement redirects the
+    scoreboard's last block.**
+    - **The gap it fills.** The wage decision's only firm-specific terms — its own unfilled
+      vacancies and its own margin shortfall — both MEAN-REVERT, so nothing accumulated and every
+      employer paid the same: `offeredWageIndex` p10 0.988 to p99 1.002, a **1.01x** spread
+      (§7.172). A firm's own productivity had no channel to its own wage.
+    - **The mechanism.** A firm's surplus per worker is what a head produces above the non-wage
+      cost of employing it; a share of that reaches the wage because the worker can leave. The
+      target premium is that share of the surplus above the going wage, and the firm is PULLED
+      toward it over about a year — **the gap expressed directly as an annual rate, so no speed
+      constant is invented.** Borrowing the cyclical push's 0.10 took a decade to converge, which
+      is not a wage decision.
+    - **One new primitive, retiring the need for none of the eighteen — read on.**
+      `RENT_SHARE_TO_LABOUR = 0.12` is a BARGAINING primitive (rule 19's third category): how a
+      surplus splits between a firm and the people who made it is what a wage negotiation IS, and
+      is not derivable from anything else here.
+    - **Measured: dispersion 1.01x → 1.40x at week 10, equilibrium targets p10 0.869 / p50 0.942 /
+      p90 1.005 / p99 1.074 (a 1.23x spread). Harness green, 0 violations.**
+    - **AND THE MEASUREMENT SAYS THE OBVIOUS NEXT STEP WAS WRONG.** 1.23x at equilibrium against
+      the table's 32.5x means **rent-sharing is not what `TIER_WAGE_MULTIPLIER` stands in for.**
+      1.2-1.4x is about right for a firm wage premium in reality — the mechanism is correctly
+      sized, not undercooked. The stated 32.5x is conflating three different things: between-
+      occupation pay (already modelled), CAPITAL income (already modelled — 37.6% of the top
+      tier), and **within-occupation SKILL and seniority dispersion, which the model does not have
+      at all: every worker in an occupation is identical.** That last one is the real missing
+      mechanism, and it is DIST 1(b)'s — a worker needs to be a constituent with its own
+      productivity, not a unit of an occupation pool.
+    - **So the tier tables are NOT derived here, deliberately.** Deriving them off a 1.23x
+      dispersion would flatten the income distribution twenty-six-fold. **The lesson: a
+      measurement that shows a new mechanism working can also show it is the wrong mechanism for
+      the thing you meant to retire.** Build it because it is real; do not let it justify a
+      deletion it cannot support.

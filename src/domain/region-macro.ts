@@ -444,6 +444,24 @@ export const MARKET_WAGE_CATCHUP_SPEED_WEEKLY = 0.15;
  * is the reallocation channel: workers move toward the firms that are short of them.
  */
 export const QUIT_ELASTICITY_TO_RELATIVE_WAGE = 1.8;
+
+/**
+ * RENT-SHARING — the share of a firm's surplus per worker that reaches the worker's wage.
+ *
+ * **A BARGAINING primitive** (rule 19's PREFERENCE/POLICY category): how a surplus is split
+ * between the firm and the people who made it is not derivable from anything else in the model —
+ * it is what a wage negotiation IS. One number, and it retires eighteen.
+ *
+ * **Why it has to exist.** Measured across 2,512 employers (§7.172), `offeredWageIndex` ran
+ * p10 0.988 to p99 1.002 — **a 1.01x spread**, because the wage rule's only firm-specific terms
+ * (its own unfilled vacancies, its own margin shortfall) both mean-revert. So every worker in an
+ * occupation earned the same, and `TIER_WAGE_MULTIPLIER`'s stated 32.5x was carrying the entire
+ * within-occupation income distribution — over half of the top tier's income.
+ *
+ * A more productive firm pays more. That is where within-occupation wage dispersion comes from,
+ * and the model had the ingredient (revenue per worker varies) and no channel from it to pay.
+ */
+export const RENT_SHARE_TO_LABOUR = 0.12;
 /** Execution quality also retains people — a well-run firm loses fewer of them. */
 export const QUIT_ELASTICITY_TO_EXECUTION = 0.35;
 /** Open positions as a share of employment at a neutral market (the JOLTS openings rate). */

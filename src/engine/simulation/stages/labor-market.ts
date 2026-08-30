@@ -50,6 +50,7 @@ import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
+import { RENT_SHARE_TO_LABOUR } from '../../../domain/region-macro';
 
 const OCCUPATIONS: OccupationType[] = [
   'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
@@ -432,13 +433,41 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const targetChangeAnnual = hiringPressure * WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL
         - marginShortfall * WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL;
       const prevIndex = comp.offeredWageIndex ?? 1.0;
+
+      // ---- RENT-SHARING: A MORE PRODUCTIVE FIRM PAYS MORE. ----
+      //
+      // The two terms above are the only firm-specific ones in the wage decision and BOTH
+      // MEAN-REVERT, so nothing accumulates: measured across 2,512 employers, `offeredWageIndex`
+      // ran p10 0.988 to p99 1.002 — a **1.01x** spread (§7.172). Every worker in an occupation
+      // earned the same, which is why `TIER_WAGE_MULTIPLIER` had to state a 32.5x one and why
+      // that stated number carried over half the top tier's income.
+      //
+      // What a firm can pay is its own SURPLUS PER WORKER — what a head produces above the
+      // non-wage cost of employing it — and a share of that reaches the wage because the worker
+      // can leave. The pull is toward the level that share implies, not a jump to it: a wage is
+      // sticky, and the existing push/pull already carry the cyclical half.
+      const headcount = Math.max(1, comp.employeeCount);
+      const nonWageCostUSD = Math.max(0, comp.annualRevenue - comp.ebitda) - weeklyWageBillUSD(
+        headcount, occupationMixFor(comp.sector), baseAnnualWageUSD, reg.occupationPools, prevIndex) * 52;
+      const surplusPerHeadUSD = (comp.annualRevenue - Math.max(0, nonWageCostUSD)) / headcount;
+      const goingWagePerHeadUSD = (weeklyWageBillUSD(
+        headcount, occupationMixFor(comp.sector), baseAnnualWageUSD, reg.occupationPools, 1.0) * 52) / headcount;
+      // The target premium is the share of the surplus that exceeds the going wage. A firm with
+      // no surplus above it offers no premium; one earning twice it offers a real one.
+      const rentTargetIndex = goingWagePerHeadUSD > 0
+        ? 1 + RENT_SHARE_TO_LABOUR * ((surplusPerHeadUSD - goingWagePerHeadUSD) / goingWagePerHeadUSD)
+        : 1;
+      // Closed over about a YEAR — the gap expressed directly as an annual rate, so no speed
+      // constant is invented. A firm reprices to its own productivity roughly annually; borrowing
+      // the cyclical push's 0.10 would have taken a decade, which is not a wage decision.
+      const rentPullAnnual = (rentTargetIndex - prevIndex) / Math.max(0.01, prevIndex);
       // The change applies DIRECTLY. An earlier form blended the level against itself
       // (`prev*inertia + prev*(1+t/52)*(1-inertia)`), which algebraically delivers t x 0.06 —
       // six percent of the intended move, so no firm's wage ever went anywhere. Stickiness
       // belongs in the size of the target and in the market's catch-up speed below, not in a
       // blend of a level with a scaled copy of itself.
       // A wage cannot be negative; nothing else bounds what a firm offers.
-      const nextIndex = Math.max(0, prevIndex * (1 + targetChangeAnnual / 52));
+      const nextIndex = Math.max(0, prevIndex * (1 + (targetChangeAnnual + rentPullAnnual) / 52));
       ctx.companyUpdates[comp.ticker].offeredWageIndex = Number(nextIndex.toFixed(5));
       ctx.companyUpdates[comp.ticker].unfilledVacancyShare = Number(unfilledShare.toFixed(4));
     });
