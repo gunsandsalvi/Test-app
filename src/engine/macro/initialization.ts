@@ -34,6 +34,12 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
     BOTTOM_50: {
       shareOfHouseholds: 0.50,
       shareOfIncomeUSD: Number((inc * 0.15).toFixed(0)),
+      // RULE 19 — THE OPENING ACCUMULATION REFLECTS THE INCOME THAT PRODUCED IT, and this one
+      // line retires `TIER_BALANCE_SHEET_WEIGHTS` — 32 stated numbers that existed ONLY as the
+      // opening condition for §7.145's derived splits. Every one of those splits keys off
+      // accumulated savings or income; with a stock here from week 1 the fallbacks are never
+      // reached, so the table has nothing left to do (§7.171).
+      accumulatedSavingsUSD: Number((inc * 0.15).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.02).toFixed(0)),
       savingsRate: 0.01,
       equityExposureShare: 0.05,
@@ -42,6 +48,7 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
     NEXT_40: {
       shareOfHouseholds: 0.40,
       shareOfIncomeUSD: Number((inc * 0.45).toFixed(0)),
+      accumulatedSavingsUSD: Number((inc * 0.45).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.28).toFixed(0)),
       savingsRate: 0.06,
       equityExposureShare: 0.25,
@@ -50,6 +57,7 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
     TOP_9: {
       shareOfHouseholds: 0.09,
       shareOfIncomeUSD: Number((inc * 0.25).toFixed(0)),
+      accumulatedSavingsUSD: Number((inc * 0.25).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.38).toFixed(0)),
       savingsRate: 0.18,
       equityExposureShare: 0.50,
@@ -58,6 +66,7 @@ export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): R
     TOP_1: {
       shareOfHouseholds: 0.01,
       shareOfIncomeUSD: Number((inc * 0.15).toFixed(0)),
+      accumulatedSavingsUSD: Number((inc * 0.15).toFixed(0)),
       shareOfNetWorthUSD: Number((nw * 0.32).toFixed(0)),
       savingsRate: 0.35,
       equityExposureShare: 0.70,

@@ -122,33 +122,19 @@ const TIER_SPEND_MIX: Record<WealthTier, { staple: number; standard: number; lux
 };
 
 /**
- * HH4c — where each component of the REAL household balance sheet sits across the wealth tiers.
- * What they allocate is already real: every line is marked from cleared prices, and tier net
- * worth is the SUM of these splits rather than a drift walked beside the real books.
+ * RULE 19 — `TIER_BALANCE_SHEET_WEIGHTS` IS GONE: 32 stated numbers, retired 2026-08-30 (§7.171).
  *
- * RULE 4/13, OPEN, AND IT IS ONE DEFECT NOT NINE. This table is documented "US SCF-shaped" — an
- * observed real-world wealth distribution, which is an equilibrium and not a primitive — and it
- * is the largest of the nine stated cross-section tables in this file. But they are all the same
- * missing mechanism: **cohorts have no balance sheets** (`region-macro.ts` says so outright), so
- * their wealth must be ALLOCATED rather than accumulated. The pieces to derive it now exist —
- * who holds equity is the direct register (OWN4), who holds a house is HSG's buyer, who holds
- * deposits is whose savings accumulated, who owes consumer debt is HH3's pools. Give a cohort a
- * balance sheet and eight of the nine tables become measurements.
- * Owner: COH, with HSG supplying the housing half.
+ * Eight rows of "US SCF-shaped" allocations splitting deposits, equity, private business,
+ * institutional claims, the unmodeled residual, housing, mortgages and consumer debt across the
+ * four tiers. §7.145 replaced every one of them with a derivation off accumulated savings, risk
+ * appetite or income — and they survived only as the OPENING CONDITION, for the single week
+ * before any saving had accumulated. Seeding the accumulation itself (one line, from the income
+ * that produced it) removes that week, so the fallbacks are unreachable and the table has nothing
+ * left to do.
+ *
+ * **A stated table kept alive only by its own opening condition is a table you can delete by
+ * seeding the mechanism instead.**
  */
-export const TIER_BALANCE_SHEET_WEIGHTS: Record<
-  'deposits' | 'equityLike' | 'privateBusiness' | 'institutionalClaims' | 'unmodeled' | 'housing' | 'mortgage' | 'consumerDebt',
-  Record<WealthTier, number>
-> = {
-  deposits: { BOTTOM_50: 0.08, NEXT_40: 0.32, TOP_9: 0.35, TOP_1: 0.25 },
-  equityLike: { BOTTOM_50: 0.01, NEXT_40: 0.12, TOP_9: 0.37, TOP_1: 0.50 },
-  privateBusiness: { BOTTOM_50: 0.02, NEXT_40: 0.10, TOP_9: 0.35, TOP_1: 0.53 },
-  institutionalClaims: { BOTTOM_50: 0.15, NEXT_40: 0.50, TOP_9: 0.28, TOP_1: 0.07 },
-  unmodeled: { BOTTOM_50: 0.05, NEXT_40: 0.25, TOP_9: 0.35, TOP_1: 0.35 },
-  housing: { BOTTOM_50: 0.10, NEXT_40: 0.55, TOP_9: 0.30, TOP_1: 0.05 },
-  mortgage: { BOTTOM_50: 0.10, NEXT_40: 0.55, TOP_9: 0.30, TOP_1: 0.05 },
-  consumerDebt: { BOTTOM_50: 0.45, NEXT_40: 0.40, TOP_9: 0.12, TOP_1: 0.03 },
-};
 
 /**
  * DIST/COH — HOW MUCH OF A WINDFALL A TIER SPENDS, DERIVED FROM ITS OWN BALANCE SHEET.

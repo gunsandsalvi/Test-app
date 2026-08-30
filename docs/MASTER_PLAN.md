@@ -1789,7 +1789,7 @@ and RISK AVERSION (the precautionary motive a confidence shock should work throu
 one temporary, the illiquidity friction, which HSG retires. Firms need **zero to one**
 (entry scale, probably derivable from technology). Against roughly **90** stated numbers in
 the household layer at the 2026-08-30 count. **16 retired the same day (§7.170); the count stands
-at ~74 and may never rise.**
+at **~42** and may never rise.**
 
 **It can be this small because this model generates its own idiosyncratic income risk.** A
 standard Bewley/Aiyagari model must STATE the income process — persistence, variance, a
@@ -1801,7 +1801,7 @@ saving available and it is already banked.
 
 | Stated block | Dies with |
 |---|---|
-| `TIER_BALANCE_SHEET_WEIGHTS` (32) | mostly dead already — opening conditions only since §7.145 |
+| ~~`TIER_BALANCE_SHEET_WEIGHTS` (32)~~ | **RETIRED §7.171** — seeding the accumulation removed the one week the fallbacks lived in |
 | tier savings rates + the 4 aggregate coefficients + λ + the 90% cap | saving as a per-tier decision — **DIST item 1(a)**, and §6.1's live row |
 | ~~credit tier shares and rates (16)~~ | **RETIRED §7.162** — migration is two-way on measured delinquency and the rate is quoted |
 | ~~`TIER_DEBT_SERVICE_WEIGHT` (4)~~ | **RETIRED §7.170** — debt service follows measured debt |
@@ -5849,3 +5849,28 @@ that proved it, the lesson.
       check whether the condition has already been met** — this one had, and the table outlived it.
     - Both fall back to income share only before any balance sheet has accumulated (§7.4).
       Harness green, 0 violations.
+
+171. **RULE 19, SECOND PASS — `TIER_BALANCE_SHEET_WEIGHTS` deleted: 32 stated numbers for one
+    seeded line. Scoreboard ~74 → ~42.**
+    - Eight rows of "US SCF-shaped" allocations splitting deposits, equity, private business,
+      institutional claims, the unmodeled residual, housing, mortgages and consumer debt across
+      four tiers. §7.145 had already replaced every one with a derivation off accumulated savings,
+      risk appetite or income. **They survived only as the OPENING CONDITION** — the single week
+      before any saving had accumulated and the derived shares had a denominator.
+    - **So the table was deleted by seeding the mechanism instead of the answer.** One line:
+      `accumulatedSavingsUSD` opens proportional to the tier's own seeded income share — the
+      opening distribution reflects the income that produced it. With a stock there from week 1,
+      `accumulatedTotal > 0` always, every share is measured from the start, and **no fallback is
+      ever reached**, so the 32 numbers had nothing left to do. Twelve of them were already
+      unreachable before this (the income- and borrow-keyed rows), which nobody had noticed.
+    - **The general move, and it is reusable: a stated table kept alive only by its own opening
+      condition can be deleted by seeding the MECHANISM rather than the OUTCOME** (§7.4's rule,
+      applied in the direction that removes numbers instead of adding them).
+    - Harness green, 0 violations.
+    - **What the count now consists of, and why the rest is harder.** ~42 remain, and the two
+      largest blocks are entangled: `TIER_OCCUPATION_MIXES` (14) and `TIER_WAGE_MULTIPLIER` (4)
+      together define the joint (occupation x tier) income distribution. Deriving either needs a
+      WITHIN-OCCUPATION earnings distribution, which the model does not have — every worker in an
+      occupation currently earns the same wage, so a tier split of them is degenerate. **That
+      distribution is DIST 1(b)'s** (the named tier as a node of weight one). The count cannot
+      fall much further until it exists.

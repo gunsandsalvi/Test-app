@@ -30,7 +30,7 @@ import { GameState, RegionId, InstitutionalEntity } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
 import { AVERAGE_HOUSEHOLD_SIZE, WealthTier } from '../../../domain/region-macro';
-import { TIER_BALANCE_SHEET_WEIGHTS, WEALTH_TIERS } from '../../macro/household-cohorts';
+import { WEALTH_TIERS } from '../../macro/household-cohorts';
 import {
   householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD,
 } from '../../macro/household-portfolio';
@@ -160,7 +160,6 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // the middle tiers' net worth that moves, and when equities rally it is the top's — the
     // difference the tier wealth-effect MPCs exist to price.
     if (reg.wealthDistribution) {
-      const W = TIER_BALANCE_SHEET_WEIGHTS;
       const consumerDebtUSD = (hs.creditCardDebtUSD ?? 0) + (hs.otherConsumerLoanDebtUSD ?? 0);
 
       // DIST/COH — THE DEPOSIT SPLIT IS AN OUTCOME OF WHO SAVED, not a stated weight.
@@ -178,7 +177,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
         Math.max(0, reg.wealthDistribution?.[t]?.accumulatedSavingsUSD ?? 0));
       const accumulatedTotal = accumulatedByTier.reduce((a, b) => a + b, 0);
       const depositShareOf = (t: WealthTier, i: number) =>
-        accumulatedTotal > 0 ? accumulatedByTier[i] / accumulatedTotal : W.deposits[t];
+        accumulatedTotal > 0 ? accumulatedByTier[i] / accumulatedTotal : 0;
 
       // DIST/COH — AND THE OTHER FINANCIAL SPLITS FALL OUT OF THE SAME TWO MEASUREMENTS.
       //
@@ -204,10 +203,10 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
         accumulatedByTier[i] * Math.max(0, 1 - Math.max(0, reg.wealthDistribution?.[t]?.equityExposureShare ?? 0)));
       const riskyTotal = riskyByTier.reduce((a, b) => a + b, 0);
       const cautiousTotal = cautiousByTier.reduce((a, b) => a + b, 0);
-      const riskyShareOf = (t: WealthTier, i: number, fallback: number) =>
-        riskyTotal > 0 ? riskyByTier[i] / riskyTotal : fallback;
-      const cautiousShareOf = (t: WealthTier, i: number, fallback: number) =>
-        cautiousTotal > 0 ? cautiousByTier[i] / cautiousTotal : fallback;
+      const riskyShareOf = (t: WealthTier, i: number) =>
+        riskyTotal > 0 ? riskyByTier[i] / riskyTotal : 0;
+      const cautiousShareOf = (t: WealthTier, i: number) =>
+        cautiousTotal > 0 ? cautiousByTier[i] / cautiousTotal : 0;
 
       // DIST/COH — HOUSING AND DEBT FOLLOW DIFFERENT MEASUREMENTS AGAIN, and that is the point:
       // each of §6.3-A's tables was a separate stated number precisely because nobody had asked
@@ -226,25 +225,25 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       const incomeByTier = WEALTH_TIERS.map((t: WealthTier) =>
         Math.max(0, reg.wealthDistribution?.[t]?.shareOfIncomeUSD ?? 0));
       const incomeTotal = incomeByTier.reduce((a, b) => a + b, 0);
-      const incomeShareOf = (t: WealthTier, i: number, fallback: number) =>
-        incomeTotal > 0 ? incomeByTier[i] / incomeTotal : fallback;
+      const incomeShareOf = (t: WealthTier, i: number) =>
+        incomeTotal > 0 ? incomeByTier[i] / incomeTotal : 0;
       const borrowByTier = WEALTH_TIERS.map((t: WealthTier, i: number) =>
         incomeByTier[i] * Math.max(0, 1 - Math.max(0, Math.min(1, reg.wealthDistribution?.[t]?.savingsRate ?? 0))));
       const borrowTotal = borrowByTier.reduce((a, b) => a + b, 0);
-      const borrowShareOf = (t: WealthTier, i: number, fallback: number) =>
-        borrowTotal > 0 ? borrowByTier[i] / borrowTotal : fallback;
+      const borrowShareOf = (t: WealthTier, i: number) =>
+        borrowTotal > 0 ? borrowByTier[i] / borrowTotal : 0;
 
       WEALTH_TIERS.forEach((t: WealthTier, i: number) => {
         const tierAssetsUSD =
           (depositsUSD + mmfSharesUSD) * depositShareOf(t, i)
-          + (etfHoldingsUSD + directEquityUSD) * riskyShareOf(t, i, W.equityLike[t])
-          + privateBusinessEquityUSD * riskyShareOf(t, i, W.privateBusiness[t])
-          + institutionalClaimsUSD * cautiousShareOf(t, i, W.institutionalClaims[t])
+          + (etfHoldingsUSD + directEquityUSD) * riskyShareOf(t, i)
+          + privateBusinessEquityUSD * riskyShareOf(t, i)
+          + institutionalClaimsUSD * cautiousShareOf(t, i)
           + unmodeledFinancialAssetsUSD * depositShareOf(t, i)
-          + housingStockUSD * incomeShareOf(t, i, W.housing[t]);
-        const tierDebtUSD = mortgageUSD * incomeShareOf(t, i, W.mortgage[t])
-          + consumerDebtUSD * borrowShareOf(t, i, W.consumerDebt[t]);
-        const tierClaimsUSD = institutionalClaimsUSD * cautiousShareOf(t, i, W.institutionalClaims[t]);
+          + housingStockUSD * incomeShareOf(t, i);
+        const tierDebtUSD = mortgageUSD * incomeShareOf(t, i)
+          + consumerDebtUSD * borrowShareOf(t, i);
+        const tierClaimsUSD = institutionalClaimsUSD * cautiousShareOf(t, i);
         const prev = reg.wealthDistribution[t];
         reg.wealthDistribution[t] = {
           ...prev,
@@ -255,8 +254,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
           debtUSD: Number(tierDebtUSD.toFixed(0)),
           institutionalClaimsUSD: Number(tierClaimsUSD.toFixed(0)),
           shareOfNetWorthUSD: Number((tierAssetsUSD - tierDebtUSD).toFixed(0)),
-          homeEquityUSD: Number((housingStockUSD * incomeShareOf(t, i, W.housing[t])
-            - mortgageUSD * incomeShareOf(t, i, W.mortgage[t])).toFixed(0)),
+          homeEquityUSD: Number((housingStockUSD * incomeShareOf(t, i)
+            - mortgageUSD * incomeShareOf(t, i)).toFixed(0)),
         };
       });
     }
