@@ -410,7 +410,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
 | 1 | foundation | **DIST — the distribution is the state** | **SUBSTANTIALLY CLOSED 2026-08-30.** (a) the savings rate is an outcome and the fourth one-way ratchet is gone (§7.165); (b) workers differ — the experience cross-section on DIST's own machinery, plus rent-sharing giving firms a real premium (§7.173-174); (c) cut-point invariance verified with an affine control at exactly 0.0000% (§7.175). Earlier: pool strata and both distress terms as integrals (§7.140-141), the absorbing barrier and reinjection (§7.143), all nine §6.3-A tables as measurements (§7.145), pool distress layoffs over the strata (§7.161), the credit tiers' three one-way ratchets (§7.162). The mortgage target went to HSG (§7.159-160). **What is left is ONE JUDGEMENT, not a mechanism:** whether to derive `TIER_WAGE_MULTIPLIER` from the ~2.5x the model now produces against the 32.5x it states — see §7.174. Own slice, with a before/after. |
-| 2 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **THE CLAMP PROGRAMME IS DONE (§7.176); the capacity DECISIONS remain.** Deleted this pass: the production-response [0.5,2.0] band, the input-supply-constraint 0.3 floor, the SME pool's half-the-reference offer floor, the growth-capex 0.4 floor (whose own comment had already convicted it), and the ±2%/week capacity clamp (§7.167). `CAPEX_PUBLIC_SUPPLY_SHARE` was dead — imported, never read — and is gone with them. The carrier's offer floor now includes the capital charge on the hulls, so a balanced freight market no longer clears where no ship can be replaced. Maintenance capex is anchored to depreciation (§7.167). **What is left: capacity read off PP&E rather than walked, and the capex SUPPLY row in §6.1 — the capital-goods sector is sized for two thirds of what it is asked for.** |
+| 2 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **THE CLAMP PROGRAMME IS DONE (§7.176); the capacity DECISIONS remain.** Deleted this pass: the production-response [0.5,2.0] band, the input-supply-constraint 0.3 floor, the SME pool's half-the-reference offer floor, the growth-capex 0.4 floor (whose own comment had already convicted it), and the ±2%/week capacity clamp (§7.167). `CAPEX_PUBLIC_SUPPLY_SHARE` was dead — imported, never read — and is gone with them. The carrier's offer floor now includes the capital charge on the hulls, so a balanced freight market no longer clears where no ship can be replaced. Maintenance capex is anchored to depreciation (§7.167). **What is left: capacity read off PP&E rather than walked — TRIED AND REVERTED (§7.177), and it is BLOCKED on the supply row below, not on its own design — and the capex SUPPLY row in §6.1 — the capital-goods sector is sized for two thirds of what it is asked for.** |
 | 3 | foundation | **COH — cohorts accumulate: household balance sheets** | **Mostly delivered by DIST from a different direction (§7.145) — re-read §5-COH before starting; most of what it describes has happened.** What is left and what makes it item 3: the household balance sheet still cannot distinguish what is spendable now from what is accumulated, and the savings rework needs that distinction to have a buffer to be a buffer OF. Also still owns `beneficiaryLiabilityUSD`'s reversal and retiring `national-accounts.ts`. |
 | 4 | foundation | **DEM — demographic variability** *(unblocks COH2, and the savings life-cycle)* | **THE AGE STRUCTURE ALREADY EXISTS AND NOTHING READS IT (§7.169).** `lifeCycleDistribution` carries four stages with `shareOfPopulation`, `savingsRate` and `consumptionMultiplier` per stage; only `RETIRED.shareOfPopulation` is ever read, and only to set a death rate. **`LifeCycleStageData.savingsRate` is read NOWHERE** — the life-cycle saving motive is present as data and binds on nothing, the fifth instance of that pattern this session. **And it should not simply be wired in: those per-stage rates are stated shape parameters** (§5-DIST-P), and the derivation is better than they are — see the row's §5 entry. | Small; takes the population-growth and migration clamps. **Promoted in substance: its AGE STRUCTURE half is what gives the household sector a life-cycle**, and a life-cycle is what makes a positive steady-state savings rate an outcome rather than a coefficient (§5-DIST-P). |
 | 5 | markets | **HSG — a housing market that clears** *(clamps)* | **PROMOTED from item 10; substantially started 2026-08-30.** Done: the mortgage book is a cross-section of **vintages** each marked to today's prices, so severity is `E[f(LTV)]` and the model can have a mortgage credit event — a −20% price move now takes severity to 2.1x where the one-average book said its floor (§7.159); loans carry a **5-year fix and RESET** (17.5% of the book reprices a year) with per-vintage default frequency; and borrowing capacity is `DSTI x income / annuity factor` (§7.160). **What remains is the row's actual title: `medianHomePriceUSD` does not CLEAR.** Until it does, the affordability limit has slack it should not always have, and `HOUSING_TURNOVER_RATE_ANNUAL` is still a constant on the seller's side. |
@@ -6018,3 +6018,30 @@ that proved it, the lesson.
       its capital requires, spread over the tonne-miles that capital delivers — the same arithmetic
       LAB runs on labour.
     - Harness green and 0 violations at every step.
+
+177. **CAP — CAPACITY READ OFF PP&E: TRIED AND REVERTED, and the reason is §7.158's rule, not a
+    flaw in the design.**
+    - §5-CAP asks for it and the argument is right: capacity is a RATE walked against its own
+      prior value (`capacity *= 1 + netInvestmentRate`), and a walked rate accumulates every error
+      it is ever given and drifts from the capital it claims to describe. **A plant is not a rate;
+      it is what the capital can make.** The build gave each line its own capital productivity —
+      units a week per dollar of net PP&E, fixed at first trade — and read capacity off it.
+    - **Measured: it costs ~0.3pp of employment and puts JPN over the 30% band (29.7% → 30.0%).**
+      Not a bug in the change. Net PP&E is genuinely FALLING because the capital-goods sector can
+      supply about 8% of the capex the economy bids for (§6.1, §7.168), so the stock is consumed
+      faster than it is replaced. Tying capacity to it makes the model state that immediately
+      instead of smoothing it away.
+    - **So the walked rate is STANDING IN for the missing supply**, and §7.158's rule applies
+      exactly: a stand-in may not be deleted before the mechanism it stands in for exists.
+      Reverted, and the probe is green again. **Restore it when the capex supply row closes** —
+      the design and the capital-productivity ratio are written down here for that.
+    - **One real defect was found on the way and is NOT reverted... except it is, and that is worth
+      saying: `grossPPEUSD` is undefined at week 1 and stage 05 runs BEFORE stage 08 sets it**, so
+      any stage-05 reader of it gets zero on the first pass. Stage 08 carries the opening fallback
+      (`annualRevenue x SECTOR_PPE_INTENSITY`); stage 05 has no reader today, so nothing is broken
+      now — but the next one to read PP&E in stage 05 must carry that fallback or fix a capital
+      stock of one dollar into whatever it derives.
+    - **The lesson, which is the third time this session it has come up in a different costume:**
+      a correct change that a missing mechanism will not support is still not a change to land.
+      §7.148 kept one and was vindicated by §7.149 finding the real defect; this one has no such
+      defect underneath it — the missing thing is a whole sector's capacity, and it is logged.
