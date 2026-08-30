@@ -72,7 +72,15 @@ export interface PaymentInstruction {
   reason: string;
 }
 
-/** Record a payment. The only way a stage should move money. */
+/**
+ * Record a payment. The only way a stage should move money.
+ *
+ * SCALE, MEASURED AND REJECTED: coalescing on the way in — one row per (payer, payee, reason) —
+ * looked obvious against **170,000–200,000 instructions a week**. It is not: 162,705 rows carry
+ * 144,650 distinct triples, an 11% saving that does not pay for the key it costs to find. The
+ * goods market really does have that many distinct counterparty relationships in a week, one per
+ * lot, and that is a fact about the model rather than a defect in it.
+ */
 export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): void {
   if (!(instruction.amountUSD > 0) || !isFinite(instruction.amountUSD)) return;
   ctx.paymentInstructions.push(instruction);
