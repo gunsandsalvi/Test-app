@@ -1752,3 +1752,36 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        else in the profile is now under 8%. **Wave 2's remaining value is concentrated in a single
        conversion**, which is a better place to be than a flat profile, and it is the one that
        touches every file that reads a company.
+218. **WAVE 2 PHASES 1–5: THE MACHINERY EXISTS, THE CONVERSION DOES NOT. Read this before
+     celebrating the commit list.** Five phases landed, `tsc` and the build green, **bit-exact over
+     20 weeks — and the cycle is unchanged at ~1,205 ms**, which is exactly what should have been
+     expected and is the honest headline.
+     - **What exists now:** the `Table` primitive (named typed-array columns over one
+       `SharedArrayBuffer`, doubling growth, LIFO free list, deterministic layout); the `InternTable`
+       (dense `int32` ids per kind, never reused); the per-week `Arena`; the `HoldingsTable`
+       (~110,000 positions in five columns with CSR groupings by holder, by type and by instrument);
+       the `CompanyTable` (2,496 rows × 27 numeric columns plus flags, with a `syncIn`/`syncOut`
+       seam); the `TrancheTable` (~8,600 rows grouped by issuer); and the kernel/shard harness with
+       the ordered-combine rule encoded in it.
+     - **What does NOT exist: the readers and writers.** ONE consumer has been converted — the
+       interest accrual, which reads the holdings columns. **Stage 08 does not read the company
+       table. Nothing reads the tranche table. Nothing shards.** The tables are built and correct
+       and, apart from that single reader, unused — which is why the timing did not move and why
+       the bit-exactness result, while necessary, proves almost nothing yet.
+     - **THE PHASE 3 FINDING THAT CHANGES THE PROJECTION'S SHAPE.** The per-line profile of stage
+       08's body is FLAT — no line above 0.85% over ~1,800 lines — and V8 reads a field off a
+       monomorphic object in about a nanosecond. **So converting those reads to column loads is not
+       where a 10× comes from.** The company table's value is cache locality on bulk single-field
+       sweeps, no allocation (retiring the 8.5–8.9% GC), and above all **a state a worker can take
+       without cloning.** Phase 3 is the ENABLER for phase 4, not a speedup on its own, and §7.216's
+       projection should be read that way: the return is collected when the body SHARDS.
+     - **Which makes the remaining order clear, and it is not the order that was planned.** Wiring
+       the company table into stage 08 while it still runs single-threaded buys close to nothing.
+       **The next real step is the worker path** — and its blocker is not the tables, it is that
+       stage 08's body still reads `updatedRegions`, `companyUpdates` and the payment journal as
+       objects. Those three are the last object-shaped things standing between the engine and its
+       other three cores.
+     - **What was skipped, deliberately, on instruction: verification between steps.** The gate was
+       built and run once at the end rather than at each phase. It passed. Had it not, five phases
+       of state-layer work would have had to be bisected — the commits are separate precisely so
+       that would have been possible.
