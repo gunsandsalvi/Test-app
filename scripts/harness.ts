@@ -141,9 +141,10 @@ const BOUNDARY_FRONTIERS: Record<string, string> = {
   'other opex beyond auction settlements': 'suppliers outside the modelled registry',
   // Warehousing is a service nobody sells yet. Owner: SVC.
   'inventory carrying cost': 'warehousing, unmodelled seller',
-  // The carriers exist and earn this as revenue; what is missing is the leg from the buyer to
-  // the carrier that actually hauled it. Owner: the freight book.
-  'freight on goods purchase': 'carrier cash leg not yet routed by lane share',
+  // A lane no carrier serves is priced at the SPEC marginal rate and the goods still move, so
+  // there is nobody to pay. Shrinks to nothing as the fleet reaches every lane; the served part
+  // is paid to the carrier by name (stage 05). Owner: the freight book.
+  'freight on a lane no carrier serves': 'no carrier on the lane to pay',
   // CP is issued at a derived rate with no cleared book, so its holder has no name. The money
   // funds are the real buyer. Owner: WS7 / the CP book.
   'commercial paper issued': 'commercial paper holders, no cleared book',

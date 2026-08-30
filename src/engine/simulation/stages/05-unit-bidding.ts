@@ -1418,12 +1418,46 @@ function runSubUnitMarkets(
           amountUSD: l.units * exWorksBuyerMoney,
           reason: 'goods purchase (ex-works)',
         });
-        pay(ctx, {
-          payer: { kind: 'COMPANY', ticker: comp.ticker },
-          payee: { kind: 'UNMODELED', region: plan.regionId },
-          amountUSD: l.units * (perUnit - exWorksBuyerMoney),
-          reason: 'freight on goods purchase',
-        });
+        // XB3a-2/CASH: THE CARRIER IS PAID BY THE BUYER, by name. The carriers have been real
+        // companies since XB3a-2 — real fleets, real fuel at the refined-product price, real crew
+        // through the labour market, listed equity, a home bank — but this leg paid the boundary
+        // and the carrier's freight then arrived on its books as `non-auction operating receipts`,
+        // also from the boundary. Two anonymous ends of one payment whose parties are both known.
+        //
+        // It is also ONE quantity now (rule 3). The carriers' revenue used to be re-derived from
+        // `shippedTonnesByLane x rate x share` further down this stage — a second computation of
+        // the same freight, in the carrier's money rather than the buyer's, which could not agree
+        // with what any buyer was charged. What a carrier earned is what its customers paid it.
+        const freightUSD = l.units * (perUnit - exWorksBuyerMoney);
+        if (freightUSD > 0) {
+          const lane = laneKey(origin, plan.regionId);
+          const shares = ctx.freightClearing?.carrierShareByLane.get(lane);
+          let paidUSD = 0;
+          shares?.forEach((share, carrierTicker) => {
+            const amountUSD = freightUSD * share;
+            if (!(amountUSD > 0)) return;
+            paidUSD += amountUSD;
+            ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0) + amountUSD;
+            pay(ctx, {
+              payer: { kind: 'COMPANY', ticker: comp.ticker },
+              payee: { kind: 'COMPANY', ticker: carrierTicker },
+              amountUSD,
+              reason: 'freight paid to the carrier',
+            });
+          });
+          // A lane no carrier serves is priced at the SPEC marginal rate (what it would cost to
+          // sail it), and the goods still moved. There is nobody to pay, so it stays a declared
+          // boundary line — and one that shrinks to nothing as the fleet reaches every lane.
+          const unservedUSD = freightUSD - paidUSD;
+          if (unservedUSD > 0.01) {
+            pay(ctx, {
+              payer: { kind: 'COMPANY', ticker: comp.ticker },
+              payee: { kind: 'UNMODELED', region: plan.regionId },
+              amountUSD: unservedUSD,
+              reason: 'freight on a lane no carrier serves',
+            });
+          }
+        }
         if (arrivalWeek <= nextWeek) {
           addInputInventory(companyUpdates[comp.ticker], comp, subUnitId, l.sellerKey, l.units, l.units * perUnit, nextWeek);
         } else {
@@ -1808,24 +1842,20 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     ctx.updatedRegions[regionId].activeContracts = reassembled;
   });
 
-  // Carriers are paid for what actually SHIPPED, not for what was booked. Booked space that went
-  // unused earns nothing, which is what a spot charter is; the buyer's side of the same flow has
-  // already left its books inside the landed cost it paid (rule 14 — both legs, same pass).
+  // Carriers are paid for what actually SHIPPED, not for what was booked — booked space that went
+  // unused earns nothing, which is what a spot charter is. The MONEY for it moved above, from the
+  // buyers, at the moment each lot was priced; what is left here is the physical work done, which
+  // is what the fleet's utilisation and its scrapping/ordering decisions read.
   const clearing = ctx.freightClearing;
   if (clearing) {
     Object.keys(ctx.shippedTonnesByLane).forEach(lane => {
       const tonnes = ctx.shippedTonnesByLane[lane];
-      const rateLaneMoney = ctx.freightRatePerTonneLaneMoneyByLane[lane] ?? 0;
-      if (!(tonnes > 0) || !(rateLaneMoney > 0)) return;
+      if (!(tonnes > 0)) return;
       const origin = lane.split('>')[0] as RegionId;
       const shares = clearing.carrierShareByLane.get(lane);
       if (!shares || shares.size === 0) return;
       shares.forEach((share, ticker) => {
-        const carrier = lookup.byTicker.get(ticker);
-        if (!carrier) return;
-        // Paid in the lane's money, booked in the carrier's own.
-        const revenue = convertLocal(tonnes * rateLaneMoney * share, origin, carrier.region as RegionId, sourcing.fxToUsd);
-        ctx.carrierFreightRevenue[ticker] = (ctx.carrierFreightRevenue[ticker] ?? 0) + revenue;
+        if (!lookup.byTicker.get(ticker)) return;
         ctx.carrierTonneNm[ticker] = (ctx.carrierTonneNm[ticker] ?? 0)
           + tonnes * share * laneDistanceNm(origin, lane.split('>')[1] as RegionId);
       });

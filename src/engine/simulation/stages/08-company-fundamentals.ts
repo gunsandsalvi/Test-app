@@ -917,7 +917,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // leg is its equity, which is where a real bank's wage bill lands.
       post('wages paid to households', -weeklyPayrollUSD, { kind: 'HOUSEHOLD', region: comp.region });
     } else {
-      const settledSalesUSD = update?.salesUSD ?? 0;
+      // XB3a-2: a CARRIER sells no units into the goods auction, so its `salesUSD` is zero — but
+      // its freight is settled, by name, by the buyers who shipped with it (stage 05). Counting
+      // it here is what keeps the whole of its revenue out of `non-auction operating receipts`,
+      // which would otherwise pay it a second time out of the boundary.
+      const settledSalesUSD = (update?.salesUSD ?? 0) + (ctx.carrierFreightRevenue[comp.ticker] ?? 0);
       const settledPurchasesUSD = update?.purchasesUSD ?? 0;
       post('settled sales (real auction receipts)', settledSalesUSD, undefined, false);
       post('settled purchases (real auction: inputs + capex)', -settledPurchasesUSD, undefined, false);
