@@ -916,6 +916,18 @@ const hhModule: HarnessModule = (() => {
         const depGap = Math.abs(((hs.depositsUSD ?? 0) - (hs.pendingBankSettlementUSD ?? 0)) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
       });
+      out.push('--- household liquidity: how many weeks of committed outflow the cash covers ---');
+      REGIONS.forEach(r => {
+        const h = s.regions[r].householdState as any;
+        const dep = Math.max(0, (h.depositsUSD ?? 0) + (h.mmfSharesUSD ?? 0));
+        const ds = Math.max(0, h.weeklyDebtServiceUSD ?? 0);
+        const cons = Math.max(0, s.regions[r].estimatedHouseholdIncomeUSD) * (1 - (h.savingsRate ?? 0)) / 52;
+        const committed = ds + cons;
+        // Any forced-selling or buffer rule is a THRESHOLD on this number. If the cash covers
+        // hundreds of weeks of outflow, no such threshold can ever be crossed and a rule built on
+        // one would be a mechanism that binds on nothing (§7.146, §7.149, §7.159).
+        out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover`);
+      });
       out.push('--- the mortgage book as a CROSS-SECTION: E[f(LTV)] against f(E[LTV]) ---');
       REGIONS.forEach(r => {
         const price = Math.max(0, s.regions[r].housingMarket?.medianHomePriceUSD ?? 0);

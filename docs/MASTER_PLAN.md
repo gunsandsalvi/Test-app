@@ -5948,3 +5948,30 @@ that proved it, the lesson.
       balance conserves the population, which the one-way version could not have done. Delinquency
       is a real ladder now (SP 0.82%, P 2.56%, NP 6.98%, SUB 13.89%) and bounded rather than
       climbing; quoted rates run SP 10.61% to SUB 23.68% off those measured losses. Harness green.
+
+163. **MEASURED: HOUSEHOLD LIQUIDITY IS 23.7 WEEKS OF COMMITTED OUTFLOW — which CONTRADICTS the
+    cause §7.158 recorded for its own failure. That record was a story, not a diagnosis.**
+    - §7.158 said the buffer rule blew up because "deposits are the sector's ENTIRE liquid wealth
+      and very much larger than twelve weeks of income, so every tier read as far above target and
+      dissaved". **The arithmetic does not support that.** Measured: liquid assets cover **23.7
+      weeks** of committed outflow (debt service plus consumption) in the USA, 22.9-24.0 across
+      all four regions. Against a 12-week target spent down over 8 years, the implied dissaving is
+      on the order of **3-4% of income** — nowhere near enough to take GDP to 2.1 billion trillion.
+      **That figure is an overflow signature, not a savings rate.** The real cause is elsewhere and
+      is NOT established.
+    - **So the stash must be re-diagnosed, not trusted**, and §7.158's stated cause is withdrawn.
+      Its DIAGNOSIS of the top-down structure stands untouched — the λ normalisation, the cap, the
+      redistribution and the four coefficients are all still there and still wrong. What is
+      withdrawn is my explanation of why my replacement broke.
+    - **TWICE IN ONE SESSION, and that is the finding worth keeping.** §7.162 recorded logging a
+      defect from the SHAPE of the code without reading the evolution path. This is the same error
+      in a different costume: explaining a failure from a plausible story without checking whether
+      the numbers could produce it. **A cause is not established until it is measured**, and a
+      confident write-up makes a wrong cause harder to dislodge than no write-up at all.
+    - **What this unblocks.** 23.7 weeks is a SANE buffer level, so a threshold on household
+      liquidity CAN be crossed — a shock that cuts income for a few months reaches it. Forced
+      selling (§6.1's household-equity row) is therefore NOT blocked on a liquid/illiquid split as
+      §7.158 assumed. **It is blocked on dissaving being possible at all**: cohort saving is
+      `disp x tierRate x lambda` under a `Math.max(0, ...)`, so no tier can ever dissave — a
+      FOURTH one-way ratchet, next to §7.162's three. The chain is: make saving two-sided, then
+      the drawdown is real, then forced selling has something to trigger on.
