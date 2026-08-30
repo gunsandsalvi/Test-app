@@ -916,6 +916,17 @@ const hhModule: HarnessModule = (() => {
         const depGap = Math.abs(((hs.depositsUSD ?? 0) - (hs.pendingBankSettlementUSD ?? 0)) - bankDeposits) / Math.max(1, bankDeposits);
         out.push(`  ${r}: instLiab=${B(instLiab)} held=${B(held)} (gap ${pct(gap)}) | netWorth parts gap ${pct(nwGap)} | tier-sum gap ${pct(tierGap)} | deposits-vs-banks gap ${pct(depGap)}`);
       });
+      out.push('--- the mortgage book against the curve that prices its losses ---');
+      REGIONS.forEach(r => {
+        const h = s.regions[r].householdState;
+        const stock = Math.max(0, h.housingStockUSD ?? 0);
+        const debt = Math.max(0, h.mortgageDebtUSD ?? 0);
+        const ltv = stock > 0 ? debt / stock : 0;
+        // The severity curve is flat at its floor below LTV ~0.75 and only bites above it, so
+        // where the book's MEAN sits decides whether the mechanism is live at all.
+        const recovery = Math.min(1, 0.75 / Math.max(0.05, ltv));
+        out.push(`  ${r}: mortgage ${B(debt)} / housing ${B(stock)} = LTV ${ltv.toFixed(3)}  ->  severity ${Math.max(0.05, 1 - recovery).toFixed(3)} [floor is 0.05]`);
+      });
       out.push('--- labor market relations ---');
       const du = series.u.slice(1).map((x, i) => x - series.u[i]);
       const dv = series.v.slice(1).map((x, i) => x - series.v[i]);

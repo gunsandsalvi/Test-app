@@ -1975,6 +1975,9 @@ owns: live defects needing a decision or a measurement, and metrics to watch rat
 
 | Defect | State and next action |
 |---|---|
+| **MORTGAGE LOSS SEVERITY IS A FLOOR CONSTANT, AND THE MEAN IS WHY — measured 2026-08-30** | `bank-lending.ts`: `avgLtv = mortgageDebtUSD / housingStockUSD`, ONE average LTV for a whole region's book, into `severity = max(0.05, 1 − min(1, 0.75/avgLtv))`. That curve is FLAT AT ITS FLOOR below LTV 0.75 and only bites above it. **Measured LTV: 0.340 in all four regions**, so severity is pinned at `MORTGAGE_MIN_LOSS_SEVERITY = 0.05` — the constant is 100% of mortgage loss severity in every region in every week, and the comment above it ("a price crash walks severity up as LTV approaches 1") describes something that cannot happen until house prices fall **55%**. A floor doing a mechanism's job (rule 2), and the mean is what lets it. **Two separate errors:** the LEVEL — with a realistic vintage spread (sd 0.20-0.30: a loan written last year at 80% beside one from twenty years ago at 20%) true `E[severity]` is **1.4x-1.9x** the mean-based figure; and the CONVEXITY, which matters more — a 15% price fall moves the mean 0.34 → 0.40 and changes losses by NOTHING, while it pushes a real mass of loans across the kink at once. **The model cannot produce a mortgage credit event.** Owner: DIST + HSG (item 10). |
+| **THE SAME DISTRESS RULE IS A THRESHOLD FOR NAMED FIRMS AND A SUM FOR POOLS — found 2026-08-30** | `labor-market.ts` applies `cash < 0 → layoffs = current x DISTRESS_LAYOFF_SPEED` per firm to the named tier (correct: each firm crosses or does not) and to `seg.cashUSD` — the POOL'S TOTAL — for the SME segments. So either every firm in a pool has distress layoffs or none does. **DIST already gave these same pools a leverage cross-section, and already integrates their DEFAULT rate and cash stress over it (§7.141)** — so one population now has a distribution for its credit outcome and a mean for its employment outcome, from two different stages. Identical code, two resolutions, one of them wrong (rule 3, and §5-DIST's own argument). |
+| **THE HOUSEHOLD CREDIT DISTRIBUTION EXISTS AND CANNOT MOVE — found 2026-08-30** | `consumerAnnualLossRate` is the ONE place that already does this right in shape: it carries four credit tiers with a **0.2 / 1.0 / 3.0 / 10.0** loss multiplier, which is exactly the convexity that makes a mean wrong. But `shareOfHouseholds` is STATED and never changes, so **nobody migrates**: no household falls from PRIME to NEAR_PRIME in a downturn, and migration is where most of the loss dynamics in a real consumer book live. A different failure from a missing distribution — a frozen one — and the fix is to make the shares an outcome of the same cohort balance sheets §7.145 already derives. Owner: CRD (item 9), which already lists the imposed shares. |
 | **CAPEX DOES NOT COVER DEPRECIATION — measured 2026-08-30 by IND13's new stock** | Assets under construction total **$2.2B against $2,452B of gross PP&E (0.09%)** with a p50 wait of 9 weeks, which puts capital ARRIVING at roughly $0.25B/week — about **0.5% of the capital stock a year against a straight-line depreciation of ~8%** (`SECTOR_PPE_USEFUL_LIFE_YEARS` ~12y). The plant is being consumed several times faster than it is replaced. It partly self-corrects — a shrinking net PP&E shrinks the capital charge the labour rule sheds against — which is exactly why it is invisible without measuring the stock. Suspect: the capex BUDGET (what a firm decides to spend) rather than the delivery path, which IND1/IND13 now make explicit end to end. Owner: CAP (item 4), whose capacity decisions this is. |
 | **A HARD CLAMP ON WEEKLY CAPACITY GROWTH — found 2026-08-30 reading IND13's neighbours** | `05-unit-bidding.ts`: `line.weeklyCapacityUnits *= 1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate))`. A ±2%/week bound on an OUTCOME (rule 2, rule 13). It is doing the work the investment decision should do: a firm that commissioned a plant twice its size still grows 2%, and one whose capital evaporated still shrinks only 2%. Small and untouched deliberately — it belongs with CAP's capacity decisions, beside the row above, and removing it before the capex budget is real would only expose the same imbalance faster. |
 | **A HOUSEHOLD CAN BUY EQUITY AND CAN NEVER SELL IT — found 2026-08-30, from a user question** | **Measured in the code, not inferred from shape.** `etf-flows.ts`'s household leg is `intoFundsUSD = Math.max(0, weeklySavingUSD x equityShareOfSaving)`: the `max(0,...)` means a household buys funds or does not buy funds, and there is no household term in `grossRedeemUSD`, which is built from the institutional `wantDelta` loop alone. Unemployment does not enter the equity decision at all — `equityShareOfSaving` is earnings yield less deposit yield and nothing else — so a job loss slows PURCHASES and never forces a sale. Savings genuinely can drain (`02b`'s deposit inflow takes `savingsRate x income` SIGNED, so a negative rate pulls deposits down), and the equity book still does not move: `household-balance-sheet.ts` marks it as `realClaimsUSD + unmodeledFinancialAssetsUSD`, a valuation of what is held, and nothing reduces what is held. **What this suppresses is the amplifier**: forced selling into a falling market, lower prices, lower wealth, more selling. A drawdown currently has no household seller in it. Owner: HH/DIST tier — the seller is a THRESHOLD decision (sell when the buffer is gone), which is exactly the nonlinearity DIST says must be carried as a distribution rather than a mean. |
@@ -5673,3 +5676,40 @@ that proved it, the lesson.
       quality; customer deposits land at 0.00 weeks of sales for made-on-demand goods and 1.06
       for long-cycle ones with no category list anywhere; and seasonality's annual mean is
       exactly 1.000 on both sides of all eleven seasonal goods.
+
+157. **WHERE ELSE THE DIST TREATMENT PAYS — the sweep, from a user question, measured not
+    guessed.** The test is §5-DIST's own: carry the distribution only where a decision is
+    NONLINEAR in the quantity, because `E[f(x)] = f(E[x])` holds only for affine `f`. So the
+    sweep is not "what is a scalar" — it is "what scalar feeds a threshold, a min/max, a default,
+    or an absorbing state". Four found, ranked, all logged in §6.1.
+    - **1. THE MORTGAGE BOOK'S LTV — the sharpest case in the codebase, and it is not close.**
+      One average LTV per region into a severity curve that is flat at its floor below 0.75.
+      Measured LTV **0.340 everywhere**, so the mechanism is inert and a constant is doing all of
+      it. The convexity is the real loss: on the mean, a 15% house-price fall changes mortgage
+      losses by nothing. **See §6.1 for the full measurement.**
+    - **2. SME POOL CASH.** The same `cash < 0 → distress layoffs` rule is applied per firm to
+      named firms and to the pool's TOTAL for segments. DIST already integrates these pools'
+      default and cash stress over strata (§7.141), so one population has a distribution for its
+      credit outcome and a mean for its employment outcome. **The strata already exist** — this
+      is the cheapest of the four.
+    - **3. THE HOUSEHOLD CREDIT TIERS — a distribution that cannot move.** The shape is already
+      right (a 0.2/1.0/3.0/10.0 convexity ladder) and the SHARES are frozen, so nobody migrates
+      down a tier in a downturn. **This is the interesting one for the theory**: a static
+      distribution is only half the treatment. The state is not the moments, it is the moments
+      AND their motion — which is exactly the Kolmogorov-forward half of the mean-field pair
+      §5-DIST cites, and the half that is easy to leave out.
+    - **4. COHORT CONSUMPTION AT THE BORROWING CONSTRAINT.** Cohorts DO carry employed and
+      unemployed per (occupation, tier) cell — that part is right. But the cell's wage and
+      benefit are SUMMED into tier income before the consumption decision, and consumption is
+      nonlinear at the constraint: a person with no job and no buffer cuts to subsistence, and a
+      tier average never does. The distribution is built and then collapsed one step too early.
+    - **What does NOT need it, checked and cleared:** anything on the named tier (real objects,
+      each crossing its own threshold), SME pool leverage/default/cash-stress (DIST did it),
+      employment by occupation-and-tier cell, contract non-performance (per contract since
+      §7.148), and the damper's bound instruments (per instrument).
+    - **The general rule this sweep produces, and it is cheap to apply:** find every `< 0`,
+      `Math.max`, `Math.min` and rating cut whose argument is an AGGREGATE, and ask what fraction
+      of the population is on the other side of it. Where the aggregate sits far from the kink —
+      LTV 0.34 against a kink at 0.75 — **the mechanism is not merely inaccurate, it is switched
+      off**, and a floor constant will be quietly standing in for it. That is the same shape as
+      §7.146 and §7.149: a mechanism that binds on nothing is a mechanism that is not there.
