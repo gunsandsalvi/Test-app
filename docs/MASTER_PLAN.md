@@ -1817,3 +1817,34 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        real number with an unestablished cause, and all three were wrong (§7.213's "no hot spot
        left", §7.216's "columnar gives 10×", §7.218's own correction). **Establish the cause, then
        project.** These three tests cost under an hour.
+220. **THE SCOPING FAILED, AND THAT IS THE ANSWER. There is no dominant block.** §7.219 concluded
+     the clearing "funnel" was ~440 ms and scoped a rewrite around collapsing it. Instrumenting the
+     funnel directly killed that scope in two measurements.
+     - **07b's adapter — every participant and every demand schedule it builds — is 9 ms.** The
+       engine beneath it is 27 ms. The layer §7.219 proposed deleting is a seventh of the book it
+       sits in. "Objects built only to be packed into typed arrays and thrown away" was true and
+       was worth nine milliseconds.
+     - **05-unit-bidding, the largest stage at 278 ms, splits as** `settleContracts` ~45,
+       `buildRegionDemandPlans` ~26, `clearBook` ~28 — **~100 ms of 278.** The rest is fill
+       application, the per-lot payment loop, inventory writes, freight and the index build. No
+       single one of them is large.
+     - **SO THE COST IS GENUINELY DISTRIBUTED, established four independent ways:** a flat CPU
+       profile (§7.213), a flat per-line profile inside the biggest body (§7.218), a 9 ms adapter,
+       and a largest-stage split where the top item is 16% of its own stage. **This engine is ~40
+       stages each doing a moderate amount of real work over a large object graph.** Every attempt
+       in §7.212–219 to find the one block has failed, and the failures agree.
+     - **WHICH SETTLES THE 100 ms QUESTION, ARITHMETICALLY.** 88% of the week is shardable
+       (§7.219), giving 2.92× on four cores; retiring allocation and the GC gives perhaps 1.3×.
+       **That is ~3.8× — about 370 ms — and there is no measured 4.8× of single-threaded waste left
+       to find on top of it.** Four independent probes say the remaining work is the model
+       computing itself. **Under 100 ms on four cores, without changing the simulation, is not
+       reachable.** At eight cores the same rewrite lands near 250 ms; at sixteen, near 180.
+     - **What IS reachable, and it is worth having:** the full data-oriented rewrite at ~370 ms on
+       this hardware — a 3.8× — with the simulation unchanged and every step bit-exact. The three
+       decisions that get it are the measured ones: shard the 88%, allocate nothing, and stop
+       walking the object graph. Not the ones invented to explain a ratio.
+     - **The discipline this whole run of records exists to install:** §7.213, §7.216, §7.218 and
+       §7.219 each projected a large win from a real number whose CAUSE was assumed. All four were
+       wrong, and each cost more to discover than the measurement that would have prevented it.
+       **A projection without an established cause is not an estimate, it is a hope with a number
+       attached.**
