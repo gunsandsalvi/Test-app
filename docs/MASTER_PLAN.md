@@ -489,6 +489,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 
 | Defect | State and next action |
 |---|---|
+| **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | §7.213: 32,278 holding rows at seed → ~103,000 distinct positions by week 5, ~122,000 rows by week 15. **15% are duplicate `(holder, instrument)` rows and 9% are under $1,000.** §1's §7.4 rule is that the seed opens in the shape the weekly engine produces; this one does not, and every stage that walks the register pays for the gap. Consolidating duplicates and dust is ~25% off every register walk — the largest algorithmic item left. Owner: the seed, with SCALE. |
 | **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | Distinct from §7.210's quit rate, which is fixed and holds for ~12 weeks. Over 60, EUR reaches 65% unemployment and UK prints 0.0% at week 49 — 52 band violations across EUR and JPN. **Next action: the same treatment that worked in §7.210 — find the week it turns, and check what is FLAT while employment moves.** Owner: HH5/LAB. |
 | **SUPPLIER MARKET SHARES DO NOT SUM TO 100%** | ~120 violations over 60 weeks in `agricultural_commodities` and `network_infrastructure`, in all four regions. **A goods-market accounting defect with nothing to do with prices**, invisible until the harness could run this long. Cheapest of the open rows and probably the most self-contained. Owner: the goods market (IND). |
 | **REPO COLLATERAL IS OVER-PLEDGED** | The largest single family in §7.211 (XIVF 56x, THSY 54x): a bank pledging more of a tenor bucket than it holds. `repoEncumberedCollateralUSD` is supposed to be reconciled against holdings every week by `reconcileRepoPledges`. Owner: WS6/REPO. |
@@ -1493,3 +1494,31 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        open by week 16 — a number that is itself a symptom of §7.211's divergence. **Part of this
        cycle time is the broken economy, not the engine.**
      - Everything in this pass is **bit-exact**: 20 weeks of prints identical field for field.
+213. **WHY 300 ms IS NOT A BUG HUNT — the four measurements that settle it.** §7.212 got 1872 →
+     1756 by fixing defects. This pass got 1466 by fixing more, including a real correctness bug.
+     Then it stopped guessing and measured the SHAPE of the remaining cost, which is the part worth
+     keeping.
+     - **The numerics are 70 ms.** `runClearingKernel` 22, `sortIndexByKey` 23, `accumulateShard`
+       15, `solveClearingStat` 10. **Everything else — ~1,400 ms — is orchestration over the object
+       graph.** Not one hot spot: the largest named function is 13% and the profile has a long flat
+       tail across forty stages.
+     - **Cutting the universe 4.4× makes it only 1.85× faster** (2,496 → ~570 firms: 1569 → 849
+       ms). **So the cost is not "too many companies."** What does not shrink with the firm count —
+       ~300 institutions, ~120,000 holding rows, the households, 37 sub-units × 4 regions — carries
+       most of it. A smaller universe is therefore NOT a route to 300; it bottoms out around 800.
+     - **Worker sharding is dead on this hardware, measured twice.** 4 cores. At 4 workers stage 05
+       goes 363 → 369 ms, at 8 → 390. §7.773's "sub-300 needs worker parallelism" is unreachable
+       here at any amount of work.
+     - **The engine is allocation-bound**: GC is a steady 8.5–8.9% of every profile, and
+       `--max-semi-space-size=64` alone is worth 7.5% with no code change at all.
+     - **THE CONCLUSION, and it is §7.777's from the other side:** ~1,400 ms of pointer-chasing over
+       2,496 companies, ~120,000 holdings and ~8,600 tranches cannot be reduced 5× by removing
+       work, because there is no concentrated work left to remove. **It requires the state itself to
+       stop being an object graph.** That is SCALE wave 2, it is a world relabel, and it now costs
+       §7.211's measurement programme.
+     - **A finding that came free and matters elsewhere:** the institutional register grows from
+       32,278 rows at seed to ~103,000 DISTINCT positions by week 5 and ~122,000 rows by week 15,
+       of which 15% are duplicate `(holder, instrument)` rows and 9% are under $1,000. §7.4 says
+       the seed must open in the shape the engine produces; **it opens at a quarter of it.** Owner:
+       the seed, with SCALE — and consolidating the duplicates and the dust is ~25% off every
+       register walk, which is the largest single algorithmic item left.
