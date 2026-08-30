@@ -92,6 +92,9 @@ export interface GameState {
   companies: Company[];
   institutionalEntities: InstitutionalEntity[];
   commodities: Commodity[];
+  /** DER4 — the open commodity futures positions, carried week to week
+   * (domain/commodity-futures.ts). The curve on each commodity is derived from it. */
+  commodityFuturesBook?: import('./commodity-futures').FuturesPosition[];
   compositeIndices: CompositeBenchmarkIndices;
   recentIPOs: { ticker: string; name: string; category: string; week: number }[];
   recentMergers: { acquirerTicker: string; acquirerName: string; targetTicker: string; targetName: string; week: number; dealValueUSD: number }[];

@@ -2,21 +2,20 @@ import React, { useState } from 'react';
 import { COMMODITY_QUANTITY_UNIT, GameState, Commodity, Region, RegionId } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
 import { TapToChart } from '../shared/TapToChart';
-import { priceCommodityFutures } from '../../engine/pricing';
 
 type CommodityTab = 'spot' | 'curve' | 'supplychain';
 
 export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => void }> = ({ state, onOpenTrade }) => {
   const [tab, setTab] = useState<CommodityTab>('spot');
-  const rf = state.regions.USA?.policyRate ?? 0.04;
 
   const rawList = Array.isArray(state.commodities) ? state.commodities : Object.values(state.commodities || {});
 
   const commodities = rawList.map((c: Commodity) => {
     const spot = c.spotPrice ?? 100;
-    const q = c.convenienceYield ?? 0.03;
-    const tenors = [0, 1 / 12, 3 / 12, 6 / 12, 1];
-    const futures = tenors.map(t => t === 0 ? spot : priceCommodityFutures(spot, rf, q, t));
+    // DER4: the curve the futures book actually cleared, not one redrawn here from a formula.
+    // The screen showed a smooth exp() through a stated convenience yield while the traded curve
+    // sat on the commodity beside it — two representations of one thing (rule 3).
+    const futures = [spot, c.futures1M || spot, c.futures3M || spot, c.futures6M || spot];
     const isContango = futures[futures.length - 1] > spot;
 
     const prevPrice = c.historicalPrices?.[c.historicalPrices.length - 2] ?? spot;
@@ -140,7 +139,6 @@ export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: an
                   <div>1M: ${c.futures[1].toFixed(1)}</div>
                   <div>3M: ${c.futures[2].toFixed(1)}</div>
                   <div>6M: ${c.futures[3].toFixed(1)}</div>
-                  <div>1Y: ${c.futures[4].toFixed(1)}</div>
                 </div>
               </div>
             );

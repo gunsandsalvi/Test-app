@@ -3,6 +3,7 @@ import { dealersFromBanks } from '../dealers';
 import { runPrimeBrokerageStage } from './stages/prime-brokerage';
 import { runSwapClearingStage } from './stages/07g-swap-clearing';
 import { runCdsClearingStage } from './stages/07h-cds-clearing';
+import { runCommodityFuturesStage } from './stages/07i-commodity-futures';
 import { runSecuritiesLendingStage } from './stages/securities-lending';
 import { runEstateResolutionStage } from './stages/estate-resolution';
 import { reconcileRepoPledges } from './stages/repo-clearing';
@@ -146,6 +147,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('07g-swap-clearing', () => runSwapClearingStage(state, ctx));
   // CRD/DER2: after 07b, whose cleared OAS every schedule in the protection book prices against.
   run('07h-cds-clearing', () => runCdsClearingStage(state, ctx));
+  // DER4: after 07-commodities, whose spot every futures schedule prices against.
+  run('07i-commodity-futures', () => runCommodityFuturesStage(state, ctx));
   // REPO2: the sovereign books have all cleared, so a pledge on paper a bank no longer holds is
   // called and the loan it secured shrinks with it.
   run('repo-collateral-reconcile', () => reconcileRepoPledges(ctx));
@@ -232,6 +235,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
+    commodityFuturesBook: ctx.commodityFuturesBook,
     holderAccruedInterestUSD: Object.fromEntries(ctx.holderAccruedInterestUSD),
     lastCashReconcileUSD: ctx.cashReconcileUSD,
     lastCashReconcileByClassUSD: ctx.cashReconcileByClassUSD,

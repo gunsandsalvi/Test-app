@@ -1,6 +1,5 @@
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
-import { priceCommodityFutures } from '../pricing';
 import { RegionId, Region, FxPair, Commodity, HouseholdState, Industry, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
 import { getBaseAnnualWageUSD, BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../bootstrap/labor-and-wages';
 import {
@@ -1312,9 +1311,15 @@ export function evolveCommodity(
   
   const change1W = Number((newSpot - comm.spotPrice).toFixed(2));
 
-  const f1M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 1 / 12).toFixed(2));
-  const f3M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 3 / 12).toFixed(2));
-  const f6M = Number(priceCommodityFutures(newSpot, rfUSD, comm.convenienceYield, 6 / 12).toFixed(2));
+  // DER4: THE CURVE IS NOT DRAWN HERE ANY MORE. It was `spot x exp((r − convenienceYield) x T)`
+  // with the convenience yield seeded once and never touched, so the curve was spot times a
+  // constant: it could not back off when this market went short or build out when it went long,
+  // and nobody was on either side of it. `07i-commodity-futures.ts` clears all three tenors
+  // against real producer and consumer hedging demand and writes them, and the convenience yield
+  // is inferred from what it cleared. Spot carries the week's move through until it runs.
+  const f1M = comm.futures1M > 0 ? comm.futures1M : newSpot;
+  const f3M = comm.futures3M > 0 ? comm.futures3M : newSpot;
+  const f6M = comm.futures6M > 0 ? comm.futures6M : newSpot;
 
   const hist = [...comm.historicalPrices.slice(-51), newSpot];
 
