@@ -5593,3 +5593,31 @@ that proved it, the lesson.
       suppliers — **0.00 weeks of sales at lead 0, 0.11 at leads 1-5, 1.06 at leads 6+**. The
       negative working capital accrues to precisely the firms whose production ties up the cash,
       and to nobody else. Harness green.
+
+155. **IND18 — the model has a calendar now, and the probe's headline is a SEASONAL print.**
+    - **Two numbers, not a table.** `SubUnitSpec.seasonality` carries an amplitude and a peak
+      week per side, and `seasonalFactor` is one cosine:
+      `1 + amplitude x cos(2*pi*(week − peakWeek)/52)`. **It averages to exactly 1.000 over a
+      year on both sides — measured, all eleven goods, both columns** — so seasonality
+      REDISTRIBUTES output and demand around the calendar and never creates or destroys any.
+      That is what makes it seasonality rather than a growth term, and it is why no data series
+      is needed to express it (rule 4).
+    - **Production seasonality is the physical one**: a harvest at week 35, a building season at
+      week 28. **Demand seasonality is the behavioural one**: the retail peak at weeks 48-49,
+      fertiliser at week 14 for spring planting, the winter electricity load. The pairing is
+      coherent without being coordinated — you buy the chemicals in spring and harvest in late
+      summer, and those are two independent primitives on two different goods.
+    - **The amplitude correction, and why it is not tuning.** Agriculture opened at 0.80, which
+      produced a 0.22x trough. That is right for ONE CROP — nothing, then everything, then
+      storage — and wrong for what this sub-unit IS: a basket of staggered plantings across a
+      hemisphere. Set to 0.45 on that reasoning, not on where the print landed (rule 12).
+    - **WHAT THIS DOES TO THE PROBE, and it must not be missed.** A 10-week run now samples ONE
+      SEASON: weeks 1-11 sit in the agricultural trough (0.56x) and near the retail peak, and the
+      week-10 headline moved −16.79% → +4.33% across this slice alone. **The number is not a
+      steady state any more and never was one; it is now visibly not one.** Comparisons across
+      commits are still like-for-like (same seed, same calendar start) but the level is a
+      seasonal reading, and any judgement of price behaviour needs a full year (rule 12 says that
+      judgement waits for the end regardless).
+    - Storage is what smooths this into consumption, and IND1 already built it: a storable good
+      with a real carrying cost is exactly the mechanism that carries a harvest through a year.
+      **The classical inventory cycle now has a period to cycle on.**

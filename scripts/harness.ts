@@ -43,7 +43,7 @@ import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/ce
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { sovBucketKey } from '../src/engine/simulation/stages/shared-helpers';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
-import { productionLeadWeeksOf } from '../src/domain/industry-registry';
+import { productionLeadWeeksOf, seasonalFactor } from '../src/domain/industry-registry';
 import { SUBUNIT_PHYSICAL, deliveryModeOf } from '../src/domain/goods-physical';
 import { laneDistanceNm } from '../src/domain/geography';
 import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
@@ -1275,6 +1275,19 @@ const indModule: HarnessModule = (() => {
       // nobody and pricing it changes nothing.
       out.push(`  spread p90/p10: ${(q(0.1) > 0 ? q(0.9) / q(0.1) : 0).toFixed(2)}x  |  below 0.5: ${suppliers.filter(c => ((c as any).deliveryReliability ?? 1) < 0.5).length}`);
     }
+
+    out.push('--- IND18: the calendar (a 10-week probe samples ONE season) ---');
+    const seasonalIds = Object.values(INDUSTRY_SUBUNITS).flat().map((su: any) => su.unitId as string)
+      .filter(su => seasonalFactor(su, 0, 'production') !== 1 || seasonalFactor(su, 0, 'demand') !== 1);
+    seasonalIds.forEach(su => {
+      const pNow = seasonalFactor(su, s.currentWeek, 'production');
+      const dNow = seasonalFactor(su, s.currentWeek, 'demand');
+      // The year's average must be exactly 1 on both sides: seasonality moves output and demand
+      // around the calendar, it does not create any.
+      let pAvg = 0, dAvg = 0;
+      for (let w = 0; w < 52; w++) { pAvg += seasonalFactor(su, w, 'production'); dAvg += seasonalFactor(su, w, 'demand'); }
+      out.push(`  ${su.padEnd(26)} wk${String(s.currentWeek).padStart(3)}: production x${pNow.toFixed(2)}  demand x${dNow.toFixed(2)}  [annual mean ${(pAvg / 52).toFixed(3)} / ${(dAvg / 52).toFixed(3)}]`);
+    });
 
     out.push('--- IND17: negative working capital, and who gets to have it ---');
     const prepaidBySupplier = new Map<string, number>();

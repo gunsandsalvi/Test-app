@@ -68,6 +68,22 @@ export interface SubUnitSpec {
    * like the production lead above (rule 4).
    */
   commissioningLeadWeeks?: number;
+  /**
+   * IND18 — SEASONALITY, as a phase and an amplitude rather than a table of 52 numbers.
+   *
+   * `production` is the physical one: a crop ripens once a year and the plant that harvests it
+   * cannot choose otherwise, which is the whole reason commodity STORAGE exists and the whole
+   * reason the classical inventory cycle has a period. `demand` is the behavioural one: coats in
+   * winter, gifts in December, a summer building season.
+   *
+   * Two numbers each — how far output or demand swings around its own average, and the week it
+   * peaks — so nothing here is a data series (rule 4 allows the primitive). Absent = flat, which
+   * is most goods and what every good was before this.
+   */
+  seasonality?: {
+    production?: { amplitude: number; peakWeek: number };
+    demand?: { amplitude: number; peakWeek: number };
+  };
   linkedCommodities?: { commodityId: string; intensityShare: number }[];
   // ---- IND's dials. Storability and carrying cost are DERIVED from the physics above
   // (see isStorable / annualCarryingCostRateOf) rather than stated twice; these two are not
@@ -180,6 +196,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'refined_products',
+        seasonality: { demand: { amplitude: 0.12, peakWeek: 30 } },
         householdUnitsPerCapitaAnnual: 6.0, corporateUnitsPerFirmAnnual: 60.0,
         recipeInputs: { upstream_extraction: 0.55, industrial_chemicals: 0.02, electricity: 0.03, professional_services: 0.02, facilities_and_logistics: 0.04, repair_and_maintenance: 0.04 },
         label: "Refined Products",
@@ -204,6 +221,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
         // Generated at the margin from gas, so its price moves with the fuel — the real channel
         // by which an energy shock reaches every other industry's cost base.
         unitId: 'electricity',
+        seasonality: { demand: { amplitude: 0.15, peakWeek: 3 } },
         householdUnitsPerCapitaAnnual: 20.0, corporateUnitsPerFirmAnnual: 120.0,
         recipeInputs: { upstream_extraction: 0.22, refined_products: 0.06, specialty_metals: 0.01, professional_services: 0.02, facilities_and_logistics: 0.02, repair_and_maintenance: 0.06 },
         label: "Electricity",
@@ -247,6 +265,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'agricultural_chemicals',
+        seasonality: { demand: { amplitude: 0.45, peakWeek: 14 } },
         corporateUnitsPerFirmAnnual: 12.0,
         recipeInputs: { industrial_chemicals: 0.25, upstream_extraction: 0.06, electricity: 0.08, professional_services: 0.03, facilities_and_logistics: 0.05, repair_and_maintenance: 0.04 },
         label: "Agricultural Chemicals",
@@ -270,6 +289,11 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'agricultural_commodities',
+        // The sub-unit is a BASKET of crops, not one crop. A single harvest swings near-totally
+        // (nothing, then everything, then storage); a basket of staggered plantings in one
+        // hemisphere does not, and stating the single-crop amplitude here would be a claim about
+        // a thing this unit is not.
+        seasonality: { production: { amplitude: 0.45, peakWeek: 35 } },
         householdUnitsPerCapitaAnnual: 4.0, corporateUnitsPerFirmAnnual: 30.0,
         recipeInputs: { agricultural_chemicals: 0.14, refined_products: 0.05, electricity: 0.02, professional_services: 0.02, facilities_and_logistics: 0.05, repair_and_maintenance: 0.04 },
         label: "Agricultural Commodities",
@@ -395,6 +419,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'consumer_devices',
+        seasonality: { demand: { amplitude: 0.30, peakWeek: 48 } },
         householdUnitsPerCapitaAnnual: 0.6, corporateUnitsPerFirmAnnual: 3.0,
         recipeInputs: { semiconductors: 0.28, specialty_metals: 0.06, industrial_chemicals: 0.04, consumer_software: 0.02, electricity: 0.02, professional_services: 0.03, facilities_and_logistics: 0.05, repair_and_maintenance: 0.02 },
         label: "Consumer Devices",
@@ -502,6 +527,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'food_beverage',
+        seasonality: { demand: { amplitude: 0.08, peakWeek: 50 } },
         householdUnitsPerCapitaAnnual: 120.0, corporateUnitsPerFirmAnnual: 8.0,
         recipeInputs: { agricultural_commodities: 0.34, industrial_chemicals: 0.03, household_chemicals: 0.02, specialty_metals: 0.02, electricity: 0.03, professional_services: 0.02, facilities_and_logistics: 0.06, repair_and_maintenance: 0.03 },
         label: "Food & Beverage",
@@ -534,6 +560,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'apparel_retail',
+        seasonality: { demand: { amplitude: 0.35, peakWeek: 48 } },
         householdUnitsPerCapitaAnnual: 10.0, corporateUnitsPerFirmAnnual: 1.0,
         recipeInputs: { household_essentials: 0.10, agricultural_commodities: 0.06, luxury_goods: 0.04, industrial_chemicals: 0.04, housing_rental_services: 0.05, electricity: 0.02, professional_services: 0.03, facilities_and_logistics: 0.09, repair_and_maintenance: 0.01 },
         label: "Apparel & General Retail",
@@ -545,6 +572,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'home_furnishings',
+        seasonality: { demand: { amplitude: 0.18, peakWeek: 22 } },
         householdUnitsPerCapitaAnnual: 1.5, corporateUnitsPerFirmAnnual: 1.5,
         recipeInputs: { specialty_metals: 0.08, industrial_chemicals: 0.07, agricultural_commodities: 0.04, consumer_devices: 0.04, housing_rental_services: 0.04, electricity: 0.02, professional_services: 0.02, facilities_and_logistics: 0.08, repair_and_maintenance: 0.02 },
         label: "Home Furnishings",
@@ -563,6 +591,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
     subUnits: [
       {
         unitId: 'luxury_goods',
+        seasonality: { demand: { amplitude: 0.40, peakWeek: 49 } },
         householdUnitsPerCapitaAnnual: 0.5, corporateUnitsPerFirmAnnual: 0.2,
         recipeInputs: { specialty_metals: 0.16, apparel_retail: 0.04, household_chemicals: 0.02, housing_rental_services: 0.03, electricity: 0.01, professional_services: 0.05, facilities_and_logistics: 0.04, repair_and_maintenance: 0.01 },
         label: "Luxury Goods",
@@ -701,6 +730,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'residential_construction',
+        seasonality: { production: { amplitude: 0.25, peakWeek: 28 } },
         householdUnitsPerCapitaAnnual: 0.05, corporateUnitsPerFirmAnnual: 0.4,
         recipeInputs: { specialty_metals: 0.16, industrial_chemicals: 0.10, home_furnishings: 0.05, heavy_equipment: 0.04, refined_products: 0.03, electricity: 0.02, professional_services: 0.06, facilities_and_logistics: 0.05, repair_and_maintenance: 0.03 },
         label: "Residential Construction",
@@ -711,6 +741,7 @@ export const INDUSTRY_REGISTRY: Record<Industry, IndustrySpec> = {
       },
       {
         unitId: 'commercial_construction',
+        seasonality: { production: { amplitude: 0.20, peakWeek: 28 } },
         corporateUnitsPerFirmAnnual: 0.5,
         recipeInputs: { specialty_metals: 0.19, industrial_chemicals: 0.10, heavy_equipment: 0.05, industrial_automation: 0.03, refined_products: 0.03, electricity: 0.02, professional_services: 0.07, facilities_and_logistics: 0.05, repair_and_maintenance: 0.03 },
         label: "Commercial & Infrastructure Construction",
@@ -998,6 +1029,19 @@ export function isStorable(unitId: string): boolean {
 /** IND10 — weeks from starting a unit to having one to sell. 0 = made on demand. */
 export function productionLeadWeeksOf(unitId: string): number {
   return byId.get(unitId)?.productionLeadWeeks ?? 0;
+}
+
+/**
+ * IND18 — this good's seasonal multiplier for a given week, on either side.
+ *
+ * One cosine: `1 + amplitude x cos(2*pi*(week - peakWeek)/52)`. It averages to exactly 1 over a
+ * year, so seasonality REDISTRIBUTES output and demand across the year and never creates or
+ * destroys any — which is what makes it seasonality rather than a growth term.
+ */
+export function seasonalFactor(unitId: string, week: number, side: 'production' | 'demand'): number {
+  const prof = byId.get(unitId)?.seasonality?.[side];
+  if (!prof) return 1;
+  return 1 + prof.amplitude * Math.cos((2 * Math.PI * (week - prof.peakWeek)) / 52);
 }
 
 /** IND13 — weeks from a capital good arriving to it entering service. 0 = usable on delivery. */

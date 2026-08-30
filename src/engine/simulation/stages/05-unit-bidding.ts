@@ -23,7 +23,7 @@ import { GameState, Region, RegionId, UnitBid, UnitOffer, SupplyContract, Compan
 import { categoryPriceTier, HOUSEHOLD_BID_BASE_PREMIUM, HOUSEHOLD_BID_PREMIUM_BY_TIER } from '../../../domain/industry';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
 import { SECTOR_PPE_USEFUL_LIFE_YEARS } from '../constants';
-import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf } from '../../../domain/industry-registry';
+import { isStorable, purchaseKindOf, productionLeadWeeksOf, commissioningLeadWeeksOf, seasonalFactor } from '../../../domain/industry-registry';
 import { pay, PartyRef } from './settlement';
 import { CATEGORY_INPUT_REQUIREMENTS, CAPEX_SUPPLIER_WEIGHTS, CAPEX_PUBLIC_SUPPLY_SHARE } from '../../../domain/market-microstructure';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
@@ -664,6 +664,7 @@ function buildRegionSupplyPlans(
   index: RegionMarketIndex,
   referencePriceUSD: number,
   supplierExpectedUnitPriceUSD: number,
+  week: number,
   isCapexSupplierCategory: boolean,
   capexSupplierWeight: number | undefined
 ): SupplyPlan[] {
@@ -744,7 +745,11 @@ function buildRegionSupplyPlans(
     const staffedShare = (comp.baselineEmployeeCount ?? 0) > 0
       ? Math.max(0, (comp.employeeCount ?? 0) / comp.baselineEmployeeCount!)
       : 1;
-    const plantUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    // IND18 — what the plant can make THIS WEEK. A harvest is not a decision: the crop ripens
+    // once a year and no price makes it ripen twice. Averages to 1 over the year, so this moves
+    // output around the calendar and never adds any.
+    const seasonalPlantFactor = seasonalFactor(subUnitId, week, 'production');
+    const plantUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle * seasonalPlantFactor;
     const uncappedProductionUnits = Math.min(plantUnits, plantUnits * staffedShare);
     const prospectiveUnitCostUSD = uncappedProductionUnits > 0.0001
       ? weeklyOperatingCostUSD / uncappedProductionUnits
@@ -891,7 +896,8 @@ function buildRegionDemandPlans(
   capexSupplierWeight: number | undefined,
   isRecipeInputCategory: boolean,
   govShare: number,
-  hhShare: number
+  hhShare: number,
+  week: number
 ): DemandPlan[] {
   const plans: DemandPlan[] = [];
   const demandState = reg.categoryDemand[subUnitId] as any;
@@ -1019,7 +1025,11 @@ function buildRegionDemandPlans(
 
   // Household Aggregate Bid
   if (hhShare > 0) {
-    let hhDemandUnits = ((demandState.demandLevelUSD * hhShare) / 52) / referencePriceUSD;
+    // IND18 — coats in winter, gifts in December. The seasonal swing is on the HOUSEHOLD leg
+    // because that is where a retail peak lives; a firm's demand for its own inputs follows its
+    // own production, which already carries the production side of the same calendar.
+    let hhDemandUnits = ((demandState.demandLevelUSD * hhShare) / 52) / referencePriceUSD
+      * seasonalFactor(subUnitId, week, 'demand');
 
     if (subUnitId === 'passenger_vehicles') {
       const initialStock = reg.householdState.durableGoodsStockUnits ?? (((demandState.demandLevelUSD * hhShare) / referencePriceUSD) * 3.5);
@@ -1115,7 +1125,7 @@ function runSubUnitMarkets(
 
     supplyPlans.push(...buildRegionSupplyPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceUSD,
-      isCapexSupplierCategory, capexSupplierWeight
+      nextWeek, isCapexSupplierCategory, capexSupplierWeight
     ));
   });
 
@@ -1153,7 +1163,7 @@ function runSubUnitMarkets(
     demandPlans.push(...buildRegionDemandPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId],
       contractUnitsByCustomer, isCapexSupplierCategory, capexSupplierWeight, isRecipeInputCategory,
-      govShare, hhShare
+      govShare, hhShare, nextWeek
     ));
   });
 
