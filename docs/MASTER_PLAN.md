@@ -5553,3 +5553,24 @@ that proved it, the lesson.
       exists and is dispersing, and the dispersion is YOUNG on purpose: at 0.9 a record moves
       only 65% of the way to the truth in ten weeks, so this is what a slow EMA looks like early.
       It needs a longer run or a supply shock to bite, and that is the correct shape.
+
+153. **IND19 — corporates already buy insurance; what the row was actually hiding was a DOUBLE
+    CHARGE that §7.125 created.** The slice as written ("property and business-interruption
+    premiums paid to the real insurers; a loss event has a payer on both sides") was built by
+    HH1c and is live: `insurance-and-pensions.ts` splits the insurers' own written premium across
+    every operating firm by `grossPPE + annualRevenue` — what a firm has to lose, which is
+    property and business interruption exactly — and the claims come back against it, both legs
+    on real cash. **Nothing to build. Verified by reading, then measured.**
+    - **The defect it exposed.** The cash leg still subtracted `premiums x INSURER_EXPENSE_RATIO`,
+      and its own comment named the dependency: *"the P&L already charges an expense ratio against
+      premiums"*. **§7.125 deleted that charge** — an insurer's operating cost became its real
+      wage bill and its real input basket, charged by the profile caller like any other firm's —
+      **and this cash leg was left behind, so the same expense was taken twice**: once as real
+      staff and premises, once as a flat fifth of premiums (rule 3). The household mirror went
+      with it: an insurer's payroll reaches households through the wage bill now, not through a
+      ratio.
+    - `INSURER_EXPENSE_RATIO` is deleted from `domain/institutions.ts` — the constant §7.125's
+      record already claimed was gone, and was not. **A cleanup that removes a charge must chase
+      every cash leg that was balancing it**, and the comment explaining the dependency is where
+      to look.
+    - Deflation −15.72% → −9.71% at week 10, harness green.

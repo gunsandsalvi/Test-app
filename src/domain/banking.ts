@@ -225,7 +225,7 @@ export const CARD_MIN_PRINCIPAL_RATE_WEEKLY = 0.005;
  * Card issuance runs real operating cost (servicing, fraud, rewards) that term credit doesn't.
  *
  * RULE 13, OPEN: one number per product for every bank, so no bank can run its card book more
- * cheaply than another — the same shape as `INSURER_EXPENSE_RATIO`. Owner: IND.
+ * cheaply than another — the same shape as the insurer expense ratio IND-R4 deleted. Owner: IND.
  */
 export const CARD_OPERATING_COST_BPS = 500;
 export const CONSUMER_TERM_OPERATING_COST_BPS = 150;

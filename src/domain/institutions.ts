@@ -25,14 +25,6 @@ export interface InstitutionalSector {
  * §7.51). A structural primitive with one owner; it becomes an outcome in IND.
  */
 export const PREMIUM_TO_SURPLUS_RATIO = 1.2;
-/**
- * The share of premium that goes on running the business rather than paying claims.
- *
- * RULE 13, OPEN: an expense ratio is an OUTCOME of an insurer's own cost structure — its staff,
- * its systems, what it pays for distribution — not a primitive. It is the same 0.20 for every
- * insurer in every region, so no insurer can be better run than another. Owner: IND.
- */
-export const INSURER_EXPENSE_RATIO = 0.20;
 
 export type InstitutionalEntityType = 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND' | 'HEDGE_FUND' | 'PRIVATE_EQUITY' | 'MONEY_MARKET_FUND' | 'ETF';
 

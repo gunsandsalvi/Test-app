@@ -33,7 +33,6 @@
 import { GameState, RegionId, Company, InstitutionalEntity } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany } from '../../../domain/company';
-import { INSURER_EXPENSE_RATIO } from '../../../domain/institutions';
 
 /**
  * The share of household income paid into pension schemes. A real policy parameter — every country
@@ -69,11 +68,15 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     );
     const weeklyPremiumsUSD = insurers.reduce((a, c) => a + (c.insurancePremiumsWrittenUSD ?? 0) / 52, 0);
     const weeklyClaimsUSD = insurers.reduce((a, c) => a + (c.insuranceClaimsPaidUSD ?? 0) / 52, 0);
-    // What the insurer spends running itself is somebody's wage. It has to LEAVE, or the insurer's
-    // cash outruns the income it reports: the P&L already charges an expense ratio against
-    // premiums, so booking the cash without it would credit the firm with money its own income
-    // statement says it spent.
-    const weeklyInsurerExpensesUSD = weeklyPremiumsUSD * INSURER_EXPENSE_RATIO;
+    // IND19/IND-R4 — THE EXPENSE RATIO IS GONE, AND ITS ABSENCE HERE IS THE POINT.
+    //
+    // This line used to subtract `premiums x INSURER_EXPENSE_RATIO`, and its own comment gave the
+    // reason: "the P&L already charges an expense ratio against premiums". §7.125 deleted that
+    // charge — an insurer's operating cost is now its REAL wage bill and its real input basket,
+    // charged by the profile caller like every other firm's — and this cash leg was left behind.
+    // So the same expense was taken twice: once as real staff and premises, once as a flat fifth
+    // of premiums (rule 3). What an insurer spends running itself leaves through the payments
+    // that actually pay for it.
 
     // ---- Split the pool by what each sector has to lose. ----
     const operating = ctx.updatedCompanies.filter(
@@ -109,7 +112,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       (e) => e.region === region && e.entityType === 'INSURER' && !e.isDefaulted
     );
     const insurerCapitalUSD = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalUSD), 0) || 1;
-    const underwritingResultUSD = weeklyPremiumsUSD - weeklyClaimsUSD - weeklyInsurerExpensesUSD;
+    const underwritingResultUSD = weeklyPremiumsUSD - weeklyClaimsUSD;
     insurerEntities.forEach((e) => {
       const share = Math.max(0, e.equityCapitalUSD) / insurerCapitalUSD;
       addEntityCash(e.id, underwritingResultUSD * share);
@@ -136,8 +139,11 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
 
     // ---- Households: the other side of every leg above. ----
     const householdNetUSD =
+      // The insurer's own operating spend used to arrive here as household income, as the other
+      // side of the expense ratio above. It leaves with it: an insurer's payroll now reaches
+      // households the way every other firm's does, through the wage bill the profile caller
+      // charges it — one representation of one insurer's staff cost (rule 3).
       -householdPremiumsUSD + householdPremiumsUSD * claimRecoveryRate
-      + weeklyInsurerExpensesUSD
       - (pensionEntities.length > 0 ? weeklyContributionsUSD : 0)
       + weeklyBenefitsUSD;
     reg.householdState = {
