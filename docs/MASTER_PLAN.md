@@ -2149,6 +2149,7 @@ ratchets — **and the row as I first wrote it misdiagnosed them** (§7.162).
 
 | Defect | State and next action |
 |---|---|
+| **A HOUSEHOLD'S EQUITY IS NOT A POSITION IT CAN SELL — measured 2026-08-30 (§7.166)** | Forced selling is BUILT and settles both ways, and it reaches **$0.0B of $985B** of household equity. Two reasons, both structural. **(a) Only fund shares have a trading channel.** Direct equity and private business are computed as RESIDUALS — the household's share is whatever the institutions do not hold — so there is no position to sell however badly the cash is needed. Owner: the ownership register (MS/OWN), not DIST. **(b) Households hold no fund shares at all**, because since §7.165 the sector is permanently above its 12-week buffer and permanently dissaving, so it never buys any. That traces to the missing life-cycle: **DEM's age structure (item 4) is what makes steady-state saving positive**, and until it lands households accumulate nothing to be forced out of. |
 | **NO TIER OF HOUSEHOLDS CAN DISSAVE — the fourth one-way ratchet, measured 2026-08-30** | Cohort saving is `disp x tierRate x lambda` under a `Math.max(0, ...)` (`household-cohorts.ts`), so a tier's saving can never be negative whatever happens to it. **This is the blocker under two other items**: the savings rework (the aggregate rate cannot be an outcome while the parts cannot move both ways) and forced selling (§6.1's household-equity row has nothing to trigger on until a drawdown is possible). Household liquidity measures **23.7 weeks of committed outflow** (§7.163), so a liquidity threshold IS crossable once dissaving exists — the trigger is sound, the drawdown is not. Owner: DIST (item 1a). **Re-diagnose the §7.158 stash; its stated cause was withdrawn by §7.163.** |
 | **CAPEX DOES NOT COVER DEPRECIATION — measured 2026-08-30 by IND13's new stock** | Assets under construction total **$2.2B against $2,452B of gross PP&E (0.09%)** with a p50 wait of 9 weeks, which puts capital ARRIVING at roughly $0.25B/week — about **0.5% of the capital stock a year against a straight-line depreciation of ~8%** (`SECTOR_PPE_USEFUL_LIFE_YEARS` ~12y). The plant is being consumed several times faster than it is replaced. It partly self-corrects — a shrinking net PP&E shrinks the capital charge the labour rule sheds against — which is exactly why it is invisible without measuring the stock. Suspect: the capex BUDGET (what a firm decides to spend) rather than the delivery path, which IND1/IND13 now make explicit end to end. Owner: CAP (item 2), whose capacity decisions this is. |
 | **A HARD CLAMP ON WEEKLY CAPACITY GROWTH — found 2026-08-30 reading IND13's neighbours** | `05-unit-bidding.ts`: `line.weeklyCapacityUnits *= 1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate))`. A ±2%/week bound on an OUTCOME (rule 2, rule 13). It is doing the work the investment decision should do: a firm that commissioned a plant twice its size still grows 2%, and one whose capital evaporated still shrinks only 2%. Small and untouched deliberately — it belongs with CAP's capacity decisions, beside the row above, and removing it before the capex budget is real would only expose the same imbalance faster. |
@@ -6133,3 +6134,32 @@ that proved it, the lesson.
       savings rate that is fully an outcome.
     - **It unblocks forced selling** (§6.1): a tier can dissave, so a drawdown is real, so there is
       something for a liquidation threshold to trigger on.
+
+166. **DIST — HOUSEHOLDS CAN SELL. The mechanism is built, two-sided and correct; it currently
+    reaches nothing, and BOTH reasons are worth more than the code.**
+    - `etf-flows.ts`'s household leg was `Math.max(0, saving x equityShare)` with no household term
+      in `grossRedeemUSD` anywhere: a household could buy funds or not buy funds. Unemployment
+      could only ever SLOW purchases, never force a sale, so a drawdown had no household seller in
+      it — the amplifier that makes one self-reinforcing.
+    - **The ordering is the mechanism, not the trigger.** A household with a shortfall does not
+      sell; it runs its cash down first and sells only what its deposits cannot cover, above the
+      buffer it wants on hand — **the same `BUFFER_TARGET_WEEKS` the saving decision is taken
+      against, because it is the same buffer** (rule 3). That is why forced selling is rare, and
+      why it is violent when it comes: every buffer empties at once, near the bottom. A redemption
+      now lands in `grossRedeemUSD` like an institution's, so it reaches the fund's own basket and
+      the prices in it, and it settles on the household books both ways — a redemption that
+      credited no deposits and retired no shares would be money from nowhere.
+    - **MEASURED, AND IT REACHES $0.0B OF $985B.** Two structural reasons, and neither is this
+      slice's to fix:
+      **(a) Only fund shares are sellable.** Household direct equity and private business are
+      computed as RESIDUALS — the household's share is whatever the institutions do not hold — so
+      most of that $985B is not a position at all and cannot be sold at any price. **Owner: the
+      ownership register.** A holding that cannot be sold is not a holding (rule 13's shape).
+      **(b) Households hold no fund shares**, because since §7.165 the sector sits permanently
+      above its 12-week buffer (21 weeks of cover) and therefore permanently dissaves, so it never
+      buys any. **This traces straight to the missing life-cycle** — §5-DIST-P said a positive
+      steady-state savings rate needs one, and DEM's age structure (item 4) is it.
+    - **The harness prints both distances** — weeks until the threshold (416 today) and how much is
+      sellable — so "not firing" stays an observation about CONDITIONS. That discipline is the
+      one this project keeps needing: §7.146, §7.149 and §7.159 were all mechanisms that existed
+      and bound on nothing, and none was visible without printing the number.

@@ -92,11 +92,18 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     let boughtUSD = 0;
     ctx.updatedInstitutionalEntities.forEach((fund) => {
       if (fund.entityType !== 'ETF' || fund.region !== region) return;
+      // DIST — SIGNED. A negative figure is a REDEMPTION: the household sold shares to raise cash
+      // it could not find in its deposits (§7.166). Both directions settle here, on the same
+      // arithmetic, because they are the same transaction with the sign flipped — and a
+      // redemption that credited no deposits and retired no shares would be money from nowhere.
       const spentUSD = ctx.householdEtfPurchasesUSD.get(fund.id) ?? 0;
-      if (!(spentUSD > 0)) return;
-      boughtUSD += spentUSD;
-      const shares = spentUSD / fundNavPerShare(fund);
+      if (spentUSD === 0) return;
       const idx = etfShares.findIndex((x) => x.fundId === fund.id);
+      const heldShares = idx >= 0 ? etfShares[idx].shares : 0;
+      const navPerShare = fundNavPerShare(fund);
+      // A household cannot sell more than it holds; the executed leg is trimmed, not the books.
+      const shares = Math.max(-heldShares, spentUSD / navPerShare);
+      boughtUSD += shares * navPerShare;
       if (idx >= 0) etfShares[idx] = { ...etfShares[idx], shares: etfShares[idx].shares + shares };
       else etfShares.push({ fundId: fund.id, shares });
     });
@@ -142,6 +149,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     // Cash left the household balance sheet to buy the fund shares. HH4d: the banks have not
     // seen that money move yet — it settles against their deposit books next week (T+1), so
     // the in-flight amount is recorded for the bank pass and the household view nets it now.
+    // A purchase takes cash out; a redemption puts it back. `boughtUSD` is signed.
     const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
     const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
     const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;

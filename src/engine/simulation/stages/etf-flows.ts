@@ -31,6 +31,7 @@ import { AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY, ETF_INCEPTION_NAV_PER_SHARE, NAM
 import { ItemizedHolding } from '../../../domain/banking';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 import { householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD } from '../../macro/household-portfolio';
+import { BUFFER_TARGET_WEEKS } from '../../macro/household-cohorts';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 
 /** An entity's money for one asset class, from its own mandate weights. */
@@ -180,9 +181,33 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       : 0;
 
     // The saving actually available this week, out of the deposits stage 02 just credited.
+    //
+    // DIST — AND HOUSEHOLDS CAN SELL NOW, WHICH IS THE POINT OF THIS BLOCK.
+    //
+    // It was `Math.max(0, saving x equityShare)`: a household could buy funds or not buy funds,
+    // and there was no household term in `grossRedeemUSD` anywhere. Unemployment could only ever
+    // SLOW purchases, never force a sale — so a drawdown had no household seller in it, which is
+    // precisely the amplifier that makes one self-reinforcing (§6.1).
+    //
+    // The savings rate is signed since §7.165, so this is too. What a household does with a
+    // shortfall is not to sell at once: it runs its cash down first and sells only what its
+    // deposits cannot cover. That ordering is why forced selling is rare, and why it is violent
+    // when it comes — every buffer is exhausted at the same time, near the bottom.
     const weeklySavingUSD = (reg.estimatedHouseholdIncomeUSD * (hs.savingsRate ?? 0)) / 52;
-    const intoFundsUSD = Math.max(0, weeklySavingUSD * equityShareOfSaving);
-    if (!(intoFundsUSD > 0)) return;
+    let intoFundsUSD: number;
+    if (weeklySavingUSD >= 0) {
+      intoFundsUSD = weeklySavingUSD * equityShareOfSaving;
+    } else {
+      // The floor is the SAME buffer the saving decision is taken against — it is the same
+      // buffer, so it is the same number (rule 3).
+      const bufferFloorUSD = (reg.estimatedHouseholdIncomeUSD / 52) * BUFFER_TARGET_WEEKS;
+      const depositHeadroomUSD = Math.max(0, (hs.depositsUSD ?? 0) - bufferFloorUSD);
+      // Sell only the part of the gap the cash cannot meet, and never more than is held.
+      const heldUSD = householdEtfHoldingsUSD(hs, ctx.updatedInstitutionalEntities);
+      intoFundsUSD = -Math.min(Math.max(0, heldUSD),
+        Math.max(0, -weeklySavingUSD - depositHeadroomUSD));
+    }
+    if (Math.abs(intoFundsUSD) < 1) return;
 
     // Households buy the BROAD market: they are not picking a size tier, which is exactly what an
     // all-cap fund is for and why it had no buyer while institutions were the only investors.
@@ -266,8 +291,11 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     });
 
     // Household saving is a creation order like any other and competes for the same AP capacity.
+    // ...and a household REDEMPTION is a redemption like any other, which is what makes a forced
+    // household sale reach the fund's own basket and the prices in it.
     const householdUSD = householdDemandByFund.get(fund.id) ?? 0;
     if (householdUSD > 0) grossCreateUSD += householdUSD;
+    else if (householdUSD < 0) grossRedeemUSD += -householdUSD;
     flowPlanByFund.set(fund.id, {
       navPerShare, wantDelta: wantDeltaByInvestor, grossCreateUSD, grossRedeemUSD, householdUSD,
     });
@@ -316,7 +344,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
     // money genuinely leaves the household balance sheet to buy the shares.
     const householdExecutedUSD = householdUSD * fillRatio;
-    if (householdExecutedUSD > 0) {
+    if (householdExecutedUSD !== 0) {
       fundCashDeltaUSD += householdExecutedUSD;
       householdExecutedByFund.set(fund.id, householdExecutedUSD);
     }

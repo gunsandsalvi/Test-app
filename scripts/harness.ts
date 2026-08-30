@@ -930,6 +930,26 @@ const hhModule: HarnessModule = (() => {
         // hundreds of weeks of outflow, no such threshold can ever be crossed and a rule built on
         // one would be a mechanism that binds on nothing (§7.146, §7.149, §7.159).
         out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover | savings rate ${pct(h.savingsRate ?? 0)} | income ${B(s.regions[r].estimatedHouseholdIncomeUSD)}`);
+        // HOW FAR IS THE FORCED-SALE THRESHOLD? A household sells only what its deposits above
+        // the buffer cannot cover, so the distance is the headroom divided by the weekly gap.
+        // Printing it keeps "not firing" an observation about CONDITIONS rather than a mechanism
+        // that binds on nothing — the failure mode this project keeps finding (§7.146, §7.159).
+        const incomeUSD = Math.max(0, s.regions[r].estimatedHouseholdIncomeUSD);
+        const floorUSD = (incomeUSD / 52) * 12;
+        const headroomUSD = Math.max(0, (h.depositsUSD ?? 0) - floorUSD);
+        const gapUSD = Math.max(0, -(incomeUSD * (h.savingsRate ?? 0)) / 52);
+        // What a forced sale could actually REACH. Only fund shares are sellable: household
+        // direct equity and private business have no trading channel, so they are wealth the
+        // household cannot turn into cash however badly it needs to.
+        const etfRows = (h.etfShares ?? []) as any[];
+        const sellableUSD = etfRows.reduce((a: number, x: any) => {
+          const f = (s as any).institutionalEntities?.find((e: any) => e.id === x.fundId);
+          const sh = f?.etf?.sharesOutstanding ?? 0;
+          const nav = sh > 0 ? ((f.itemizedHoldings ?? []).reduce((b: number, hh: any) => b + (hh.quantityOrNotionalUSD ?? 0), 0) + Math.max(0, f.cashUSD ?? 0)) / sh : 0;
+          return a + (x.shares ?? 0) * nav;
+        }, 0);
+        out.push(`      deposit headroom over the buffer ${B(headroomUSD)} vs a ${B(gapUSD)}/wk gap = ${gapUSD > 0 ? (headroomUSD / gapUSD).toFixed(0) : '∞'} weeks before forced selling starts`);
+        out.push(`      sellable (fund shares) ${B(sellableUSD)} of ${B(h.equityHoldingsUSD ?? 0)} total household equity — the rest has no trading channel`);
       });
       out.push('--- the mortgage book as a CROSS-SECTION: E[f(LTV)] against f(E[LTV]) ---');
       REGIONS.forEach(r => {
