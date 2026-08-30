@@ -156,6 +156,11 @@ export interface WeeklyStepContext {
    *  weeks until the assets are gone and the residual is written off. */
   estates: import('../../../domain/estate').Estate[];
   /** CAL — this week's interest accruals to distribute over the register, by instrument. */
+  /** CASH — gross reserves 02b had to invent this week because a balance moved outside the
+   *  settlement layer. The migration's completion meter; zero means every stage posts. */
+  cashReconcileUSD: Partial<Record<RegionId, number>>;
+  /** CASH — the same meter split by which holder class's balance moved unrouted. */
+  cashReconcileByClassUSD: { corporate: number; institutional: number; sme: number };
   pendingHolderAccrualUSD: Map<string, number>;
   /** CAL — the instruments whose coupon falls due this week: their accrued balances become cash. */
   pendingHolderAccrualPayout: Set<string>;
@@ -260,6 +265,8 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     shipmentsDispatched: [],
     tradeInvoicesBooked: [],
     estates: (state as any).estates ?? [],
+    cashReconcileUSD: {},
+    cashReconcileByClassUSD: { corporate: 0, institutional: 0, sme: 0 },
     pendingHolderAccrualUSD: new Map(),
     pendingHolderAccrualPayout: new Set(),
     holderAccruedInterestUSD: new Map(Object.entries((state as any).holderAccruedInterestUSD ?? {})),

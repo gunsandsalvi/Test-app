@@ -60,6 +60,9 @@ export interface GameState {
   estates?: import('./estate').Estate[];
   /** CAL — accrued-but-unpaid interest by (instrument, holder); see stages/shared-helpers.ts. */
   holderAccruedInterestUSD?: Record<string, number>;
+  /** CASH — reserves 02b invented this week to cover balances that moved outside settlement. */
+  lastCashReconcileUSD?: Partial<Record<import('./geography').RegionId, number>>;
+  lastCashReconcileByClassUSD?: { corporate: number; institutional: number; sme: number };
   /** §6 damper diagnostic — see WeeklyStepContext.damperBoundInstrumentIds. */
   lastWeekDamperBoundIds?: string[];
   /** GUARD — books that could not trade this week: no participant's ceiling exceeded its own

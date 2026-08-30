@@ -1259,6 +1259,25 @@ const xbModule: HarnessModule = (() => {
       const withRevenue = carriers.filter(c => (c.carrierFleet?.lastWeekFreightRevenueUSD ?? 0) > 0);
       out.push(`  carriers earning freight this week: ${withRevenue.length} of ${alive.length}; tonne-miles ${carriers.reduce((a, c) => a + (c.carrierFleet?.lastWeekTonneNm ?? 0), 0).toExponential(2)}`);
       out.push('--- transit, the currency boundary, reserves ---');
+  // CASH — how much money moved on a holder's book with NO payment instruction behind it. 02b
+  // invents the matching reserves so the per-bank identity cannot drift, which is why this has
+  // been invisible: every check passed while a second, unrouted way of moving money survived
+  // beside the settlement layer (rule 3). Its own comment has always called it the migration's
+  // progress meter; this prints it. Watch it DOWN.
+  {
+    const byRegion = ((s as any).lastCashReconcileUSD ?? {}) as Record<string, number>;
+    const totalUSD = Object.values(byRegion).reduce((a, v) => a + (Number(v) || 0), 0);
+    if (totalUSD > 0) {
+      out.push(`  settlement bypass (02b reconcile, gross): ${B(totalUSD)} — ${Object.entries(byRegion)
+        .filter(([, v]) => Math.abs(Number(v) || 0) > 0)
+        .map(([r, v]) => `${r} ${B(Number(v))}`).join(', ')}`);
+      const byClass = (s as any).lastCashReconcileByClassUSD as { corporate: number; institutional: number; sme: number } | undefined;
+      if (byClass) {
+        out.push(`    by holder class: corporate ${B(byClass.corporate)}, institutional ${B(byClass.institutional)}, SME ${B(byClass.sme)}`);
+      }
+    }
+  }
+
       const inTransit = s.goodsInTransit ?? [];
       out.push(`  consignments in transit ${inTransit.length}  value ${B(inTransit.reduce((a, sh) => a + sh.units * sh.landedCostPerUnit, 0))}; in-place goods ever imported: ${inTransit.filter(sh => deliveryModeOf(sh.subUnitId) === 'IN_PLACE').length} (must be 0)`);
       REGIONS.forEach(r => {

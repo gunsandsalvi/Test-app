@@ -286,6 +286,16 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const reconcileUSD = (trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0))
         + (trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0))
         + (trueSmeUSD - (lentSheet.smeDepositsUSD ?? 0));
+      // CASH — THE MIGRATION METER, NOW REPORTED. This adjustment is money that moved on a
+      // holder's book without a payment instruction: a stage mutated a balance directly and this
+      // line invents the matching reserves so the identity cannot drift. It is therefore the
+      // exact size of what still bypasses the settlement layer, and the comment above has always
+      // said it goes to zero when every stage records instructions — but nothing ever printed it,
+      // so "the migration is nearly done" was an assertion rather than a measurement.
+      ctx.cashReconcileUSD[regionId] = (ctx.cashReconcileUSD[regionId] ?? 0) + Math.abs(reconcileUSD);
+      ctx.cashReconcileByClassUSD.corporate += Math.abs(trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0));
+      ctx.cashReconcileByClassUSD.institutional += Math.abs(trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0));
+      ctx.cashReconcileByClassUSD.sme += Math.abs(trueSmeUSD - (lentSheet.smeDepositsUSD ?? 0));
       const withDeposits: BankingSector = {
         ...lentSheet,
         cashReservesUSD: lentSheet.cashReservesUSD + reconcileUSD,

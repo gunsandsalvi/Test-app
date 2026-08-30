@@ -221,6 +221,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
     holderAccruedInterestUSD: Object.fromEntries(ctx.holderAccruedInterestUSD),
+    lastCashReconcileUSD: ctx.cashReconcileUSD,
+    lastCashReconcileByClassUSD: ctx.cashReconcileByClassUSD,
     // G3b: the player's counterparties ARE the named banks' desks, so the list is re-derived
     // every week off their sheets — a desk that filled up this week quotes differently next.
     dealers: dealersFromBanks(nextState.companies), lastWeekDamperBoundIds: ctx.damperBoundInstrumentIds, lastWeekDeadCeilingBooks: ctx.deadCeilingBooks, primaryOfferings: ctx.primaryOfferingsWorking, marketIndexes: ctx.updatedMarketIndexes,
