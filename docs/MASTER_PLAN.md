@@ -429,7 +429,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | — | consequence | **EMP — the labour collapse** *(was item 2)* | **DEMOTED under rule 18: this row has no build in it.** Its seed half is done (§7.118-121) and §7.149 fixed the defect that made the collapse one-directional — the hiring branch had never fired. What is left is a CRITERION ("60 weeks stable"), not a work item, so it belongs in §5's S-final validation gate rather than the work order. Nothing to start; watch it as the foundation tier lands. |
 | 9 | markets | **G3 — one dealer system (all three of them)** | **CLOSED 2026-08-30 (§7.185–187).** There is one dealer system: a desk per named bank, an ordinary participant in its book's auction, sized by its own leverage headroom and funded by its own reserves. The regional arrays are derived views; the player's three invented counterparties are gone and its fill price is the desk's quote, not a React component's; all five fixed bank prices — the wholesale spread, the deposit beta, the ROE hurdle, the underwriting fee and the hash-drawn lead bank — come out of the bank's own sheet. Primary is now a firm commitment. **Unblocks: CRD's CDS half, DER, ETF2.** Its damper half (G3d) and the equity-float change are the two things a measurement run has to check.
 | 10 | markets | **REPO — secured funding is a market with counterparties** | **CLOSED 2026-08-30 (§7.188).** A repo is a CONTRACT — named lender, named borrower, struck rate, maturity, and the specific paper pledged — stored once on the region's book with both parties named; every scalar the sheets carried is derived from it, the standing facility included. Collateral is cheapest-to-deliver and encumbrance is per bucket. There is a TERM book, and a term need the private market will not fund falls back to overnight, which is what a funding squeeze is. **Deliberately NOT done: `AssetType.REPO` and an `ItemizedHolding` row** — the position is already real and named, and a second representation to satisfy a checklist is the exact defect this row removed. A player financing a position belongs with **HF**'s prime brokerage. |
-| 11 | markets | **XB — cross-border portfolios and trade** | IN PROGRESS. **XB6** remains and owns the FX leg of the damper defect: the float is systematically one-way and the elastic side cannot absorb it. |
+| 11 | markets | **XB — cross-border portfolios and trade** | **XB6 CLOSED 2026-08-30 (§7.189); XB3a-5 is now unblocked.** The FX leg of the damper defect was a GEOMETRY error: the engine clears a float to buyers, so a bigger float always clears at a lower stat — right when the float is the currency being SUPPLIED, inverted when the base was in demand. The auction now runs on whichever currency is being sold. Two one-way flows went with it: the desks' own books dumped into the float at any price, and the residual warehoused on them by capacity share after the fact. **Remains: XB3a-5** (invoice currency and transaction FX exposure), which XB6 gated. |
 | 12 | markets | **HF — hedge fund strategies + prime brokerage** | Grown: speculator schedules from own capital (the FX elastic side), hedge ratios onto mandate profiles, home bias as a LIMIT not a weight, the LBO debt share as a financing outcome. |
 | 13 | markets | **DER — derivatives and the people who hedge with them** | Prereq G3. Adds: the cross-currency basis becomes a cleared price, not `150 × utilization × invented split`. |
 | 14 | markets | **G5 — default resolution: recovery as an outcome** | Adds: the defaults-count × 12bps contagion coefficient becomes real losses on real holders' books. |
@@ -1216,7 +1216,7 @@ effect moves with a cleared price.
 
 ### XB — Cross-border portfolios and trade  *(item 11; IN PROGRESS; absorbed the old WS9)*
 
-**Status: XB1, XB2, XB2b–XB2f, XB3a-1/2/3/4, XB3b, XB4, XB5 DONE (§7.72–77). XB3a-5 and XB6 REMAIN — and XB3a-5 is gated on XB6.**
+**Status: XB1, XB2, XB2b–XB2f, XB3a-1/2/3/4, XB3b, XB4, XB5 DONE (§7.72–77); XB6 DONE (§7.189). XB3a-5 REMAINS and is now UNBLOCKED.**
 **The 60-week harness is deliberately RED while this runs — see §6 and rule 1 of `CLAUDE.md`.**
 
 **XB1 — DONE (§7.72).** `foreignShare` deleted: it assigned each region a share of every other
@@ -6316,3 +6316,37 @@ that proved it, the lesson.
       `sovereignBookCapacityUSD` is `book + headroom` — the balance sheet its equity supports, not
       a fabricated ceiling. What REPO2 added is that the financing half is now computed off the
       specific unpledged paper rather than a blended average.
+
+189. **XB6 — the FX auction was running on the wrong currency, and that was the whole geometry.**
+    - The clearing engine auctions a float to BUYERS: total demand falls as the stat rises, so a
+      bigger float always clears at a LOWER stat. That is exactly right when the float is the
+      currency being SUPPLIED — more of it on offer, the cheaper it gets. The FX adapter always
+      made the stat `quote per base`, so whenever clients were net BUYERS of the base the geometry
+      inverted: **the more the base was demanded, the lower its own rate had to go to clear.**
+    - The `1 + sign × pct` reservation shift was an attempt to mirror the working direction, and it
+      could only ever move the LEVEL, not the SLOPE. It also left the elastic side needing a 1.2%
+      move before it would take anything at all, so every week with a net flow the rate HAD to
+      move — in whichever direction the geometry chose — until the damper stopped it. That is
+      §7.77's −8.01% print (`MAX_WEEKLY_FX_MOVE_PCT` to the second decimal) 38 weeks in 40, and
+      §7.82's re-measure finding EUR escaping UPWARD once the flow flipped. **One defect, both
+      directions**, which is why neither re-measurement could pin it: the sign of every flow was
+      correct and the number still came out wrong.
+    - **The fix is one sentence: auction the currency being SOLD.** Net supply of the base runs the
+      book as it stands; net demand for the base means the QUOTE currency is on offer, so the book
+      runs upside-down and the print is inverted back. The elastic side's schedule is then the
+      same in both cases — a buyer that needs the thing on offer to get cheaper by its required
+      move — which is what it always was for one direction and never was for the other.
+    - **The two central-bank defences collapse into one schedule** for the same reason. The
+      mirror-image "holder that sells into strength" was the same inversion in another place:
+      expressed on a book quoted the other way up, it made the defending bank a SELLER of the
+      thing it was defending.
+    - **Two one-way flows went with it, both G3's pattern in a book G3 did not touch.** The desks'
+      own positions were dumped into the float — the whole book offered at any price, every week,
+      in one direction, which is the single largest systematically one-way flow §6.1's FX row asks
+      to find. And the unabsorbed residual was warehoused across the desks by capacity SHARE,
+      whether or not the capacity was there. The desks are now participants: they bid at the
+      market when empty and further away the fuller they are, priced by the basis, which is what
+      their balance sheet costs; their books move by exactly what they bid for.
+    - **Not measured (rule 12).** The structural probe is clean and the fiscal-band violation this
+      run used to carry is gone, but the number that matters — the FX pins per pair over 60 weeks
+      — belongs to the measurement run with everything else.
