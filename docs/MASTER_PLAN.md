@@ -1559,3 +1559,30 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        level settles. **Iterate below 1; validate at 1.**
      - **What this does NOT do:** it does not make the full-fidelity cycle faster. 1467 ms at scale
        1 still stands, and §7.213's account of it is unchanged.
+215. **FULL FIDELITY: 1360 ms, and the list of things that are NOT the problem.** §7.214 met the
+     wall-clock budget by making the roster a conserving resolution parameter, which is worth
+     having and is NOT what was asked for: it runs a smaller world, not the same world faster.
+     This record is the same-world attempt, and its value is the eliminations.
+     - **RUN COMPILED JS.** The harness ran through `tsx`, which transpiles per module. Bundled
+       once with esbuild and run as plain JS it is 10–15% faster and **bit-exact over 20 weeks**.
+       `npm run verify` and `npm run profile` build to `node_modules/.cache` first.
+     - **AND IT RESTORES LINE-LEVEL PROFILING.** §7.772 recorded that tsx flattens every function
+       to line 1 so V8 cannot attribute inside a stage, and section timers were the workaround.
+       Against the BUNDLE, `--cpu-prof` gives real line numbers. **That tool is available now.**
+     - **NOT the problem, each measured:** Bun runs it 8% slower (1589 vs 1464 ms). V8
+       dictionary-mode is not the flat profile's cause (9 of 2,496 companies; no entity, no
+       region). The clearing engine's worker pool buys nothing on 4 cores (§7.213). And netting
+       payments on the way in — which looked obvious against 170,000–200,000 instructions a week —
+       is worth 11%: **162,705 rows carry 144,650 distinct (payer, payee, reason) triples**, and
+       coalescing measured SLOWER than the key cost to find. The goods market genuinely has that
+       many counterparty relationships in a week, one per lot.
+     - **THE ARITHMETIC, so the next attempt starts from it.** 1360 ms: stage 08 ~430 (2,496
+       companies × a body whose seven sections are all between 13 and 116 ms), stage 05 ~314
+       (entirely the auctions), the five financial books + securities lending ~310, GC ~120, and a
+       tail of thirty stages. The numerics inside all of it are ~70 ms. **Nothing here is 5×
+       anything.** Getting the same world under 300 ms means the object graph stops being an
+       object graph — §7.777's conclusion, reached for the third time and now from line-level data
+       rather than section timers.
+     - **The scoped version of that, if it is taken:** the holdings register alone — 120,000 rows,
+       walked by twenty files — is ~300 ms of the 1360. It is the one data structure worth
+       converting first, and it can be done behind the existing accessor.
