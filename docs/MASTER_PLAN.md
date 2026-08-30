@@ -431,7 +431,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 10 | markets | **REPO — secured funding is a market with counterparties** | **CLOSED 2026-08-30 (§7.188).** A repo is a CONTRACT — named lender, named borrower, struck rate, maturity, and the specific paper pledged — stored once on the region's book with both parties named; every scalar the sheets carried is derived from it, the standing facility included. Collateral is cheapest-to-deliver and encumbrance is per bucket. There is a TERM book, and a term need the private market will not fund falls back to overnight, which is what a funding squeeze is. **Deliberately NOT done: `AssetType.REPO` and an `ItemizedHolding` row** — the position is already real and named, and a second representation to satisfy a checklist is the exact defect this row removed. A player financing a position belongs with **HF**'s prime brokerage. |
 | 11 | markets | **XB — cross-border portfolios and trade** | **XB6 CLOSED 2026-08-30 (§7.189); XB3a-5 is now unblocked.** The FX leg of the damper defect was a GEOMETRY error: the engine clears a float to buyers, so a bigger float always clears at a lower stat — right when the float is the currency being SUPPLIED, inverted when the base was in demand. The auction now runs on whichever currency is being sold. Two one-way flows went with it: the desks' own books dumped into the float at any price, and the residual warehoused on them by capacity share after the fact. **Remains: XB3a-5** (invoice currency and transaction FX exposure), which XB6 gated. |
 | 12 | markets | **HF — hedge fund strategies + prime brokerage** | **CLOSED 2026-08-30 (§7.190).** Four funds instead of one, each in the markets its strategy is actually in; leverage is a real prime-brokerage line from a named bank, at a derived haircut, consuming the broker's balance sheet, priced, and withdrawable — so a margin call is a mechanism. Three of the four folded constants are gone: the FX elastic side is the pair's own volatility against the fund's own capital, the hedge ratio is a mandate property, the LBO debt share is 07d's answer. **The fourth, `HOME_BIAS_BY_ENTITY_TYPE` used as a weight, was CHECKED and the review's claim does not hold** — see §7.190. **Not built: a real equity SHORT** (borrow, locate, recall, squeeze), which is what would make long-short a paired book rather than a long one; it needs a securities-lending market and belongs with DER's margin machinery. |
-| 13 | markets | **DER — derivatives and the people who hedge with them** | Prereq G3. Adds: the cross-currency basis becomes a cleared price, not `150 × utilization × invented split`. |
+| 13 | markets | **DER — derivatives and the people who hedge with them** | **TWO SLICES DONE 2026-08-30 (§7.191): IRS and the cross-currency basis.** The swap market clears par rates at 2/5/10Y off exposures the model already measures, and prints the SWAP SPREAD — the first cross-market basis, and the first test that two of its markets agree. The basis is a cleared price: hedger demand against what the desks can write, with the walk-away tolerance derived from the currency's own volatility and the mandate's own hedge ratio. **Remains: CDS (which CRD's second half needs), equity options and the implied vol that kills `\|\| 0.3`, commodity futures, and corporate/bank hedging.** Each is an adapter on machinery that now exists. |
 | 14 | markets | **G5 — default resolution: recovery as an outcome** | Adds: the defaults-count × 12bps contagion coefficient becomes real losses on real holders' books. |
 | 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | Re-scoped by the review: every seeded commodity price is a real market price back-solved into a "scarcity index" — the primitive becomes extraction cost and ore grade. Weather gets a calendar and a geography; two dead impact fields (14 writes, 0 reads) die; the third becomes a YIELD. |
 | 16 | depth | **CAL — payment calendars** | Coupons, loan interest and dividends on real dates instead of smooth 1/52 accruals. |
@@ -1419,7 +1419,7 @@ primitives.
 
 ---
 
-### DER — Derivatives, and the people who hedge with them  *(item 13; needs G3)*
+### DER — Derivatives, and the people who hedge with them  *(item 13)*  **IRS AND THE BASIS DONE**
 
 Merges the old G4 (derivative markets), G7 (commodity futures) and WS11 (corporate and bank
 hedging). Futures and hedging were never separate markets — they are the users of this one, and
@@ -1428,11 +1428,12 @@ splitting them across three projects hid that every one of them needs the same p
 Each instrument is an engine adapter with a small real participant set; the closed-form pricers
 remain MTM converters. **Build IRS first** — its natural two-sided demand already exists.
 
-1. **IRS.** Par rates at 2/5/10Y per region, YIELD_LIKE. Payers of fixed: banks hedging G2 loan
-   books, corporates with floating debt. Receivers: insurers and pensions extending to liability
-   duration (from HH1; before it, from the duration gap 07b's fit already computes). The cleared
-   par rate minus the 07c bootstrap is a real swap spread — the first cross-market basis the sim
-   produces, and a powerful diagnostic.
+1. ~~**IRS.**~~ **DONE (§7.191).** Par rates at 2/5/10Y clear in `07g-swap-clearing.ts`; the
+   payers are banks whose capital cannot absorb their own fixed-rate book's two-sigma repricing
+   and corporates whose coverage covenant a rate move would breach; the receivers are
+   liability-matched books whose reservation is the government bond of the same tenor.
+   `swapSpreadBpsByTenor` is published per region. **The measurement run owes it the verify:**
+   does the spread hold a single-digit band in calm weeks and blow out under stress?
 2. **CDS.** One IG and one HY index per region, single names later. Buyers: banks (G2 books),
    hedge funds; sellers: yield-seeking insurers. Cleared index spread vs cash OAS is a real
    CDS-cash basis. Margin flows are real cash through the ledgers.
@@ -1458,8 +1459,8 @@ high and backwardation when scarce, both of which genuinely occur in stage 07; e
 within the dealer spread; hedged companies and producers demonstrably feel less P&L from the
 shocks they hedged, which is the whole point of items 4 and 5.
 
-**Folded from the review:** the cross-currency basis — the PRICE a hedger pays — is
-`MAX(150bps) × utilization × (0.35 + 0.65 × oneWayShare)`: an observed crisis-era ceiling (rule
+**Folded from the review — DONE (§7.191):** the cross-currency basis is a CLEARED price now, not
+`MAX(150bps) × utilization × (0.35 + 0.65 × oneWayShare)`. Original note kept for the record: an observed crisis-era ceiling (rule
 4) times an invented split, a bound the price rests on (rule 15). The desk's capacity model is
 right and stays (PFE against real leverage headroom, internalisation before carry, a desk at zero
 meaning a hedge is unavailable at any price); what it CHARGES becomes a cleared level — hedgers
@@ -6367,3 +6368,34 @@ that proved it, the lesson.
       currently a long book with a strategy label, because a short needs borrowed stock, a locate,
       a borrow fee and a recall — a securities-lending market this model does not have. It belongs
       with DER's margin machinery, and until it exists the strategy is a mandate, not a book.
+
+191. **DER — a swap market, and a cross-currency basis that clears.**
+    - **IRS first, because its two-sided demand already existed and nobody had asked for it.** The
+      pay-fixed side is not a policy fraction: a bank pays fixed on the part of its own fixed-rate
+      sovereign book whose two-sigma weekly repricing — estimated off its own curve's history, the
+      same estimator the repo haircuts use — its capital cannot absorb; a corporate pays fixed on
+      the part of its floating debt whose interest bill would breach its OWN coverage covenant if
+      rates moved by the same amount. The receive-fixed side is a liability-matched book closing a
+      duration gap it can measure, and **its reservation is the government bond of the same
+      tenor**, because that is the alternative it already has. That single sentence is why a swap
+      spread exists at all, and `swapSpreadBpsByTenor` is now published per region.
+    - **It is the first CROSS-MARKET basis this model produces.** Every other price it prints is a
+      market's own opinion of itself; this one is two markets compared, so it is the first number
+      that can say they disagree. That is the diagnostic DER was worth building for.
+    - **The cross-currency basis was rule 15's clearest surviving case and is now a cleared
+      price.** `MAX(150) × utilization × (0.35 + 0.65 × oneWayShare)`: a ceiling that was an
+      observed crisis-era level (rule 4) and a split that was invented. It clears against real
+      supply — what the region's desks can still write — with hedgers whose schedules slope the
+      right way by construction: full size when the hedge is free, nothing once the basis passes
+      what the risk is worth. Thin demand clears near zero; demand beyond what the desks can carry
+      pushes the basis until enough hedgers walk. **That is the post-2008 mechanism the formula was
+      imitating, and it is cheaper to write than the imitation was.**
+    - **What a hedger will pay is derived too.** The four posted tolerances (220/180/90/45) ordered
+      the entity types correctly and were otherwise chosen. Certainty is worth the risk it removes:
+      the currency's own measured annualised volatility times the share of the exposure the
+      mandate hedges (HF4's mandate property). A liability-driven book pays close to a full sigma;
+      a macro fund pays nothing, because the currency IS the trade.
+    - **And the spot desks' quote width is now a real price.** XB6 gave the FX desks a schedule
+      whose width was the posted 150; where a cleared basis has printed, that is what their
+      balance sheet is actually fetching this week, and the constant survives only as the scale
+      before the first print — a scale, not a price, that nobody pays.
