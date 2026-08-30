@@ -388,7 +388,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 1 | foundation | **DIST — the distribution is the state** | **PROMOTED TO ITEM 1 (2026-08-30). Substantially delivered and the largest live mechanism row.** Done: SME pool leverage strata with both distress terms as integrals (§7.140-141), the absorbing barrier and its reinjection (§7.143), all nine §6.3-A household tables as measurements (§7.145), and **two of the four §7.157 sweep targets** — pool distress layoffs over the strata (§7.161) and the credit tiers' three one-way ratchets (§7.162). The mortgage half went to HSG (§7.159). **What remains: (a) the FOURTH one-way ratchet — cohort saving sits under a `Math.max(0,...)` so no tier can dissave (§7.163), which blocks both the savings rework and forced selling; (b) the named tier as a node of weight one, one representation at N resolutions; (c) cut-point invariance, which needs (b) to be testable.** §5-DIST-P is its governing idea and holds the primitive scoreboard. |
 | 2 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **CAP0 DONE (§7.121)** — the [2%,65%] margin clamp is gone and a firm can report a loss, so CAP's own mechanism (a firm that cannot cover unit cost STOPS) can fire. **IND13 handed it two measured defects (§6.1, §7.151):** capex covers ~0.5%/yr of a capital stock depreciating at ~8%, so the plant is being consumed several times faster than replaced; and a hard **±2%/week clamp on capacity growth** (rule 2). Both were invisible until the construction stock existed to measure them. The capacity DECISIONS are the rest. |
 | 3 | foundation | **COH — cohorts accumulate: household balance sheets** | **Mostly delivered by DIST from a different direction (§7.145) — re-read §5-COH before starting; most of what it describes has happened.** What is left and what makes it item 3: the household balance sheet still cannot distinguish what is spendable now from what is accumulated, and the savings rework needs that distinction to have a buffer to be a buffer OF. Also still owns `beneficiaryLiabilityUSD`'s reversal and retiring `national-accounts.ts`. |
-| 4 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. **Promoted in substance: its AGE STRUCTURE half is what gives the household sector a life-cycle**, and a life-cycle is what makes a positive steady-state savings rate an outcome rather than a coefficient (§5-DIST-P). |
+| 4 | foundation | **DEM — demographic variability** *(unblocks COH2, and the savings life-cycle)* | **THE AGE STRUCTURE ALREADY EXISTS AND NOTHING READS IT (§7.169).** `lifeCycleDistribution` carries four stages with `shareOfPopulation`, `savingsRate` and `consumptionMultiplier` per stage; only `RETIRED.shareOfPopulation` is ever read, and only to set a death rate. **`LifeCycleStageData.savingsRate` is read NOWHERE** — the life-cycle saving motive is present as data and binds on nothing, the fifth instance of that pattern this session. **And it should not simply be wired in: those per-stage rates are stated shape parameters** (§5-DIST-P), and the derivation is better than they are — see the row's §5 entry. | Small; takes the population-growth and migration clamps. **Promoted in substance: its AGE STRUCTURE half is what gives the household sector a life-cycle**, and a life-cycle is what makes a positive steady-state savings rate an outcome rather than a coefficient (§5-DIST-P). |
 | 5 | markets | **HSG — a housing market that clears** *(clamps)* | **PROMOTED from item 10; substantially started 2026-08-30.** Done: the mortgage book is a cross-section of **vintages** each marked to today's prices, so severity is `E[f(LTV)]` and the model can have a mortgage credit event — a −20% price move now takes severity to 2.1x where the one-average book said its floor (§7.159); loans carry a **5-year fix and RESET** (17.5% of the book reprices a year) with per-vintage default frequency; and borrowing capacity is `DSTI x income / annuity factor` (§7.160). **What remains is the row's actual title: `medianHomePriceUSD` does not CLEAR.** Until it does, the affordability limit has slack it should not always have, and `HOUSING_TURNOVER_RATE_ANNUAL` is still a constant on the seller's side. |
 | 6 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | **The household half is DONE (§7.162):** tier migration is two-way on measured delinquency, delinquency heals instead of accumulating, and the tier rate is QUOTED from that tier's own measured loss rather than drifting `+cci x k` forever. **What remains:** the ratings half (ratings handling zero earnings) and the CDS half, which needs G3. |
 | 7 | foundation | **IND — industry operating models** | **CLOSED except IND16 (§7.146-156).** Kept in the table only because IND16 is open: the distribution tier, and it is a REFACTOR not an addition — a household already buys `facilities_and_logistics` as a good, so a channel margin on top would pay the same sector twice. Design in §5-IND16. |
@@ -1132,7 +1132,19 @@ sheet still cannot distinguish what is SPENDABLE NOW from what is ACCUMULATED, a
 needs that distinction to have something to be a buffer of. Also still owns `beneficiaryLiabilityUSD`'s
 reversal and retiring `national-accounts.ts`.
 
-**READ §5-DIST FIRST — it proposes redesigning this project, not competing with it.** COH's plan
+**SETTLED 2026-08-30: DIST won, and it is item 1.** The question below — whether to give a cohort a
+balance sheet or a DISTRIBUTION over balance sheets — was answered by building the second: §7.145
+turned all nine tables into measurements from the distribution's own moments. **COH1 is therefore
+mostly done.** What remains of it is the spendable/accumulated split. **COH2 IS BLOCKED ON DEM**, a
+prerequisite this table does not show: its own text requires that "a cohort has an age via DEM".
+So the real order inside this row is COH1-remainder → DEM → COH2.
+
+**AND `TIER_OCCUPATION_MIXES` IS NOT A PRIMITIVE**, whatever the paragraph below says. §5-DIST-P
+places it as the largest stated block with no owner: a wealth tier's occupation mix is an OUTCOME
+of who got hired into what and who accumulated from it, not a structural fact. The line below
+predates that argument.
+
+**The original framing follows.** §5-DIST proposed redesigning this project, not competing with it. COH's plan
 is to give a cohort a balance sheet; DIST's argument is to give it a DISTRIBUTION over balance
 sheets with the aggregate as its first moment, so the nine tables below become the SHAPE of that
 distribution and the shape becomes an outcome of random growth against the borrowing constraint
@@ -6215,3 +6227,33 @@ that proved it, the lesson.
     - **Note what this does to §7.167's own fix.** Anchoring maintenance capex to depreciation
       RAISED the bids, so it widened the 1.55x gap. That is correct — the demand is now honest and
       the supply side's inconsistency is exposed rather than hidden by an understated ask.
+
+169. **DEM — THE AGE STRUCTURE IS ALREADY THERE AND NOTHING READS IT; and the life-cycle saving
+    rate should be DERIVED, not the stated one sitting next to it.**
+    - `lifeCycleDistribution` carries `EARLY_CAREER | PEAK_EARNING | PRE_RETIREMENT | RETIRED`,
+      each with `shareOfPopulation`, `savingsRate` and `consumptionMultiplier`. **Only
+      `RETIRED.shareOfPopulation` is read anywhere, and only to set a death rate.**
+      `LifeCycleStageData.savingsRate` is read by NOTHING. **Fifth instance this session of a
+      mechanism that exists and binds on nothing** (§7.146, §7.149, §7.159, §7.167, this).
+    - **DO NOT JUST WIRE THE STATED RATES IN.** They are shape parameters of exactly the kind
+      §5-DIST-P says must die, and §7.165 has only just deleted the aggregate ones. Wiring four
+      stated per-stage rates into the decision would put back what was removed, one level down.
+    - **THE DERIVATION, and it has no free parameter at all.** A household saves to fund the years
+      it will not earn. If a share `w` of adult life is spent working and `r` retired, and
+      consumption is smooth across both, then the saving rate during working life is exactly
+      `r / (w + r)` — **and since `w + r = 1` across the population, the required working-life
+      saving rate IS the retired share of the population.** The model already carries that share
+      and already evolves it from real births and deaths. So: **working cohorts save `r` of
+      income; retired cohorts draw down.** Nothing is stated; the four `savingsRate` fields are
+      deleted rather than read.
+    - **Why this is the unblocker for three other things.** It makes a POSITIVE steady-state
+      savings rate an outcome (§7.165 leaves the sector permanently dissaving because a buffer
+      rule alone has no motive that survives a stationary economy); a positive rate lets
+      households ACCUMULATE fund shares; and only then does §7.166's forced selling have anything
+      to reach. It is also COH2's stated prerequisite — "a cohort has an age via DEM".
+    - **The one real piece of work** is that cohorts are keyed `(occupation x wealth tier)` with no
+      age dimension, so the life-cycle currently has nowhere per-cohort to land. Either add age to
+      the cohort key — which multiplies the cross-section — or apply the term at the region level
+      and allocate it by income. **Settle that before building**; and watch for double-counting
+      against the pension contribution and benefit flows, which already move real money between
+      working and retired households.
