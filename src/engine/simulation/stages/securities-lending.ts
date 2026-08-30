@@ -150,19 +150,23 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
     // not — so a position BELOW what it was when the loan was struck is the lender selling out
     // from under it, and that much has to come back. Oldest loan first, split where the sale only
     // reaches part of one.
-    const positionNow = (lenderId: string, companyId: string): number => {
-      const lent = live.reduce((a, l) => (
-        l.lender.id === lenderId && l.instrumentId === companyId ? a + l.shares : a), 0);
-      return deliverable(lenderId, companyId) + lent;
-    };
+    // SCALE: both of these read the whole live book for ONE (lender, name) pair, and both were
+    // called once per loan — two O(loans^2) scans a week. The book is summarised in a single pass
+    // instead: shares still out on loan, and the largest position any of that pair's loans was
+    // struck against. Same numbers, same order of accumulation, one walk.
+    const lentByPair = new Map<string, number>();
+    const strikeByPair = new Map<string, number>();
+    live.forEach((l) => {
+      const k = positionKey(l.lender.id, l.instrumentId);
+      lentByPair.set(k, (lentByPair.get(k) ?? 0) + l.shares);
+      strikeByPair.set(k, Math.max(strikeByPair.get(k) ?? 0, l.lenderPositionAtStrike));
+    });
     const soldByLender = new Map<string, number>();
     live.forEach((l) => {
       const k = positionKey(l.lender.id, l.instrumentId);
       if (soldByLender.has(k)) return;
-      const atStrike = live.reduce((a, o) => (
-        o.lender.id === l.lender.id && o.instrumentId === l.instrumentId
-          ? Math.max(a, o.lenderPositionAtStrike) : a), 0);
-      soldByLender.set(k, Math.max(0, atStrike - positionNow(l.lender.id, l.instrumentId)));
+      const positionNow = deliverable(l.lender.id, l.instrumentId) + (lentByPair.get(k) ?? 0);
+      soldByLender.set(k, Math.max(0, (strikeByPair.get(k) ?? 0) - positionNow));
     });
     live.forEach((loan) => {
       if (loan.recalledWeek !== undefined) { carried.push(loan); return; }
