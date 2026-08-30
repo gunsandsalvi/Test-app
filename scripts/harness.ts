@@ -1275,6 +1275,14 @@ const xbModule: HarnessModule = (() => {
       if (byClass) {
         out.push(`    by holder class: corporate ${B(byClass.corporate)}, institutional ${B(byClass.institutional)}, SME ${B(byClass.sme)}`);
       }
+      // CASH: every dollar that reached the boundary this week, by reason. A boundary that
+      // absorbs silently is indistinguishable from a leak, which is the whole objection to it.
+      const byReason = ((s as any).lastSettlement?.unmodeledByReason ?? {}) as Record<string, number>;
+      const reasons = Object.entries(byReason).filter(([, v]) => Math.abs(Number(v)) > 1e6)
+        .sort((a, b) => Math.abs(Number(b[1])) - Math.abs(Number(a[1])));
+      if (reasons.length > 0) {
+        out.push(`  UNMODELED boundary, by reason: ${reasons.map(([r, v]) => `${r} ${B(Number(v))}`).join('; ')}`);
+      }
       const overdraftUSD = Number((s as any).lastCashOverdraftUSD ?? 0);
       if (overdraftUSD > 0) {
         out.push(`    of which clamped OVERDRAFTS (a holder spending money it does not have): ${B(overdraftUSD)}`);

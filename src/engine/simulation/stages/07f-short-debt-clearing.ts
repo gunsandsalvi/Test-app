@@ -100,29 +100,18 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const cbOrder = reg.centralBankSheet
         ? centralBankParticipant(reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k))
         : null;
-      // OWN7 — same shrink as 07c: the float is what the bidders here can hold between them.
-      // The central bank on a no-order week, and the corporate treasuries that park cash in
-      // short paper and never bid, both keep their positions — so neither one's paper is for
-      // sale and handing it to the bidders is a claim minted.
-      const nonParticipantByBucket = new Map<string, number>();
-      const reserveBucket = (key: string | undefined, usd: number) => {
-        if (!key || !(usd > 0)) return;
-        nonParticipantByBucket.set(key, (nonParticipantByBucket.get(key) ?? 0) + usd);
-      };
-      if (!cbOrder && reg.centralBankSheet) {
-        Object.entries(reg.centralBankSheet.sovereignHoldingsByTenor || {})
-          .forEach(([key, usd]) => reserveBucket(key, Number(usd) || 0));
-      }
-      ctx.prevActiveFirms.forEach((c) => {
-        if (c.region !== regionId) return;
-        (c.treasuryHoldings || []).forEach((h) =>
-          reserveBucket(bucketKeyByTrancheId.get(h.instrumentId), h.quantityOrNotionalUSD ?? 0));
-      });
+      // OWN7 — the shrink, stated the way 07c's third carve-out finally stated it: the float is
+      // what the participants in THIS book hold BETWEEN THEM, computed off the participant list
+      // itself rather than by naming the non-bidders one at a time. Naming them one at a time is
+      // what left the residual no named book holds in the float, and the desks then bought
+      // 4.5B of bills over ten weeks from an UNMODELED seller. The three real carve-outs fall
+      // out of the participant sum for free: the central bank on a no-order week is not a
+      // participant, the corporate treasuries that park cash in short paper never bid, and the
+      // share no book holds at all has nobody to decrement. Set below, once the desks exist.
       const instruments: ClearingInstrument[] = activeBuckets.map((b) => ({
         id: billInstrumentId(regionId, b.key),
         outstandingUSD: outstandingByBucket.get(b.key) ?? 0,
-        tradableFloatUSD: Math.max(0,
-          (outstandingByBucket.get(b.key) ?? 0) - (nonParticipantByBucket.get(b.key) ?? 0)),
+        tradableFloatUSD: outstandingByBucket.get(b.key) ?? 0,
         currentStat: Math.max(1, calculateNelsonSiegelZeroRate(b.years, reg.yieldCurveParams) * 10000),
         statKind: 'YIELD_LIKE',
         durationYears: b.years,
@@ -245,6 +234,15 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
       });
       const deskTickers = deskTickersOf(deskParticipants);
+
+      // OWN7, applied: every bidder is a real holder, so what they hold between them is what is
+      // genuinely in play. Everything else on the register keeps its position.
+      const heldByBookUSD = new Map<string, number>();
+      [...participants, ...deskParticipants].forEach((p) =>
+        p.currentHoldingsByInstrumentId.forEach((usd, id) => {
+          if (usd > 0) heldByBookUSD.set(id, (heldByBookUSD.get(id) ?? 0) + usd);
+        }));
+      instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookUSD.get(inst.id) ?? 0; });
 
       const result = clearFinancialAsset(instruments, [...participants, ...deskParticipants], priorDealerInventory, {
         dealerSpreadBps: DEALER_SPREAD_BPS,

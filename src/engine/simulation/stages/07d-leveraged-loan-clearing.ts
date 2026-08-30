@@ -149,11 +149,11 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     );
     if (regionCompanies.length === 0) return;
 
-    // OWN2: the float is the outstanding. `floatingDebtUSD` above already removes every bank
-    // FACILITY from the instrument this book prices — that is precisely "what a bank holds in
-    // its banking book", subtracted once, per issuer, from the real ladder. Multiplying by
-    // `1 - corpBondOwnership.bankShare` on top of it withheld another 28% of every loan from
-    // nobody, and did so at a flat regional rate rather than at each issuer's own bank mix.
+    // OWN2 claimed the float here was the whole outstanding, on the grounds that
+    // `floatingDebtUSD` already removes every bank FACILITY. Removing the one non-participant it
+    // could name is not the same as naming every participant: measured over ten weeks, the desks
+    // absorbed 2.7B of loan paper sold by NOBODY. The shrink is applied below, once the desks
+    // exist — the float is what this book's holders hold between them, nothing more.
     // WS8: primary loan offerings priced alongside the outstanding stock (HC6's LBO/recap
     // financings arrive through this same gate).
     const offeringsByIssuerId = new Map<string, import('../../../types').PrimaryOffering>();
@@ -364,6 +364,18 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
     });
     const deskTickers = deskTickersOf(deskParticipants);
+
+    // OWN7's rule, same as 07b/07c/07e/07f: the float is what the participants in THIS book hold
+    // between them, plus the paper on offer (the engine adds the offering to the float itself).
+    // What no named book holds was never for sale, because there is no seller to decrement.
+    const heldByBookUSD = new Map<string, number>();
+    const addHeld = (instrumentId: string, usd: number) => {
+      if (!(usd > 0)) return;
+      heldByBookUSD.set(instrumentId, (heldByBookUSD.get(instrumentId) ?? 0) + usd);
+    };
+    currentHoldingByCompanyByEntity.forEach((byCompany) => byCompany.forEach((usd, id) => addHeld(id, usd)));
+    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((usd, id) => addHeld(id, usd)));
+    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookUSD.get(inst.id) ?? 0; });
 
     const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,

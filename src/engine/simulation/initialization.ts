@@ -26,8 +26,24 @@ import { leverageHeadroomUSD } from '../macro/banking';
  * So this stays, named for exactly what it is: a SEED, read once at week 0, never weekly, with
  * its closing slice recorded in §6. It is not an ownership share and nothing may treat it as
  * one — `equityOwnership` and its siblings open at zero and are measured at the end of week 1.
+ *
+ * THE CREDIT SLICE IS GONE, and it was never a cold-start problem. `corpBond: 0.45` sized the
+ * institutions' opening credit book at 45% of a debt stock that counts every tranche — floating,
+ * bank facilities, commercial paper, public and private alike — and then placed the whole of it
+ * on the PUBLIC FIXED paper only. Measured at week 0: institutions opened holding 132% of the
+ * USA corporate bond stock, 127% of the EUR, 126% of the UK, 120% of the JPN. The register was
+ * minting claims before the first week ran, and the desks then hid it by going short into the
+ * boundary (measured -9.3B in two weeks) rather than the ledger check catching it.
+ *
+ * A bond book has no unnamed holder to leave room for: its participants are the institutions and
+ * the dealer desks, and the desks open flat. So the institutions open with the WHOLE tradable
+ * stock — exactly what the HC2 private-tier pass below already does, and exactly the instrument
+ * 07b and 07d clear (fixed ex-commercial-paper; floating ex-bank-facility). Equity and
+ * sovereigns keep a slice because those books DO have holders this model does not name yet —
+ * founders, households, foreign official — and OWN7's float rule is what keeps their paper out
+ * of the auction rather than a share pretending to own it.
  */
-const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42, corpBond: 0.45, sovBond: 0.30 };
+const INSTITUTIONAL_OPENING_BOOK_SHARE = { equity: 0.42, sovBond: 0.30 };
 
 import { isActiveCompany } from '../../domain/company';
 import { restingVacancies } from '../../domain/region-macro';
@@ -322,14 +338,14 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     const regionCompanies = companies.filter(c => c.region === regionId);
 
     const totalMarketCap = regionCompanies.reduce((s, c) => s + c.marketCap, 0);
-    const totalCorpDebt = regionCompanies.reduce((s, c) => s + c.totalDebt, 0);
     // FRM: the ratio is measured now, and it is seeded from the stack macro/initialization built
     // — so this reads the same number rather than the walked field it used to.
     const totalSovDebt = reg.debtToGdpPctBottomUp * reg.derivedNominalGdpUSD;
 
     reg.institutionalSector.equityHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.equity * totalMarketCap).toFixed(0));
-    reg.institutionalSector.corpBondHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.corpBond * totalCorpDebt).toFixed(0));
     reg.institutionalSector.sovBondHoldingsUSD = Number((INSTITUTIONAL_OPENING_BOOK_SHARE.sovBond * totalSovDebt).toFixed(0));
+    // The credit book is placed whole, off the candidate lists below rather than off a share of
+    // `totalCorpDebt` — see INSTITUTIONAL_OPENING_BOOK_SHARE's doc for what that share minted.
 
     // Compile holding candidates for individual institutional entities and macro sectors
     const equityCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies.filter(c => c.listingStatus !== 'PRIVATE').map(c => ({
@@ -353,13 +369,17 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
     // shape (the HC2 block below).
     const corpCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
-      .map(c => ({ id: c.id, type: 'CORP_BOND' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FIXED').reduce((s, t) => s + t.principalUSD, 0) }))
+      .map(c => ({ id: c.id, type: 'CORP_BOND' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FIXED' && !t.isCommercialPaper).reduce((s, t) => s + t.principalUSD, 0) }))
       .filter(c => c.outstandingUSD > 0);
     const totalCorpCandidatesUSD = corpCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
+    // OWN6: the opening credit book is the tradable stock itself. Placed here, once the candidate
+    // list that defines that stock exists — holdings-view.ts rederives this scalar from the
+    // entities' own books every week after, so the seed must open in the same shape.
+    reg.institutionalSector.corpBondHoldingsUSD = Number(totalCorpCandidatesUSD.toFixed(0));
 
     const loanCandidates: { id: string; type: ItemizedHolding['instrumentType']; region: RegionId; outstandingUSD: number }[] = regionCompanies
       .filter(c => c.listingStatus !== 'PRIVATE')
-      .map(c => ({ id: c.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FLOATING').reduce((s, t) => s + t.principalUSD, 0) }))
+      .map(c => ({ id: c.id, type: 'LEVERAGED_LOAN' as const, region: regionId, outstandingUSD: (c.debtTranches || []).filter(t => t.rateType === 'FLOATING' && !t.isBankFacility).reduce((s, t) => s + t.principalUSD, 0) }))
       .filter(c => c.outstandingUSD > 0);
     const totalLoanCandidatesUSD = loanCandidates.reduce((s, c) => s + c.outstandingUSD, 0) || 1;
     const attributeLoanHoldingsProportionally = (shareUSD: number): ItemizedHolding[] =>
@@ -681,7 +701,7 @@ export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): 
             (reg.institutionalSector.cashUSD || 0);
           return { id: comp.id, sizeWeight: totalMacroAssetsUSD * share, targetPct: targetFor(role, comp.hedgeFundStrategy).loanPct };
         }),
-      INSTITUTIONAL_OPENING_BOOK_SHARE.corpBond * totalLoanCandidatesUSD
+      totalLoanCandidatesUSD
     );
 
     regionalInstCompanies.forEach(comp => {

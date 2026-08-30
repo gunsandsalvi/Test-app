@@ -157,12 +157,12 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
 
     const creditConditionsIndex = reg.bankingSector.creditConditionsIndex ?? 0;
 
-    // OWN2: the float is the outstanding, because the instrument this book prices is ALREADY
-    // net of what does not trade in it. `fixedDebtUSD` excludes commercial paper (07f's market),
-    // and a bank's corporate exposure in this model is a FACILITY on its itemized business-loan
-    // book, never a bond in an investment portfolio — its only presence here is the dealer
-    // inventory, which is a participant and not a subtraction. The `1 - corpBondOwnership
-    // .bankShare` this replaces withheld 28% of every issue from an owner that did not exist.
+    // OWN2 claimed the float here was the whole outstanding, because this instrument is
+    // "already net of what does not trade in it". MEASUREMENT FALSIFIED IT: over ten weeks the
+    // desks took on 5.7B of corporate paper sold by NOBODY — an UNMODELED counterparty on the
+    // sell side of every auction. The book's holders are the institutions and the desks; the
+    // outstanding they do not hold between them belongs to nobody in this model, and handing
+    // it to the bidders mints a claim. The shrink is applied below, once the desks exist.
     // WS8: this week's primary offerings in THIS book — new fixed-rate paper priced alongside
     // the outstanding stock. The issuer's walk-away rides on the instrument; the engine
     // re-solves without the offering when it is pulled.
@@ -391,6 +391,21 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
     });
     const deskTickers = deskTickersOf(deskParticipants);
+
+    // OWN7's rule, applied to this book: the float is what the participants in THIS book hold
+    // between them, plus whatever is on offer in the primary (the engine adds the offering to
+    // the float itself). A holder outside the book keeps its position, so its paper was never
+    // for sale — and the residual no named book holds at all was never for sale either, because
+    // there is no seller to decrement. Same carve-out as 07c/07e/07f, computed the same way:
+    // off what the real holders actually hold, never off a stated passive share.
+    const heldByBookUSD = new Map<string, number>();
+    const addHeld = (instrumentId: string, usd: number) => {
+      if (!(usd > 0)) return;
+      heldByBookUSD.set(instrumentId, (heldByBookUSD.get(instrumentId) ?? 0) + usd);
+    };
+    currentHoldingByCompanyByEntity.forEach((byCompany) => byCompany.forEach((usd, id) => addHeld(id, usd)));
+    deskParticipants.forEach((d) => d.currentHoldingsByInstrumentId.forEach((usd, id) => addHeld(id, usd)));
+    instruments.forEach((inst) => { inst.tradableFloatUSD = heldByBookUSD.get(inst.id) ?? 0; });
 
     const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], priorDealerInventoryById, {
       dealerSpreadBps: DEALER_SPREAD_BPS,
