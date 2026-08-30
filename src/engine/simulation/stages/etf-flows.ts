@@ -25,6 +25,7 @@
  */
 
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
+import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
 import { INDEX_DEFINITIONS, IndexDefinition, MarketIndex } from '../../../domain/indexes';
@@ -493,6 +494,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const investor = entityById.get(investorId);
       if (!investor || rows.length === 0) return;
       investor.itemizedHoldings = [...(investor.itemizedHoldings || []), ...rows];
+      bumpRegister(ctx);
     });
   }
 

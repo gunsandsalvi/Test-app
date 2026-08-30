@@ -4,6 +4,7 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
+import { getRegisterIndex, typeSlice } from './register-index';
 import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { SECTOR_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
@@ -529,17 +530,25 @@ export function applyHolderInterestAccruals(
       if (!inner) { inner = new Map(); accrualsByType.set(type, inner); }
       inner.set(key.slice(at + 1), v);
     });
+    // SCALE: only the types that actually accrue are walked, through the CSR index — a flat pair
+    // of Int32Arrays grouped by type, so an EQUITY or GOV_BOND row is not visited at all rather
+    // than visited and rejected. Within a type the index preserves register order, so the float
+    // totals accumulate in exactly the order the nested walk produced.
     const totalByKey = new Map<string, number>();
     const matched: { entityId: string; key: string; qtyUSD: number }[] = [];
-    ctx.updatedInstitutionalEntities.forEach((entity) => {
-      entity.itemizedHoldings.forEach((h) => {
-        const byId = accrualsByType.get(h.instrumentType);
-        if (byId === undefined || !byId.has(h.instrumentId)) return;
-        const key = `${h.instrumentType}:${h.instrumentId}`;
+    const index = getRegisterIndex(ctx as never);
+    const entities = ctx.updatedInstitutionalEntities;
+    accrualsByType.forEach((byId, type) => {
+      const [lo, hi] = typeSlice(index, type as never);
+      for (let i = lo; i < hi; i++) {
+        const entity = entities[index.entAt[i]];
+        const h = entity.itemizedHoldings[index.rowAt[i]];
+        if (!h || !byId.has(h.instrumentId)) continue;
+        const key = `${type}:${h.instrumentId}`;
         const qtyUSD = h.quantityOrNotionalUSD ?? 0;
         totalByKey.set(key, (totalByKey.get(key) ?? 0) + qtyUSD);
         matched.push({ entityId: entity.id, key, qtyUSD });
-      });
+      }
     });
     matched.forEach(({ entityId, key, qtyUSD }) => {
       const weeklyUSD = accruals.get(key);

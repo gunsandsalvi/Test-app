@@ -20,6 +20,7 @@ import {
   realisedDebtRecoveryRate,
 } from '../../../domain/estate';
 import { getOutputInventoryUSD } from '../../../domain/company';
+import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
@@ -167,6 +168,7 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const e = index.entityById.get(id);
     if (!e) return;
     e.itemizedHoldings = (e.itemizedHoldings || []).filter((h) => (h.quantityOrNotionalUSD ?? 0) > 1);
+    bumpRegister(ctx);
   });
 
   ctx.estates = estates.filter((e) => e.closedWeek === undefined || week - e.closedWeek < 4);

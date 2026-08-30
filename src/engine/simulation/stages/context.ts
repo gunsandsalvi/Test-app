@@ -59,6 +59,9 @@ export interface WeeklyStepContext {
   }[];
   /** CASH/SETL1 — the week's payment instructions. Stages record; the settlement stage executes
    * (see stages/settlement.ts). A stage must not move money any other way. */
+  /** SCALE: the register's CSR index, cached across stages and dropped by `bumpRegister`
+   *  whenever a stage changes WHICH ROWS EXIST (stages/register-index.ts). */
+  registerIndex?: import('./register-index').RegisterIndex;
   paymentInstructions: import('./settlement').PaymentInstruction[];
   /** SETL6 — the running net of those instructions per party: what each has committed to pay or
    * is due to receive before the settlement pass runs. Read through

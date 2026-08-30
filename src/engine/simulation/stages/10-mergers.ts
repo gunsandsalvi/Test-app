@@ -11,6 +11,7 @@ import { GameState, DebtTranche } from '../../../types';
 import { getSimulationDate } from '../../formatters';
 import { isAntitrustBlocked, isActiveCompany } from '../../../domain/company';
 import { checkForMerger } from '../merger';
+import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 
 /**
@@ -213,7 +214,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
       touched = true;
       return { ...h, instrumentId: acquirer.id, issuerRegion: acquirer.region };
     });
-    if (touched) e.itemizedHoldings = rows;
+    if (touched) { e.itemizedHoldings = rows; bumpRegister(ctx); }
   });
 
   // Target is absorbed and exits active operations

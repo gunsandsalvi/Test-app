@@ -29,6 +29,7 @@
  */
 
 import { InstitutionalEntity, ItemizedHolding } from '../../../types';
+import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 
 /** The instrument types the clearing books price — the only groups the store indexes. */
@@ -205,6 +206,7 @@ export function buildHoldingsStore(ctx: WeeklyStepContext): void {
 
 export function finalizeHoldingsStore(ctx: WeeklyStepContext): void {
   ctx.holdingsStore?.finalize();
+  bumpRegister(ctx);
   ctx.holdingsStore = undefined;
 }
 
@@ -251,5 +253,6 @@ export function consolidateRegister(ctx: WeeklyStepContext): void {
       }
     });
     entity.itemizedHoldings = merged;
+    bumpRegister(ctx);
   });
 }
