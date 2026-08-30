@@ -423,11 +423,11 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 4 | foundation | **COH — cohorts accumulate: household balance sheets** | **Mostly delivered by DIST from a different direction (§7.145) — re-read §5-COH before starting; most of what it describes has happened.** What is left and what makes it item 3: the household balance sheet still cannot distinguish what is spendable now from what is accumulated, and the savings rework needs that distinction to have a buffer to be a buffer OF. Also still owns `beneficiaryLiabilityUSD`'s reversal and retiring `national-accounts.ts`. |
 | 5 | foundation | **DEM — demographic variability** *(unblocks COH2, and the savings life-cycle)* | **THE AGE STRUCTURE ALREADY EXISTS AND NOTHING READS IT (§7.169).** `lifeCycleDistribution` carries four stages with `shareOfPopulation`, `savingsRate` and `consumptionMultiplier` per stage; only `RETIRED.shareOfPopulation` is ever read, and only to set a death rate. **`LifeCycleStageData.savingsRate` is read NOWHERE** — the life-cycle saving motive is present as data and binds on nothing, the fifth instance of that pattern this session. **And it should not simply be wired in: those per-stage rates are stated shape parameters** (§5-DIST-P), and the derivation is better than they are — see the row's §5 entry. | Small; takes the population-growth and migration clamps. **Promoted in substance: its AGE STRUCTURE half is what gives the household sector a life-cycle**, and a life-cycle is what makes a positive steady-state savings rate an outcome rather than a coefficient (§5-DIST-P). |
 | 6 | markets | **HSG — a housing market that clears** *(clamps)* | **PROMOTED from item 10; substantially started 2026-08-30.** Done: the mortgage book is a cross-section of **vintages** each marked to today's prices, so severity is `E[f(LTV)]` and the model can have a mortgage credit event — a −20% price move now takes severity to 2.1x where the one-average book said its floor (§7.159); loans carry a **5-year fix and RESET** (17.5% of the book reprices a year) with per-vintage default frequency; and borrowing capacity is `DSTI x income / annuity factor` (§7.160). **What remains is the row's actual title: `medianHomePriceUSD` does not CLEAR.** Until it does, the affordability limit has slack it should not always have, and `HOUSING_TURNOVER_RATE_ANNUAL` is still a constant on the seller's side. |
-| 7 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | **Household half DONE (§7.162); RATINGS half DONE (§7.184).** Tier migration is two-way on measured delinquency, delinquency heals, the tier rate is quoted from that tier's own measured loss; and a rating is no longer two ratios — scale, customer and supplier concentration, the maturity wall against liquidity, and earnings volatility each notch it, every one a measurement the model already took. **Remains: the CDS half, which needs G3.** |
+| 7 | markets | **CRD — credit prices cleared, ratings handle zero earnings** *(clamps)* | **Household half DONE (§7.162); RATINGS half DONE (§7.184); the CDS half is now UNBLOCKED (G3 closed).** Tier migration is two-way on measured delinquency, delinquency heals, the tier rate is quoted from that tier's own measured loss; and a rating is no longer two ratios — scale, customer and supplier concentration, the maturity wall against liquidity, and earnings volatility each notch it, every one a measurement the model already took. **Remains: the CDS half, which needs G3.** |
 | 8 | foundation | **IND — industry operating models** | **CLOSED except IND16 (§7.146-156).** Kept in the table only because IND16 is open: the distribution tier, and it is a REFACTOR not an addition — a household already buys `facilities_and_logistics` as a good, so a channel margin on top would pay the same sector twice. Design in §5-IND16. |
 | — | consequence | **MAC — the price level has no anchor** *(was item 1)* | **DEMOTED under rule 18, and RESCOPED.** It was "close the inflation escape", scoped against a measurement (−36% by w37) taken before ten IND slices, three root-cause fixes and a calendar. **That evidence is void and may not be inherited.** The honest row: the price level's behaviour is a SYMPTOM, its cause is one or more missing mechanisms, and every mechanism landed so far has moved it without trying. **Re-measure on a whole number of years AFTER the foundation tier, then scope.** Its saving half is DIST's item 1(a) and its confidence half needs a precautionary motive, which needs DEM's age structure. |
 | — | consequence | **EMP — the labour collapse** *(was item 2)* | **DEMOTED under rule 18: this row has no build in it.** Its seed half is done (§7.118-121) and §7.149 fixed the defect that made the collapse one-directional — the hiring branch had never fired. What is left is a CRITERION ("60 weeks stable"), not a work item, so it belongs in §5's S-final validation gate rather than the work order. Nothing to start; watch it as the foundation tier lands. |
-| 9 | markets | **G3 — one dealer system (all three of them)** | The regional desk copied onto four sheets, the player-facing `Dealer` priced inside a React component, and every fixed bank price the review found: underwriting fees, the wholesale spread, the deposit-beta floor, the hash-drawn lead bank, `BANK_TARGET_ROE`. Also owns the dealer-capacity half of the promoted damper defect (§6.1). |
+| 9 | markets | **G3 — one dealer system (all three of them)** | **CLOSED 2026-08-30 (§7.185–187).** There is one dealer system: a desk per named bank, an ordinary participant in its book's auction, sized by its own leverage headroom and funded by its own reserves. The regional arrays are derived views; the player's three invented counterparties are gone and its fill price is the desk's quote, not a React component's; all five fixed bank prices — the wholesale spread, the deposit beta, the ROE hurdle, the underwriting fee and the hash-drawn lead bank — come out of the bank's own sheet. Primary is now a firm commitment. **Unblocks: CRD's CDS half, DER, ETF2.** Its damper half (G3d) and the equity-float change are the two things a measurement run has to check.
 | 10 | markets | **REPO — secured funding is a market with counterparties** | New 2026-08-29. Repo already CLEARS (`repo-clearing.ts` uses the generic engine, real reservations, the SRF as a seat) but it is not an asset class: no `AssetType`, no `ItemizedHolding`, no named counterparty, one anonymous pool per region, collateral as a scalar. Rules 3 and 14. It is also what should bound a bank's securities book, which is why OWN8's residual ceiling exists at all. |
 | 11 | markets | **XB — cross-border portfolios and trade** | IN PROGRESS. **XB6** remains and owns the FX leg of the damper defect: the float is systematically one-way and the elastic side cannot absorb it. |
 | 12 | markets | **HF — hedge fund strategies + prime brokerage** | Grown: speculator schedules from own capital (the FX elastic side), hedge ratios onto mandate profiles, home bias as a LIMIT not a weight, the LBO debt share as a financing outcome. |
@@ -1018,68 +1018,42 @@ institutional seed share deleted; `national-accounts.ts` gone.
 ---
 
 
-### G3 — One dealer system (all three of them)  *(item 7)*
+### G3 — One dealer system (all three of them)  *(item 9)*  **CLOSED 2026-08-30**
 
-**The review tripled this project's evidence and it is now precisely scoped.** The model has
-three dealer systems: the REGIONAL desk (one book on `reg.bankingSector`, copied verbatim onto
-every bank's sheet by 02b, P&L split by `bankMarketShare` — no bank decided to carry the risk and
-no bank's capital constrains it); the PLAYER-facing `Dealer` type (quotes by
-`baseSpreadBps × spreadMultiplier` with an `axeDiscountPct`, carries UI fields on a domain
-entity, has no balance sheet and can never run out of capacity); and the fill price computed
-INSIDE `TradeTicketModal.tsx` (`price × (1 + side × 0.0015)`), outside the engine entirely.
+There were three dealer systems and there is now one: a desk per NAMED BANK, an ordinary
+participant in its own book's auction. What each slice did is in §7.185–187; what a measurement
+run still owes this row is below.
 
-**G3a — the desk becomes per-bank and owned.** Each bank carries its own dealer inventory sized
-by its own capital (the FX desk already does exactly this — `fxDeskCapacityUSD` against leverage
-headroom is the pattern); the clearing adapters allocate residuals to the banks whose books have
-room, and the P&L lands on the bank that carried the position. The regional arrays become derived
-views, then die.
+- **G3a/G3e** (§7.185): the desk is a participant with a market maker's schedule — neutral at
+  this week's printed level, full a spread away in its favour, flat a spread away against it —
+  sized by a share of the balance sheet its own equity supports and funded from its own reserves.
+  Cash inventory now consumes the leverage ratio one-for-one, which it never did. The three
+  regional arrays are derived sums. 07e charges the fee it had never charged and carries the
+  inventory it had always dropped, and its float is what the book's participants hold rather than
+  the whole share register.
+- **G3c** (§7.186): the wholesale spread is the bank's own cleared OAS; the deposit rate is its
+  own alternative funding cost on the share of its base actually in play; the hurdle is
+  risk-free + its own beta × ERP; the underwriting fee is quoted per deal and the derivation
+  reproduces all three levels of the table it replaces; the lead bank follows the measured
+  lending relationship and can be lost. Primary is a firm commitment: the issuer is paid on the
+  whole deal and the lead pays reserves for the residual.
+- **G3b** (§7.187): the player's counterparties ARE the banks. The invented axes, the base spread
+  and the React-component fill price are gone; a fill moves a named desk's inventory and reserves
+  in the same pass, and all eight asset classes move a real balance sheet.
 
-**G3b — the player trades against the same desks.** Delete the `Dealer` type's pricing; a player
-order is one more participant order against the per-bank books. Fixes three review findings at
-once: the React-component fill price, the equity credit with **no cash leg** posted to the
-regional aggregate (07b states the rule: "an equity write with no cash leg breaks the per-bank
-identity"), and six of eight asset classes moving no inventory at all when the player trades.
+**What the measurement run owes this row (rule 12 — none of it measured yet):**
+1. **G3d, the number G3 exists to move**: the persistently-bound damper count, 2,549 with a
+   60-week worst streak before. Desks with real capital are the absorber the §6 row says is
+   missing; if the count does not fall, the thin side is somewhere else.
+2. **The equity market's level**, which the float change moves by construction, and whether
+   `checkSustainedEquityDemandMovesPriceBeyondEps` prints again.
+3. **`<book> dealer inventory`**, the largest boundary line: it should shrink by whatever the
+   desks now take the other side of.
+4. **Bank NIM and equity**, because the deposit rate can now be zero for a liquid bank whose
+   depositors are not leaving. That is the mechanism, not a bug — but it is a large change to
+   household interest income and it is the first thing to look at if the household side moves.
+5. **Underwriting fee levels**, against the 50/150/300 the derivation is meant to reproduce.
 
-**G3c — every fixed bank price becomes the bank's own decision.** The review's inventory:
-`UNDERWRITING_FEE_BPS` (50/150/300 — competing desks bid a fee, they do not read a table);
-`chooseLeadBank` (a stable hash is a draw, not a relationship — mandates follow the bank's real
-lending/deposit relationship and can be LOST); `WHOLESALE_FUNDING_SPREAD_BPS = 40` (identical for
-a sound bank and a breaching one — the spread is where the market's view of a bank shows up, and
-§6.1's USA cohort funds ~48% wholesale against it); the deposit-beta floor `policyRate × 0.45`
-(IS the rate most weeks — a bank's deposit pricing comes from its own funding need against the
-alternatives its depositors see); `BANK_TARGET_ROE = 0.12` (its own comment's exit condition is
-met — bank stock clears in 07e, so the hurdle is risk-free + measured beta × ERP off the bank's
-own cleared price).
-
-**G3e — the desk's cash and the desk's fee, both of which SETL6 exposed (§7.103).** Now that the
-cleared books settle through a clearing house, the dealer's leg is explicit and two things are
-visible that were not. **(1) The inventory is UNFUNDED** — it sits on the region, so no named
-bank pays for it, and its cash counterparty is the boundary line `<book> dealer inventory`, the
-LARGEST one left. G3a puts the book on a bank and the payer becomes that bank's reserves; the
-line goes to zero by construction, and it is the measure of whether G3a is finished. **(2) 07e
-charges no dealer fee and carries no inventory.** It declares `dealerSpreadBps: 8` and then
-discards both the engine's fee and `newDealerInventoryById`, because this book clears in SHARES
-and both come back share-denominated — so equity trading is free while every other book pays,
-and the equity desk holds nothing however one-sided the session was. Convert at the cleared
-price when the desks become real; the equity boundary line is small today only because the desk
-is not taking the other side. **(3) The equity float is the whole share count.**
-`tradableFloatUSD = c.sharesOutstanding`, and the only bidders are institutions — the founders,
-households and corporates on the register are not in the book and their shares are still in the
-float. It does not show as over-holding only because the funds' mandates keep them well below
-it and the residual is the inventory this desk then drops. OWN7 fixed the same shape in the
-sovereign books (§7.104: subtract what non-participants hold); doing it here changes the equity
-market's clearing level, so it belongs with the desks that will absorb the difference.
-
-**G3d — capacity against the promoted damper defect (§6.1).** The books print their dampers
-because posted demand does not reach the float; the dealer residual is the mechanism that should
-absorb the gap, and per-bank desks with real capital give it a real size. Measure the
-persistently-bound count before and after — this is the number G3 exists to move.
-
-**Verify (once):** no regional dealer array read anywhere; a player buy shows up in a named
-bank's inventory and cash; fees and spreads differ across banks and move over time; the
-persistently-bound count, re-measured.
-
----
 
 ### REPO — Secured funding is a market with counterparties  *(item 8; new 2026-08-29)*
 
@@ -1115,7 +1089,7 @@ pledge, collateral quality matters, and a fire sale can be modelled.
 
 **REPO3 — term, not only overnight.** A term structure in secured funding, so a bank can fund a
 long book short and be caught by it — the real mechanism behind a funding squeeze, and the reason
-`WHOLESALE_FUNDING_SPREAD_BPS` (G3) is currently a constant.
+`WHOLESALE_FUNDING_SPREAD_BPS` is now the bank's own cleared OAS (§7.186); the constant survives only as the week-one fallback.
 
 **REPO4 — the funding decision and the securities decision are ONE.** A treasury buys the bond
 and repos it out; the book is bounded by capital and by what it can finance, not by leftover
@@ -1961,8 +1935,8 @@ in one object. The target is one FUND shape — itemized assets, units held by n
 manager on a fee, a mandate that drives the bidding — with the ETF as the template. **Owner:
 unassigned, and not IND's; IND finishes at firms.** |
 | ~~**THE REPO MARKET IS DEAD, AND A CEILING IS AN IDENTITY**~~ | **CLOSED by OWN8 (§7.102).** `investableSurplusUSD` deleted; the sovereign ceiling is now `sovereignBookCapacityUSD` — current book plus the balance sheet the bank's equity supports under the leverage floor, a bound that can exceed the position it bounds. Repo: zero volume in all four regions -> 3 of 4 USA banks borrowing, 46.7B outstanding, interbank lending live and the SRF drawn (18.4B USA, 4.1B JPN) for the first time; the rate now moves inside the corridor instead of printing the early-return floor. USA sovereign book 78B->350B (pre-OWN was 285B), cash/deposits 47-68% -> 7%. **Two things it surfaced, both recorded rather than chased (rule 10):** 46 new `sovBondOwnership` conservation violations — OWN7's defect appearing in a second asset class now that the sovereign book is large, which strengthens the case that OWN7's harness fix comes first; and 16 weeks of USA bank capital ratio out of band, because a bank shifting cash into ZERO-risk-weight bonds grows equity on the carry while RWA (loans only) does not move, and the payout valve is cash-constrained so it cannot bleed off. That second one is a real mechanism, not a bug — it is why the leverage floor exists — but the harness band on a risk-weighted ratio is a poor test of it. Owner: G3, with the §6 USA bank-cohort row. |
-| **THE BOOKS PRINT THEIR DAMPERS — promoted from §6.2, 2026-08-29** | The clearing engine states its own failure condition: the damper "must never BIND persistently — a name clamped for weeks on end means the posted schedules disagree with the printed level and the print is the damper, not the market." The watchlist row set the same test ("only wrong if it stays there") at 1,961 bound; the harness now prints **2,549 persistently bound, worst streak 60 weeks in a 60-week run**. The condition is met. This is ONE defect wearing many prints: the FX rate pinning at −8.01% (its damper to the second decimal) 38–39 weeks in 40, and the five books' `MAX_WEEKLY_*_MOVE_PCT` binding across 2,549 instruments — the posted demand does not reach the float it is asked to clear (§7.18's want/have from the demand side). The engine is not the defect; the thin side is. **Owners: G3 (dealer capacity, G3d), SCALE (float), XB6 (the FX flow), HF (the FX elastic side).** Do not widen any damper. |
-| **A SHOCK TEST STOPPED MOVING ITS PRICE** | **New 2026-08-29 (§7.107).** `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an otherwise identical control world — no longer moves the name's price. Same signature the sovereign-auction shock test already shows (§6.1's XB row: "demand so far below the enlarged float that both A/B worlds pin at the same bound"), and 07e is the book where that is most likely: its `tradableFloatUSD` is the ENTIRE share count while the only bidders are institutions whose mandates cap them far below it, and the dealer residual that should absorb the rest is dropped unapplied (**G3e**). **Do not weaken the test.** Re-measure when G3e gives the equity book a real float and a real absorber; if it still does not move then, the demand side is the defect. |
+| **THE BOOKS PRINT THEIR DAMPERS — promoted from §6.2, 2026-08-29; G3's half landed 2026-08-30, UNMEASURED** | The clearing engine states its own failure condition: the damper "must never BIND persistently — a name clamped for weeks on end means the posted schedules disagree with the printed level and the print is the damper, not the market." The watchlist row set the same test ("only wrong if it stays there") at 1,961 bound; the harness now prints **2,549 persistently bound, worst streak 60 weeks in a 60-week run**. The condition is met. This is ONE defect wearing many prints: the FX rate pinning at −8.01% (its damper to the second decimal) 38–39 weeks in 40, and the five books' `MAX_WEEKLY_*_MOVE_PCT` binding across 2,549 instruments — the posted demand does not reach the float it is asked to clear (§7.18's want/have from the demand side). The engine is not the defect; the thin side is. **Owners: G3 (dealer capacity, G3d — DONE §7.185, count not yet re-measured), SCALE (float), XB6 (the FX flow), HF (the FX elastic side).** Do not widen any damper. **The next measurement run must print the persistently-bound count against 2,549/60 weeks: that is the test of whether real dealer capital was the missing absorber.** |
+| **A SHOCK TEST STOPPED MOVING ITS PRICE** | **New 2026-08-29 (§7.107).** `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an otherwise identical control world — no longer moves the name's price. Same signature the sovereign-auction shock test already shows (§6.1's XB row: "demand so far below the enlarged float that both A/B worlds pin at the same bound"), and 07e is the book where that is most likely: its `tradableFloatUSD` is the ENTIRE share count while the only bidders are institutions whose mandates cap them far below it, and the dealer residual that should absorb the rest is dropped unapplied (**G3e**). **Do not weaken the test.** G3e has now given the equity book both (§7.185): the float is what the book's participants hold, and the desks absorb the residual onto real capital. **Re-measure. If it still does not move, the demand side is the defect.** |
 | **THE HARNESS IS RED ON PURPOSE WHILE XB RUNS** | **Read this before assuming something is broken.** XB touches ownership, five clearing books, the goods market, the FX market and the dealers at once, so the 60-week harness has been failing by design since XB1 and is NOT to be chased slice by slice (rule 1 of `CLAUDE.md`). **XB3a widened this further**: the goods auction was repartitioned and the RNG stream relabelled, so every count taken before it describes a different world. Last count taken was **66 violations**, dominated by **USA bank NIM out of band** plus one **byte-identical sovereign shock test** (a saturation signature: demand so far below the enlarged float that both A/B worlds pin at the same bound). Two shock tests were already updated because they shocked levers XB deleted; a third may need the same. **Do not fix these individually.** Finish XB3b, then run the harness ONCE (its XB module reports the battery) and attribute properly. If it is still red after XB closes, that is the moment it becomes a defect list. |
 | ~~**Invoicing locks to 100% USD by week 5**~~ | **The mechanism was DELETED, not fixed (§7.76 correction).** The lock-in was arithmetic between three weights I invented — a weighted score with an argmax is not how anyone chooses an invoice currency, and reporting its corner solution as a finding about the world was wrong. Invoice currency is now owned by **XB3a-5**, gated on **XB6**: while USD is the FX numéraire the cheapest vehicle currency is decided by the model's plumbing, so the question is not askable yet. |
 | **Freight rates run away on some lanes** | **Found by the XB battery (§7.77).** Over 40 weeks EUR>UK goes 6.28 -> 292,929 per tonne and JPN>USA 7.63 -> 704, while EUR>EUR falls 59% and JPN>UK falls 94%. Freight as a share of cargo value then prints above 100% for the bulk goods (upstream_extraction at 58,255%), which is not a price, it is a market that has come apart. Two candidates and they interact: capacity on a lane is a physical stock that cannot respond inside a week, so a demand spike has nothing to meet it; and the rate is quoted in the ORIGIN's money, so a collapsing origin currency inflates it mechanically (see the row below, which is probably the root). **Do not cap the rate** — a bound is not a price (§7.21, §7.75). Diagnose which of the two dominates by holding FX fixed in an A/B, then fix the one that is real. |
@@ -1986,7 +1960,7 @@ unassigned, and not IND's; IND finishes at firms.** |
 | **`unmodeledFinancialAssetsUSD`** | **The scoreboard for HH, not a watch item.** 1,605B at week 40, and §7.48 identified where 46% of it already is: 740B of insurance reserves, pension entitlements and fund shares sitting on institutional balance sheets as assets with **no holder**. It is not the universe being too small — the model contains it and does not attribute it. HH1 closed that 740B on both sides at once; HH2 added the house (3,188B of stock, 2,127B of home equity), taking net worth to 4,730B and 4.61x income. Watch this line fall toward zero as each slice lands. |
 | ~~**The corporate books hold more paper than exists**~~ | **CLOSED by OWN7 (§7.104).** Harness 602 → 107, and every ownership and conservation family with it. Both red invariants were examined first, as this row demanded: `checkHoldingsLedgerConservation` was genuinely measuring the wrong thing (holder-region against issuer-region, plus three real holders left off entirely) and `checkOwnershipConservation` was correct with a stale comment. The shrink itself was **the float**: 07c and 07f sold the whole issue while the central bank (on a no-order week) and the corporate treasuries sat outside the book still holding theirs — 114% → 97% with a real household residual. Two more: the register counted SME POOL loans as corporate ownership (~22%, rule 3), and a merger left the target's paper on its holders' books while the same principal was re-cleared from the acquirer's ladder. What is left is one defaulted issuer in one week of sixty — **G5's**, and now its opening measurement. |
 | ~~**Bank employees are paid by nobody**~~ | **CLOSED by IND-R1 (§7.108) — for banks.** Payroll, capex and input purchases are computed BEFORE the profile dispatch now, so every firm with staff owes them a wage whatever profile prices its revenue; the bank cash walk pays it and the instruction reaches a household. **The same defect is still live at 46x the size one branch further down:** 1,712 private firms employing 8.20M people return before the payroll block, so 67% of the USA's named wage bill still never reaches a household. That half is IND-R6's (§7.115), not a §6 row — it has an owner. |
-| **The dealer desk is one regional book pretending to be four** | **Found 2026-08-29.** `corpBondDealerInventory` / `sovBondDealerInventory` / `loanDealerInventory` are written ONLY on `reg.bankingSector` (07b:416, 07c:480, 07d:391, 07f:315), and `02b-bank-diversification.ts:369-374` then copies that same regional array onto every bank's sheet — four banks each carrying an identical book that is actually one. The P&L is split by `bankMarketShare` (07b:421, 07c:484, 07d:396, 07f:293). Two rules at once: rule 3, one real thing with two representations and nothing reconciling them; rule 13, no bank DECIDED to take that inventory and no bank's capital constrains it — the same "a share owning nothing" pattern OWN spent six slices removing from the ownership registers. Note the split itself is right and must survive: an investment book (`sovereignBondHoldingsByTenor`) and a market-maker's inventory are genuinely different businesses, and rule 15's saturation clearing needs somewhere to put the residual. What is wrong is that the desk has no owner. **Sharpened by SETL6 (§7.103):** now that the cleared books settle through a clearing house, the desk's cash leg is explicit and it has no payer — `<book> dealer inventory` is the largest remaining boundary line, and it is the exact measure of this defect. A desk with no owner has no reserves to pay with. **Owner: G3 (G3e) — this is its opening finding, and that line going to zero is how it closes.** |
+| ~~**The dealer desk is one regional book pretending to be four**~~ | **Found 2026-08-29.** `corpBondDealerInventory` / `sovBondDealerInventory` / `loanDealerInventory` are written ONLY on `reg.bankingSector` (07b:416, 07c:480, 07d:391, 07f:315), and `02b-bank-diversification.ts:369-374` then copies that same regional array onto every bank's sheet — four banks each carrying an identical book that is actually one. The P&L is split by `bankMarketShare` (07b:421, 07c:484, 07d:396, 07f:293). Two rules at once: rule 3, one real thing with two representations and nothing reconciling them; rule 13, no bank DECIDED to take that inventory and no bank's capital constrains it — the same "a share owning nothing" pattern OWN spent six slices removing from the ownership registers. Note the split itself is right and must survive: an investment book (`sovereignBondHoldingsByTenor`) and a market-maker's inventory are genuinely different businesses, and rule 15's saturation clearing needs somewhere to put the residual. What is wrong is that the desk has no owner. **Sharpened by SETL6 (§7.103):** now that the cleared books settle through a clearing house, the desk's cash leg is explicit and it has no payer — `<book> dealer inventory` is the largest remaining boundary line, and it is the exact measure of this defect. A desk with no owner has no reserves to pay with. **CLOSED by G3a/G3e (§7.185): the desk is a participant per named bank, sized by its own headroom and funded from its own reserves; the regional arrays are derived sums. The `<book> dealer inventory` boundary line is the measure and has not been re-measured — it should shrink to whatever the desks did not take the other side of.** |
 | **Banks opt out of the corporate operating model, not just its P&L** — **MOSTLY CLOSED 2026-08-29** | **Found 2026-08-29; three of its four halves are done.** `profileKeyOf` still routes a bank to `profiles/bank.ts`, but that module is no longer a REPLACEMENT for the operating model: payroll, capex and inputs are common to every firm (IND-R1, §7.108), loan losses are the bank's own measured rate on the books that actually carry credit rather than `random() * 0.05 * assets` (IND-R4's first half, §7.109), and opening revenue is `earning assets x the region's NIM` instead of a Pareto draw (IND-R5, §7.109). **What remains after IND3 is the PROFILE CONTRACT, and it is one step (§7.122).** `ProfilePnl` lets a profile return `newEbitdaMargin` and `newEbitda` — permission to STATE a margin, which is why a bank's is still `0.40` while the operating path now builds EBITDA up from real costs (§7.121). Invert it: a profile returns its revenue mechanism and its own extra cost lines (a bank's loan losses and funding cost, an insurer's claims and reserve movement), and shared code does `EBITDA = revenue − inputs − payroll − otherOpex − profileCosts`. That one change also retires IND-R4's `INSURER_EXPENSE_RATIO` and `CARD_OPERATING_COST_BPS` instead of deleting them one at a time. **And one blocker CHAIN-D created:** a recipe is now a property of a PRODUCT, and IND-R2 correctly gave financials no product line — so a firm that sells nothing now BUYS nothing, and a bank purchases none of the services it obviously does. Financials need an input basket keyed to their profile rather than to an output. **Owner: IND.** |
 | **The institutional sector's opening size is still assigned** | **Named by OWN6 (2026-08-29), with its size and its closing slice.** `INSTITUTIONAL_OPENING_BOOK_SHARE = { equity 0.42, corpBond 0.45, sovBond 0.30 }` in `simulation/initialization.ts` — read once at week 0, never weekly, and NOT an ownership share (the registers are measured; nothing in the engine reads one to decide anything any more). It survives because the seed is circular: an entity's `totalAssetsUSD` is `institutionalMarketShare × the sector aggregate`, and the sector aggregate is these three numbers times the market. Breaking it means anchoring an institution on what it OWES — the pension and insurance claims households hold against it — and `beneficiaryLiabilityUSD` is today derived FROM assets (`household-balance-sheet.ts:73`), so that anchor does not exist yet. **Closing slice:** make `beneficiaryLiabilityUSD` a real claim built from the household side, then size the entity from it. Until then this is a named gap with a size, an owner and a scheduled close, which is what rule 13 requires of one. |
 
@@ -2044,7 +2018,7 @@ constants §7.4 sanctions), which were checked and left.
 | `macro/evolution.ts:248-251` — **MAC** | The savings RATE (hence consumption, hence C) from `0.05 + inflationGap × 0.5 − 0.1 × CCI-gap + realRateGap × 0.4`. | 13 |
 | `macro/evolution.ts:220` — **MAC** | Consumer confidence from coefficients 150/200/80/1000, then clamped [30, 170]. | 2, 13 |
 | `macro/banking.ts:302` — **CRD** | `creditConditionsIndex = capitalGap × 8 + (0.025 − NIM) × 10 + spillover`, which then drives credit conditions and the tier rates above. | 13 |
-| `macro/banking.ts:240` — **G3** | Deposit beta floor `policyRate × 0.45`; `:281` payout ratio step function; `:286` universal 14% target capital. | 13 |
+| `macro/banking.ts` — **G3 (deposit beta CLOSED §7.186)** | ~~Deposit beta floor `policyRate × 0.45`~~ — now the bank's own alternative funding cost on the contested share of its base. Remaining on this row: the payout ratio step function and the universal 14% target capital. | 13 |
 | `stages/05-unit-bidding.ts:1273` — **CAP** | Contract price = published price × `(1 − (bargainingPower − 0.3) × 0.05)`. | 1, 15 |
 | ~~`domain/dealer-derivatives.ts:106`~~ | ~~`FX_SPOT_PRICE_IMPACT_PER_GDP`~~ **DELETED by the review (§7.100)** — it was DEAD: no consumer anywhere since FX started clearing in a real book. The audit listed it as live; it was not. | 1 |
 
@@ -6209,3 +6183,94 @@ that proved it, the lesson.
       NUMBER on both sides of the book. **The stage's work is load-bearing instead of decorative**,
       which is what §5-SCALE's "cheapest large win on the table" note was pointing at.
     - **The seed rater inherits it for free**, because seed and week share one function (§7.4).
+
+185. **G3a/G3e — the dealer desk becomes a named bank's business, and the equity float becomes real.**
+    - The model had a "dealer" that was three things and none of them a business: a residual the
+      engine computed (`float − allocated`), an array on the region, and a P&L split by
+      `bankMarketShare`. No bank decided to carry it and no bank's capital constrained it; once
+      SETL6 made the cash side explicit, its counterparty was the BOUNDARY, because a desk with
+      no owner has no reserves to pay with.
+    - **The fix is not a new mechanism, it is deleting a special case.** A desk is an ORDINARY
+      PARTICIPANT, one per named bank, in the same auction as everyone else. Its schedule is what
+      a market maker does: it wants exactly the inventory it already holds at this week's printed
+      level, goes to full size a spread away in its favour and to flat a spread away against it.
+      So the level drifts week to week in the direction of the flow the desks absorb, at a rate
+      set by how fast they fill — inventory-driven price discovery, with no new parameter: the
+      WIDTH of the schedule is the book's own bid-ask, which the book already charges.
+    - **Its size is its own capital.** Cash inventory consumes the leverage ratio one-for-one
+      (unlike the FX desk's 2% PFE add-on), so capacity is a share of the balance sheet the
+      bank's equity supports, less what its other desks carry, and never more than the leverage
+      floor still allows. `bankTotalAssetsUSD` now counts the inventory: before this, a desk's
+      book consumed NOTHING, which is exactly what let a position with no capital behind it
+      absorb any imbalance.
+    - **One stated parameter added, and it is the only one:** the share of the balance sheet a
+      bank commits to market-making. Note the BASE — a share of unused headroom would let the
+      desk take a quarter of what is left every week forever, converging on the whole sheet. It
+      is deliberately NOT merged with the FX desk's identical-looking 0.25: those bases are
+      different things, and one number meaning two is the defect this project deletes.
+    - **Three things it surfaced.** (a) 07c subtracted the dealer's own book from the reservable
+      float by reading `pos.bucketKey` on a row that carries `tenorKey` — so it had never once
+      been subtracted. (b) 07e charged NO FEE, because the engine's spread came back
+      share-denominated and the adapter dropped it: equity trading was free while every other
+      book paid. The conversion is the adapter's, at the cleared price, for clients and desks
+      alike. (c) 07e's float was `sharesOutstanding` — the whole company — while the only bidders
+      were institutions whose mandates keep them far below it. OWN7's rule, applied to the
+      register: **the float is what the participants in this book hold between them.** Founders,
+      households and corporates do not bid, so their shares were never for sale. This changes the
+      equity market's clearing level by construction and is the first thing the measurement run
+      must look at.
+
+186. **G3c — five posted bank prices become five decisions the bank makes.**
+    - **The wholesale funding spread** was 40bps for a sound bank and a breaching one. A bank is a
+      borrower in the bond market like any other and 07b already prints its OAS, so its funding
+      spread is now its own cleared spread. The constant is the week-one fallback.
+    - **The deposit rate** was `policyRate × 0.45` — an observed real-world pass-through (rule 4),
+      identical across banks, and, because the money fund rarely took funding, THE rate almost
+      every week despite being described as a floor. A bank now pays the cheaper of what the
+      deposit is worth to it (the wholesale funding it displaces, at its own spread) and what the
+      depositor could get instead, on the share of its base actually in play — money walking to
+      the fund, or its own liquidity short of a stressed month. **Consequence to watch, not to
+      pre-empt: a liquid bank whose depositors are not leaving now pays ZERO.** That is the
+      mechanism's own answer and it may be wrong for a reason the model has not built yet
+      (deposits buy payment services, which nothing here represents). It is published on the
+      sheet, so the money fund reads the rate rather than restating it — one number, one writer.
+    - **The ROE hurdle** met its own file's stated exit condition, the fourth such condition found
+      satisfied: bank stock clears in 07e, so the hurdle is risk-free + the bank's measured beta ×
+      ERP, and two banks with different betas price the same loan differently.
+    - **The underwriting fee** was a three-line table (50/150/300). It is now quoted per deal:
+      the desks' own spread, plus what a week's move can cost on the residual the desks cannot
+      absorb — for a credit book, that spread move through the deal's own duration. **The
+      derivation reproduces all three of the table's levels from mechanism** (bonds ≈54, loans
+      ≈140, equity ≈258 on plausible residual shares), which is the strongest evidence yet that a
+      posted schedule was a mechanism in disguise. A fee now falls when banks have balance sheet
+      and rises when they do not.
+    - **The lead bank** was a stable hash of the issuer id: nothing the bank did won the mandate
+      and no issuer ever moved (rule 13). It now follows the credit relationship, measured off the
+      banks' own itemized loan books every time it is asked — so a bank that lets a facility run
+      off loses the call — and, with no incumbent, the desk that can still underwrite, decremented
+      as mandates are awarded so no one bank wins them all.
+    - **And the primary market became a firm commitment.** With the desks owning balance sheet, the
+      issuer is paid on the WHOLE deal and the lead pays real reserves for what the book did not
+      take, which lands in its own inventory. That was the last unfunded acquisition on the
+      primary path, and `primary-settlement.ts`'s own comment had named G3 as the condition.
+
+187. **G3b — the player's dealers were the second dealer system; there is now one.**
+    - Alpha, Beta and Gamma were invented counterparties with declared axes, a
+      `baseSpreadBps × spreadMultiplier`, an `axeDiscountPct` and a stated credit limit. No
+      balance sheet, so they could never run out. The fill price was `price × (1 + side ×
+      0.0015)`, computed inside a React component — outside the engine, and unknown to every
+      other participant in the same book. The desk's earnings were credited to the REGIONAL
+      aggregate with no cash leg, the exact write 07b refuses to make and says why. And six of
+      eight asset classes moved no inventory at all.
+    - The counterparties are the named banks. A dealer's AXE is where its desk is actually long
+      this week, read off its own inventory — which is what an axe MEANS — so it moves as the book
+      moves. Its limit is its real capacity, so a full desk cannot take the other side. Its quote
+      is half its book's spread plus the impact the order has on the desk's own schedule: an order
+      it fills from stock moves nothing, one it must source moves the level by the share of
+      capacity taken. **The discount is not granted, it falls out.**
+    - The fill moves that bank: inventory by the notional, reserves the other way, both legs same
+      pass, so total assets are unchanged and the per-bank identity holds. A derivative consumes
+      the desk through the same PFE add-on the FX book uses, so all eight classes move a real
+      balance sheet.
+    - **One more duplicate went with it:** each book's bid-ask was a private constant in its
+      adapter AND a different number in the player's dealer table. One table now, read by both.
