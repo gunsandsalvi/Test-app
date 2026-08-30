@@ -149,10 +149,14 @@ Standing user directives. Not suggestions.
 
 | Command | Cost | When |
 |---|---|---|
+| `UNIVERSE_SCALE=0.12 … npx tsx scripts/harness.ts` | ~205 ms/wk | iteration: the conserving roster (§7.214). **Never a validation run** |
 | `npx tsc --noEmit`, `npm run build` | seconds | any time, always before a commit |
 | `bash scripts/check-hygiene.sh` | seconds | any time; fails if a second script appears |
 | `WEEKS=10 SHOCKS=0 npx tsx scripts/harness.ts` | ~40 s | structural probe: is the mechanism wired |
 | `npm run verify` (243 weeks incl. shock batteries) | ~5 min | **END OF PROJECT ONLY** (rule 12) |
+
+`NODE_OPTIONS=--max-semi-space-size=64` is worth 7.5% on any of these — the engine is
+allocation-bound (§7.213) — and is wired into `npm run verify` and `npm run profile`.
 
 **A 10-week probe samples ONE SEASON** since IND18, so its price print is a seasonal reading, not
 a steady state. Price behaviour is judged on whole years.
@@ -264,7 +268,7 @@ a clamp cannot be deleted before the mechanism under it exists.
 | 3 | depth | **PROD — firm productivity and innovation** | **NOT STARTED.** Prereq IND. Productivity as something a firm invests in and gains. |
 | 4 | depth | **CRE — commercial property and leases** | **NOT STARTED.** Prereqs HH and G2. Firms rent premises from someone. |
 | 5 | depth | **TAXR — corporate tax, really** | **The folded finding closed (§7.206): one owner for the rate.** The row's own substance is untouched — a real tax BASE (depreciation shield, loss carry-forward, deferred tax) and the cross-border half, which needs MNC. |
-| 6 | depth | **SCALE — universe scale-up under a wall-clock budget** | **PROFILED (§7.212): 1872 → 1756 ms against a 300 ms target, and the remainder is not defects.** Worker parallelism is measured DEAD on 4 cores, so wave 2's columnar state is the only route — and it is a world relabel that invalidates §7.211's measurement programme. **That trade is a decision, not a task.** Owns the float half of the damper defect — thin books are why prints pin. Wave 1 landed (§7.81); wave 2 is columnar 05/contracts/plans. |
+| 6 | depth | **SCALE — universe scale-up under a wall-clock budget** | **WALL-CLOCK BUDGET MET (§7.214): 205 ms/cycle at UNIVERSE_SCALE=0.12, 391 at 0.25, 1467 at full fidelity (bit-exact).** The roster is a conserving RESOLUTION parameter now — thinning it no longer shrinks the economy, which is the rule-13 defect that had made every previous attempt fail. Wave 2's columnar state is still what a faster FULL-fidelity cycle needs (§7.213). |
 | 7 | last | **S-final — the validation gate** | Everything above, plus the measurement debt below. |
 | 8 | last | **AU — Aurora, the UI rebuild** | Everything above. UI state moves out of `GameState`, which the determinism hash spans. |
 
@@ -1522,3 +1526,36 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        the seed must open in the shape the engine produces; **it opens at a quarter of it.** Owner:
        the seed, with SCALE — and consolidating the duplicates and the dust is ~25% off every
        register walk, which is the largest single algorithmic item left.
+214. **UNDER 300 ms — and the thing standing in the way was a defect, not the engine.**
+     §7.213 concluded that with 70 ms of numerics and ~1,400 ms of orchestration and no hot spot
+     above 13%, the only lever left with a multiplier was HOW MUCH OBJECT GRAPH there is. That was
+     right. What it did not know is why pulling that lever had never worked.
+     - **The roster size was setting regional GDP (rule 13).** The seed pads each region's public
+       tier out to 200 names, and its own comment says why: "breadth of the roster a player can
+       pick from, **not the region's economic scale**". It was the economic scale. Every padding
+       clone ADDED its revenue and its jobs on top. **Measured at half roster: 5.2M jobs and 0.43T
+       of output vanished**, while the SME pool the named tier is carved OUT of sat unchanged at
+       5.88M — so the carve was one-directional, subtracting from the pool but never giving back.
+     - **A thinned roster hands what it drops to the names that remain.** Sampled on a STRIDE, not
+       truncated at the top, so the size distribution is sampled rather than beheaded; the keepers
+       are lifted to carry the whole tier's revenue; headcount is left alone because
+       `dealProductLinesAndHeadcount` re-derives it from revenue over productivity. **Conserve the
+       revenue and the jobs follow.**
+     - **MEASURED at seed — 2,496 companies down to 336 with the economy the same size:**
+       employment 28.34 / 28.37 / 28.36 / 28.23M and output 2.117 / 2.107 / 2.103 / 2.100T at
+       scale 1 / 0.5 / 0.25 / 0.12. **That is what makes the roster a RESOLUTION parameter and not
+       an input** (rule 19), which it had been asserting it was in a comment for as long as it has
+       existed.
+     - **THE CYCLE: 1467 ms → 707 → 391 → 205** at those four scales, and **UNIVERSE_SCALE=1 is
+       bit-exact with the commit before the knob.**
+     - **The false floor.** The first curve flattened at ~830 ms and looked like an engine floor
+       that no roster change could touch. It was a flat `Math.max(20, …)` per SEGMENT in the
+       private tier — 16 industries × 20 = 320 firms a region however small the knob was set. **A
+       floor can impersonate a law of nature; print the count before believing one.**
+     - **Invariance, 12 weeks:** unemployment 18.1/13.0/11.6/12.3 at full against
+       17.4/10.2/9.8/12.5 at half, where before conservation it read 28.1/28.4/30.7/29.9. It is
+       NOT exact at quarter scale and below — and §7.211's divergent regime means some of that
+       spread is chaos rather than resolution error, which cannot be separated until the price
+       level settles. **Iterate below 1; validate at 1.**
+     - **What this does NOT do:** it does not make the full-fidelity cycle faster. 1467 ms at scale
+       1 still stands, and §7.213's account of it is unchanged.
