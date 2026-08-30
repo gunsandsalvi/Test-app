@@ -514,12 +514,28 @@ export function applyHolderInterestAccruals(
     // `type:id` key string twice per holding, ~70k rows each way. The matching rows are collected
     // on the first pass and the second walks only those, which is the same arithmetic in the same
     // order on the same values.
+    // SCALE: the accrual keys are `${instrumentType}:${instrumentId}`, and this REBUILT that
+    // string for every holding of every entity — ~110,000 rows a week — to probe a map holding a
+    // few thousand issuers. Split the keys by type once (the same trick
+    // `applyPendingCorporateActionSettlements` already uses below) and the row is probed by the
+    // fields it already carries: a row of a type that accrues nothing costs one map lookup that
+    // misses, and no string at all. `instrumentType` never contains ':', so the split inverts the
+    // key exactly.
+    const accrualsByType = new Map<string, Map<string, number>>();
+    accruals.forEach((v, key) => {
+      const at = key.indexOf(':');
+      const type = key.slice(0, at);
+      let inner = accrualsByType.get(type);
+      if (!inner) { inner = new Map(); accrualsByType.set(type, inner); }
+      inner.set(key.slice(at + 1), v);
+    });
     const totalByKey = new Map<string, number>();
     const matched: { entityId: string; key: string; qtyUSD: number }[] = [];
     ctx.updatedInstitutionalEntities.forEach((entity) => {
       entity.itemizedHoldings.forEach((h) => {
+        const byId = accrualsByType.get(h.instrumentType);
+        if (byId === undefined || !byId.has(h.instrumentId)) return;
         const key = `${h.instrumentType}:${h.instrumentId}`;
-        if (!accruals.has(key)) return;
         const qtyUSD = h.quantityOrNotionalUSD ?? 0;
         totalByKey.set(key, (totalByKey.get(key) ?? 0) + qtyUSD);
         matched.push({ entityId: entity.id, key, qtyUSD });
