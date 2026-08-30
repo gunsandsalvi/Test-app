@@ -5148,3 +5148,23 @@ that proved it, the lesson.
       goes to zero and the ask is unit cost (§7.130), never below. A firm gives up profit to win
       share, not money.
     - Harness green, 0 violations. No new persisted field, so §7.41's rebuild trap is not in play.
+
+138. **IND7, first half — the antitrust hold is measured; the divestiture is not built.**
+    - **What exists.** A competition authority acts on a MEASURED share held for a sustained
+      period, not a snapshot: one quarter at 45% is a good quarter, a year at 45% is a position.
+      Stage 08 runs an antitrust clock off each firm's own `categoryMarketShare` — counting up
+      while it is dominant in any category it sells into, resetting when it is not — and **stage
+      10 will not let a firm under the hold acquire another.** The threshold and the window are
+      policy primitives in rule 4's sense, like a tax rate or a capital ratio; no real authority's
+      case history is imported.
+    - **What is NOT built, and why it is being recorded rather than half-done.** §5-IND7 also
+      calls for the divestiture: splitting the firm into two real companies through the generation
+      machinery, dividing product lines, debt AND HOLDERS. The first two are the merger stage run
+      backwards and are tractable. **The third is not, yet:** a spin-off must create a NEW
+      issuer's holder register and give every parent holder a proportional position in it, and
+      ownership conservation is exactly what OWN7 spent its whole slice getting right (§7.104,
+      harness 602 → 107). `settleCorporateActionOnHolders` SCALES an existing float; it cannot
+      mint a register. **Building that carelessly would undo OWN7**, so the honest order is: extend
+      the ownership machinery to issue a new register first, then divest.
+    - Harness green, 0 violations. **IND's independent slices are now IND4, IND6 and IND7-first-
+      half done; IND10-19 remain and are the depth-tier build-outs.**

@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial,
 } from '../../../types';
-import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare } from '../../../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
@@ -1530,6 +1530,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // delisting and default, not a ten-cent bound that then feeds market cap, index levels and
     // the take-private arithmetic. Only the non-negativity remains, which is arithmetic.
     let newStockPrice = isDefaulted ? 0.0 : Math.max(0, Number(comp.stockPrice.toFixed(2)));
+    // IND7: the antitrust clock. It counts UP while this firm is dominant in some category it
+    // sells into and resets when it is not, so the consequence attaches to a sustained position
+    // rather than one good quarter.
+    const newAntitrustWeeks = peakCategoryShare({ productLines: updatedProductLines }) >= ANTITRUST_SHARE_THRESHOLD
+      ? (comp.antitrustWeeksAboveThreshold ?? 0) + 1
+      : 0;
+
     // IDX: beta is measured off this name's own cleared returns against its region's index —
     // both series this model publishes every week — instead of being read from its sector label.
     const newBeta = isPubliclyListed(comp)
@@ -1788,6 +1795,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       isDefaulted,
       stockPrice: newStockPrice,
       beta: newBeta,
+      antitrustWeeksAboveThreshold: newAntitrustWeeks,
       historicalPrices: hist,
       marketCap: newMarketCap,
       oasSpreadBps: newOasBps,

@@ -9,7 +9,7 @@
 
 import { GameState, DebtTranche } from '../../../types';
 import { getSimulationDate } from '../../formatters';
-import { isActiveCompany } from '../../../domain/company';
+import { isAntitrustBlocked, isActiveCompany } from '../../../domain/company';
 import { checkForMerger } from '../merger';
 import { WeeklyStepContext } from './context';
 
@@ -74,6 +74,12 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   const acquirer = ctx.updatedCompanies.find(c => c.ticker === merger.acquirerTicker);
   const target = ctx.updatedCompanies.find(c => c.ticker === merger.targetTicker);
   if (!acquirer || !target || !isActiveCompany(acquirer) || !isActiveCompany(target)) return;
+
+  // IND7 — a firm under an antitrust hold does not get to buy another one. The hold is a
+  // MEASURED position: a dominant share in some category it sells into, held for a sustained
+  // window (§7.138), not a snapshot and not a label. This is the half of IND7 that exists; the
+  // divestiture that should follow it is recorded there as unbuilt.
+  if (isAntitrustBlocked(acquirer)) return;
 
   const purchasePrice = target.marketCap * 1.15;
   const cashPaid = purchasePrice * 0.5;

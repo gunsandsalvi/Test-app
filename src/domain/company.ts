@@ -237,6 +237,9 @@ export interface Company {
   annualRevenue: number;
   productLines?: ProductLine[];
   primarySubUnitId?: string;
+  /** IND7 — consecutive weeks this firm has held a dominant share in some category it sells
+   *  into. A competition authority acts on a sustained position, not a snapshot. */
+  antitrustWeeksAboveThreshold?: number;
   employeeCount: number;
   previousEmployeeCount: number;
   baselineEmployeeCount: number;
@@ -495,4 +498,30 @@ export function getInputInventoryUnits(comp: Company, subUnitId?: string): numbe
   const unitSum = (lots: InputLot[]) => lots.reduce((s, lot) => s + lot.unitsHeld, 0);
   if (subUnitId) return unitSum(inv[subUnitId] ?? []);
   return Object.values(inv).reduce((s, lots) => s + unitSum(lots), 0);
+}
+
+
+/**
+ * IND7 — ANTITRUST. A competition authority acts on a MEASURED share held for a sustained period,
+ * not on a snapshot: one quarter at 40% is a good quarter, three years at 40% is a position.
+ *
+ * The threshold and the window are policy primitives — what a competition regime chooses to act
+ * on — in the same sense as a tax rate or a capital ratio (rule 4 allows the primitive; it forbids
+ * importing any real authority's actual case history).
+ */
+export const ANTITRUST_SHARE_THRESHOLD = 0.45;
+export const ANTITRUST_SUSTAINED_WEEKS = 52;
+
+/** The highest share this firm holds in any single category it sells into, measured. */
+export function peakCategoryShare(comp: { productLines?: { categoryMarketShare?: number }[] }): number {
+  return (comp.productLines || []).reduce((m, l) => Math.max(m, l.categoryMarketShare ?? 0), 0);
+}
+
+/**
+ * Whether this firm is under an antitrust hold — dominant for long enough that a regime would
+ * act. The immediate consequence is that it may not ACQUIRE (stage 10 respects it); the
+ * divestiture that should follow is recorded as unbuilt in §7.138.
+ */
+export function isAntitrustBlocked(comp: { antitrustWeeksAboveThreshold?: number }): boolean {
+  return (comp.antitrustWeeksAboveThreshold ?? 0) >= ANTITRUST_SUSTAINED_WEEKS;
 }
