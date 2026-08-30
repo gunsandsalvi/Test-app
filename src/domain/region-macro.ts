@@ -138,6 +138,16 @@ export interface HousingMarket {
   historicalPrices: number[];
   ownershipRatePct: number;
   mortgageOriginationVolumeUSD: number;
+  /**
+   * HSG — the BEST mortgage quote in this region last week, annual.
+   *
+   * A borrower shops, so the going rate is the keenest quote it can find, and the quotes now
+   * differ: each bank prices its own book's measured loss rate at its own cost of equity
+   * (`bank-lending.ts`). This is what the affordability walk that sets the house price reads, and
+   * it is a MEASUREMENT of the lending market rather than a spread stated over the 10Y.
+   * Undefined before the first bank pass, where the seed spread stands in (§7.4).
+   */
+  bestMortgageRateAnnual?: number;
 }
 
 export interface WeatherAnomaly {

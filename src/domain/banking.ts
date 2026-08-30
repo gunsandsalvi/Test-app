@@ -309,7 +309,18 @@ export const CONSUMER_TERM_SEED_WAM_WEEKS = Math.round(2.5 * 52);
  * — and the household book simply does not do it. Every bank charges every borrower the same
  * 170bps whatever its funding costs or its losses run. Owner: HSG.
  */
-export const MORTGAGE_SPREAD_OVER_10Y_BPS = 170;
+/**
+ * HSG — `MORTGAGE_SPREAD_OVER_10Y_BPS = 170` is GONE from origination. Every bank charged every
+ * borrower the same spread over the 10Y, in a file whose own `BankLoan.marginBps` doc says a
+ * margin is "quoted by the bank's own credit arithmetic at origination, the same expected-loss +
+ * capital-cost pricing the bond market uses". `bank-lending.ts` quotes it that way now: the loss
+ * rate this bank's OWN mortgage vintages are running, the mortgage risk weight, its own cost of
+ * equity and `MORTGAGE_OPERATING_COST_BPS`.
+ *
+ * What survives is the SEED's opening quote and nothing else: at week 0 no bank has a loss
+ * experience to price off, so the region opens on this and the banks own it from week 1 (§7.4).
+ */
+export const MORTGAGE_SEED_SPREAD_OVER_10Y_BPS = 170;
 /**
  * The revolving pool's weekly payment rate. A NAMED behavioural primitive, not a derivation:
  * a card pool mixes transactors (paid in full monthly) with revolvers (minimum payments), and
@@ -332,6 +343,14 @@ export const CARD_MIN_PRINCIPAL_RATE_WEEKLY = 0.005;
  */
 export const CARD_OPERATING_COST_BPS = 500;
 export const CONSUMER_TERM_OPERATING_COST_BPS = 150;
+/**
+ * HSG — what it costs a bank to originate and service a mortgage, in basis points of balance.
+ * The cheapest household loan there is to run: one collateral valuation, one registration, and a
+ * payment a month against a card book's constant authorisation traffic (`CARD_OPERATING_COST_BPS`
+ * is 500 for exactly that reason). A cost primitive with one owner, in the same family as the two
+ * above it, and it is what replaces the SPREAD it used to be buried inside.
+ */
+export const MORTGAGE_OPERATING_COST_BPS = 40;
 /**
  * Share of the owner-occupied housing stock that trades per year — the driver of mortgage
  * origination demand.

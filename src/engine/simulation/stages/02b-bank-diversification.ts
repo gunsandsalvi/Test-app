@@ -151,7 +151,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // HH3: the week's real household-credit flows, per bank, for the region roll-up below.
     const householdFlowsByBank = new Map<string, {
       interestUSD: number; debtServicePrincipalUSD: number;
-      mortgageOriginationUSD: number; mortgageDischargeUSD: number;
+      mortgageOriginationUSD: number; mortgageDischargeUSD: number; mortgageRateQuotedAnnual: number;
       consumerCreditOriginationUSD: number;
     }>();
 
@@ -274,6 +274,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         debtServicePrincipalUSD: household.debtServicePrincipalWeeklyUSD,
         mortgageOriginationUSD: household.mortgageOriginationUSD,
         mortgageDischargeUSD: household.mortgageDischargeUSD,
+        mortgageRateQuotedAnnual: household.mortgageRateQuotedAnnual,
         consumerCreditOriginationUSD: household.consumerCreditOriginationUSD,
       });
       const lentSheet = household.sheet;
@@ -446,12 +447,20 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     const otherConsumerLoanDebtUSD = Number(sumPools('CONSUMER_TERM').toFixed(0));
     let interestUSD = 0; let servicePrincipalUSD = 0; let mortgageOriginationUSD = 0;
     let mortgageDischargeUSD = 0; let consumerCreditUSD = 0;
+    // HSG: a borrower shops, so the region's going mortgage rate is the KEENEST quote it can
+    // find. The quotes differ now — each bank prices its own book's measured loss experience at
+    // its own cost of equity — which is what makes a credit tightening reach the housing market
+    // as a rate rather than as a stated factor.
+    let bestMortgageRateAnnual = Number.POSITIVE_INFINITY;
     householdFlowsByBank.forEach((f) => {
       interestUSD += f.interestUSD;
       servicePrincipalUSD += f.debtServicePrincipalUSD;
       mortgageOriginationUSD += f.mortgageOriginationUSD;
       mortgageDischargeUSD += f.mortgageDischargeUSD;
       consumerCreditUSD += f.consumerCreditOriginationUSD;
+      if (f.mortgageRateQuotedAnnual > 0) {
+        bestMortgageRateAnnual = Math.min(bestMortgageRateAnnual, f.mortgageRateQuotedAnnual);
+      }
     });
     // HH4d: the household deposit stock IS the banks' summed household-deposit line — one
     // number, reconciled here every week (the balance-sheet stage debits this week's ETF
@@ -482,6 +491,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // The housing-market stat becomes the real number the banks actually wrote this week.
     if (reg.housingMarket) {
       reg.housingMarket.mortgageOriginationVolumeUSD = Number(mortgageOriginationUSD.toFixed(0));
+      if (Number.isFinite(bestMortgageRateAnnual)) {
+        reg.housingMarket.bestMortgageRateAnnual = Number(bestMortgageRateAnnual.toFixed(5));
+      }
     }
   });
 }

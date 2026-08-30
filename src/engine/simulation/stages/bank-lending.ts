@@ -42,7 +42,7 @@ import {
   MORTGAGE_SEED_VINTAGE_COHORTS, MortgageVintage, bookMortgageSeverity, vintageCurrentLtv,
   MORTGAGE_FIXED_PERIOD_WEEKS, MORTGAGE_DSTI_LIMIT,
   mortgageSeverityAtLtv,
-  MORTGAGE_SPREAD_OVER_10Y_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
+  MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_OPERATING_COST_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
   CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_RATE_ANNUAL, MORTGAGE_LTV_AT_ORIGINATION,
   FORECLOSURE_COST_SHARE, MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, MORTGAGE_MIN_LOSS_SEVERITY,
@@ -407,9 +407,18 @@ export function quoteHouseholdMarginBps(params: {
   return Math.max(50, Math.round(expectedLossBps + capitalCostBps + params.operatingCostBps));
 }
 
-/** The current primary mortgage rate: the cleared 10Y plus the real origination spread. */
+/**
+ * HSG — the going mortgage rate: the KEENEST quote in the region, because a borrower shops.
+ *
+ * It was the cleared 10Y plus a flat 170bp that every bank charged every borrower. The banks
+ * quote their own books now — own loss experience, own risk weight, own cost of equity — and the
+ * best of those is what a household actually gets. The seed spread stands in only until the first
+ * bank pass has run (§7.4).
+ */
 export function currentMortgageRateAnnual(reg: Region): number {
-  return Math.max(0.005, (reg.zeroRates?.tenor10Y ?? 0.04) + MORTGAGE_SPREAD_OVER_10Y_BPS / 10000);
+  const quoted = reg.housingMarket?.bestMortgageRateAnnual;
+  if (quoted !== undefined && quoted > 0) return quoted;
+  return Math.max(0.005, (reg.zeroRates?.tenor10Y ?? 0.04) + MORTGAGE_SEED_SPREAD_OVER_10Y_BPS / 10000);
 }
 
 /**
@@ -596,6 +605,8 @@ export interface HouseholdLendingResult {
   mortgageOriginationUSD: number;
   consumerCreditOriginationUSD: number;
   declinedOriginationUSD: number;
+  /** HSG — what THIS bank quoted a mortgage at this week. The region keeps the best of them. */
+  mortgageRateQuotedAnnual: number;
 }
 
 /**
@@ -663,10 +674,27 @@ export function runBankHouseholdLending(
   // the price it was written at, so the losses come from the part of the distribution that is
   // actually above the kink — which is where every dollar of real mortgage loss comes from.
   const medianHomePriceUSD = Math.max(0, reg.housingMarket?.medianHomePriceUSD ?? 0);
-  const marketMortgageRate = currentMortgageRateAnnual(reg);
   const mortgagePool = pools.find((p) => p.kind === 'MORTGAGE');
   const mortgageSeverity = bookMortgageSeverity(mortgagePool?.vintages, medianHomePriceUSD);
   const mortgageLossRateAnnual = unsecuredLossRateAnnual * MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER * mortgageSeverity;
+
+  // HSG — THIS BANK'S OWN MORTGAGE QUOTE, off its own book. `MORTGAGE_SPREAD_OVER_10Y_BPS = 170`
+  // had every bank charging every borrower the same spread, in a file whose own `BankLoan.marginBps`
+  // doc says a margin is "quoted by the bank's own credit arithmetic at origination, the same
+  // expected-loss + capital-cost pricing the bond market uses". The household book uses it now:
+  // the loss rate this bank's OWN vintages are running (frequency x the severity its own LTV
+  // cross-section implies), the mortgage risk weight, its own cost of equity and its own
+  // servicing cost. A bank whose book is underwater quotes wider, which is what a credit
+  // tightening looks like from the lender's side.
+  const bankMortgageRate = Math.max(0.005,
+    (reg.zeroRates?.tenor10Y ?? 0.04)
+    + quoteHouseholdMarginBps({
+      annualLossRate: mortgageLossRateAnnual,
+      riskWeight: MORTGAGE_RISK_WEIGHT,
+      operatingCostBps: MORTGAGE_OPERATING_COST_BPS,
+      requiredReturnAnnual: bankHurdle,
+    }) / 10000);
+  const marketMortgageRate = bankMortgageRate;
 
   const equityUSD = sheet.bankEquityUSD;
   const otherRwaUSD = (sheet.businessLoans || []).reduce((a, l) => a + l.principalUSD, 0);
@@ -882,6 +910,7 @@ export function runBankHouseholdLending(
     mortgageDischargeUSD,
     consumerCreditOriginationUSD,
     declinedOriginationUSD,
+    mortgageRateQuotedAnnual: bankMortgageRate,
   };
 }
 

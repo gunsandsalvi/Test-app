@@ -10,7 +10,7 @@ import {
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
 import {
   CREDIT_FILE_CURE_WEEKLY, CONSUMER_CREDIT_RISK_WEIGHT, CARD_OPERATING_COST_BPS,
-  MORTGAGE_SPREAD_OVER_10Y_BPS, MORTGAGE_TERM_WEEKS, MORTGAGE_DSTI_LIMIT, MORTGAGE_LTV_AT_ORIGINATION,
+  MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_TERM_WEEKS, MORTGAGE_DSTI_LIMIT, MORTGAGE_LTV_AT_ORIGINATION,
   HOUSING_TURNOVER_RATE_ANNUAL,
 } from '../../domain/banking';
 import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
@@ -884,8 +884,12 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // down the distribution and prices lower; a rate rise cuts every tier's capacity and prices
   // lower; richer households price higher. Nothing is walked and nothing is clamped.
   const householdsCount = Math.max(1, newTotalPopulation / AVERAGE_HOUSEHOLD_SIZE);
+  // HSG: the rate the marginal buyer is actually quoted — the keenest of the banks' own quotes,
+  // each priced off its own book (`bank-lending.ts`). The flat spread over the 10Y that stood here
+  // is the SEED's opening quote only, used until the first bank pass has run (§7.4).
   const mortgageRateForPricing = Math.max(0.005,
-    (region.zeroRates?.tenor10Y ?? newPolicyRate) + MORTGAGE_SPREAD_OVER_10Y_BPS / 10000);
+    region.housingMarket?.bestMortgageRateAnnual
+    ?? ((region.zeroRates?.tenor10Y ?? newPolicyRate) + MORTGAGE_SEED_SPREAD_OVER_10Y_BPS / 10000));
   const rWeekly = mortgageRateForPricing / 52;
   const annuityFactorForPricing = rWeekly / (1 - Math.pow(1 + rWeekly, -MORTGAGE_TERM_WEEKS));
   const affordabilityByTier = WEALTH_TIERS.map((t) => {
