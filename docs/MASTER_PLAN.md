@@ -6094,3 +6094,42 @@ that proved it, the lesson.
       (rule 11); §5's MAC/EMP/IND/CAP/DEM/DIST/COH/CRD/HSG headers carry their real state; and the
       §5-DIST-P primitive scoreboard retires the two entries this session actually retired.
     - **The rescope did not change any code.** It changed which code gets written next.
+
+165. **DIST 1(a) — THE SAVINGS RATE IS AN OUTCOME, AND THE CAUSE OF THE EARLIER FAILURE WAS A
+    UNITS ERROR. Neither story I told about it was right.**
+    - **THE RE-DIAGNOSIS FIRST, since §7.163 required one.** §7.158 blamed "deposits are the
+      sector's entire liquid wealth, much larger than a twelve-week buffer, so every tier
+      dissaved". §7.163 withdrew that on arithmetic. Re-running the stash under measurement, the
+      savings rate printed **−4,251,491,541,453%** and GDP was already broken **at week 1**,
+      before anything could compound — so it was never a feedback loop either, which was my
+      second guess. **The cause is one line:** `tierLiquidShare` fell back to
+      `wealthDistribution[t].shareOfIncomeUSD`, **which is a DOLLAR AMOUNT** (it holds
+      `tierDisposableUSD[t]`, seeded as `inc x 0.15`) **used as a fraction.** A 346B liquid stock
+      multiplied by a 1.5e11 "share". Normalising it fixes everything: the rate lands at
+      **−2.67%**, which is exactly the 3-4% §7.163's arithmetic predicted.
+    - **THREE STORIES BEFORE ONE MEASUREMENT, and that is the lesson worth more than the fix.**
+      A wrong cause, confidently written up, is harder to dislodge than no write-up: §7.158's
+      story survived two sessions and shaped a task list. **The units error was findable in
+      thirty seconds by printing the number.** It is also the §7.149 family again — a name that
+      says USD is not a share, which is rule 9's principle one type over.
+    - **What is now gone:** the four coefficients that set `aggregateSavingsRate`, the λ that
+      scaled tier rates to hit it, `SAVINGS_CAP_SHARE = 0.9`, and the two-pass redistribution that
+      existed to make the cap not break the identity. **Each tier decides saving against its own
+      buffer and its own measured liquid assets; the aggregate rate is `Σ saving / Σ income`.**
+    - **The policy rate moved to where it belongs.** It used to be a coefficient on the aggregate.
+      It is now the two real things a rate does to a household budget, both already per tier: it
+      raises DEBT SERVICE for the indebted and DEPOSIT INTEREST for savers. A distributional
+      transmission instead of a scalar one, running the right way round for each tier.
+    - **The harness identity was inverted with it.** The old check asserted cohort savings hit the
+      aggregate's target — a test that λ had forced the parts to match an imposed whole, carrying
+      `Math.max(0, savingsRate)` because a rate that could not go negative was the point. It now
+      asserts the published rate IS what the cohorts add up to, signed.
+    - **Measured: −3.1% to −3.4% across the four regions at week 10, harness green, 0 violations.**
+      The sector is above its buffer (21-22 weeks of cover against a 12-week target) and spending
+      the excess down, so the rate is negative and heading toward zero as the stock falls. **A
+      zero steady-state rate is the buffer-stock result and is only correct in a STATIONARY
+      economy** — a positive one needs a life-cycle, which is DEM's age structure (§5-DIST-P).
+      That is the next thing this row needs, and it is now the only thing between here and a
+      savings rate that is fully an outcome.
+    - **It unblocks forced selling** (§6.1): a tier can dissave, so a drawdown is real, so there is
+      something for a liquidation threshold to trigger on.

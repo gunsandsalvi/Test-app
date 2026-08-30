@@ -492,13 +492,16 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
       });
     }
     const sumSavings = cohorts.reduce((a, c) => a + c.savingsUSD, 0);
-    const targetSavings = Math.max(0, hs.savingsRate) * agg;
-    // 1% band: cohorts squeezed by debt service dissave below the λ target — real behavior,
-    // bounded; a wider gap means the normalization itself broke.
-    if (agg > 0 && Math.abs(sumSavings - targetSavings) / agg > 1e-2) {
+    // THE IDENTITY NOW RUNS THE OTHER WAY. It used to assert that cohort savings hit the
+    // aggregate rate's target — a check that the λ-normalisation had forced the parts to match
+    // an imposed whole, and it carried `Math.max(0, savingsRate)` because a rate that could not
+    // be negative was the point. Since the rate is DERIVED from the cohorts' own budgets it is
+    // signed, and what must hold is that the published rate is exactly what they add up to.
+    const impliedRate = agg > 0 ? sumSavings / agg : 0;
+    if (agg > 0 && Math.abs(impliedRate - (hs.savingsRate ?? 0)) > 1e-3) {
       violations.push({
         week,
-        message: `${region}: cohort savings ${(sumSavings / 1e9).toFixed(2)}B vs aggregate rate x income ${(targetSavings / 1e9).toFixed(2)}B — the λ-normalization is off`,
+        message: `${region}: cohort savings imply a rate of ${(impliedRate * 100).toFixed(2)}% but the sector publishes ${(((hs.savingsRate ?? 0)) * 100).toFixed(2)}% — the savings rate is not the cohorts' own measurement`,
       });
     }
     // HH4d: ONE household deposit stock. The household state's line plus the in-flight ETF
@@ -926,7 +929,7 @@ const hhModule: HarnessModule = (() => {
         // Any forced-selling or buffer rule is a THRESHOLD on this number. If the cash covers
         // hundreds of weeks of outflow, no such threshold can ever be crossed and a rule built on
         // one would be a mechanism that binds on nothing (§7.146, §7.149, §7.159).
-        out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover`);
+        out.push(`  ${r}: liquid ${B(dep)} vs committed ${B(committed)}/wk = ${(committed > 0 ? dep / committed : 0).toFixed(1)} weeks of cover | savings rate ${pct(h.savingsRate ?? 0)} | income ${B(s.regions[r].estimatedHouseholdIncomeUSD)}`);
       });
       out.push('--- the mortgage book as a CROSS-SECTION: E[f(LTV)] against f(E[LTV]) ---');
       REGIONS.forEach(r => {

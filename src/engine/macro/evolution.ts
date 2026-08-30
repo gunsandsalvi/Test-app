@@ -310,10 +310,12 @@ export function evolveRegionMacro(
   const govEmploymentGrowthRate = prevGovEmploymentGrowthRate * 0.85 + targetGovEmploymentGrowthRate * 0.15;
   const newGovernmentEmployment = Math.max(1, Math.round(region.governmentEmployment * (1 + govEmploymentGrowthRate)));
 
-  const savingsBaseline = 0.05 + Math.max(0, region.expectedInflation - piStar) * 0.5 - 0.1 * ((newCCI - 100) / 100);
-  const realRateGap = laggedPolicyRate - newNeutralRate;
-  const rateSavingsIncentive = (realRateGap * 0.4);
-  const newSavingsRate = (savingsBaseline + rateSavingsIncentive);
+  // DIST/MAC — `newSavingsRate` is no longer decided here. It used to be
+  // `0.05 + inflation gap x 0.5 − confidence x 0.1 + real-rate gap x 0.4`, four coefficients
+  // deciding the most consequential number in the model, with the tier cross-section normalised
+  // to whatever they produced. It is now MEASURED off the cohorts' own budgets, below the point
+  // where they are built — see `household-cohorts.ts` for the buffer rule that replaces it and
+  // for where the policy rate went (debt service and deposit interest, both per tier).
 
 
   // 1. Asset side — HH4d: the household deposit stock is OWNED by the banking pass now (one
@@ -445,7 +447,12 @@ export function evolveRegionMacro(
 
   // Update newRealConsumptionGrowth with real balance-sheet channels:
   const trendConsumptionGrowth = region.potentialGdpGrowth * (newCCI / 100);
-  const realWageGainEffect = (1 - newSavingsRate) * (laggedWageGrowth - region.inflation - 0.005);
+  // DIST/MAC — LAST week's measured savings rate. This term runs before the cohorts are built,
+  // and the rate is now their output, so it reads the most recent one that exists. A lag here is
+  // right anyway: what a household spends out of a real wage gain this week is governed by the
+  // saving behaviour it already had, not by the one this week's budgets will turn out to imply.
+  const priorSavingsRate = prevHS.savingsRate ?? 0.06;
+  const realWageGainEffect = (1 - priorSavingsRate) * (laggedWageGrowth - region.inflation - 0.005);
   const newRealConsumptionGrowth = trendConsumptionGrowth
     + realWageGainEffect
     + balanceSheetWealthEffect
@@ -558,13 +565,22 @@ export function evolveRegionMacro(
     baseAnnualWageUSD,
     laborForceByOccupation,
     governmentTransfersWeeklyUSD: govObligations.transfersUSD,
-    aggregateSavingsRate: newSavingsRate,
+    // DIST/MAC — the sector's real liquid assets, which each tier's buffer is measured against.
+    // The savings RATE is no longer passed in: it is what comes out.
+    liquidAssetsUSD: Math.max(0, prevHS.depositsUSD ?? 0) + Math.max(0, prevHS.mmfSharesUSD ?? 0),
     weeklyDebtServiceUSD: prevHS.weeklyDebtServiceUSD ?? 0,
-    // HH: the cohorts decompose the measured aggregate rather than deriving their own.
     measuredDisposableIncomeUSD: newEstimatedHouseholdIncomeUSD,
     annualCapitalReceiptsUSD,
     wealthDistribution: region.wealthDistribution ?? createWealthDistribution(region.estimatedHouseholdIncomeUSD),
   });
+
+  // DIST/MAC — THE SAVINGS RATE, MEASURED. Every tier decided its own saving against its own
+  // buffer; this is what those decisions add up to, over the income they were taken out of. It
+  // is an outcome now (rule 13), and nothing normalises the parts to it.
+  const measuredSavingsUSD = WEALTH_TIERS.reduce((a, t) => a + (cohortResult.tierSavingsUSD[t] ?? 0), 0);
+  const newSavingsRate = cohortResult.totalDisposableIncomeUSD > 0
+    ? measuredSavingsUSD / cohortResult.totalDisposableIncomeUSD
+    : (prevHS.savingsRate ?? 0.06);
 
   // HH4: the spend shares are DERIVED — each tier's consumption budget times its real spend
   // mix, summed. The old form walked `luxurySpendShare` by a wealth-signal drift that no stage

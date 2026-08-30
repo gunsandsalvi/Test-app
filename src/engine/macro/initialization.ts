@@ -372,7 +372,9 @@ function buildRegion(regionId: RegionId): Region {
     baseAnnualWageUSD,
     laborForceByOccupation,
     governmentTransfersWeeklyUSD: seedObligations.transfersUSD,
-    aggregateSavingsRate: HOUSEHOLD_SAVINGS_RATE,
+    // The seed has no accumulated deposits yet, so every tier opens below its buffer and saves
+    // toward it — which is the opening condition a cold start should have (§7.4).
+    liquidAssetsUSD: 0,
     weeklyDebtServiceUSD: 0,
     // Zero here to match the zero debt service: both sides of the budget loop arrive together
     // at the HH3 seed migration, which re-derives the cohorts with the real books.

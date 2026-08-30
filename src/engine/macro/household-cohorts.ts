@@ -143,6 +143,16 @@ export const TIER_BALANCE_SHEET_WEIGHTS: Record<
  */
 export const WEALTH_SPENDDOWN_YEARS = 8;
 
+/**
+ * DIST/MAC — HOW MANY WEEKS OF ITS OWN INCOME A HOUSEHOLD WANTS ON HAND.
+ *
+ * The one primitive in the saving decision below, and it is a behavioural one (rule 4 allows the
+ * primitive; it forbids the outcome). A buffer is held in WEEKS OF INCOME because that is what
+ * it is for — covering the gap until the next pay cheque, or until the next job — so a richer
+ * household wants a proportionally bigger one, and the ratio is what is stable across them.
+ */
+export const BUFFER_TARGET_WEEKS = 12;
+
 export function tierWealthMpc(tier: WealthTierData | undefined): number {
   if (!tier) return 0;
   const netWorth = Math.max(1, tier.shareOfNetWorthUSD);
@@ -160,9 +170,17 @@ export interface CohortBuildInputs {
   laborForceByOccupation: Record<OccupationType, number>;
   /** PUB3b: the government's REAL weekly transfer obligation — the one number the budget owns. */
   governmentTransfersWeeklyUSD: number;
-  /** The region's behavioural aggregate savings rate — the anchor the tier cross-section is
-   * normalized to, so the aggregate saving flow is unchanged by construction. */
-  aggregateSavingsRate: number;
+  /**
+   * DIST/MAC — the household sector's LIQUID assets (deposits + money-fund shares), which the
+   * saving decision below reads per tier.
+   *
+   * What this REPLACES is `aggregateSavingsRate`, and the field it replaces had the problem in
+   * its own doc comment: "the anchor the tier cross-section is normalized to, so the aggregate
+   * saving flow is unchanged by construction". The aggregate was an INPUT and the tiers were a
+   * decomposition of it, so no tier could ever disagree with the whole — which is top-down, and
+   * the opposite of what a cross-section is for.
+   */
+  liquidAssetsUSD: number;
   /** HH3's real weekly debt service (interest + required principal), annualized inside. */
   weeklyDebtServiceUSD: number;
   /** HH — the region's MEASURED disposable household income (annual): the sum of what households
@@ -208,7 +226,7 @@ export interface CohortBuildResult {
 export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildResult {
   const {
     occupationPools, baseAnnualWageUSD, laborForceByOccupation,
-    governmentTransfersWeeklyUSD, aggregateSavingsRate, weeklyDebtServiceUSD, wealthDistribution,
+    governmentTransfersWeeklyUSD, liquidAssetsUSD, weeklyDebtServiceUSD, wealthDistribution,
     measuredDisposableIncomeUSD,
   } = inputs;
 
@@ -328,27 +346,64 @@ export function buildHouseholdCohorts(inputs: CohortBuildInputs): CohortBuildRes
     dispUSD: x.dispUSD * incomeScale,
   }));
   const totalDisposableIncomeUSD = preliminary.reduce((a, x) => a + x.dispUSD, 0);
-  const targetSavingsUSD = Math.max(0, aggregateSavingsRate) * totalDisposableIncomeUSD;
-  const savingsBaseUSD = preliminary.reduce(
-    (a, x) => a + x.dispUSD * (wealthDistribution[x.c.tier]?.savingsRate ?? 0.05), 0
-  );
-  const lambda = savingsBaseUSD > 0 ? targetSavingsUSD / savingsBaseUSD : 0;
-  // Two passes so the aggregate holds even when the 90%-of-disposable cap binds (it does in
-  // high-savings escape worlds): first the λ-scaled tier rates under the cap, then the clamped
-  // shortfall redistributed into whatever headroom remains, proportionally.
-  const SAVINGS_CAP_SHARE = 0.9;
-  const firstPassUSD = preliminary.map((x) => Math.max(0, Math.min(
-    x.dispUSD * SAVINGS_CAP_SHARE,
-    x.dispUSD * (wealthDistribution[x.c.tier]?.savingsRate ?? 0.05) * lambda
-  )));
-  const firstPassTotalUSD = firstPassUSD.reduce((a, v) => a + v, 0);
-  const shortfallUSD = Math.max(0, targetSavingsUSD - firstPassTotalUSD);
-  const headroomTotalUSD = preliminary.reduce(
-    (a, x, i) => a + Math.max(0, x.dispUSD * SAVINGS_CAP_SHARE - firstPassUSD[i]), 0
-  );
-  const cohortSavingsUSD = preliminary.map((x, i) => {
-    const headroom = Math.max(0, x.dispUSD * SAVINGS_CAP_SHARE - firstPassUSD[i]);
-    return firstPassUSD[i] + (headroomTotalUSD > 0 ? shortfallUSD * (headroom / headroomTotalUSD) : 0);
+
+  // ---- DIST/MAC: SAVING IS WHAT IS LEFT OVER, NOT WHAT WAS ASSUMED. ----
+  //
+  // WHAT THIS REPLACES, and why the shape mattered more than the formula. A stated aggregate
+  // savings rate (`0.05 + inflation gap x 0.5 − confidence x 0.1 + real-rate gap x 0.4`, four
+  // coefficients) became a TARGET saving flow; the tier rates were then scaled by a λ to hit it,
+  // capped at 90% of any cohort's income, and whatever the cap clipped was redistributed into
+  // the remaining headroom so the target held anyway. **The cross-section could not disagree
+  // with the aggregate by construction** — which is top-down, and is exactly what a distribution
+  // is supposed to stop you doing. Every "derived" tier number downstream (§7.142's wealth MPC,
+  // §7.145's nine tables) ultimately hung off those four coefficients.
+  //
+  // THE RULE NOW, and every term in it is measured. A household holds a BUFFER against the gap
+  // until the next pay cheque or the next job, and wants it in weeks of its OWN income. Below
+  // that buffer it saves to rebuild; above it, it spends the excess down. Both at the same speed
+  // — `WEALTH_SPENDDOWN_YEARS`, the horizon a household already spreads a windfall over, so no
+  // second constant appears here.
+  //
+  //     saving = (target buffer − liquid assets) / spend-down horizon
+  //
+  // The aggregate savings rate is then `Σ saving / Σ income`: A MEASUREMENT (rule 13). The cap
+  // and the redistribution go with the target, because a rule that cannot ask for more than a
+  // household has needs nothing to stop it (rule 2).
+  //
+  // WHERE THE POLICY RATE WENT. It used to be a coefficient on the aggregate. It is now the two
+  // real things a rate does to a household budget, both already per-tier: it raises DEBT SERVICE
+  // for the indebted (measured, and already netted out of `dispUSD`) and it raises DEPOSIT
+  // INTEREST for savers (measured, and already in capital receipts). That is a distributional
+  // transmission instead of a scalar one, and it runs the right way round for each tier.
+  //
+  // AND IT PRODUCES THE WEALTHY-HAND-TO-MOUTH MIDDLE CAUSALLY. §7.145 derived that cross-section
+  // and this explains it: a tier whose net worth is a house and a pension holds little LIQUID,
+  // sits below its buffer, and saves out of income like a poor household — which is what
+  // wealthy-hand-to-mouth IS, arrived at rather than assumed.
+  const accumulatedNorm = WEALTH_TIERS.reduce(
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.accumulatedSavingsUSD ?? 0), 0);
+  // Who holds the liquid assets is whose saving accumulated (§7.144's own finding). Before any
+  // saving has accumulated there is nothing to split by, so it follows income — which is what
+  // the opening weeks of a cold start look like (§7.4).
+  // Both branches must return a SHARE. `shareOfIncomeUSD` is a DOLLAR AMOUNT despite reading
+  // like a fraction — it holds `tierDisposableUSD[t]` — so it is normalised here. Using it raw
+  // was the actual cause of §7.158's blow-up: a 346B liquid stock multiplied by a 1.5e11
+  // "share", which is a units error of the §7.149 family and not the story that record told.
+  const incomeNorm = WEALTH_TIERS.reduce(
+    (a, t) => a + Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0), 0);
+  const tierLiquidShare = (t: WealthTier): number => accumulatedNorm > 0
+    ? Math.max(0, wealthDistribution[t]?.accumulatedSavingsUSD ?? 0) / accumulatedNorm
+    : (incomeNorm > 0 ? Math.max(0, wealthDistribution[t]?.shareOfIncomeUSD ?? 0) / incomeNorm : 0.25);
+  const tierIncomeUSD = {} as Record<WealthTier, number>;
+  WEALTH_TIERS.forEach((t) => { tierIncomeUSD[t] = 0; });
+  preliminary.forEach((x) => { tierIncomeUSD[x.c.tier] += x.dispUSD; });
+  const cohortSavingsUSD = preliminary.map((x) => {
+    const tier = x.c.tier;
+    // This cohort's slice of its tier's liquid assets, by its slice of its tier's income.
+    const shareOfTier = tierIncomeUSD[tier] > 0 ? x.dispUSD / tierIncomeUSD[tier] : 0;
+    const liquidUSD = Math.max(0, liquidAssetsUSD) * tierLiquidShare(tier) * shareOfTier;
+    const targetBufferUSD = (x.dispUSD / 52) * BUFFER_TARGET_WEEKS;
+    return (targetBufferUSD - liquidUSD) / WEALTH_SPENDDOWN_YEARS;
   });
 
   const tierDisposableUSD = {} as Record<WealthTier, number>;
