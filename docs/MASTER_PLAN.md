@@ -358,7 +358,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
 | 1 | foundation | **MAC — close the inflation escape, then confidence and saving become outcomes** *(clamps)* | **NOW ITEM 1: it gates EMP, and every horizon run is this.** G1b's price-level escape drags employment behind it — a firm whose nominal revenue falls 30% is below its cost of capital however its headcount was derived (§7.118, §7.121). Measured: inflation −0.5% → −36% by w37 with unemployment following it to ~40%, in BOTH the pre-CHAIN tree and the current one, so it is neither new nor CHAIN's. Narrowed otherwise: FRM took its fiscal half, COH its household half. After G1b, confidence and saving as outcomes and the bounds go. |
 | 2 | foundation | **EMP — the labour collapse** | **THE SEED HALF IS DONE (§7.118-121) AND THE 10-WEEK SYMPTOM IS GONE:** unemployment runs 20.3% → 30.0% over ten weeks, **in band in all four regions in every week**, against 10.5/25.7/17.9/23.5% at seed before. §7.111's two impossible sector ratios (Consumer 0.92x, Industrials 0.93x — gross output BELOW value added) are now 1.42x and 1.30x. **BLOCKED ON ITEM 1 for the rest:** its stated criterion is 60 weeks stable and at horizon the deflation spiral still takes it. Nothing here is startable until G1b closes. |
-| 3 | foundation | **IND — industry operating models** | Every non-financial corporate is one model with four coefficients. **Seven slices closed 2026-08-29** (§7.108-109, §7.112-115): IND1 storability, IND2's subscription half, IND5 electricity, IND8 rating generation, IND9 (already done by G2), IND-R1 payroll/capex/inputs common to every firm, IND-R2 the software proxy lines, IND-R4's loan-loss half and IND-R5 bank seed revenue. **IND3, CAP0 and IND-R6 also DONE (§7.121):** the margin is an outcome of real costs, the [2%,65%] clamp is gone, and the listing branch is deleted — one operating model for every firm. **AND IND FINISHES AT FIRMS (§7.125): the profile contract is inverted** — no profile may state a margin, EBITDA is computed in one place for every kind of firm, financials buy what they consume from a profile input basket, and `INSURER_EXPENSE_RATIO` is deleted. **Harness PASSED, 0 violations.** **What remains is independent and unstarted:** IND-R3 (per-good consumption intensity), IND4, IND6, IND7, IND10-19; §7.122 steps 1-2, now pure refactors; and `CARD_OPERATING_COST_BPS`, which is deliberately left — it prices a loan rather than stating a margin, and a per-product cost-to-serve is a legitimate primitive. Prereq: BP1 (done). |
+| 3 | foundation | **IND — industry operating models** | **CLOSED except IND16, 2026-08-30 (§7.146-155).** Every non-financial corporate is one model with four coefficients, and every slice of the row is now built or measured shut. Earlier closes: IND1/IND2-subscription/IND5/IND8/IND9/IND-R1/IND-R2/IND-R4/IND-R5 (§7.108-109, §7.112-115); IND3, CAP0 and IND-R6 (§7.121) — the margin is an outcome of real costs, the clamp is gone, the listing branch is deleted; the profile contract inverted (§7.125). **This pass: IND15** labour constrains output (§7.146), **IND10** production takes time and WIP is a real stock (§7.147), **IND11** the backlog is a stock — which exposed that a firm's own production was never available to its own contracts (§7.148), **IND12** domestic trade credit (§7.150), **IND13** assets under construction (§7.151), **IND14** reliability priced into sourcing (§7.152), **IND19** already built, and hiding a double-charged expense ratio (§7.153), **IND17** prepayments (§7.154), **IND18** the calendar (§7.155). **Three defects were found by building it and fixed at the root, not worked around:** the contract-settlement ordering (§7.148), **LAB's nominal/real unit error that had kept the hiring branch switched off since EMP (§7.149)**, and the insurer expense double-charge (§7.153). **IND16 (the distribution tier) is the only slice left and it is a REFACTOR, not an addition** — see §5-IND16 for the double-representation trap and the full design. Also still open and owned elsewhere: `CARD_OPERATING_COST_BPS` (deliberately left — it prices a loan rather than stating a margin), §7.122 steps 1-2 (pure refactors), and the two CAP-owned defects IND13's new stock exposed (§6.1: capex does not cover depreciation; a ±2%/week clamp on capacity growth). |
 | 4 | foundation | **CAP — a firm can run a loss; then production and capacity** *(clamps)* | **CAP0 DONE (§7.121): the [2%, 65%] margin clamp is gone**, deleted with IND3 because a margin that is the residual of real costs needs no band. A firm can report a loss now, so CAP's own mechanism — a firm that cannot cover unit cost STOPS producing rather than throttling — can finally fire. That and the capacity decisions are what remains. |
 | 5 | foundation | **DEM — demographic variability** | Small; takes the population-growth and migration clamps. |
 | 6 | foundation | **COH — cohorts accumulate: household balance sheets** | New, from the review's sharpest reframing: §6.3's "nine imposed household tables" are ONE missing mechanism — cohorts have no balance sheets. Give them one and eight of the nine become measurements; reverse `beneficiaryLiabilityUSD` and the institutional seed share goes too; retire `national-accounts.ts`, whose own exit condition is met. |
@@ -748,9 +748,29 @@ firm that cannot hire cannot produce — without this, HH5/6's labor market is d
 IND3's "costs are people" industries are not real. Verify: an unfilled-vacancy firm's output
 measurably binds on labor, not only on PP&E.
 
-**IND16 — The distribution tier.** Wholesale/retail between the factory gate and the final buyer:
-a margin chain, minimum order sizes, local stocking — the rest of §6's logistics-share gap. May
-land as BP1 buyer-mix structure rather than new firms.
+**IND16 — The distribution tier.  *(THE ONE IND SLICE STILL OPEN — designed 2026-08-30, NOT
+built, and the reason it was not built is the finding.)*** Wholesale/retail between the factory
+gate and the final buyer: a margin chain, minimum order sizes, local stocking — the rest of §6's
+logistics-share gap.
+
+**THE TRAP, found while scoping it.** A household today buys `facilities_and_logistics` AS A GOOD,
+out of its own buyer-mix share, in that good's own book. So the distribution service is already
+sold, priced and paid for — once. Adding a channel margin on top of every other good would credit
+the same sector for the same work TWICE (rule 3), and it would not be visible: both numbers would
+look like real revenue with a real payer. **IND16 is therefore a REFACTOR, not an addition** —
+the household's distribution spend has to MOVE out of that book and onto the goods it is actually
+spent distributing — and half-building it is worse than not starting.
+
+**The design, so the next pass does not re-derive it.** The margin should be an OUTCOME of the
+good's own physics, not a stated per-category rate (rule 13): the channel holds
+`min(shelfLifeWeeks, channel cover)` weeks of stock, and what that costs per dollar is
+`annualCarryingCostRateOf(unitId) + the region's own short rate`, pro-rated. Both terms already
+exist and both already encode value density and spoilage — a dollar of gravel costs more to move
+and hold than a dollar of watches, and a dairy cannot stock a quarter's cover at any price. The
+household then bids the FACTORY-GATE price its willingness-to-pay leaves after the channel takes
+its cut, which is the real transmission: a costly channel means less reaches the producer.
+Minimum order sizes and local stocking follow the same stock. Prereq: nothing new; the blocker is
+the refactor above, not the mechanism.
 
 **IND17 — Prepayments and deposits.** The other sign of IND2's deferred revenue: customers pay
 ahead (progress payments, annual subscriptions) — negative working capital as a real funding
@@ -5621,3 +5641,35 @@ that proved it, the lesson.
     - Storage is what smooths this into consumption, and IND1 already built it: a storable good
       with a real carrying cost is exactly the mechanism that carries a harvest through a year.
       **The classical inventory cycle now has a period to cycle on.**
+
+156. **IND CLOSES, except the one slice that is a refactor.** Ten slices in one pass (§7.146-155),
+    every one measured with `WEEKS=10 SHOCKS=0`, harness green at the close.
+    - **What the row was actually worth was not the slices.** Three defects came out of building
+      them, each invisible until a mechanism existed to expose it, and each fixed at the root:
+      **(1)** contracts settled against last week's leftover stock, so a firm's own production was
+      never available to its own committed orders and every contract in the economy
+      under-delivered permanently — hidden because an unfilled order evaporated (§7.148);
+      **(2)** `labor-market.ts` divided this week's revenue by the SEED's revenue per head, so in
+      a deflation every firm read as overstaffed, `understaffedHeads` was zero for everybody, and
+      **the hiring branch §7.109 built had never once fired** while the shedding branch always
+      did (§7.149); **(3)** an insurer's operating cost was charged twice, once as real staff and
+      premises and once as a flat fifth of premiums, because §7.125 deleted the charge and left
+      the cash leg that balanced it (§7.153).
+    - **The pattern across all three is one sentence, and it is worth more than the row.**
+      A mechanism that binds on nothing is a mechanism that is not there (§7.146) — and the three
+      ways it happens are: the thing it would bind on does not exist yet (backlog), the units are
+      wrong so the condition never trips (hiring), or a cleanup removes one side of a pair and
+      the other keeps running (insurer expenses). **None of the three is findable by reading the
+      logic**, because in all three the logic is correct. Only a measurement finds them.
+    - **What the IND battery now measures**, once per run, judged by nobody: WIP against
+      production lead; the cost structure firms shed against (EBITDA/revenue, inputs/revenue,
+      netPPE/revenue, the share below cost of capital); trade credit and who carries it;
+      construction in progress; supplier reliability dispersion; customer deposits by cycle
+      length; and the calendar. **Two structural invariants** guard the new stocks: a pipeline is
+      exactly as long as its good's lead, and a backlog can grow by at most one week's obligation.
+    - **Three verifies EMERGED rather than being built**, which is the sign the mechanisms are
+      real and not fitted: receivables per week of sales rise monotonically with production lead
+      (0.60 → 0.83 → 0.96) although the leads were set for IND10 and the terms come from credit
+      quality; customer deposits land at 0.00 weeks of sales for made-on-demand goods and 1.06
+      for long-cycle ones with no category list anywhere; and seasonality's annual mean is
+      exactly 1.000 on both sides of all eleven seasonal goods.
