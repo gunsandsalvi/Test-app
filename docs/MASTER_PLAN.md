@@ -474,14 +474,14 @@ slice on machinery that now exists, which is what the markets tier was for.
 | 14 | markets | **G5 — default resolution: recovery as an outcome** | **FIRST SLICE DONE 2026-08-30 (§7.192) — the one it was scoped around.** A default opens an ESTATE; assets leave at the rate the markets that would buy them absorb them; proceeds waterfall by real seniority; the residual is written off the holders' books. Recovery is an OUTPUT and displaces the 0.4 prior. Both folded constants are gone — the ×12 contagion coefficient and the 0.10 recovery floor. **BOTH REMAINDERS CLOSED 2026-08-30 (§7.202) — UNMEASURED.** The public default rate was the public path's cash accounting: a firm ran out of cash beside an UNDRAWN committed line, so the line is now drawn first at what the interest-coverage covenant still permits (`committedLineHeadroomUSD`), and a default is a firm out of committed credit rather than out of cash on a Tuesday. And the PE exit by sale is built: a company held past `PE_FUND_LIFE_WEEKS` goes to another sponsor with the dry powder for it, at the mark the balance sheets already carry, capital called from the buyer's LPs and distributed to the seller's — which closes the capital-recycling loop at the end that was open. **What it owes a run: the public default rate against the private tier's, which is the measurement that diagnosed it.** |
 | 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | **CLOSED 2026-08-30 (§7.193).** Commodity prices follow extraction cost per tonne and units per tonne; the seed is the marginal producer's cost and the market does the rest. Weather has a season index, an exposure read off what each region actually produces, and generated place names; the two dead impact fields are deleted and the third is a YIELD cut the commodity book prices. **The reseed changes every energy and metal price and therefore every recipe cost — the measurement run must read the price level and the JPN fiscal band against it, not against anything measured before today.** |
 | 16 | depth | **CAL — payment calendars** | **CORPORATE HALF DONE 2026-08-30 (§7.194).** Interest accrues to whoever holds the paper that week and the coupon date turns each holder's accrued balance into cash — a bond half-yearly, a floating loan quarterly, CP at maturity, dividends on the quarter the board already reports. **P&L stays smooth on both sides; only cash is lumpy.** **Remains: the SOVEREIGN calendar**, which needs the treasury's expense, the banks' credit and the institutions' credit moving in one pass plus a per-bucket accrual (a bank is not on the institutional register) — half of it measured worse than none. |
-| 17 | depth | **ETF2 — a real price for ETF shares** | **TWO OF THREE REMAINDERS DONE (§7.201, §7.205) — UNMEASURED.** The funding half landed early because it owned the harness's largest violation family; §7.205 added IN-KIND redemption (the fund delivers its pro-rata slice of everything it owns, so no money has to be found and the cash cap stops being a constraint on institutions) and DERIVED the AP's capacity from the risk a basket consumes while a desk holds it, retiring a constant that contradicted its own name. **Remains only the row's actual title: the share BOOK — pricing ETF shares against the APs' float instead of carrying them at NAV, which is what would give the fund a premium and discount to NAV and make the arbitrage a price rather than a quantity.** |
+| 17 | depth | **ETF2 — a real price for ETF shares** | **CLOSED 2026-08-30 (§7.201, §7.205, §7.206) — UNMEASURED.** The funding half landed early because it owned the harness's largest violation family; §7.205 added IN-KIND redemption (the fund delivers its pro-rata slice of everything it owns, so no money has to be found and the cash cap stops being a constraint on institutions) and DERIVED the AP's capacity from the risk a basket consumes while a desk holds it, retiring a constant that contradicted its own name. **And §7.206 closed the row's actual title: the share BOOK clears.** The float is what the fund's investors hold, the primary offering is what the APs will create, no AP creates below net asset value (which holds a discount without a bound), and an investor's reservation is the point at which it would rather assemble the index itself — net asset value plus what the constituent books charge for every name in it, which bounds a premium by a price the model already sets. `premiumToNavBps` is a real premium; `unmetFlowShare` stays beside it as the quantity. Holders mark at what their shares trade at. **What it owes a run: whether the premium sits at zero in calm weeks and only moves when the APs are actually constrained.** |
 | 18 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
 | 19 | depth | **SCALE — universe scale-up under a wall-clock budget** | Wave 2 after IND. Owns the float half of the promoted damper defect: thin books are why prints pin. |
 | 20 | depth | **MNC — multinational production** | Prereqs IND, XB. |
 | 21 | depth | **DYN — entry, exit, and industry structure** | Prereqs IND, BP1. Adds: the named tier's cut point falls out of the Pareto tail instead of sitting beside it. |
 | 22 | depth | **PROD — firm productivity and innovation** | Prereq IND. |
 | 23 | depth | **CRE — commercial property and leases** | Prereqs HH, G2 (both done). |
-| 24 | depth | **TAXR — corporate tax, really** | Prereq PUB (done); MNC for the cross-border half. Adds: the model has three tax rates and no owner — the corporate one is a bare 0.21 literal policy cannot reach. |
+| 24 | depth | **TAXR — corporate tax, really** | Prereq PUB (done); MNC for the cross-border half. **THE FOLDED FINDING IS CLOSED (§7.206) — UNMEASURED:** the bare `0.21` is gone and every corporate tax number reads `region.effectiveTaxRate`, the rate the fiscal stance already moves. A firm used to report earnings after 21% tax and remit cash at 31%; the P&L and the payment now agree, and a fiscal tightening reaches corporate earnings. **The row's own substance is untouched: a real corporate tax BASE (this is still a rate on EBIT less interest, with no depreciation shield, no loss carry-forward and no deferred tax), and the cross-border half, which needs MNC.** |
 | 25 | last | **S-final — validation gate** | Everything above. |
 | 26 | last | **AU — Aurora, the UI rebuild** | Everything above. Adds: UI state moves out of `GameState`, which the determinism hash spans. |
 
@@ -7155,3 +7155,49 @@ that proved it, the lesson.
       either right or a finding), what the boundary's `inventory carrying cost` line falls to, and
       whether the credit tiers' delinquency rates still order correctly now that nothing orders
       them by hand.
+
+206. **ETF2 closes with a real share price, and two rows' folded findings.**
+    - **AN ETF SHARE HAS A PRICE NOW.** The row's title, and the last thing `unmetFlowShare` was
+      standing in for. The shares clear on the same engine as every other book: **the float** is
+      what this fund's investors hold between them (OWN7's rule, unchanged), **the primary
+      offering** is what the APs will create, and **no AP creates below net asset value**, because
+      creating at a discount is selling a dollar for less than a dollar — which is what holds the
+      top of a discount, and it is a participant's price rather than a bracket (rule 15).
+    - **WHAT BOUNDS A PREMIUM IS A PRICE THE MODEL ALREADY SETS.** An investor's reservation is the
+      point at which it would rather go and assemble the index itself: net asset value plus what
+      the constituent books charge to buy every name in it. So a week the APs can absorb prints at
+      net asset value and a week they cannot prints a premium — which is what an ETF's premium IS,
+      rather than a number derived from one. **No new parameter, and the book is undamped**: a
+      fund's shares can only move as far as the basket behind them plus the assembly cost, and
+      that is already a real bound.
+    - **HOLDERS MARK AT WHAT THEIR SHARES TRADE AT.** The premium is a transfer between holders — a
+      buyer paid a seller for it — not wealth anybody created, so claims legitimately differ from
+      the assets behind them by exactly it. A fund whose book has not cleared yet still marks at
+      net asset value, because that is the only number about it that exists. `unmetFlowShare`
+      stays: it is the QUANTITY and the premium is the PRICE, about one fact, and both are worth
+      having.
+    - **TAXR's FOLDED FINDING: a firm reported 21% tax and paid 31%.** Three tax rates with no
+      owner between them — a bare `0.21` literal on corporate NET INCOME, `region.effectiveTaxRate`
+      (seeded 0.31, drifted weekly by the fiscal stance) on the corporate ACCRUAL forty lines
+      below it and on the SME pools' and the WACC, and `HOUSEHOLD_EFFECTIVE_TAX_RATE` on
+      households. **The P&L and the payment disagreed about the same liability** (rule 14), and the
+      government's one tax lever could not reach corporate taxation at all (rule 13) while stage 11
+      counted the proceeds as revenue. One rate now, from the region that sets it.
+    - **TWO DOC COMMENTS THAT WERE NOT TRUE, CORRECTED.** §7.201's CDS module claimed the bank's
+      large-exposure measurement as "the consumer `09-concentration-risk.ts` has never had". It is
+      not: that stage measures TRADE concentration over the contract book — how much of a firm's
+      revenue one customer is — which is a different exposure on a different book, and it found its
+      own consumer in CRD-R1's rating notches. Two concentrations, two owners, neither standing in
+      for the other. **The §4 SCALE row still calls stage 09 "the cheapest win on the table: 98 ms
+      a week to compute flags nothing prices off" — that is stale for the same reason**, and it is
+      the fifth stale row this session (§7.199's lesson again: read the code before believing a
+      row).
+    - **HC3b WAS READ AND DELIBERATELY NOT STARTED.** Its two easy halves are already done: the
+      goods market has never cared who owns a supplier's equity (HC3 — private firms bid and offer
+      in the same auction with real product lines), and SEG-D made a pool's revenue its own
+      measured receipts. What REMAINS is the hard half the row was deferred for: switching named
+      firms' revenue from the statistical formula to the sales anchor. **The plan records that
+      forcing it before collapsed both tiers (−10% to −22% growth)**, which is precisely a
+      measurement question, and it is the third change now waiting on a run beside the wage level
+      and the household bid premium.
+    - **UNMEASURED**, like everything since §7.199.

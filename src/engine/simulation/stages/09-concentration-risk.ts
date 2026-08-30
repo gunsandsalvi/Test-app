@@ -72,8 +72,12 @@ export function runConcentrationRiskStage(state: GameState, ctx: WeeklyStepConte
   };
 
   // CRD-R1 — the LARGEST single counterparty share, as a number. The flags above are strings for
-  // the UI; a rating cannot be notched off a sentence. This stage has measured concentration every
-  // week at 8.5% of run time with nothing consuming it (§5-CRD); this is its first consumer.
+  // the UI; a rating cannot be notched off a sentence. This stage measured concentration every
+  // week at 8.5% of run time with nothing consuming it (§5-CRD); the rating notches are its
+  // consumer. Note what this is and is not: it is TRADE concentration, over the contract book —
+  // how much of a firm's revenue one customer is and how much of its inputs one supplier is. A
+  // bank's large-exposure limit is a different concentration over a different book and is
+  // measured where that book lives (07h); neither number stands in for the other.
   const topShare = (index: Map<string, PartyExposure>, ticker: string, id: string): number => {
     let top = 0;
     [index.get(ticker), index.get(id)].forEach(entry => {

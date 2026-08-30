@@ -15,8 +15,11 @@
  *  - **The float is the protection somebody NEEDS.** A bank whose exposure to one name exceeds
  *    what its capital lets it carry against a single counterparty has to lay the excess off; that
  *    excess is a measurement of its own book against the large-exposure limit, not a preference.
- *    This is the consumer `09-concentration-risk.ts` has never had (§5-CRD: it computes those
- *    flags every week at 8.5% of run time and nothing prices off them).
+ *    It is measured HERE, over the lender's own itemised loans, and is deliberately not
+ *    `09-concentration-risk.ts`'s number: that stage measures a firm's TRADE concentration — how
+ *    much of its revenue one customer is, how much of its inputs one supplier is — which is a
+ *    different exposure on a different book, and it found its own consumer in CRD-R1's rating
+ *    notches. Two concentrations, two owners, neither standing in for the other.
  *  - **The participants are the sellers** — the banks' derivative desks and the credit funds that
  *    want the exposure without funding it. A seller's reservation is what the same credit costs it
  *    to carry: its expected loss plus the capital the position consumes at its own required
