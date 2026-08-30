@@ -101,14 +101,42 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // the debt service the banks' real loans imply. ----
       const annualEarningsUSD = pool.annualRevenueUSD * pool.marginPct;
       const annualDebtServiceUSD = Math.max(1, pool.debtUSD * (reg.policyRate + 0.03));
-      const coverage = annualEarningsUSD / annualDebtServiceUSD;
       const cashCoverWeeks = weeklyWageBillUSD > 0 ? cashUSD / weeklyWageBillUSD : TARGET_CASH_WEEKS_OF_WAGES;
       const cashStress = Math.max(0, 1 - cashCoverWeeks / TARGET_CASH_WEEKS_OF_WAGES);
-      pool.defaultRateAnnualPct = Number(Math.max(0.002, Math.min(0.25,
-        0.015
-        + Math.max(0, 1 - coverage) * 0.04
-        + cashStress * 0.06
-      )).toFixed(4));
+
+      // DIST — THE DEFAULT RATE IS AN INTEGRAL OVER THE POOL, NOT A FUNCTION OF ITS MEAN.
+      //
+      // `Math.max(0, 1 - coverage)` is a THRESHOLD, and this read it at the pool average — so a
+      // pool with mean coverage 1.2 had exactly ZERO coverage-driven defaults however many of its
+      // firms sat below 1, and **a mean-preserving spread could not cause a single default**,
+      // which is the mechanism of a credit cycle. `E[f(x)]` is not `f(E[x])` (§5-DIST).
+      //
+      // The pool now carries a leverage cross-section struck from the same rule the named tier
+      // uses (§7.140), and the rate is the weighted sum of each stratum's own distress. The mean
+      // is preserved exactly, so this changes no aggregate — it changes what the aggregate can
+      // RESPOND to.
+      //
+      // The `[0.002, 0.25]` band goes with it (rule 2). It existed to bound a formula read at a
+      // point; a weighted sum of a bounded per-stratum function needs no second bound.
+      const strata = pool.strata && pool.strata.length > 0
+        ? pool.strata
+        : [{ weight: 1, leverageMultiple: annualEarningsUSD > 0 ? pool.debtUSD / annualEarningsUSD : 0 }];
+      const meanLeverage = annualEarningsUSD > 0 ? pool.debtUSD / annualEarningsUSD : 0;
+      const strataMean = strata.reduce((a, st) => a + st.weight * st.leverageMultiple, 0);
+      // Re-centre on the pool's CURRENT leverage each week: the shape is the cross-section's, the
+      // level is the pool's own book. Without this the strata would drift away from the debt they
+      // are supposed to describe (rule 3).
+      const recentre = strataMean > 0 ? meanLeverage / strataMean : 0;
+      const coverageOf = (lev: number) => {
+        const debtService = lev * recentre * annualEarningsUSD * (reg.policyRate + 0.03);
+        return debtService > 0 ? annualEarningsUSD / debtService : Number.POSITIVE_INFINITY;
+      };
+      const coverageDistress = strata.reduce(
+        (a, st) => a + st.weight * Math.max(0, 1 - coverageOf(st.leverageMultiple)), 0);
+
+      pool.defaultRateAnnualPct = Number(Math.max(0,
+        0.015 + coverageDistress * 0.04 + cashStress * 0.06
+      ).toFixed(4));
     });
   });
 }

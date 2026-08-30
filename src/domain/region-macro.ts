@@ -252,6 +252,30 @@ export interface GovDebtTranche {
  * constants each, sold into 7 of 36 sub-units, bought in exactly one place, and could never
  * cover a product line added to the registry — rule 17 failing outright (§5-SEG).
  */
+/**
+ * DIST — one stratum of an SME pool: a weighted macro-agent, in the particle-in-cell sense.
+ *
+ * A pool used to be a scalar, so every decision about it was a function of its MEAN. That is
+ * exact for a linear decision and wrong for a threshold, and every decision that matters here is
+ * a threshold: `Math.max(0, 1 - coverage)` on the pool average gave a pool with mean coverage 1.2
+ * exactly ZERO coverage-driven defaults, however many of its firms sat below 1. `E[f(x)]` is not
+ * `f(E[x])`, and a mean-preserving spread could not cause a single default — which is the
+ * mechanism of a credit cycle.
+ *
+ * Measured in the named tier, which is the same population one resolution finer: leverage runs
+ * p10 1.50 / p50 3.12 / p90 5.92, and **11.2% of firms sit within 10% of the covenant threshold**.
+ * That is the mass a scalar throws away.
+ *
+ * The pool's own aggregates stay, and are DERIVED from these (rule 3) — nothing reads a node and
+ * a parallel scalar for the same quantity.
+ */
+export interface SmePoolStratum {
+  /** Share of the pool's firms this stratum stands for. Weights sum to 1. */
+  weight: number;
+  /** Debt to annual earnings for the firms in it — the dimension that gates default. */
+  leverageMultiple: number;
+}
+
 export interface SmePool {
   /** The registry industry this pool is the small-firm tier of. One pool per region x industry. */
   industry: Industry;
@@ -279,6 +303,9 @@ export interface SmePool {
    * produces through one mechanism, so the old capex-derived / supply-derived pair (two routes,
    * two books, each able to clobber the other) collapses to this. */
   salesDerivedAnnualRevenueUSDBySubUnit?: Record<string, number>;
+  /** DIST — the pool's leverage cross-section. Absent = not yet seeded; every decision that is
+   *  nonlinear in leverage integrates over this instead of reading the pool's mean. */
+  strata?: SmePoolStratum[];
 }
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';

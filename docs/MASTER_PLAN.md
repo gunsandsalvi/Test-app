@@ -5188,3 +5188,36 @@ that proved it, the lesson.
       measurably worsened the headline and said so, naming the missing counterpart. The
       counterpart is this, and together they behave. **A half-loop recorded as a half-loop is
       recoverable; a half-loop shipped as a fix is not.**
+
+140. **DIST, first slice — the SME pool carries a cross-section, and the decision that gates a
+    credit cycle is an integral instead of a function of the mean.** *(User directive: start DIST.
+    Its prerequisite, one firm model, was met by IND-R6.)*
+    - **THE MEASUREMENT §5-DIST ASKED FOR, FIRST.** Named tier at seed, USA: leverage p10 **1.50**
+      / p50 **3.12** / p90 **5.92**, margin spread 2.5x, revenue spread 24.7x — and **11.2% of
+      firms sit within 10% of the covenant threshold.** The affordability line EMP sheds against
+      has almost nothing near it now (1 firm of 591, against §7.109's 92 of 629), so **DIST's
+      value is on the CREDIT side, not the labour side.** That is what the measurement was for and
+      it answered.
+    - **The defect it found.** A pool's default rate was
+      `0.015 + max(0, 1 − coverage) x 0.04 + cashStress x 0.06`, read at the pool MEAN. `max(0, 1 −
+      coverage)` is a threshold, so a pool averaging coverage 1.2 had exactly ZERO coverage-driven
+      defaults however many of its firms sat below 1, and **a mean-preserving spread could not
+      cause a single default** — which is the mechanism of a credit cycle. Plus a `[0.002, 0.25]`
+      band on top (rule 2), which existed to bound a formula read at a point.
+    - **The fix.** The pool carries `strata`: K equal-weight quantiles of the SAME leverage-takeup
+      draw the named tier uses (IND8/§7.113) — no second distribution, no fitted shape, no
+      imported dispersion (§7.4). Their mean is re-centred on the pool's own book every week, so
+      **this adds a cross-section and restates no debt** (rule 3). The rate is now the weighted
+      sum of each stratum's own distress, and the band is deleted.
+    - **Measured, and it is the textbook case.** Weighted mean leverage is identical at K = 1, 5,
+      9, 20, 50 — **aggregation exactness holds** (§5-DIST's first verify). And where the threshold
+      is live: at mean leverage **16 the scalar reports 0.0000 distress while the cross-section
+      reports 0.1104** — the scalar is blind through the entire approach to the threshold and only
+      agrees once the mean is deep past it (at 20: 0.167 vs 0.198).
+    - **Honestly dormant today.** At the pools' current 2.7x leverage, interest coverage is 6.2x
+      and no stratum is near the threshold, so the term contributes zero and the harness is
+      unchanged (green, 0 violations). **It arms as pools lever up, which is exactly when a credit
+      cycle needs it** — and it could never have armed before.
+    - **Next in DIST:** the household side (COH's redesign), the absorbing barrier with reinjection
+      on the SME side, and the strata responding to their own stratum's cash rather than the
+      pool's.

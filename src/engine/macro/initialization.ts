@@ -8,7 +8,7 @@ import { CENTRAL_BANK_SOVEREIGN_SHARE, TGA_TARGET_WEEKS_OF_SPENDING } from '../.
 import { governmentPayrollWeeklyUSD, governmentObligationsWeeklyUSD } from '../../domain/government';
 import { GOVERNMENT_OCCUPATION_MIX } from '../../domain/region-macro';
 import { INDUSTRY_REGISTRY, SME_POOL_INDUSTRIES, smePoolSubUnits, totalOutputFromFinalDemand, smePoolEmployment } from '../../domain/industry-registry';
-import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT } from '../bootstrap/firms';
+import { sectorBaselineMarginPct, SME_MARGIN_DISCOUNT, seedPoolLeverageStrata, SME_POOL_STRATA_COUNT } from '../bootstrap/firms';
 import { sovBucketKey } from '../simulation/stages/shared-helpers';
 import { generate52WeekHistory } from './utils';
 import { createSeedCategoryDemandState } from '../../domain/market-microstructure';
@@ -190,6 +190,11 @@ const UNEMPLOYMENT_RATE = 0.045;
 // from the region's own retired share. Which region shrinks is an outcome of that draw, not a
 // table. Net migration opens at zero and is the endogenous attractiveness signal's to move.
 const NET_MIGRATION_RATE_ANNUAL = 0.0;
+
+/** DIST — the level the SME pool's leverage cross-section opens at. §7.113 measured the migrated
+ *  tier at 2.7x EBITDA in all four regions; the shape is struck around that and re-centred on the
+ *  pool's real book weekly, so this sets the opening spread and never the debt itself. */
+const SME_SEED_LEVERAGE_MULTIPLE = 2.7;
 const EFFECTIVE_TAX_RATE = 0.31;
 /**
  * The size of the opening sovereign stack, as a multiple of nominal GDP. A SEED primitive with
@@ -634,6 +639,10 @@ function buildRegion(regionId: RegionId): Region {
         // actually carry onto real loans and writes this back as their derived sum (rule 3).
         debtUSD: 0,
         defaultRateAnnualPct: 0.02,
+        // DIST — the pool's leverage cross-section, struck from the same rule the named tier
+        // uses. Its debt is migrated later (bank-lending's seed), so the mean is re-centred on
+        // the pool's real book every week; what is seeded here is the SHAPE.
+        strata: seedPoolLeverageStrata(SME_SEED_LEVERAGE_MULTIPLE, SME_POOL_STRATA_COUNT),
         capexUSD: Number((annualRevenueUSD * 0.05).toFixed(0)),
       });
     });

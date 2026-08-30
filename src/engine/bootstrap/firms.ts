@@ -167,7 +167,38 @@ const INTEREST_RATE_ASSUMPTION = 0.045;
  * reconstruct and must therefore draw. It is a dispersion, not a level — the LEVEL is the
  * engine's own covenant rule.
  */
-const MIN_COVENANT_TAKEUP = 0.15;
+export const MIN_COVENANT_TAKEUP = 0.15;
+
+/**
+ * DIST — the SME pool's leverage cross-section, struck from the SAME rule the named tier uses.
+ *
+ * A named firm draws `leverageTakeup` uniformly on `[MIN_COVENANT_TAKEUP, 1]` of its covenant
+ * capacity (IND8, §7.113). A pool is the same population one resolution coarser, so its strata
+ * are equal-weight QUANTILES of that same draw — no second distribution, no fitted shape, and no
+ * real-world dispersion imported (§7.4: seed by the engine's own code).
+ *
+ * The strata are then scaled so their weighted mean is the pool's OWN measured leverage, which
+ * keeps the aggregate exactly where it was: this adds a cross-section, it does not restate the
+ * debt (rule 3).
+ */
+export function seedPoolLeverageStrata(meanLeverageMultiple: number, strataCount: number): { weight: number; leverageMultiple: number }[] {
+  if (!(strataCount > 0) || !(meanLeverageMultiple > 0)) return [];
+  const takeups: number[] = [];
+  for (let i = 0; i < strataCount; i++) {
+    const u = (i + 0.5) / strataCount;
+    takeups.push(MIN_COVENANT_TAKEUP + u * (1 - MIN_COVENANT_TAKEUP));
+  }
+  const meanTakeup = takeups.reduce((a, b) => a + b, 0) / takeups.length;
+  const scale = meanTakeup > 0 ? meanLeverageMultiple / meanTakeup : 0;
+  return takeups.map((t) => ({
+    weight: Number((1 / strataCount).toFixed(6)),
+    leverageMultiple: Number((t * scale).toFixed(4)),
+  }));
+}
+
+/** DIST — how many strata a pool carries. §5-DIST's threshold artifact is 1/K, and the measured
+ *  mass within 10% of the covenant threshold is 11.2%, so K must resolve finer than that. */
+export const SME_POOL_STRATA_COUNT = 20;
 
 function ratingFor(revBase: number, ebitdaMargin: number, debtBase: number): CreditRating {
   const ebitda = revBase * ebitdaMargin;
