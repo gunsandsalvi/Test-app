@@ -672,10 +672,22 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       };
     }
 
-    // Maintenance — funded, not assumed:
-    // 1. What maintenance WOULD cost if fully funded (capacity-based target)
-    const maintenanceCapexToRevenueRatio = (comp.maintenanceCapex ?? (comp.capex * 0.6)) / Math.max(1, comp.annualRevenue);
-    const targetMaintenanceCapex = newRevenue * maintenanceCapexToRevenueRatio;
+    // CAP — MAINTENANCE CAPEX IS DEPRECIATION. That is what maintenance capex IS: the spend that
+    // keeps the capital stock whole as it wears out.
+    //
+    // It used to be `newRevenue x (comp.maintenanceCapex / comp.annualRevenue)` — **the target
+    // derived from its own current value**, an EMA of itself with no anchor to the thing it is
+    // for. Whatever it was seeded at is what it stayed. IND13's construction stock measured the
+    // consequence (§6.1, §7.151): capital ARRIVING at ~0.5% of the capital stock a year against a
+    // straight-line depreciation of ~8%, so the plant was being consumed several times faster
+    // than it was replaced, invisibly, because a shrinking net PP&E also shrinks the capital
+    // charge the labour rule sheds against.
+    //
+    // The anchor is the firm's OWN books: its gross plant over its OWN sector's useful life,
+    // which is the same arithmetic the depreciation line below already runs. No new number.
+    const usefulLifeYearsForCapex = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
+    const grossPPEForCapex = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+    const targetMaintenanceCapex = grossPPEForCapex / usefulLifeYearsForCapex;
     const weeklyDesiredMaintenanceCapex = targetMaintenanceCapex / 52;
 
     // 2. What the company can actually fund this week — operating cash + a small cash draw + limited new borrowing (IG only), never unlimited

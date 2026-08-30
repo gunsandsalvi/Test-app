@@ -711,10 +711,13 @@ function buildRegionSupplyPlans(
       // grows when machines are installed and running, not when a budget is approved (IND1) and
       // not when a crate is unloaded (IND13).
       const netInvestmentRate = ((comp.capexCommissionedLastWeekUSD ?? 0) - weeklyDepreciationUSD) / netPPE;
-      line.weeklyCapacityUnits = Math.max(
-        0.0001,
-        line.weeklyCapacityUnits! * (1 + Math.max(-0.02, Math.min(0.02, netInvestmentRate)))
-      );
+      // CAP — THE ±2%/WEEK CLAMP IS GONE (rule 2). It bounded an OUTCOME: a firm that had just
+      // commissioned a plant twice its size still grew 2%, and one whose capital had evaporated
+      // still shrank only 2%. It was doing the work the INVESTMENT DECISION should do, and that
+      // decision was broken underneath it — maintenance capex was derived from its own prior
+      // value, so net investment was permanently and invisibly negative (§7.167). With the
+      // decision anchored to real depreciation there is nothing left for a bound to protect.
+      line.weeklyCapacityUnits = Math.max(0.0001, line.weeklyCapacityUnits! * (1 + netInvestmentRate));
     }
     const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     const costRate = Math.max(0, 1 - baseMargin);

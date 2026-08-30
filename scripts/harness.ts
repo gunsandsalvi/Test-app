@@ -1386,6 +1386,14 @@ const indModule: HarnessModule = (() => {
         const np = Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0));
         return c.ebitda < np * (coc + (c.beta ?? 1) * 0.05);
       }).length;
+      // CAP — DOES CAPEX COVER DEPRECIATION? The number IND13's stock exposed, measured at the
+      // FLOW so it is not hidden behind the commissioning lead and the maintenance EMA.
+      const dep = firms.reduce((a, c) => {
+        const gross = c.grossPPEUSD ?? 0;
+        return a + gross / 12;
+      }, 0);
+      const capexA = firms.reduce((a, c) => a + (c.capex ?? 0), 0);
+      out.push(`  ${r}: capex ${B(capexA)}/yr vs depreciation ${B(dep)}/yr = ${(dep > 0 ? capexA / dep : 0).toFixed(2)}x [1.0x replaces the stock]`);
       out.push(`  ${r}: EBITDA/rev ${pct(ebitda / rev)}  inputs/rev ${pct(inputs / rev)}  netPPE/rev ${(netPpe / rev).toFixed(2)}x  |  below cost of capital: ${below}/${firms.length} (${pct(below / firms.length)})`);
     });
 
