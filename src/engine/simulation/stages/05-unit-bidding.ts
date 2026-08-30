@@ -534,7 +534,21 @@ function buildRegionSupplyPlans(
     const pd = ratingPdMap[comp.creditRating] ?? 0.03;
     const expectedLoss = pd * 0.60;
     const costOfCapital = 0.05 + expectedLoss;
-    const marginPremium = costOfCapital * 1.5;
+
+    // IND6 — SHARE VERSUS MARGIN, expressed only through the real offer price.
+    //
+    // Every seller asked cost plus the same premium, so no firm could choose to buy share by
+    // pricing keener than its rivals — the one lever that actually moves share in an auction that
+    // fills cheaper offers first. The posture is not a stated per-company variable and not a
+    // synthetic share target: it is the firm's OWN inventory position, which stage 05 already
+    // computes. A warehouse filling up is a firm that is not selling, and it gives up margin to
+    // move the stock; a firm with nothing left holds out for its full premium.
+    //
+    // The floor beneath it is the contribution-margin bound: at full inventory the premium goes to
+    // zero and the ask is unit cost (§7.130), never below — a firm gives up profit to win share,
+    // not money.
+    const inventoryPricePressure = Math.min(1, Math.max(0, inventoryToCapacityRatio));
+    const marginPremium = costOfCapital * 1.5 * (1 - inventoryPricePressure);
 
     plans.push({
       key: comp.ticker,

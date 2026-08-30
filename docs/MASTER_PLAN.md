@@ -5133,3 +5133,18 @@ that proved it, the lesson.
       MEASUREMENT since §7.134 — stating one per industry would restore precisely what IDX just
       deleted, one field over. **A work item's own brief can be stale; the rules are not.**
     - Harness green, 0 violations.
+
+137. **IND6 — share versus margin, expressed only through the real offer price.** Every seller
+    asked cost plus the same premium, so no firm could choose to buy share by pricing keener than
+    its rivals — the one lever that actually moves share in an auction that fills cheaper offers
+    first.
+    - **The posture is neither a stated per-company variable nor a synthetic share target**, both
+      of which §5-IND6 rules out. It is the firm's OWN inventory position, which stage 05 already
+      computes for the production throttle: a warehouse filling up is a firm that is not selling,
+      and it gives up margin to move stock; a firm with nothing left holds out for its full
+      premium. The same signal already governs QUANTITY, and IND6 is that it should govern PRICE
+      too — which is what a real seller does first.
+    - **The contribution-margin bound is the floor beneath it:** at full inventory the premium
+      goes to zero and the ask is unit cost (§7.130), never below. A firm gives up profit to win
+      share, not money.
+    - Harness green, 0 violations. No new persisted field, so §7.41's rebuild trap is not in play.
