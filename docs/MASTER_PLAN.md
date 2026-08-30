@@ -1586,3 +1586,25 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - **The scoped version of that, if it is taken:** the holdings register alone — 120,000 rows,
        walked by twenty files — is ~300 ms of the 1360. It is the one data structure worth
        converting first, and it can be done behind the existing accessor.
+216. **WHAT LINE-LEVEL PROFILING FOUND, once §7.215 made it possible.** §7.772 recorded that tsx
+     flattens every function to line 1 so V8 cannot attribute inside a stage. Profiling the BUNDLE
+     lifts that, and the first look found things four rounds of section timers had missed.
+     - **The #1 and #5 self-time lines in the whole program were the same thing:** the accrual
+       ledger being rebuilt `Object.entries → Map` on the way into every week and
+       `Object.fromEntries` on the way out. **~105,000 keys, 5.25% of all CPU**, converting a
+       container into another container and back. **Nothing serialises or hashes GameState**, so
+       the object form was buying nothing — a data-shape decision that had never been checked
+       against a reader.
+     - **ETF flows was quadratic in the register:** every fund asked every entity for its holding
+       of that fund by reducing over the entity's ENTIRE book — 27 × 75 × ~1,600 = **3.2M row
+       visits a week to read a few thousand positions.**
+     - **The register carries one row per POSITION now.** A fill appends rather than merging, so
+       it fragments: 122,164 rows over 103,633 distinct `(holder, instrument)` pairs at week 15,
+       and twenty-eight sweeps a week walk the duplicates. Merging is lossless. **It has to run at
+       the week's CLOSE, not at the books' write-back** — the late stages append after the books,
+       and folding earlier left 9,734 of the 18,531 standing.
+     - **MEASURED: ~1400 ms against 1872 at the start of this work — 25%, full fidelity, macro
+       prints unchanged.** With §7.214's conserving roster the same engine runs at 205 ms.
+     - **The lesson worth keeping:** three rounds of "the profile is flat, there is nothing left"
+       were wrong, and they were wrong because the instrument could not see inside a stage. **A
+       flat profile is a statement about the profiler until the profiler can resolve lines.**
