@@ -37,7 +37,8 @@
 import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
 import {
   SECTOR_OCCUPATION_MIX,
-  MATCHING_EFFICIENCY, MATCHING_ELASTICITY, BASELINE_QUIT_RATE_WEEKLY, LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
+  MATCHING_EFFICIENCY, MATCHING_ELASTICITY, NEUTRAL_LABOR_TIGHTNESS,
+  BASELINE_QUIT_RATE_WEEKLY, LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
   HIRING_ADJUSTMENT_SPEED_MULTIPLE, LAYOFF_SPEED_MULTIPLE, DISTRESS_LAYOFF_SPEED,
   VACANCY_WITHDRAWAL_RATE_WEEKLY,
   WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL, WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL,
@@ -154,10 +155,32 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
 
     // Last week's tightness sets this week's quit rate: a worker with options uses them.
     const priorTightness = reg.laborMarketTightness ?? 1.0;
-    // A rate cannot exceed 1 — that is arithmetic. The [0.3, 2.5] band that used to bound
-    // TIGHTNESS instead was a behavioural clamp: it kept quits alive in a market with no
-    // vacancies, where nobody in fact quits.
-    const quitRateWeekly = Math.min(1, BASELINE_QUIT_RATE_WEEKLY * Math.max(0, priorTightness));
+    //
+    // HOW EASILY A JOB IS FOUND HAS ONE REPRESENTATION, AND IT IS THE MATCHING FUNCTION'S.
+    //
+    // A quit is a bet on finding another job, so the quit rate moves with the rate at which a
+    // seeker actually finds one — and this stage computes that rate two hundred lines below:
+    // `f(theta) = A x theta^MATCHING_ELASTICITY`, concave, because a vacancy takes time to fill.
+    // This was LINEAR in tightness, which is the same claim with an elasticity of 1 — that every
+    // extra vacancy finds its worker instantly — and it contradicted the matching function in its
+    // own file (rule 3). It was not normalised to the rest point either, so a neutral market quit
+    // 5% below baseline.
+    //
+    // Linear, it was also unbounded upward, and tightness is `vacancies / seekers` — a ratio whose
+    // denominator goes to zero in a fully employed market. §7.209's seed opens JPN at 0.31%
+    // unemployment and a tightness of 215, where the linear form put the WEEKLY quit rate at 1.69:
+    // clipped to 1, so every worker in the country quit in week one and firms could rehire only
+    // what a single week of matching allows. Measured: headcount 3.72M -> 0.85M and unemployment
+    // 0.31% -> 65%, with revenue FLAT — a labour market destroying itself with nothing happening
+    // in the economy at all. The concave form says 11.8% a week at that same tightness, which is a
+    // very hot market rather than a national resignation.
+    //
+    // A rate cannot exceed 1 — that is arithmetic, not a clamp. The [0.3, 2.5] band that used to
+    // bound TIGHTNESS was a behavioural clamp: it kept quits alive in a market with no vacancies,
+    // where nobody in fact quits.
+    const relativeJobFindingRate = Math.pow(
+      Math.max(0, priorTightness) / NEUTRAL_LABOR_TIGHTNESS, MATCHING_ELASTICITY);
+    const quitRateWeekly = Math.min(1, BASELINE_QUIT_RATE_WEEKLY * relativeJobFindingRate);
 
     interface Posting { comp: Company; vacancies: number; layoffs: number; quits: number }
     const postings: Posting[] = [];
