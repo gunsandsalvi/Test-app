@@ -2042,3 +2042,32 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        undersupply, and §1.20 forbids rolling back a derivation for a bad print — but it does not
        ask anyone to ship one. The measurement is the deliverable; the fix needs the padding path
        understood first.
+226. **A FUND DISTRIBUTES WHAT IT HAS — and the repo reordering that looked right and was not.**
+     Working the 60-week harness's largest violation families after §7.224.
+     - **THE LARGEST FAMILY WAS ONE MISSING BOUND.** `distributeToLps` paid recap and exit proceeds
+       to the LPs against `drawnUSD` alone, never against the sponsor's balance. MEASURED: **PEF1
+       paid 0.495B out of a 0.000B balance at week 12** and carried the same −0.50B for the next
+       forty weeks. `callCapitalUSD`, ten lines above it, already bounds a capital call by the LPs'
+       real cash — "a call that comes up short is a deal that does not close" — so this was one side
+       of an asymmetry, not a missing rule. What cannot be wired stays undistributed, which leaves
+       the commitment drawn, which is what an unpaid distribution is. **Violations 641 → 515.**
+     - **THE REPO REORDERING: A GOOD HYPOTHESIS, MEASURED, WRONG, REVERTED.** 130 over-pledge
+       violations across three banks, almost all in BILL buckets — and bills mature weekly in
+       `bill-accretion`, `sovereign-calendar` and the fiscal stage, all of which run AFTER
+       `repo-collateral-reconcile`. Reconciling before the maturities looked like reconciling
+       against last week's holdings. Moving the reconcile to the end cut the live over-pledge prints
+       at week 20 from 14 to 1 — **and the run finished at 647 violations in 69 families against
+       515 in 61.** It also opened a new family (`Bank XIVF balance-sheet identity broken`, 23x),
+       because the reconcile's margin call then lands after the settlement cutoff and the bank's
+       identity no longer closes inside the week. Reverted.
+     - **THE TRAP, AND IT IS THE ONE THIS FILE KEEPS RE-LEARNING:** the week-20 partial (14 → 1) was
+       a live print capped per week, and it said the opposite of the run. **Read the run's total, not
+       its first twenty weeks** — and when a stage moves, check what its side effects were relying
+       on being inside the week.
+     - **WHAT IS LEFT, ranked, at 515 violations in 61 families:** over-pledged repo (still open,
+       and now known NOT to be a stage-ordering defect — the pledge and the holding disagree for
+       some other reason), USA bank NIM collapsing to 0.39% against a [1%, 8%] band, index-fund
+       overdrafts (UKHYX/JPNEQX/UKEQSX, distinct from the PE one), money-fund book against its
+       $1-NAV share liability, and the unemployment band. **Every one of them is downstream of
+       §6.1's top row** — the seed's sector supply/demand mismatch — and should be re-read after it
+       closes rather than worked directly.

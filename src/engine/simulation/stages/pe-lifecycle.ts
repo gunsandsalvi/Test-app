@@ -174,7 +174,17 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
   if (!sponsor?.peFund || !(amountUSD > 0)) return;
   const totalDrawnUSD = sponsor.peFund.lpCommitments.reduce((a, c) => a + Math.max(0, c.drawnUSD), 0);
   if (!(totalDrawnUSD > 0)) return;
-  const paidUSD = Math.min(amountUSD, totalDrawnUSD);
+  // A FUND DISTRIBUTES WHAT IT HAS. `callCapitalUSD` above already bounds a call by the LPs'
+  // real cash — "a call that comes up short is a deal that does not close" — and the
+  // distribution side never got the same treatment. So a sponsor wired recap and exit proceeds
+  // against `drawnUSD` alone and went negative: MEASURED, PEF1 paid 0.495B out of a 0.000B
+  // balance at week 12 and carried the same -0.50B for the next forty weeks, the single largest
+  // violation family in the 60-week harness. This is not a clamp on a price (§1.2): it is the
+  // constraint itself, and it is one side of an asymmetry rather than a new rule. What cannot be
+  // wired stays undistributed, which leaves the commitment drawn — which is what an unpaid
+  // distribution actually is.
+  const paidUSD = Math.min(amountUSD, totalDrawnUSD, Math.max(0, sponsor.cashUSD ?? 0));
+  if (!(paidUSD > 0)) return;
   const creditByLp = new Map<string, number>();
   sponsor.peFund.lpCommitments.forEach((c) => {
     if (!(c.drawnUSD > 0)) return;
