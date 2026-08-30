@@ -414,6 +414,45 @@ cite owners by NAME (`Owner: MAC`); the name is stable, the row number is not �
 
 Work top to bottom. Never start an item whose prereqs aren't done.
 
+### WHERE THIS STANDS — 2026-08-30
+
+**The MARKETS tier is closed.** G3 (§7.185–187), REPO (§7.188), XB6 (§7.189), HF (§7.190),
+DER's first two slices (§7.191) and G5's first slice (§7.192) all landed in one pass, plus NAT
+(§7.193) and CAL's corporate half (§7.194) from the depth tier. What that pass was FOR, in one
+line each:
+
+- Every market in the model now has a **dealer with a balance sheet** — one system, per named
+  bank, capital-bounded, funded from its own reserves (G3). That was the last "residual owned by
+  nobody" pattern, and it was in five books plus FX plus the player's ticket.
+- **Secured funding, prime brokerage and swaps are contracts with two named parties** (REPO, HF,
+  DER), stored once, with the scalars derived from them. Three books, one pattern.
+- **Two prices that were formulas now clear**: the cross-currency basis, and the FX rate itself,
+  whose damper-pinning turned out to be a GEOMETRY error rather than a size one (§7.189).
+- **A default resolves** (G5), which closes the harness's last conservation violation.
+- **The seed stopped importing commodity prices** (NAT), and **interest stopped being a smooth
+  weekly trickle** (CAL).
+
+**NOTHING IN THAT PASS HAS BEEN MEASURED (rule 12).** Structural probes are clean — the per-bank
+identity holds, collateral reconciles, no book mints claims that did not exist before — but no
+market number has been read, deliberately. **The measurement run is the next thing that should
+happen**, and §5 carries what each project owes it. The four that matter most:
+
+1. **The damper count** (§6.1), against 2,549 persistently bound / 60-week worst streak. G3d and
+   XB6 both exist to move it.
+2. **The equity market's level**, which G3e's float change moves by construction.
+3. **Bank NIM and household interest income**, which G3c's deposit rate can now take to zero for
+   a liquid bank whose depositors are not leaving.
+4. **The price level**, which NAT's reseed moved by changing every energy and metal price — no
+   number measured before 2026-08-30 is a baseline for it.
+
+**What is left to BUILD, in order.** Depth tier, items 17–24 below, none started: ETF2, HC3b,
+SCALE, MNC, DYN, PROD, CRE, TAXR. Plus the named remainders inside closed rows — DER's CDS,
+options, futures and corporate hedging; G5's public default rate and PE exit by sale; CAL's
+sovereign calendar; HF's real equity short; XB3a-5's invoice currency; IND16's distribution tier;
+and DIST's one judgement call on `TIER_WAGE_MULTIPLIER`. Every one of those is an adapter or a
+slice on machinery that now exists, which is what the markets tier was for.
+
+
 | # | Tier | Project | Why here |
 |---|---|---|---|
 | — | standing | **P1 — Periodicity & units sweep** | Runs alongside anything (rule 9). |
@@ -434,7 +473,7 @@ Work top to bottom. Never start an item whose prereqs aren't done.
 | 13 | markets | **DER — derivatives and the people who hedge with them** | **TWO SLICES DONE 2026-08-30 (§7.191): IRS and the cross-currency basis.** The swap market clears par rates at 2/5/10Y off exposures the model already measures, and prints the SWAP SPREAD — the first cross-market basis, and the first test that two of its markets agree. The basis is a cleared price: hedger demand against what the desks can write, with the walk-away tolerance derived from the currency's own volatility and the mandate's own hedge ratio. **Remains: CDS (which CRD's second half needs), equity options and the implied vol that kills `\|\| 0.3`, commodity futures, and corporate/bank hedging.** Each is an adapter on machinery that now exists. |
 | 14 | markets | **G5 — default resolution: recovery as an outcome** | **FIRST SLICE DONE 2026-08-30 (§7.192) — the one it was scoped around.** A default opens an ESTATE; assets leave at the rate the markets that would buy them absorb them; proceeds waterfall by real seniority; the residual is written off the holders' books. Recovery is an OUTPUT and displaces the 0.4 prior. Both folded constants are gone — the ×12 contagion coefficient and the 0.10 recovery floor. **Remains: the public default rate (~10%/yr against the private tier's zero, isolating the cause to the public path's cash accounting), and the PE exit by SALE.** |
 | 15 | depth | **NAT — nature transmits, it does not impose** *(clamps)* | **CLOSED 2026-08-30 (§7.193).** Commodity prices follow extraction cost per tonne and units per tonne; the seed is the marginal producer's cost and the market does the rest. Weather has a season index, an exposure read off what each region actually produces, and generated place names; the two dead impact fields are deleted and the third is a YIELD cut the commodity book prices. **The reseed changes every energy and metal price and therefore every recipe cost — the measurement run must read the price level and the JPN fiscal band against it, not against anything measured before today.** |
-| 16 | depth | **CAL — payment calendars** | Coupons, loan interest and dividends on real dates instead of smooth 1/52 accruals. |
+| 16 | depth | **CAL — payment calendars** | **CORPORATE HALF DONE 2026-08-30 (§7.194).** Interest accrues to whoever holds the paper that week and the coupon date turns each holder's accrued balance into cash — a bond half-yearly, a floating loan quarterly, CP at maturity, dividends on the quarter the board already reports. **P&L stays smooth on both sides; only cash is lumpy.** **Remains: the SOVEREIGN calendar**, which needs the treasury's expense, the banks' credit and the institutions' credit moving in one pass plus a per-bucket accrual (a bank is not on the institutional register) — half of it measured worse than none. |
 | 17 | depth | **ETF2 — a real price for ETF shares** | Prereq G3. Adds: re-measure `AP_WEEKLY_CAPACITY_MULTIPLE_OF_EQUITY`, whose value contradicts its own comment by an order of magnitude. |
 | 18 | depth | **HC3b — the product-market handover** | Prereq BP1 (done). Cheaper since SEG: the pools already sell across all 36 sub-units. |
 | 19 | depth | **SCALE — universe scale-up under a wall-clock budget** | Wave 2 after IND. Owns the float half of the promoted damper defect: thin books are why prints pin. |
@@ -1549,18 +1588,24 @@ the CPI, in that order, with no field adding to GDP or inflation directly.
 
 ---
 
-### CAL — Payment calendars  *(item 16)*
+### CAL — Payment calendars  *(item 16)*  **CORPORATE HALF DONE**
 
-Coupons, loan interest and dividends accrue as smooth weekly 1/52 flows on both sides — stage 08's
-expense and `institutional-balance-sheet.ts`'s income. Real instruments pay on their own calendar:
-bonds semi-annual or quarterly, loans monthly or quarterly off the reset schedule, dividends
-quarterly on declared dates. The smooth accrual conserves dollars but erases real cash-flow
-lumpiness — quarter-end liquidity needs, coupon-date reinvestment flow, the reason CP and money
-markets breathe on a calendar at all.
+What landed is §7.194. What this section keeps is the half that did not, and its condition.
 
-Give each `DebtTranche` and loan a real payment schedule and pay on it. The S5 cash ledger is the
-natural landing place for the corporate side; WS5 and WS7 both exist now and would feel the
-lumpiness immediately.
+**The sovereign calendar needs three movers in one pass.** Government paper's coupon is read in
+three places — stage 11 debits the treasury, 02b credits the banks, `institutional-balance-sheet`
+credits the institutions — and all three are smooth 1/52 accruals. Putting any ONE of them on the
+coupon dates leaves the others disagreeing by exactly the lumpiness, which is measurable
+immediately: the `governmentInterestToUnmodeledHolders` boundary line swings on coupon weeks.
+`sovereignCouponDueShare` is written and waiting in `domain/government.ts` with that condition on
+it. It also needs a **per-bucket** accrual rather than the register one CAL built, because a BANK
+is not on the institutional register and holds sovereigns directly.
+
+**What accrued interest bought, and what it did not.** A holder that sells mid-period keeps what
+it earned, so the coupon date cannot transfer interest to a party that did not earn it. What the
+model still does NOT do is settle accrued in the TRADE PRICE — a bond here changes hands at its
+clean price and the accrued follows the register instead. The economics are the same; the
+difference would only show if a book ever quoted a dirty price, which none does.
 
 ---
 
@@ -6464,3 +6509,34 @@ that proved it, the lesson.
       not a wider floor — **the pledge follows the paper.** Collateral that no longer exists is
       called, the contract it secured shrinks, and the borrower repays what it raised against it.
       That is a margin call on collateral, and the model could not previously have one.
+
+194. **CAL — interest accrues to the holder and pays on the date; and the swap curve gets a
+     benchmark worth the name.**
+    - **A revert was started and it was the wrong move — the disagreement WAS the finding.** The
+      first attempt put the holders on the coupon dates and left the issuers on a smooth accrual,
+      the two sides drifted apart by exactly the lumpiness, and the reflex was to undo the holder
+      side. That is a cushion, not a fix (rule 2). What the drift actually said is that **the
+      accrual had nowhere to live.**
+    - **Interest is earned continuously and paid discretely, and in between it is a RECEIVABLE.**
+      Real bonds settle that in the trade price — a bond trades DIRTY, clean plus accrued. Without
+      it, paying the coupon to whoever holds on the date hands a one-week buyer a half-year of
+      interest and takes it from the holder that earned it: a transfer the auction never priced,
+      and a standing incentive to own paper across coupon dates that nothing offsets.
+    - **So it accrues to the register**: to whoever owns the paper that week, and the coupon date
+      turns each holder's accrued balance into cash — including a holder that has since sold out,
+      because it earned it. Same economics as settling accrued in the price, and no clearing
+      adapter has to know what a coupon is. The issuer pays exactly the sum of what it accrued, so
+      the two sides cannot drift. **The P&L stays smooth on both sides**, which is what an income
+      statement is for; only CASH is lumpy.
+    - **`do assets trade on accrued?` — not in the price, and now they do not need to.** The
+      accrued follows the register rather than the ticket. The difference would only show if a
+      book quoted a dirty price, which none does; it is recorded in §5-CAL so it is not forgotten.
+    - **THE SWAP CURVE GETS A BENCHMARK.** The floating leg paid `policyRate` — an ADMINISTERED
+      number, not a traded one, so the swap curve was a term structure on a rate nobody transacts
+      at. It now pays the cleared GC repo print: this model's own overnight secured rate,
+      compounded into a published index the way an overnight benchmark actually is. **That makes
+      these OIS**, and it makes the SECURED CURVE five points that all traded — overnight and
+      13-week from the repo market (REPO1/REPO3), 2/5/10Y from the swap book (DER1).
+    - **And the swap spread finally means what a swap spread means:** secured money against the
+      government's own yield at the same tenor. Two credits, two markets, one number. Against
+      `zeroRates` — the SOVEREIGN curve — it is a genuinely different thing, which is the point.
