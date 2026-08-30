@@ -39,7 +39,26 @@ export interface PrivateFirmSeed {
   productMixBySubUnit?: Record<string, number>;
 }
 
-export const PRIVATE_FIRMS_PER_REGION = 300;
+/**
+ * SCALE — THE UNIVERSE IS A RESOLUTION PARAMETER, AND IT IS A KNOB NOW.
+ *
+ * `UNIVERSE_SCALE` (env, default 1) multiplies the two counts that size the firm roster. It exists
+ * because §7.213 measured the cycle at 1,466 ms with no hot spot left to remove: the numerics are
+ * 70 ms and the rest is orchestration over the object graph, so the only remaining lever with a
+ * multiplier is HOW MUCH GRAPH there is.
+ *
+ * **This is a resolution parameter and rule 19's invariance test applies to it** — the model's
+ * answers must not depend on the roster size, and the scoreboard for that is §5-DIST-P. A run at
+ * anything but 1 is a DIFFERENT WORLD, not a faster version of the same one: different firms,
+ * different seeds consumed, no same-seed comparison with a full run. Use it to iterate; validate
+ * at 1.
+ */
+export const UNIVERSE_SCALE: number = (() => {
+  const raw = Number((typeof process !== 'undefined' ? process.env?.UNIVERSE_SCALE : undefined) ?? 1);
+  return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : 1;
+})();
+
+export const PRIVATE_FIRMS_PER_REGION = Math.max(4, Math.round(300 * UNIVERSE_SCALE));
 /**
  * Share of each pool's REVENUE attributed to the named tier (the upper tail). The tier's DEBT is
  * whatever real leverage on that revenue's EBITDA supports — deliberately NOT a share of the
@@ -65,7 +84,11 @@ export function generatePrivateFirmSeeds(
   const seeds: PrivateFirmSeed[] = [];
 
   segments.forEach((seg) => {
-    const n = Math.max(20, Math.round(PRIVATE_FIRMS_PER_REGION * (seg.annualRevenueUSD / totalRevenueUSD)));
+    // SCALE: the per-segment floor scales with the knob too — left at a flat 20 it dominated the
+    // roster (16 industries x 20 = 320 a region however small the knob was set), which is exactly
+    // why the first cycle-time curve flattened at ~830 ms and looked like an engine floor.
+    const segFloor = Math.max(2, Math.round(20 * UNIVERSE_SCALE));
+    const n = Math.max(segFloor, Math.round(PRIVATE_FIRMS_PER_REGION * (seg.annualRevenueUSD / totalRevenueUSD)));
 
     // Draw the tail: evenly spaced quantiles of a Pareto (deterministic — bootstrap generation
     // is reproducible-by-shape, and quantiles avoid a lucky/unlucky draw deciding the carve).

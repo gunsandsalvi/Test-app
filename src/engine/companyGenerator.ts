@@ -9,7 +9,7 @@ import { FirmSeedTemplate, generateFirmSeeds, generateUniqueName, generateUnique
 import { getRegionProductivityPerCapitaUSD } from './bootstrap/population';
 import { SECTOR_PPE_INTENSITY, SECTOR_PPE_USEFUL_LIFE_YEARS } from './simulation/constants';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from './equity-valuation';
-import { PrivateFirmSeed } from './bootstrap/private-firms';
+import { UNIVERSE_SCALE, PrivateFirmSeed } from './bootstrap/private-firms';
 import { determineCreditRating } from './simulation/credit';
 import { random } from './rng';
 
@@ -737,6 +737,52 @@ export function generateInitialCompanies(
       companies.push(newCompany as any);
     }
 
+    // ---- SCALE — THINNING THE ROSTER MUST NOT SHRINK THE ECONOMY. ----
+    //
+    // The padding above is a REPRESENTATION choice — its own comment says so, "breadth of the
+    // roster a player can pick from, not the region's economic scale". It was not: every clone
+    // ADDED its revenue and its jobs to the region, so the number of names was setting regional
+    // GDP and employment (rule 13 — a quantity a mechanism should produce, imposed instead).
+    // Measured at half roster: 5.2M jobs and 0.43T of output simply vanished, while the SME pool
+    // the named tier is carved OUT of stayed exactly where it was.
+    //
+    // So a thinned roster hands what it drops to the names that remain. The region's output and
+    // its payroll are identical at every resolution; only the GRANULARITY changes, which is what
+    // makes the roster size a RESOLUTION parameter (rule 19) rather than an economic input.
+    // Headcount is not scaled here because `dealProductLinesAndHeadcount` below re-derives it
+    // from revenue over productivity — conserve the revenue and the jobs follow.
+    if (UNIVERSE_SCALE < 1) {
+      const roster = companies.filter(
+        (c) => c.region === region && !c.isBankEntity && !c.institutionalRole);
+      const keepCount = Math.max(4, Math.round(roster.length * UNIVERSE_SCALE));
+      if (keepCount < roster.length) {
+        const totalRevenueUSD = roster.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+        // Every m-th name in the order they were generated: a stride, not the largest, so the
+        // size distribution the roster carries is sampled rather than truncated at the top.
+        const stride = roster.length / keepCount;
+        const kept: any[] = [];
+        const keptIds = new Set<string>();
+        for (let i = 0; i < keepCount; i++) {
+          const c = roster[Math.floor(i * stride)];
+          if (c && !keptIds.has(c.id)) { kept.push(c); keptIds.add(c.id); }
+        }
+        const droppedIds = new Set(roster.filter((c) => !keptIds.has(c.id)).map((c) => c.id));
+        for (let i = companies.length - 1; i >= 0; i--) {
+          if (droppedIds.has(companies[i].id)) companies.splice(i, 1);
+        }
+        const keptRevenueUSD = kept.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+        const lift = keptRevenueUSD > 0 ? totalRevenueUSD / keptRevenueUSD : 1;
+        kept.forEach((c) => {
+          c.annualRevenue *= lift;
+          c.baselineAnnualRevenue *= lift;
+          c.totalDebt *= lift;
+          c.cash *= lift;
+          c.marketCap *= lift;
+          c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
+          c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
+        });
+      }
+    }
   });
 
   
