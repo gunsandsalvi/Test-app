@@ -34,7 +34,7 @@
  * 03 (category demand reads the household income this stage's employment determines).
  */
 
-import { GameState, RegionId, Company, OccupationType } from '../../../types';
+import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
 import {
   SECTOR_OCCUPATION_MIX,
   MATCHING_EFFICIENCY, MATCHING_ELASTICITY, BASELINE_QUIT_RATE_WEEKLY, LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
@@ -76,6 +76,40 @@ function occupationMixFor(sector: string): Partial<Record<OccupationType, number
  * productivity growth, which is the textbook labor demand and is stable by construction. At the
  * seed the two are equal and hiring is flat — §7.4 satisfied without a reconciliation step.
  */
+/**
+ * LAB — this firm's own output price, against the price it was SEEDED at.
+ *
+ * `outputNeedHeads` below compares this week's revenue to the revenue per head the firm was
+ * BUILT with, and those are dollars from two different price levels. The growth path in
+ * `desiredEmploymentGrowthAnnual` already knew this — it subtracts inflation from nominal
+ * revenue growth — and the LEVEL path did not, so the two halves of one decision disagreed
+ * about units.
+ *
+ * What that cost: with prices falling, every firm's current-dollar revenue divided by its
+ * seed-dollar revenue per head reads BELOW its headcount, so `understaffedHeads` is zero for
+ * everybody and the hiring branch never fires — while the shedding branch, which reads real
+ * earnings against a real capital charge, fires for the 30-43% of firms below the line. One
+ * direction was nominal and one was real, and only the shedding direction could happen.
+ *
+ * The deflator is a MEASUREMENT, not an index anyone chose: each good's own cleared price
+ * against the price it was seeded at (`unitPriceUSD / baseUnitPriceUSD`), revenue-weighted
+ * across the firm's lines. A firm whose own product has halved in price is not overstaffed.
+ */
+function outputPriceVsBaseline(comp: Company, reg: Region): number {
+  let weight = 0;
+  let weighted = 0;
+  (comp.productLines ?? []).forEach((line) => {
+    const cd = reg.categoryDemand[line.subUnitId as any] as any;
+    const base = cd?.baseUnitPriceUSD;
+    const now = cd?.unitPriceUSD;
+    if (!(base > 0) || !(now > 0)) return;
+    const w = Math.max(0, line.revenueShare ?? 0);
+    weight += w;
+    weighted += w * (now / base);
+  });
+  return weight > 0 ? weighted / weight : 1;
+}
+
 function desiredEmploymentGrowthAnnual(
   history: number[] | undefined,
   currentRevenueUSD: number,
@@ -185,8 +219,11 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const baselineRevPerHeadUSD = (comp.baselineEmployeeCount ?? 0) > 0
         ? (comp.baselineAnnualRevenue || comp.annualRevenue) / comp.baselineEmployeeCount!
         : 0;
+      // Both sides of this ratio in the SAME dollars: this week's revenue deflated back to the
+      // price level the baseline was struck at (see `outputPriceVsBaseline`).
+      const realRevenueUSD = comp.annualRevenue / Math.max(0.05, outputPriceVsBaseline(comp, reg));
       const outputNeedHeads = baselineRevPerHeadUSD > 0
-        ? comp.annualRevenue / baselineRevPerHeadUSD
+        ? realRevenueUSD / baselineRevPerHeadUSD
         : current;
       const earningsHeadroomUSD = comp.ebitda - capitalChargeUSD;
       const affordableHireHeads = (earningsHeadroomUSD > 0 && annualWagePerWorkerUSD > 0)

@@ -5446,3 +5446,38 @@ that proved it, the lesson.
       seed is `C + I + G`, a final-demand identity with NO intermediate demand in it, so output
       is sized for final demand while firms need inputs too. It is taken next, out of order and
       deliberately, because it is what this red is.
+
+149. **LAB — THE HIRING BRANCH HAD NEVER FIRED. One half of the employment decision was nominal
+    and the other was real, and only the shedding half could happen.**
+    - Found by chasing §7.148's red rather than working around it. `labor-market.ts` decides
+      headcount twice: `desiredEmploymentGrowthAnnual` takes the GROWTH path and correctly
+      deflates (`nominalGrowthAnnual − inflationAnnual`), and §7.109's level path — added to give
+      the shedding rule its missing symmetric half — computes
+      `outputNeedHeads = comp.annualRevenue / (baselineAnnualRevenue / baselineEmployeeCount)`.
+      **`annualRevenue` is this week's dollars; `baselineAnnualRevenue` is the seed's.** No
+      deflator anywhere.
+    - **So with prices falling, every firm in the world reads as overstaffed** — its
+      current-dollar revenue divided by its seed-dollar revenue per head lands below its actual
+      headcount — `understaffedHeads` is zero for everybody, and the hiring branch is gated on
+      exactly that. Meanwhile the shedding branch reads REAL earnings against a REAL capital
+      charge and fires for the 26-44% of firms below the line (measured, new in the IND battery).
+      **§7.109 built the symmetric half and a unit error kept it switched off.**
+    - **The deflator is a measurement, not an index anyone chose:** each good's own cleared price
+      against the price it was seeded at (`unitPriceUSD / baseUnitPriceUSD`, a field the seed
+      already stores and never rewrites), revenue-weighted across the firm's own lines. A firm
+      whose product has halved in price is not overstaffed.
+    - **Measured: unemployment FALLS for the first five weeks for the first time** — 20.3% →
+      18.0% — instead of rising monotonically from week 1, which is what every run since EMP has
+      done. Week 10: 28.8% red → **25.7% green**, better than the pre-IND11 baseline's 27.5%.
+      The 10-week probe passes with 0 violations and §7.148's band trip is gone.
+    - **What is still open.** The curve turns at week 6 and climbs again (30.4% JPN at week 11,
+      against the old baseline's 31.5%). That is the remaining labour collapse and it is not this
+      defect: the IND battery now prints what it sheds against — **netPPE/revenue at 1.35-1.58x**
+      against a ~7.5% cost of capital is a ~10% -of-revenue capital charge on a 12-18% EBITDA
+      margin, so the distribution straddles the line and any shock pushes a third of it under.
+      **inputs/revenue at 14-20%** against a real economy's ~45-55% is CHAIN's shallow-recipe
+      finding, measured on live firms rather than at the seed. Both are §5-CHAIN's and §5-EMP's.
+    - **The lesson, and it is §7.146's again in a different coat.** A mechanism that exists but
+      cannot fire is a mechanism that is not there — and this one could not fire for a reason no
+      reading of the logic would show, because the logic was right and the UNITS were wrong.
+      Rule 9 is about periodicity; this is its sibling. **A price level is part of the number.**

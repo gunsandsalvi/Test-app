@@ -1246,6 +1246,25 @@ const indModule: HarnessModule = (() => {
     }, 0);
     out.push(`  work in progress carried across every firm: ${B(totalWipUSD)}`);
 
+    out.push('--- IND: the cost structure every firm sheds against ---');
+    // §5-EMP/§5-CHAIN's diagnosis, measured rather than restated: the labour rule sheds on
+    // `capitalCharge - ebitda`, so what matters is where the distribution of firms sits against
+    // that line, and how much of revenue is payroll rather than bought-in inputs.
+    REGIONS.forEach(r => {
+      const firms = s.companies.filter(c => c.region === r && isActiveCompany(c) && c.annualRevenue > 0 && !c.bankBalanceSheet);
+      if (firms.length === 0) return;
+      const rev = firms.reduce((a, c) => a + c.annualRevenue, 0);
+      const ebitda = firms.reduce((a, c) => a + c.ebitda, 0);
+      const inputs = firms.reduce((a, c) => a + ((c as any).lastWeekPurchasesUSD ?? 0) * 52, 0);
+      const netPpe = firms.reduce((a, c) => a + Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0)), 0);
+      const coc = Math.max(0, (s.regions[r].zeroRates?.tenor10Y ?? s.regions[r].policyRate));
+      const below = firms.filter(c => {
+        const np = Math.max(0, (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0));
+        return c.ebitda < np * (coc + (c.beta ?? 1) * 0.05);
+      }).length;
+      out.push(`  ${r}: EBITDA/rev ${pct(ebitda / rev)}  inputs/rev ${pct(inputs / rev)}  netPPE/rev ${(netPpe / rev).toFixed(2)}x  |  below cost of capital: ${below}/${firms.length} (${pct(below / firms.length)})`);
+    });
+
     out.push('--- IND11: the backlog is a stock, and it is two-sided ---');
     const contracts = [...allContracts(s).values()];
     const owed = contracts.filter(c => (c.backlogUnits ?? 0) > 0.0001);
