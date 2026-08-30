@@ -1870,6 +1870,82 @@ terms on offer. The constant dies when orders, not demand, go upstream.
 
 ---
 
+### DIST-P — How few primitives does the cross-section need?  *(governing idea, 2026-08-30, from a user question)*
+
+**The test.** A number is irreducible only if NO mechanism in the model can produce it. That leaves
+exactly three legitimate categories, and everything else must be an outcome:
+
+  1. **TECHNOLOGY** — what a process physically takes. Recipes, lead times, value density. Not
+     DIST's; they belong to the registry.
+  2. **PREFERENCE** — how an agent trades the present against the future, and its aversion to risk.
+  3. **POLICY** — tax progressivity, transfer means-testing. A real government CHOOSES these; they
+     are instruments, not facts to derive. `TIER_TAX_RATE_MULTIPLIER` and `TIER_TRANSFER_WEIGHT`
+     are therefore legitimate and are not shape parameters.
+
+**THE ANSWER: two permanent, one temporary, for the whole household cross-section.**
+
+  1. **PATIENCE** — the household's discount rate against the return on saving. This is the engine:
+     it is what makes a wealth distribution STATIONARY rather than divergent (Aiyagari's condition).
+     `WEALTH_SPENDDOWN_YEARS = 8` is one reduced form of it and a buffer target would be another;
+     they are the same number twice and should collapse.
+  2. **RISK AVERSION** — separable from patience, and needed separately: patience sets the LEVEL of
+     wealth, risk aversion sets the EXTRA held against income uncertainty. One number does it in a
+     buffer-stock reduced form, but then a confidence shock cannot raise saving — which is exactly
+     what `−0.1 x CCI` in the old aggregate formula was faking.
+  3. *(temporary)* **THE ILLIQUIDITY FRICTION** — what makes a house or a pension unspendable. A
+     primitive only while housing and pensions are not real markets with real transaction costs.
+     **HSG (item 10) retires it.**
+
+**Firms/SMEs: zero to one.** Entry scale — how big a firm is when born — and that is probably
+derivable from technology (the smallest scale at which the recipe's fixed costs are covered). The
+size distribution must be entirely output: random growth (auctions won, contracts kept, IND14's
+reliability compounding) + entry + DIST's absorbing barrier generates Pareto by Gabaix/Luttmer's
+own mechanism. **`PARETO_ALPHA = 1.16` states the answer to a process the model already runs.**
+
+**WHY IT CAN BE THIS SMALL, AND THIS PART IS ALREADY BANKED.** A standard Bewley/Aiyagari model
+MUST state the income process — persistence, variance, a transition matrix, 4-6 numbers, fitted to
+data, which rule 4 forbids outright. This model does not need one: a household is unemployed
+because a real firm laid it off, at a real vacancy, after a real matching process. **The
+idiosyncratic risk that drives the entire wealth distribution is already endogenous**, and that is
+the single largest saving available.
+
+**THREE KINDS OF NUMBER, AND CONFLATING THEM IS WHERE THE DAMAGE HAPPENS.**
+
+  - **RESOLUTION parameters** — K strata, tier count, grid size. NOT primitives; numerical choices.
+    The test is INVARIANCE: the answer must not change when they change. §5-DIST's cut-point
+    invariance test is exactly this, and it is what proves K is not secretly doing work.
+  - **SHAPE parameters** — Pareto alpha, tier shares, savings rates, an MPC ladder, an average LTV.
+    Each is a claim about THE ANSWER, and each is a place the model cannot surprise you. **§6.1's
+    mortgage finding is what that costs**: a stated mean put the whole book on the flat part of the
+    severity curve and switched the mechanism off entirely.
+  - **TRUE primitives** — the three categories above.
+
+**THE SCOREBOARD, and it is the useful part. The count of stated SHAPE parameters is a direct
+measure of how much mechanism is missing**, and each block dies exactly when its mechanism lands.
+Roughly 90 of them in the household layer today: 14 in `TIER_OCCUPATION_MIXES`, 32 in
+`TIER_BALANCE_SHEET_WEIGHTS`, 4 each in the wage/tax/transfer/residual/debt-service weights, 4 tier
+population shares, 4 savings-rate coefficients, 16 across the credit tiers, plus the spend-down
+horizon and the savings cap.
+
+| Stated block | Dies with |
+|---|---|
+| `TIER_BALANCE_SHEET_WEIGHTS` (32) | mostly dead already — opening conditions only since §7.145 |
+| tier savings rates + the 4 aggregate coefficients + λ + the 90% cap | saving as a per-tier decision (MAC, item 1) |
+| credit tier shares and rates (16) | real migration between tiers — CRD, item 9 |
+| `TIER_DEBT_SERVICE_WEIGHT` (4) | **its own comment already says "a stated primitive until HH4c gives cohorts their own balance sheets" — overdue** |
+| `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN, item 22 |
+| the average LTV, `WEALTH_SPENDDOWN_YEARS` | housing that clears — HSG, item 10 |
+| **`TIER_OCCUPATION_MIXES` (14)** | **NOTHING — no owner assigned. The largest stated block with no mechanism scheduled to kill it.** A tier's occupation mix should be an outcome of who got hired into what, over time. |
+
+Run it like §6.1's unmodeled-financial-assets line: **a count that must fall and may never rise**,
+printed by the harness, so "how bottom-up is DIST" is a number rather than an opinion.
+
+**THE CAVEAT, and it decides the ORDER.** You cannot reach two before the mechanisms land. A shape
+parameter is what STANDS IN FOR a missing mechanism, so deleting one early does not make the model
+more bottom-up — it makes it wrong. §7.158 is what that looks like when you try.
+
+---
+
 ### DYN — Entry, exit, and industry structure  *(item 22; needs IND, BP1)*
 
 **DIST derives this project's cut point if it happens first (§5-DIST).** "The named tier's cut
@@ -5713,3 +5789,35 @@ that proved it, the lesson.
       LTV 0.34 against a kink at 0.75 — **the mechanism is not merely inaccurate, it is switched
       off**, and a floor constant will be quietly standing in for it. That is the same shape as
       §7.146 and §7.149: a mechanism that binds on nothing is a mechanism that is not there.
+
+158. **TRIED AND REVERTED — saving as a per-tier buffer decision. The DIAGNOSIS is right and
+    stands; the reduced form I reached for is wrong, and the way it failed is worth keeping.**
+    - **THE DIAGNOSIS, which is not in question.** `aggregateSavingsRate` is an INPUT
+      (`0.05 + inflation gap x 0.5 − confidence x 0.1 + real-rate gap x 0.4`, four coefficients),
+      and `CohortBuildInputs` says what is done with it in its own doc comment: *"the anchor the
+      tier cross-section is normalized to, so the aggregate saving flow is unchanged by
+      construction."* The tier rates are scaled by a λ to hit that target, capped at 90% of any
+      cohort's income, and whatever the cap clips is redistributed into the remaining headroom so
+      the target holds anyway. **The cross-section cannot disagree with the aggregate**, which is
+      top-down and the opposite of what a distribution is for. Every "derived" tier number
+      downstream — §7.142's wealth MPC (`consumePropensity = 1 − tier.savingsRate`), §7.145's nine
+      tables — ultimately hangs off those four coefficients. **This is real and is still owed.**
+    - **WHAT I BUILT AND WHY IT BLEW UP.** A buffer-stock rule: `saving = (target buffer − liquid
+      assets) / WEALTH_SPENDDOWN_YEARS`, with `target buffer = 12 weeks of the cohort's own
+      income`. Measured: **GDP 0.78T → 2.1 BILLION trillion, 60 violations by week 10.**
+    - **The failure is a units-of-meaning error, not an arithmetic one, and it is the interesting
+      part.** `hs.depositsUSD + hs.mmfSharesUSD` is not a transaction buffer — it is the household
+      sector's ENTIRE liquid wealth, and it is very much larger than twelve weeks of income. So
+      every tier read as hugely ABOVE target and dissaved at an eighth of the excess per year,
+      consumption exploded, and the explosion fed itself. **A buffer rule needs the buffer and the
+      long-horizon savings stock to be DIFFERENT stocks**, and this model has exactly one liquid
+      pool. Splitting it is a real modelling decision, not a coefficient.
+    - **The general lesson, and §5-DIST-P's caveat is written from it.** A stated shape parameter
+      is what STANDS IN FOR a missing mechanism. Deleting it before the mechanism exists does not
+      make the model more bottom-up — **it makes it wrong, immediately and violently.** The
+      aggregate savings rate is standing in for a per-tier consumption decision that needs a
+      liquid/illiquid split the balance sheets do not yet carry. That split is HSG's and COH's.
+    - **Kept as `git stash@{0}`** rather than deleted, so the next attempt starts from the shape
+      and not from scratch. **What the next attempt needs FIRST:** a household balance sheet that
+      distinguishes transaction balances from accumulated savings — at which point the buffer has
+      something to be a buffer OF.
