@@ -14,6 +14,7 @@ import {
 } from '../../domain/banking';
 import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
 import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE } from '../../domain/region-macro';
+import { BufferBand, bufferMonthsOf, joinCreditTiersToBalanceSheets, delinquencyExposureOf } from '../../domain/household-credit';
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
@@ -655,6 +656,28 @@ export function evolveRegionMacro(
   const newNearPrime = Math.max(0.001, nearPrimePrev + pDown - npDown - npUp + spUp);
   const newSubprime = Math.max(0.001, subprimePrev + npDown - spUp);
 
+  // CRD x COH — THE JOIN. Credit tiers and wealth tiers are two partitions of one population, so
+  // they are put on one axis rather than mapped to each other: the BUFFER, how many months of its
+  // own spending a household could cover out of what it holds liquid (COH1's stock). Each credit
+  // tier inherits the balance sheets of the households sitting in its band of that ranking,
+  // worst file first — which is what replaces four stated arrival multipliers and a debt split by
+  // head count.
+  const creditOrder: string[] = ['SUBPRIME', 'NEAR_PRIME', 'PRIME', 'SUPER_PRIME'];
+  const shareByCreditTier: Record<string, number> = {
+    SUPER_PRIME: newSuperPrime, PRIME: newPrime, NEAR_PRIME: newNearPrime, SUBPRIME: newSubprime,
+  };
+  // The cross-section AS IT STOOD, which is what a credit file reflects — this week's wealth
+  // update has not run yet and a file does not know about it either.
+  const priorWealth = region.wealthDistribution;
+  const bufferBands: BufferBand[] = (Object.keys(priorWealth) as WealthTier[]).map((wt) => ({
+    shareOfHouseholds: Math.max(0, priorWealth[wt].shareOfHouseholds ?? 0),
+    bufferMonths: bufferMonthsOf(priorWealth[wt]),
+    debtUSD: Math.max(0, priorWealth[wt].debtUSD ?? 0),
+  }));
+  const joined = joinCreditTiersToBalanceSheets(
+    bufferBands, creditOrder.map((t) => shareByCreditTier[t] ?? 0));
+  const joinByTier = new Map(creditOrder.map((t, i) => [t, joined[i]]));
+
   const updatedTiers = region.householdState.creditTierBooks.map(tier => {
     let newShare = tier.shareOfHouseholds;
     if (tier.tier === 'SUPER_PRIME') newShare = newSuperPrime;
@@ -671,7 +694,13 @@ export function evolveRegionMacro(
     // long as the economy was slack, without bound and with no way back. Arrears CURE: a
     // borrower catches up, or the loan is written off and leaves the book. Both remove it from
     // the delinquent stock, on the same clock a file takes to clear.
-    const arrivalRate = Math.max(0, tierStress) * (tier.tier === 'SUBPRIME' ? 1.5 : tier.tier === 'NEAR_PRIME' ? 0.8 : tier.tier === 'PRIME' ? 0.3 : 0.1);
+    // CRD x COH: 1.5 / 0.8 / 0.3 / 0.1 was the shape of the answer stated in advance. A household
+    // with no buffer misses a payment when its income moves against it and one with months of
+    // cover does not, so the arrival rate is the region's own stress against the balance sheets of
+    // the households in this band. The ordering the multipliers asserted now falls out of the
+    // wealth cross-section instead of being written down beside it.
+    const arrivalRate = Math.max(0, tierStress)
+      * delinquencyExposureOf(joinByTier.get(tier.tier)?.bufferMonths ?? 0);
     const newDelinquency = Math.max(0.001,
       tier.delinquencyRatePct * (1 - CREDIT_FILE_CURE_WEEKLY * 52) + arrivalRate);
 
@@ -697,11 +726,21 @@ export function evolveRegionMacro(
   });
 
   const totalShare = updatedTiers.reduce((s, t) => s + t.shareOfHouseholds, 0);
-  const normalizedTiers = updatedTiers.map(t => ({
-    ...t,
-    shareOfHouseholds: t.shareOfHouseholds / totalShare,
-    debtBalanceUSD: (newCreditCardDebtUSD + newOtherLoanDebtUSD) * (t.shareOfHouseholds / totalShare)
-  }));
+  // CRD x COH: a tier's debt is the debt of the HOUSEHOLDS IN IT, not the region's whole book cut
+  // by head count — which had a subprime household and a super-prime one owing the same amount and
+  // made a credit squeeze bite everywhere equally. The wealth cross-section measures where the
+  // borrowing is; a band with no measured debt falls back to its head-count share, which is all
+  // the seed has before the cohorts have accumulated anything (§7.4).
+  const totalDebtShare = joined.reduce((a, j) => a + j.debtShare, 0);
+  const normalizedTiers = updatedTiers.map(t => {
+    const headShare = t.shareOfHouseholds / totalShare;
+    const debtShare = totalDebtShare > 0 ? (joinByTier.get(t.tier)?.debtShare ?? 0) / totalDebtShare : headShare;
+    return {
+      ...t,
+      shareOfHouseholds: headShare,
+      debtBalanceUSD: (newCreditCardDebtUSD + newOtherLoanDebtUSD) * debtShare,
+    };
+  });
 
   // PUB2b: the balance-sheet STANCE scalar is gone. It was a formula on unemployment and
   // inflation that fed a "monetization share" printing deposits straight into households —
