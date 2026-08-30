@@ -157,7 +157,7 @@ cross-stage dependency is visible) and runs the stages in order. Groups, not a l
 | Macro & credit | 01-macro-feedback, 02-region-macro, 02b-bank-diversification, labor-market, prime-brokerage | Contagion signals; region evolution and the administered policy rate (**no curve**); per-bank flow ledgers, the GC repo session, the deposit-vs-MMF split; the labour market; the funds' broker lines |
 | Real economy | 03-category-demand, 04-input-output, trade-settlement, goods-arrival, sourcing-intent, freight-clearing, 05-unit-bidding, 06-fx-and-trade, 07-commodities | C+I+G plus the Leontief intermediate half; input clearing; invoices due; arrivals; sourcing and freight; **THE goods auction** (five books per sub-unit, per-lot settlement, contracts, capex bids, the distribution channel); FX conversion; commodity spot |
 | Financial books | 07b corp bonds, 07c sovereigns (**the curve's only owner**), 07d loans, 07f bills+CP, securities-lending, 07e equity, 07g swaps, 07h CDS, 07i commodity futures | Each a thin adapter over the clearing engine |
-| Settle & report | repo-collateral-reconcile, holdings-writeback, institutional-marking, 08-company-fundamentals, hc-lifecycle, settlement, sme-pools, 09-concentration-risk, 10-mergers, 11-fiscal, etf-flows, fx-hedging, 12-portfolio, 13-news | Per-company week; the corporate lifecycle; **the settlement layer (two cycles: intraday and close)**; the SME pools' week; trade concentration; M&A; measured GDP and CPI, government issuance; ETF flows and the share book; FX hedging incl. corporates; marks and the turn summary |
+| Settle & report | repo-collateral-reconcile, holdings-writeback, institutional-marking, 08-company-fundamentals, hc-lifecycle, settlement, sme-pools, 09-concentration-risk, 10-mergers, sovereign-calendar, 11-fiscal, etf-flows, fx-hedging, 12-portfolio, 13-news | Per-company week; the corporate lifecycle; **the settlement layer (two cycles: intraday and close)**; the SME pools' week; trade concentration; M&A; **the sovereign coupon calendar (§7.208 — one party-keyed ledger, the single writer of the receivable on both books)**; measured GDP and CPI, government issuance; ETF flows and the share book; FX hedging incl. corporates; marks and the turn summary |
 
 **`stages/financial-clearing-engine.ts`** — the generic cap-free double auction. Each participant
 posts a real demand schedule; the solve is an exact piecewise-linear segment walk with **saturation
@@ -223,11 +223,6 @@ The SME tier as one pool per (region × industry) with a real cross-section. One
 Default resolution with recovery as an outcome.
 
 **Still formula-driven**, each with a §4 owner:
-- **The wage LEVEL** — `LABOR_SHARE_OF_OUTPUT` sets every occupation's base wage, weekly, at eight
-  call sites (COH3).
-- **The household bid premium** — a frozen constant times three chosen elasticities, in the stage
-  that sets every consumer price (COH4).
-- **`TIER_WAGE_MULTIPLIER`** — 32.5x stated against ~2.5x the mechanisms produce (DIST).
 - **The fiscal-stance step function**, which needs a government that reads its own budget (MAC).
 - **A profile's stated cost shape** — the insurer's and the card book's remaining ratios (IND-R4).
 - **The corporate tax BASE** — a rate on EBIT less interest, with no depreciation shield, no loss
@@ -262,17 +257,8 @@ a clamp cannot be deleted before the mechanism under it exists.
 
 ### Named remainders inside closed rows
 
-- **CAL — the sovereign calendar.** Needs the treasury's expense, the banks' credit and the
-  institutions' credit moving in one pass, plus a PER-BUCKET accrual (a bank is not on the
-  institutional register). **Half of it measured is worse than none**, so it lands whole.
-- **COH3 — the wage LEVEL.** `LABOR_SHARE_OF_OUTPUT = 0.62`, read weekly by eight call sites.
-  Derivation in §6.1.
-- **COH4 — the household bid premium.** Two derivations, both from measured cohort quantities,
-  differing by two orders of magnitude. §6.1 carries both and the reason.
 - **COH — the last slice of `INSTITUTIONAL_OPENING_BOOK_SHARE` (`equity: 0.42`)**, which needs an
   asset manager anchored on the households' own fund holdings.
-- **DIST — `TIER_WAGE_MULTIPLIER`.** One judgement, not a mechanism: whether to derive it from the
-  ~2.5x the model now produces against the 32.5x it states (§7.172-174).
 - **IND-R4** — the profiles' two remaining stated cost ratios.
 - **IND7** — the divestiture, which must MINT a holder register; extend the ownership machinery
   first or it undoes OWN7 (§7.138).
@@ -281,7 +267,7 @@ a clamp cannot be deleted before the mechanism under it exists.
 
 ### THE MEASUREMENT DEBT — owed before anything is judged
 
-**Nothing has been measured since §7.199.** Records 200–207 are all UNMEASURED, and two of them
+**Nothing has been measured since §7.199.** Records 200–208 are all UNMEASURED, and two of them
 relabel the world: NAT's reseed changed every energy and metal price (§7.193), and HC3b removed an
 RNG draw per operating firm per week (§7.207), so **no same-seed comparison across that commit is
 valid and no number measured before 2026-08-30 is a baseline.**
@@ -300,10 +286,16 @@ Read in this order:
 6. **Bank NIM and household interest income**, which G3c's deposit rate can take to zero for a
    liquid bank whose depositors are not leaving.
 7. **The price level and the JPN fiscal band**, against NAT's reseed and nothing earlier.
-8. **§5-DER's verify list** — the swap spread and CDS-cash basis in calm weeks and under stress,
+8. **The four §7.208 derivations, each against the number it replaced.** The wage level (0.62 →
+   ~0.79, so household income and every payroll move together), the tier wage multiplier (32.5x →
+   ~2.5x, which moves top-tier income from wages toward capital and should show in the cohorts'
+   income split), the household demand ladder (a step at a 0.019 premium → a six-rung schedule, in
+   the stage that sets every consumer price), and CAL's calendar (the sovereign coupon is lumpy in
+   cash now, so bank reserves and the TGA both swing on the coupon weeks while NIM does not).
+9. **§5-DER's verify list** — the swap spread and CDS-cash basis in calm weeks and under stress,
    contango when inventories are high and backwardation when scarce, expiry convergence, and
    hedged firms feeling less P&L from the shocks they hedged.
-9. **The new books' first prints:** whether any stock borrow clears at all, the borrow-fee
+10. **The new books' first prints:** whether any stock borrow clears at all, the borrow-fee
    distribution, whether a recall cascade squeezes or oscillates; whether the ETF premium sits at
    zero in calm weeks; whether the channel margin is a sensible fraction of a shelf price (**it is
    unbounded above by construction** — a long-lead, high-carry good could carry a large one, and
@@ -458,7 +450,9 @@ moves presentation state to the UI layer.
 PATIENCE (what makes a wealth distribution stationary rather than divergent) and RISK AVERSION
 (the precautionary motive a confidence shock works through) — plus one temporary illiquidity
 friction. Firms need **zero to one**. Against ~90 stated numbers at the 2026-08-30 count; **the
-count stands at ~42 and may never rise.**
+count stands at ~41 and may never rise.** §7.208 retired `TIER_WAGE_MULTIPLIER`,
+`LABOR_SHARE_OF_OUTPUT` and the four bid-premium numbers, and added the demand ladder's rung count
+— a RESOLUTION parameter, which §1.19 does not count.
 
 **It can be this small because this model generates its own idiosyncratic income risk.** A standard
 Bewley/Aiyagari model must STATE the income process, fitted to data, which rule 4 forbids outright.
@@ -467,11 +461,9 @@ largest single saving available and it is already banked.**
 
 | Stated block still open | Dies with |
 |---|---|
-| **`TIER_OCCUPATION_MIXES` (14) + `TIER_WAGE_MULTIPLIER` (4)** | **Both mechanisms now EXIST (§7.173-174): ~2.5x combined, from 1.01x.** What remains is a JUDGEMENT, not a blocker: 32.5x WITHIN an occupation is not a plausible wage fact — it is the whole income concentration crammed into a wage multiplier, while capital income (37.6% of the top tier) is measured separately. Deriving would be MORE correct and would move top-tier income from wages toward capital. **Own slice, with a before/after.** |
+| `TIER_OCCUPATION_MIXES` (14) | the occupation mix as an outcome of who the firms actually hire — DIST's remaining half. `TIER_WAGE_MULTIPLIER` went in §7.208. |
 | `PARETO_ALPHA`, `NAMED_TIER_REVENUE_SHARE` | real entry and exit — DYN |
 | `WEALTH_SPENDDOWN_YEARS` | the illiquidity friction, retired when housing wealth is fully spendable |
-| `LABOR_SHARE_OF_OUTPUT` | COH3's wage level — the derivation is in §6.1 |
-| `HOUSEHOLD_BID_BASE_PREMIUM` + `HOUSEHOLD_BID_PREMIUM_BY_TIER` (3) | COH4's bid premium — both derivations are in §6.1 |
 
 ---
 ## 6. Defects and watchlist
@@ -483,8 +475,6 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 
 | Defect | State and next action |
 |---|---|
-| **THE WAGE LEVEL IS A STATED LABOUR SHARE — COH3's remainder** | `getBaseAnnualWageUSD` sets every occupation's base wage as `productivity × LABOR_SHARE_OF_OUTPUT`, stated at 0.62 and read EVERY WEEK by eight call sites — the anchor under household income, the labour market, every payroll and the freight market's crew cost. **The derivation:** value added splits into labour compensation and gross operating surplus, and the surplus must cover depreciation plus the return the capital's owners require, so `labourShare = 1 − (depreciation + cost of capital) × (capital / value added)`, with the capital-output ratio from `SECTOR_PPE_INTENSITY` over `(1 − recipe intensity)` and the cost of capital from the policy rate plus `EQUITY_RISK_PREMIUM`. **Every input already exists.** Hand-checked it lands in 0.64–0.88 across plausible capital intensities, which brackets the 0.62 it replaces. It needs `getBaseAnnualWageUSD` to take a cost of capital it cannot currently see. Owner: COH3. |
-| **THE HOUSEHOLD BID PREMIUM — COH4's remainder, with BOTH derivations** | `HOUSEHOLD_BID_BASE_PREMIUM = tanh(0.05) × 0.15` (a frozen constant wearing arithmetic) times `{2.5, 1.0, 0.35}` (chosen elasticities) sets what a household pays ABOVE the going price in stage 05 — every consumer category, every week. The price TIER is a real registry property and stays; the numbers are the defect. **(a) The budget-redirection bound:** a household defending a staple can move its whole discretionary pot onto that line, so the reservation is where staple spend equals the entire budget — `(1 − stapleSpendShare) / stapleSpendShare`, ~1.9 at a 0.35 staple share, and budget-consistent by construction. **(b) The marginal reservation:** the bid is one step for the whole quantity, so its max price is the reservation for the MARGINAL unit, which a household equalising value across categories prices near the going price — small, and larger the tighter its commitments, e.g. `stapleSpendShare`, ~0.35. **Both are derived; they differ by 100x, and the number they replace is 0.019.** The step-bid shape is what makes them differ: a single `(units, maxPrice)` pair cannot express a demand curve, so whichever number goes in stands in for a schedule. **The right fix is probably neither: a household bid that is a BUDGET rather than a quantity at a ceiling** (rule 15's shape). Owner: COH4. |
 | **THE CAPITAL-GOODS SECTOR CANNOT SUPPLY THE ECONOMY'S CAPEX** | Firms bid their real capex and the basket weights sum to 1, so the bids ARE the capex figure: **~163B/yr of bids against ~13B/yr of deliveries, an 8% fill** (§7.167), four of five categories short at 65–174% over base (§7.168). §7.178 made the demand LEVEL honest (gap 1.55x → 1.29x) and §7.199 closed the seed's investment fixed point. **Both are UNMEASURED and this is measurement item 1.** It is the accumulated cost behind the ~29% unemployment that has been blocking unrelated work (§7.179). |
 | **THE BOOKS PRINT THEIR DAMPERS** | The engine states its own failure condition: a name clamped for weeks means the posted schedules disagree with the printed level and **the print is the damper, not the market.** Last measured **947 persistently bound** (890 before the OWN7 sweep, peaking at 1042 before the desk-position fix). §7.197 records the rise as the honest shape of deleting the residual dealer: **the pressure was always there.** **Do not widen the damper.** The well-posed question is: who buys when the holders as a group want less than they hold? Owners: SCALE (the float half), and the measurement run. |
 | **A SHOCK TEST STOPPED MOVING ITS PRICE** | `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an identical control world — no longer moves the name's price. Same signature as the sovereign-auction shock test: demand so far below the enlarged float that both A/B worlds pin at the damper. Re-measure after G3e's float change. |
@@ -1270,3 +1260,75 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - A sale is a buyer and a seller: revenue is `salesUSD`, annualised at the same measurement weight a pool's receipts use, which now has one owner.
      - Gone with it: `SECTOR_PRICING_POWER`, the company-level demand-shock lag buffer, and the commodity-price growth adjustment (**a producer's revenue rises with its commodity's price because it SELLS units at that price**). **The 50% default haircut is deleted too, and that one is a claim:** a defaulted firm's revenue should fall because its customers stop buying, and if nothing in the auction makes them, that is a finding for the estate work.
      - **DECLARED RELABEL:** the formula's `random()` is gone, so the stream shifts and same-seed worlds will not match anything measured before this commit.
+208. **The four deferred items, and the rule that answered each one.** Each had been carried as a
+     JUDGEMENT rather than a blocker. In every case the judgement had already been made — in §1,
+     before the item existed — and what was left was to notice which rule it was.
+     - **`TIER_WAGE_MULTIPLIER` — rule 19's caveat, now satisfied.** A shape parameter must not be
+       deleted before its mechanism exists; §7.173's rent-sharing and §7.174's experience premium
+       built it, and §7.174 already recorded that deriving "would be MORE correct" because **32.5x
+       WITHIN one occupation is not a plausible wage fact** — it was the whole income concentration
+       crammed into a wage multiplier while capital income was measured separately beside it. The
+       tier multiplier is now the band means of the JOINT distribution of `(1 + return to
+       experience × tenure) × firm premium`, over the tenure strata crossed with the real
+       cross-section of firm wage indexes. The constant survives as a SEED for the opening
+       condition and nothing else.
+     - **And the band operation has ONE owner (rule 3).** Credit tiers on the buffer axis and
+       wealth tiers on the wage-premium axis are the same operation — two partitions of one
+       population, joined by ranking one and cutting it at the other's shares. `PopulationNode` +
+       `bandMeansOverDistribution` in `domain/household-credit.ts`; both callers read it.
+     - **The wage LEVEL — rule 19, plainly.** The derivation existed in §6.1 and every input
+       existed: value added splits into labour compensation and gross operating surplus, and the
+       surplus must cover depreciation plus the return the capital's owners require, so
+       `labourShare = 1 − (1/life + cost of capital) × (capital / value added)` per sub-unit,
+       averaged over the registry. Probed at 0.76–0.81 against the 0.62 it replaces — inside the
+       0.64–0.88 band §6.1 predicted, which is the derivation checking itself.
+       - **The cost of capital in it is STRUCTURAL, not the policy rate** (rule 3): the cyclical
+         movement in wages is the labour market's own `wageIndex`, and putting the cycle in twice
+         would be two representations of one thing. `national-accounts.ts` uses the same
+         derivation at a reference rate, so `HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR` is no longer
+         defined against 0.62 while wages are set near 0.79.
+     - **The household bid premium — rule 15, and the two derivations were both right.** They
+       differed by 100x because **the defect was the SHAPE, not the numbers**: a household bid was
+       one step — a quantity at a ceiling — and a step cannot express a demand curve, so one
+       derivation was the reservation for the FIRST unit and the other for the MARGINAL one, and a
+       step has only one slot for them. So the household posts a SCHEDULE, like every other
+       participant in this model, and the premium disappears rather than being chosen.
+       - **What is left to state is only how far the ladder REACHES, and the budget answers that:**
+         a household can move discretionary spending onto a line it cannot defer and cannot move
+         anything onto one it can, so a tier's ceiling is the reciprocal of the budget share
+         committed at or below it — all measured, weekly, by the cohorts.
+       - **The rungs are cut on the QUANTITY axis, not the price axis.** Equal quantity steps each
+         priced `budget / quantity` make the staircase EXACT at every step rather than conservative
+         between two prices: probed at K = 3/6/24 rungs it returns 10.00 units at a clearing price
+         of 100 every time. A rung count is a RESOLUTION parameter (rule 19) and the answer must
+         not depend on it — here it demonstrably does not.
+     - **CAL — rule 12: build the WHOLE thing before measuring.** "Half of it measured is worse
+       than none" is the deferral this rule exists to refuse. The whole thing is one party-keyed
+       ledger, and it is the single writer of the receivable on both books, so the holder's claim
+       and the treasury's payable are one number seen from two sides.
+       - **The banks were the whole difficulty, and they are why the key is a PARTY.** A bank holds
+         government paper on its own balance sheet, per tenor bucket, and is not on the
+         institutional register at all — so an accrual keyed by holder id cannot reach it.
+       - **A bank is paid as `BANK_SECURITIES`, not `BANK`.** Nothing is earned on the coupon date:
+         the equity leg was posted the week the interest was EARNED, and the payment turns one of
+         the bank's assets into another. Paying it as income would credit equity twice — §7.62's
+         trap, in a new place, and the reason the reserve leg in the central-bank stage is now the
+         settlement pass's alone.
+       - **The treasury's expense stays smooth and its ACCOUNT moves on the dates**, and the
+         difference between them is exactly the change in what it owes and has not paid. So the TGA
+         is corrected by that change rather than by a second copy of the interest bill.
+       - **Three holders are deliberately OFF the calendar, each for a stated reason.** A discount
+         bill pays no coupon at all — its return is accretion, settled in the redemption leg, which
+         is also why the corporate treasuries are absent. The central bank's coupon and its
+         remittance are one week's round trip between the TGA and its own liability, so a date
+         moves a number out of one side of its sheet and back. And the holders this model cannot
+         name keep the boundary line that already says they are paid smoothly.
+       - **Two dead paths went with it.** The register's `GOV_BOND` accrual hook was written in
+         anticipation and nothing ever fed it — it could not have served this case, because the
+         bank leg is the entire difficulty. And the institutional income pass still carried the
+         memoised corporate-coupon helpers whose loop body had been reduced to `void`.
+     - **The master file itself, under rule 11.** 7,247 lines to 1,272, at no cost in substance:
+       §5 was carrying full designs for nineteen CLOSED projects, against the file's own rule that
+       a closed item's section is deleted; §4's preamble still described a work order that had been
+       overtaken; §2 and §3 described a model that no longer exists. **§7 keeps all 208 records and
+       every number in them** — records are never renumbered and never dropped.
