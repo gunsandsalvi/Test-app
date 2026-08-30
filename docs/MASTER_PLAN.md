@@ -5481,3 +5481,30 @@ that proved it, the lesson.
       cannot fire is a mechanism that is not there — and this one could not fire for a reason no
       reading of the logic would show, because the logic was right and the UNITS were wrong.
       Rule 9 is about periodicity; this is its sibling. **A price level is part of the number.**
+
+150. **IND12 — domestic trade credit: the machinery was already built and gated to cross-border
+    by ONE LINE.** `if (!seller || origin === plan.regionId) return;` in stage 05. Everything
+    XB3a-5 built — terms set from the buyer's own default probability against the seller's own
+    margin (no net-30/60/90 table anywhere), a receivable on one book and a payable on the other,
+    cash deferred until due, a WRITE-OFF when either counterparty dies — applied only to sales
+    that crossed a border, which is the minority of trade. Trade credit outstanding exceeds bank
+    credit in reality and almost all of it is domestic.
+    - **The one real difference is the invoice currency, and for a domestic pair there is no
+      choice to make**: both sides are already in that money, so there is no exposure to place
+      and nothing for `chooseInvoiceRegion` to weigh. That is the whole of the change.
+    - **Measured, and all three of §5-IND12's checks pass.** 217,030 invoices outstanding,
+      $15.3B, of which **65% domestic**. **Receivables $15.3B = payables $15.3B exactly** — every
+      invoice is two-sided by construction (rule 14). Mean terms 7.5 weeks, set per pair by real
+      credit rather than stated.
+    - **The third check EMERGED rather than being built.** Receivables per week of sales rise
+      monotonically with production lead: **0.60 weeks at lead 0, 0.83 at 1-5 weeks, 0.96 at 6+**.
+      Nothing was tuned for this — the lead times were set for IND10 with no thought to working
+      capital, and the terms come from credit quality, not from cycle length. A long-cycle firm
+      carries more working capital because its customers are the kind of firms they are.
+    - **A customer default already propagates to named suppliers**: `trade-settlement.ts` writes
+      the invoice off when either side is inactive, and that write-off is now mostly domestic —
+      which is what makes it a cascade channel rather than an export anecdote.
+    - **Still on immediate cash: contract deliveries.** A contract delivery pays through `pay()`
+      the week it ships while an auction lot goes on terms — two treatments of one B2B sale
+      (rule 3). Logged, not built: it belongs with whatever revisits contract settlement.
+    - Deflation −16.22% → −14.39% at week 10, USA unemployment 25.7% → 24.1%, harness green.

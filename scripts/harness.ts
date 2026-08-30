@@ -1265,6 +1265,45 @@ const indModule: HarnessModule = (() => {
       out.push(`  ${r}: EBITDA/rev ${pct(ebitda / rev)}  inputs/rev ${pct(inputs / rev)}  netPPE/rev ${(netPpe / rev).toFixed(2)}x  |  below cost of capital: ${below}/${firms.length} (${pct(below / firms.length)})`);
     });
 
+    out.push('--- IND12: trade credit, and who carries it ---');
+    const invoices = ((s as any).tradeInvoices ?? []) as any[];
+    const byTicker = new Map(s.companies.map(c => [c.ticker, c]));
+    let domesticUSD = 0, crossUSD = 0, termSum = 0;
+    const receivableByTicker = new Map<string, number>();
+    const payableByTicker = new Map<string, number>();
+    invoices.forEach(iv => {
+      const usd = iv.amountCurrency * iv.bookedUsdPerCurrency;
+      if (iv.sellerRegion === iv.buyerRegion) domesticUSD += usd; else crossUSD += usd;
+      termSum += iv.weekDue - iv.weekBooked;
+      receivableByTicker.set(iv.sellerTicker, (receivableByTicker.get(iv.sellerTicker) ?? 0) + usd);
+      payableByTicker.set(iv.buyerTicker, (payableByTicker.get(iv.buyerTicker) ?? 0) + usd);
+    });
+    const totalUSD = domesticUSD + crossUSD;
+    const receivables = [...receivableByTicker.values()].reduce((a, x) => a + x, 0);
+    const payables = [...payableByTicker.values()].reduce((a, x) => a + x, 0);
+    out.push(`  ${invoices.length} invoices outstanding, ${B(totalUSD)} — domestic ${B(domesticUSD)} (${pct(totalUSD ? domesticUSD / totalUSD : 0)}), cross-border ${B(crossUSD)}`);
+    out.push(`  receivables ${B(receivables)} vs payables ${B(payables)} [must be equal: every invoice is two-sided]`);
+    out.push(`  mean terms ${(invoices.length ? termSum / invoices.length : 0).toFixed(1)} weeks`);
+    // The design's third check: a long-cycle firm ties up more working capital, so it should
+    // carry visibly more trade credit against its own sales.
+    const leadOf = (c: any) => {
+      const lines = c.productLines ?? [];
+      const w = lines.reduce((a: number, l: any) => a + (l.revenueShare ?? 0), 0);
+      return w > 0 ? lines.reduce((a: number, l: any) => a + (l.revenueShare ?? 0) * productionLeadWeeksOf(l.subUnitId), 0) / w : 0;
+    };
+    const buckets: { label: string; test: (n: number) => boolean }[] = [
+      { label: 'lead 0wk   ', test: n => n < 0.5 },
+      { label: 'lead 1-5wk ', test: n => n >= 0.5 && n < 6 },
+      { label: 'lead 6+wk  ', test: n => n >= 6 },
+    ];
+    buckets.forEach(b => {
+      const firms = s.companies.filter(c => isActiveCompany(c) && c.annualRevenue > 0 && b.test(leadOf(c)));
+      if (firms.length === 0) return;
+      const rev = firms.reduce((a, c) => a + c.annualRevenue, 0) / 52;
+      const rec = firms.reduce((a, c) => a + (receivableByTicker.get(c.ticker) ?? 0), 0);
+      out.push(`  ${b.label}: ${String(firms.length).padStart(4)} firms, receivables ${(rev > 0 ? rec / rev : 0).toFixed(2)} weeks of sales`);
+    });
+
     out.push('--- IND11: the backlog is a stock, and it is two-sided ---');
     const contracts = [...allContracts(s).values()];
     const owed = contracts.filter(c => (c.backlogUnits ?? 0) > 0.0001);

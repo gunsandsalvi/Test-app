@@ -1356,20 +1356,39 @@ function runSubUnitMarkets(
         // and the cash follows when it falls due. A lot whose buyer is a household or government
         // aggregate has no cash leg here to defer, so deferring one would invent an exposure.
         const seller = lookup.byTicker.get(l.sellerKey);
-        if (!seller || origin === plan.regionId) return;
-        let invRow = invoiceRegionCache.get(origin);
-        if (!invRow) { invRow = new Map(); invoiceRegionCache.set(origin, invRow); }
-        let invoiceRegion = invRow.get(plan.regionId);
-        if (invoiceRegion === undefined) {
-          invoiceRegion = chooseInvoiceRegion({
-            sellerRegion: origin,
-            buyerRegion: plan.regionId,
-            candidates: MARKET_REGION_IDS,
-            illiquidity: sourcing.fxPairIlliquidity,
-            quotedPairs: sourcing.quotedPairs,
-            sellerIsShort: sourcing.sellerIsShort(subUnitId, origin),
-          });
-          invRow.set(plan.regionId, invoiceRegion);
+        if (!seller) return;
+        // IND12 — DOMESTIC TRADE CREDIT. The whole machinery below — terms set by the buyer's own
+        // credit, a receivable on one book and a payable on the other, cash that follows when it
+        // falls due, and a write-off when a counterparty dies — was built for XB3a-5 and then
+        // gated to CROSS-BORDER sales by this one line. Trade credit outstanding exceeds bank
+        // credit in reality, and almost all of it is domestic: a B2B sale at home is on terms for
+        // exactly the same reason a B2B sale abroad is, and it is the channel through which one
+        // customer's default reaches its suppliers' books.
+        //
+        // A domestic pair invoices in its OWN currency, which is not a choice to be made: both
+        // sides are in that money already, so there is no exposure to place and nothing for
+        // `chooseInvoiceRegion` to weigh. That is the ONE difference between the two cases.
+        const isDomestic = origin === plan.regionId;
+        let invoiceRegion: RegionId;
+        if (isDomestic) {
+          invoiceRegion = plan.regionId;
+        } else {
+          let invRow = invoiceRegionCache.get(origin);
+          if (!invRow) { invRow = new Map(); invoiceRegionCache.set(origin, invRow); }
+          const cached = invRow.get(plan.regionId);
+          if (cached === undefined) {
+            invoiceRegion = chooseInvoiceRegion({
+              sellerRegion: origin,
+              buyerRegion: plan.regionId,
+              candidates: MARKET_REGION_IDS,
+              illiquidity: sourcing.fxPairIlliquidity,
+              quotedPairs: sourcing.quotedPairs,
+              sellerIsShort: sourcing.sellerIsShort(subUnitId, origin),
+            });
+            invRow.set(plan.regionId, invoiceRegion);
+          } else {
+            invoiceRegion = cached;
+          }
         }
         const currency = invoiceCurrencyOf(invoiceRegion);
         const usdPerCurrency = sourcing.fxToUsd(invoiceRegion);

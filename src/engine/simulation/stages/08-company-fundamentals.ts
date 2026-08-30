@@ -852,9 +852,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // recognised in full at delivery above; the cash is backed out here and posted when the
       // invoice falls due, at whatever the invoice currency is then worth. The gap between the
       // two is the transaction FX exposure, and it lands as real cash rather than a statistic.
-      post('cross-border sales invoiced, not yet collected', -(update?.tradeReceivableBookedUSD ?? 0));
+      post('sales invoiced, not yet collected', -(update?.tradeReceivableBookedUSD ?? 0));
       post('cross-border invoices collected', update?.tradeReceivableCollectedUSD ?? 0);
-      post('cross-border purchases invoiced, not yet paid', update?.tradePayableBookedUSD ?? 0);
+      post('purchases invoiced, not yet paid', update?.tradePayableBookedUSD ?? 0);
       post('cross-border invoices paid', -(update?.tradePayableSettledUSD ?? 0));
       // Revenue recognized beyond what cleared in the auction still collects — customers in the
       // parts of the business the modeled markets do not cover yet.
