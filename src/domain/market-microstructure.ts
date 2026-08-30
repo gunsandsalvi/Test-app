@@ -46,6 +46,14 @@ export interface SupplyContract {
    * Absent = a fixed-price contract, which assigns it to the seller.
    */
   escalationBaseUSD?: number;
+  /**
+   * IND17 — WHAT THE CUSTOMER HAS PAID AHEAD. A long-cycle order is funded as the work is done,
+   * not on handover: the buyer's money pays for the steel before the ship exists. It is the
+   * seller's LIABILITY (goods owed, not revenue) and the buyer's ASSET, one number on the
+   * bilateral object because it is one obligation — negative working capital, and a real
+   * funding source for exactly the firms whose production ties up the most cash.
+   */
+  prepaidUSD?: number;
 }
 
 export interface CategoryDemandState {

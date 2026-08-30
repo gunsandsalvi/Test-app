@@ -88,6 +88,18 @@ const CONTRACT_INDEXATION_MIN_WEEKS = 52;
  */
 const SUPPLIER_MIN_SOURCING_WEIGHT = 0.05;
 
+/**
+ * IND17 — the share of work in progress that the CUSTOMER funds.
+ *
+ * A contract term, in the same family as the cure period above: long-cycle supply agreements are
+ * paid on progress because no supplier will carry a year of someone else's build on its own
+ * balance sheet, and no buyer will hand over the whole price before anything exists. Which side
+ * funds how much is negotiated, and 30% is the middle of it. A good made on demand has no work
+ * in progress to fund, so it carries no deposit at all — the lead does that filtering, not a
+ * category list.
+ */
+const PROGRESS_PAYMENT_SHARE = 0.30;
+
 // 1$ is 1$ Phase 2: this company's real weekly need for inputSubUnitId, from the same literal
 // recipe (CATEGORY_INPUT_REQUIREMENTS) that 08-company-fundamentals.ts uses to draw down input
 // inventory — bidding to this real, recipe-derived need (instead of a generic revenue-share
@@ -556,6 +568,26 @@ function settleContracts(
     availableBySupplier.set(supplier.ticker, supplierUnits - actualTransacted);
     contract.backlogUnits = Math.max(0, owedAfterCancellationUnits - actualTransacted);
     const paymentUSD = actualTransacted * contract.priceUSD;
+
+    // IND17 — PROGRESS PAYMENTS. What the customer has already paid ahead settles this delivery
+    // first; only the balance moves as cash. The deposit then tracks the work still in the
+    // pipeline: `lead x weekly value x share`, topped back up each week, which is what a
+    // progress-payment schedule IS. A firm building for a year collects most of the price
+    // before it hands anything over, and that is the funding its working capital runs on.
+    const targetDepositUSD = productionLeadWeeksOf(subUnitId)
+      * contract.quantityUnitsPerWeek * contract.priceUSD * PROGRESS_PAYMENT_SHARE;
+    const appliedFromDepositUSD = Math.min(contract.prepaidUSD ?? 0, paymentUSD);
+    contract.prepaidUSD = (contract.prepaidUSD ?? 0) - appliedFromDepositUSD;
+    const topUpUSD = Math.max(0, targetDepositUSD - contract.prepaidUSD);
+    contract.prepaidUSD += topUpUSD;
+    if (topUpUSD > 0.01) {
+      pay(ctx, {
+        payer: { kind: 'COMPANY', ticker: customer.ticker },
+        payee: { kind: 'COMPANY', ticker: supplier.ticker },
+        amountUSD: topUpUSD,
+        reason: 'contract progress payment',
+      });
+    }
     // The fill rate is measured against THIS WEEK's obligation: shipping down a backlog is
     // catching up, not over-performing, so it cannot read above 1.
     const fillRate = contract.quantityUnitsPerWeek > 0
@@ -595,7 +627,9 @@ function settleContracts(
     pay(ctx, {
       payer: { kind: 'COMPANY', ticker: customer.ticker },
       payee: { kind: 'COMPANY', ticker: supplier.ticker },
-      amountUSD: paymentUSD,
+      // IND17 — net of what was already paid ahead. Charging the full price again would collect
+      // for the same goods twice.
+      amountUSD: paymentUSD - appliedFromDepositUSD,
       reason: 'contract delivery',
     });
     addInputInventory(custUp, customer, subUnitId, supplier.ticker, actualTransacted, paymentUSD, nextWeek);

@@ -5574,3 +5574,22 @@ that proved it, the lesson.
       every cash leg that was balancing it**, and the comment explaining the dependency is where
       to look.
     - Deflation −15.72% → −9.71% at week 10, harness green.
+
+154. **IND17 — prepayments: negative working capital, and IND10 is what decides who gets it.**
+    A long-cycle order is funded as the work is done, not on handover — the buyer's money pays
+    for the steel before the ship exists.
+    - `SupplyContract.prepaidUSD` is one number on the bilateral object because it is one
+      obligation: the seller's liability (goods owed, not revenue) and the buyer's asset. Each
+      week's delivery settles against the deposit FIRST and only the balance moves as cash — the
+      full price again would collect for the same goods twice — and the deposit is then topped
+      back up to `lead x weekly value x 30%`, which is what a progress-payment schedule IS: it
+      tracks the work still in the pipeline.
+    - **The 30% is a contract term, not a dial**, in the same family as IND11's cure period: no
+      supplier carries a year of someone else's build on its own balance sheet and no buyer hands
+      over the whole price before anything exists, and which side funds how much is negotiated.
+      **There is no category list anywhere** — a good made on demand has no work in progress to
+      fund, so `productionLeadWeeks` does the filtering, and the zero falls out.
+    - **Measured, and it lands exactly where it should:** $4.4B of customer deposits across 1,637
+      suppliers — **0.00 weeks of sales at lead 0, 0.11 at leads 1-5, 1.06 at leads 6+**. The
+      negative working capital accrues to precisely the firms whose production ties up the cash,
+      and to nobody else. Harness green.

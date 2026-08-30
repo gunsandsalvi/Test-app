@@ -1276,6 +1276,32 @@ const indModule: HarnessModule = (() => {
       out.push(`  spread p90/p10: ${(q(0.1) > 0 ? q(0.9) / q(0.1) : 0).toFixed(2)}x  |  below 0.5: ${suppliers.filter(c => ((c as any).deliveryReliability ?? 1) < 0.5).length}`);
     }
 
+    out.push('--- IND17: negative working capital, and who gets to have it ---');
+    const prepaidBySupplier = new Map<string, number>();
+    let prepaidTotalUSD = 0;
+    [...allContracts(s).values()].forEach(c => {
+      const v = c.prepaidUSD ?? 0;
+      if (!(v > 0)) return;
+      prepaidTotalUSD += v;
+      prepaidBySupplier.set(c.supplierCompanyId, (prepaidBySupplier.get(c.supplierCompanyId) ?? 0) + v);
+    });
+    out.push(`  customer deposits held: ${B(prepaidTotalUSD)} across ${prepaidBySupplier.size} suppliers`);
+    // It should accrue to the long-cycle producers and to nobody else: a good made on demand has
+    // no work in progress for a customer to fund.
+    [{ lo: 0, hi: 0.5, label: 'lead 0wk   ' }, { lo: 0.5, hi: 6, label: 'lead 1-5wk ' }, { lo: 6, hi: 1e9, label: 'lead 6+wk  ' }].forEach(b => {
+      const firms = s.companies.filter(c => {
+        if (!isActiveCompany(c) || !(c.annualRevenue > 0)) return false;
+        const lines = c.productLines ?? [];
+        const w = lines.reduce((a: number, l: any) => a + (l.revenueShare ?? 0), 0);
+        const lead = w > 0 ? lines.reduce((a: number, l: any) => a + (l.revenueShare ?? 0) * productionLeadWeeksOf(l.subUnitId), 0) / w : 0;
+        return lead >= b.lo && lead < b.hi;
+      });
+      if (firms.length === 0) return;
+      const rev = firms.reduce((a, c) => a + c.annualRevenue, 0) / 52;
+      const dep = firms.reduce((a, c) => a + (prepaidBySupplier.get(c.ticker) ?? 0), 0);
+      out.push(`  ${b.label}: deposits held ${(rev > 0 ? dep / rev : 0).toFixed(2)} weeks of sales`);
+    });
+
     out.push('--- IND13: capital that has arrived and is not yet plant ---');
     const aucFirms = s.companies.filter(c => isActiveCompany(c) && ((c as any).assetsUnderConstruction ?? []).length > 0);
     const aucUSD = aucFirms.reduce((a, c) => a + ((c as any).assetsUnderConstruction as any[]).reduce((b, l) => b + l.valueUSD, 0), 0);
