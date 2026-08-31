@@ -11,7 +11,7 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial, RegionId,
 } from '../../../types';
-import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, tranchePaymentDue } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, tranchePaymentDue, managedEntityIdsOf } from '../../../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
 import { isInvestmentGrade } from './asset-allocation';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
@@ -1086,7 +1086,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // what actually settled — the sales anchor, finally binding (§539's expectation applies:
       // prints may get uglier and that is the honest direction, §1.20).
       const nonAuctionReceiptsUSD = Math.max(0, newRevenue / 52 - settledSalesUSD);
-      const vehicleBehind = !comp.isBankEntity && comp.isInstitutionalEntity ? entityById.get(comp.id) : undefined;
+      const vehicleBehind = !comp.isBankEntity && comp.isInstitutionalEntity ? entityById.get(managedEntityIdsOf(comp)[0]) : undefined;
       if (process.env.BOUNDARY_TRACE === '1' && nonAuctionReceiptsUSD > 1e6) {
         const key = `${comp.region}:${comp.financialStatementProfile ?? comp.sector ?? '?'}:${comp.ticker}`;
         boundaryTraceByFirm.set(key, (boundaryTraceByFirm.get(key) ?? 0) + nonAuctionReceiptsUSD);

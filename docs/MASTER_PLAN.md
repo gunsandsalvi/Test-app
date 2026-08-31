@@ -363,10 +363,23 @@ Display: one shared helper, MoM+YoY, period labelled. Aurora inherits it.
 ### MNC — multinational production *(item 1)*
 
 Every firm is single-region while intra-firm trade is ~a third of real world trade — here zero.
-The FDI decision (build abroad vs export, priced off XB3a's landed-cost machinery); foreign
-subsidiaries as real plants with local costs and labour; intra-firm trade at transfer prices;
-structural FX exposure making the hedging desks' client book real demand; repatriation through
-the FX books. TAXR's rate differences later make location a priced choice.
+**The design (rule 19 — the fewest primitives): a SUBSIDIARY IS A COMPANY.** The model already
+has everything a foreign plant needs — production, labour, books, births, contracts, invoices,
+FX — so MNC adds a LINK and a DECISION, never a second production machinery:
+1. **The ownership link**: a subsidiary is a real company in region B whose equity the parent
+   holds (`parentTicker` + a real register row through the ownership machinery, OWN7-conform).
+   Consolidation is a VIEW (parent's earnings + its share of subsidiary earnings), never a
+   second set of books.
+2. **The FDI decision**: a firm persistently paying more to LAND its exports in region B than a
+   local producer's cost (XB3a's landed-cost machinery, measured over the §7.138-style sustained
+   window) births a subsidiary there through the existing birth machinery, funded by the
+   parent's own cash crossing the FX book as a real payment — the financing decision first, the
+   proceeds land, the plant follows (§7.288's discipline).
+3. **Intra-firm trade**: supply contracts between parent and subsidiary through the existing
+   world contract book — the intra-firm share then EMERGES from who owns whom. The transfer
+   price is the contract's struck price (TAXR later makes it a priced choice).
+4. **Repatriation**: subsidiary dividends flow to the parent's account through the FX
+   conversion path — structural FX exposure the hedging desks' client book then really carries.
 **Verify:** FDI responds to landed-cost differentials; an intra-firm trade share EMERGES; one FX
 move changes a multinational's consolidated earnings through both channels.
 

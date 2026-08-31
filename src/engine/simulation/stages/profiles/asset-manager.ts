@@ -1,6 +1,5 @@
-/** An asset manager's P&L: fees on the book its entity actually marks (moved verbatim from stage 08, BP1c). */
-
 import { random } from '../../../rng';
+import { managedEntityIdsOf } from '../../../../domain/company';
 
 import { ProfileInput, ProfilePnl } from './types';
 
@@ -8,7 +7,7 @@ export const assetManagerProfile: (input: ProfileInput) => ProfilePnl = (input) 
   const { comp, state, entityById } = input;
   let newRevenue = 0;
 
-  const instEnt = entityById.get(comp.id);
+  const instEnt = entityById.get(managedEntityIdsOf(comp)[0]);
   // One balance sheet, one representation (S11): where a real InstitutionalEntity backs this
   // company, its AUM IS that entity's marked book — totalAssetsUSD is recomputed weekly from
   // real cash and real holdings (institutional-balance-sheet.ts), so the drift-by-index

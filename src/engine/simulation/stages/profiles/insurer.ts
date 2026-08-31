@@ -1,6 +1,5 @@
-/** An insurer's P&L: premiums limited by capital, claims stochastic, investment income its own portfolio's (moved verbatim from stage 08, BP1c). */
-
 import { random } from '../../../rng';
+import { managedEntityIdsOf } from '../../../../domain/company';
 import { PREMIUM_TO_SURPLUS_RATIO } from '../../../../domain/institutions';
 import { ProfileInput, ProfilePnl } from './types';
 
@@ -17,7 +16,7 @@ export const insurerProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   // a shell reporting 0.05B of revenue and 0.10B of market cap beside an entity holding 241.4B,
   // with `technicalReservesUSD` printing 0.2B against a 221.9B beneficiary liability — the
   // same obligations represented twice, three orders of magnitude apart (§7.49).
-  const instEnt = entityById.get(comp.id);
+  const instEnt = entityById.get(managedEntityIdsOf(comp)[0]);
   const floatAssets = instEnt ? instEnt.totalAssetsUSD : comp.annualRevenue * 5;
   // The reserves ARE the beneficiary liability HH1a records on the entity. One number.
   comp.technicalReservesUSD = instEnt?.beneficiaryLiabilityUSD ?? floatAssets * 0.85;

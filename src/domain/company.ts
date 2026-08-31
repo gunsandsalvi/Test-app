@@ -263,6 +263,15 @@ export interface Company {
   isBankEntity?: boolean;
   isInstitutionalEntity?: boolean;
   institutionalEntityType?: 'INSURER' | 'ASSET_MANAGER' | 'PENSION_FUND';
+  /**
+   * §7.284 step 2 — THE MANAGER→VEHICLE LINK, replacing the id-equality convention. A listed
+   * manager (this Company shell: staff, fee revenue, its own equity) MANAGES vehicles (the
+   * InstitutionalEntity pools: assets, cash, unit-holder liabilities). Today every institutional
+   * shell manages exactly the one entity sharing its id — `managedEntityIdsOf` states that
+   * default in ONE place — and this field is what lets a manager run several vehicles (the ETF
+   * sponsor template) once the split's later steps land. Never read it raw; ask the helper.
+   */
+  managesEntityIds?: string[];
   baselineAnnualRevenue: number;
   annualRevenue: number;
   productLines?: ProductLine[];
@@ -730,3 +739,9 @@ export function tranchePaymentDue(t: DebtTranche, week: number): { due: boolean;
  * the same auction (rule 3).
  */
 export const RECEIPTS_MEASUREMENT_WEIGHT = 0.08;
+
+/** §7.284 — the vehicles this shell manages. The id-equality convention is the stated default,
+ *  here and nowhere else; a shell with an explicit link reads the link. */
+export function managedEntityIdsOf(comp: { id: string; managesEntityIds?: string[] }): string[] {
+  return comp.managesEntityIds ?? [comp.id];
+}
