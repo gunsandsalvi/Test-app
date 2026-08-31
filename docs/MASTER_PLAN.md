@@ -293,9 +293,9 @@ was the first structural answer.
 ## 4. The work order
 
 The only place a project's order and state live. Work top to bottom; never start an item whose
-prerequisites are not done. **Do not reorder without asking** — the sequence encodes prerequisites
-not visible from a row: a market cannot be honest before the demand side it prices against is, and
-a clamp cannot be deleted before the mechanism under it exists.
+prerequisites are not done. **Do not reorder** — the sequence encodes prerequisites not visible
+from a row: a market cannot be honest before the demand side it prices against is, and a clamp
+cannot be deleted before the mechanism under it exists.
 
 **THE RUN TO JUDGE AGAINST IS THE NEXT ONE — §7.254's two bank fixes (the income measure and
 the wholesale roll) relabelled the world after §7.253's reference (278/44, the best yet;
@@ -306,10 +306,68 @@ naming the relabel between.
 **IN FLIGHT: STRUCT (§5-STRUCT; §7.229–242).** Cross-cutting, not a row below: invariants by
 construction. Steps 1/3/4/5 built, step 2 done for the company kernel, step 6 built and off; the
 enforcement backlog executed 2026-08-31 (§7.242) with its standing remainders annotated; the rest
-is listed per step in §5. **Three standing decisions queue behind it, all the user's or
-the next measurement's call:** (1) the tax asymmetry (§6.1 — which of the two loss-tax rules is
-right; fixing it re-bases the world); (2) the EUR regression (§6.1 supplier-shares row — top of the
-queue); (3) `SEED_BURN_IN` (off until §7.232's table flattens).
+is listed per step in §5. **Standing decisions, taken 2026-08-31** (user directive: decide and
+execute, do not hold): (1) the tax asymmetry — **the profile path is right** (a loss produces no
+rebate); delete the industrial rebate WITH the `ebitFloorUSD: 1` operating-loss floor as one
+re-baseline, in §4.0 Tier 1; (2) the EUR/JPN supplier-shares regression — §4.0 Tier 1; (3)
+`SEED_BURN_IN` stays OFF until §7.232's seed-vs-settled table flattens (a measurement gate, not
+a preference).
+
+### 4.0 THE FIX ORDER (struck 2026-08-31; user directive: bugs first, then foundations)
+
+Everything open, ordered from actual known bug to construction. Work top to bottom; a Tier-1
+item that needs a Tier-2 foundation to be fixed CLEANLY still gets its minimal direct fix first
+(the foundation then makes the regression unwritable). No long reference run until the tier-1
+pass is done; the one run at the end re-bases everything at once.
+
+**Tier 1 — actual known bugs** (each provably wrong code, not an economic gap):
+1. The remaining settlement bypass — 1.0B/week of unrouted flows (corporate 0.6, SME 0.9);
+   trace and route flow by flow (§6.1 money row).
+2. Currency mixing at `pay()` — the stage-05 goods legs pay buyer-local money as `amountUSD`;
+   the government's cash leg vs its stat (05:1704/1716); carrier books summing four currencies;
+   the GDP identity adding real-USD NX to local C+I+G (§6.1 money-locality row).
+3. The `as any` casts guarding `estates` and the accrued-interest ledgers with resetting
+   defaults (`context.ts` Tier-0 cluster) — pure deletions.
+4. `PROFILE_REGISTRY` untyped — the LIVE REIT profile gap invisible at compile time.
+5. One quantity, many authors — kill order: the corporate tax RATE, then 07b's fixed 0.4
+   recovery vs the realized basis, then the rest of the §6.1 list.
+6. Fund overdrafts (JPNEQX/EURHYX 34x each) — funds spending money they do not have.
+7. MMF NAV departures (47x) — a subscription/redemption moving one side only.
+8. The industrial loss pair — DECIDED: delete `ebitFloorUSD: 1` and the industrial loss rebate
+   together, one re-baseline (the profile path's rule is the rule).
+9. Supplier shares summing to ~45% in JPN semiconductors / EUR passenger_vehicles.
+10. The seed's unit mapping (~86% uniform undersupply) — reconcile one category by hand.
+11. corpBondOwnership > 1 — the estate-window denominator asymmetry (holdings-view
+    `isActiveCompany` filter); fix the outstanding side to count a dead issuer's tranches while
+    claims on it stand.
+12. A retired bank facility reaches no lender — record the retire credit event (the §7.252
+    shape, retirement side).
+13. A discount bill's issue leg — buyers pay face where the auction cleared a discount.
+14. The dead freight market — verify the fuel-at-full-fleet suspicion, fix the root.
+15. The 2.0e9% vacancy print — guard the ratio at its limit, loudly.
+16. Repo residual — the 2 tranche-keyed over-pledges.
+17. NIM measure remainders — accretion income into the measure; a EUR band.
+18. Stage-05 opening order — derive an economic order (or clear simultaneously); a declaration
+    order may not set unemployment.
+19. Instrument/UI re-derivation rot — sweep the harness/UI reads onto engine-exposed values.
+
+**Tier 2 — foundations that make Tier-1 classes unwritable** (§5-STRUCT owns the detail):
+step-1 endgame (whole-sheet channel → typed deltas; DELETE 02b's reconcile and the overdraft
+clamp), Tier-1 one-line flips (~150 sites), Tier-2 ledger enforcement (branded USD, readonly,
+`bookPnL()`), step-4 discriminated union + registries-as-dispatch, BankBook/View split,
+branded number families at the four seams, step-5 edge annotation, step-2 stage extractions,
+P1 renames.
+
+**Tier 3 — diagnosis of live anomalies**: the damper (10Y pinned 60 weeks; foreign 18%/4%
+curves), the UK equity runaway's buyer, the seam's wage-indexation leg, the boundary
+accrual pair.
+
+**Tier 4 — missing mechanisms** (gaps, not bugs): MAC's stance function, the household direct
+equity channel, FX swap lines and the FX spread, COH's last slice, IND-R4, IND7's register
+mint, the manager/vehicle split, logistics scale.
+
+**Tier 5 — measurement debt** (§4 list below, items 5–6, 8–10), then **Tier 6 — the build
+table** (MNC → DYN → PROD → CRE → TAXR base → SCALE Wave 2 → S-final → AU).
 
 ### What is left to BUILD
 
@@ -735,10 +793,10 @@ until it passes.
 
 ### AU — Aurora, the UI rebuild  *(item 8)*
 
-Delete every current UI element and rebuild. **Required process, fixed in advance:** (1) a LONG
-iterative series of clarifying questions via AskUserQuestion — visual direction, information
-architecture, interaction patterns, reference products, platform scope; (2) mockups the user reacts
-to BEFORE production code; (3) real-world product inspiration. Scope is `src/components/` plus
+Delete every current UI element and rebuild. **Required process, fixed in advance:** (1) a
+written design brief settling visual direction, information architecture, interaction patterns,
+reference products and platform scope BEFORE production code; (2) mockups iterated against that
+brief; (3) real-world product inspiration. Scope is `src/components/` plus
 `App.tsx`; the engine and domain layers are untouched.
 **Folded:** UI state lives inside `GameState` (`isTradeModalOpen`, `selectedInstrument`, …) — the
 object the determinism hash spans, so a modal click can make two identical runs disagree. Aurora
@@ -780,9 +838,9 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | **MONEY IS NOT CONSERVED, AND TWO OF ITS CREATION MECHANISMS ARE PLUGS** | §7.229: 02b's reconcile INVENTS reserves for any balance a stage moved without a payment instruction — **14.3B/week gross** (corporate 3.9B, institutional 9.9B, SME 4.3B) — and the overdraft clamp `Math.max(0, cashUSD)` destroys negative balances, creating the money that was overspent: **6.0B/week**. `unbackedBankCashUSD` runs **213.3B at week 13 → 585.4B at week 30, rising**. The ledger now exists and hygiene holds direct money writes at budget 2 (§7.230) — **and that killed the claimed cause: "43 direct writes" was a miscount (ten real strays, since migrated), so the 14.3B bypass is NOT direct field writes.** **§7.240 TRACED THE BYPASS BY READING** — `etf-flows.ts` (no `pay()` in the file at all; every creation/redemption/fee moves cash by whole-object rebuild — the institutional 9.9B slice), `pe-lifecycle.ts` (LPs debited directly AND the buyer paid via `pay()` — one purchase price destroyed per secondary deal; recap/IPO proceeds written to `comp.cash`), `10-mergers.ts:93` (consideration arrives on no book), `macro/banking.ts:424-440` (payee-less dividends), `money-market-fund.ts` (fee/diversion rebuilds); §7.241 adds `insurance-and-pensions.ts` and the whole-sheet channel (`CompanyWeekUpdate.bankBalanceSheet`, 15 writers). **§7.242 CONVERTED the traced writers to payment instructions**: insurance/pensions (all four flows), the MMF fee, PE capital calls/distributions/recap (and deleted the IPO DOUBLE CREDIT — primary settlement already pays the issuer), the merger consideration (tender to holders of record, stock re-keyed to real acquirer shares), and etf-flows' institutional legs (creations, in-kind slices, the fee — which was computed TWICE from two different NAVs). Two hand-offs remain as COUNTED unbacked credits (`creditUnbacked`, visible by reason): the 02b savings diversion and the ETF household leg — each entangled with a T+1 bank convention that must migrate with them. The whole-sheet channel still stands. **THE METER HAS COLLAPSED: bypass gross 39.8B → 11.7B → 3.2B → 1.0B/week, overdrafts 0.0B** (§7.244–251; the hand-offs are payments since §7.248, the hyperinflation was most of the rest). §7.251's class split: corporate 0.4B, SME 0.8B, **institutional 0.0B — the 9.9B slice that named this row is fully migrated**. The channel guard EXISTS (§7.250: `updateBankSheet()` throws after stage 08 consumes it). **Next action: the whole-sheet channel migration (typed non-money deltas), then delete the reconcile and the clamp; the remaining 1.0B is corporate+SME and traceable flow by flow.** Owner: STRUCT step 1 (CASH/SETL). |
 | **A SECURITY IS A DISPLAY STRUCT, NOT A PRIMITIVE** | §7.229: `TradeableInstrument` is an `assetType` string tag plus a `details` bag of **26 optional fields**, with nothing enforcing that a CDS carries a spread or a bond a coupon. **§7.230 built the registries additively**: `domain/assets/` reconciles the FOUR instrument taxonomies (two were anonymous; `SOV_BOND` vs `GOV_BOND` disagree) under one class map, `ASSET_REGISTRY`/`PARTY_REGISTRY` dispatch, and hygiene ratchets literal comparisons at budget 64. **What remains is the migration: replace the four unions and the `details` bag with the discriminated union**, so a new type will not build until it is handled. Also standing: **a new profile has no small-firm tier** — SME pools are keyed by INDUSTRY, so a new profile silently gets large firms only. Owner: STRUCT step 4. |
 | **EVERY MONEY FIELD IS NAMED USD AND HOLDS LOCAL MONEY** | §7.241: `domain/currency.ts` declares all stored figures region-local; the `USD` suffix lies on thousands of fields and `PaymentInstruction` carries no currency, so origin-money, buyer-money and genuine-USD figures mix freely. Verified casualties beyond the stage-05 row: the household aggregate leg pays origin money; the government's cash leg and its recorded stat disagree by the FX rate one screen apart (05:1704/1716); a carrier's revenue sums four currencies into its local book (its margin is an FX artifact); the GDP identity adds real-USD NX to local C+I+G; the commodity clearing ratio divides two currency salads. **Next action: brand `Money<C>` at the `pay()` seam while STRUCT step 1 is touching every call site anyway (§5 Tier 4); the mixing sites then fail to compile one by one.** Owner: XB/STRUCT. |
-| **AN INDUSTRIAL OPERATING LOSS CANNOT EXIST** | §7.240: `08:824` passes `ebitFloorUSD: 1` into the extracted income statement, so every industrial firm's EBIT is floored at $1 — no operating loss can reach coverage, the default trigger, the rating, or the tax line. This flattens exactly the distressed cohort §5-G5's work is about, and it COMPOUNDS the rebate row below (a loss first erased, any residual then rebated). The floor's own comment argues the margin basis already carries the wage bill — read that claim before deleting. **Next action: decide with the rebate row as ONE re-baseline** — the loss mechanics of the industrial path should change once, not twice. Owner: IND/CRD. |
+| **AN INDUSTRIAL OPERATING LOSS CANNOT EXIST** | §7.240: `08:824` passes `ebitFloorUSD: 1` into the extracted income statement, so every industrial firm's EBIT is floored at $1 — no operating loss can reach coverage, the default trigger, the rating, or the tax line. This flattens exactly the distressed cohort §5-G5's work is about, and it COMPOUNDS the rebate row below (a loss first erased, any residual then rebated). The floor's own comment argues the margin basis already carries the wage bill — read that claim before deleting. **DECIDED (2026-08-31, §4.0 Tier 1 item 8): delete the floor WITH the rebate below as one re-baseline** — the loss mechanics of the industrial path change once. Owner: IND/CRD. |
 | **ONE QUANTITY, MANY AUTHORS** | §7.240's duplicate cluster, each a §1.3 divergence live or waiting: the corporate tax rate FOUR ways (0.31 owner / 0.21 ×2 / 22%); `EQUITY_RISK_PREMIUM` twice (0.045 vs 0.035); credit-tier books twice, disagreeing; THREE PD models in stage 05; 07b pricing fixed 0.4 recovery against the realized rate everywhere else (**the CDS-cash basis partly measures this**); a second rating ladder in carriers.ts; depreciation three ways inside stage 08; seed asset age three values; two dealer-spread constants; two labour-force computations; two consumer loss curves in one function. **Next action: one owner per quantity, killed one at a time with a grep for the number after each (the FRM discipline); start with the tax rate and the recovery basis, which move priced worlds.** Owner: STRUCT sweep. |
-| **AN INDUSTRIAL FIRM'S LOSS IS REBATED AT THE TAX RATE** | §7.237 found it while extracting the income statement: the profile path guards net income on `ebit > 0` and the industrial path does not, so an industrial firm with a pre-tax loss receives a tax REBATE it never gets in cash. **Every distressed industrial company in the model is flattered by the tax rate — and the distressed ones are exactly the firms §5-G5's default work is about.** The rule was written twice inline, once per path, which is how the two came to disagree. It is now one function with the difference named (`taxesLosses`) and pinned by a test, PRESERVED rather than fixed because fixing it changes the world and that is not a refactor's call. **Next action: decide which half is right — it is almost certainly the profile path's — and take the re-baseline deliberately.** Owner: IND/CRD. |
+| **AN INDUSTRIAL FIRM'S LOSS IS REBATED AT THE TAX RATE** | §7.237 found it while extracting the income statement: the profile path guards net income on `ebit > 0` and the industrial path does not, so an industrial firm with a pre-tax loss receives a tax REBATE it never gets in cash. **Every distressed industrial company in the model is flattered by the tax rate — and the distressed ones are exactly the firms §5-G5's default work is about.** The rule was written twice inline, once per path, which is how the two came to disagree. It is now one function with the difference named (`taxesLosses`) and pinned by a test. **DECIDED (2026-08-31): the profile path's rule is right — a loss produces no rebate. Executed with the floor row above as one re-baseline (§4.0 Tier 1 item 8).** Owner: IND/CRD. |
 | **THE SEED SUPPLIES ~14% LESS THAN ITS OWN DEMAND — UNIFORMLY** | **The SECTOR half of this row is closed by §7.227**: combined named+SME coverage went from 0.43/0.99/0.80/1.04 to 0.85/0.85/0.88/0.87, a 2.4x spread down to 1.04x. What is left is a LEVEL: every producing sector supplies about 86% of the demand the same seed generates, and 34 of the USA's 37 categories still open below their own demand. **This is now one number to find, not a distribution to chase.** The seed's VALUE totals reconcile (IO gross output 1033B against firm+SME revenue 980B, 94.9%), so the gap is in the UNIT mapping — `deriveSubUnitUnitPrice` divides FINAL demand by a per-capita/per-firm physical volume while capacity is revenue over the same price, and the recipe-input demand a category faces is built from firms' own intensities rather than from the IO coefficients. **Next action: reconcile units demanded against units suppliable for one category by hand, end to end.** Owner: the seed, with IND. |
 | **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | Remeasured by §7.232: 32,278 rows at seed → 113,393 settled (×3.51). The seed-shape half of this row STANDS — it is one line of step 6's table. **The claimed algorithmic win is DEAD (§7.228): 0.0% duplicates (the weekly consolidation already handles them) and 3–5% dust, not 15% and 9% — the "~25% off every register walk" was true when written and is not now. Do not scope work against it.** Owner: the seed, via STRUCT step 6. |
 | **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | **RE-DIAGNOSED IN §7.224: nothing in the labour market is wrong.** It reads `nominalGrowth - inflation`, and the inflation was a goods-market defect at week 1. With that fixed, EUR's 66% is gone and all four regions sit near 33%, but JPN now reaches 75% by week 58 and 69 band violations remain. **FOLDED INTO THE UNEMPLOYMENT-RATCHET ROW ABOVE** — with the price level sane and the famine gone (§7.246) the labour market is no longer "printing whatever the price level hands it"; whatever it prints now is its own. One standing defect signature kept from §7.244: **the vacancy rate printed 2.0e9%** — an unguarded ratio at a limit, §7.210's exact shape, findable by measuring the week the v series first departs sanity. Owner: LAB, with the ratchet row. |
@@ -805,7 +863,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | **EVERY REAL-ECONOMY FX CONVERSION HAPPENS AT MID** | The desks that make the market and warehouse its residual earn nothing on it, and crediting them a spread without a payer would print money. Owner: the FX book. |
 | **LOGISTICS IS 0.4% OF GDP AGAINST A REAL 5–6%** | Every dollar reaches a named carrier, but the sector is an order of magnitude too small; domestic tonnage is the gap. **IND16's channel margin (§7.205) is the first thing that adds to it — re-measure before working this.** |
 | **THE FREIGHT MARKET IS DEAD, NOT RUNNING AWAY — §7.244 INVERTED THIS ROW** | The old finding (EUR>UK 6.28 → 292,929/tonne) is gone: on the valid baseline **every lane prints to 0.00 (−100%) and every carrier is dead — 0 alive of 12, fleet 10,270 assets, logistics 0.0% of GDP.** A rate of zero against a positive offer floor (§7.176 put the capital charge in it) means the clearing found no payable demand at any carrier's floor, or the carriers died first and the rate is the print of an empty book. **Next action: measure the week the first carrier dies and what killed it (fuel at full-fleet capacity regardless of utilisation — §7.240's live half of the dead/live pair — is the standing suspect).** Owner: XB/IND16 aftermath. |
-| **DOES THE TREASURY OPTIMISE ISSUANCE ON THE CURVE? — A DECISION, not a defect** | The model's treasury leans opportunistically in two places (the bill share and the tenor mix). **Needs a user answer; do not change it unilaterally.** |
+| **DOES THE TREASURY OPTIMISE ISSUANCE ON THE CURVE? — DECIDED: status quo** | The model's treasury leans opportunistically in two places (the bill share and the tenor mix). **Decided 2026-08-31: the opportunistic lean stays — it is a real behaviour, not a defect. Revisit only if a measurement shows it minting or destroying value against the curve.** |
 | **THE USA BANK COHORT — DIAGNOSED, NOT A BANK DEFECT** | The bank's arithmetic is right; its stress is the joint product of the corporate-cash boundary, the absence of hedging (now largely closed by DER) and policy driven high by the price level. **Do not tune the bank.** §7.251 re-measured it on real accretion income for the first time (the revival): **NIM in band to w15, decays to NEGATIVE from w23, bottoms −0.033 by w31** (41x), with the capital ratio following (14x) — a decay curve, not noise, and it starts long before the seam. **The identity family that rode beside it is CLOSED (§7.252)**: one missing credit event on the failed-CP-roll revolver — 9 breaking banks → zero at 16 weeks; it also relabelled the world (loan interest arrives a week earlier). **DECOMPOSED AND CLOSED (§7.254): the NIM family was a statistic ignoring settlement-paid interest plus a seed wholesale stock no flow ever moved** — income measure fixed, the wholesale roll built, USA NIM violations 41 → 0 at 32 weeks. Standing, named in §7.254: the sovereign book's return is all ACCRETION now and the NIM measure does not see it; EUR banks carry wholesale they cannot repay (cash below buffer) and only USA is banded. Re-measure on the §7.254 reference. Owner: G2/WS. |
 | **THE INSTRUMENT AND THE UI RE-DERIVE WHAT THE ENGINE EXPOSES** | §7.240's rot cluster. Harness: a trade-fee check that reads an aggregate the engine never writes with a `dealerId` matching no bank (dead since G3); NAV clamped before checking; a residual 1e6 pledge tolerance one screen below the unified $1; ten hardcoded region lists beside `REGIONS`; corridor bps, the mortgage severity curve and the capex list re-hardcoded instead of imported; clamps inside checked summations; a CB forced-placement guard vacuous exactly when the CB ordered nothing. UI: MyBook's P&L frozen (ignores stored `unrealizedPnL`); WorldScreen re-introducing the G transfer double-count the engine deleted; a year change labelled "1W Δ"; IRS/XCS tickets priced off formula/noise instead of the cleared `swapParRateByTenor`/`crossCurrencyBasisBps`; the Supply Chain tab dead on nonexistent keys. **Next action: harness fixes now (it is the instrument); UI fixes are AU's inventory — every one is "read the stored value".** Owner: the harness now, AU for the UI. |
 | **CONSEQUENCE ROWS — a number is not a work item (rule 18)** | The price level (G1b), the labour collapse (EMP), equity prices running away past ~week 80, and real growth prints escaping at horizon. **All four are evidence, and all four are void as scoped:** every one of them was measured before the IND, CHAIN, CAP, DIST, DEM and market-tier work, and none may be inherited. Re-measure, then decide whether a mechanism is missing. |
