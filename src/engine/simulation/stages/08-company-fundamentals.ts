@@ -1672,8 +1672,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
               recordPremium(t, repaid * premiumPerDollar);
               const remainingUSD = t.principalUSD - repaid;
               if (t.isBankFacility && t.facilityBankTicker && repaid > 0) {
-                recordCredit(t.id, Math.max(0, remainingUSD), t.floatingMarginBps ?? 350,
-                  Math.max(1, t.maturityWeek - nextWeek), remainingUSD <= 0.01);
+                // Pushed DIRECTLY, not via recordCredit: that helper books to homeBankTicker —
+                // the facility's lender is t.facilityBankTicker, and splitting the two put the
+                // deposit destruction on one bank and the loan reduction on another (measured:
+                // PGNX +292.7M of prepay credit against a −4.1M loan move, identity −151.8M).
+                // Its `principalUSD > 0` guard also swallowed full retirements.
+                ctx.creditEventsThisWeek.push({
+                  bankTicker: t.facilityBankTicker, companyId: comp.id, trancheId: t.id,
+                  principalUSD: Math.max(0, remainingUSD), marginBps: t.floatingMarginBps ?? 350,
+                  originationWeek: t.originationWeek, termWeeks: Math.max(1, t.maturityWeek - t.originationWeek),
+                  retire: remainingUSD <= 0.01,
+                });
                 facilityRepaidByBank.set(t.facilityBankTicker,
                   (facilityRepaidByBank.get(t.facilityBankTicker) ?? 0) + repaid);
                 facilityRepaidUSD += repaid;

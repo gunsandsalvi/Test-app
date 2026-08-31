@@ -228,7 +228,16 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     const bookUSD = (e.cashUSD ?? 0) + holdingsUSD + (e.repoLentUSD ?? 0);
     if (bookUSD <= 0) return e;
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
-    const paidToHoldersUSD = (bookUSD * (e.mmfNetYieldAnnual ?? 0)) / 52;
+    // §4.0 Tier 1 item 7 — A STABLE-NAV FUND DISTRIBUTES WHAT IT EARNED, NOT WHAT IT QUOTED.
+    // This paid `bookUSD × mmfNetYieldAnnual`, a QUOTE, while the assets earned their realized
+    // income — two derivations of one number (rule 3), and the share liability outran the book
+    // by the gap, compounding (§7.253: 47 NAV-departure violations, book 2-3% under shares).
+    // The $1-NAV identity is its own measure: the book's excess over the share liability, net
+    // of the fee instruction below (whose cash leaves at the close), IS the undistributed
+    // income. Distributing exactly that keeps book = shares by construction; a genuine LOSS
+    // leaves book below shares and distributes nothing, which is what breaking the buck looks
+    // like and exactly what the harness's departure check should catch.
+    const paidToHoldersUSD = Math.max(0, bookUSD - feeUSD - (e.mmfSharesOutstandingUSD ?? 0));
     feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeUSD);
     feePayerByRegion.set(e.region, e.id);
     issuedByRegion.set(e.region, (issuedByRegion.get(e.region) ?? 0) + paidToHoldersUSD);
