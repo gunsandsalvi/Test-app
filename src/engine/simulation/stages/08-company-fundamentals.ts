@@ -43,6 +43,7 @@ import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '
 import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain/company-week/debt-ladder';
 import { industrialIncome, profileIncome } from '../../../domain/company-week/income-statement';
 import { chargeCarryingCost, consumeLotsFifo, fulfillmentRatio } from '../../../domain/company-week/inventory';
+import { dividendDecision } from '../../../domain/company-week/distributions';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -1128,8 +1129,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // cap bled 10x a real dividend out of every profitable company (measured in this ledger's
       // first week of existence: 15-25M/wk against 20M/wk of sales). A board pays out a share of
       // what the company earns; the declared yield stands only when earnings cover it.
-      const declaredDividendWeekly = Math.max(0, (comp.dividendYield ?? 0) * comp.marketCap) / 52;
-      const maxSustainableWeekly = Math.max(0, newNetIncome) * maxDividendPayoutRatioOf(comp) / 52;
+      // §5-STRUCT step 2 — the payout rule lives on the firm (domain/company-week/distributions.ts).
       // SETL3: a dividend is paid to the REGISTER. It used to leave the payer and arrive nowhere
       // — the one-sided flow §6 half-knew about, listing "institutional dividend passthrough" as
       // an unbuilt receipt channel. The paying-agent path already exists for call premiums and
@@ -1140,8 +1140,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // quarter is that date — the same thirteen-week clock stage 08 already runs its earnings
       // on. Thirteen weeks of dividend leave in one week and nothing in the other twelve, which
       // is what a shareholder's cash actually looks like and what a fund reinvesting it feels.
-      const dividendAccrualWeeklyUSD = Math.min(declaredDividendWeekly, maxSustainableWeekly);
-      const dividendWeeklyUSD = currentWeekMod13 === 13 ? dividendAccrualWeeklyUSD * 13 : 0;
+      const dividend = dividendDecision({
+        declaredYield: comp.dividendYield ?? 0,
+        marketCapUSD: comp.marketCap,
+        netIncomeUSD: newNetIncome,
+        maxPayoutRatio: maxDividendPayoutRatioOf(comp),
+        weekOfQuarter: currentWeekMod13,
+        weeksInQuarter: 13,
+      });
+      const dividendWeeklyUSD = dividend.cashThisWeekUSD;
       post('dividends paid', -dividendWeeklyUSD, undefined, false);
       payHoldersCash(ctx, comp.id, 'EQUITY', dividendWeeklyUSD);
       post('maintenance funding draw (new tranche proceeds)', weeklyDebtFundedPortion, bankCredit);
