@@ -3877,3 +3877,24 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        convert each population event into instructions (wind-up pays the estate/LPs; merger
        consideration carries the cash; death → estate). The BYPASS_TRACE instrument stands as
        the settle:false inventory, which is a different (report-only) surface.
+
+264. **THE FIRST POPULATION EVENT CONVERTED — the filing seizes the debtor's cash by
+     instruction — AND IT WAS THE DOMINANT FEEDER: bypass gross 3.0B → 0.7B/week (USA 2.6B →
+     0.2B) at the 20-week probe.**
+     - The shape (§7.263's corrected class): an estate recorded the dead company's cash as an
+       asset while the balance sat FROZEN on the company object and on its bank's deposit line
+       forever, and the distributions minted their money at the boundary — three legs of one
+       event, none connected. The 02b reconcile's `isDefaulted` exclusion then dropped the
+       corpse's cash from the truth-Σ every week while the line still carried it: one death =
+       a standing weekly mismatch of its whole cash balance. USA, with the most deaths and the
+       biggest balances, carried 2.6B of the 3.0B.
+     - The fix: at estate opening the debtor PAYS its cash into the boundary ('estate: cash
+       seized at filing', a declared frontier paired with 'estate distribution' — the two legs
+       of one workout meeting at the boundary, §7.259's pattern). Its bank line follows
+       through settlement; the exclusion stops mattering because the corpse's balance is zero.
+     - Verified: 20 weeks shocks-off — **4 violations in 3 families** (three small-ETF 0.02B
+       singles; EURIGX's single gone too), bypass 0.7B. Ladder green.
+     - The reconcile's REMAINING feeders, in order: the `Math.max(0, c.cash)` clamp (a
+       negative-cash company counts as 0 in the truth while the line carries its real flows);
+       SME pro-rata share drift; merger consolidation; home-bank reassignment. Each now sits
+       inside 0.7B/week total. Owner: STRUCT step 1, one event at a time.
