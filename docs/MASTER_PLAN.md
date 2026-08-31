@@ -3860,3 +3860,20 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        elsewhere leg exists — those are candidates for real payment instructions against the
        boundary, which would let the reconcile shrink by their size); then the invoice pair.
        Owner: STRUCT step 1.
+     - **CORRECTED, same session, by reading the settlement order**: the debt-principal claim
+       above is WRONG on both halves. (1) The register pass
+       (`applyPendingCorporateActionSettlements`) already scales every INSTITUTIONAL holder by
+       the pre/post ladder ratio each week AND pays the principal as a real payment from the
+       issuer ('security payment to holder of record') — §7.259's mint was the DESK-held slice
+       (desks live on bank sheets, outside that pass), and §7.259's `reconcileHolderPrincipal`
+       is its backstop; the two are rule-3 twins to fold eventually (desks into the register
+       pass, or the ratio pass retired into the reconciliation). (2) Stage 08 NEVER writes
+       `comp.cash` (its own 2229 comment: settlement is the one mover; `newCash` is a running
+       view) — so a settle:false post moves NOTHING and cannot be bypass. **The corporate
+       reconcile class must therefore be POPULATION/IDENTITY events**, where the stock moves
+       between populations with no flow: `pe-lifecycle.ts:755`'s `c.cash = 0` wind-up (a real
+       direct write), merger cash consolidation, deaths leaving the Σ while the deposit line
+       keeps the stock, births, and home-bank reassignment. THAT is the Tier-2 work list:
+       convert each population event into instructions (wind-up pays the estate/LPs; merger
+       consideration carries the cash; death → estate). The BYPASS_TRACE instrument stands as
+       the settle:false inventory, which is a different (report-only) surface.
