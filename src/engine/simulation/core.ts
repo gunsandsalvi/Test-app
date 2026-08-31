@@ -8,6 +8,7 @@ import { runSecuritiesLendingStage } from './stages/securities-lending';
 import { runEstateResolutionStage } from './stages/estate-resolution';
 import { reconcileRepoPledges } from './stages/repo-clearing';
 import { createInitialContext } from './stages/context';
+import { StageDependencyTrace, stageTraceEnabled } from './stage-deps';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
@@ -77,6 +78,9 @@ export interface WeeklyStepResult {
   state: GameState;
   /** Populated only when `profile` was set. */
   timings: StageTiming[];
+  /** §5-STRUCT step 5 — populated only under STAGE_TRACE=1: what each stage actually read and
+   *  wrote, and therefore which orderings are load-bearing. */
+  stageTrace?: StageDependencyTrace;
 }
 
 /**
@@ -94,15 +98,25 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // state below. A saved game therefore resumes the same world instead of forking into another
   // one, and a run replayed from the same seed is identical week for week (engine/rng.ts).
   setRngState(state.rngState);
-  const ctx = createInitialContext(state);
+  const baseCtx = createInitialContext(state);
+  // §5-STRUCT step 5: `ctx` is a binding the stage closures read at call time, so the runner can
+  // swap a recording proxy in around each stage without any stage knowing. Off by default; when
+  // off this costs one boolean test per stage and `ctx` is `baseCtx` throughout.
+  let ctx = baseCtx;
+  const trace = stageTraceEnabled() ? new StageDependencyTrace() : undefined;
   const timings: StageTiming[] = [];
   const profile = options?.profile === true;
   const run = <T>(stage: string, fn: () => T): T => {
-    if (!profile) return fn();
-    const startedAt = performance.now();
-    const result = fn();
-    timings.push({ stage, ms: performance.now() - startedAt });
-    return result;
+    if (trace) ctx = trace.begin(stage, baseCtx);
+    try {
+      if (!profile) return fn();
+      const startedAt = performance.now();
+      const result = fn();
+      timings.push({ stage, ms: performance.now() - startedAt });
+      return result;
+    } finally {
+      if (trace) { trace.end(); ctx = baseCtx; }
+    }
   };
 
   run('01-macro-feedback', () => runMacroFeedbackStage(state, ctx));
@@ -267,5 +281,5 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
     // SEG1: payments recorded after this week's settlement cutoff settle next cycle instead of
     // dying with the context (they used to be silently dropped — tender proceeds never landed).
     pendingPaymentJournal: ctx.paymentJournal,
-  }, timings };
+  }, timings, stageTrace: trace };
 }

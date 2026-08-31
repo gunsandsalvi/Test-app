@@ -2407,3 +2407,25 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        budgets — money writes outside the ledger (2), literal comparisons against an instrument type
        (64), and a pure-`test/` boundary. **Each may fall and never rise.** An architectural decision
        the build does not enforce is a comment, and every rule in this record was a comment before.
+231. **§5-STRUCT STEP 5 — THE STAGE ORDERING SURFACE, ENUMERATED FOR THE FIRST TIME: 79 BACKWARD
+     EDGES OVER 11 FIELDS.** Fifty-two stages have always run in a hand-ordered list whose
+     correctness depends entirely on the order, with nothing checking it. §7.226 is what that cost:
+     moving `repo-collateral-reconcile` on a correct diagnosis broke the per-bank balance identity
+     and took a 60-week run to find out, because nothing anywhere said its side effects depended on
+     being inside the settlement window.
+     - **MEASURED, NOT DECLARED, AND THAT WAS THE DESIGN DECISION.** The obvious build is a manifest
+       per stage. For a codebase written from scratch that is right; here it would be fifty-two
+       hand-written guesses over a ~90-field context, and **a manifest that is wrong gives false
+       confidence exactly where the hazard is.** So `stage-deps.ts` proxies the context and RECORDS
+       every read and write. The manifest is a fact about the run and cannot drift from the code.
+       `STAGE_TRACE=1`; off by default, one boolean test per stage when off.
+     - **THE TOP OF THE LIST IS THE EDGE THAT BROKE §7.226.** `paymentJournal` is written last by
+       `settlement-close` and read earlier by **17 stages**. `updatedInstitutionalEntities` is
+       written last by `bill-accretion` and read earlier by **24**. `updatedCompanies`, 17.
+       `holdingsStore`, 6. Every one of these is either deliberate — a stage legitimately reading
+       last week's value — or a latent repeat of §7.226, and **not one of them had ever been
+       written down.**
+     - **WHAT IT DOES NOT DO YET.** It does not fail the build. A backward edge is not automatically
+       a defect, so a budget here would fail on correct code; the next move is to annotate the
+       deliberate ones and ratchet on the remainder. **But a stage move can now be checked in three
+       weeks of simulated time instead of sixty.**

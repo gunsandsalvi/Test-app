@@ -33,6 +33,10 @@ const SHOCKS = process.env.SHOCKS !== '0';
 const PROFILE = process.env.PROFILE === '1';
 /** VERBOSE=1: dump every violation at the end (they also print live, capped per week). */
 const VERBOSE = process.env.VERBOSE === '1';
+/** §5-STRUCT step 5: record what each stage reads and writes, and report the orderings that are
+ *  load-bearing. Off by default; the proxy is built only when this is on. */
+const STAGE_TRACE = process.env.STAGE_TRACE === '1';
+let lastStageTrace: import('../src/engine/simulation/stage-deps').StageDependencyTrace | undefined;
 
 import { advanceWeeklyStep, advanceWeeklyStepProfiled } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
@@ -1916,9 +1920,10 @@ function runHarness() {
 
     let preState = state;
     const t0 = Date.now();
-    if (PROFILE) {
-      const { state: next, timings } = advanceWeeklyStepProfiled(state, { profile: true });
+    if (PROFILE || STAGE_TRACE) {
+      const { state: next, timings, stageTrace } = advanceWeeklyStepProfiled(state, { profile: PROFILE });
       state = next;
+      if (stageTrace) lastStageTrace = stageTrace;
       if (w > WARMUP_WEEKS) {
         profiledWeeks++;
         timings.forEach(({ stage, ms }) => {
@@ -2274,6 +2279,14 @@ function runHarness() {
         }
       } catch (e) { console.log(`\n=== ${m.name} — A/B shock === threw: ${e}`); }
     });
+  }
+
+  // ---- §5-STRUCT step 5: the stage ordering surface (STAGE_TRACE=1) ----
+  // Which orderings in core.ts are load-bearing, MEASURED rather than asserted. §7.226 moved one
+  // stage on a correct diagnosis and broke the bank identity; nothing anywhere said that stage's
+  // side effects depended on being inside the settlement window. This is that list.
+  if (lastStageTrace) {
+    lastStageTrace.report().forEach((line) => console.log(line));
   }
 
   // ---- per-stage profile (PROFILE=1) ----
