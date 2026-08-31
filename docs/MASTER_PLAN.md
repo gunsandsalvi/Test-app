@@ -452,6 +452,53 @@ moving stage 05 and 08 state into `SharedArrayBuffer`s. An object extracted as a
 references has to be extracted again as one holding row indices — **so every new object keeps a flat,
 numeric, array-friendly field set and identity as an id.** `domain/company-week/` complies.
 
+**THE ENFORCEMENT BACKLOG (§7.241) — make the wrong program unwritable, cheapest first.** The goal
+restated by the user: extendable, fixable, compile errors instead of silent runtime damage — "the
+ETF error should never have been possible." Ranked by silent sites converted per unit of work:
+- **Tier 0 — pure deletions, zero risk, do first.** Delete the ~35 `as any` casts that erase
+  contracts that exist and type-check without the cast: `context.ts:373-380` FIRST (they guard
+  `estates` and both accrued-interest ledgers with resetting defaults — a rename silently wipes
+  every open estate weekly), then the ~25-site `categoryDemand` cluster, the `(update as any)`
+  pair in 08, the `(reg as any)` trio in 11, pe-lifecycle's two.
+- **Tier 1 — one-line flips, ~150 silent sites.** `REGION_IDS` derived from `CURRENCY_BY_REGION`
+  and the 41 hardcoded region arrays replaced; **type `PROFILE_REGISTRY` as
+  `Record<FinancialStatementProfile, ProfileModule>`** (surfaces the LIVE REIT gap at compile
+  time); `PARTY_KINDS = Object.keys(PARTY_REGISTRY)` and `defect()` instead of `?? 0` in the
+  interning (kills the mis-delivery trap); `assertNever` defaults on the five money switches
+  (settlement apply, 12-portfolio's mark switch, estate `openEstate`, dealers' `default: 0.15`,
+  carryCalculator); derive `WEALTH_TIERS`/`OCCUPATIONS` from their seed Records; one GOV-id
+  module (`govBucketId`/`govTrancheId`/`parseGovInstrumentId`) replacing 15 `replace()` parsers
+  and the case-sensitive `startsWith('b')` predicates.
+- **Tier 2 — the ledger's enforcement (extends step 1).** Brand money (`type USD` constructible
+  only in `engine/ledger/`) + `readonly` balance fields — closes ~50 verified bypass sites
+  including the forms and files the grep can never see (`cash` by name, spread rebuilds, `.tsx`);
+  **delete `bankBalanceSheet` from `CompanyWeekUpdate`** (the 15-writer whole-sheet channel) in
+  favour of typed non-money deltas; `bookPnL(bank, amount, reason)` and brand `bankEquityUSD`
+  (13 writer files → one API); `journalPayment` throws `defect()` on NaN/negative instead of
+  silently dropping; `defect()` at the ten load-bearing joins (coupon payout, corporate actions,
+  primary takes, sovereign payables); a small reason-category enum beside `pay()`'s free text.
+  End-state noun: an `Account { holder, bankId, balanceUSD }` owned by the ledger, the five
+  holder balance fields becoming views — the migration's target stated as a type.
+- **Tier 3 — derive, don't store.** `sharesOutstanding` from the register (corporate actions via
+  a holdings-store method that writes both legs); `repoEncumberedCollateralUSD` computed from
+  `repoBook` (the rogue writers then cannot compile); `unitMassTonnes` as a registry view (or
+  DYN/PROD's first runtime product line ships weightless).
+- **Tier 4 — the splits and brands (bigger slices, each its own §1.7 commit).** Split
+  `BankingSector` into `BankBook` (per-bank, writable) vs derived read-only `BankingSectorView`
+  (makes the 40/60-force-place class unrepresentable); `INSTITUTION_PROFILES[entityType]`
+  registry (first methods: `indexedShare`, `borrowingCapacityUSD`, `investsInEtfs` — collapses
+  the 64-site dispatch and unblocks new manager/vehicle kinds); make the step-4 registries the
+  DISPATCH PATH (they currently have zero consumers and are §1.3 second representations until
+  the if-chains die behind them); zero-cost branded number families (`Money<C>`,
+  `PerWeek`/`PerYear`, `Frac`/`Bps`, `Shares`) at four seams — the `pay()` boundary (brand while
+  step 1 touches every call site anyway), a generic clearing engine (`ClearingInstrument<S, Q>` —
+  makes shares-in-`…USD` floats and percent-vs-fraction dampers compile errors), periodicity
+  brands on region-macro flows, physical-unit brands folded into the instrument-union migration.
+  Brands erase to `number` — §7.228's columnar constraint is respected by construction. Plus:
+  `formatPercent`'s `isDecimal` becomes required (the magnitude guess hides unit errors), and
+  one meaning for `Pct` (fraction) with a hygiene line against new percent-scaled `_PCT`
+  constants.
+
 ### P1 — Periodicity and units  *(standing)*
 
 Not a phase, a standing sweep alongside whatever is in flight. **Engine:** walk every rate, growth
@@ -690,8 +737,11 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 |---|---|
 | **THE ORDER OF A SOURCE-FILE DECLARATION SETS UNEMPLOYMENT** | §7.222 measured it: reverse the order `05-unit-bidding` walks `INDUSTRY_SUBUNITS` — a declaration order, nothing economic — and week 1 aggregate net income moves +3.8%, GDP −0.12%, **every one of 2,496 firms buys a different amount**, and by week 2 seven more firms are dead and unemployment prints 9.49% against 9.61%. Sub-unit markets open one after another and firms spend one budget across all of them, so whichever market opens first is served first. That coupling is REAL (a firm has one wallet); what is arbitrary is that the queue is a file's declaration order. **Rule 19: an arbitrary implementation detail is setting a macro outcome.** The well-posed question is what the opening order should BE — simultaneous clearing across a firm's budget, or an order derived from something economic. Do not paper over it by pre-allocating per-market budgets: that lets a firm overspend. Stage 08's half of the order question is CLOSED — §7.223's entity-scoped RNG made the company loop order-invariant and sharded; this row is stage 05's alone. Owner: IND/SCALE. |
 | **BEHAVIOUR LIVES IN THE STAGES, NOT IN THE OBJECTS** | §7.229 measured it: **7,736 lines of `domain/` against 24,595 of `simulation/stages/`**. **PARTLY CLOSED BY §5-STRUCT:** the four rules the open defects named now have objects (`Government`, `Collateral`, `Fund`, `SmePool` — §7.230) and the company kernel's seven rule blocks are pure objects in `domain/company-week/` with 71 tests, all bit-exact (§7.238). What remains: the other 700+-line stages still compute inline, and the kernel's effectful remainder (cash walk, reports, offering settlement) waits on the ledger migration. **Next action: continue the §7.238 loop (extract → compile → fingerprint → test → commit), stage by stage.** Owner: STRUCT. |
-| **MONEY IS NOT CONSERVED, AND TWO OF ITS CREATION MECHANISMS ARE PLUGS** | §7.229: 02b's reconcile INVENTS reserves for any balance a stage moved without a payment instruction — **14.3B/week gross** (corporate 3.9B, institutional 9.9B, SME 4.3B) — and the overdraft clamp `Math.max(0, cashUSD)` destroys negative balances, creating the money that was overspent: **6.0B/week**. `unbackedBankCashUSD` runs **213.3B at week 13 → 585.4B at week 30, rising**. The ledger now exists and hygiene holds direct money writes at budget 2 (§7.230) — **and that killed the claimed cause: "43 direct writes" was a miscount (ten real strays, since migrated), so the 14.3B bypass is NOT direct field writes.** **§7.240 TRACED THE BYPASS BY READING** — `etf-flows.ts` (no `pay()` in the file at all; every creation/redemption/fee moves cash by whole-object rebuild — the institutional 9.9B slice), `pe-lifecycle.ts` (LPs debited directly AND the buyer paid via `pay()` — one purchase price destroyed per secondary deal; recap/IPO proceeds written to `comp.cash`), `10-mergers.ts:93` (consideration arrives on no book), `macro/banking.ts:424-440` (payee-less dividends), `money-market-fund.ts` (fee/diversion rebuilds). **Next action: confirm by measurement (the reconcile's per-class gross should map onto these sites), convert each to instructions, then delete the reconcile and the clamp — the gross is the burndown.** Owner: STRUCT step 1 (CASH/SETL). |
+| **MONEY IS NOT CONSERVED, AND TWO OF ITS CREATION MECHANISMS ARE PLUGS** | §7.229: 02b's reconcile INVENTS reserves for any balance a stage moved without a payment instruction — **14.3B/week gross** (corporate 3.9B, institutional 9.9B, SME 4.3B) — and the overdraft clamp `Math.max(0, cashUSD)` destroys negative balances, creating the money that was overspent: **6.0B/week**. `unbackedBankCashUSD` runs **213.3B at week 13 → 585.4B at week 30, rising**. The ledger now exists and hygiene holds direct money writes at budget 2 (§7.230) — **and that killed the claimed cause: "43 direct writes" was a miscount (ten real strays, since migrated), so the 14.3B bypass is NOT direct field writes.** **§7.240 TRACED THE BYPASS BY READING** — `etf-flows.ts` (no `pay()` in the file at all; every creation/redemption/fee moves cash by whole-object rebuild — the institutional 9.9B slice), `pe-lifecycle.ts` (LPs debited directly AND the buyer paid via `pay()` — one purchase price destroyed per secondary deal; recap/IPO proceeds written to `comp.cash`), `10-mergers.ts:93` (consideration arrives on no book), `macro/banking.ts:424-440` (payee-less dividends), `money-market-fund.ts` (fee/diversion rebuilds); §7.241 adds `insurance-and-pensions.ts` (premiums/claims/pension flows into `comp.cash` and entity `cashUSD`, zero `pay()` in the file) and the channel that likely carries the rest: **`CompanyWeekUpdate.bankBalanceSheet` — 15 stages hand stage 08 a whole bank sheet and it books it verbatim.** **Next action: confirm by measurement (the reconcile's per-class gross should map onto these sites), convert each to instructions, then delete the reconcile and the clamp — the gross is the burndown.** Owner: STRUCT step 1 (CASH/SETL). |
 | **A SECURITY IS A DISPLAY STRUCT, NOT A PRIMITIVE** | §7.229: `TradeableInstrument` is an `assetType` string tag plus a `details` bag of **26 optional fields**, with nothing enforcing that a CDS carries a spread or a bond a coupon. **§7.230 built the registries additively**: `domain/assets/` reconciles the FOUR instrument taxonomies (two were anonymous; `SOV_BOND` vs `GOV_BOND` disagree) under one class map, `ASSET_REGISTRY`/`PARTY_REGISTRY` dispatch, and hygiene ratchets literal comparisons at budget 64. **What remains is the migration: replace the four unions and the `details` bag with the discriminated union**, so a new type will not build until it is handled. Also standing: **a new profile has no small-firm tier** — SME pools are keyed by INDUSTRY, so a new profile silently gets large firms only. Owner: STRUCT step 4. |
+| **A CREDIT FILE CURES IN SEVEN WEEKS, NOT SEVEN YEARS** | §7.241, a live bug found through the units lens: `evolution.ts:652` applies `CREDIT_FILE_CURE_WEEKLY` per week for tier migration (correct) while `:712` decays the delinquency stock by `(1 − CURE_WEEKLY × 52)` PER WEEK — the annualized fraction on a weekly clock. The stock collapses to ~7× the weekly arrival rate and `quoteHouseholdMarginBps` prices ALL consumer credit off a 52×-understated loss figure. **Next action: drop the `× 52`; re-baseline cost is real (every card/term margin re-prices) — take it deliberately.** Owner: CRD/HH. |
+| **EVERY MONEY FIELD IS NAMED USD AND HOLDS LOCAL MONEY** | §7.241: `domain/currency.ts` declares all stored figures region-local; the `USD` suffix lies on thousands of fields and `PaymentInstruction` carries no currency, so origin-money, buyer-money and genuine-USD figures mix freely. Verified casualties beyond the stage-05 row: the household aggregate leg pays origin money; the government's cash leg and its recorded stat disagree by the FX rate one screen apart (05:1704/1716); a carrier's revenue sums four currencies into its local book (its margin is an FX artifact); the GDP identity adds real-USD NX to local C+I+G; the commodity clearing ratio divides two currency salads. **Next action: brand `Money<C>` at the `pay()` seam while STRUCT step 1 is touching every call site anyway (§5 Tier 4); the mixing sites then fail to compile one by one.** Owner: XB/STRUCT. |
+| **THE SME POOLS' DEBT SERVICE NEVER SEES THE BANKS' QUOTED MARGINS** | §7.241: `sme-pools.ts:106/133` prices the pools' debt at `policyRate + 0.03` inline, under a comment claiming it is "the debt service the banks' real loans imply" — while the real loans sit one file away with quoted `marginBps` (bank-lending:321). A credit tightening widens every quoted margin and moves measured pool distress by ZERO, and that distress is the default rate banks price against — the transmission loop is open exactly where it claims closed. **Next action: when 02b re-derives `debtUSD` from the loans, derive the blended `marginBps` beside it; sme-pools reads it.** Owner: SEG/G2. |
 | **THE RATCHET CANNOT SEE THE DOMINANT MONEY-WRITE FORM** | §7.240: `check-hygiene.sh:33` matches `.field =`/`+=`/`-=`, but the codebase's dominant balance write is the object-literal/spread rebuild (`cashUSD: (e.cashUSD ?? 0) + x`) — no `=` to match — and both budgets skip `.tsx`. **Budget 2 currently governs almost none of the real writes.** Next action: extend the pattern to the `field:` form inside object literals (expect a large one-time count — that is visibility, not regression; set the new budget from the first honest run) and add `.tsx` to both greps. Owner: STRUCT step 1. |
 | **THE SWAP BOOK NEVER NETS ITS STANDING CONTRACTS** | §7.240: 07g re-hedges each bank's ENTIRE uncovered repricing exposure every week, and receivers refill their whole duration gap, while last week's 2–10-year swaps still run — the sizing pass (97–129) never reads `carried`. Notional accumulates without bound (~52×/yr at steady state). 07h nets `alreadyHedgedUSD` and 07i nets standing positions — **the rule exists in both siblings; 07g alone is missing it.** Next action: net the carried book out of both sides' sizing, exactly as 07h does. Owner: DER. |
 | **AN FX FORWARD PAYS ITS CUMULATIVE MARK EVERY WEEK** | §7.240: `forwardMarkToMarketUSD` is the mark since inception (contract never re-struck, no last-marked rate stored), and `fx-hedging.ts:334-345` pays the FULL mark as "variation margin" each week of a 13-week tenor — a persistent 5% spot move transfers ~5% of notional up to 13 times instead of once. Conserved between the pair, but bank equity and holder cash receive up to tenor× the real flow. Next action: pay the CHANGE in the mark (store `lastMarkedRate` on the forward) — a one-field fix with a re-baseline cost. Owner: DER/HF. |
@@ -2749,3 +2799,133 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        (3) The dead-state cluster and the misdescribing comments travel together: code whose
        consumers were deleted keeps its narrative, and the narrative then misleads the next
        reader — §7.234's "read the code before believing a row" applies to comments too.
+241. **THE ENFORCEMENT AUDIT: could the compiler have refused each recorded defect — and what
+     still compiles silently?** Six sweeps, one lens each (unprotected state; units; impossible
+     states + the extension test; identity + silent drops; fallbacks; ownership/altitude), every
+     claim below re-verified by hand. The question asked at every site: what wrong code does this
+     structure permit that runs quietly? The etf-flows bypass is the type case — `cashUSD` is a
+     public mutable `number` on every entity, so the wrong program COMPILED.
+     - **UNPROTECTED STATE — the ETF hole class, inventoried.** The likely institutional bypass
+       channel: **`CompanyWeekUpdate.bankBalanceSheet` lets any stage replace a bank's whole
+       sheet and stage 08 books it verbatim (08:2169) — 15 writers.** New rogue writers no prior
+       sweep saw: `insurance-and-pensions.ts:113/196` moves premiums, claims and pension flows
+       into `comp.cash` and entity `cashUSD` with ZERO `pay()` calls in the file.
+       **`bankEquityUSD` has NO owner at all — 13 files write it** (payee-less "income" lands
+       there, §7.240's estate-recovery case included). `Company.cash` is named `cash`, so the
+       grep ratchet can never guard it by name. `sharesOutstanding` and the register are two
+       representations either writable alone (mergers mint shares with no register rows);
+       `repoEncumberedCollateralUSD` is "derived from repoBook" by comment while 11-fiscal:246
+       and 10-mergers:195 write the scalar without touching the pledges. Mergers gains 75% of a
+       target's headcount and 25% of a workforce exits the world with no separation flow. The
+       working-copy layer is fully ALIASED: `createInitialContext` shallow-spreads
+       regions/companies, so "prev" objects are this week's mutated ones (part of §7.231's 79
+       backward edges), and a mid-week exception leaves the caller's state half-mutated. Module
+       state beyond the known linkage table: party/reason interning arrays, and
+       `baseWageTableByRegion` (a second world in one process inherits the first's wage table).
+     - **UNITS — the dominant family is CURRENCY, not periodicity.** `domain/currency.ts`
+       declares every stored figure REGION-LOCAL money; nearly every field is named `USD` — the
+       suffix lies on thousands of fields, and `PaymentInstruction.amountUSD` carries no
+       currency. Verified mixings beyond §6.1's stage-05 row: the household aggregate leg pays in
+       ORIGIN money (05:1670-1678, a third unit variant); the government pays one unit and is
+       RECORDED in another one screen apart (05:1704 vs 1716); a carrier's revenue is a sum over
+       four currencies booked as its own (05:1489→profiles/carrier.ts:19) with fuel cost in home
+       money — its margin is an FX artifact; the channel accumulator likewise; the GDP identity
+       adds genuine-USD NX to local-money C+I+G (11:95-118); the commodity clearing ratio divides
+       one currency salad by another (evolution.ts:1269-1326). **And one straight LIVE BUG found
+       through the units lens: the credit-file cure constant runs on two clocks eleven lines
+       apart** — tier migration uses `CREDIT_FILE_CURE_WEEKLY` weekly (correct, evolution:652);
+       the delinquency stock decays by `(1 − CURE_WEEKLY × 52)` PER WEEK (evolution:712), so a
+       7-year record cures in ~7 weeks and `quoteHouseholdMarginBps` prices ALL consumer credit
+       off a 52×-understated loss stock. Also: securities-lending runs the clearing engine with
+       SHARES in every `…USD` field (harmless only while `dealerSpreadBps: 0`);
+       `quantityOrNotionalUSD` is a confessed two-unit union whose equity shares are back-derived
+       at TODAY's price when the sibling is absent; `formatPercent` GUESSES fraction-vs-percent
+       by magnitude (`|val| <= 1`), so a 101% print silently renders 100× smaller — the display
+       layer actively hides unit errors; millions-era gates fossilized in the buyback block
+       (`sharesOutstanding > 10`, `excessCash > 5` — all vacuous at dollar scale).
+     - **IMPOSSIBLE STATES + THE EXTENSION TEST.** The four newer contract types (RepoParty,
+       SwapParty, CdsParty, ClaimHolder) are true discriminated unions — the house knows the
+       pattern; the five old cores predate it: `InstitutionalEntity` (one tag, seven per-kind
+       optional bags — a HEDGE_FUND without a strategy compiles and is in NO market; an ETF with
+       `etf: undefined` exists and never flows), `Company` (bank-ness is THREE flags + an
+       optional sheet — `isBankEntity` without `bankBalanceSheet` routes the bank down the
+       corporate-deposit path as its own depositor; lifecycle booleans permit dead-twice with two
+       live deals), `DebtTranche` (a FIXED tranche with only a floating margin, claimed by CP
+       and facility flags simultaneously, compiles — these flags route paper between four
+       markets), `HouseholdLoanPool` (a MORTGAGE without vintages silently reverts to the flat
+       severity floor the vintages were built to kill), `PrimaryOffering` (purpose stated twice,
+       can disagree). The extension test, per axis: industry and WealthTier PASS
+       (registry/Record-driven); region and occupation fail only via hand-kept iteration arrays
+       (41 hardcoded region lists; a 5th region ships as an economy with no firms, no banks,
+       floating debt referencing TONA, sovereign debt that never clears); AssetType, PartyRef,
+       profile and payment-reason fail STRUCTURALLY. The three worst: **a new PartyRef kind is
+       silently interned into COMPANY's table (`KIND_INDEX.get ?? 0`, party.ts:74) — payments
+       MIS-DELIVERED, not dropped**; settlement's apply switch has no default — an unhandled
+       kind's money is deleted without touching `unresolvedUSD`; **`PROFILE_REGISTRY` is
+       `Record<string,…>` with 4 entries against a 6-member union — `'REIT'` is a legal member
+       with no module and books TODAY as an ordinary goods firm.** And the step-4 registries
+       have **ZERO consumers** — `PARTY_REGISTRY` is dispatched by nothing, `ASSET_REGISTRY`'s
+       facts by nothing: both are currently §1.3 second representations of facts the if-chains
+       still own.
+     - **IDENTITY + SILENT DROPS.** One branded id exists (RegionId); everything else is
+       interchangeable `string`: a five-way-multiplexed `instrumentId`, FOUR live GOV id formats
+       (bucket vs bill-tranche separated by letter CASE — 07f's `startsWith('b')` vs
+       `-GOV-B13-…`, so same-region bill tranches silently fall out of the treasurer's sizing
+       and the fallback map is dead code), four spellings of the SME pool identity, per-book
+       participant prefixes each with its own parser, `SupplyContract` party fields holding
+       ticker-or-id-or-poolkey by design (the harness's prepaid check reads one space against
+       the other and disagrees with itself, harness:1704/1719). The dominant miss idiom — 255
+       `.get(…) ?? 0`-shaped sites in stages/ — converts every wrong-space lookup into "no
+       data": a coupon whose issuer misses the ticker map is skipped while the receivable is
+       DELETED anyway; the same miss on corporate actions credits holder cash with no payer
+       (feeding the 02b plug); `issuerTickerById` is built ONCE at context creation, so a
+       company born mid-week is invisible to it that week. Silent-drop residue: the regional
+       `bankingSector` aggregate is a 22-field literal rebuild dropping nine optional fields
+       (every future optional field will silently not aggregate); **`(state as any)` casts at
+       context.ts:373-380 guard `estates` and BOTH accrued-interest ledgers with resetting
+       defaults — a rename compiles and silently wipes every open estate weekly**; ~35 `as any`
+       casts erase contracts that exist and type-check without the cast (the categoryDemand
+       cluster, ~25 sites); GameState now carries two real `Map`s that any JSON snapshot will
+       round-trip to `{}` silently.
+     - **FALLBACKS.** 220 nonzero-literal fallback sites triaged: ~70 INVENT ECONOMICS. The
+       `defect()` doctrine (GUARD) never left the domain layer — 10 call sites in 6 files,
+       ZERO in settlement, the ledger, clearing, banking, macro. Worst: **`journalPayment`
+       silently drops NaN and negative amounts (settlement.ts:85) — every upstream arithmetic
+       defect exits the economy as quiet non-payment**; the two legs of one loan can fall back
+       to DIFFERENT invented margins (borrower `?? 200`bps, bank mirror `?? 350`bps — money
+       created between the books; 21 margin/coupon fallback sites, all should-never-fire);
+       `bankMarketShare` has THREE different invented fallbacks across five sites (0.25,
+       1/banks, equal-split); `|| 0.25` converts an HONEST ZERO book into a 25% share on a real
+       path (bank-lending:308/740 — line 297 computes the zero carefully and 308 undoes it);
+       the PUB1e-DELETED budget derivation survives as a `??` arm (05:1055); the PD model runs
+       at a LITERAL 5% base rate (shared-helpers:88 — policy hikes never reach PDs through this
+       path); `carryCalculator`'s `|| 0.045` also swallows a legitimate 0% policy rate.
+     - **OWNERSHIP — the structural roots of the open rows.** **`BankingSector` is one writable
+       type serving as BOTH the regional aggregate and each named bank's book** — the fusion
+       that made §7.240's 40/60 force-place compile; `moneySupplyM2USD` sits on every per-bank
+       sheet and is "summed". **There is no `Account`** — a balance is a differently-named field
+       on five types resolved by a kind-switch; this is the §6.1 money row one level down: the
+       bypass, the ratchet blind spot, and the inexpressible LP-set payer all reduce to it.
+       **The category market's share cross-section has NO home** — Σ shares = 1 spans hundreds
+       of `ProductLine`s; this is the structural root of the EUR-regression row and the
+       original SME lock. The SME pools' debt service is priced at an invented +300bp
+       (sme-pools:106/133) under a comment claiming it reads "the banks' real loans" — **a
+       credit tightening moves pool distress by ZERO**; the priced margins exist one file away
+       on the banks' books. A defaulted firm's real invoices are KILLED at default
+       (trade-settlement:48) while its estate is paid a formula receivable by nobody
+       (estate-resolution:326) — one real thing, two disconnected representations, feeding the
+       estate boundary line. The central bank's reaction function is loose fields on Region +
+       inline Taylor rule — the pre-§7.230 Government shape, again. Institutional behaviour has
+       no profile registry (64 sites/21 files of entityType switches — each new manager/vehicle
+       kind must be taught to every one). Every institutional firm is TWO id-joined objects
+       (Company shell + InstitutionalEntity) with formula fallbacks that resurrect §7.49's
+       second insurer when the join misses, and the shell's role union has drifted (PE/MMF/ETF
+       shells carry `institutionalRole: null`). `GameState.unitMassTonnes` is seeded
+       world-state for a registry fact — the first runtime-created product line (DYN/PROD, §4
+       items 2-3) ships WEIGHTLESS, free freight, silently.
+     - **THE LESSON.** Every §6.1 money/market row has a structural twin here: the defect is
+       the runtime shadow of a type that permits it. The house already owns every needed
+       pattern — the union discipline (repo/swaps/CDS), the registry ("one line per kind"), the
+       derived list (SME_POOL_INDUSTRIES), `defect()` — each stopped at the module where it was
+       invented. Enforcement is extension of existing patterns, not invention; the ranked
+       backlog is in §5-STRUCT.
