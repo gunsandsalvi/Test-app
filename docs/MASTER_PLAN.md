@@ -323,8 +323,8 @@ OWN/OWN7/OWN8 (§7.98, 102, 104, 197), FRM (§7.106), GUARD (§7.105), IDX (§7.
 DEM (§7.181), CAP (§7.167–168, 176–178), COH (§7.199), HSG (§7.159–160, 183, 200), CRD (§7.162,
 184, 201, 205), G3 (§7.185–187), REPO (§7.188), HF (§7.190, 202), DER (§7.191, 201, 203), G5
 (§7.192, 202), NAT (§7.193), ETF2 (§7.201, 205–206), IND16/HC3b (§7.205, 207), STRUCT steps
-1–6 + enforcement (§7.229–242, 274–279), the Tier-1 bug pass (§7.255), the zero-boundary
-burndown (§7.285–286), the money row (§7.288).
+1–6 + enforcement + closure (§7.229–242, 274–279, 290), the Tier-1 bug pass (§7.255), the
+zero-boundary burndown (§7.285–286), the money row (§7.288).
 
 Named remainders inside closed rows: **COH** `equity: 0.42` (needs the asset manager anchor;
 seed-gated); **IND-R4** two stated cost ratios (gated on loss-event and servicing-cost
@@ -333,28 +333,26 @@ mechanisms, §7.283); **G2** the wholesale-roll/holder unification (the last bou
 ---
 ## 5. Instructions for the open items
 
-### STRUCT — invariants by construction *(§7.229–242; standing remainders only)*
+### STRUCT — invariants by construction *(§7.229–242, 274–279, 290 — CLOSED as a project; what
+survives is the standing loop)*
 
-Steps 1/3/4/5/6 built; step 2 done for the company kernel. What stands:
-- **Step 2 elsewhere**: the other 700+-line stages still compute inline. The loop: extract →
-  compile → **fingerprint (FP=1, deep sha256 of the whole state, weeks 1–3, fresh baseline per
-  extraction)** → test → commit. Three of seven kernel extractions failed the fingerprint on
-  arithmetic reordering alone (§7.238) — an extraction that reorders float arithmetic is not a
-  refactor. The kernel's effectful remainder (cash walk ~210 lines, reports, offering settlement)
-  becomes methods taking the ledger.
-- **Step 4 migration**: replace the four instrument unions and the 26-optional-field `details`
-  bag with the discriminated union (the house pattern: repo/swaps/CDS/claims are already true
-  unions). The step-4 registries must become the DISPATCH PATH (zero consumers = §1.3 second
-  representations until the if-chains die behind them).
-- **Tier-2 ledger enforcement remainders**: branded `Money<C>` at the `pay()` seam (brand while a
-  migration touches every call site — units.ts's own seam rule; a brand with unbranded producers
-  is theater); full `readonly` + branded-money pass; the `Account { holder, bankId, balanceUSD }`
-  end-state noun; the BankBook/View FULL split (nominal type, dealer inventories onto per-bank
-  books, aggregate fully derived — §7.279 typed the view half).
-- **Columnar constraint while extracting** (§7.228): every new object keeps flat numeric
-  array-friendly fields and identity as an id.
-- **Institutional behaviour registry**: extend `institution-profiles.ts` until the 64-site
-  entityType dispatch collapses (unblocks new manager/vehicle kinds).
+Every finite item is done (§7.290): the ledger owns money end to end (§7.288 deleted the
+reconcile; the `Account` end-state noun is stated in `engine/ledger/balance.ts`); the four
+instrument taxonomies derive from one superset with the registries as the fact-dispatch path
+(ratchet 64 → 56); the institution registry carries ten per-kind facts; the labor-demand and
+bank-pricing rules joined `domain/` bit-exact with tests. **Deferred, each by its own recorded
+rule, to be taken when its gate opens:** the `Money<C>` brand at `pay()` (units.ts's seam rule —
+a brand with unbranded producers is theater; the every-call-site window §7.277 named has passed,
+so it lands with the columnar payment-journal conversion); the nominal BankBook split (the
+readonly view already made the field-poke class uncompilable; a brand buys nothing measured
+today); the `details`-bag discriminated union (its 30 consumers are ALL in `src/components` —
+AU deletes them, so the union lands with AU's rebuild, not before it).
+
+**The STANDING loop (not a finite item):** when touching a stage that still computes inline
+(07f, pe-lifecycle, 11-fiscal, etf-flows are the biggest), extract the rule block first — extract
+→ compile → **fingerprint (FP=1, fresh baseline per extraction)** → test → commit; keep every
+extracted object flat-input (§7.228). Three of seven kernel extractions failed the fingerprint on
+arithmetic reordering alone (§7.238).
 
 ### P1 — periodicity and units *(standing sweep)*
 
@@ -787,3 +785,4 @@ finding, the number, the lesson. Full narratives in git before the 2026-08-31 co
 287. **THE REBASE: 13 violations / 5 families — the run to judge against** (60wk, seed 2654435769, shocks on, §7.286 tree). The five: USA u band 9x (ends 33.6% — the capex channel is the head of the queue), one w2 shock single, two credit-ETF dust singles, one JPN NIM dip. Boundary silent all 60 weeks; identities green; CPI ×2.024; active firms 2,220 (attrition is REAL now — §1.20); damper 1,640; reconcile meter 2.2B/wk. SEED_BURN_IN, the wholesale re-anchor and COH's 0.42 each stay behind their own recorded gates.
 288. **The three standing issues §7.287 ranked, fixed in one pass:** (a) CAPEX — growth capex capped at the money the firm commands (FCF after maintenance + cash above the treasurer's own operating buffer — one owner, rule 19; the first cut's stated 1.5x IG factor was killed the same day on user order); raised money lands as cash and grows next week's cap by exactly what was raised; at w15 all regions bid 0.65–0.67x depreciation. (b) **THE MONEY ROW CLOSED** — RECON_TRACE proved the early-regime gross was the CLAMP CONVENTION (signed truth ⇒ divergence exactly 0.0M/bank/week: the ~25B was the rolling overdraft float the §7.265 facility drains); the 02b reconcile overwrite DELETED — deposits evolve by settlement alone, the meter stays as watchdog; SME asserts at region level; defaulted firms are IN the truth (§7.286 made the estate account real). (c) THE DAMPER decomposed by book (`book:id` tags): equity 771 / stock loan 283 / corp bond 229 / CP 83 / lev loan 77 at 12wk — half is the small-cap equity tail (SCALE's), sovereign is 2 bills. A decomposition to burn down by named class, not a scalar to watch. 60-week reference on this tree: §7.289.
 289. **THE REFERENCE ON THE §7.288 TREE: 30 violations / 7 FAMILIES — THE RUN TO JUDGE AGAINST** (60wk, seed 2654435769, shocks on). **The capex cap worked at horizon: the u endpoint BENT for the first time since §7.271** — 30.3/28.1/25.4/23.2 (§7.287: 33.6/28.9/26.3/26.3), the USA band family shrinking 9x → 4x (grazes 30.09–30.66 only in the last four weeks — the LAB row at the harness boundary, not a spiral), and the capex battery reads 0.90/0.88/0.88/1.00x of depreciation (§7.287's EUR blowup tree bid 7.5x; JPN at exactly replacement). CPI ×2.189 with w60 inflation 17 annualized; GDP 1.14T; active firms 2,230; carriers 12/12. **The money row's deletion held at full horizon: meter 0.1B gross (watchdog-quiet), boundary ONE declared line ('wholesale funding repaid' −0.2B).** The 30 against §7.287's 13 is the relabel plus two regrown families, both previously named: UK bank NIM 16x (marginal-to-negative, −0.012…0.0096 — §7.261's watch became the top family; §7.254's accretion-blind income measure is the first suspect) and the loan/sov mint drift 6x at 2.0–2.3% over (§7.259's known remainder: claims on issuers that left the book are not swept), plus EUR capital 2x, two ETF dust singles. **The damper decomposition at 60wk: 2,481 persistent binds** (equity 774, corp bond 617, stock loan 472, CP 413, lev loan 121 — the corp-bond/CP tails GROW with horizon where equity is flat; worst streak 60 weeks). Queue set by this run: UK NIM legs → the mint sweep → the damper by class → the band edge.
+290. **STRUCT CLOSED AS A PROJECT — the finite remainders executed in five bit-exact commits, the deferrals each pinned to its own recorded rule.** (a) Ten per-kind facts now live on `INSTITUTION_PROFILES` (liabilityDriven, beneficiariesAreHouseholds, sovereignDurationMandate, sovereignCoreShare, preferredCreditDurationYears, subInvestmentGradeSizeFactor, sellsCdsProtection joined picksOwnNames/investsInEtfs/leverage) — seven if-chain sites across 07b/07c/07g/07h/fx-hedging/household-balance-sheet/cross-border converted value-identically. (b) The two ANONYMOUS instrument unions got names and all four taxonomies derive from one superset (`ItemizedHoldingType`/`EstateClaimType`/`PrimaryOfferingType` as Exclude/Extract views of `HoldingType`) — a new kind must be placed in or excluded from each view deliberately. (c) Two holding facts joined the asset registry (`hedgedAsFixedIncome` — CP excluded, 13-week paper's FX exposure dies with the paper; `carriesRateDuration` — a leveraged loan floats), ratchet 58 → 56. (d) The `Account` end-state noun is STATED in the ledger; assignment-form money-write ratchet 3 → 2 (the survivors: a stock-transfer absorb and a derived view). (e) The employer's weekly labor decision (quit-rate concavity §7.210, the own-price deflators §7.149/249, the demand pull §7.247, the posting precedence §7.269) and the bank's credit pricing (the G2 transmission's quote arithmetic; CREDIT_RECOVERY_RATE got ONE owner) extracted to `domain/` — **FP bit-identical both times**, tests 72 → 86, lint ceiling 386 → 385. DEFERRED with reasons in §5: the Money brand (seam rule — lands with the columnar journal), the nominal BankBook split (the readonly view closed the measured class), the details-bag union (all 30 consumers are UI components AU deletes). The step-2 loop survives as STANDING discipline, not a work item.
