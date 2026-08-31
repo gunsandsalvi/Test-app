@@ -1624,6 +1624,11 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     rngSeed: seed,
     rngState: getRngState(),
     primaryOfferings: [],
+    // §7.274: the workout and accrual ledgers open EMPTY and REQUIRED — a state without them
+    // no longer compiles, so no load or construction path can silently reset them again.
+    estates: [],
+    holderAccruedInterestUSD: new Map<string, Map<string, number>>(),
+    sovereignAccruedInterestUSD: new Map<string, number>(),
     unitMassTonnes: seededUnitMassTonnes,
     freightRatePerTonneLaneMoneyByLane: seededFreightRates,
     // Opens empty: no pair has traded yet, so none has revealed its depth.

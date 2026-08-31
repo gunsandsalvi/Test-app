@@ -56,8 +56,10 @@ export interface GameState {
   /** XB3a-5 — cross-border sales delivered and not yet paid for, in the market's own emergent
    *  invoice currency, due on terms derived from the buyer's own credit. */
   tradeInvoices: import('./trade-invoice').TradeInvoice[];
-  /** G5 — open and just-closed workouts, carried across weeks. */
-  estates?: import('./estate').Estate[];
+  /** G5 — open and just-closed workouts, carried across weeks. §7.274: REQUIRED — the optional
+   *  form let a state without the field compile, and the `?? []` default at context creation
+   *  silently reset every open workout (§4.0 Tier 1 item 3's resetting-default trap). */
+  estates: import('./estate').Estate[];
   /**
    * CAL — accrued-but-unpaid interest by (instrument, holder); see stages/shared-helpers.ts.
    *
@@ -67,11 +69,11 @@ export interface GameState {
    * program, 5.25% of all CPU, converting a container to another container and back. Nothing
    * serialises or hashes GameState, so the object form was buying nothing at all.
    */
-  holderAccruedInterestUSD?: Map<string, Map<string, number>>;
+  holderAccruedInterestUSD: Map<string, Map<string, number>>;
   /** CAL — accrued-but-unpaid SOVEREIGN interest by (region, tenor bucket, party); see
    *  stages/sovereign-calendar.ts. Party-keyed rather than holder-keyed because a bank holds
    *  government paper on its own balance sheet and is not on the institutional register. */
-  sovereignAccruedInterestUSD?: Map<string, number>;
+  sovereignAccruedInterestUSD: Map<string, number>;
   /** CASH — reserves 02b invented this week to cover balances that moved outside settlement. */
   lastCashReconcileUSD?: Partial<Record<import('./geography').RegionId, number>>;
   lastCashReconcileByClassUSD?: { corporate: number; institutional: number; sme: number };
