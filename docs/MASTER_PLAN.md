@@ -3898,3 +3898,12 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        negative-cash company counts as 0 in the truth while the line carries its real flows);
        SME pro-rata share drift; merger consolidation; home-bank reassignment. Each now sits
        inside 0.7B/week total. Owner: STRUCT step 1, one event at a time.
+     - **The clamp, MEASURED both ways and kept**: with the truth counting signed balances the
+       reconcile reads 5.2B/week (USA 2.9, JPN 1.9) against 0.7B clamped — **~4.5B/week of
+       corporate balances stand NEGATIVE**. A negative balance is not a negative deposit (a
+       liability cannot be negative); it is a bank ASSET — an overdraft loan with no line in
+       this model. The clamp is therefore the correct deposits concept, and the 4.5B is the
+       size of the missing overdraft-facility mechanism the §6.1 money-conservation row names
+       (money nobody funded until a negative balance is a real facility draw with a real
+       lender). Reverted the convention change; the facility build is the Tier-2 item, now
+       with its price tag.

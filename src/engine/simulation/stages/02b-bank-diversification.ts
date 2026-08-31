@@ -142,12 +142,15 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity) return;
       if (!c.homeBankTicker) return;
-      // §7.264: SIGNED, not clamped. The deposit line moves by settlement's signed deltas, so
-      // counting a negative-cash company as zero here manufactured its whole |balance| as a
-      // weekly reconcile mismatch (§7.46 L7: a measurement that clamps is a measurement that
-      // lies). A negative balance is the bank's de-facto overdraft credit until the facility
-      // mechanism owns it — the truth and the line agree on that either way.
-      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + c.cash);
+      // §7.264 MEASURED BOTH CONVENTIONS: clamped, the reconcile reads 0.7B/week; signed, it
+      // reads 5.2B — because ~4.5B/week of corporate balances stand NEGATIVE, and a negative
+      // balance is not a negative deposit (a liability cannot be negative) but a bank ASSET —
+      // an overdraft loan this model has no line for. The clamp is therefore the correct
+      // DEPOSITS concept, and what it leaves out is not a truth-convention error but the
+      // missing overdraft-facility mechanism the §6.1 money-conservation row already names:
+      // until a negative balance is a real facility draw with a real lender, the overspent
+      // cash is money nobody funded. Keep the clamp; build the facility (Tier 2).
+      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
     });
     // SEG1: the segment pools' balances, reconciled the same way — each pool's cash sits across
     // the region's banks pro-rata by market share (settlement spreads it identically; this
