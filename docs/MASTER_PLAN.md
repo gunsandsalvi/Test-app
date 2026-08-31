@@ -422,6 +422,91 @@ each. Steps 1–4 are individually shippable and each is bit-exactness-testable 
 which is the property that makes this safe incrementally and unsafe as a rewrite. Do not start step 5
 until the objects exist.
 
+### STRUCT — Invariants by construction, not by discipline  *(§7.229; the next project)*
+
+Every open row in §6.1 is the same failure: an invariant maintained by everyone remembering, rather
+than by the code refusing. 43 authors each remembering both legs of a payment. A capacity rule that no
+object owns. A stage order that is correct only because nobody has moved a stage. The work is not to
+fix the rows; it is to make each class of defect unrepresentable and let the rows close behind it.
+**7,736 lines of `domain/` against 24,595 of `stages/` is the number this project exists to invert.**
+
+**The enforcement mechanism already exists and is why this will stick:** `check-hygiene.sh` already
+fails the build on a stray file in `scripts/`. Every step below adds one rule to it. An architectural
+decision that is not enforced by the build is a comment.
+
+**Step 1 — THE LEDGER. Balances become unwritable outside it.**
+The defect is not that 43 sites write money; it is that they CAN. Money fields become `readonly` on
+every public type, the mutable representation lives private inside `engine/ledger/`, and the only
+export is a double-entry `post(payer, payee, amountUSD, reason)`. A one-legged flow becomes a type
+error. Then **delete 02b's reconcile and the `Math.max(0, cashUSD)` overdraft clamp** — both exist
+only to absorb what the types should have refused, and both CREATE money (§7.229: 14.3B and 6.0B a
+week). An overdraft becomes a modelled event: a credit line drawn, or a payment that fails. **The
+reconcile's own gross is the burndown — it reaches zero when the last site is migrated.**
+Hygiene rule: no assignment to a money field outside `engine/ledger/`.
+
+**EXPECT THE HARNESS TO GET WORSE, AND DO NOT REVERT IT FOR THAT.** 20.3B a week is currently being
+absorbed silently. Stop absorbing it and it has to land somewhere visible. Violations will rise before
+they fall, and §1.20 applies with full force: the derivation is the point, the print is not.
+
+**Step 2 — STAGES ORCHESTRATE, THEY DO NOT COMPUTE.**  *(a standing sweep, not a task)*
+A stage reads state, calls domain objects, writes results: **no arithmetic and no numeric literals in
+`stages/`.** A stage that cannot be written in ~50 lines is the signal that a domain concept is
+missing, delivered while writing rather than forty weeks into a run. `08-company-fundamentals.ts` at
+2,358 lines is not a large function; it is about fifteen absent objects — a P&L, a debt ladder, an
+inventory, a capex programme, a payroll. §7.229's SME lock was twelve lines that belong on `SmePool`.
+**This is 24,595 lines and cannot be one piece of work.** It advances only as steps 1, 3 and 4 pull
+rules out; the hygiene rule below lands LAST, once the count is near zero, or it blocks every commit.
+Hygiene rule (deferred): no bare numeric literals in `stages/`.
+
+**Step 3 — ONE OBJECT PER OPEN DEFECT.**
+`Government` first: it has no primitive at all — twelve free functions over argument bags with the
+state scattered across `Region` — which is why the EUR outlay row has never closed. Then `Collateral`
+(the pledge row), `Fund` (the redemption row), `SmePool` (the capacity row). Each extraction closes its
+own defect AND removes the class it came from.
+
+**Step 4 — EVERY TYPE UNION BECOMES A REGISTRY.**
+The pattern is already in the repo and already right: `profiles/index.ts`, `Record<Kind, Module>`, "one
+line per kind". Generalise it to `AssetType` (75 comparison sites across 17 files), `PartyRef.kind`
+(69/19) and institutional `entityType` (64/21). Each member becomes a module owning how it prices,
+settles and marks. For securities, replace the `details` bag of 26 optional fields with a
+**discriminated union carrying per-type payloads**, so the compiler's exhaustiveness check becomes the
+checklist and a new type will not build until it is handled.
+Hygiene rule: no literal comparison against those unions outside their registry.
+
+**Step 5 — STAGE DEPENDENCIES ARE DECLARED, NOT REMEMBERED.**
+Fifty-two stages in a hand-ordered list whose correctness depends on the order, with nothing checking
+it. §7.226 is the proof: moving `repo-collateral-reconcile` to where the defect said it belonged cut
+the symptom and broke the bank identity, because its side effects relied on being inside the
+settlement window — and that cost a 60-week run to discover. Each stage declares `reads` and `writes`;
+the runner topologically sorts and **fails if a stage reads something written later**. Ordering becomes
+a derived fact instead of tribal knowledge in a comment.
+
+**Step 6 — DELETE THE SEED.**  *(last; it needs the objects)*
+Every §7.4 defect in this file is one bug: the opening world is built by a SECOND code path that
+disagrees with the engine. The WIP pipeline at 1.06 weeks of a 6-week lead, the CPI basket struck on
+the landed price and measured on the shelf, the register at a third of its steady state, the sector
+split — all of it. There should be no seed. A bootstrap sets the exogenous primitives (population,
+geography, the registry) and then **runs the engine's own mechanisms to a fixed point.** One code path
+cannot disagree with itself.
+
+**TESTING — THE COLLISION TO RESOLVE FIRST.** This design says each extracted object is unit-testable,
+and the repo has exactly one test (the harness) plus a §1 rule that `scripts/` may hold only
+`harness.ts` and `check-hygiene.sh`. Those cannot both stand. **Amend the rule to allow a `test/` tree
+of pure-function tests before step 1**, or "unit testable" is a slogan: the harness is an integration
+check and cannot tell you a five-line method is wrong. The rule's intent — one end-to-end script, no
+competing harnesses — is preserved by scoping `test/` to pure domain functions with no engine run.
+
+**RESPECT THE COLUMNAR CONSTRAINT WHILE EXTRACTING.** §7.228 leaves the only remaining speed path as
+moving stage 05 and 08 state into `SharedArrayBuffer`s. That is a different project, but it touches the
+same layout: an object extracted now as a class holding object references has to be extracted again as
+one holding row indices. **So give every new object a flat, numeric, array-friendly field set and keep
+identity as an id rather than a reference.** Doing it in that shape costs nothing now and saves the
+second pass.
+
+**HOW, WITHOUT A BIG-BANG REWRITE.** Strangler fig, one noun at a time, hygiene ratcheting behind each.
+Steps 1, 3, 4 and 5 are individually shippable and each is bit-exactness-testable against the harness —
+the property that makes this safe incrementally and unsafe as a rewrite.
+
 ### P1 — Periodicity and units  *(standing)*
 
 Not a phase, a standing sweep alongside whatever is in flight. **Engine:** walk every rate, growth
