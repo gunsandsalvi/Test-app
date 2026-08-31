@@ -37,14 +37,13 @@
 import { GameState, Region, RegionId, Company, OccupationType } from '../../../types';
 import {
   SECTOR_OCCUPATION_MIX,
-  MATCHING_EFFICIENCY, MATCHING_ELASTICITY, NEUTRAL_LABOR_TIGHTNESS,
-  BASELINE_QUIT_RATE_WEEKLY, LABOR_PRODUCTIVITY_GROWTH_ANNUAL,
+  MATCHING_EFFICIENCY, MATCHING_ELASTICITY,
   HIRING_ADJUSTMENT_SPEED_MULTIPLE, LAYOFF_SPEED_MULTIPLE, DISTRESS_LAYOFF_SPEED,
   VACANCY_WITHDRAWAL_RATE_WEEKLY,
   WAGE_PUSH_PER_UNFILLED_SHARE_ANNUAL, WAGE_PULL_PER_MARGIN_SHORTFALL_ANNUAL,
   COST_OF_LIVING_PASS_THROUGH,
   MARKET_WAGE_CATCHUP_SPEED_WEEKLY,
-  QUIT_ELASTICITY_TO_RELATIVE_WAGE, QUIT_ELASTICITY_TO_EXECUTION, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
+  GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany, fullStaffingCapHeads } from '../../../domain/company';
 import { SmePool } from '../../../domain/region-macro';
@@ -54,9 +53,14 @@ import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-a
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../../bootstrap/population';
 import {
-  RENT_SHARE_TO_LABOUR, RETURN_TO_EXPERIENCE_ANNUAL, TenureStratum, TENURE_COHORTS,
+  RENT_SHARE_TO_LABOUR, TenureStratum, TENURE_COHORTS,
   OCCUPATION_TYPES,
 } from '../../../domain/region-macro';
+import {
+  ownPriceGrowthAnnual, outputPriceVsBaseline, demandPullFromFill,
+  revenueGrowthWindow, realEmploymentGrowthAnnual,
+  quitRateWeeklyAt, firmQuitMultiplier, employerWeekPosting, PriceGrowthRow,
+} from '../../../domain/company-week/labor-demand';
 
 const OCCUPATIONS = OCCUPATION_TYPES;
 
@@ -100,19 +104,16 @@ function occupationMixFor(sector: string): Partial<Record<OccupationType, number
  * against the price it was seeded at (`unitPriceUSD / baseUnitPriceUSD`), revenue-weighted
  * across the firm's lines. A firm whose own product has halved in price is not overstaffed.
  */
-function outputPriceVsBaseline(comp: Company, reg: Region): number {
-  let weight = 0;
-  let weighted = 0;
-  (comp.productLines ?? []).forEach((line) => {
+function outputPriceVsBaselineOf(comp: Company, reg: Region): number {
+  // Gatherer only — the rule is domain/company-week/labor-demand.ts's (§5-STRUCT step 2).
+  return outputPriceVsBaseline((comp.productLines ?? []).map((line) => {
     const cd = reg.categoryDemand[line.subUnitId];
-    const base = cd?.baseUnitPriceUSD ?? 0;
-    const now = cd?.unitPriceUSD ?? 0;
-    if (!(base > 0) || !(now > 0)) return;
-    const w = Math.max(0, line.revenueShare ?? 0);
-    weight += w;
-    weighted += w * (now / base);
-  });
-  return weight > 0 ? weighted / weight : 1;
+    return {
+      weight: Math.max(0, line.revenueShare ?? 0),
+      base: cd?.baseUnitPriceUSD ?? 0,
+      now: cd?.unitPriceUSD ?? 0,
+    };
+  }));
 }
 
 /**
@@ -124,46 +125,29 @@ function outputPriceVsBaseline(comp: Company, reg: Region): number {
  * answered with mass rehiring, a demand surge, a ×3 price week and a mass shed — §7.247's
  * week-52+ seam, measured end to end). Own-price over own-window has neither seam.
  */
-function ownPriceGrowthAnnual(
-  lines: { subUnitId: string; revenueShare?: number }[] | undefined,
-  reg: Region,
-  window: number,
-  fallbackInflationAnnual: number
-): number {
-  let weight = 0;
-  let growth = 0;
-  (lines ?? []).forEach((l) => {
-    const ph = reg.categoryDemand[l.subUnitId]?.priceHistory;
-    if (!ph || ph.length < window + 1) return;
-    const p0 = ph[ph.length - 1 - window];
-    const p1 = ph[ph.length - 1];
-    if (!(p0 > 0 && p1 > 0)) return;
-    const lw = Math.max(0, l.revenueShare ?? 0);
-    weight += lw;
-    growth += lw * ((p1 / p0 - 1) * (52 / window));
-  });
-  return weight > 0 ? growth / weight : fallbackInflationAnnual;
-}
-
-function desiredEmploymentGrowthAnnual(
+function desiredGrowthAnnualOf(
   history: number[] | undefined,
   currentRevenueUSD: number,
   fallbackInflationAnnual: number,
   lines: { subUnitId: string; revenueShare?: number }[] | undefined,
   reg: Region
 ): number {
-  if (!history || history.length < 2) return 0;
-  const window = Math.min(12, history.length - 1);
-  const past = history[history.length - 1 - window];
-  if (!(past > 0) || !(currentRevenueUSD > 0)) return 0;
-  const nominalGrowthAnnual = (currentRevenueUSD / past - 1) * (52 / window);
-  const realGrowthAnnual = nominalGrowthAnnual
-    - ownPriceGrowthAnnual(lines, reg, window, fallbackInflationAnnual);
-  // Labor demand grows with real output net of what productivity delivers for free. UNBOUNDED:
-  // the +/-25% clamp that stood here was doing the work an affordability constraint should do —
-  // it stopped a wild revenue print ordering a hiring spree, but it equally stopped a collapsing
-  // one ordering the layoffs. What limits hiring now is whether the firm can pay for it (below).
-  return realGrowthAnnual - LABOR_PRODUCTIVITY_GROWTH_ANNUAL;
+  // Gatherer only — the window, the deflator and the growth rule live in
+  // domain/company-week/labor-demand.ts (§5-STRUCT step 2), where their tests are.
+  const w = revenueGrowthWindow(history, currentRevenueUSD);
+  if (!w) return 0;
+  const rows: PriceGrowthRow[] = [];
+  (lines ?? []).forEach((l) => {
+    const ph = reg.categoryDemand[l.subUnitId]?.priceHistory;
+    if (!ph || ph.length < w.windowWeeks + 1) return;
+    rows.push({
+      weight: Math.max(0, l.revenueShare ?? 0),
+      p0: ph[ph.length - 1 - w.windowWeeks],
+      p1: ph[ph.length - 1],
+    });
+  });
+  return realEmploymentGrowthAnnual(
+    w.nominalGrowthAnnual, ownPriceGrowthAnnual(rows, w.windowWeeks, fallbackInflationAnnual));
 }
 
 export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): void {
@@ -211,9 +195,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     // A rate cannot exceed 1 — that is arithmetic, not a clamp. The [0.3, 2.5] band that used to
     // bound TIGHTNESS was a behavioural clamp: it kept quits alive in a market with no vacancies,
     // where nobody in fact quits.
-    const relativeJobFindingRate = Math.pow(
-      Math.max(0, priorTightness) / NEUTRAL_LABOR_TIGHTNESS, MATCHING_ELASTICITY);
-    const quitRateWeekly = Math.min(1, BASELINE_QUIT_RATE_WEEKLY * relativeJobFindingRate);
+    const quitRateWeekly = quitRateWeeklyAt(priorTightness);
 
     interface Posting { comp: Company; vacancies: number; layoffs: number; quits: number }
     const postings: Posting[] = [];
@@ -222,21 +204,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     employers.forEach((comp) => {
       const current = Math.max(0, comp.employeeCount);
       if (current <= 0) return;
-      const growthAnnual = desiredEmploymentGrowthAnnual(
+      const growthAnnual = desiredGrowthAnnualOf(
         comp.revenueHistory, comp.annualRevenue, inflationAnnual, comp.productLines, reg);
       const desiredWeeklyChange = current * (growthAnnual / 52);
 
       // HH6: a firm's OWN quit rate. Paying below the going rate loses people faster; paying
       // above keeps them, which is what makes a raise do something rather than just cost money.
       // Execution quality retains too — a well-run firm loses fewer of them.
-      const wageIndex = comp.offeredWageIndex ?? 1.0;
-      const firmQuitMultiplier = Math.max(0,
-        1 - (wageIndex - 1) * QUIT_ELASTICITY_TO_RELATIVE_WAGE
-          - ((comp.executionQuality ?? 1.0) - 1) * QUIT_ELASTICITY_TO_EXECUTION
-      );
-      // Bounded where a quit rate is really bounded: nobody can quit twice, and a firm paying
-      // far above the market simply loses nobody.
-      const quits = current * Math.min(1, quitRateWeekly * firmQuitMultiplier);
+      const quits = current * Math.min(1,
+        quitRateWeekly * firmQuitMultiplier(comp.offeredWageIndex ?? 1.0, comp.executionQuality ?? 1.0));
 
       // ---- LAB: WHAT THE FIRM CAN AFFORD. ----
       //
@@ -282,7 +258,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         : 0;
       // Both sides of this ratio in the SAME dollars: this week's revenue deflated back to the
       // price level the baseline was struck at (see `outputPriceVsBaseline`).
-      const realRevenueUSD = comp.annualRevenue / Math.max(0.05, outputPriceVsBaseline(comp, reg));
+      const realRevenueUSD = comp.annualRevenue / Math.max(0.05, outputPriceVsBaselineOf(comp, reg));
       // §7.247 — THE LEVEL TARGET SEES THE DEMAND THE FIRM'S MARKETS LEFT UNSERVED.
       //
       // Realized revenue is what the firm's CURRENT staff produced, so a target built on it
@@ -298,18 +274,14 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // measurement with no coefficient. It reaches Infinity honestly when a market received
       // nothing; what bounds hiring is what always bounds it — affordability and the matching
       // friction — not a cap on the signal.
-      let fillWeight = 0;
-      let fillSum = 0;
-      (comp.productLines ?? []).forEach((l) => {
+      const demandPull = demandPullFromFill((comp.productLines ?? []).map((l) => {
         const cd = reg.categoryDemand[l.subUnitId];
-        const demandedUnits = Number(cd?.totalUnitsDemandedThisWeek) || 0;
-        const suppliedUnits = Number(cd?.totalUnitsSuppliedThisWeek) || 0;
-        if (!(demandedUnits > 0)) return;
-        const lw = Math.max(0, l.revenueShare ?? 0);
-        fillWeight += lw;
-        fillSum += lw * Math.min(1, suppliedUnits / demandedUnits);
-      });
-      const demandPull = fillWeight > 0 ? (fillSum > 0 ? fillWeight / fillSum : Infinity) : 1;
+        return {
+          weight: Math.max(0, l.revenueShare ?? 0),
+          demanded: Number(cd?.totalUnitsDemandedThisWeek) || 0,
+          supplied: Number(cd?.totalUnitsSuppliedThisWeek) || 0,
+        };
+      }));
       // …AND IS CAPPED BY THE HEADS PRODUCTION CAN USE. Stage 05 caps `staffedShare` at 1: a
       // worker beyond the plant's full staffing adds ZERO output. An uncapped pull kept firms
       // bidding for workers with no marginal product once the economy reached full staffing —
@@ -330,43 +302,18 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         ? earningsHeadroomUSD / annualWagePerWorkerUSD
         : 0;
 
-      let vacancies = 0;
-      let layoffs = 0;
-      if (desiredWeeklyChange >= 0) {
-        // Growing: hire the increment PLUS replace the churn — real gross flows, not the net.
-        // §7.249 — BOUNDED BY THE HEADS THE PLANT CAN USE (§7.247's cap, the same physics as
-        // stage 05's staffedShare ≤ 1). This branch was UNBOUNDED: a wild revenue print ordered
-        // a spree no plant could employ — measured, one bank posted 2.9e14 vacancies in one
-        // week, tightness printed 266,345, the quit rate clipped to 100%/week and every worker
-        // in the region quit (§7.247's teleports, root-caused). The physical cap alone kills
-        // that — a hire beyond full staffing adds no output — and deliberately NOT the
-        // affordability gate here: gating ordinary growth hiring on STOCK headroom throttled
-        // recovery economy-wide when tried (u 14.9% → 27% by week 51), because a thin-margin
-        // firm hiring into real demand is not the failure this bound exists for. Affordability
-        // keeps gating the LEVEL path, as §7.110 designed.
-        const hireableHeads = Math.min(desiredWeeklyChange, Math.max(0, productiveHeadsCap - current));
-        vacancies = hireableHeads * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits;
-      } else {
-        // Shrinking: attrition does the work first (it is free), layoffs only for the rest.
-        layoffs = Math.max(0, -desiredWeeklyChange * LAYOFF_SPEED_MULTIPLE - quits);
-      }
-      // §7.247 — a firm whose own market left demand unserved, and whose earnings can carry more
-      // staff, does not shed on the growth signal: that signal reads a revenue its own staffing
-      // produced, and in a short market it orders the layoffs that keep the market short. The
-      // two rules that outrank the market being short come AFTER this: a firm that cannot pay
-      // (the affordability cut) and a firm out of cash shed regardless.
-      const understaffedHeads = Math.max(0, outputNeedHeads - current);
-      if (affordableHireHeads > 0 && understaffedHeads > 0) {
-        layoffs = 0;
-        vacancies = Math.max(vacancies,
-          Math.min(understaffedHeads, affordableHireHeads) * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits);
-      }
-      // LAB: and it sheds toward what it can afford — the gap between its earnings and its cost
-      // of capital, in workers, at the speed layoffs actually happen. This is the ordinary
-      // response; the cash rule below is the acute one.
-      if (affordableCutHeads > 0) layoffs = Math.max(layoffs, affordableCutHeads * LAYOFF_SPEED_MULTIPLE);
-      // A firm genuinely out of cash sheds staff regardless of the friction above.
-      if (comp.cash < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
+      // The posting rule — precedence and bounds — is domain/company-week/labor-demand.ts's
+      // `employerWeekPosting` (§5-STRUCT step 2); this stage only gathers its inputs.
+      const { vacancies, layoffs } = employerWeekPosting({
+        currentHeads: current,
+        desiredWeeklyChangeHeads: desiredWeeklyChange,
+        quitsHeads: quits,
+        productiveHeadsCap,
+        outputNeedHeads,
+        affordableHireHeads,
+        affordableCutHeads,
+        cashIsNegative: comp.cash < 0,
+      });
 
       const mix = occupationMixFor(comp.sector);
       OCCUPATIONS.forEach((occ) => {
@@ -391,7 +338,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         revenueShare: (seg.salesDerivedAnnualRevenueUSDBySubUnit?.[su.unitId]
           ?? reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0),
       }));
-      const growthAnnual = desiredEmploymentGrowthAnnual(
+      const growthAnnual = desiredGrowthAnnualOf(
         seg.revenueHistoryUSD, seg.annualRevenueUSD, inflationAnnual, segLines, reg
       );
       const desiredWeeklyChange = current * (growthAnnual / 52);
