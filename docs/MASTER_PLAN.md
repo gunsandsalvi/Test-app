@@ -2600,3 +2600,36 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - **THE LOOP, for whoever continues: extract → compile → fingerprint → test → commit.** Two of
        four extractions failed the fingerprint on the first attempt. Without it, both would have
        shipped as "pure refactors" and the world would have moved for reasons nobody could find.
+238. **§5-STRUCT STEP 2 COMPLETE FOR THE COMPANY KERNEL: SEVEN OBJECTS, 71 TESTS, ALL BIT-EXACT.**
+     `capital-programme`, `credit-standing`, `debt-ladder`, `income-statement`, `inventory`,
+     `distributions`, `payroll` — 659 lines of `domain/company-week/`, each a pure function over
+     flat inputs (§7.228's columnar constraint), each checked against the three-week fingerprint,
+     each carrying the tests that its rule made possible for the first time.
+     - **THE FINGERPRINT CAUGHT THREE ERRORS IN MY OWN EXTRACTIONS, and every one was an ARITHMETIC
+       REORDERING invisible by reading.** (a) The profile path guards net income on `ebit > 0`, not
+       on pre-tax income — different for the over-levered but operationally sound firm. (b) Folding
+       three cost lines into one `operatingCosts` argument re-associates a floating-point
+       subtraction. (c) Returning one summed input cost instead of the per-lot costs changes a
+       running total that spans several sub-units. **Three of seven extractions failed on the first
+       attempt. Without a bit-exactness check all three ship as "pure refactors" and the world moves
+       for reasons nobody can later find.**
+     - **AND THE LINT RATCHET CAUGHT A FOURTH THING — MINE.** The distributions extraction left a
+       local unused, taking the warning count 437 → 438 and failing the build. Removed rather than
+       raising the ceiling, **which is the entire point of a ratchet.**
+     - **TWO REAL DEFECTS FOUND BY EXTRACTING, both now §6.1 rows.** The industrial path rebates a
+       pre-tax loss at the tax rate and the profile path does not (§7.237) — the rule was written
+       twice inline, which is how the copies came to disagree. And seven `comp.x = comp.x` no-ops
+       left by my own earlier `Object.assign` conversion (§7.235).
+     - **THE HONEST LINE COUNT: the file is 2,358 lines, up from 2,317.** Seven extractions have made
+       it LONGER, because a pure function needs its inputs gathered explicitly where inline code
+       just reached for them, and the gathering is more verbose than the reaching. **What changed is
+       not the size; it is that 659 lines of rules now live somewhere they can be tested, and the
+       stage is visibly a gatherer rather than a decider.** Anyone measuring this project by the
+       kernel's line count will conclude nothing happened. That is the wrong measure and this record
+       exists to say so.
+     - **WHAT REMAINS IN THE KERNEL AND WHY IT IS STILL THERE.** The weekly cash walk (~210 lines)
+       is EFFECTFUL — it posts payments through the ledger — so it is not a pure function and does
+       not belong in `domain/`. It should become a method on a `CashWalk` object that takes the
+       ledger, which is a different shape of change and belongs with the §5-STRUCT step 1 migration
+       rather than here. The reports block and the offering/refinancing settlement are likewise
+       effectful. **The rules are out; what is left is the doing, and that is what a stage is for.**

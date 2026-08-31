@@ -44,6 +44,7 @@ import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain
 import { industrialIncome, profileIncome } from '../../../domain/company-week/income-statement';
 import { chargeCarryingCost, consumeLotsFifo, fulfillmentRatio } from '../../../domain/company-week/inventory';
 import { dividendDecision } from '../../../domain/company-week/distributions';
+import { payrollWeek } from '../../../domain/company-week/payroll';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -304,7 +305,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // already contains a baseline wage bill; charging the whole payroll again would count it
     // twice. A profile with no stated margin (the carrier) charges the payroll in full instead —
     // that is the cost-shape choice a profile exists to make.
-    const payrollAboveBaselineAnnualUSD = (weeklyPayrollUSD - baselineWeeklyPayrollUSD) * 52;
+    // §5-STRUCT step 2 — the deviation rule lives on the firm (domain/company-week/payroll.ts).
+    const payroll = payrollWeek({ weeklyUSD: weeklyPayrollUSD, baselineWeeklyUSD: baselineWeeklyPayrollUSD });
+    const payrollAboveBaselineAnnualUSD = payroll.aboveBaselineAnnualUSD;
 
     // IND-R6 — THE LISTING BRANCH IS GONE. There is one operating model and every firm runs it.
     //
