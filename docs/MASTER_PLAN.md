@@ -297,13 +297,13 @@ prerequisites are not done. **Do not reorder** — the sequence encodes prerequi
 from a row: a market cannot be honest before the demand side it prices against is, and a clamp
 cannot be deleted before the mechanism under it exists.
 
-**THE RUN TO JUDGE AGAINST IS §7.256's: 204 violations / 18 FAMILIES on the Tier-1-pass
-tree** (counts 628 → 361 → 351 → 320 → 367 → 278 → 204; families 94 → 67 → 60 → 44 → 18;
-§7.256 recorded the cost — the EUR fiscal-labour spiral — and §7.257 root-fixed it (the
-household budget was a slice of the demand level, not its income). §7.258 is the reference on
-that tree (169/18); §7.259 then killed the UK bank cohort's killer (the underwriting pipeline
-destroying the lead's residual + the missing holder principal leg) — a fresh reference on the
-§7.259 tree is due and will supersede §7.258.)
+**THE RUN TO JUDGE AGAINST IS §7.261's: 99 violations / 13 FAMILIES on the §7.259 tree**
+(counts 628 → 361 → 351 → 320 → 367 → 278 → 204 → 169 → 99; families 94 → 67 → 60 → 44 → 18
+→ 13. The chain: §7.256 recorded the EUR fiscal-labour spiral, §7.257 root-fixed it (the
+household budget was a slice of the demand level, not its income), §7.258 referenced that tree
+(169/18), §7.259 killed the UK bank cohort's killer (the underwriting pipeline destroying the
+lead's residual + the missing holder principal leg), and §7.261 referenced THAT tree: CPI
+×2.144, the 10Y released at 5.93, all four regions cohering at horizon.)
 Each run is the record of its own tree; compare nothing across them without naming the
 relabel between.
 
@@ -3782,3 +3782,28 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        tonnage that actually moves — where do the other ~98% of the world's freight dollars
        go, and why does week 1 pay a carrier ~6x less than the seed cleared for the identical
        fleet and flows. Owner: the freight book (XB3a-2), with the sourcing intent.
+
+261. **THE REFERENCE ON THE §7.259 TREE: 99 violations in 13 FAMILIES — THE RUN TO JUDGE
+     AGAINST** (counts 628 → … → 204 → 169 → 99). 60 weeks, seed 2654435769, shocks on.
+     (Predates §7.260's carrier-seed fix — a 12-firm seed relabel the next reference absorbs.)
+     - **§7.259 verified at reference scale**: UK bank capital GONE (12x → 0); UK NIM 42 → 10,
+       every survivor marginal (0.0089–0.0098 against the 0.01 floor — VOUL's seed wholesale
+       stack at its cleared spread, the watch item, not the killer); the loan/bond mint
+       families did not appear (the paydown holds at 60 weeks); **EUREQX 34 → 3 — the paydown
+       WAS most of one fund's missing income**, and the class is now UKEQSX 34x + JPNEQX 34x
+       (unchanged, so their drain is something else) + USAEQX 3x new-small.
+     - **The world at horizon, best in the model's history**: CPI ×2.144 (was ×2.269, from
+       ×4.969 two references ago), week-60 inflation 14 annualized and FALLING; u 30.2 / 28.1
+       / 21.2 / 23.0 all cohering; GDP 1.13T; **the 10Y RELEASED AGAIN (5.93 at w60)** — the
+       §7.256 release now reproduces on a second tree, so the damper row's (b) has a moving
+       instrument twice; bypass gross 1.9B/week (2.1 → 1.9).
+     - **New reference-scale families**: USA unemployment GRAZES its 30% band cap 8x
+       (30.08–30.24) — the labour long-horizon row's number, now at the harness boundary, not
+       a spiral; three contract-backlog singles (was eight); one under-subscribed-auction
+       non-response.
+     - Still standing: carriers 0/12 (§7.260's live-market question), unbackedBankCashUSD
+       1,451B rising (Tier 2's meter), damper 1,617 persistent binds, fill 0.585.
+     - Queue: (1) UKEQSX/JPNEQX 34x (trace running); (2) §4.0 Tier 2 (whole-sheet channel
+       migration → delete the 02b reconcile + overdraft clamp); (3) the carrier live-market
+       reconciliation; (4) USA u at the band edge (LAB row); (5) UK NIM marginal (VOUL
+       wholesale watch).
