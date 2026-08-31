@@ -142,7 +142,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity) return;
       if (!c.homeBankTicker) return;
-      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
+      // §7.264: SIGNED, not clamped. The deposit line moves by settlement's signed deltas, so
+      // counting a negative-cash company as zero here manufactured its whole |balance| as a
+      // weekly reconcile mismatch (§7.46 L7: a measurement that clamps is a measurement that
+      // lies). A negative balance is the bank's de-facto overdraft credit until the facility
+      // mechanism owns it — the truth and the line agree on that either way.
+      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + c.cash);
     });
     // SEG1: the segment pools' balances, reconciled the same way — each pool's cash sits across
     // the region's banks pro-rata by market share (settlement spreads it identically; this
