@@ -16,6 +16,8 @@
  * amount and the caller issues it — one writer per fact (§1.3).
  */
 
+import { TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../company';
+
 export interface CapitalProgrammeInputs {
   /** The plant, as a stock. */
   grossPPEUSD: number;
@@ -134,11 +136,15 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // it, so the multiplicative stack was unbounded — measured at the §7.287 reference: EUR
   // firms bid 317B/yr of capex against 42B of depreciation (7.5x), draining the world's
   // capital-goods supply at 2x prices while USA firms below replacement couldn't fill.
-  // Maintenance has had a funding capacity since §7.167; growth gets the SAME convention:
-  // free cash flow after maintenance, levered half again for an investment-grade name (the
-  // identical 0.5 bridge share upkeep uses). A firm that wants more than that raises real
-  // money first — the financing decision, which is a different function.
-  const growthFundingCapUSD = fcfBeforeGrowthCapex * (i.isInvestmentGrade ? 1.5 : 1.0);
+  // The cap is the money the firm actually commands, from mechanisms the model already has
+  // and NOTHING stated here (rule 19): the year's free cash flow after maintenance, plus the
+  // cash pile above the treasurer's own operating buffer — the same buffer 07f's bill sleeve
+  // is sized against, one owner. Debt- or equity-funded expansion arrives the way it really
+  // does: the firm RAISES the money first (the financing decision and the primary market),
+  // the proceeds land as cash, and the next week's cap has grown by exactly what was raised.
+  const deployableCashUSD = Math.max(0,
+    i.cashUSD - i.annualRevenueUSD * TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE);
+  const growthFundingCapUSD = Math.max(0, fcfBeforeGrowthCapex) + deployableCashUSD;
   const targetGrowthCapex = Math.min(desiredGrowthCapex, growthFundingCapUSD);
   const growthCapexUSD = Math.max(0, i.priorGrowthCapexUSD * 0.90 + targetGrowthCapex * 0.10);
 

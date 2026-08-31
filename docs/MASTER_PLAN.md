@@ -4349,11 +4349,17 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        w25 EUR is a normal 0.73x of depreciation; the 317B/yr blowup (7.5x) develops later,
        out of the growth-capex multiplier stack (q x competitiveness x shortage), which had
        NO FINANCING TERM: every factor was a reason to WANT plant, none a means to PAY.
-       Growth capex now carries the same funding convention maintenance has had since §7.167:
-       capped at free cash flow after maintenance, levered half again (the identical 0.5
-       bridge share) for an investment-grade name. A firm that wants more raises real money
-       first — the financing decision, a different function. Unit-tested (72nd pure test);
-       60-week read pending below.
+       Growth capex is now capped at the money the firm actually commands, derived from
+       mechanisms the model already has and NOTHING stated (rule 19 — corrected in-session:
+       the first cut levered FCF by a stated 1.5x for IG names, a shape constant, killed the
+       same day): the year's free cash flow after maintenance PLUS the cash pile above the
+       treasurer's own operating buffer (`TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE`, the
+       same buffer 07f's bill sleeve is sized against — one owner). Debt- or equity-funded
+       expansion arrives the way it really does: the firm raises the money first, the
+       proceeds land as cash, and the next week's cap has grown by exactly what was raised.
+       Unit-tested (72nd pure test). At w15 all four regions bid 0.65–0.67x of depreciation
+       — the cap binds honestly in the squeeze regime; the 60-week endpoint is the next
+       reference's read.
      - **THE MONEY ROW (task #8, gate-blocked since §7.241): CLOSED — the meter reads 0.0B.**
        RECON_TRACE attributed the early-regime gross (62.7B/wk at w9, ALL corporate class) to
        a CONVENTION, not a flow: the truth-Σ clamped negatives (`max(0, cash)`) while
