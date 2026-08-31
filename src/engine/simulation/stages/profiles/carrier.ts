@@ -21,14 +21,26 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
 
   const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, state.unitMassTonnes ?? {});
-  let weeklyFuelTonnes = 0;
+  // §4.0 Tier 1 item 14 — FUEL BURNS ON VOYAGES SAILED, NOT ON THE FLEET'S EXISTENCE. This
+  // charged every asset its FULL-CAPACITY voyage schedule every week while revenue was only
+  // the freight actually carried — a fleet at 1% utilization paid 100% steaming costs, and all
+  // twelve carriers bled to death by mid-run (§7.253: 0 of 12 alive, logistics 0.03% of GDP).
+  // An idle ship is laid up; fuel scales with the tonne-miles the carrier really moved this
+  // week against what the fleet could move, bounded at 1 by physics (it cannot sail more than
+  // its capacity).
+  let fullFleetFuelTonnes = 0;
+  let capacityTonneNm = 0;
   (comp.carrierFleet?.assets ?? []).forEach((asset: any) => {
     const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);
     const perWeek = weeklyCapacityTonnes(asset, distanceNm);
     const voyages = asset.capacityTonnes > 0 ? perWeek / asset.capacityTonnes : 0;
-    weeklyFuelTonnes += voyages * (asset.fuelTonnesPerNm ?? 0) * distanceNm;
+    fullFleetFuelTonnes += voyages * (asset.fuelTonnesPerNm ?? 0) * distanceNm;
+    capacityTonneNm += perWeek * distanceNm;
   });
-  const annualFuel = weeklyFuelTonnes * fuelUsdPerTonne * 52;
+  const utilization = capacityTonneNm > 0
+    ? Math.min(1, (ctx.carrierTonneNm[comp.ticker] ?? 0) / capacityTonneNm)
+    : 0;
+  const annualFuel = fullFleetFuelTonnes * utilization * fuelUsdPerTonne * 52;
   // IND-R1, rule 3: ONE payroll. This used to be `sum(asset.crewCount) x crewAnnualWageUSD` —
   // a second wage bill computed off the fleet spec, which the labor market cannot touch, while
   // `employeeCount` (which it hires and fires, and which pays the households) moved
