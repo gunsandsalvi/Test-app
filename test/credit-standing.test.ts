@@ -1,0 +1,64 @@
+/**
+ * §5-G5: the public tier defaulted at ~10%/yr against ~1-2% in reality while the private tier with
+ * real ladders showed ZERO — because nothing at all stood between a bad week and a default. These
+ * assert the thing that now does: a firm draws its line first, and defaults when the line is
+ * exhausted, which is a different event and a far rarer one.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare }
+  from '../src/domain/company-week/credit-standing';
+
+test('coverage is unbounded, because a bound is not a measurement', () => {
+  // §1.15: the old [-50, 50] clamp destroyed the information that a firm has no earnings at all.
+  const wrecked = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueUSD: 1e9,
+    ebitdaUSD: 1, ebitUSD: -2e8, annualInterestUSD: 1e6, bankCapitalRatio: 0.1 });
+  assert.ok(wrecked.coverage < -50, `coverage ${wrecked.coverage} should not be clamped`);
+});
+
+test('a firm with no earnings still reports a finite leverage', () => {
+  const m = creditMetrics({ isBank: false, totalDebtUSD: 1e9, revenueUSD: 0,
+    ebitdaUSD: 0, ebitUSD: 0, annualInterestUSD: 0, bankCapitalRatio: 0.1 });
+  assert.ok(isFinite(m.leverage) && isFinite(m.coverage));
+  assert.ok(m.leverage > 0);
+});
+
+test('a bank is rated on its capital, not on an EBITDA it does not report', () => {
+  const thin = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueUSD: 1e9,
+    ebitdaUSD: 0, ebitUSD: 0, annualInterestUSD: 0, bankCapitalRatio: 0.04 });
+  const sound = creditMetrics({ isBank: true, totalDebtUSD: 1e9, revenueUSD: 1e9,
+    ebitdaUSD: 0, ebitUSD: 0, annualInterestUSD: 0, bankCapitalRatio: 0.12 });
+  assert.ok(thin.coverage < sound.coverage);
+});
+
+test('a firm whose earnings cannot carry another dollar of interest gets nothing', () => {
+  // The case the default trigger is FOR: the line closes exactly when a lender would stop.
+  assert.equal(revolverDrawUSD({ cashShortfallUSD: 5e8, headroomUSD: 0, alreadyDrawnUSD: 0 }), 0);
+});
+
+test('a draw never exceeds the shortfall or the remaining headroom', () => {
+  assert.equal(revolverDrawUSD({ cashShortfallUSD: 100, headroomUSD: 1e9, alreadyDrawnUSD: 0 }), 100);
+  assert.equal(revolverDrawUSD({ cashShortfallUSD: 1e9, headroomUSD: 500, alreadyDrawnUSD: 200 }), 300);
+  assert.equal(revolverDrawUSD({ cashShortfallUSD: 1e9, headroomUSD: 100, alreadyDrawnUSD: 900 }), 0);
+});
+
+test('default needs BOTH cash exhausted and coverage below the floor', () => {
+  const base = { wasDefaulted: false, mergerAcquired: false, coverageFloor: 1.0 };
+  assert.equal(isInDefault({ ...base, cashUSD: -1, coverage: 0.5 }), true);
+  assert.equal(isInDefault({ ...base, cashUSD: -1, coverage: 5.0 }), false, 'solvent but illiquid is not default');
+  assert.equal(isInDefault({ ...base, cashUSD: 1e9, coverage: 0.1 }), false, 'thin cover with cash is not default');
+});
+
+test('an acquired firm is not in default, however bad its book', () => {
+  assert.equal(isInDefault({ wasDefaulted: true, mergerAcquired: true, cashUSD: -1e9,
+    coverage: -100, coverageFloor: 1.0 }), false);
+});
+
+test('the maturity wall is the share falling due inside a year', () => {
+  const ladder = [
+    { principalUSD: 250, maturityWeek: 10 },
+    { principalUSD: 750, maturityWeek: 400 },
+  ];
+  assert.equal(maturityWallShare(ladder, 5), 0.25);
+  assert.equal(maturityWallShare([], 5), 0);
+});

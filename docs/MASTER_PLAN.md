@@ -2555,3 +2555,29 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        and the warning ceiling is today's count, so a new `any` fails the build while the existing
        77 do not. Plus hygiene's three budgets and 23 tests, all on push and PR. **Every one is a
        ratchet: each may fall and never rise.**
+236. **§5-STRUCT STEP 2 STARTED: TWO OBJECTS OUT OF THE COMPANY KERNEL, BOTH BIT-EXACT.**
+     The 1,900-line kernel is not a large function; it is fifteen absent objects (§7.229). Two are
+     now out, each with a bit-exactness check over three weeks and tests that could not previously
+     be written at all.
+     - **`capital-programme.ts`** — 158 lines: maintenance anchored to depreciation, what can be
+       funded, what is deferred, the growth envelope with its shortage signal, the plant's
+       roll-forward. Six tests, and the one that matters most asserts the §7.151 defect cannot
+       return: **the target must move with gross PP&E and useful life, and must NOT move when only
+       its own prior value moves.** That defect ran invisibly until someone measured the
+       construction stock; it is now two assertions.
+     - **`credit-standing.ts`** — the two ratios, the revolver draw, the default trigger, the
+       maturity wall. They belong together because they are one question from three sides: §5-G5
+       found the public tier defaulting at ~10%/yr against ~1–2% in reality **because nothing stood
+       between a bad week and a default.** Eight tests, including that solvent-but-illiquid is not
+       default and thin-cover-with-cash is not default — the two halves that must BOTH hold.
+     - **THE PATTERN, for whoever continues this.** Extract → compile → **fingerprint against the
+       three-week baseline** → write the tests the extraction makes possible → commit. Every step
+       is cheap and the fingerprint is what makes it safe: both extractions came back bit-exact
+       first time, so the refactor is provably behaviour-preserving rather than argued to be.
+     - **WHAT IS LEFT IN THE KERNEL, honestly: the file is 2,317 lines and the two extractions took
+       it DOWN by about 100 net**, because a pure function needs its inputs gathered explicitly
+       where inline code just reached for them. **That is the cost and it is worth paying** — the
+       gathering is now visible, and what was extracted is testable — but do not expect the line
+       count to fall fast. The remaining seams: the weekly cash walk (~210 lines, effectful — it
+       posts payments, so it needs the ledger not a pure function), the debt ladder and refinancing
+       (~600 lines, the biggest), the P&L, the payroll, the inventory.

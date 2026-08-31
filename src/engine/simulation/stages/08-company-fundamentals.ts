@@ -39,6 +39,7 @@ import { measureBeta, regionIndexOf } from '../../macro/indices';
 import { pay, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { planCapitalProgramme, commissionCapital } from '../../../domain/company-week/capital-programme';
+import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -1148,22 +1149,19 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // silently restored: cash gone, debt not. Leak #3, and likely a real default driver.)
 
     // Credit metrics
-    const rawLeverage = comp.sector === 'Banks'
-      ? (newTotalDebt / Math.max(1, newRevenue * 0.4))
-      : (newTotalDebt / Math.max(1, newEbitda));
-    // CRD — the [0, 100] bound is GONE. It existed because EBITDA passes through zero and the
-    // ratio explodes; the denominator is already floored, so the number is finite without it, and
-    // what the bound actually destroyed was the information that the firm has no earnings at all.
-    // `determineCreditRating` is told the earnings directly now and answers that case itself.
-    const newLeverage = isFinite(rawLeverage) ? Number(Math.max(0, rawLeverage).toFixed(2)) : 5.0;
-
-    const rawCoverage = comp.sector === 'Banks'
-      ? (reg.bankingSector.bankCapitalRatio < 0.05 ? 0.4 : 3.0)
-      : (newEbit / Math.max(0.5, annualInterest));
-    // ...and the [-50, 50] bound with it, for the same reason: the denominator is floored, so
-    // coverage is finite, and a firm at -200x coverage is telling you something a firm at -50x is
-    // not (rule 15 — a bound is not a measurement either).
-    const newCoverage = isFinite(rawCoverage) ? Number(rawCoverage.toFixed(2)) : 1.5;
+    // §5-STRUCT step 2 — the two ratios a rating is struck on live on the firm's credit standing
+    // (domain/company-week/credit-standing.ts), unbounded and for the stated reason: a bound is not
+    // a measurement (§1.15), and the clamps these used to carry destroyed the information that a
+    // firm has no earnings at all.
+    const { leverage: newLeverage, coverage: newCoverage } = creditMetrics({
+      isBank: comp.sector === 'Banks',
+      totalDebtUSD: newTotalDebt,
+      revenueUSD: newRevenue,
+      ebitdaUSD: newEbitda,
+      ebitUSD: newEbit,
+      annualInterestUSD: annualInterest,
+      bankCapitalRatio: reg.bankingSector.bankCapitalRatio,
+    });
 
     // G5 — THE COMMITTED LINE IS DRAWN BEFORE ANYTHING DEFAULTS.
     //
@@ -1187,7 +1185,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         currentAnnualInterestUSD: annualInterest,
         revolverRateAnnual,
       }) - alreadyDrawnUSD);
-      const drawUSD = Math.min(-newCash, headroomUSD);
+      const drawUSD = revolverDrawUSD({
+        cashShortfallUSD: -newCash, headroomUSD, alreadyDrawnUSD: 0,
+      });
       if (drawUSD > 1) {
         const revolver: DebtTranche = {
           id: `${comp.id}-REVOLVER-LIQ-${nextWeek}`,
@@ -1214,7 +1214,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // of this trigger — the same object the credit market prices its hazard against
     // (computeAnnualDefaultProbability), so priced risk and realized risk are one model. It is
     // reached now only AFTER the committed line above has been drawn to whatever it will bear.
-    const isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < DEFAULT_COVERAGE_FLOOR));
+    const isDefaulted = isInDefault({
+      wasDefaulted: comp.isDefaulted,
+      mergerAcquired: Boolean(comp.mergerAcquired),
+      cashUSD: newCash,
+      coverage: newCoverage,
+      coverageFloor: DEFAULT_COVERAGE_FLOOR,
+    });
 
     let newRating = comp.creditRating;
 
@@ -1231,9 +1237,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // CRD-R1 — the rating reads everything the model already measures about this issuer, not
       // just two ratios (§7.184). Every argument is a measurement taken elsewhere for another
       // purpose; nothing here is a new stated weight.
-      const wallUSD = comp.debtTranches
-        .filter((t) => (t.maturityWeek ?? Infinity) - nextWeek <= 52)
-        .reduce((a, t) => a + t.principalUSD, 0);
+      const maturityWallShareOfLadder = maturityWallShare(comp.debtTranches, nextWeek);
       const ladderUSD = Math.max(1, comp.debtTranches.reduce((a, t) => a + t.principalUSD, 0));
       const revHist = comp.revenueHistory ?? [];
       const revMean = revHist.length > 2 ? revHist.reduce((a, x) => a + x, 0) / revHist.length : 0;
@@ -1245,7 +1249,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         peerMedianRevenueUSD: regionMedianRevenueUSD,
         customerConcentration: comp.customerConcentration,
         supplierConcentration: comp.supplierConcentration,
-        maturityWallShare: wallUSD / ladderUSD,
+        maturityWallShare: maturityWallShareOfLadder,
         liquidityToDebt: Math.max(0, newCash) / ladderUSD,
         revenueVolatility: revVol,
         // CRD: the earnings themselves, so the rater can answer the case the ratio clamps were
