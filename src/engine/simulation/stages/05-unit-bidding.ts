@@ -1541,7 +1541,14 @@ function runSubUnitMarkets(
             const amountUSD = freightUSD * share;
             if (!(amountUSD > 0)) return;
             paidUSD += amountUSD;
-            ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0) + amountUSD;
+            // §6.1 money-locality: the freight leg is BUYER money, and a carrier serves lanes
+            // whose buyers pay in four different monies — summing them raw made its revenue
+            // line a currency salad and its margin an FX artifact. The carrier's income stat
+            // accrues in the carrier's OWN money; the payment instruction below keeps today's
+            // buyer-money convention until Money<C> lands at the pay() seam (§5 Tier 4).
+            const carrierRegion = lookup.byTicker.get(carrierTicker)?.region;
+            ctx.carrierFreightRevenue[carrierTicker] = (ctx.carrierFreightRevenue[carrierTicker] ?? 0)
+              + (carrierRegion ? convertLocal(amountUSD, plan.regionId, carrierRegion, sourcing.fxToUsd) : amountUSD);
             pay(ctx, {
               payer: { kind: 'COMPANY', ticker: comp.ticker },
               payee: { kind: 'COMPANY', ticker: carrierTicker },

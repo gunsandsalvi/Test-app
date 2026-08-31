@@ -25,6 +25,7 @@ import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measur
 import { pay } from './settlement';
 import { REGION_IDS } from '../../../domain/geography';
 import { encumberedFaceByBucket, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
+import { usdToLocal } from '../../../domain/currency';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds = REGION_IDS;
@@ -115,8 +116,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // allocated formula in the demand stage.
     const governmentComponentUSD = (reg.governmentProcurementSpentUSD ?? 0) * 52;
 
-    // NX — net exports, already established in Phase 3 (already annualized-scale)
-    const netExportsComponentUSD = reg.exportsUSD - reg.importsUSD;
+    // NX — net exports, annualized. §6.1's money-locality row, first verified casualty fixed:
+    // `exportsUSD`/`importsUSD` are GENUINE USD (05 converts every cross-border lot at the
+    // cleared rate before the bilateral table sums a world total), while C, I and G above are
+    // REGION-LOCAL money. Adding them raw put a dollar figure inside a yen identity; the NX
+    // component converts back to this region's own money before it joins.
+    const netExportsComponentUSD = usdToLocal(reg.exportsUSD - reg.importsUSD, regionId, ctx.getFxToUsd);
 
     const rawGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
     const instantaneousNominalGdpUSD = Math.max(1e11, isFinite(rawGdpUSD) ? rawGdpUSD : 1e12);

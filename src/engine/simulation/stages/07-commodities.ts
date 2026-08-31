@@ -11,6 +11,6 @@ import { WeeklyStepContext } from './context';
 
 export function runCommoditiesStage(state: GameState, ctx: WeeklyStepContext): void {
   ctx.updatedCommodities = state.commodities.map((comm) =>
-    evolveCommodity(comm, ctx.updatedRegions.USA.gdpGrowth, ctx.updatedRegions.USA.zeroRates.tenor3M, ctx.updatedRegions, state.companies)
+    evolveCommodity(comm, ctx.updatedRegions.USA.gdpGrowth, ctx.updatedRegions.USA.zeroRates.tenor3M, ctx.updatedRegions, state.companies, ctx.getFxToUsd)
   );
 }

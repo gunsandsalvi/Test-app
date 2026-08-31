@@ -17,6 +17,7 @@ import { quoteHouseholdMarginBps } from '../simulation/stages/bank-lending';
 import { GOVERNMENT_OCCUPATION_MIX, AVERAGE_HOUSEHOLD_SIZE } from '../../domain/region-macro';
 import { BufferBand, bufferMonthsOf, joinCreditTiersToBalanceSheets, delinquencyExposureOf } from '../../domain/household-credit';
 import { smePoolLinkedCommodities } from '../../domain/industry-registry';
+import { localToUsd, FxToUsd } from '../../domain/currency';
 import { evolveRegionalWeather } from './weather';
 import { createWealthDistribution, createHousingMarket, createLifeCycleDistribution } from './initialization';
 import { random } from '../rng';
@@ -1266,36 +1267,40 @@ export function evolveFxPair(fx: FxPair, regions: Record<RegionId, Region>): FxP
  * Evolve Commodities with Weather & Supply/Demand shocks
  */
 
-export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, regions: Record<RegionId, Region>): number {
+export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, regions: Record<RegionId, Region>, fxToUsd: FxToUsd): number {
   // SEG-A: which pools supply a commodity comes from the REGISTRY's own sub-unit linkages —
   // the industries whose output is actually linked to it — rather than from a hardcoded list
   // bolted onto one bucket (MANUFACTURING_LINKED_COMMODITIES, deleted). A pool's contribution
   // is its revenue times the linkage's own intensity share, so adding a linked sub-unit to the
   // registry brings its SME tier's supply with it.
+  // §6.1 money-locality: each pool's revenue is REGION-LOCAL; a world commodity market sums in
+  // one numeraire (USD), or the total is a currency salad.
   return REGION_IDS.reduce((s, r) => {
-    return s + (regions[r].smePools || []).reduce((s2, pool) => {
+    return s + localToUsd((regions[r].smePools || []).reduce((s2, pool) => {
       const linkage = smePoolLinkedCommodities(pool.industry).find(l => l.commodityId === commodityId);
       if (!linkage) return s2;
       return s2 + (pool.annualRevenueUSD * linkage.intensityShare) / 52;
-    }, 0);
+    }, 0), r, fxToUsd);
   }, 0);
 }
 
-export function calibrateIntensityShare(commodityId: string, allCompanies: Company[], regions: Record<RegionId, Region>, subUnitId: string): number {
+export function calibrateIntensityShare(commodityId: string, allCompanies: Company[], regions: Record<RegionId, Region>, subUnitId: string, fxToUsd: FxToUsd): number {
   // §6: the `industrial_automation` pseudo-commodity branches are deleted — it left the
   // linkage table (see BASE_COMMODITY_CATEGORY_LINKAGE) and is a plain sub-unit category whose
   // supply and demand already clear in stages 04/05. This function now only ever sees real
   // producedCommodityId-tagged producers.
   const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
+  // §6.1 money-locality: a producer's revenue is its region's local money and each region's
+  // demand level is its own; both sides of the world ratio convert to USD before summing.
   const publicWeeklySupplyUSD = producers.reduce((s, c) =>
-    s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
-  const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
+    s + localToUsd((c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, c.region, fxToUsd), 0);
+  const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions, fxToUsd);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
-  const totalCategoryDemandUSD = REGION_IDS.reduce((s, r) => s + (regions[r].categoryDemand[subUnitId]?.demandLevelUSD ?? 0), 0);
+  const totalCategoryDemandUSD = REGION_IDS.reduce((s, r) => s + localToUsd(regions[r].categoryDemand[subUnitId]?.demandLevelUSD ?? 0, r, fxToUsd), 0);
   return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;
 }
 
-function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyUSD: number): { ratio: number; supplyUnits: number; demandUnits: number } {
+function computeCommodityClearingRatio(commodityId: string, allCompanies: Company[], comm: Commodity, regions: Record<RegionId, Region>, privateSegmentSupplyUSD: number, fxToUsd: FxToUsd): { ratio: number; supplyUnits: number; demandUnits: number } {
   const linkage = COMMODITY_CATEGORY_LINKAGE[commodityId] || COMMODITY_CATEGORY_LINKAGE[comm.symbol];
   const intensityShare = linkage?.intensityShare ?? 0;
 
@@ -1314,19 +1319,21 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   // supply is that share of the sub-unit's real cleared supply and its demand is that share of
   // the sub-unit's demand — whoever makes the good brings the commodity to market, not only the
   // two firms carrying the tag. The elasticities below then move a ratio that means something.
+  // §6.1 money-locality: each region's demand level and cleared price are REGION-LOCAL money.
+  // A world commodity market sums both sides in USD, or the ratio divides a currency salad.
   const perRegion = REGION_IDS.reduce((acc, r) => {
     const catDemand = linkage ? regions[r].categoryDemand[linkage.subUnitId] : undefined;
     if (!catDemand) return acc;
-    acc.demandAnnualUSD += catDemand.demandLevelUSD ?? 0;
+    acc.demandAnnualUSD += localToUsd(catDemand.demandLevelUSD ?? 0, r, fxToUsd);
     // Rule 9: `totalUnitsSuppliedThisWeek` is WEEKLY and `demandLevelUSD` is ANNUAL.
-    acc.supplyWeeklyUSD += (catDemand.totalUnitsSuppliedThisWeek ?? 0) * (catDemand.unitPriceUSD ?? 0);
+    acc.supplyWeeklyUSD += localToUsd((catDemand.totalUnitsSuppliedThisWeek ?? 0) * (catDemand.unitPriceUSD ?? 0), r, fxToUsd);
     return acc;
   }, { demandAnnualUSD: 0, supplyWeeklyUSD: 0 });
 
   // Before this market has ever cleared (week 1) there is no supplied figure yet, so fall back to
   // the tagged producers' own output, which is what the seed had.
   const producers = allCompanies.filter(c => c.producedCommodityId === commodityId && isActiveCompany(c));
-  const taggedWeeklySupplyUSD = producers.reduce((s, c) => s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
+  const taggedWeeklySupplyUSD = producers.reduce((s, c) => s + localToUsd((c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, c.region, fxToUsd), 0);
   const weeklySupplyUSD = perRegion.supplyWeeklyUSD > 0
     ? perRegion.supplyWeeklyUSD * intensityShare
     : taggedWeeklySupplyUSD + privateSegmentSupplyUSD;
@@ -1351,7 +1358,8 @@ export function evolveCommodity(
   globalGrowth: number,
   rfUSD: number,
   regions: Record<RegionId, Region>,
-  allCompanies: Company[]
+  allCompanies: Company[],
+  fxToUsd: FxToUsd
 ): Commodity {
   const dt = 1 / 52;
   const demandShock = globalGrowth * 0.8;
@@ -1372,8 +1380,8 @@ export function evolveCommodity(
 
   const drift = demandShock * dt + randomEps;
   
-  const privateSegmentSupplyUSD = computePrivateSegmentCommoditySupplyUSD(comm.id, regions);
-  const { ratio: rawClearingRatio, supplyUnits: rawSupplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyUSD);
+  const privateSegmentSupplyUSD = computePrivateSegmentCommoditySupplyUSD(comm.id, regions, fxToUsd);
+  const { ratio: rawClearingRatio, supplyUnits: rawSupplyUnits, demandUnits } = computeCommodityClearingRatio(comm.id, allCompanies, comm, regions, privateSegmentSupplyUSD, fxToUsd);
   const supplyUnits = rawSupplyUnits * (1 - yieldLossShare);
   const clearingRatio = rawClearingRatio * (1 - yieldLossShare);
   const supplyDemandDrift = Math.max(-0.04, Math.min(0.04, (clearingRatio - 1.0) * 0.12));

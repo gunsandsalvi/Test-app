@@ -1309,7 +1309,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
   // meant a second world built in the same process re-calibrated already-calibrated values).
   Object.keys(BASE_COMMODITY_CATEGORY_LINKAGE).forEach(commodityId => {
     const base = BASE_COMMODITY_CATEGORY_LINKAGE[commodityId];
-    const calibratedShare = calibrateIntensityShare(commodityId, allGeneratedCompanies, regions, base.subUnitId);
+    const calibratedShare = calibrateIntensityShare(commodityId, allGeneratedCompanies, regions, base.subUnitId, seedFxToUsd);
     COMMODITY_CATEGORY_LINKAGE[commodityId] = { ...base, intensityShare: calibratedShare };
   });
 
