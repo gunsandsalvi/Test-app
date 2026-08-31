@@ -3966,3 +3966,22 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        remaining gap to the real 5–6% is Tier 4's logistics-scale build, not a death). 3
        violations in 3 families; ladder green. Bypass reads 4.5B (EUR 2.9B) — the relabel
        moved the §7.265 in-flight wedges; watch at the next reference.
+
+268. **A BANK IS RATED ON ITS OWN SHEET — the corporate rating context was firing the
+     no-earnings CCC branch on solvent banks, and the UK NIM family was its funding cost.**
+     - The defect pair: (1) stage 08 fed `determineCreditRating` the CORPORATE context for
+       banks — but a bank's company-level figures are the accrual bridge, not the business:
+       its cash lives on the bank sheet (`liquidityToDebt` read ~0), its earnings statistic
+       swings through zero on the bridge (the rater's `ebitdaUSD <= 0` branch then returned
+       CCC on solvent banks — measured pre-§7.259: every UK bank CCC by w9 WITH EQUITY
+       RECOVERING, whereupon its cleared OAS blew out and its wholesale repriced to
+       policy+700bps — the §7.256/§7.261 UK NIM family was this funding cost), and its
+       revenue print is exactly what the volatility notch punishes. (2) `creditMetrics`' bank
+       branch read the REGION-AGGREGATE capital ratio — every bank rated on the cohort's
+       mean, none on itself.
+     - The fix: banks pass only the scale context (everything else "no opinion", which is
+       what the CreditContext contract says absence means) so the spine is creditMetrics' own
+       bank branch — now fed the bank's OWN `bankBalanceSheet.bankCapitalRatio`.
+     - **Verified (20 weeks, shocks off): USA banks all AA, UK banks all A** (the cohorts
+       were CCC/B); VOUL's OAS 516 → 238bps — the wholesale spread that kept UK NIM marginal
+       unwinds at the source. 4 violations in 4 families; ladder green.

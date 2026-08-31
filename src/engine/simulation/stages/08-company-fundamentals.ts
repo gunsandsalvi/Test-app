@@ -1203,7 +1203,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       ebitdaUSD: newEbitda,
       ebitUSD: newEbit,
       annualInterestUSD: annualInterest,
-      bankCapitalRatio: reg.bankingSector.bankCapitalRatio,
+      // §7.268: the bank's OWN sheet, not the region average — a solvency rating on the
+      // cohort's mean rated every bank the same and none of them on itself.
+      bankCapitalRatio: comp.bankBalanceSheet?.bankCapitalRatio ?? reg.bankingSector.bankCapitalRatio,
     });
 
     // G5 — THE COMMITTED LINE IS DRAWN BEFORE ANYTHING DEFAULTS.
@@ -1312,18 +1314,33 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const revVol = revMean > 0
         ? Math.sqrt(revHist.reduce((a, x) => a + (x - revMean) ** 2, 0) / revHist.length) / revMean
         : 0;
-      const calculatedRating = determineCreditRating(newLeverage, newCoverage, {
-        annualRevenueUSD: newRevenue,
-        peerMedianRevenueUSD: regionMedianRevenueUSD,
-        customerConcentration: comp.customerConcentration,
-        supplierConcentration: comp.supplierConcentration,
-        maturityWallShare: maturityWallShareOfLadder,
-        liquidityToDebt: Math.max(0, newCash) / ladderUSD,
-        revenueVolatility: revVol,
-        // CRD: the earnings themselves, so the rater can answer the case the ratio clamps were
-        // covering up rather than inheriting a bounded number that has lost it.
-        ebitdaUSD: newEbitda,
-      });
+      // §7.268 — A BANK IS NOT RATED ON THE CORPORATE CONTEXT. Its company-level figures are
+      // the accrual bridge, not the business: its cash lives on the bank sheet (so
+      // `liquidityToDebt` read ~0), its earnings statistic swings through zero on the bridge
+      // (so the rater's no-earnings branch fired CCC on solvent banks — measured: every UK
+      // bank at CCC by w9 with equity RECOVERING, whereupon its wholesale repriced to
+      // policy+700bps and the §7.256 NIM family followed), and its revenue print is exactly
+      // the volatility the vol notch punishes. The bank's spine is creditMetrics' own bank
+      // branch — its sheet's capital ratio — and the corporate measurements are simply "no
+      // opinion" (absent), which is what the CreditContext contract says absence means.
+      const calculatedRating = determineCreditRating(newLeverage, newCoverage,
+        comp.sector === 'Banks'
+          ? {
+            annualRevenueUSD: newRevenue,
+            peerMedianRevenueUSD: regionMedianRevenueUSD,
+          }
+          : {
+            annualRevenueUSD: newRevenue,
+            peerMedianRevenueUSD: regionMedianRevenueUSD,
+            customerConcentration: comp.customerConcentration,
+            supplierConcentration: comp.supplierConcentration,
+            maturityWallShare: maturityWallShareOfLadder,
+            liquidityToDebt: Math.max(0, newCash) / ladderUSD,
+            revenueVolatility: revVol,
+            // CRD: the earnings themselves, so the rater can answer the case the ratio clamps
+            // were covering up rather than inheriting a bounded number that has lost it.
+            ebitdaUSD: newEbitda,
+          });
       // Wall Street: rating migration is deliberately sticky (a 25%/week chance to move even one
       // notch) to mirror how real rating agencies don't instantly re-rate every week — but the
       // bond-implied spread (real institutional order flow tilted by computeExpectedLossSpreadBps
