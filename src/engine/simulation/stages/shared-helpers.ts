@@ -12,6 +12,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { SECTOR_OCCUPATION_MIX, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
+import { bankRwaUSD, BANK_MIN_CAPITAL_RATIO } from '../../../domain/bank-pricing';
 
 const FOREIGN_GROWTH_SENSITIVITY = 3.0;
 
@@ -83,6 +84,32 @@ function annualEbitdaVol(comp: Company): number {
  * two same-rated names is real information, not curve noise.
  */
 export function computeAnnualDefaultProbability(comp: Company): number {
+  // §7.291 — A BANK'S DEFAULT DISTANCE COMES OFF ITS OWN SHEET (§7.268's doctrine, one function
+  // over: the RATING was fixed there, and this PD — which PRICES the bank's paper in 07b and
+  // sizes its wholesale spread through the cleared OAS — still read the CORPORATE context.
+  // `comp.cash` is ~0 for a bank (its money is cashReservesUSD) and `comp.ebitda` is the accrual
+  // bridge that swings through zero on solvent banks, so `shockToCash` collapsed, the distance
+  // went to ~0, and a structurally wholesale-funded bank was priced toward default while its
+  // capital was intact — measured: THSY's cleared OAS repriced its 27B wholesale stack from
+  // policy+~130bp to ~74% ANNUAL between w10 and w31, NIM to −25%, the §7.289 UK NIM family.)
+  //
+  // What a bank defaults on is CAPITAL: losses eating the buffer above the regulatory floor.
+  // Every input is already measured — its own equity, its own risk-weighted book, and its book's
+  // own annual loss rate (the same quantities its lending is priced with). The loss rate is the
+  // σ-scale of the book's annual loss (a concentrated credit book's loss dispersion is of the
+  // order of its expected loss), so the distance is "how many years of expected losses fit in
+  // the buffer" — no new constant, and it degenerates loudly: a bank AT the floor prices at
+  // PD ~0.5, which is what a bank at the floor is.
+  if (comp.isBankEntity && comp.bankBalanceSheet) {
+    const sheet = comp.bankBalanceSheet;
+    const rwaUSD = Math.max(1, bankRwaUSD(sheet));
+    const bufferUSD = sheet.bankEquityUSD - rwaUSD * BANK_MIN_CAPITAL_RATIO;
+    // The book's own measured provision rate (02b re-derives it weekly from the pools' real
+    // default experience); the floor is consumerAnnualLossRate's own de-minimis.
+    const lossRateAnnual = Math.max(0.005, sheet.loanLossProvisionRateAnnualPct ?? 0.01);
+    const distance = bufferUSD / (rwaUSD * lossRateAnnual);
+    return normalCdf(-distance);
+  }
   const interest = comp.debtTranches?.reduce((sum, t) => {
     const rate = t.rateType === 'FIXED'
       ? (t.couponRate ?? 0.05)

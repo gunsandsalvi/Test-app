@@ -9,6 +9,7 @@
  */
 
 import { CreditTierBook } from './region-macro';
+import { BankingSector, householdBookRwaUSD, CONSUMER_CREDIT_RISK_WEIGHT } from './banking';
 
 /** The workout prior: what a defaulted credit recovers before this region has measured its own
  *  experience (G5 displaces it with the realized rate, one resolution at a time — §7.192). */
@@ -25,6 +26,17 @@ export const BANK_MIN_CAPITAL_RATIO = 0.08;
  *  condition: a named bank's hurdle is its OWN cost of equity (`bankRequiredReturnAnnual`,
  *  which stays beside the equity-risk-premium owner in the engine). */
 export const BANK_TARGET_ROE = 0.12;
+
+/** The bank's risk-weighted book — what the capital ratio and every capital charge divide by. */
+export function bankRwaUSD(sheet: BankingSector): number {
+  // HH3: the household book's weight is per-kind (a secured mortgage consumes less capital
+  // than a card balance); the flat weight remains only as the fallback for a sheet whose pools
+  // predate itemization.
+  const householdRwa = (sheet.householdLoans && sheet.householdLoans.length > 0)
+    ? householdBookRwaUSD(sheet.householdLoans)
+    : sheet.consumerLoanBookUSD * CONSUMER_CREDIT_RISK_WEIGHT;
+  return sheet.businessLoanBookUSD * 1.0 + householdRwa;
+}
 
 /** One margin quote for any borrower: expected loss + capital cost, in bps over policy. */
 export function quoteLoanMarginBps(params: {

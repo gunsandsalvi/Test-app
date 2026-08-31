@@ -97,15 +97,8 @@ function smePoolAnnualPd(seg: SmePool): number {
   return Math.max(0.002, Math.min(0.25, seg.defaultRateAnnualPct));
 }
 
-export function bankRwaUSD(sheet: BankingSector): number {
-  // HH3: the household book's weight is per-kind (a secured mortgage consumes less capital
-  // than a card balance); the flat 0.75 remains only as the fallback for a sheet whose pools
-  // predate itemization.
-  const householdRwa = (sheet.householdLoans && sheet.householdLoans.length > 0)
-    ? householdBookRwaUSD(sheet.householdLoans)
-    : sheet.consumerLoanBookUSD * CONSUMER_CREDIT_RISK_WEIGHT;
-  return sheet.businessLoanBookUSD * 1.0 + householdRwa;
-}
+export { bankRwaUSD } from '../../../domain/bank-pricing';
+import { bankRwaUSD } from '../../../domain/bank-pricing';
 
 /**
  * SEED MIGRATION (§7.4: the cold start opens in the engine's shape). Recalibrates each

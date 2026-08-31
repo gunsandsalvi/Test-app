@@ -274,6 +274,56 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     });
   });
 
+  // MINT_TRACE=1 — per-issuer decomposition of a minting class: who carries the excess, and is
+  // the issuer live, dead, or a bank (the §7.286 paydown exclusion). Read-only.
+  if (process.env.MINT_TRACE === '1') {
+    const heldByIssuer = new Map<string, { usd: number; cls: string }>();
+    const addTrace = (h: any) => {
+      if (h.instrumentType !== 'LEVERAGED_LOAN' && h.instrumentType !== 'CORP_BOND'
+        && h.instrumentType !== 'COMMERCIAL_PAPER') return;
+      const cur = heldByIssuer.get(h.instrumentId) ?? { usd: 0, cls: h.instrumentType };
+      cur.usd += h.quantityOrNotionalUSD ?? 0;
+      heldByIssuer.set(h.instrumentId, cur);
+    };
+    state.institutionalEntities.forEach((e: any) => { if (!e.isDefaulted) e.itemizedHoldings.forEach(addTrace); });
+    const byId = new Map(state.companies.map((c: any) => [c.id, c]));
+    const rows: string[] = [];
+    heldByIssuer.forEach((v, id) => {
+      const c: any = byId.get(id);
+      const outUSD = c ? (c.debtTranches || []).reduce((a: number, t: any) => {
+        const cls = t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN';
+        return a + (cls === v.cls ? t.principalUSD : 0);
+      }, 0) : 0;
+      const excess = v.usd - outUSD;
+      if (excess > 50e6) {
+        const flag = !c ? 'GONE' : c.isBankEntity ? 'BANK' : c.isDefaulted ? 'DEAD' : c.mergerAcquired ? 'MERGED' : 'live';
+        rows.push(`${(excess / 1e6).toFixed(0)}M ${v.cls} ${c?.ticker ?? id} [${flag}]`
+          + ` out ${(outUSD / 1e6).toFixed(0)}M cash ${((c?.cash ?? 0) / 1e6).toFixed(0)}M`);
+      }
+    });
+    if (rows.length > 0) console.log(`  [mint] w${week} excess>50M: ${rows.sort((a, b) => parseFloat(b) - parseFloat(a)).slice(0, 12).join(' | ')}`);
+    // The top excess name's holders, so the unswept path names itself.
+    let topId = ''; let topExcess = 0;
+    heldByIssuer.forEach((v, id) => {
+      const c: any = byId.get(id);
+      const outUSD = c ? (c.debtTranches || []).reduce((a: number, t: any) => {
+        const cls = t.isCommercialPaper ? 'COMMERCIAL_PAPER' : t.rateType === 'FIXED' ? 'CORP_BOND' : 'LEVERAGED_LOAN';
+        return a + (cls === v.cls ? t.principalUSD : 0);
+      }, 0) : 0;
+      if (v.usd - outUSD > topExcess) { topExcess = v.usd - outUSD; topId = id; }
+    });
+    if (topId) {
+      const holders: string[] = [];
+      state.institutionalEntities.forEach((e: any) => {
+        if (e.isDefaulted) return;
+        const usd = e.itemizedHoldings.reduce((a: number, h: any) =>
+          a + (h.instrumentId === topId ? (h.quantityOrNotionalUSD ?? 0) : 0), 0);
+        if (usd > 100e6) holders.push(`${e.id}:${(usd / 1e6).toFixed(0)}M[${e.entityType}${e.region === (byId.get(topId) as any)?.region ? '' : '/x-border'}]`);
+      });
+      console.log(`  [mint-top] ${(byId.get(topId) as any)?.ticker}: ${holders.sort((a, b) => parseFloat(b.split(':')[1]) - parseFloat(a.split(':')[1])).slice(0, 6).join(' ')}`);
+    }
+  }
+
   regionIds.forEach((r) => {
     const cases: [string, number, number][] = [
       ['corporate bonds', held[r].corp, outstanding[r].corp],

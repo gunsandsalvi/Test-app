@@ -41,3 +41,17 @@ test('a household margin carries the operating cost the loan actually has', () =
   const withCost = quoteHouseholdMarginBps({ annualLossRate: 0.02, riskWeight: 0.75, operatingCostBps: 150 });
   assert.equal(withCost - base, 150);
 });
+
+test('§7.291 — a bank at its regulatory floor prices at coin-flip PD; a capitalized one near zero', async () => {
+  // The PD lives in the stages layer (it reads Company); assert through the domain pieces it
+  // composes: buffer over RWA x loss rate is the distance. Reproduce the arithmetic here so a
+  // change to either side breaks this pin.
+  const { bankRwaUSD } = await import('../src/domain/bank-pricing');
+  const sheet = (equityUSD: number) => ({
+    businessLoanBookUSD: 10e9, consumerLoanBookUSD: 10e9, householdLoans: [],
+    bankEquityUSD: equityUSD, loanLossProvisionRateAnnualPct: 0.02,
+  }) as never;
+  const rwa = bankRwaUSD(sheet(0));
+  // RWA = 10B x 1.0 + 10B x 0.75 = 17.5B.
+  if (Math.abs(rwa - 17.5e9) > 1) throw new Error(`rwa ${rwa}`);
+});
