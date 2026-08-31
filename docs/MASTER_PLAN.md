@@ -4182,3 +4182,22 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - Verified: tsc clean, 71/71, WEEKS=15 SHOCKS=0 probe identical (2 baseline violations)
        — households save in the early regime, so the channel arms without relabeling the
        reference; it fires exactly when §7.166's printed distances close.
+
+282. **THE FX SPREAD HAS A PAYER (Tier-4 mechanism #3); swap lines stay gated on their stated
+     prerequisite.**
+     - §6.1's row: every real-economy FX conversion happened at MID — the desks that make the
+       market and warehouse its residual earned nothing on client flow, and crediting them a
+       spread without a payer would print money. Now the PAYER is the converting firm: every
+       cross-border trade invoice pays `DESK_SPREAD_BPS_BY_BOOK.fx = 2bps` (spot FX for
+       corporate flow — tighter than any bond, priced with the bill book) of the invoiced
+       value to the buyer's home-region banks pro rata by market share, reason
+       'fx conversion spread' (FINANCIAL_FEES). The BANK settlement leg lands it as cash +
+       equity exactly as every other dealer fee. Domestic trades convert nothing and pay
+       nothing.
+     - Remainder, named: aggregate buyers' (household/government) cross-border slices and the
+       financial books' own conversions still cross at mid — extend the same leg when those
+       flows carry a named payer.
+     - FX SWAP LINES: NOT built — the row's own prerequisite ("needs an FX funding market
+       first") is unmet; building the stress instrument before the funding market it operates
+       on would be scaffolding with no load. Stays on §6.1 with its owner.
+     - Verified: tsc clean, 71/71, WEEKS=10 probe identical (2 baseline violations).

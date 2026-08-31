@@ -62,6 +62,9 @@ export const DESK_SPREAD_BPS_BY_BOOK: Record<string, number> = {
   equity: 8,
   commodity: 15,
   derivatives: 20,
+  // §7.282: spot FX for corporate flow — majors trade tighter than any bond but a client
+  // conversion still pays a pip; 2bps sits with the bill book, which is the right company.
+  fx: 2,
 };
 
 /** One name a desk is long (or short, when negative) in one book. */

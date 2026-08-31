@@ -40,6 +40,7 @@ import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
 import { laneDistanceNm, REGION_IDS } from '../../../domain/geography';
 import { SourcingSplit } from './sourcing-intent';
 import { chooseInvoiceRegion, invoiceCurrencyOf } from '../../../domain/invoice-currency';
+import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { paymentTermWeeks } from '../../../domain/trade-invoice';
 import { computeAnnualDefaultProbability } from './shared-helpers';
 import { getFxToUsd } from './06-fx-and-trade';
@@ -1695,6 +1696,34 @@ function runSubUnitMarkets(
           amountUSD: invoicedUSD,
           reason: 'trade credit extended',
         });
+        // §7.282 — THE FX SPREAD HAS A PAYER NOW. A cross-border trade converts the buyer's
+        // money, and until here every real-economy conversion happened at MID: the desks that
+        // make the market and warehouse its residual earned nothing on the flow that is most
+        // of their business (§6.1's row — crediting them a spread WITHOUT a payer would have
+        // printed money). The payer is the converting firm; the pip goes to its home region's
+        // banks — the desks whose fxDealerBook carries the other side — pro rata by market
+        // share, landing cash + equity through settlement's own BANK leg like every other
+        // dealer fee. Domestic trades convert nothing and pay nothing.
+        if (!isDomestic) {
+          const fxFeeUSD = invoicedUSD * (DESK_SPREAD_BPS_BY_BOOK.fx / 10000);
+          if (fxFeeUSD > 0.01) {
+            const buyerBanks = ctx.prevActiveFirms.filter(
+              (b) => b.region === plan.regionId && b.isBankEntity && b.bankBalanceSheet);
+            const totalShare = buyerBanks.reduce((a, b) => a + (b.bankMarketShare ?? 0), 0)
+              || buyerBanks.length;
+            buyerBanks.forEach((b) => {
+              const share = totalShare > 0
+                ? ((b.bankMarketShare ?? 0) || 1) / totalShare : 0;
+              if (share <= 0) return;
+              pay(ctx, {
+                payer: { kind: 'COMPANY', ticker: comp.ticker },
+                payee: { kind: 'BANK', ticker: b.ticker },
+                amountUSD: fxFeeUSD * share,
+                reason: 'fx conversion spread',
+              });
+            });
+          }
+        }
       });
     });
     if (units <= 0.0001) return;
