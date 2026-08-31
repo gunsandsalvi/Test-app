@@ -1401,6 +1401,23 @@ const indModule: HarnessModule = (() => {
     REGIONS.forEach(r => ((s.regions[r] as any).activeContracts ?? []).forEach((c: any) => out.set(contractKey(c), c)));
     return out;
   };
+  // §7.270: the BACKLOG check aggregates per key, never last-wins. Two live contracts can
+  // share a (supplier, customer, subUnit) key — a quarterly re-form beside a running tenor —
+  // and a last-wins map compared week N's contract A against week N+1's contract B: phantom
+  // backlog growth, the singles this check printed. The conservation claim is about the
+  // PAIR's total obligation, so the sums are what it must bound.
+  const backlogByKey = (s: GameState) => {
+    const out = new Map<string, { backlogUnits: number; quantityUnitsPerWeek: number }>();
+    REGIONS.forEach(r => ((s.regions[r] as any).activeContracts ?? []).forEach((c: any) => {
+      const k = contractKey(c);
+      const agg = out.get(k) ?? { backlogUnits: 0, quantityUnitsPerWeek: 0 };
+      agg.backlogUnits += Number(c.backlogUnits ?? 0) || 0;
+      agg.quantityUnitsPerWeek += Number(c.quantityUnitsPerWeek ?? 0) || 0;
+      if (isNaN(c.backlogUnits ?? 0)) agg.backlogUnits = NaN;
+      out.set(k, agg);
+    }));
+    return out;
+  };
   return {
   name: 'IND battery',
   /**
@@ -1410,18 +1427,18 @@ const indModule: HarnessModule = (() => {
    * the bound is an obligation being counted twice.
    */
   week(prev, s, w) {
-    const before = allContracts(prev);
-    allContracts(s).forEach((c, k) => {
+    const before = backlogByKey(prev);
+    backlogByKey(s).forEach((c, k) => {
       const p = before.get(k);
       if (!p) return;
-      const grew = (c.backlogUnits ?? 0) - (p.backlogUnits ?? 0);
-      if (grew > (p.quantityUnitsPerWeek ?? 0) + 0.01) {
+      const grew = c.backlogUnits - p.backlogUnits;
+      if (grew > p.quantityUnitsPerWeek + 0.01) {
         violations.push({
           week: w,
-          message: `contract ${k}: backlog grew ${grew.toFixed(2)} units in a week against a ${(p.quantityUnitsPerWeek ?? 0).toFixed(2)}-unit weekly obligation`,
+          message: `contract ${k}: backlog grew ${grew.toFixed(2)} units in a week against a ${p.quantityUnitsPerWeek.toFixed(2)}-unit weekly obligation`,
         });
       }
-      if (isNaN(c.backlogUnits ?? 0)) violations.push({ week: w, message: `contract ${k}: NaN backlog` });
+      if (isNaN(c.backlogUnits)) violations.push({ week: w, message: `contract ${k}: NaN backlog` });
     });
   },
   report(s) {
