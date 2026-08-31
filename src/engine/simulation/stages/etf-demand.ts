@@ -79,7 +79,13 @@ export function indexFundsForBook(
     const holdingsUSD = holdingsUsdOf
       ? holdingsUsdOf(e)
       : e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalUSD ?? 0), 0);
-    const investableUSD = holdingsUSD + (e.cashUSD ?? 0);
+    // §7.273 — THE FUND KEEPS ITS OWN FEE AS A CASH SLEEVE. Fully invested, a fund that pays
+    // its sponsor and its trading spreads out of a zero cash line orbits at dust-negative
+    // forever: each refill sale nets proceeds-minus-fee and lands just below zero again
+    // (measured: USAEQX overdrawn by <5M for 21 straight weeks at the §7.271 reference). The
+    // sleeve is a year of its OWN expense ratio — the fund's own measured obligation, no new
+    // constant — which is also what real index funds hold cash for.
+    const investableUSD = (holdingsUSD + (e.cashUSD ?? 0)) * (1 - (e.etf?.expenseRatioAnnual ?? 0));
     if (investableUSD > 0) out.push({ fund: e, index, investableUSD });
   });
   return out;
