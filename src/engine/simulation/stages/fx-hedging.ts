@@ -496,7 +496,6 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     // the asset and dropping the liability: measured at exactly the week's SME origination,
     // -160.5M on the largest dealer in week 1, on 11 banks, growing every week.
     const sheet = bank.bankBalanceSheet;
-    if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
     const nextSheet = {
       ...sheet,
       // CASH: the desk's reserves and its P&L both arrive through the ledger, posted against the
@@ -505,9 +504,9 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       wholesaleFundingUSD: (sheet.wholesaleFundingUSD ?? 0) + desk.marginReceivedUSD,
       fxDealerBook: desk.book,
     };
-    ctx.companyUpdates[ticker].bankBalanceSheet = nextSheet;
-    // Also on the company itself: a later stage that rebuilds a sheet from `c.bankBalanceSheet`
-    // rather than from companyUpdates would otherwise drop the desk's whole book.
+    // §7.250: the company IS the write. The channel copy this also parked in `companyUpdates`
+    // was dead post-08 (only stage 08 applies it) and worse than dead: any late reader
+    // preferring the channel got a snapshot missing everything settlement had moved since.
     return { ...bank, bankBalanceSheet: nextSheet };
   });
 }

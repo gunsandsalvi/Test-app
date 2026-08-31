@@ -397,7 +397,11 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
   if (deskFillByTicker.size > 0) {
     ctx.updatedCompanies = ctx.updatedCompanies.map((c: any) => {
       const delta = deskFillByTicker.get(c.ticker);
-      const sheet = ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet;
+      // §7.250 — THE LIVE SHEET, both directions. This stage runs AFTER stage 08: reading the
+      // channel first read the PRE-08 snapshot (erasing settlement's intraday legs from the
+      // rebuild — §7.97's eraser shape), and the channel copy written back was dead (only
+      // stage 08 applies it).
+      const sheet = c.bankBalanceSheet;
       if (!delta || !sheet?.fxDealerBook) return c;
       const nextNet = { ...sheet.fxDealerBook.netNotionalByRegion };
       (Object.keys(delta) as RegionId[]).forEach(r => {
@@ -408,8 +412,6 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
         ...sheet,
         fxDealerBook: { ...sheet.fxDealerBook, netNotionalByRegion: nextNet, grossNotionalUSD: grossUSD },
       };
-      if (!ctx.companyUpdates[c.ticker]) ctx.companyUpdates[c.ticker] = {};
-      ctx.companyUpdates[c.ticker].bankBalanceSheet = nextSheet;
       return { ...c, bankBalanceSheet: nextSheet };
     });
   }

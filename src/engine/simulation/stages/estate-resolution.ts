@@ -34,7 +34,12 @@ export const RECOVERY_HISTORY_LENGTH = 24;
 
 const holderRef = (c: EstateClaim): PartyRef =>
   c.holder.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: c.holder.id }
-    : c.holder.kind === 'BANK' ? { kind: 'BANK', ticker: c.holder.ticker }
+    // §7.250 — BANK_SECURITIES, not BANK: an estate recovery is cash arriving AGAINST the loan
+    // written off the same pass (reduceHolding below), an asset swap — not income. Paying it as
+    // BANK credited reserves AND equity (§7.240's flagged row), which balanced only while the
+    // loan write-off was going to the dead channel; with that write revived, the equity leg
+    // broke the per-bank identity by exactly the recovery.
+    : c.holder.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: c.holder.ticker }
       : { kind: 'COMPANY', ticker: c.holder.ticker };
 
 /**
@@ -260,9 +265,11 @@ function reduceHolding(
     const ticker = claim.holder.ticker;
     const company = index.bankByTicker.get(ticker);
     if (!company) return;
-    // The annotation is here because `ctx.companyUpdates` is `Record<string, any>` (see
-    // stages/context.ts) — the remaining hole noImplicitAny cannot close on its own.
-    const sheet: BankingSector = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
+    // §7.250 — THE LIVE SHEET. This stage runs AFTER stage 08, the only applier of
+    // `companyUpdates.bankBalanceSheet`, so the old channel write here went to NOWHERE: a
+    // defaulted borrower's loan was never written off the lender's book and the write-down
+    // never reached its equity — silently, both legs together (§7.103's trap, write side).
+    const sheet: BankingSector = company.bankBalanceSheet!;
     let leftUSD = amountUSD;
     const loans = (sheet.businessLoans || []).map((l) => {
       if (l.borrowerId !== companyId || leftUSD <= 0) return l;
@@ -271,14 +278,18 @@ function reduceHolding(
       return { ...l, principalUSD: l.principalUSD - takeUSD };
     }).filter((l) => l.principalUSD > 1);
     const bookUSD = loans.reduce((a, l) => a + l.principalUSD, 0);
-    if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
-    ctx.companyUpdates[ticker].bankBalanceSheet = {
+    // §7.250: equity moves by what the BOOK moved. The borrower's rows here can carry less than
+    // the estate's allocation (the loan mirror is rebuilt from tranches elsewhere and drifts), so:
+    // a LOSS writes equity down by what was actually extinguished — no more; a RECOVERY is an
+    // asset swap for the matched slice (cash in, loan out) and INCOME for the unmatched slice —
+    // cash arriving against an asset this ledger no longer carries. Both branches then balance
+    // by construction, whatever the rows hold.
+    const extinguishedUSD = amountUSD - leftUSD;
+    company.bankBalanceSheet = {
       ...sheet,
       businessLoans: loans,
       businessLoanBookUSD: Math.round(bookUSD),
-      // A write-off is a write-down: the asset goes and equity takes it. A recovery is cash
-      // arriving against the asset, and the reserves leg settles through the ledger.
-      bankEquityUSD: sheet.bankEquityUSD - (isLoss ? amountUSD : 0),
+      bankEquityUSD: sheet.bankEquityUSD + (isLoss ? -extinguishedUSD : leftUSD),
     };
   }
 }

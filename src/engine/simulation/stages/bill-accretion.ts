@@ -39,9 +39,16 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
 
     // Banks: the position grows and the gain is earnings. Both sides move, so the per-bank
     // balance-sheet identity holds without a cash leg.
+    // §7.250 — THE LIVE SHEET, both sides. This stage runs AFTER stage 08, and only stage 08
+    // ever applies `companyUpdates.bankBalanceSheet` — so writing the channel here wrote to
+    // NOWHERE (the context dies with the week), and reading it first read the PRE-08 sheet,
+    // erasing settlement's intraday deltas from the basis besides. Measured: the accreted b13
+    // was written as 1,218.45M and the week ended at 1,217.28M — the banks' bills have never
+    // accreted, silently, because both legs dropped together and no identity could break
+    // (§7.103's trap, on the write side).
     ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
       if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet || !isActiveCompany(c)) return c;
-      const existing = ctx.companyUpdates[c.ticker]?.bankBalanceSheet ?? c.bankBalanceSheet;
+      const existing = c.bankBalanceSheet;
       const byTenor = { ...(existing.sovereignBondHoldingsByTenor || {}) };
       let gainUSD = 0;
       rateByBucket.forEach((rate, key) => {
@@ -52,14 +59,15 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
         gainUSD += accretedUSD;
       });
       if (gainUSD === 0) return c;
-      if (!ctx.companyUpdates[c.ticker]) ctx.companyUpdates[c.ticker] = {};
-      ctx.companyUpdates[c.ticker].bankBalanceSheet = {
-        ...existing,
-        sovereignBondHoldingsByTenor: byTenor,
-        sovereignBondHoldingsUSD: Math.round((Object.values(byTenor) as any[]).reduce((a: number, v: any) => a + (Number(v) || 0), 0)),
-        bankEquityUSD: existing.bankEquityUSD + gainUSD,
+      return {
+        ...c,
+        bankBalanceSheet: {
+          ...existing,
+          sovereignBondHoldingsByTenor: byTenor,
+          sovereignBondHoldingsUSD: Math.round((Object.values(byTenor) as any[]).reduce((a: number, v: any) => a + (Number(v) || 0), 0)),
+          bankEquityUSD: existing.bankEquityUSD + gainUSD,
+        },
       };
-      return c;
     });
 
     // Institutions: the holding grows; the book's own marking treats it as the income it is.
