@@ -221,6 +221,52 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       inst.tradableFloatUSD = (heldByInstitutionsShares.get(inst.id) ?? 0) + (deskHeldShares.get(inst.id) ?? 0);
     });
 
+    // §7.281 — THE HOUSEHOLD DIRECT-EQUITY SELL CHANNEL. The households' listed shares are the
+    // register's residual (what institutions and desks do not hold), and until now they were
+    // never for sale at any price — "a holding that cannot be sold is not a holding" (§7.166's
+    // row). When last week's liquidity ladder announced a sale (deposits and fund shares both
+    // exhausted — `pendingDirectEquitySaleUSD`), the sector enters this session as a SELLER:
+    // its residual shares, prorated across names by value, at reservation zero (a forced seller
+    // takes the print; the book's damper still bounds the week's move). Only the slice for sale
+    // joins the float — the rest stays as unsellable as it always was.
+    const hhSaleNeedUSD = Math.max(0, reg.householdState?.pendingDirectEquitySaleUSD ?? 0);
+    const householdParticipantId = `HOUSEHOLD-${regionId}`;
+    let householdParticipant: ClearingParticipant | undefined;
+    const householdPriorShares = new Map<string, number>();
+    if (hhSaleNeedUSD > 1) {
+      const hhSharesByCompany = new Map<string, number>();
+      let hhTotalValueUSD = 0;
+      regionCompanies.forEach((c) => {
+        if (!isPubliclyListed(c)) return;
+        const hhShares = Math.max(0,
+          liveSharesOf(c) - (heldByInstitutionsShares.get(c.id) ?? 0) - (deskHeldShares.get(c.id) ?? 0));
+        if (hhShares <= 0) return;
+        hhSharesByCompany.set(c.id, hhShares);
+        hhTotalValueUSD += hhShares * (refPriceById.get(c.id) ?? 0);
+      });
+      if (hhTotalValueUSD > 1) {
+        const sellFraction = Math.min(1, hhSaleNeedUSD / hhTotalValueUSD);
+        const demandByInstrumentId = new Map<string, ParticipantDemand>();
+        hhSharesByCompany.forEach((shares, companyId) => {
+          const sellShares = shares * sellFraction;
+          householdPriorShares.set(companyId, sellShares);
+          demandByInstrumentId.set(companyId, {
+            reservationStat: 0,
+            maxHoldingUSD: 0,
+            fullSizeStatRange: 1e-6,
+            maxNetPurchaseUSD: 0,
+          });
+          const inst = instruments.find((i) => i.id === companyId);
+          if (inst) inst.tradableFloatUSD += sellShares;
+        });
+        householdParticipant = {
+          id: householdParticipantId,
+          currentHoldingsByInstrumentId: householdPriorShares,
+          demandByInstrumentId,
+        };
+      }
+    }
+
     // ETF: the index funds tracking any equity index this book prices. They are ordinary holders
     // — real positions, real cash — but their schedule has no reservation level: a fund buys its
     // benchmark weight at whatever the market is asking. That is the one demand shape this engine
@@ -322,7 +368,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       };
     });
 
-    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants], new Map(), {
+    const result = clearFinancialAsset(instruments, [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])], new Map(), {
       dealerSpreadBps: DEALER_SPREAD_BPS,
       maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
       // OWN7: the float here is a stock these participants already hold, so an unsold
@@ -422,6 +468,26 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       deskCashUSD.set(desk.id, cashDeltaUSD);
       netCashByEntityId.set(desk.id, cashDeltaUSD);
     });
+    // §7.281: the households' cash leg, computed the same way — shares SOLD at the cleared
+    // print, less the same spread every seller pays. The unsold remainder stays household-held
+    // (it simply rejoins the residual the register measures). The proceeds land on the
+    // HOUSEHOLD party at settlement below, which is the whole point of the channel.
+    if (householdParticipant) {
+      const newShares = result.newParticipantHoldings.get(householdParticipantId) ?? new Map<string, number>();
+      let cashDeltaUSD = 0;
+      householdPriorShares.forEach((prevShares, companyId) => {
+        const comp = companyById.get(companyId);
+        if (!comp) return;
+        const soldShares = Math.max(0, prevShares - (newShares.get(companyId) ?? 0));
+        if (soldShares <= 0) return;
+        const f = soldShares * comp.stockPrice * (DEALER_SPREAD_BPS / 10000);
+        cashDeltaUSD += soldShares * comp.stockPrice - f;
+        bookFeeUSD += f;
+      });
+      if (cashDeltaUSD > 0) netCashByEntityId.set(householdParticipantId, cashDeltaUSD);
+      reg.householdState.pendingDirectEquitySaleUSD = 0;
+    }
+
     // And the inventory it was left holding, marked at this week's cleared price, onto the bank
     // that carried it — the equity desk held nothing however one-sided the session was, because
     // the engine's residual came back in shares and this adapter dropped it.
@@ -464,7 +530,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     settleClearedBook(
       ctx, regionId, BOOK,
       netCashByEntityId,
-      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id } : dealerDeskPartyOf(id, deskTickers)),
+      (id) => (entityIds.has(id) ? { kind: 'INSTITUTION', id }
+        : id === householdParticipantId ? { kind: 'HOUSEHOLD', region: regionId }
+        : dealerDeskPartyOf(id, deskTickers)),
       { netCashUSD: dealerNetUSD, feeUSD: bookFeeUSD },
       feeDesksForRegion(ctx, regionId),
       equityPrimaryTakes

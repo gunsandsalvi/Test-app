@@ -4160,3 +4160,25 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - Verified: tsc clean, 71/71, WEEKS=15 SHOCKS=0 probe (spans the w13 quarter step)
        identical to baseline — no region is near the red line in the early regime, so the
        mechanism arms without relabeling the reference.
+
+281. **THE HOUSEHOLD DIRECT-EQUITY SELL CHANNEL (Tier-4 mechanism #2): the residual is a
+     POSITION now.** §7.166's row — "a holding that cannot be sold is not a holding" — direct
+     equity was the register's residual, reachable by no trade at any price, so a drawdown had
+     no household seller in it beyond fund shares.
+     - The ladder's next rung, announce-then-price: etf-flows (the ladder's owner) computes
+       the slice of a household shortfall that neither the deposit buffer nor the fund shares
+       could cover and announces it (`HouseholdState.pendingDirectEquitySaleUSD`, set every
+       week, 0 when saving is positive); NEXT week's 07e session executes it — the same
+       one-week rhythm every ETF flow follows.
+     - In 07e the sector enters as a SELLER: its residual shares per name (live shares minus
+       institutions minus desks — the same subtraction `householdDirectEquityUSD` measures),
+       prorated by value, ONLY the announced slice, at reservation zero (a forced seller takes
+       the print; the damper still bounds the week's move). The sold slice joins the float;
+       the unsold remainder rejoins the residual untouched.
+     - Cash leg: shares sold × cleared print less the same dealer spread every seller pays,
+       settled through the clearing house to the `HOUSEHOLD` party — the dealer counterleg
+       keeps the CCP flat, and the buyers' registers absorb the shares, so the residual
+       SHRINKS by construction (no second representation of who holds what).
+     - Verified: tsc clean, 71/71, WEEKS=15 SHOCKS=0 probe identical (2 baseline violations)
+       — households save in the early regime, so the channel arms without relabeling the
+       reference; it fires exactly when §7.166's printed distances close.

@@ -224,6 +224,15 @@ export interface HouseholdState {
   directEquityUSD: number;
   /** Index-fund shares, created through the real AP mechanism and marked at the fund's NAV. */
   etfShares: { fundId: string; shares: number }[];
+  /**
+   * §7.281 — THE DIRECT-EQUITY SELL CHANNEL's announcement. The liquidity ladder's next rung
+   * after deposits and fund shares: the slice of a household shortfall neither could cover,
+   * announced here by etf-flows (the ladder's owner) and EXECUTED by the next week's 07e
+   * session, which puts that value of the households' own residual shares into the float and
+   * pays the HOUSEHOLD party the cleared proceeds. The announce-then-price week is the same
+   * rhythm every ETF flow already follows. Zero (or absent) = nothing to sell.
+   */
+  pendingDirectEquitySaleUSD?: number;
   /** Marked value of the above, carried so net worth does not have to reach into the fund list. */
   etfHoldingsUSD: number;
   /**

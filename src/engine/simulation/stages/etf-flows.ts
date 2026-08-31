@@ -220,6 +220,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     let intoFundsUSD: number;
     if (weeklySavingUSD >= 0) {
       intoFundsUSD = weeklySavingUSD * equityShareOfSaving;
+      hs.pendingDirectEquitySaleUSD = 0;
     } else {
       // The floor is the SAME buffer the saving decision is taken against — it is the same
       // buffer, so it is the same number (rule 3).
@@ -227,8 +228,14 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       const depositHeadroomUSD = Math.max(0, (hs.depositsUSD ?? 0) - bufferFloorUSD);
       // Sell only the part of the gap the cash cannot meet, and never more than is held.
       const heldUSD = householdEtfHoldingsUSD(hs, ctx.updatedInstitutionalEntities);
-      intoFundsUSD = -Math.min(Math.max(0, heldUSD),
-        Math.max(0, -weeklySavingUSD - depositHeadroomUSD));
+      const cashGapUSD = Math.max(0, -weeklySavingUSD - depositHeadroomUSD);
+      intoFundsUSD = -Math.min(Math.max(0, heldUSD), cashGapUSD);
+      // §7.281 — the ladder's NEXT rung. What neither the deposit buffer nor the fund shares
+      // could cover is announced as a direct-equity sale, and next week's 07e session executes
+      // it against the households' own residual shares — the position §7.166's row said was
+      // not a position ("a holding that cannot be sold is not a holding"). Announce-then-price,
+      // the same one-week rhythm every flow in this stage follows.
+      hs.pendingDirectEquitySaleUSD = Math.round(Math.max(0, cashGapUSD - Math.max(0, heldUSD)));
     }
     if (Math.abs(intoFundsUSD) < 1) return;
 
