@@ -1121,11 +1121,25 @@ function buildRegionDemandPlans(
     // factory-gate price was the model paying no one to move the goods.
     const channelMargin = channelMarginRate(subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
     const shelfPrice = shelfPriceUSD(referencePriceUSD, subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
-    let hhDemandUnits = ((demandState.demandLevelUSD * hhShare) / 52) / shelfPrice
+    // THE BUDGET IS THE MEASURED HOUSEHOLD LEG, NOT A SLICE OF THE DEMAND LEVEL (rule 3).
+    //
+    // `demandLevelUSD × hhShare` carved the household's money out of the category's TOTAL demand
+    // — a level that carries the corporate leg (firms' nominal revenues × input intensity) and
+    // the Leontief intermediate half. In a category with persistent excess demand that closes a
+    // loop with nothing real in it: the price rises → the buying industries' nominal revenues
+    // rise → the corporate leg re-inflates the demand level → the household is handed a bigger
+    // budget and its ladder's reservation climbs → the price rises. Measured as the EUR
+    // electricity runaway (§7.257): price ×119 in ten weeks while the UNIT shortage improved
+    // 0.59→0.97 and capacity, staffing and supplier count all held flat — the demand level went
+    // 19.9B→1,836B with the household bidding it. Stage 03 owns the household's real money — the
+    // cohorts' consumption budgets, allocated by tier — and this ladder is sized from that leg
+    // alone, so a household cannot outbid its own income no matter what the firms beside it pay.
+    const hhAnnualBudgetUSD = demandState.householdDemandUSD ?? (demandState.demandLevelUSD * hhShare);
+    let hhDemandUnits = (hhAnnualBudgetUSD / 52) / shelfPrice
       * seasonalFactor(subUnitId, week, 'demand');
 
     if (subUnitId === 'passenger_vehicles') {
-      const initialStock = reg.householdState.durableGoodsStockUnits ?? (((demandState.demandLevelUSD * hhShare) / shelfPrice) * 3.5);
+      const initialStock = reg.householdState.durableGoodsStockUnits ?? ((hhAnnualBudgetUSD / shelfPrice) * 3.5);
       const scrappageRate = 0.12 / 52;
       const replacementDemandUnits = initialStock * scrappageRate;
       const targetStock = (reg.estimatedHouseholdIncomeUSD * (1 - reg.householdState.savingsRate) * 0.10) / shelfPrice;

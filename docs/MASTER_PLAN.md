@@ -299,7 +299,9 @@ cannot be deleted before the mechanism under it exists.
 
 **THE RUN TO JUDGE AGAINST IS §7.256's: 204 violations / 18 FAMILIES on the Tier-1-pass
 tree** (counts 628 → 361 → 351 → 320 → 367 → 278 → 204; families 94 → 67 → 60 → 44 → 18;
-§7.256 also records the cost — the EUR fiscal-labour spiral is the top open diagnosis).
+§7.256 recorded the cost — the EUR fiscal-labour spiral — and §7.257 root-fixed it: the
+household budget was a slice of the demand level, not its income; a fresh reference on the
+fixed tree is due).
 Each run is the record of its own tree; compare nothing across them without naming the
 relabel between.
 
@@ -847,7 +849,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | **THE WEEK-52+ SEAM, decomposed by §7.249's probe into three named parts** | (a) **The YoY base effect**: at w53 measured inflation halves (174→99→84) because the 52-week window rolls onto the week-1 price shock — an honest property of a YoY measure. Its labour amplifier is FIXED (§7.249: the growth signal deflates by the employer's OWN price over its OWN 12-week window; u holds 14.9% through w52 where it read 22%+) — but the base effect still reaches the world through the WAGE indexation (`COST_OF_LIVING_PASS_THROUGH × reg.inflation`) and whatever else consumes the YoY figure. (b) **The 10Y damper release**: the 10Y sat PINNED at 4.69 for 44 weeks while policy walked 3.8→11.55% — the damper row's defect in one line — then stepped to 5.88 at w52. (c) **The teleports — CLOSED at reference scale (§7.251)**: §7.249's fixes (own-price deflator, the physical hiring cap) hold through the seam in the 60-week reference — u glides 22.8→23.1 across w50–60, no teleport, no terminal week, and the 2.0e9% vacancy print is gone. What remains: (a) is confirmed live in §7.251 (inflation 135→70 annualized at w53, the window rolling onto the week-1 shock) and still reaches the world through wage indexation; (b) is WORSE than the old decomposition said — §7.251's 10Y never released at all (pinned 4.58–4.70 for the full 60 weeks, while EUR/UK/JPN print an 18% 10Y against a 4% 2Y at horizon). Next action: (b) — why the sovereign book's damper binds for the whole run, read WITH the damper row and §7.251's steep foreign curves. Owner: LAB closed its part; MKT/damper owns the rest. |
 | **THE UK INSTITUTIONAL BOOK EXPONENTIAL — CLOSED (§7.256: the book ends at 464B moving ±2B/week where the §7.253 world ended at 2,238B compounding 14%/week; the ratio families read 0)** — decomposition history: | BOOKTRACE on the reference: the weekly book delta w55–60 is **EQUITY +110B → +256B (ETF_SHARE following), every CREDIT line FLAT at 149B, ratio 0.92 at horizon** — the "book moving without cash" is UK equity PRICES compounding ~13%/week from ~w50, marked onto the books. This row is therefore the consequence row's "equity prices run away past ~week 80", arrived early and region-first: the well-posed question is who BUYS at +13%/week — the price mechanism (damper/float/demand), not any ledger. The corpBondOwnership >1 family (9x) is SEPARATE and small: institutional credit is 0.93 of outstanding, so the overshoot needs the banks' facility slice; the estate-window asymmetry (a defaulted issuer's tranches leave the `isActiveCompany` denominator while holders keep claims until the estate pays — holdings-view.ts:235) is instrumented (BOOKTRACE's dead-issuer split) and measured next probe. UK capex at 2.66x depreciation is the same price level in the capex categories. Next action: the equity price mechanism, worked WITH the damper row. Owner: MKT/damper (equity), OWN (the ratio drift). |
 | **REPO COLLATERAL IS OVER-PLEDGED** | The largest single family in §7.211 (XIVF 56x, THSY 54x): a bank pledging more of a tenor bucket than it holds, while `reconcileRepoPledges` is supposed to reconcile weekly. **§7.230 found the check itself split: the engine reconciled at $1, the harness checked at 1e6.** Both now read `domain/collateral.ts`'s single 1-dollar tolerance (§7.233's 281 was visibility, not degradation), and **§7.248 CLOSED THE FAMILY: 129 → 2** — the pledge follows maturing paper on the BOOK at the fiscal stage's redemption, the reconcile no longer chases one week behind. The 2 residual are tranche-keyed (t#), not bill buckets — read them next time the family is touched. Owner: WS6/REPO (residual only). |
-| **GOVERNMENT OUTLAYS EXCEED THE BUDGET** | **The check that watched this row was wrong (§7.230): it compared outlays against `governmentSpendingUSD × 1.5`, which is not the budget**, and fired seven times on the wrong quantity. It now reads `Government`'s own decomposition (contractual interest and payroll off the top, discretionary remainder scaled by the stance) and fires naming whether the overrun is contractual or discretionary. §7.245 killed the EUR runaway (49 → 0 at its run; the unappropriated capex bid). §7.247 (the run to judge against): **43 — UK 25, EUR 18 — RISING with full employment**, which is what an automatic stabiliser meeting a hot economy prints unless the stance rule adapts. Next action: read the UK 25 — a contractual overrun (interest paid on real dates) is the stance rule's problem, which is MAC's fiscal step function, not a ledger defect. Owner: MAC. |
+| **GOVERNMENT OUTLAYS EXCEED THE BUDGET** | **The check that watched this row was wrong (§7.230): it compared outlays against `governmentSpendingUSD × 1.5`, which is not the budget**, and fired seven times on the wrong quantity. It now reads `Government`'s own decomposition (contractual interest and payroll off the top, discretionary remainder scaled by the stance) and fires naming whether the overrun is contractual or discretionary. §7.245 killed the EUR runaway (49 → 0 at its run; the unappropriated capex bid). §7.247 (the run to judge against): **43 — UK 25, EUR 18 — RISING with full employment**, which is what an automatic stabiliser meeting a hot economy prints unless the stance rule adapts. Next action: read the UK 25 — a contractual overrun (interest paid on real dates) is the stance rule's problem, which is MAC's fiscal step function, not a ledger defect. **§7.257: the EUR leg (43x at §7.256's reference, TGA negative twice) was DOWNSTREAM of the household-budget rule-3 defect — the fixed tree prints 0 overruns and a positive TGA over 20 weeks; the fresh reference re-measures what remains for the stance rule.** Owner: MAC. |
 | **THE PRICE LEVEL DOES NOT SETTLE** | **PARTLY CLOSED BY §7.224, AND THE OLD DIAGNOSIS WAS WRONG.** This row blamed COH4's demand ladder. The ladder is not the cause: two unit errors were, both at week 1 — the seasonal factor inside the production shutdown test (whole categories shipping zero) and a CPI whose base and current prices were different price concepts. Both fixed; mid-run inflation 2,266% -> 145%, week-60 50.8%, and the hyperinflating revenue prints (6.6e+21) are gone. **LARGELY CLOSED BY §7.245–246:** the unappropriated bid, the staffing-dimension floor mismatch and the wrong-signed response factor were the ratchet's engines. §7.246's read: **CPI ×2.71 over 60 weeks with week-60 inflation FALLING (166 → 59 annualized), fill 0.453** — the first sane long price print in the model's history. Not yet a settle: ×2.71 is still high and the last ten weeks' trend is the thing to re-read after the unemployment row closes (labour shedding is now the biggest force on supply). **Still do not put the bid premium back and do not cap the bid.** Owner: the unemployment row, then re-measure. |
 | **CAPITAL-GOODS FAMINE — CLOSED BY §7.246's MEASUREMENT** | On the sane price level the famine does not exist: firms bid 87B/yr against 156B/yr of capacity built (0.56x). §7.244's 8.02x was price inflation plus §7.245's unappropriated government bid. What survives is the opposite watch: a sector now OVERSUPPLIED against real bids will idle capacity, and the model has no mothball/scrap mechanism — that is DYN's charter, not a defect row. |
 | **THE BOOKS PRINT THEIR DAMPERS** | The engine states its own failure condition: a name clamped for weeks means the posted schedules disagree with the printed level and **the print is the damper, not the market.** §7.247 (the run to judge against): **2,016 persistently bound, worst streak the full 60 weeks** (§7.246: 1,990; §7.244: 2,189; the old 947 benchmark is void). §7.197 records the level as the honest shape of deleting the residual dealer: **the pressure was always there.** **Do not widen the damper.** The well-posed question is: who buys when the holders as a group want less than they hold? Owners: SCALE (the float half), and the measurement run. |
@@ -3624,3 +3626,55 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        now urgent); (2) the UK bank cohort (NIM_TRACE on UK banks); (3) JPNEQX's digger;
        (4) the carrier death cause; (5) the SME bypass slice; then §4.0 Tier 2 (the channel
        migration endgame) and the build table.
+
+257. **THE EUR SPIRAL'S ROOT: THE HOUSEHOLD'S BUDGET WAS A SLICE OF THE DEMAND LEVEL, NOT ITS
+     INCOME — found by differential, fixed at the owner, the spiral is dead.**
+     - **The differential method worked exactly as designed** (§7.256's queue item 1). SPIRAL=1
+       prints each region's feedback terms weekly; the term that departs FIRST is the driver.
+       At w10 EUR printed pi 409 annualized against the pack's 87–121 while EUR unemployment
+       (13.0) and wage index (1.433) still cohered — so the spiral was a PRICE story, and the
+       fiscal blowout (outlays 3.2→6.5B, wage-indexed payroll, the negative TGA) and the 57%
+       unemployment were consequences, not causes. SPIRAL_PRICES=1 then localized WHICH prices:
+       **EUR electricity ×119 in ten weeks** (p34 w3 → p4,061 w13), with repair_and_maintenance,
+       professional_services and housing_rental_services — the electricity-eating services —
+       following it, and the CPI carrying them into wages, outlays and the labour market.
+     - **The decisive measurement** (PX_FOCUS=electricity, per-region weekly): EUR electricity
+       SUPPLY was never the anomaly — 53 suppliers, capacity 8.96→8.80M units, staffing ~0.97,
+       all flat; the unit shortage IMPROVED 0.59→0.97 as the price ran. USA ran a WORSE unit
+       shortage (s/d 0.53) with a flat price the whole run. What exploded was EUR's
+       `demandLevelUSD`: 19.9B → 40B (w7) → 76B → 199B → 865B → **1,836B (w12)** — and the
+       price tracked the demand level, not the shortage.
+     - **The loop, and why it is a rule-3 defect**: stage 05 sized the household bid ladder
+       from `demandLevelUSD × hhShare` — the category's TOTAL demand level (which carries the
+       corporate leg, firms' NOMINAL revenues × input intensity, plus the Leontief intermediate
+       half) times a fixed buyer-mix fraction. In a category with persistent excess demand that
+       closes a loop with nothing real in it: price ↑ → the buying industries' nominal revenues
+       ↑ → the corporate leg re-inflates the demand level → the household is handed a bigger
+       budget → its ladder's reservation (reachable/satiation) climbs → price ↑. The household
+       budget was represented TWICE: stage 03 computes the honest leg (`suHhDemand` — the
+       cohorts' real consumption budgets C, allocated by tier and mix) and threw it away, while
+       stage 05 re-derived it from the demand level — and the unanchored copy won. It is the
+       precise violation `householdBudgetReachMultiple`'s own comment warns against ("a
+       multiple of the BUDGET and never of a price"): the budget itself was downstream of the
+       price. EUR was the region whose seed sat closest to the loop-gain-1 threshold
+       (electricity short AND its consumer services short simultaneously); the code was always
+       symmetric, the state was not (same class as §7.245's spiral, one level deeper).
+     - **The fix, at the owner**: `CategoryDemandState.householdDemandUSD` — stage 03 now
+       RECORDS the household leg it already computed (capex categories: 0; none has a household
+       buyer share, verified), and stage 05's ladder reads THAT for the weekly budget (and the
+       passenger_vehicles stock fallback). Corporate bids stay per-firm (their own
+       revenue×intensity — nominal but bounded by what each firm actually sells and pays for),
+       government stays appropriated. A household can no longer outbid its own income because
+       the firms beside it are paying more.
+     - **Verified, WEEKS=20 SHOCKS=0**: EUR electricity p32→39 over the full 20 weeks (was
+       p32→4,061 by w13); demand level 19.9→39.4B (was 1,836B by w12); EUR pi 58 at w20 — the
+       LOWEST in the pack (USA 88 / UK 76 / JPN 74) — u 16.2 mid-pack, outlays flat 2.5→2.64B,
+       overrun 0.00 every week, TGA positive throughout. The probe's violation set: 18 in 5
+       families, and the EUR unemployment-band family plus all four revenue-explosion singles
+       (SDAM/MVPL/CHBL/EKYV — the service firms whose revenue rode the spiral) are GONE; what
+       remains is the known queue (UK bank cohort 15, fund overdrafts 3). tsc, 71 tests,
+       hygiene, lint 386/386 all clean.
+     - **Instrument kept**: SPIRAL=1 (feedback terms), SPIRAL_PRICES=1 (top price movers
+       week-over-week per region), PX_FOCUS=<category> (per-region supplier
+       count/capacity/staffing/units/demand-level for one category) — the one-region-runaway
+       differential kit, in the harness for the next one.

@@ -1894,8 +1894,92 @@ const bookTraceModule: HarnessModule = {
   },
 };
 
+/**
+ * SPIRAL=1 — the one-region-runaway differential (§7.256's EUR fiscal-labour spiral). Prints
+ * each region's feedback terms weekly so the region that departs can be diffed against the
+ * three that cohere AT the departure week: which term was an outlier BEFORE the break is the
+ * driver, everything after is consequence.
+ */
+const SPIRAL = process.env.SPIRAL === '1';
+/** SPIRAL_PRICES=1 — per region, the top category price movers week-over-week (landed
+ *  unitPriceUSD), to localize WHICH goods run when one region's inflation departs. */
+const SPIRAL_PRICES = process.env.SPIRAL_PRICES === '1';
+const spiralPrevPriceByKey = new Map<string, number>();
+const spiralModule: HarnessModule = {
+  name: 'one-region spiral differential',
+  week(_prev, state, w) {
+    if (SPIRAL_PRICES) {
+      const focus = process.env.PX_FOCUS;
+      if (focus) {
+        REGION_IDS_SEED_ORDER.forEach((region) => {
+          const sup = state.companies.filter((c) => c.region === region && isActiveCompany(c)
+            && (c.productLines || []).some((l) => l.subUnitId === focus));
+          const cap = sup.reduce((a, c) => {
+            const l = (c.productLines || []).find((x) => x.subUnitId === focus);
+            return a + (l?.weeklyCapacityUnits ?? 0);
+          }, 0);
+          const staffed = sup.reduce((a, c) => a + ((c.baselineEmployeeCount ?? 0) > 0
+            ? Math.min(1, (c.employeeCount ?? 0) / c.baselineEmployeeCount!) : 1), 0);
+          const cd = state.regions[region].categoryDemand[focus];
+          console.log(`  [pxf] w${w} ${region} ${focus} sup${sup.length}`
+            + ` cap${(cap / 1e6).toFixed(2)}M staffedAvg${sup.length ? (staffed / sup.length).toFixed(2) : '-'}`
+            + ` s${((cd?.totalUnitsSuppliedThisWeek ?? 0) / 1e6).toFixed(2)}M`
+            + ` d${((cd?.totalUnitsDemandedThisWeek ?? 0) / 1e6).toFixed(2)}M`
+            + ` p${(cd?.unitPriceUSD ?? 0).toFixed(0)}`
+            + ` dLvl${((cd?.demandLevelUSD ?? 0) / 1e9).toFixed(2)}B`);
+        });
+      }
+      REGION_IDS_SEED_ORDER.forEach((region) => {
+        const r = state.regions[region];
+        const movers: { id: string; ratio: number; p: number; idx: number; inv: number; short: number }[] = [];
+        Object.entries(r.categoryDemand).forEach(([id, cd]) => {
+          const p = cd.unitPriceUSD ?? 0;
+          const key = `${region}:${id}`;
+          const prev = spiralPrevPriceByKey.get(key);
+          if (prev !== undefined && prev > 0 && p > 0) {
+            const supplied = cd.totalUnitsSuppliedThisWeek ?? 0;
+            const demanded = cd.totalUnitsDemandedThisWeek ?? 0;
+            movers.push({
+              id, ratio: p / prev, p, idx: cd.clearedInputPriceIndex,
+              inv: cd.inventoryLevelUSD,
+              short: demanded > 0 ? supplied / demanded : 1,
+            });
+          }
+          spiralPrevPriceByKey.set(key, p);
+        });
+        movers.sort((a, b) => b.ratio - a.ratio);
+        const line = movers.slice(0, 5)
+          .map((m) => `${m.id} x${m.ratio.toFixed(2)} p${m.p.toFixed(0)} idx${m.idx.toFixed(1)} s/d${m.short.toFixed(2)} inv${(m.inv / 1e9).toFixed(1)}B`)
+          .join(' | ');
+        console.log(`  [px] w${w} ${region} ${line}`);
+      });
+    }
+    if (!SPIRAL) return;
+    REGION_IDS_SEED_ORDER.forEach((region) => {
+      const r = state.regions[region];
+      const smeEmployment = (r.smePools || []).reduce((a, s) => a + (s.employment ?? 0), 0);
+      const poolCashNeg = (r.smePools || []).filter((s) => (s.cashUSD ?? 0) < 0).length;
+      const gov = governmentOf(region, r);
+      const { overrunUSD } = gov.overrun();
+      console.log(`  [spiral] w${w} ${region}`
+        + ` u ${(r.unemploymentRate * 100).toFixed(1)}`
+        + ` pi ${(r.inflation * 100).toFixed(0)}`
+        + ` pol ${(r.policyRate * 100).toFixed(1)}`
+        + ` wageIdxG ${(r.occupationPools?.GENERAL?.wageIndex ?? 0).toFixed(3)}`
+        + ` | outlays ${((r.governmentOutlaysUSD ?? 0) / 1e9).toFixed(2)}B`
+        + ` overrun ${(overrunUSD / 1e9).toFixed(2)}B`
+        + ` transfers ${((r.governmentTransfersWeeklyUSD ?? 0) / 1e9).toFixed(2)}B`
+        + ` payrollGov ${((r.governmentPayrollWeeklyUSD ?? 0) / 1e9).toFixed(2)}B`
+        + ` tga ${((r.centralBankSheet?.treasuryAccountUSD ?? 0) / 1e9).toFixed(1)}B`
+        + ` | smeEmp ${(smeEmployment / 1e6).toFixed(2)}M poolNeg ${poolCashNeg}`
+        + ` govEmp ${((r.governmentEmployment ?? 0) / 1e6).toFixed(2)}M`
+        + ` | fx ${(state.fxPairs.find((p) => p.base === region && p.quote === 'USA')?.rate ?? 1).toFixed(3)}`);
+    });
+  },
+};
+
 // ---- ADD NEW MODULES HERE, and nowhere else. ----
-const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpModule, bookTraceModule];
+const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpModule, bookTraceModule, spiralModule];
 
 // =============================================================================================
 // THE RUN

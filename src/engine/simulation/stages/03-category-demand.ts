@@ -178,6 +178,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     const govBudgetByCategory: Record<string, number> = {};
     const smoothingByCategory: Record<string, number> = {};
     const corporateDemandByCategory: Record<string, number> = {};
+    const householdDemandByCategory: Record<string, number> = {};
 
     // SUPPLY/CHAIN — the corporate input basket, summed from the firms that will bid it. This is
     // the same accessor stage 05 uses per firm, so the regional level and the bids that fill it
@@ -245,6 +246,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         const suCorpDemand = corpInputDemandByCategory[su.unitId] ?? 0;
         allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;
         corporateDemandByCategory[su.unitId] = suCorpDemand;
+        householdDemandByCategory[su.unitId] = suHhDemand;
 
         if (su.buyerMix.HOUSEHOLD > 0.5) smoothingByCategory[su.unitId] = 0.1;
         else if (su.buyerMix.GOVERNMENT > 0.5) smoothingByCategory[su.unitId] = 0.05;
@@ -304,6 +306,9 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         upstreamScarcityIndex: existingEntry?.upstreamScarcityIndex ?? 1.0,
         lastWeekInventoryLevelUSD: existingEntry?.lastWeekInventoryLevelUSD ?? existingEntry?.inventoryLevelUSD ?? (newLevel * 0.10),
         corporateDemandUSD: corporateDemandByCategory[cat] ?? 0,
+        // The household leg, measured at its owner (the cohort budgets) — stage 05's bid ladder
+        // reads THIS. Capex categories have no household buyer, so absent means zero.
+        householdDemandUSD: householdDemandByCategory[cat] ?? 0,
       };
     });
 
