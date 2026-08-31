@@ -2102,3 +2102,43 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - **WHAT IS NOW THE TOP OF §6.1:** the LEVEL. Supply is uniformly ~14% short of the demand the
        same seed generates. That is one number to find, not a distribution to chase, and the
        dispersion is no longer in the way of finding it.
+228. **THE SPEED QUESTION, CLOSED BY EXHAUSTION RATHER THAN BY ARGUMENT.** §7.222 measured the
+     parallel fraction; this measures every remaining path. Each line is a run, not a judgement.
+     - **THE ENGINE GOT SLOWER BECAUSE IT STARTED WORKING.** 1,165 ms/week before §7.224's fixes,
+       ~1,750 ms after. Firms that used to die now survive, so there are more contracts, more
+       register rows, more of everything. **Every speed number in §7.212–222 was measured on a
+       collapsing economy and none of them transfer.**
+     - **NO HOT SPOT.** Re-profiled on the working world: the largest self-time frame in the whole
+       program is `companyWeekKernel` at **6.38%**, GC at 4.73%, and nothing else above 2.9%.
+     - **NO ALGORITHMIC WIN IN THE BIG STAGES.** Doubling the universe: `05-unit-bidding` 1.92x,
+       `08-company-fundamentals` 1.88x. Both linear. The only super-linear stages are
+       `estate-resolution` 4.90x, `register-consolidation` 3.08x and `securities-lending` 2.90x —
+       168 ms between them, and `securities-lending`'s is intrinsic (every fund prices every name,
+       like the equity book).
+     - **WORKERS CANNOT HAVE THE DATA, AND NOW THERE IS A NUMBER.** Structured-cloning the company
+       roster to four workers and back costs **365 ms** against a 305 ms stage; the roster alone
+       serialises in 113 ms / 22.4 MB, the regions in 490 ms / 42.9 MB. **The transfer costs more
+       than the work.** This is the measurement §7.222 asserted without taking.
+     - **THE CLEARING WORKER POOL, WHICH ALREADY EXISTS AND ALREADY PACKS TYPED ARRAYS, BUYS
+       NOTHING.** `CLEARING_WORKERS=4`: 1,852 ms/week against 1,781 serial. The kernel it shards is
+       ~120 ms of a ~370 ms family; the rest is adapters (§7.220's 9 ms/27 ms split).
+     - **§6.1's LARGEST CLAIMED ALGORITHMIC WIN IS GONE.** The register row promised ~25% off every
+       walk from duplicate and dust rows. Measured now: **0.0% duplicates** (the weekly
+       consolidation already handles them) and 3–5% dust, not 15% and 9%. The row was true when
+       written and is not true now.
+     - **THE ROSTER IS NOT A RESOLUTION PARAMETER — the rule-19 invariance test FAILS.** At
+       UNIVERSE_SCALE 0.25 / 0.5 / 1.0 the week costs 499 / 837 / 1,706 ms and total firm revenue is
+       conserved (1611 / 1644 / 1692 B, so the §7.208 thinning works) — but USA unemployment prints
+       16.7 / 16.4 / 23.8% and EUR GDP 2.06 / **27.18** / 4.52 T. **Roster size is an economic input,
+       not a resolution knob, and cannot be used to buy iteration speed.** (It may fail only because
+       a broken world diverges chaotically; re-run this test after §6.1's level row closes.)
+     - **WHAT WAS ACTUALLY TAKEN: two bit-exact changes, ~5%.** `estate-resolution`'s invoice-book
+       rescan grouped into one pass, and stage 08's terminal `Object.assign(comp, { 72 fields })`
+       written as direct assignments — a 72-property object allocated and discarded per company per
+       week. Three paired runs: 1741/1701/1860 ms before, 1626/1717/1688 after.
+     - **SO: THE ONLY REMAINING PATH IS THE COLUMNAR REWRITE, AND IT IS A PROJECT.** Stages 05 and 08
+       are half the week, both order-invariant-or-serial as §7.222 measured, and neither can reach a
+       worker until its state lives in `SharedArrayBuffer`s. That is `src/engine/columns/` finished
+       and both kernels ported — ~200 fields including nested tranche, line, inventory and WIP
+       arrays. **Do not scope it as a task and do not report a speedup from the sharding scaffolding
+       in §7.223, which executes inline and buys nothing.**
