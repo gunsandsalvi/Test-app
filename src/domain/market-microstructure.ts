@@ -93,6 +93,9 @@ export interface CategoryDemandState {
   /** The local book's own last cleared price — its anchor next week (XB3a). */
   localUnitPriceUSD?: number;
   smoothedUnitPriceUSD?: number; // Slow-moving average of the LOCAL book's cleared price, which its suppliers set production against (see 05-unit-bidding.ts) — damps the cobweb-cycle instability of reacting to the raw last-cleared price
+  /** §7.249 — the category's own published price, one entry per week (last 13), so a firm's
+   *  nominal growth can be deflated by the price of what IT sells over the SAME window. */
+  priceHistory?: number[];
   // This category's real corporate-only demand share this week (see 03-category-demand.ts) —
   // stage05-unit-bidding.ts distributes this as real named corporate bids across every
   // potential buyer company, weighted by revenue share, instead of a hand-picked per-category

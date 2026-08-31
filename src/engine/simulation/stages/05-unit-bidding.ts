@@ -1783,6 +1783,11 @@ function runSubUnitMarkets(
     if (!demandState) return;
     demandState.exWorksUnitPriceUSD = Number(results[regionId].clearedPriceUSD.toFixed(2));
     demandState.unitPriceUSD = Number(publishedPrice[regionId].toFixed(2));
+    // §7.249 — the category's own price, one entry per week, so a firm's real output growth can
+    // be deflated by the price of what IT sells over the SAME window (rule 9 twice over: the
+    // aggregate CPI is a different population AND a 52-week period against a 12-week growth).
+    // 13 entries covers the labour stage's 12-week window.
+    demandState.priceHistory = [...(demandState.priceHistory ?? []).slice(-12), demandState.unitPriceUSD];
     // IND16: the third price level, and the one a household actually faces. Ex-works is what the
     // producer received, `unitPriceUSD` is what it cost delivered — what a BUSINESS pays for its
     // inputs — and this is what it costs on a shelf, once the channel's cover is paid for. Three

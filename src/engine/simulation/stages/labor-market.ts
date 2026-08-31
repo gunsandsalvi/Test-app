@@ -49,7 +49,7 @@ import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and
 import { isActiveCompany } from '../../../domain/company';
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
-import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
+import { INDUSTRY_REGISTRY, smePoolSubUnits } from '../../../domain/industry-registry';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../../bootstrap/population';
@@ -115,17 +115,50 @@ function outputPriceVsBaseline(comp: Company, reg: Region): number {
   return weight > 0 ? weighted / weight : 1;
 }
 
+/**
+ * §7.249 — the deflator is THE PRICE OF WHAT THIS EMPLOYER SELLS, over THE SAME WINDOW as the
+ * nominal growth it deflates. The old form subtracted the REGION's 52-WEEK CPI from a 12-week
+ * annualized firm growth: rule 9 twice over — a different population (dispersion in category
+ * prices became phantom real growth per firm) and a different period (a base effect in the YoY
+ * measure at week 53 read as +90pp of real growth for every firm at once, and the labour market
+ * answered with mass rehiring, a demand surge, a ×3 price week and a mass shed — §7.247's
+ * week-52+ seam, measured end to end). Own-price over own-window has neither seam.
+ */
+function ownPriceGrowthAnnual(
+  lines: { subUnitId: string; revenueShare?: number }[] | undefined,
+  reg: Region,
+  window: number,
+  fallbackInflationAnnual: number
+): number {
+  let weight = 0;
+  let growth = 0;
+  (lines ?? []).forEach((l) => {
+    const ph = reg.categoryDemand[l.subUnitId]?.priceHistory;
+    if (!ph || ph.length < window + 1) return;
+    const p0 = ph[ph.length - 1 - window];
+    const p1 = ph[ph.length - 1];
+    if (!(p0 > 0 && p1 > 0)) return;
+    const lw = Math.max(0, l.revenueShare ?? 0);
+    weight += lw;
+    growth += lw * ((p1 / p0 - 1) * (52 / window));
+  });
+  return weight > 0 ? growth / weight : fallbackInflationAnnual;
+}
+
 function desiredEmploymentGrowthAnnual(
   history: number[] | undefined,
   currentRevenueUSD: number,
-  inflationAnnual: number
+  fallbackInflationAnnual: number,
+  lines: { subUnitId: string; revenueShare?: number }[] | undefined,
+  reg: Region
 ): number {
   if (!history || history.length < 2) return 0;
   const window = Math.min(12, history.length - 1);
   const past = history[history.length - 1 - window];
   if (!(past > 0) || !(currentRevenueUSD > 0)) return 0;
   const nominalGrowthAnnual = (currentRevenueUSD / past - 1) * (52 / window);
-  const realGrowthAnnual = nominalGrowthAnnual - inflationAnnual;
+  const realGrowthAnnual = nominalGrowthAnnual
+    - ownPriceGrowthAnnual(lines, reg, window, fallbackInflationAnnual);
   // Labor demand grows with real output net of what productivity delivers for free. UNBOUNDED:
   // the +/-25% clamp that stood here was doing the work an affordability constraint should do —
   // it stopped a wild revenue print ordering a hiring spree, but it equally stopped a collapsing
@@ -189,7 +222,8 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
     employers.forEach((comp) => {
       const current = Math.max(0, comp.employeeCount);
       if (current <= 0) return;
-      const growthAnnual = desiredEmploymentGrowthAnnual(comp.revenueHistory, comp.annualRevenue, inflationAnnual);
+      const growthAnnual = desiredEmploymentGrowthAnnual(
+        comp.revenueHistory, comp.annualRevenue, inflationAnnual, comp.productLines, reg);
       const desiredWeeklyChange = current * (growthAnnual / 52);
 
       // HH6: a firm's OWN quit rate. Paying below the going rate loses people faster; paying
@@ -336,8 +370,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const current = Math.max(0, seg.employment);
       if (current <= 0) return;
       // Same growth-on-growth rule as a named firm, off the segment's own revenue history.
+      // §7.249: a pool's own prices are its industry's sub-units, weighted by what it measurably
+      // sold into each (the same read §7.227 uses), the category's demand where it has not yet.
+      const segLines = smePoolSubUnits(seg.industry).map((su) => ({
+        subUnitId: su.unitId,
+        revenueShare: (seg.salesDerivedAnnualRevenueUSDBySubUnit?.[su.unitId]
+          ?? reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0),
+      }));
       const growthAnnual = desiredEmploymentGrowthAnnual(
-        seg.revenueHistoryUSD, seg.annualRevenueUSD, inflationAnnual
+        seg.revenueHistoryUSD, seg.annualRevenueUSD, inflationAnnual, segLines, reg
       );
       const desiredWeeklyChange = current * (growthAnnual / 52);
       const quits = current * quitRateWeekly;
