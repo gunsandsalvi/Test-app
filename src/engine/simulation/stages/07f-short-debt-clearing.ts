@@ -44,6 +44,8 @@ import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT
 import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
 import { buildDealerDeskParticipants, applyDealerDeskFills, dealerDeskPartyOf, deskTickersOf } from './dealer-desks';
+import { dealerDeskTicker } from '../../../domain/dealer-desk';
+import { discountBillProceedsUSD } from '../../../domain/government';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import {
@@ -340,17 +342,90 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,
       });
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} bill`);
+
+      // §4.0 Tier 1 item 13 — THE DISCOUNT EXISTS AT ISSUE. A bill auction clears a YIELD, and
+      // the buyer of NEW paper pays the discounted price, not face — this book charged face,
+      // booked face, and then §7.250's accretion grew the position past face: every primary
+      // placement minted its own discount into the holders' books while the treasury was
+      // overpaid by the same amount (the EUR/JPN 'ledger is minting claims' family, and a
+      // feeder of every bill holder's phantom income). The SECONDARY float already trades in
+      // stored-value units and stays untouched. Each non-desk buyer's pro-rata slice of the
+      // primary now books at cost and pays cost — the rebate below adjusts both legs of the
+      // same instruction — and the treasury receives proceeds at the cleared discount. Desk
+      // slices keep the face convention (their inventory books from raw fills; re-pricing one
+      // leg alone would break the per-bank identity), so the treasury is made whole for the
+      // desks' slice and the desks' book carries the old convention until G3a re-prices it.
+      const priceFractionById = new Map<string, number>();
+      activeBuckets.forEach((b) => {
+        const id = billInstrumentId(regionId, b.key);
+        const yieldAnnual = (result.newStatById.get(id) ?? instruments.find((i) => i.id === id)?.currentStat ?? 0) / 10000;
+        priceFractionById.set(id, discountBillProceedsUSD(1, Math.max(0, yieldAnnual), b.years));
+      });
+      const rebateByParticipant = new Map<string, Map<string, number>>();
+      const deskPrimaryFaceByInstrument = new Map<string, number>();
+      let totalCashRebatesUSD = 0;
+      {
+        const boughtByInstrument = new Map<string, number>();
+        const buyersByInstrument = new Map<string, { pid: string; boughtUSD: number }[]>();
+        [...participants, ...deskParticipants].forEach((p) => {
+          const fills = result.newParticipantHoldings.get(p.id);
+          if (!fills) return;
+          fills.forEach((newUSD, id) => {
+            const boughtUSD = newUSD - (p.currentHoldingsByInstrumentId.get(id) ?? 0);
+            if (boughtUSD > 1) {
+              boughtByInstrument.set(id, (boughtByInstrument.get(id) ?? 0) + boughtUSD);
+              const list = buyersByInstrument.get(id) ?? [];
+              list.push({ pid: p.id, boughtUSD });
+              buyersByInstrument.set(id, list);
+            }
+          });
+        });
+        result.primaryOutcomeById.forEach((o, instrumentId) => {
+          if (o.withdrawn) return;
+          const pf = priceFractionById.get(instrumentId);
+          if (pf === undefined || pf >= 1) return;
+          const takeUSD = Math.max(0, o.marketTakeUSD);
+          const totalBoughtUSD = boughtByInstrument.get(instrumentId) ?? 0;
+          if (!(takeUSD > 1) || !(totalBoughtUSD > 0)) return;
+          (buyersByInstrument.get(instrumentId) ?? []).forEach(({ pid, boughtUSD }) => {
+            const primarySliceUSD = boughtUSD * Math.min(1, takeUSD / totalBoughtUSD);
+            const discountUSD = primarySliceUSD * (1 - pf);
+            if (!(discountUSD > 0)) return;
+            if (dealerDeskTicker(pid) !== undefined) {
+              deskPrimaryFaceByInstrument.set(instrumentId,
+                (deskPrimaryFaceByInstrument.get(instrumentId) ?? 0) + discountUSD);
+              return;
+            }
+            const m = rebateByParticipant.get(pid) ?? new Map<string, number>();
+            m.set(instrumentId, (m.get(instrumentId) ?? 0) + discountUSD);
+            rebateByParticipant.set(pid, m);
+            // The cash half of the same instruction: the buyer pays cost, not face — the
+            // central bank included (its "payment" is the reserves it creates, and it creates
+            // only what the paper cost; its book and its issuance must tell the same story).
+            result.netCashDeltaByParticipantId.set(pid,
+              (result.netCashDeltaByParticipantId.get(pid) ?? 0) + discountUSD);
+            totalCashRebatesUSD += discountUSD;
+          });
+        });
+      }
+      const rebateOf = (pid: string, instrumentId: string): number =>
+        rebateByParticipant.get(pid)?.get(instrumentId) ?? 0;
+
       if (cbOrder && reg.centralBankSheet) {
         // Asset side only — the reserves that paid for it were created. See central-bank-demand.
+        // Item 13: the CB's primary slice books at cost like every other holder's (its fills are
+        // adjusted by its rebate; it has no cash leg to adjust).
+        const cbRawFills = result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>();
+        const cbFills = new Map<string, number>();
+        cbRawFills.forEach((usd, id) => cbFills.set(id, usd - rebateOf(CENTRAL_BANK_PARTICIPANT_ID, id)));
         const filled = applyCentralBankFills(
-          reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k),
-          result.newParticipantHoldings.get(CENTRAL_BANK_PARTICIPANT_ID) ?? new Map<string, number>()
+          reg.centralBankSheet, billBucketKeys, (k) => billInstrumentId(regionId, k), cbFills
         );
         reg.centralBankSheet.lastOpenMarketPurchasesUSD =
           Math.round(((reg.centralBankSheet.lastOpenMarketPurchasesUSD ?? 0) + filled));
       }
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
-    if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} bill`);
 
       // Refit the curve through BOTH the cleared bills and 07c's cleared bonds, so the sub-2Y
       // segment every short-rate consumer reads comes from a market, not an extrapolation.
@@ -385,7 +460,10 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const byTenor: Record<string, number> = { ...(existingSheet.sovereignBondHoldingsByTenor || {}) };
         let faceDeltaUSD = 0;
         activeBuckets.forEach((b) => {
-          const newUSD = fills.get(billInstrumentId(regionId, b.key)) ?? 0;
+          // Item 13: the primary slice books at cost — the rebate is the same instruction's
+          // booking half (the cash half was adjusted on the participant's net above).
+          const newUSD = (fills.get(billInstrumentId(regionId, b.key)) ?? 0)
+            - rebateOf(`BANK-${bank.ticker}`, billInstrumentId(regionId, b.key));
           faceDeltaUSD += newUSD - (byTenor[b.key] ?? 0);
           if (newUSD > 1) byTenor[b.key] = newUSD; else delete byTenor[b.key];
         });
@@ -418,7 +496,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         ctx.holdingsStore!.scan(entity.id, 'GOV_BOND', (h) => auctionedIds.has(h.instrumentId));
         const billHoldings: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
-          if (usd > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
+          const bookedUSD = usd - rebateOf(entity.id, instrumentId);
+          if (bookedUSD > 1) billHoldings.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD });
         });
         ctx.holdingsStore!.append(entity.id, billHoldings);
       });
@@ -437,7 +516,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         });
         const billRows: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
-          if (usd > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: usd });
+          const bookedUSD = usd - rebateOf(treasuryParticipantId(ticker), instrumentId);
+          if (bookedUSD > 1) billRows.push({ instrumentId, instrumentType: 'GOV_BOND', issuerRegion: regionId, quantityOrNotionalUSD: bookedUSD });
         });
         if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
         ctx.companyUpdates[ticker].treasuryHoldings = [...kept, ...billRows];
@@ -454,10 +534,25 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             : id.startsWith('TREASURY-') ? { kind: 'COMPANY', ticker: id.slice('TREASURY-'.length) }
               : id === CENTRAL_BANK_PARTICIPANT_ID ? { kind: 'CENTRAL_BANK', region: regionId }
                 : dealerDeskPartyOf(id, deskTickers)),
-        { netCashUSD: result.dealerNetCashUSD, feeUSD: result.totalDealerRevenueUSD },
+        // Item 13: the CCP receives less by exactly the rebates its buyers kept, and pays the
+        // treasury less by the same total — flat by construction, as a clearing house is.
+        { netCashUSD: result.dealerNetCashUSD - totalCashRebatesUSD, feeUSD: result.totalDealerRevenueUSD },
         feeDesksForRegion(ctx, regionId),
-        // PUB: the treasury is paid for the bills this week's auction actually placed.
-        primaryTakes(result, () => ({ kind: 'GOVERNMENT', region: regionId }))
+        // PUB/item 13: the treasury receives the DISCOUNTED proceeds the auction's yield
+        // implies — that shortfall against face is exactly the government's borrowing cost,
+        // paid back at redemption (PUB3d's conservation, both legs at last). The desks' primary
+        // slice still pays face, so the treasury is made whole for it here.
+        (() => {
+          const takes: { party: PartyRef; amountUSD: number }[] = [];
+          result.primaryOutcomeById.forEach((o, instrumentId) => {
+            if (o.withdrawn) return;
+            const pf = priceFractionById.get(instrumentId) ?? 1;
+            const amountUSD = Math.max(0, o.marketTakeUSD) * pf
+              + (deskPrimaryFaceByInstrument.get(instrumentId) ?? 0);
+            if (amountUSD > 0) takes.push({ party: { kind: 'GOVERNMENT', region: regionId }, amountUSD });
+          });
+          return takes;
+        })()
       );
 
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
