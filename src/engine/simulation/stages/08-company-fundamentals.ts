@@ -2389,5 +2389,35 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // CAL: the week's interest accruals onto the register, and the coupon dates that clear them.
   applyHolderInterestAccruals(ctx);
 
+  // §4.0 Tier 1 item 9 — A MARKET SHARE IS A RATIO, AND RATIOS SUM TO ONE. Each line's share
+  // walked its own competitiveness rate independently, so the category sum drifted: a death
+  // took its share to the grave (JPN semiconductors summed 45%) and a uniformly-competitive
+  // category compounded above one (EUR passenger_vehicles 108%). Renormalized per
+  // (region, sub-unit) after the loop: relative competitiveness decides RELATIVE share —
+  // a gain is now genuinely at someone's expense — and a dead supplier's share redistributes
+  // to the survivors, which is the §7.152 stand-in until DYN's real entry replaces it.
+  // Runs on the merged roster in row order, so the sharded kernel stays order-invariant.
+  {
+    const shareSumByKey = new Map<string, number>();
+    ctx.updatedCompanies.forEach((c) => {
+      if (!isActiveCompany(c)) return;
+      (c.productLines || []).forEach((pl) => {
+        const key = `${c.region}:${pl.subUnitId}`;
+        shareSumByKey.set(key, (shareSumByKey.get(key) ?? 0) + (pl.categoryMarketShare ?? 0));
+      });
+    });
+    ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
+      if (!isActiveCompany(c) || !(c.productLines || []).length) return c;
+      let touched = false;
+      const lines = (c.productLines || []).map((pl) => {
+        const sum = shareSumByKey.get(`${c.region}:${pl.subUnitId}`) ?? 0;
+        if (!(sum > 1e-9) || Math.abs(sum - 1) < 1e-9) return pl;
+        touched = true;
+        return { ...pl, categoryMarketShare: Number((pl.categoryMarketShare / sum).toFixed(6)) };
+      });
+      return touched ? { ...c, productLines: lines } : c;
+    });
+  }
+
   ctx.newsItems.push(...refinanceNews);
 }
