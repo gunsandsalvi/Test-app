@@ -45,13 +45,24 @@ export function deriveSubUnitUnitPrice(
   buyerMix: Record<BuyerType, number>,
   population: number,
   firmCount: number,
-  unitId?: string
+  unitId?: string,
+  intermediateDemandUSD?: number
 ): number {
   const householdWeight = buyerMix.HOUSEHOLD + buyerMix.GOVERNMENT; // government spending also serves the population
   const corporateWeight = buyerMix.CORPORATE;
   const spec = unitId ? subUnitSpecOf(unitId) : undefined;
   const hhIntensity = spec?.householdUnitsPerCapitaAnnual ?? FALLBACK_HOUSEHOLD_UNITS_PER_CAPITA_ANNUAL;
   const corpIntensity = spec?.corporateUnitsPerFirmAnnual ?? FALLBACK_CORPORATE_UNITS_PER_FIRM_ANNUAL;
+  // A PURE INTERMEDIATE has no final buyer to price it: final demand is $0 by construction, so
+  // this rule seeded its price at 0 and every reader shipped it weightless (§7.241's guard is
+  // what makes that loud). Its buyers are producers, so the same §7.127 construction applies to
+  // THEM: the dollars its actual buyers pay over the physical volume those buyers take. This is
+  // not the intermediate-demand-as-price trap — the trap was a FINAL-buyer volume under a
+  // total-output numerator; here numerator and volume count the same (producer) buyers.
+  if (!(finalDemandUSD > 0) && (intermediateDemandUSD ?? 0) > 0) {
+    const producerVolumeUnits = Math.max(1, firmCount * corpIntensity * corporateWeight);
+    return Number(((intermediateDemandUSD as number) / producerVolumeUnits).toFixed(2));
+  }
   const physicalVolumeUnits = Math.max(
     1,
     population * hhIntensity * householdWeight + firmCount * corpIntensity * corporateWeight

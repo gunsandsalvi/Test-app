@@ -232,8 +232,12 @@ export function seedRegionCategoryDemand(
         reg.categoryDemand[su.unitId] = createSeedCategoryDemandState(
           demandLevelUSD,
           reg.gdpGrowth ?? 0.02,
-          // §7.127: FINAL demand prices the good; total output is the quantity behind it.
-          deriveSubUnitUnitPrice(finalDemandBySubUnit[su.unitId] ?? 0, su.buyerMix, reg.totalPopulation, regionFirmCount, su.unitId)
+          // §7.127: FINAL demand prices the good; total output is the quantity behind it. The
+          // intermediate slice is passed so a PURE intermediate prices off its producer buyers.
+          deriveSubUnitUnitPrice(
+            finalDemandBySubUnit[su.unitId] ?? 0, su.buyerMix, reg.totalPopulation, regionFirmCount, su.unitId,
+            (totalOutputBySubUnit[su.unitId] ?? 0) - (finalDemandBySubUnit[su.unitId] ?? 0)
+          )
         );
       });
     });
