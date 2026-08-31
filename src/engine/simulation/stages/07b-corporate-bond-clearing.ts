@@ -403,7 +403,10 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         const targetUSD = investableUSD * c.weight + offeringUSD * fundShareOfIndex;
         demandByInstrumentId.set(
           c.instrumentId,
-          indexFundDemand(targetUSD, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight, 'YIELD_LIKE')
+          // §7.270: the kernel's cash leg is traded PLUS the dealer fee, so a bound spent to
+          // the last dollar overdraws by spread × gross — the fee rides outside the bound. A
+          // fund that never walks away rides the bound exactly; shave it by the spread.
+          indexFundDemand(targetUSD, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight / (1 + DEALER_SPREAD_BPS / 10000), 'YIELD_LIKE')
         );
       });
       return {
