@@ -598,6 +598,9 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | Defect | State and next action |
 |---|---|
 | **THE ORDER OF A SOURCE-FILE DECLARATION SETS UNEMPLOYMENT** | §7.222 measured it: reverse the order `05-unit-bidding` walks `INDUSTRY_SUBUNITS` — a declaration order, nothing economic — and week 1 aggregate net income moves +3.8%, GDP −0.12%, **every one of 2,496 firms buys a different amount**, and by week 2 seven more firms are dead and unemployment prints 9.49% against 9.61%. Sub-unit markets open one after another and firms spend one budget across all of them, so whichever market opens first is served first. That coupling is REAL (a firm has one wallet); what is arbitrary is that the queue is a file's declaration order. **Rule 19: an arbitrary implementation detail is setting a macro outcome.** The well-posed question is what the opening order should BE — simultaneous clearing across a firm's budget, or an order derived from something economic. Do not paper over it by pre-allocating per-market budgets: that lets a firm overspend. Owner: IND/SCALE. |
+| **BEHAVIOUR LIVES IN THE STAGES, NOT IN THE OBJECTS** | §7.229 measured it: **7,736 lines of `domain/` against 24,595 of `simulation/stages/`**, in functions of 700–2,400 lines. Every open row below is a rule with no home — the fiscal rule (no `Government` object, only twelve free functions over argument bags), the repo pledge rule (no `Collateral` object), the fund's redemption rule (no `Fund` object), the SME pool's capacity rule (twelve inline lines that silently allocated ZERO to the household basket's largest category, for ever). **Do not work the rows one at a time — they are one cause.** The model to copy already exists: `profiles/index.ts`, a registry whose header reads "one line per kind". **Next action: move the rule each open defect names out of its stage and onto an object, defect by defect, starting with Government.** Owner: AU. |
+| **MONEY IS NOT CONSERVED, AND TWO OF ITS CREATION MECHANISMS ARE PLUGS** | §7.229: 02b's reconcile INVENTS reserves for any balance a stage moved without a payment instruction — **14.3B/week gross** (corporate 3.9B, institutional 9.9B, SME 4.3B) — and the overdraft clamp `Math.max(0, cashUSD)` destroys negative balances, creating the money that was overspent: **6.0B/week**. `unbackedBankCashUSD` runs **213.3B at week 13 → 585.4B at week 30, rising**. **43 direct writes to a money field** sit outside `initialization.ts` and `settlement.ts`, across 15 files. **Next action: enumerate all 43 and convert each to a payment instruction; the reconcile's own comment says it goes to zero when that is done, so the 14.3B IS the to-do list, measured.** Owner: CASH/SETL. |
+| **A SECURITY IS A DISPLAY STRUCT, NOT A PRIMITIVE** | §7.229: `TradeableInstrument` is an `assetType` string tag plus a `details` bag of **26 optional fields**, with nothing enforcing that a CDS carries a spread or a bond a coupon. Cost of a new security type, counted: **75 comparison sites across 17 files**. Other unions cost the same way — `PartyRef.kind` 69 sites/19 files, institutional `entityType` 64/21, `RegionId` 34/9. **A new profile also has no small-firm tier**: SME pools are keyed by INDUSTRY, so a new industry gets one automatically and a new profile silently gets large firms only. Owner: AU. |
 | **THE SEED SUPPLIES ~14% LESS THAN ITS OWN DEMAND — UNIFORMLY** | **The SECTOR half of this row is closed by §7.227**: combined named+SME coverage went from 0.43/0.99/0.80/1.04 to 0.85/0.85/0.88/0.87, a 2.4x spread down to 1.04x. What is left is a LEVEL: every producing sector supplies about 86% of the demand the same seed generates, and 34 of the USA's 37 categories still open below their own demand. **This is now one number to find, not a distribution to chase.** The seed's VALUE totals reconcile (IO gross output 1033B against firm+SME revenue 980B, 94.9%), so the gap is in the UNIT mapping — `deriveSubUnitUnitPrice` divides FINAL demand by a per-capita/per-firm physical volume while capacity is revenue over the same price, and the recipe-input demand a category faces is built from firms' own intensities rather than from the IO coefficients. **Next action: reconcile units demanded against units suppliable for one category by hand, end to end.** Owner: the seed, with IND. |
 | **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | §7.213: 32,278 holding rows at seed → ~103,000 distinct positions by week 5, ~122,000 rows by week 15. **15% are duplicate `(holder, instrument)` rows and 9% are under $1,000.** §1's §7.4 rule is that the seed opens in the shape the weekly engine produces; this one does not, and every stage that walks the register pays for the gap. Consolidating duplicates and dust is ~25% off every register walk — the largest algorithmic item left. Owner: the seed, with SCALE. |
 | **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | **RE-DIAGNOSED IN §7.224: nothing in the labour market is wrong.** It reads `nominalGrowth - inflation`, and the inflation was a goods-market defect at week 1. With that fixed, EUR's 66% is gone and all four regions sit near 33%, but JPN now reaches 75% by week 58 and 69 band violations remain. **Do not touch the matching function or the quit rate until the capacity row below is closed** — the labour market will keep printing whatever the price level hands it. Owner: HH5/LAB, after IND. |
@@ -2142,3 +2145,60 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        and both kernels ported — ~200 fields including nested tranche, line, inventory and WIP
        arrays. **Do not scope it as a task and do not report a speedup from the sharding scaffolding
        in §7.223, which executes inline and buys nothing.**
+229. **ARCHITECTURE AUDIT — WHY DEFECTS LIKE THE SME LOCK ARE STRUCTURAL, NOT ACCIDENTAL.**
+     Prompted by a fair question: *how was that lock even possible?* The answer is not "someone
+     missed it". It is that the rule it broke had nowhere to live. One measurement explains the
+     whole file: **7,736 lines of `domain/` against 24,595 lines of `simulation/stages/`.** Three
+     quarters of this model's behaviour lives in the orchestration layer, in functions of 700–2,400
+     lines, not in the objects it is a model OF.
+     - **THE LOCK, AS A SPECIMEN.** An SME pool's rule for allocating capacity across its industry's
+       sub-units was twelve inline lines in the middle of `05-unit-bidding.ts`. There is no
+       `SmePool` object that owns "where do I put my capacity". So: nothing could test it, nothing
+       named it, and its failure — `mixShare` exactly 0, for ever, because a market it has never
+       sold into produces no measurement and no measurement produces no offer — was invisible
+       without printing the intermediate. It cost `household_essentials`, the largest weight in the
+       household basket, **its entire SME tier from week one**.
+     - **MONEY IS NOT CONSERVED, AND THE ENGINE ALREADY MEASURES ITS OWN LEAK.** Creation:
+       bank lending (a loan writes a deposit), central-bank asset purchases, the government deficit
+       — all modelled. Then two that are not mechanisms at all: **02b's reconcile INVENTS reserves**
+       to match any balance a stage moved without a payment instruction (its own comment says so,
+       and calls itself "the migration's own progress meter"), and **the overdraft clamp
+       `Math.max(0, cashUSD)` destroys negative balances**, which creates the money that was
+       overspent. Measured over 30 weeks: **bypass 14.3B/week gross** (corporate 3.9B,
+       institutional 9.9B, SME 4.3B), **clamped overdrafts 6.0B/week**, and
+       `unbackedBankCashUSD` **213.3B at week 13 → 585.4B at week 30 — rising, not falling.**
+       **43 direct writes to a money field** sit outside `initialization.ts` and `settlement.ts`,
+       in 15 files. Conservation is not a property of the design; it is 43 authors each remembering
+       to write both legs. The PE fund that spent money it did not have (§7.226) is that, exactly.
+     - **SECURITIES HAVE NO PRIMITIVE.** `TradeableInstrument` is a display struct: an `assetType`
+       string tag plus a `details` bag of **26 optional fields**, most meaningless for any given
+       instrument, and nothing enforcing that a CDS carries a spread or a bond a coupon. The cost of
+       a new security type, counted: **75 comparison sites across 17 files.** Contrast the one place
+       that is right — `profiles/index.ts`, a registry whose own header says "one line per kind
+       (rule 17)": a new company profile is a module plus one line, and nothing else in the engine
+       changes.
+     - **THE OTHER ENTITIES, RANKED BY HOW WELL THEY ARE MODELLED.** `CentralBank` is a real
+       primitive: an interface with derived readers (`centralBankAssetsUSD`, `unbackedBankCashUSD`,
+       `remittanceUSD`). `Company` is close — an interface plus the profile registry. **Government
+       is not modelled at all**: `domain/government.ts` has no `interface Government`, only twelve
+       free functions over loose argument bags, with the state scattered across `Region`. So the
+       fiscal rule cannot be read in one place, which is why "EUR outlays exceed its budget" has sat
+       in §6.1 unresolved.
+     - **THE COST OF ADDING A TYPE, MEASURED.** Comparison sites against each union, i.e. the number
+       of places a new member must be taught about: **AssetType 75 sites / 17 files;
+       PartyRef.kind 69 / 19; institutional entityType 64 / 21; RegionId 34 / 9; Sector 11 / 3.**
+       A new region touches nine files. A new counterparty kind touches nineteen.
+     - **THE TWO EXTENSIBILITY QUESTIONS, ANSWERED.** *A new household type:* `WealthTier` is a
+       four-member union with 53 uses but comparisons in only **two** files — the tiers are carried
+       as data (arrays keyed by tier), so this one is nearly clean and a fifth tier is close to a
+       data change. *A new company type:* it does NOT go to the SME tier, and that is correct —
+       pools are keyed by INDUSTRY (`SME_POOL_INDUSTRIES` × `smeShareOfActivity`), so a new
+       *industry* gets a pool automatically and a new *profile* does not. **The real gap is that a
+       new profile has no small-firm tier at all**: add a REIT and the model has large REITs and no
+       small ones, silently.
+     - **WHAT THIS CHANGES ABOUT THE WORK ORDER.** Chasing §6.1 row by row is treating symptoms of
+       one cause. Every open row is a rule with no home: the fiscal rule (no Government object), the
+       repo pledge rule (no Collateral object), the fund's redemption rule (no Fund object), the
+       pool's capacity rule (no SmePool object). **The next project is not a defect — it is moving
+       behaviour out of the stages and into the objects, starting with the ones the open defects
+       name.** A stage should orchestrate: read state, call the objects, write state.
