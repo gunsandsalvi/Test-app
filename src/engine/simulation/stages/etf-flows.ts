@@ -82,7 +82,13 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   const navByFundId = new Map<string, number>();
   funds.forEach((fund) => {
     const navUSD = fundNavUSD(fund);
-    const feeUSD = (navUSD * fund.etf!.expenseRatioAnnual) / 52;
+    // §4.0 Tier 1 item 6 — a fee is paid FROM CASH THE FUND HAS. Charging the full ratio into a
+    // fund whose cash-plus-pending was already spent dug the small persistent overdrafts the
+    // harness flags (USAIGX −18M, the IGX/LLX residue); the sponsor of a cash-short fund waits,
+    // and next week's ratio is computed fresh off the NAV as before.
+    const payableCapUSD = Math.max(0, (fund.cashUSD ?? 0)
+      + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id }));
+    const feeUSD = Math.min((navUSD * fund.etf!.expenseRatioAnnual) / 52, payableCapUSD);
     // §7.241: ONE fee, ONE payment. The old form computed the fee twice from two different NAVs
     // — the sponsor's credit off the pre-flow book here, the fund's debit off the post-flow book
     // in the apply pass — so the two sides of one fee disagreed by the week's flow, silently.

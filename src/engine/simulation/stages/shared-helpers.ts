@@ -4,7 +4,7 @@
  * itemized-holdings attribution). Kept together here rather than duplicated per stage.
  */
 
-import { journalPayment } from './settlement';
+import { journalPayment, partyId } from './settlement';
 import { getHoldingsTable } from './register-index';
 import { INSTRUMENT_IDS } from '../../columns/intern';
 import { Company, Region, SmePool, RegionId, ItemizedHolding, SupplyRelationship, InstitutionalEntity } from '../../../types';
@@ -326,6 +326,9 @@ export function applyPendingCorporateActionSettlements(
     issuerTickerById?: Map<string, string>;
     /** §7.241: a payer-less credit (unmapped issuer) is counted here instead of being silent. */
     unbackedLedger?: import('../../ledger/balance').UnbackedLedger;
+    /** §4.0 Tier 1 item 6: the running settlement net, so a placement's budget sees what the
+     *  holder's week has already committed. Present on the real context. */
+    pendingNetById?: import('./context').WeeklyStepContext['pendingNetById'];
   }
 ): void {
   const pending = ctx.pendingHolderSettlements;
@@ -379,6 +382,9 @@ export function applyPendingCorporateActionSettlements(
     if (!anyHit) return entity;
     let touched = false;
     let cashUSD = 0;
+    // Placements this entity has funded within THIS pass — journalPayment does not update the
+    // running settlement net, so two placements in one week must see each other here.
+    let committedPlacementUSD = 0;
     const newHoldings = entity.itemizedHoldings
       .map((h) => {
         if (hasCash) {
@@ -431,9 +437,30 @@ export function applyPendingCorporateActionSettlements(
         // pro rata with the existing holder base, which they must pay for. WS8 primary issuance is
         // already netted out of this ratio by stage 08 (it inflates the pre-action float by the
         // market take), so what remains here is a genuine placement and it is charged, not gifted.
-        const principalCashUSD = h.instrumentType === 'EQUITY'
+        let principalCashUSD = h.instrumentType === 'EQUITY'
           ? 0
           : h.quantityOrNotionalUSD * (1 - ratio);
+        // §4.0 Tier 1 item 6 — A PLACEMENT IS TAKEN UP ONLY AS FAR AS THE CASH REACHES. The
+        // float-increase leg billed holders of record with no budget: a fund whose week was
+        // already spent was debited into overdraft by its own pro-rata allotment (measured:
+        // USAIGX −18M, the residual of the overdraft family). A holder short of cash declines
+        // the unaffordable slice — its holding grows by only the share it funded, and the
+        // issuer's proceeds shrink by the same amount on the same instruction.
+        let effectiveRatio = ratio;
+        if (principalCashUSD < 0) {
+          const pendingUSD = ctx.pendingNetById
+            ? (ctx.pendingNetById[partyId({ kind: 'INSTITUTION', id: entity.id })] ?? 0)
+            : 0;
+          const availableUSD = Math.max(0, (entity.cashUSD ?? 0) + cashUSD + pendingUSD
+            - committedPlacementUSD);
+          const owedUSD = -principalCashUSD;
+          const fundedShare = owedUSD > 0 ? Math.min(1, availableUSD / owedUSD) : 1;
+          if (fundedShare < 1) {
+            effectiveRatio = 1 + (ratio - 1) * fundedShare;
+            principalCashUSD = -owedUSD * fundedShare;
+          }
+          committedPlacementUSD += -principalCashUSD;
+        }
         // CASH: and it comes FROM THE ISSUER, by name — the same route the premium above takes.
         // Crediting `cashUSD` here made the redemption money appear on the holder's book while
         // stage 08's ledger posted the issuer's side against the UNMODELED boundary: two halves
@@ -464,7 +491,7 @@ export function applyPendingCorporateActionSettlements(
               (ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] ?? 0) + principalCashUSD;
           }
         }
-        return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
+        return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * effectiveRatio };
       })
       .filter((h) => h.quantityOrNotionalUSD > 1);
     if (!touched) return entity;

@@ -87,6 +87,10 @@ export class BankIdentityTrace {
   private contributions = new Map<string, Map<string, number>>();
   private focusTicker = process.env.BANK_IDENTITY_TRACE_BANK || undefined;
   private focusFields: Record<string, number> | undefined;
+  /** INSTITUTION focus: journal net by reason plus the cash stock, per stage — for the
+   *  overdraft family (a fund spending money it does not have). */
+  private focusInstitutionId = process.env.BANK_IDENTITY_TRACE_INSTITUTION || undefined;
+  private focusInstitutionCash: number | undefined;
 
   /** Seed the opening residuals so stage 01 is not charged with what last week left behind. */
   begin(state: GameState, ctx: WeeklyStepContext): void {
@@ -164,11 +168,49 @@ export class BankIdentityTrace {
       + (rows.length ? `\n    ${rows.join('\n    ')}` : ' <none>'));
   }
 
+  /** The focus institution's cash after each stage, and — before each settlement pass — the
+   *  journal's net for it by reason, so an overdraft names the leg that dug it. */
+  private traceInstitution(stage: string, ctx: WeeklyStepContext): void {
+    if (!this.focusInstitutionId) return;
+    const e = ctx.updatedInstitutionalEntities.find(
+      (x) => x.id === this.focusInstitutionId || (x as { ticker?: string }).ticker === this.focusInstitutionId);
+    if (!e) return;
+    const cash = e.cashUSD ?? 0;
+    if (this.focusInstitutionCash !== undefined && Math.abs(cash - this.focusInstitutionCash) > 1e4) {
+      console.log(`  [inst] w${ctx.nextWeek} ${this.focusInstitutionId} ${stage} cash `
+        + `${(this.focusInstitutionCash / 1e6).toFixed(2)}M -> ${(cash / 1e6).toFixed(2)}M`);
+    }
+    this.focusInstitutionCash = cash;
+    if (stage !== '08-company-fundamentals' && stage !== 'labor-reconciliation') return;
+    const j = ctx.paymentJournal;
+    const byReason = new Map<string, number>();
+    for (let i = 0; i < j.amountUSD.length; i++) {
+      const payer = partyOf(j.payerId[i]);
+      const payee = partyOf(j.payeeId[i]);
+      const touch = (ref: typeof payer, sign: 1 | -1) => {
+        if (ref.kind === 'INSTITUTION' && ref.id === e.id) {
+          const key = reasonText(j.reasonId[i]);
+          byReason.set(key, (byReason.get(key) ?? 0) + sign * j.amountUSD[i]);
+        }
+      };
+      touch(payer, -1);
+      touch(payee, 1);
+    }
+    const rows = Array.from(byReason.entries())
+      .filter(([, usd]) => Math.abs(usd) > 1e4)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+      .map(([k, usd]) => `${k} ${(usd / 1e6).toFixed(2)}M`);
+    if (rows.length > 0) {
+      console.log(`  [inst-journal] w${ctx.nextWeek} ${this.focusInstitutionId} before-${stage}: ${rows.join(' | ')}`);
+    }
+  }
+
   afterStage(stage: string, state: GameState, ctx: WeeklyStepContext): void {
     if (stage === '08-company-fundamentals' || stage === 'labor-reconciliation') {
       this.dumpJournal(stage, ctx);
     }
     this.traceFocus(stage, ctx);
+    this.traceInstitution(stage, ctx);
     const now = this.residuals(state, ctx);
     now.forEach((r, ticker) => {
       const delta = r - (this.last.get(ticker) ?? 0);

@@ -14,7 +14,7 @@
 import { GameState, RegionId } from '../../../types';
 import { PrimeBrokerageLine, maxDrawnUSD, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
 import { WeeklyStepContext, updateBankSheet } from './context';
-import { pay } from './settlement';
+import { pay, pendingSettlementUSD } from './settlement';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
 import { WHOLESALE_FUNDING_SPREAD_BPS } from '../../../domain/banking';
@@ -171,5 +171,75 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
         primeBrokerageLoansUSD: Math.round(lentByBroker(nextBook, ticker)),
       });
     });
+  });
+}
+
+/**
+ * §4.0 Tier 1 item 6 — THE CLOSE-CYCLE SWEEP. A margin account finances its debit the day it
+ * appears, not a week later. The morning pass above deliberately sweeps LAST week's spend; a
+ * fund that levered into this week's auctions then sat with a naked negative balance until the
+ * next morning — the harness's whole 'fund spending money it does not have' family for the
+ * leveraged funds (measured: ABBG bought 7.5B of loans on 5.1B cash the week its line
+ * re-struck, closed at −4.6B, and the drawdown arrived the following week). This pass runs
+ * before the settlement close: a fund whose cash-plus-pending is negative draws the shortfall
+ * against its remaining line, on the standing terms the morning pass struck (the next morning
+ * re-prices the whole balance), and the broker's asset line moves on the live sheet.
+ */
+export function runPrimeBrokerageCloseSweep(ctx: WeeklyStepContext): void {
+  (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((regionId) => {
+    const reg = ctx.updatedRegions[regionId];
+    if (!reg) return;
+    const book: PrimeBrokerageLine[] = reg.primeBrokerageBook ?? [];
+    const drawnByBroker = new Map<string, number>();
+    ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((fund) => {
+      if (fund.region !== regionId || fund.entityType !== 'HEDGE_FUND' || fund.isDefaulted) return fund;
+      const brokerTicker = fund.homeBankTicker;
+      if (!brokerTicker) return fund;
+      const cashPlusPendingUSD = (fund.cashUSD ?? 0)
+        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id });
+      if (cashPlusPendingUSD >= -1) return fund;
+      const drawUSD = Math.min(fund.primeBrokerageAvailableUSD ?? 0, -cashPlusPendingUSD);
+      if (drawUSD <= 1) return fund;
+      pay(ctx, {
+        payer: { kind: 'BANK_SECURITIES', ticker: brokerTicker },
+        payee: { kind: 'INSTITUTION', id: fund.id },
+        amountUSD: drawUSD,
+        reason: 'prime brokerage drawdown',
+      });
+      const line = book.find((l) => l.fundId === fund.id);
+      if (line) {
+        line.drawnUSD = Math.round(line.drawnUSD + drawUSD);
+      } else {
+        book.push({
+          id: `${regionId}-PB-${fund.id}`,
+          regionId,
+          brokerTicker,
+          fundId: fund.id,
+          drawnUSD: Math.round(drawUSD),
+          // An emergency draw on a line the morning struck at zero balance carries the standing
+          // terms for one week; the next morning's re-strike prices the whole balance properly.
+          haircutRate: DEFAULT_HAIRCUT,
+          rateAnnual: Number((reg.policyRate + WHOLESALE_FUNDING_SPREAD_BPS / 10000).toFixed(6)),
+          struckWeek: ctx.nextWeek,
+        });
+      }
+      drawnByBroker.set(brokerTicker, (drawnByBroker.get(brokerTicker) ?? 0) + drawUSD);
+      return { ...fund, primeBrokerageAvailableUSD: Math.max(0, (fund.primeBrokerageAvailableUSD ?? 0) - drawUSD) };
+    });
+    reg.primeBrokerageBook = book;
+    if (drawnByBroker.size > 0) {
+      // Post-08: the live sheet is the only bank-sheet write that survives (§7.250).
+      ctx.updatedCompanies = ctx.updatedCompanies.map((c) => {
+        const drawnUSD = drawnByBroker.get(c.ticker);
+        if (!drawnUSD || !c.bankBalanceSheet) return c;
+        return {
+          ...c,
+          bankBalanceSheet: {
+            ...c.bankBalanceSheet,
+            primeBrokerageLoansUSD: Math.round((c.bankBalanceSheet.primeBrokerageLoansUSD ?? 0) + drawnUSD),
+          },
+        };
+      });
+    }
   });
 }

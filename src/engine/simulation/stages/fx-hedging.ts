@@ -14,7 +14,7 @@
 
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
-import { pay } from './settlement';
+import { pay, pendingSettlementUSD } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
 import { invoiceCurrencyOf } from '../../../domain/invoice-currency';
 import { exposureToHedgeUSD } from './corporate-financing';
@@ -371,8 +371,14 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       const basisBps = clearedBasisBps.get(bookKey(entity.region, issuer)) ?? 0;
 
       // Initial margin is real cash leaving the client and sitting with the desk.
+      // §4.0 Tier 1 item 6 — THE BUDGET SEES WHAT IS ALREADY COMMITTED. This stage runs in the
+      // close cycle, after the ETF creations and the insurers' legs have posted but before any
+      // of them settle; checking raw cash spent the same dollars twice, and the margin dug the
+      // fund's overdraft by exactly its own size (measured: SJMS w2, margin 455.23M, close
+      // cash −455.23M — the harness's whole 'overdrawn fund' family in one line).
       const marginUSD = writableUSD * FX_INITIAL_MARGIN_RATE;
-      if (marginUSD > Math.max(0, entity.cashUSD ?? 0) + markUSD) return;
+      if (marginUSD > Math.max(0, (entity.cashUSD ?? 0)
+        + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: entity.id })) + markUSD) return;
       marginPostedUSD += marginUSD;
       // Initial margin is the CLIENT'S money sitting with the desk: reserves move, equity does
       // not, and the desk carries it on its funding line as the liability it is.
@@ -446,7 +452,10 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
       if (writableUSD <= 1e6) return;
       const basisBps = clearedBasisBps.get(bookKey(c.region, issuer)) ?? 0;
       const marginUSD = writableUSD * FX_INITIAL_MARGIN_RATE;
-      if (marginUSD > Math.max(0, c.cashUSD ?? 0) + markUSD) return;
+      // Same rule as the institutional leg above: the corporate hedger's budget nets what its
+      // own week has already committed.
+      if (marginUSD > Math.max(0, (c.cashUSD ?? 0)
+        + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: c.ticker })) + markUSD) return;
       pay(ctx, {
         payer: { kind: 'COMPANY', ticker: c.ticker },
         payee: { kind: 'BANK_SECURITIES', ticker: dealer.ticker },
