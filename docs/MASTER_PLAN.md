@@ -2356,3 +2356,54 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        pool's capacity rule (no SmePool object). **The next project is not a defect — it is moving
        behaviour out of the stages and into the objects, starting with the ones the open defects
        name.** A stage should orchestrate: read state, call the objects, write state.
+230. **§5-STRUCT STEPS 1–4, BUILT — AND ONE CORRECTION TO §7.229's OWN HEADLINE.**
+     - **THE CORRECTION FIRST.** §7.229 reported "43 direct writes to a money field across 15 files".
+       **That number was wrong.** The grep counted `const cashUSD = ...` — local variable
+       declarations — as writes. The true figure is **42 property writes across 8 files, of which 25
+       are `initialization.ts` legitimately building the opening world**; the real strays were **ten,
+       in five files**, and two of those are not balances at all (an estate's asset SNAPSHOT and a
+       derived sector AGGREGATE, which share a field name with a balance — its own small defect).
+       I asserted a cause — forty-three stray writes — for a real measured number, the 14.3B/week
+       reconcile, without establishing the link between them. **That is §7.221's failure mode
+       committed inside the audit that exists to name it.** The 14.3B is real and still unexplained:
+       the bypass is not direct field writes, so it is something else — most likely balances carried
+       through `companyUpdates` and whole-object rebuilds. **Find it before claiming a cause again.**
+     - **STEP 1, THE LEDGER.** `engine/ledger/` owns money. `PartyRef` and its interning move out of
+       `settlement.ts`, because the money primitive should not live inside one of the stages that
+       uses it. `post()` takes a payer AND a payee. `creditUnbacked()` is the named exception, counted
+       by reason on the context, so an unbacked movement is loud instead of silent. Migrated:
+       `10-mergers`' bank-book absorption becomes `absorbBankBook()` (not a payment — no money moves,
+       one sheet becomes another), and `pe-lifecycle`'s direct household credit becomes a named
+       unbacked credit, since its payer is a SET of LP entities that `post` cannot yet express.
+       **`check-hygiene.sh` now fails the build on a money-field write outside the ledger**, budget 2.
+     - **STEP 3, FOUR OBJECTS, EACH CLOSING ITS OWN ROW.** `Government` (there was none — twelve free
+       functions over argument bags and ~25 fields on `Region`); `Collateral`; `Fund`; `SmePool`.
+     - **AND THE FISCAL CHECK WAS WRONG, WHICH IS WHY THAT ROW NEVER CLOSED.** It read
+       `outlays > governmentSpendingUSD * 1.5` — a stated 50% tolerance against a number that **is
+       not the budget**. The budget is the decomposition: contractual interest and payroll off the
+       top, the discretionary remainder scaled by the stance. Both sides now come off `Government`,
+       and the message names whether the overrun is contractual or discretionary, because
+       contractual lines never can be.
+     - **AND THE PLEDGE ROW HAD TWO TOLERANCES.** The engine's reconcile allowed 1 dollar, the
+       harness's check allowed 1e6. **A bank could be a million dollars over-pledged, pass the
+       reconcile, and fail the check in the same week** — which is most of why §7.226's two attempts
+       at it both failed. One definition now (`domain/collateral.ts`), read by both.
+     - **STEP 4, TWO REGISTRIES — and a rule-3 violation found in the writing.** This model has
+       **FOUR taxonomies for "what kind of instrument is this"**: `AssetType` (11 members, named),
+       `ItemizedHolding.instrumentType` (7, ANONYMOUS inline union), `EstateClaim.instrumentType`
+       (5, ANONYMOUS), `PrimaryOfferingInstrumentType` (3, named). Two have no name, so nothing could
+       be counted against them — and they disagree: a government bond is `SOV_BOND` in one and
+       `GOV_BOND` in another, while `COMMERCIAL_PAPER`, `PE_FUND_INTEREST`, `ETF_SHARE` and
+       `BANK_FACILITY` each exist in some and not others. `domain/assets` reconciles all four as a
+       superset with one class map — additive on purpose, because replacing them touches every
+       holding, claim and offering in the engine and is a migration, not a definition.
+     - **NOT RUN, DELIBERATELY.** These commits are compiled and not executed: the user asked for the
+       code, and steps 1–4 are refactors whose behaviour claims are (a) the SME mix rule, which
+       §7.229 already measured as broken and whose fix §7.226-style measurement showed makes the
+       world worse before better, and (b) the two tolerance corrections, which WILL change violation
+       counts. **The next run is a baseline, not a regression test.** Do not read its number against
+       515 without re-establishing what the corrected checks now measure.
+     - **THE RATCHETS, which are the part that outlives me.** `check-hygiene.sh` carries three
+       budgets — money writes outside the ledger (2), literal comparisons against an instrument type
+       (64), and a pure-`test/` boundary. **Each may fall and never rise.** An architectural decision
+       the build does not enforce is a comment, and every rule in this record was a comment before.
