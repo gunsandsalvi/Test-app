@@ -2458,3 +2458,30 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        one defect at a time.
      - **AND THE TABLE IS ITSELF THE TEST.** A change that closes a §7.4 defect moves a row toward
        1.00. Nothing in this project could previously say that in under sixty weeks.
+233. **THE POST-STRUCT BASELINE: 515 → 1,130, AND THE NUMBER IS NOT WHAT IT LOOKS LIKE.**
+     Decomposed by family, because a total that mixes "the world got worse" with "the check got
+     sharper" is not a measurement of anything.
+     - **+184: THE PLEDGE CHECK GOT SIX ORDERS OF MAGNITUDE STRICTER.** 97 → 281. §7.230 found the
+       engine reconciling at a 1-dollar tolerance and the harness checking at 1e6; they now share
+       `domain/collateral.ts`'s single definition at 1 dollar. **Every one of those 184 was there
+       before and could not be seen.** This is the check working, not the banks getting worse.
+     - **+53: THE FISCAL CHECK NOW MEASURES THE BUDGET.** 0 → 53. It used to compare outlays against
+       `governmentSpendingUSD × 1.5`, which is not the budget, so §6.1's EUR row fired seven times
+       on the wrong quantity. It now comes off `Government` and fires 53 times on the right one.
+     - **−149: THE LEDGER AND THE OBJECTS WORKING.** Bank balance-sheet identity broken **97 → 48**.
+       `UKHYX` overdrafts **34 → 0**. UK money-fund book against its NAV liability **15 → 0**.
+       JPN and USA unemployment bands **36 → 1**. These are real closures, and three of them are
+       §6.1 rows.
+     - **+160: ONE REAL REGRESSION, AND IT IS EUR.** Supplier market shares now fail across seven
+       EUR categories that were clean — `housing_rental_services`, `food_beverage`,
+       `passenger_vehicles`, `household_essentials`, `luxury_goods`, `health_services` — while
+       `EUR:enterprise_software` **improved 28 → 5**. EUR unemployment ends at **84.2%** against
+       27–31% everywhere else. **This is the SME capacity fix (§7.229) landing: it is the correct
+       rule and it has destabilised one region.** §1.20 says keep it and find out why EUR.
+     - **THE WORLD ITSELF, from step 6's table at 60 weeks rather than 12:** goods fill ratio settles
+       at **0.176** (0.648 at twelve weeks), CPI **×15.4**, active firms **2,496 → 1,825**. The goods
+       market does not reach a steady state; it decays for sixty weeks.
+     - **SO THE HONEST SCORE:** the structural work closed four families and exposed two hundred and
+       thirty-seven violations that were always there. The one genuine regression is regional, is
+       traceable to a known-correct fix, and is now the top of the queue. **Do not compare 1,130 to
+       515 again — compare to this run.**
