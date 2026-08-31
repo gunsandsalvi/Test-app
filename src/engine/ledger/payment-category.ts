@@ -38,7 +38,7 @@ export type PaymentCategory = (typeof PAYMENT_CATEGORIES)[number];
 /** Ordered: first match wins, so put the specific (fees) before the general (securities). */
 const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   // -- Fees before the books they ride on --
-  [/dealer fee|underwriting|management fee|expense ratio|borrow fee|distribution margin|conversion spread/, 'FINANCIAL_FEES'],
+  [/dealer fee|underwriting|management fee|expense ratio|borrow fee|distribution margin|conversion spread|drawn from the vehicle|borne by the vehicle/, 'FINANCIAL_FEES'],
 
   // -- Labor --
   [/wages|payroll/, 'LABOR'],

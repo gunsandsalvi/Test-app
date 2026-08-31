@@ -148,11 +148,15 @@ function groupSupplyRelationships(
 /** BYPASS_TRACE=1 — per (region:label) weekly sums of the walk's settle:false legs (see the
  *  `post` closure below); cleared at stage entry, printed at stage exit. */
 const bypassTraceByLabel = new Map<string, number>();
+/** BOUNDARY_TRACE=1 — who collects 'non-auction operating receipts', per firm, so the frontier's
+ *  6B/week decomposes to named carriers instead of a total. Cleared and printed with the above. */
+const boundaryTraceByFirm = new Map<string, number>();
 
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
   let refinanceNews: NewsItem[] = [];
   bypassTraceByLabel.clear();
+  boundaryTraceByFirm.clear();
 
   // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
   // values at the top of a stage, never inside a per-company loop). Each of these was a full
@@ -1048,9 +1052,38 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       post('trade invoices collected', update?.tradeReceivableCollectedUSD ?? 0, undefined, false);
       post('purchases invoiced, not yet paid', update?.tradePayableBookedUSD ?? 0, undefined, false);
       post('trade invoices paid', -(update?.tradePayableSettledUSD ?? 0), undefined, false);
-      // Revenue recognized beyond what cleared in the auction still collects — customers in the
-      // parts of the business the modeled markets do not cover yet.
-      post('non-auction operating receipts', Math.max(0, newRevenue / 52 - settledSalesUSD));
+      // §7.285 — THE BOUNDARY PAIR IS CLOSED, two different ways for two different carriers.
+      //
+      // BOUNDARY_TRACE decomposed the 4.8B/week 'non-auction operating receipts' line: ~60% was
+      // the four INSURERS' shells collecting their premium revenue from the boundary while the
+      // insurance stage had already paid the same premiums to their entities as real legs — the
+      // same dollar arriving twice, and a GROWTH LOOP besides (premium capacity = surplus x
+      // ratio, and the double-collected cash fed the surplus: the USA insurer's line grew 988M
+      // -> 1,532M in three weeks). The asset-manager shells were the same shape with no real leg
+      // anywhere (fee revenue whose payer is the conflated vehicle, §7.284's finding).
+      //
+      // (1) A shell BACKED BY A REAL ENTITY settles its operating result against that entity —
+      // the vehicle's book, which is where the real premiums/fees/income land. This is §7.284's
+      // step 3 executed on the conflated object: the two party kinds (INSTITUTION vs COMPANY)
+      // are two ledger accounts even while the ids are one. The entity nets to ~zero on an
+      // insurer (premiums through, claims reimbursed); on a manager it pays the fee out of the
+      // managed assets, which is what a real fund does.
+      //
+      // (2) An OPERATING firm's residual gap is the ACCRUAL LAG (the revenue EMA above/below
+      // this week's settled sales), and `max(0, ...)` kept only the positive side — so the
+      // boundary structurally PAID declining firms and charged nobody. The lag is a reporting
+      // statement, not a flow: nobody owes it, so no cash moves for it at all. Cash binds to
+      // what actually settled — the sales anchor, finally binding (§539's expectation applies:
+      // prints may get uglier and that is the honest direction, §1.20).
+      const nonAuctionReceiptsUSD = Math.max(0, newRevenue / 52 - settledSalesUSD);
+      const vehicleBehind = !comp.isBankEntity && comp.isInstitutionalEntity ? entityById.get(comp.id) : undefined;
+      if (process.env.BOUNDARY_TRACE === '1' && nonAuctionReceiptsUSD > 1e6) {
+        const key = `${comp.region}:${comp.financialStatementProfile ?? comp.sector ?? '?'}:${comp.ticker}`;
+        boundaryTraceByFirm.set(key, (boundaryTraceByFirm.get(key) ?? 0) + nonAuctionReceiptsUSD);
+      }
+      if (vehicleBehind) {
+        post('operating receipts drawn from the vehicle', nonAuctionReceiptsUSD, { kind: 'INSTITUTION', id: comp.id });
+      }
       // ...and the costs of running the whole business beyond what was bought as real units:
       // wages, services, and the unsettled share of capex. Settled purchases already left as
       // real cash above, so only the excess of total accrued outflows over them posts here.
@@ -1087,7 +1120,15 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // The supplier used to be picked here, by a size-weighted hash over the SME pools. That was
       // an allocation standing in for a purchasing decision — the thing rule 13 forbids — and it
       // is deleted rather than tuned.
-      post('other opex beyond auction settlements', -Math.max(0, opexOutflowUSD - wagesPaidUSD));
+      // §7.285 (2), the cost half of the same pair — closed WITH the receipts half, as the
+      // frontier's own doc demanded (both are accruals; removing one side alone makes every
+      // firm bleed). An entity-backed shell's extra costs (an insurer's claims — which its
+      // entity pays as real legs) are reimbursed to the vehicle; an operating firm's accrual
+      // remainder moves no cash, exactly like its receipts twin.
+      const opexBeyondWagesUSD = Math.max(0, opexOutflowUSD - wagesPaidUSD);
+      if (vehicleBehind) {
+        post('operating costs borne by the vehicle', -opexBeyondWagesUSD, { kind: 'INSTITUTION', id: comp.id });
+      }
       // IND16: WAREHOUSING HAS A SELLER NOW. This was a declared boundary frontier — "warehousing,
       // unmodelled seller" — because nothing in the model held goods for anybody. The distribution
       // tier is that sector: the same firms that run the household channel hold a firm's stock for
@@ -1644,6 +1685,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // The principal leaves through the ledger; the refinancing proceeds (if the offering
       // settled) arrived above. A maturity with neither settlement nor revolver above means the
       // company simply repays from cash — deleveraging by default, which is real.
+      // §7.286: this stays the internal VIEW of the payment `settleCorporateActionOnHolders`
+      // below makes for real (issuer → holder of record, on the same ladder delta).
       post('maturing tranche principal repaid', -maturingTranche.principalUSD, undefined, false);
     }
 
@@ -2481,5 +2524,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
       .map(([key, usd]) => `${key} ${(usd / 1e6).toFixed(1)}M`);
     console.log(`  [bypass] w${nextWeek} settle:false legs :: ${rows.slice(0, 14).join(' | ')}`);
+  }
+  if (process.env.BOUNDARY_TRACE === '1' && boundaryTraceByFirm.size > 0) {
+    const rows = Array.from(boundaryTraceByFirm.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, usd]) => `${key} ${(usd / 1e6).toFixed(1)}M`);
+    const totalUSD = Array.from(boundaryTraceByFirm.values()).reduce((a, v) => a + v, 0);
+    console.log(`  [boundary] w${nextWeek} non-auction receipts ${(totalUSD / 1e9).toFixed(2)}B :: ${rows.slice(0, 12).join(' | ')}`);
   }
 }

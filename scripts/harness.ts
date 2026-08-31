@@ -148,43 +148,21 @@ const clone = (s: GameState): GameState => structuredClone(s);
  * whose counterparty exists and was not used — and it fails the harness on the week it appears.
  * Do not add a line here to make a run pass. Route the flow.
  */
+// §7.286 — THE LIST IS EMPTY. Every frontier closed: the accrual pair stopped moving cash
+// (operating firms) or settles against the vehicle entity (institutional shells); the estate
+// pair runs through the debtor's own account with named peer buyers and real invoice
+// collections; the paydown pair pays issuer → holder directly; freight on an unserved lane
+// pays the origin's transport pool; carrying cost has its distribution sellers. What remains
+// below is kept ONLY as documentation of the one declared residual crossing (the seed's
+// wholesale unwind, whose matching holder asset the seed never created — closing it is a seed
+// re-anchor, gated with SEED_BURN_IN). Anything else that touches the boundary now fails the
+// week it appears.
 const BOUNDARY_FRONTIERS: Record<string, string> = {
-  // HC3b anchored revenue to what the auction actually settled, so this is no longer "revenue
-  // from customers nobody can name" — it is the ACCRUAL LAG between a week's sales and the
-  // annualised revenue they move, which `max(0, ...)` keeps only the positive side of. It should
-  // now be small and mean-reverting rather than structural; a line that stays large means the
-  // sales anchor is not binding somewhere. **Closing it entirely is a PAIR with the cost line
-  // below** — recognised revenue and recognised cost are both accruals, and removing one side's
-  // boundary settlement without the other makes every firm bleed cash. Owner: the goods-market
-  // completeness work (SCALE/PROD).
-  'non-auction operating receipts': 'the accrual lag between a week of sales and annual revenue',
-  'other opex beyond auction settlements': 'suppliers outside the modelled registry',
-  // IND16 gave warehousing a seller: the distribution tier holds a firm's stock and is paid for
-  // it by name. What still reaches the boundary is a region with no distribution firm at all,
-  // which is a fact about that region. Owner: IND16.
-  'inventory carrying cost': 'a region with no distribution firm to hold the stock',
-  // A lane no carrier serves is priced at the SPEC marginal rate and the goods still move, so
-  // there is nobody to pay. Shrinks to nothing as the fleet reaches every lane; the served part
-  // is paid to the carrier by name (stage 05). Owner: the freight book.
-  'freight on a lane no carrier serves': 'no carrier on the lane to pay',
-  // Owner: G5 — the residual claimants an estate pays once the named ones are satisfied.
-  'estate distribution': 'unnamed residual claimants in a workout',
-  // §7.264: the debtor's cash arrives at the boundary at filing; the distributions above draw
-  // on it — the two legs of one workout meeting at the boundary, like §7.259's principal pair.
-  'estate: cash seized at filing': "the estate's funding, parked at the boundary until distributed",
-  // G2's funding composition, the flow half (§7.254): wholesale money is a roll, and a bank
-  // with cash beyond its stressed-outflow cover does not renew it. The lender is genuinely
-  // unmodeled today. Large while the seed stocks unwind, then near zero; a line that STAYS
-  // large means banks are re-accumulating cash faster than they shed priced funding. Owner: G2.
-  'wholesale funding repaid': 'the unmodeled wholesale lender, at the roll',
-  // §7.259: the HOLDER half of a credit retirement. Stage 08 posts the borrower's retired
-  // principal INTO the boundary ('maturing tranche principal repaid', on the company cash walk);
-  // the credit books pay it OUT to the holders pro rata as their positions reconcile down to the
-  // real outstanding (holder-paydown.ts). The two legs are one flow meeting itself across a
-  // week; a line that grows without its stage-08 twin means positions are shrinking that no
-  // borrower repaid. Owner: the credit books (07b/07d).
-  'loan principal paydown to holders': "the borrowers' retired principal, parked at the boundary by stage 08",
-  'bond principal paydown to holders': "the borrowers' retired principal, parked at the boundary by stage 08",
+  // G2's seed unwind: wholesale money a bank no longer needs is not renewed, and the lender is
+  // genuinely unmodeled because the SEED created the funding stock with no holder asset behind
+  // it. Shrinks to nothing as the stock unwinds (gone by ~w15); its true close is seeding the
+  // matching claim, a re-anchor gated with SEED_BURN_IN (§7.232).
+  'wholesale funding repaid': 'the seed wholesale stock, unwinding to a lender the seed never named',
 };
 /** Below this, a week's line is rounding rather than a flow. */
 const BOUNDARY_DE_MINIMIS_USD = 1e6;

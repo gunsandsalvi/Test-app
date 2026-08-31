@@ -239,6 +239,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     reconcileHolderPrincipal({
       ctx, regionId,
       outstandingByIssuerId: new Map(regionCompanies.map((c) => [c.id, fixedDebtOf(c)])),
+      issuerById: new Map(regionCompanies.map((c) => [c.id, c])),
       holdingsByEntity: currentHoldingByCompanyByEntity,
       banks: regionBanksEarly,
       deskBook: BOOK,

@@ -20,13 +20,13 @@ import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingUSD,
   realisedDebtRecoveryRate,
 } from '../../../domain/estate';
-import { getOutputInventoryUSD } from '../../../domain/company';
+import { getOutputInventoryUSD, isActiveCompany } from '../../../domain/company';
 import { bumpRegister } from './register-index';
 import { BankingSector } from '../../../domain/banking';
 import { BankLoan } from '../../../domain/banking';
 import { bookPnL } from '../../ledger/bank-book';
 import { WeeklyStepContext } from './context';
-import { pay, PartyRef } from './settlement';
+import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 
@@ -60,12 +60,10 @@ interface EstateIndex {
   entityById: Map<string, InstitutionalEntity>;
   bankByTicker: Map<string, Company>;
   companyById: Map<string, Company>;
-  receivableTermWeeksByTicker: Map<string, number>;
-  /** SCALE: the invoice book's mean term, GROUPED IN ONE PASS. `meanReceivableTermWeeks` memoised
+  /** SCALE (retired §7.286: receivables are the real invoice book now; kept doc for history)
    *  per ticker but each miss scanned the whole book, so the cost was
    *  O(distinct issuers x invoices) — and both grow with the world. Measured: estate-resolution
    *  ran 4.90x for a 2x universe, the worst super-linear stage in the engine. One pass. */
-  invoiceTermByTicker: Map<string, { totalWeeks: number; count: number }> | undefined;
   ppeWeeksByRegion: Map<string, number>;
   /** `entityId -> instrumentId -> the rows of that entity's book holding it`. Built once for the
    *  holders that actually have a claim, which is what turns a per-claim SCAN of a whole book
@@ -86,8 +84,7 @@ function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
   });
   return {
     entityById, bankByTicker, companyById,
-    receivableTermWeeksByTicker: new Map(), ppeWeeksByRegion: new Map(),
-    invoiceTermByTicker: undefined,
+    ppeWeeksByRegion: new Map(),
     rowsByEntityInstrument: new Map(), touchedEntityIds: new Set(),
   };
 }
@@ -125,22 +122,13 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (comp.isBankEntity || comp.isInstitutionalEntity) return;
     const estate = openEstate(comp, ctx);
     if (!estate) return;
-    // §7.264 — THE FILING SEIZES THE CASH, BY INSTRUCTION. The estate recorded the debtor's
-    // cash as an asset while the debtor's own balance sat frozen on its object and on its
-    // bank's deposit line FOREVER, and the distributions minted their money at the boundary —
-    // three legs of one event, none connected. The debtor now PAYS its cash into the boundary
-    // at filing (the same boundary the distributions draw from — the two legs meet there, like
-    // §7.259's principal pair), its bank line follows through settlement, and the 02b
-    // reconcile's `isDefaulted` exclusion stops manufacturing a corporate-class mismatch on
-    // every death.
-    if (comp.cash > 1) {
-      pay(ctx, {
-        payer: { kind: 'COMPANY', ticker: comp.ticker },
-        payee: { kind: 'UNMODELED', region: comp.region as RegionId },
-        amountUSD: comp.cash,
-        reason: 'estate: cash seized at filing',
-      });
-    }
+    // §7.286 — THE FILING SEIZES NOTHING ANY MORE. §7.264 paid the debtor's cash into the
+    // UNMODELED boundary at filing and drew the distributions back out of it — two legs of one
+    // workout meeting at a party that is nobody. The debtor's account IS the estate's account:
+    // the dead firm runs no cash walk (stage 08 skips it), so nothing spends the balance; the
+    // buyers of its assets pay INTO it, its receivables collect ONTO it (trade-settlement's
+    // dead-seller fix), and the waterfall pays claimants OUT of it — every leg between named
+    // accounts, the boundary out of the story entirely.
     estates.push(estate);
     byCompanyId.set(comp.id, estate);
   });
@@ -152,14 +140,13 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (!reg) return;
     const comp = index.companyById.get(estate.companyId);
 
-    // What the markets take this week, each at its own rate.
-    const collectedUSD = estate.assets.cashUSD;
-    estate.assets.cashUSD = 0;
-
-    // Receivables settle on the terms the issuer itself extended: its own mean invoice term.
-    const termWeeks = Math.max(1, meanReceivableTermWeeks(ctx, index, estate.ticker));
-    const receiptsUSD = Math.min(estate.assets.receivablesUSD, estate.assets.receivablesUSD / termWeeks);
-    estate.assets.receivablesUSD -= receiptsUSD;
+    // §7.286 — receivables are the REAL invoice book now, not a schedule beside it. The
+    // buyers' payments arrive on the dead firm's account through trade-settlement on the
+    // invoices' own due dates; here they are only COUNTED, so the close condition knows when
+    // the last one is in.
+    estate.assets.receivablesUSD = (state.tradeInvoices ?? [])
+      .filter((iv) => iv.sellerTicker === estate.ticker)
+      .reduce((a, iv) => a + iv.amountCurrency * iv.bookedUsdPerCurrency, 0);
 
     // Inventory leaves at the company's OWN turnover — the rate its market was taking the goods
     // before it failed — and at the discount a buyer needs for holding it that long.
@@ -174,15 +161,30 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     const ppeSoldUSD = Math.min(estate.assets.ppeUSD, estate.assets.ppeUSD / ppeWeeks);
     estate.assets.ppeUSD -= ppeSoldUSD;
 
+    // §7.286 — "peers as cheap capex" MEANS PEERS NOW: the same-sector firms of the region buy
+    // the week's slices at the workout's discounts, pay the estate's account by instruction,
+    // and take the plant onto their own books (the discount is their bargain — the reason
+    // distressed assets clear at all). A week with no peer able to pay scraps that week's
+    // slice instead: unsold distressed inventory perishes and an unclaimed plant is
+    // abandonment, not a sale to nobody.
     const hurdle = Math.max(0.01, (reg.zeroRates?.tenor10Y ?? reg.policyRate) + EQUITY_RISK_PREMIUM);
-    const proceedsUSD = collectedUSD + receiptsUSD
-      + invSoldUSD * (1 - Math.min(0.9, (hurdle * turnoverWeeks) / 52))
-      + ppeSoldUSD * (1 - Math.min(0.9, (hurdle * ppeWeeks) / 52));
+    const invPriceUSD = invSoldUSD * (1 - Math.min(0.9, (hurdle * turnoverWeeks) / 52));
+    const ppePriceUSD = ppeSoldUSD * (1 - Math.min(0.9, (hurdle * ppeWeeks) / 52));
+    sellAssetsToPeers(ctx, index, estate, comp, invSoldUSD, invPriceUSD, ppeSoldUSD, ppePriceUSD);
 
-    if (proceedsUSD > 1) distribute(ctx, index, estate, proceedsUSD);
+    // The waterfall pays out of the account everything above pays INTO: cash it died with,
+    // invoice collections, this week's asset sales (pending until the close, counted here).
+    const estateComp = index.companyById.get(estate.companyId);
+    const availableUSD = estateComp
+      ? Math.max(0, estateComp.cash + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: estate.ticker }))
+      : 0;
+    const paidUSD = availableUSD > 1 ? distribute(ctx, index, estate, availableUSD) : 0;
 
-    // Closed when there is nothing left to sell: the residual claims are written off.
-    if (estateAssetsUSD(estate.assets) <= 1) {
+    // Closed when there is nothing left to sell or collect AND the account is empty (or every
+    // claim is satisfied, in which case the waterfall stopped short of the money): the residual
+    // claims are written off.
+    const claimsRemainUSD = outstandingUSD(estate.claims);
+    if (estateAssetsUSD(estate.assets) <= 1 && (availableUSD - paidUSD <= 1 || claimsRemainUSD <= 1)) {
       estate.closedWeek = week;
       writeOffResidual(ctx, index, estate);
       const realised = realisedDebtRecoveryRate(estate);
@@ -205,10 +207,73 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
   ctx.estates = estates.filter((e) => e.closedWeek === undefined || week - e.closedWeek < 4);
 }
 
+/**
+ * §7.286 — the week's asset slices go to NAMED PEERS: the region's same-sector active firms,
+ * pro rata to their own cash, paying the workout's discounted price into the estate's account
+ * and taking the assets onto their books (plant at book value — the discount is the bargain;
+ * inventory as the dead firm's real sub-unit rows, transferred with their units). A week with
+ * no peer able to pay scraps that week's slice — unsold distressed inventory perishes and an
+ * unclaimed plant is abandonment, never a sale to nobody.
+ */
+function sellAssetsToPeers(
+  ctx: WeeklyStepContext, index: EstateIndex, estate: Estate, comp: Company | undefined,
+  invSoldUSD: number, invPriceUSD: number, ppeSoldUSD: number, ppePriceUSD: number
+): void {
+  if (invPriceUSD <= 1 && ppePriceUSD <= 1) return;
+  const peers = ctx.updatedCompanies.filter((c) =>
+    c.region === estate.regionId && c.sector === comp?.sector && isActiveCompany(c)
+    && !c.isBankEntity && !c.isInstitutionalEntity && c.id !== estate.companyId && c.cash > 0);
+  const totalPeerCashUSD = peers.reduce((a, c) => a + c.cash, 0);
+  if (totalPeerCashUSD <= 1) return;
+  const weekPriceUSD = invPriceUSD + ppePriceUSD;
+  peers.forEach((peer) => {
+    const share = peer.cash / totalPeerCashUSD;
+    const payUSD = Math.min(weekPriceUSD * share, peer.cash);
+    if (payUSD <= 1) return;
+    pay(ctx, {
+      payer: { kind: 'COMPANY', ticker: peer.ticker },
+      payee: { kind: 'COMPANY', ticker: estate.ticker },
+      amountUSD: payUSD,
+      reason: 'estate asset sale to peers',
+    });
+    // What the payment buys, at the same share: the plant at its book value (the buyer's
+    // bargain is book minus price), and the inventory rows with their real units.
+    const ppeShareUSD = ppeSoldUSD * share;
+    if (ppeShareUSD > 0) {
+      peer.grossPPEUSD = (peer.grossPPEUSD ?? 0) + ppeShareUSD;
+    }
+    if (comp?.outputInventoryBySubUnit && invSoldUSD > 0) {
+      const preInvUSD = Object.values(comp.outputInventoryBySubUnit)
+        .reduce((a, r) => a + Math.max(0, r.valueUSD), 0);
+      if (preInvUSD > 0) {
+        const frac = Math.min(1, (invSoldUSD * share) / preInvUSD);
+        Object.entries(comp.outputInventoryBySubUnit).forEach(([subUnitId, row]) => {
+          if (!(row.unitsHeld > 0)) return;
+          const buyerInv = peer.outputInventoryBySubUnit ?? (peer.outputInventoryBySubUnit = {});
+          const dst = buyerInv[subUnitId] ?? (buyerInv[subUnitId] = { unitsHeld: 0, valueUSD: 0 });
+          dst.unitsHeld += row.unitsHeld * frac;
+          dst.valueUSD += row.valueUSD * frac;
+        });
+      }
+    }
+  });
+  // The sold units leave the dead firm's rows whatever fraction the peers took; the rest of
+  // the week's slice is the scrappage above.
+  if (comp?.outputInventoryBySubUnit && invSoldUSD > 0) {
+    const preInvUSD = Object.values(comp.outputInventoryBySubUnit)
+      .reduce((a, r) => a + Math.max(0, r.valueUSD), 0);
+    const keepFrac = preInvUSD > 0 ? Math.max(0, 1 - invSoldUSD / preInvUSD) : 0;
+    Object.values(comp.outputInventoryBySubUnit).forEach((row) => {
+      row.unitsHeld *= keepFrac;
+      row.valueUSD *= keepFrac;
+    });
+  }
+}
+
 /** The waterfall: secured first, then unsecured, then whatever is left for equity. */
 function distribute(
   ctx: WeeklyStepContext, index: EstateIndex, estate: Estate, proceedsUSD: number
-): void {
+): number {
   let remainingUSD = proceedsUSD;
   [CLAIM_SENIORITY.SECURED, CLAIM_SENIORITY.UNSECURED, CLAIM_SENIORITY.EQUITY].forEach((seniority) => {
     if (remainingUSD <= 1) return;
@@ -223,10 +288,11 @@ function distribute(
       if (shareUSD <= 0) return;
       claim.recoveredUSD += shareUSD;
       estate.distributedUSD += shareUSD;
-      // The estate is the payer: an issuer's own assets, reaching the people it owed. Its side of
-      // the ledger is the boundary until a defaulted company keeps a real book of its own.
+      // §7.286: the estate pays FROM THE DEBTOR'S OWN ACCOUNT — the issuer's assets reaching
+      // the people it owed, as one instruction between two named accounts. The caller caps the
+      // week's waterfall at what that account actually holds, so this never overdraws it.
       pay(ctx, {
-        payer: { kind: 'UNMODELED', region: estate.regionId },
+        payer: { kind: 'COMPANY', ticker: estate.ticker },
         payee: holderRef(claim),
         amountUSD: shareUSD,
         reason: 'estate distribution',
@@ -235,6 +301,7 @@ function distribute(
     });
     remainingUSD -= payUSD;
   });
+  return proceedsUSD - remainingUSD;
 }
 
 /** Whatever the workout could not pay comes off the holders' books as a loss. */
@@ -377,30 +444,6 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
     claims,
     distributedUSD: 0,
   };
-}
-
-/** The issuer's own mean invoice term, from the invoices it is still owed. */
-function meanReceivableTermWeeks(
-  ctx: WeeklyStepContext, index: EstateIndex, ticker: string
-): number {
-  // SCALE: one pass over the invoice book per issuer per week, not one per estate per week. The
-  // book does not change inside this stage, so the memo is the same number by construction.
-  const memo = index.receivableTermWeeksByTicker.get(ticker);
-  if (memo !== undefined) return memo;
-  if (index.invoiceTermByTicker === undefined) {
-    const byTicker = new Map<string, { totalWeeks: number; count: number }>();
-    for (const iv of (ctx.tradeInvoicesBooked ?? [])) {
-      const bucket = byTicker.get(iv.sellerTicker);
-      const weeks = Math.max(1, iv.weekDue - iv.weekBooked);
-      if (bucket) { bucket.totalWeeks += weeks; bucket.count++; }
-      else byTicker.set(iv.sellerTicker, { totalWeeks: weeks, count: 1 });
-    }
-    index.invoiceTermByTicker = byTicker;
-  }
-  const bucket = index.invoiceTermByTicker.get(ticker);
-  const out = bucket && bucket.count > 0 ? bucket.totalWeeks / bucket.count : 8;
-  index.receivableTermWeeksByTicker.set(ticker, out);
-  return out;
 }
 
 /** Weeks of sales the inventory represents — the rate its own market was taking it. */

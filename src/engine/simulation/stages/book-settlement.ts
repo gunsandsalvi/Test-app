@@ -106,6 +106,10 @@ export function settleClearedBook(
   // this is zero. If one ever does again, it prints under its own reason rather than vanishing.
   const boundary: PartyRef = { kind: 'UNMODELED', region: regionId };
   const leftoverUSD = tradingUSD - primaryUSD;
+  if (process.env.LEFTOVER_TRACE === '1' && Math.abs(leftoverUSD) > 1) {
+    console.log(`  [leftover] ${regionId} ${book}: leftover ${(leftoverUSD / 1e6).toFixed(3)}M`
+      + ` (dealerNet ${(dealer.netCashUSD / 1e6).toFixed(3)}M fee ${(dealer.feeUSD / 1e6).toFixed(3)}M primary ${(primaryUSD / 1e6).toFixed(3)}M)`);
+  }
   if (leftoverUSD > 0) pay(ctx, { payer: ccp, payee: boundary, amountUSD: leftoverUSD, reason: `${book} dealer inventory` });
   else if (leftoverUSD < 0) pay(ctx, { payer: boundary, payee: ccp, amountUSD: -leftoverUSD, reason: `${book} dealer inventory` });
 }

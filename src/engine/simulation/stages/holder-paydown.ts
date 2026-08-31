@@ -1,43 +1,47 @@
 /**
- * §7.259 — HOLDER PRINCIPAL PAYDOWN: the missing half of a credit maturity.
+ * §7.259 / §7.286 — HOLDER PRINCIPAL PAYDOWN: the missing half of a credit maturity, now paid
+ * BY THE BORROWER ITSELF.
  *
- * Stage 08 retires tranches — maturities, prepayments, calls — and posts the borrower's
- * principal to the UNMODELED boundary ('maturing tranche principal repaid'). The HOLDERS of
- * that paper never saw the event: the weekly clearing redistributes what holders hold between
- * them, it never shrinks the total, so every retirement left the books holding more than the
- * issuer owes — claims on principal that had already been repaid. Measured once the §7.259
- * desk fix stopped masking it: the loan books drift ~2–3% over outstanding within weeks, on
- * every region.
+ * Stage 08 retires tranches — maturities, prepayments, calls. The HOLDERS of that paper never
+ * saw the event: the weekly clearing redistributes what holders hold between them, it never
+ * shrinks the total, so every retirement left the books holding claims on principal already
+ * repaid (measured: 2–3% drift over outstanding within weeks, every region).
  *
- * This pass reconciles each issuer's holder total DOWN to its real outstanding before the
- * book clears: every positive position is scaled pro rata, and the scaled-away principal is
- * PAID to its holder from the same UNMODELED boundary the borrower repaid into — the two
- * boundary legs are one flow meeting itself, which is what makes this a settlement of the
- * borrower's repayment rather than a new source of money. Held below outstanding is left
- * alone (scaling UP would mint the exact claim this exists to burn). Desk shorts are not
- * claims and are neither counted nor scaled.
+ * §7.259's first cut parked the borrower's cash at the UNMODELED boundary and paid holders out
+ * of it — two anonymous ends of one payment whose parties are both known (the same shape the
+ * freight leg had before XB3a-2). §7.286 closes it: every scaled-away dollar is paid
+ * ISSUER → HOLDER directly, out of the issuer's own account, capped at the money it actually
+ * has — positions burn only as far as cash reaches them, and the remainder stays for next
+ * week's pass. BANK issuers are excluded: a bank's own paper is wholesale funding whose
+ * repayment accounting belongs to the funding roll (02b/§7.254) — paying it here raced that
+ * roll's same-week wholesale write and broke five banks' identities (measured); their drift
+ * stays on the holders' books until G2 unifies the roll with its modeled holders. Held below
+ * outstanding is left alone (scaling UP would mint the exact claim this exists to burn). Desk
+ * shorts are not claims and are neither counted nor scaled.
  */
 
 import { Company, RegionId } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
-import { pay } from './settlement';
+import { pay, pendingSettlementUSD, PartyRef } from './settlement';
 
 export function reconcileHolderPrincipal(args: {
   ctx: WeeklyStepContext;
   regionId: RegionId;
   /** Each live issuer's REAL outstanding for this book's debt class. */
   outstandingByIssuerId: Map<string, number>;
+  /** The issuers themselves, so the payer is the borrower and the cap is its own money. */
+  issuerById: Map<string, Company>;
   /** Institutions' positions by (entityId → issuerId → USD) — scaled IN PLACE. */
   holdingsByEntity: Map<string, Map<string, number>>;
   /** The banks whose desks may hold this book's paper. */
   banks: Company[];
   /** The desk book name ('leveraged loan', 'corporate bond', ...). */
   deskBook: string;
-  /** The payment reason, so the boundary line is attributable per book. */
+  /** The payment reason, so the flow is attributable per book. */
   reason: string;
 }): void {
-  const { ctx, regionId, outstandingByIssuerId, holdingsByEntity, banks, deskBook, reason } = args;
+  const { ctx, outstandingByIssuerId, issuerById, holdingsByEntity, banks, deskBook, reason } = args;
 
   // Pass 1 — each issuer's holder total, institutions plus positive desk positions.
   const heldByIssuer = new Map<string, number>();
@@ -58,62 +62,78 @@ export function reconcileHolderPrincipal(args: {
     });
   });
 
-  // The scale for every issuer whose holders claim more than it owes. $1M of slack keeps the
-  // pass off rounding noise; the drift this burns is B-scale.
+  // The scale for every issuer whose holders claim more than it owes, CAPPED by what the
+  // issuer can actually pay this week. $1M of slack keeps the pass off rounding noise; the
+  // drift this burns is B-scale.
   const factorByIssuer = new Map<string, number>();
   heldByIssuer.forEach((heldUSD, issuerId) => {
     const outstandingUSD = Math.max(0, outstandingByIssuerId.get(issuerId) ?? 0);
-    if (heldUSD > outstandingUSD + 1e6) factorByIssuer.set(issuerId, outstandingUSD / heldUSD);
+    if (!(heldUSD > outstandingUSD + 1e6)) return;
+    const issuer = issuerById.get(issuerId);
+    if (!issuer) return;
+    // A BANK's own paper is WHOLESALE FUNDING, and its repayment accounting belongs to the
+    // funding roll (02b/§7.254) — paying it here raced that roll's same-week wholesale write
+    // and broke five banks' identities (measured, §7.286). Bank-issuer drift stays on the
+    // holders' books until G2 unifies the roll with its modeled holders; it crosses the $1M
+    // slack rarely (twice in eight weeks across all banks).
+    if (issuer.isBankEntity) return;
+    const desiredBurnUSD = heldUSD - outstandingUSD;
+    const availableUSD = Math.max(0, issuer.cash + pendingSettlementUSD(ctx, { kind: 'COMPANY', ticker: issuer.ticker }));
+    const burnUSD = Math.min(desiredBurnUSD, availableUSD);
+    if (burnUSD > 1) factorByIssuer.set(issuerId, (heldUSD - burnUSD) / heldUSD);
   });
   if (factorByIssuer.size === 0) return;
 
-  // Pass 2 — scale and PAY. The cash is the borrower's own repayment arriving at the holder,
-  // routed through the boundary it was parked at.
+  /** The borrower's own account (bank issuers are excluded above — their paper is the
+   *  wholesale roll's). */
+  const payerOf = (issuerId: string): PartyRef | undefined => {
+    const issuer = issuerById.get(issuerId);
+    return issuer ? { kind: 'COMPANY', ticker: issuer.ticker } : undefined;
+  };
+
+  // Pass 2 — scale and PAY, issuer by issuer: the borrower's repayment reaching its holder
+  // directly, one instruction per (issuer, holder) with money on both ends.
   holdingsByEntity.forEach((byIssuer, entityId) => {
-    let paidUSD = 0;
     byIssuer.forEach((usd, issuerId) => {
       const factor = factorByIssuer.get(issuerId);
       if (factor === undefined || !(usd > 0)) return;
-      const newUSD = usd * factor;
-      paidUSD += usd - newUSD;
-      byIssuer.set(issuerId, newUSD);
+      const paidUSD = usd * (1 - factor);
+      byIssuer.set(issuerId, usd * factor);
+      if (paidUSD <= 1) return;
+      const payer = payerOf(issuerId);
+      if (!payer) return;
+      pay(ctx, { payer, payee: { kind: 'INSTITUTION', id: entityId }, amountUSD: paidUSD, reason });
     });
-    if (paidUSD > 1) {
-      pay(ctx, {
-        payer: { kind: 'UNMODELED', region: regionId },
-        payee: { kind: 'INSTITUTION', id: entityId },
-        amountUSD: paidUSD,
-        reason,
-      });
-    }
   });
   deskSheets.forEach(({ bank, sheet }) => {
     if (!sheet) return;
     const rows = sheet.dealerDeskInventory?.[deskBook];
     if (!rows || rows.length === 0) return;
-    let paidUSD = 0;
+    let touched = false;
     const newRows = rows.map((p) => {
       const factor = factorByIssuer.get(p.instrumentId);
       if (factor === undefined || !(p.inventoryUSD > 0)) return p;
-      paidUSD += p.inventoryUSD * (1 - factor);
+      const paidUSD = p.inventoryUSD * (1 - factor);
+      if (paidUSD > 1) {
+        const payer = payerOf(p.instrumentId);
+        if (payer) {
+          // The desk's principal comes back as reserves against the position it loses — an
+          // asset swap on the securities account, exactly like a sale (rule 14).
+          pay(ctx, { payer, payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker }, amountUSD: paidUSD, reason });
+        }
+      }
+      touched = true;
       return {
         ...p,
         inventoryUSD: p.inventoryUSD * factor,
         units: p.units !== undefined ? p.units * factor : undefined,
       };
     });
-    if (paidUSD > 1) {
+    if (touched) {
       const inventory: DealerDeskInventory = { ...(sheet.dealerDeskInventory ?? {}) };
       inventory[deskBook] = newRows;
       updateBankSheet(ctx, bank.ticker, { ...sheet, dealerDeskInventory: inventory });
-      // The desk's principal comes back as reserves against the position it loses — an asset
-      // swap on the securities account, exactly like a sale (rule 14).
-      pay(ctx, {
-        payer: { kind: 'UNMODELED', region: regionId },
-        payee: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
-        amountUSD: paidUSD,
-        reason,
-      });
     }
   });
+
 }

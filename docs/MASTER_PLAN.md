@@ -4258,3 +4258,56 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        singles, and one w19 'equity dealer inventory' guard dust. HH_EQ_TRACE=1 (new, one
        line in 07e) proves the direct-equity channel never fired in the window, and the
        divestiture cannot before week 52 — neither new mechanism moved the profile.
+
+285. **THE BOUNDARY BURNDOWN, measured first: BOUNDARY_TRACE named the carriers of the 6B/week
+     pair.** The per-firm decomposition of 'non-auction operating receipts' (~4.8B/wk at w13):
+     ~60% was the four INSURERS' shells collecting premium revenue from the boundary that the
+     insurance stage had ALREADY paid their entities as real legs — the same dollar twice, and
+     a GROWTH LOOP (premium capacity = surplus × ratio; the double-collected cash fed the
+     surplus: USA insurer 988M → 1,532M in three weeks). The asset-manager shells were the
+     same shape with no real leg anywhere (§7.284's conflation). The remainder was a long tail
+     of operating firms whose `max(0, …)` clamp kept only the positive side of the accrual
+     lag, so the boundary structurally PAID decliners and charged nobody.
+     - Fix, two ways for two carriers: (1) an entity-backed shell settles its operating result
+       against ITS VEHICLE ('operating receipts drawn from the vehicle' / 'operating costs
+       borne by the vehicle', INSTITUTION↔COMPANY — §7.284's step 3 executed on the conflated
+       object; the entity nets ~zero on an insurer, pays the fee out of managed assets on a
+       manager); (2) an operating firm's accrual remainder moves NO cash at all — settle:false
+       lines never moved real money anyway (comp.cash has ONE mover, settlement), so the walk's
+       view was the only thing pretending, and the boundary was paying holders against nothing.
+     - THE EQUITY RESIDUAL, answered: the CCP leg is built as the exact negative of every
+       client leg, so the book's true leftover is zero BY CONSTRUCTION; LEFTOVER_TRACE showed
+       float dust (≤$2k/week, every region) and EQ_CONS_TRACE showed zero share-conservation
+       breaks in 20 weeks. The one −1.53M week (w19) came from the insurer-mint tree above and
+       does not recur on the fixed tree. Instruments kept: LEFTOVER_TRACE, EQ_CONS_TRACE.
+
+286. **ZERO BOUNDARIES: every remaining frontier closed, and the list emptied to one
+     seed-gated line.** WEEKS=20 SHOCKS=0 with the emptied list: ZERO undeclared crossings,
+     harness back to the two baseline credit-ETF w3 singles.
+     - THE PAYDOWN PAIR: holder-paydown pays ISSUER → HOLDER directly (one instruction per
+       issuer-holder pair, capped at the issuer's own money — positions burn only as far as
+       cash reaches them). BANK issuers are EXCLUDED: their paper is wholesale funding whose
+       repayment accounting belongs to the 02b roll — paying it in the reconcile raced the
+       roll's same-week wholesale write and broke five banks' identities (measured with
+       BANK_IDENTITY_TRACE: the funding write restored exactly the roll's decrement). Their
+       drift stays on holders' books (crosses the $1M slack twice in eight weeks) until G2
+       unifies the roll with its modeled holders.
+     - THE ESTATE PAIR: the filing seizes nothing — the debtor's account IS the estate's
+       account (stage 08 skips dead firms, so nothing else spends it). Receivables are the
+       REAL invoice book (trade-settlement now settles a dead SELLER's invoices — the buyer
+       really owes them; a dead BUYER still kills the invoice); inventory and plant go to
+       NAMED PEERS (same region, same sector, pro rata to their own cash) who pay the
+       workout's discounted price into the account and take the assets onto their books — a
+       week with no peer able to pay scraps that week's slice (perish/abandonment, never a
+       sale to nobody); the waterfall pays claimants OUT of the account, capped at what it
+       holds. meanReceivableTermWeeks and the receivable schedule died with the second
+       representation.
+     - FREIGHT on an unserved lane pays the ORIGIN's AutomotiveTransport SME pool — the
+       unnamed small transporters the SME tier exists to represent.
+     - BOUNDARY_FRONTIERS is down to ONE documented line: 'wholesale funding repaid' — the
+       seed created the funding stock with no holder asset behind it, so the unwind's
+       counterparty is genuinely unnamed; its true close is seeding the matching claim, a
+       re-anchor gated with SEED_BURN_IN (§7.232). Everything else that touches the boundary
+       now FAILS the week it appears.
+     - Verified: tsc clean, 71/71, hygiene pass, lint 386, WEEKS=12 and WEEKS=20 probes both
+       at the two-violation baseline; per-bank identities all green.

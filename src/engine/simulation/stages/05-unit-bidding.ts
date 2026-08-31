@@ -1591,14 +1591,17 @@ function runSubUnitMarkets(
               reason: 'freight paid to the carrier',
             });
           });
-          // A lane no carrier serves is priced at the SPEC marginal rate (what it would cost to
-          // sail it), and the goods still moved. There is nobody to pay, so it stays a declared
-          // boundary line — and one that shrinks to nothing as the fleet reaches every lane.
+          // §7.286 — a lane no NAMED carrier serves is still sailed by SOMEBODY: the unnamed
+          // small transporters the SME tier exists to represent. The freight pays the origin
+          // region's transport pool — a real aggregate with a cash line and a bank, exactly the
+          // counterparty the SEGMENT party kind was built for — instead of the boundary. The
+          // line still shrinks to nothing as the named fleet reaches every lane; until then the
+          // money reaches the sector that actually moved the goods.
           const unservedUSD = freightUSD - paidUSD;
           if (unservedUSD > 0.01) {
             pay(ctx, {
               payer: { kind: 'COMPANY', ticker: comp.ticker },
-              payee: { kind: 'UNMODELED', region: plan.regionId },
+              payee: { kind: 'SEGMENT', region: origin, industry: 'AutomotiveTransport' },
               amountUSD: unservedUSD,
               reason: 'freight on a lane no carrier serves',
             });

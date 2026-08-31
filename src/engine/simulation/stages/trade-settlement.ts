@@ -43,10 +43,14 @@ export function runTradeSettlementStage(state: GameState, ctx: WeeklyStepContext
 
     const bookedUSD = invoice.amountCurrency * invoice.bookedUsdPerCurrency;
 
-    // A defaulted counterparty on EITHER side kills the invoice rather than settling half of it.
-    // Paying a seller out of a buyer that no longer exists would mint the money; an unpaid trade
-    // receivable is a real loss, and whose loss it is belongs to G5's estates.
-    if (!activeByTicker.get(invoice.sellerTicker) || !activeByTicker.get(invoice.buyerTicker)) {
+    // §7.286 — a dead BUYER kills the invoice (paying a seller out of a buyer that no longer
+    // exists would mint the money; the unpaid receivable is the seller's real loss). A dead
+    // SELLER's invoice is different: the buyer is alive and really owes it, and the money
+    // belongs to the seller's ESTATE — it collects onto the dead firm's account, which is
+    // where the workout now draws its distributions from. Killing it here wrote off a
+    // receivable the estate was simultaneously "collecting" from the UNMODELED boundary —
+    // the same claim represented twice, one copy funded by nobody.
+    if (!activeByTicker.get(invoice.buyerTicker)) {
       ctx.tradeInvoiceWriteOffUSD += bookedUSD;
       return;
     }

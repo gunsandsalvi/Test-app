@@ -380,6 +380,29 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     });
     ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} equity`);
+    // EQ_CONS_TRACE=1 — per-instrument share conservation across every cash-accounted
+    // participant: Σ(new − prev) must be zero for a stock book with no primary; a nonzero sum
+    // is a participant whose shares moved with no cash leg, valued at the cleared price.
+    if (process.env.EQ_CONS_TRACE === '1') {
+      const allParts = [...participants, ...indexFundParticipants, ...deskParticipants, ...(householdParticipant ? [householdParticipant] : [])];
+      const deltaByInstrument = new Map<string, number>();
+      allParts.forEach((p) => {
+        const news = result.newParticipantHoldings.get(p.id) ?? new Map<string, number>();
+        news.forEach((shares, instId) => {
+          deltaByInstrument.set(instId, (deltaByInstrument.get(instId) ?? 0) + shares - (p.currentHoldingsByInstrumentId.get(instId) ?? 0));
+        });
+        p.currentHoldingsByInstrumentId.forEach((prev, instId) => {
+          if (!news.has(instId)) deltaByInstrument.set(instId, (deltaByInstrument.get(instId) ?? 0) - prev);
+        });
+      });
+      deltaByInstrument.forEach((dShares, instId) => {
+        const px = result.newStatById.get(instId) ?? refPriceById.get(instId) ?? 0;
+        const usd = dShares * px;
+        if (Math.abs(usd) > 1e5) {
+          console.log(`  [eq-cons] ${regionId} ${instId}: net share delta ${dShares.toFixed(2)} = ${(usd / 1e6).toFixed(3)}M at ${px.toFixed(2)} (offering: ${offeringsByIssuerId.has(instId)})`);
+        }
+      });
+    }
     // Equity proceeds are shares x the CLEARED price — the one place the conversion differs
     // from credit (where the stat is a spread and the paper prices at par).
     // G3c: quoted per deal. Equity moves in price already, so the risk on the residual is the

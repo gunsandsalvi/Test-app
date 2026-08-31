@@ -230,6 +230,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     reconcileHolderPrincipal({
       ctx, regionId,
       outstandingByIssuerId: new Map(regionCompanies.map((c) => [c.id, floatingDebtOf(c)])),
+      issuerById: new Map(regionCompanies.map((c) => [c.id, c])),
       holdingsByEntity: currentHoldingByCompanyByEntity,
       banks: regionBanks,
       deskBook: BOOK,
