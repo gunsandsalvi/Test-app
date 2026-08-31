@@ -145,9 +145,14 @@ function groupSupplyRelationships(
   return out;
 }
 
+/** BYPASS_TRACE=1 — per (region:label) weekly sums of the walk's settle:false legs (see the
+ *  `post` closure below); cleared at stage entry, printed at stage exit. */
+const bypassTraceByLabel = new Map<string, number>();
+
 export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepContext): void {
   const { nextWeek, currentWeekMod13, companyUpdates, prevActiveFirms, updatedRegions, updatedCommodities, systemicStressFactorGlobal } = ctx;
   let refinanceNews: NewsItem[] = [];
+  bypassTraceByLabel.clear();
 
   // Per-week indices, built once (see the plan's optimization rule: memoize per-week derived
   // values at the top of a stage, never inside a per-company loop). Each of these was a full
@@ -984,6 +989,13 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (!isFinite(amountUSD) || amountUSD === 0) return;
       cashLedger.push({ label, amountUSD: Math.round(amountUSD) });
       newCash += amountUSD;
+      // BYPASS_TRACE=1 — the settle:false legs are cash the walk moves while claiming the money
+      // moves elsewhere; any label whose elsewhere-leg does not actually debit/credit this
+      // company is the 02b reconcile's corporate class, attributed here by name.
+      if (!settle && process.env.BYPASS_TRACE === '1') {
+        const key = `${comp.region}:${label}`;
+        bypassTraceByLabel.set(key, (bypassTraceByLabel.get(key) ?? 0) + amountUSD);
+      }
       // `settle: false` = the line is REPORTED here but the money moves elsewhere, itemised. A
       // dividend is the case: the issuer owes the register, and the register pays each holder by
       // name — so the payment instructions come from the settlement of that register, and posting
@@ -2420,4 +2432,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   }
 
   ctx.newsItems.push(...refinanceNews);
+
+  if (process.env.BYPASS_TRACE === '1' && bypassTraceByLabel.size > 0) {
+    const rows = Array.from(bypassTraceByLabel.entries())
+      .filter(([, usd]) => Math.abs(usd) > 10e6)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+      .map(([key, usd]) => `${key} ${(usd / 1e6).toFixed(1)}M`);
+    console.log(`  [bypass] w${nextWeek} settle:false legs :: ${rows.slice(0, 14).join(' | ')}`);
+  }
 }

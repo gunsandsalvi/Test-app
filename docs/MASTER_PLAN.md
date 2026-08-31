@@ -3841,3 +3841,22 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        in-kind slice edge or pending-settlement timing at the bound) and the fact that an
        overdrawn fund has no refill path — a real design question (a fund short of cash
        should sell, not freeze) parked for the ETF2 row.
+
+263. **TIER 2 OPENED: the bypass attribution instrument is built; the audit method is the
+     per-label verification of every settle:false leg's "elsewhere" story.**
+     - BYPASS_TRACE=1 (stage 08): per (region:label) weekly sums of the cash walk's
+       settle:false legs — the postings that move `newCash` while claiming the money settles
+       elsewhere by name. Sixteen labels; the dominant ones by size are 'settled sales (real
+       auction receipts)' (14–18B/wk USA), 'primary opportunistic proceeds', 'settled
+       purchases', the invoice pair, and the debt-principal family ('maturing tranche
+       principal repaid', prepayments, calls — which genuinely have NO elsewhere leg on the
+       company side; §7.259's holder paydown is the HOLDER half of those, paired at the
+       boundary).
+     - The 02b reconcile meter runs ~25B/wk gross in the opening weeks and decays to ~1.9B by
+       w60 (the §7.244–251 curve) — the audit's target is the MATURE-regime residual, so each
+       label must be checked against the settlement ORDER (which pass applies the pay() legs
+       to `comp.cash`, before or after the walk rebuilds it), not against the label's size.
+       Next action: one label at a time, starting with the debt-principal family (no
+       elsewhere leg exists — those are candidates for real payment instructions against the
+       boundary, which would let the reconcile shrink by their size); then the invoice pair.
+       Owner: STRUCT step 1.
