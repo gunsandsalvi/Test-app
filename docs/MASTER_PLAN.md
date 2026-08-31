@@ -2429,3 +2429,32 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        a defect, so a budget here would fail on correct code; the next move is to annotate the
        deliberate ones and ratchet on the remainder. **But a stage move can now be checked in three
        weeks of simulated time instead of sixty.**
+232. **§5-STRUCT STEP 6 — THE SEED AGAINST THE SETTLED WORLD, ON SIX LINES.** Every §7.4 defect
+     this project has recorded is one bug: the opening world is built by ASSERTION and the engine
+     then produces something else. Each was found separately and each cost a run to find. Here is
+     the whole class, measured in one pass, twelve weeks, seed against settled:
+     ```
+       wip weeks of throughput    0.00  ->    1.53      (the seed opens with NO work in progress)
+       register rows            32,278  -> 113,393      x3.51
+       goods fill ratio           1.00  ->    0.648     x0.65
+       USA CPI level               100  ->  198.7       x1.99
+       USA unemployment          8.94%  ->  15.52%      x1.74
+       active firms              2,496  ->   2,454      x0.98
+     ```
+     - **THE FIRST LINE IS NEW AND IT IS THE WORST ONE.** The seed opens with **zero** work in
+       progress. Every good with a production lead therefore starts from an empty pipeline, and
+       `advanceProductionPipeline`'s "first touch seeds the pipeline full" only fires when a line
+       first trades — so the opening weeks deliver nothing for exactly the goods that take longest
+       to make. §6.1's "1.06 weeks of a 6-week lead" was the tail of this, found forty weeks
+       downstream of its cause.
+     - **AND THE SEED CLAIMS A FULLY SUPPLIED WORLD.** `goods fill ratio` opens at 1.00 because no
+       auction has run; the engine settles it at 0.65. The seed is not wrong about the fill — it has
+       no opinion, and the code that reads it before week 1 takes silence for agreement.
+     - **THE MECHANISM IS BUILT AND IS OFF.** `SEED_BURN_IN=n` runs the engine n weeks and hands the
+       result back as week 0, which is the end state: a world the ENGINE produced rather than one
+       `initialization.ts` asserted. It stays off, because turning it on re-bases every number in
+       §7 at once. **That is a decision to take deliberately after this table flattens, not a
+       default.** What it gives today is the ability to ask the question per quantity instead of
+       one defect at a time.
+     - **AND THE TABLE IS ITSELF THE TEST.** A change that closes a §7.4 defect moves a row toward
+       1.00. Nothing in this project could previously say that in under sixty weeks.

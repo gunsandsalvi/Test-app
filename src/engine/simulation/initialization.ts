@@ -84,6 +84,8 @@ import { laneTransitWeeks } from '../../domain/carrier';
 import { laneDistanceNm } from '../../domain/geography';
 import { InTransitShipment } from './stages/goods-arrival';
 import { buildCpiBasket, CPI_BASE_LEVEL } from './stages/price-index';
+import { burnInWeeks } from './burn-in';
+import { advanceWeeklyStep } from './core';
 import { refreshRegionalHoldingsView, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './stages/holdings-view';
 import { sovBucketKey } from './stages/shared-helpers';
 import { setSimulationSeed, getRngState, setRngState, DEFAULT_SIMULATION_SEED } from '../rng';
@@ -315,6 +317,19 @@ export function solveSeedInvestmentFixedPoint(
 }
 
 export function createInitialGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
+  const state = buildSeededGameState(seed);
+  // §5-STRUCT step 6 — OFF unless asked for. Burn-in hands back a world the ENGINE produced rather
+  // than one this function asserted, which is the end state for every §7.4 defect. It changes every
+  // number in the project at once, so it is a switch someone turns deliberately after reading the
+  // steady-state probe (engine/simulation/burn-in.ts), never a default.
+  const weeks = burnInWeeks();
+  if (weeks <= 0) return state;
+  let burnt = state;
+  for (let w = 0; w < weeks; w++) burnt = advanceWeeklyStep(burnt);
+  return { ...burnt, currentWeek: 0, year: state.year };
+}
+
+function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState {
   setSimulationSeed(seed);
   const regions = getInitialRegions();
   const fxPairs = getInitialFxPairs();

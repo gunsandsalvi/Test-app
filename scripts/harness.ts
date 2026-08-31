@@ -37,6 +37,8 @@ const VERBOSE = process.env.VERBOSE === '1';
  *  load-bearing. Off by default; the proxy is built only when this is on. */
 const STAGE_TRACE = process.env.STAGE_TRACE === '1';
 let lastStageTrace: import('../src/engine/simulation/stage-deps').StageDependencyTrace | undefined;
+/** §5-STRUCT step 6: the seed's own reading of the §7.4 quantities, taken before week 1. */
+let seededProbe: Record<string, number> | undefined;
 
 import { advanceWeeklyStep, advanceWeeklyStepProfiled } from '../src/engine/simulation/core';
 import { GameState, RegionId, Position } from '../src/types';
@@ -44,6 +46,7 @@ import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
 import { sovereignCouponByBucket, weeklyInterestExpenseUSD, decomposeGovernmentSpending } from '../src/domain/government';
 import { governmentOf } from '../src/domain/government-entity';
+import { probeSteadyState, compareToSettled } from '../src/engine/simulation/burn-in';
 import { overPledgedByBucket } from '../src/domain/collateral';
 import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/central-bank';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
@@ -1814,6 +1817,7 @@ function weekLine(s: GameState, w: number, newViol: number, totalViol: number, m
 function runHarness() {
   console.log(`=== THE HARNESS — ${WEEKS} weeks, seed ${SEED}, shocks ${SHOCKS ? 'on' : 'off'}${PROFILE ? ', profiling' : ''} ===`);
   let state = createInitialGameState(SEED);
+  seededProbe = probeSteadyState(state);
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
   let knownTickers = new Set(state.companies.map(c => c.ticker));
   MODULES.forEach(m => { try { m.init?.(state); } catch (e) { violations.push({ week: 0, message: `[harness:${m.name}] init threw: ${e}` }); } });
@@ -2278,6 +2282,20 @@ function runHarness() {
           lines.forEach(l => console.log(l));
         }
       } catch (e) { console.log(`\n=== ${m.name} — A/B shock === threw: ${e}`); }
+    });
+  }
+
+  // ---- §5-STRUCT step 6: how far the SEED is from where the ENGINE goes ----
+  // Every §7.4 defect this project has recorded — the drained production pipeline, the CPI basket
+  // on the wrong price concept, the register at a third of steady state, 36 of 37 categories short
+  // of their own demand — is the same bug: the opening world is built by assertion and the engine
+  // then produces something else. This is that gap, measured in one pass rather than discovered one
+  // row at a time. A ratio far from 1.00 is a quantity the seed asserts and the engine disagrees
+  // with; it is a defect list, and it is meant to flatten.
+  if (seededProbe) {
+    console.log('--- §5-STRUCT step 6: the seed against the settled world (1.00 = the seed was right) ---');
+    compareToSettled(seededProbe, probeSteadyState(state)).forEach((p) => {
+      console.log(`  ${p.name.padEnd(26)} seed ${p.seeded.toPrecision(6).padStart(12)} -> settled ${p.settled.toPrecision(6).padStart(12)}  x${p.ratio.toFixed(3)}`);
     });
   }
 
