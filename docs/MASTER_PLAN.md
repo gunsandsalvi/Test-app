@@ -3523,3 +3523,70 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        it either; pass the prior week's accretion in when the family next surfaces. EUR banks
        print negative NIM with wholesale they cannot repay (cash below buffer) — only USA is
        banded today; watch when EUR gets its band.
+
+255. **THE §4.0 TIER-1 PASS, EXECUTED: fourteen slices in one day, every fix measured before
+     and after** (user directive 2026-08-31: bugs first, decide-don't-ask, no long runs
+     mid-pass, push to main). Status against the §4.0 list:
+     - **Item 2 (currency salads)** — GDP identity's NX converts to region money; the carrier's
+       revenue line accrues in its own money; the commodity ratio sums both sides in USD (weekly
+       + seed calibration + SME helper). The cross-book instruction legs remain Money<C>'s scope.
+     - **Item 5 (one owner)** — corporate tax rate (4 authors → 1: seed generators read
+       EFFECTIVE_TAX_RATE), 07b's recovery basis (fixed 0.4 prior → the region's realised blend),
+       EQUITY_RISK_PREMIUM (0.045 copy → the 0.035 owner), the carrier rating ladder (inline
+       3-cutoff copy → determineCreditRating). The DEALER_SPREAD_BPS line of §7.240 was stale —
+       all five books already read one owner. Still open: three PD models in 05, three
+       depreciations in 08, two labour-force computations, two consumer loss curves.
+     - **Item 6 (fund overdrafts, 34x×2)** — four budget legs learned about each other:
+       fx-hedging margins net pending; a NEW close-cycle prime-brokerage sweep finances a
+       leveraged fund's mid-week debit the same week (ABBG: 7.5B bought on 5.1B cash, −4.6B
+       overnight); the ETF sponsor fee pays from cash the fund has; a placement of record is
+       taken up only as far as the cash reaches. 12+ overdrafts/6wk → one 3.65M residue
+       (a ~1.3% clearing-book overshoot, suspected fee rounding — named, unchased).
+     - **Item 7 (MMF NAV, 47x)** — the fund distributed a QUOTE (mmfNetYieldAnnual) while assets
+       earned realized income; it now distributes exactly the book's excess over the share
+       liability net of the fee. Departures 0 in 10 weeks; a real loss now SHOWS as one.
+     - **Item 8 (the tax pair, DECIDED)** — ebitFloorUSD deleted (an operating loss exists and
+       reaches coverage/default/rating) and the industrial rebate deleted (one rule: a loss is
+       neither taxed nor rebated); tests re-pinned; carry-forwards stay TAXR's.
+     - **Item 9 (supplier shares)** — shares renormalize per (region, sub-unit) after the
+       company loop: a gain is at a rival's expense, a death redistributes to survivors
+       (§7.152's stand-in until DYN).
+     - **Item 11 (corpBond > 1)** — a defaulted issuer's tranches stay in outstanding while its
+       estate is open; the check's 'never a keying artifact' comment was wrong for exactly this
+       window.
+     - **Item 12 (retired facility)** — surplus-cash prepayment of a facility records the credit
+       event and pays a real BANK_CREDIT leg (loan and deposit die together). **A regression
+       shipped first and was caught by commit bisection**: recordCredit targets homeBankTicker,
+       not the facility's lender, and its principal>0 guard swallowed retirements — deposit died
+       at one bank, loan at another (PGNX −151.8M). 4-week probes missed the w7+ onset;
+       §7.247's probe-horizon lesson, relearned and paid for.
+     - **Item 13 (the bill discount)** — a primary buyer pays the cleared discounted price and
+       books it; the treasury receives take×price (plus the desks' face slice); the CB creates
+       only the reserves the paper cost; the CCP is flat by construction. Every placement used
+       to mint its own discount into holder books (the EUR/JPN sovereign-mint family, phantom
+       bill income everywhere). Desk inventory keeps the face convention until G3a.
+     - **Item 14 (dead freight)** — fuel burns at real utilization (tonne-miles moved over
+       fleet capability), not on the fleet's existence; carriers stop bleeding by construction.
+     - **Item 15 (vacancy guard)** — the reading throws when vacancies exceed the labor force —
+       and FIRED AT WEEK 1: `restingVacancies` inverted the matching function uncapped, so the
+       seed planted 4.07M GENERAL vacancies into a 5.6M labor force (JPN opened at u 11.0%
+       because of it; it opens at 3.4% now). The inversion saturates at the seekers that exist
+       and reads MATCHING_ELASTICITY instead of a hardcoded √ beside it.
+     - **Item 17 (bands + accretion)** — capital-ratio and NIM bands cover all four regions
+       (UK's capital ratio promptly showed itself out of band — real signal); last week's bill
+       accretion is recorded per bank sheet and enters the NIM income measure.
+     - **Item 18 (opening order)** — stage 05's markets open UPSTREAM FIRST (descending
+       corporate buyer share, unitId tiebreak), derived from the registry — a source file's
+       layout no longer sets unemployment. Weeks 1–2 open with zero violations.
+     - **Item 10 (seed undersupply) — HAND-RECONCILED, sharpened, not fixed**: capacity seeds at
+       first use (zero at week 0) by design, and since ONE price divides both sides,
+       units-coverage ≡ the demand-vs-revenue VALUE ratio — the uniform ~86% is the DEMAND
+       DERIVATION's level against seeded revenue (the IO 94.9% reconciliation plus ~9pp), not a
+       unit-conversion error. The fix is a level decision on `demandLevelUSD`'s derivation; the
+       §6.1 row carries this reading.
+     - **Items 1, 16 (bypass composition; repo residual 2x)** — measurement-gated on the
+       reference below. Item 19's UI half waits for AU; the harness half died in §7.242.
+     - **Also corrected in passing**: §7.254's 'no flow ever moved wholesale' was WRONG —
+       `evolveBankingSector` re-derives wholesale as the weekly residual; EMWF's constant
+       170.62B was the residual being genuinely constant. The roll (repay from excess cash)
+       stands on its own economics and measured clean; the record's causal claim does not.
