@@ -238,9 +238,16 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
         if (!(refPrice > 0)) return;
         // Target in SHARES, because this book clears in shares.
         const targetShares = (investableUSD * c.weight) / refPrice;
+        // §7.262: the cash bound is posted in SHARES, but the fund PAYS the CLEARED price — a
+        // bound struck at the reference price lets it overspend by up to the weekly move cap
+        // (18%) in every name at once, which is exactly an index fund's failure mode: it is the
+        // one bidder that never walks away from a rising print. Committing at the WORST
+        // admissible price this week makes the cash constraint hold at settlement whatever
+        // clears — the residual sticky −0.02B overdrafts after the in-kind fix were this.
+        const worstPriceUSD = Math.max(1e-9, refPrice * (1 + MAX_WEEKLY_PRICE_MOVE_PCT));
         demandByInstrumentId.set(
           c.instrumentId,
-          indexFundDemand(targetShares, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight / Math.max(1e-9, refPrice), 'PRICE_LIKE')
+          indexFundDemand(targetShares, Math.max(0, (fund.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: fund.id })) * c.weight / worstPriceUSD, 'PRICE_LIKE')
         );
       });
       return { id: fund.id, currentHoldingsByInstrumentId: currentShares, demandByInstrumentId };
