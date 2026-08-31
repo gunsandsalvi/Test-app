@@ -140,34 +140,24 @@ export function formatBps(
   return `${sign}${bps.toFixed(precision)} bps`;
 }
 
+/**
+ * §7.241: `isDecimal` is REQUIRED. The old signature guessed the unit by magnitude
+ * (`|val| <= 1`), so a fraction crossing 1.0 — a 101% growth print, a >100% surprise — silently
+ * rendered 100× smaller. A display helper that guesses units is a unit-confusion machine in the
+ * one layer whose job is to expose them; the caller knows its unit and now must say it.
+ */
 export function formatPercent(
   val: number | undefined | null,
-  optionsOrDecimals?:
-    | number
-    | {
-        isDecimal?: boolean; // true if 0.052 = 5.2%
-        showSign?: boolean;
-        precision?: number;
-      }
+  options: {
+    isDecimal: boolean; // true if 0.052 = 5.2%; false if 5.2 = 5.2%
+    showSign?: boolean;
+    precision?: number;
+  }
 ): string {
   if (val === undefined || val === null || isNaN(val)) return '0.00%';
-
-  let isDecimal = false;
-  let showSign = false;
-  let precision = 2;
-
-  if (typeof optionsOrDecimals === 'number') {
-    precision = optionsOrDecimals;
-    isDecimal = Math.abs(val) <= 1.0;
-  } else if (typeof optionsOrDecimals === 'object' && optionsOrDecimals !== null) {
-    isDecimal = optionsOrDecimals.isDecimal ?? (Math.abs(val) <= 1.0);
-    showSign = optionsOrDecimals.showSign ?? false;
-    precision = optionsOrDecimals.precision ?? 2;
-  } else {
-    isDecimal = Math.abs(val) <= 1.0;
-  }
-
-  const pct = isDecimal ? val * 100 : val;
+  const showSign = options.showSign ?? false;
+  const precision = options.precision ?? 2;
+  const pct = options.isDecimal ? val * 100 : val;
   const sign = pct > 0 && showSign ? '+' : '';
   return `${sign}${pct.toFixed(precision)}%`;
 }

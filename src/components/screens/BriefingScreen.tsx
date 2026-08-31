@@ -122,7 +122,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
               severity: 6,
               category: 'MACRO',
               title: `Labor Squeeze: ${regId} ${occId.replace('_', ' ')}`,
-              description: `Wage growth spiked above 8% (${formatPercent(pool.wageGrowthAnnual)}). Severe labor shortage.`,
+              description: `Wage growth spiked above 8% (${formatPercent(pool.wageGrowthAnnual, { isDecimal: true })}). Severe labor shortage.`,
               targetDest: 'world'
             });
           }

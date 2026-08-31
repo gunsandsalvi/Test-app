@@ -94,19 +94,19 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Capital Ratio</div>
               <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">
-                {formatPercent(bank.bankCapitalRatio, 1)}
+                {formatPercent(bank.bankCapitalRatio, { isDecimal: true, precision: 1 })}
               </div>
             </div>
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Net Interest Margin</div>
               <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">
-                {formatPercent(bank.netInterestMarginPct)}
+                {formatPercent(bank.netInterestMarginPct, { isDecimal: true })}
               </div>
             </div>
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Loan Loss Provision Rate</div>
               <div className="text-sm font-bold font-[var(--font-numeric)] text-[var(--text-primary)] mt-1">
-                {formatPercent(bank.loanLossProvisionRateAnnualPct)} / yr
+                {formatPercent(bank.loanLossProvisionRateAnnualPct, { isDecimal: true })} / yr
               </div>
             </div>
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
@@ -142,7 +142,7 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
                           </div>
                           <div className="text-right">
                             <div className={`font-bold font-[var(--font-numeric)] ${isDistressed ? 'text-[var(--signal-negative)]' : 'text-[var(--text-primary)]'}`}>
-                              {formatPercent(sheet.bankCapitalRatio, 1)} capital
+                              {formatPercent(sheet.bankCapitalRatio, { isDecimal: true, precision: 1 })} capital
                             </div>
                             <div className="text-[10px] text-[var(--text-tertiary)]">{formatCurrency(sheet.bankEquityUSD, { compact: true })} equity</div>
                           </div>
@@ -223,22 +223,22 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Equities</div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(eqOwnership.bankShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(eqOwnership.institutionalShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(eqOwnership, region.measuredForeignOwnership?.equity ?? 0), 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(eqOwnership.bankShare, { isDecimal: true, precision: 1 })}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(eqOwnership.institutionalShare, { isDecimal: true, precision: 1 })}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(eqOwnership, region.measuredForeignOwnership?.equity ?? 0), { isDecimal: true, precision: 1 })}</span></div>
               </div>
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Corporate Bonds</div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(corpOwnership.bankShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(corpOwnership.institutionalShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(corpOwnership, region.measuredForeignOwnership?.corpBond ?? 0), 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(corpOwnership.bankShare, { isDecimal: true, precision: 1 })}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(corpOwnership.institutionalShare, { isDecimal: true, precision: 1 })}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(corpOwnership, region.measuredForeignOwnership?.corpBond ?? 0), { isDecimal: true, precision: 1 })}</span></div>
               </div>
               <div className="p-3 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-hairline)] space-y-1">
                 <div className="font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1">Sovereign Bonds</div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(sovOwnership.bankShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(sovOwnership.institutionalShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Central Bank:</span> <span className="font-bold">{formatPercent(sovOwnership.centralBankShare, 1)}</span></div>
-                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(sovOwnership, region.measuredForeignOwnership?.sovBond ?? 0), 1)}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Bank Share:</span> <span className="font-bold">{formatPercent(sovOwnership.bankShare, { isDecimal: true, precision: 1 })}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Institutional:</span> <span className="font-bold">{formatPercent(sovOwnership.institutionalShare, { isDecimal: true, precision: 1 })}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Central Bank:</span> <span className="font-bold">{formatPercent(sovOwnership.centralBankShare, { isDecimal: true, precision: 1 })}</span></div>
+                <div className="flex justify-between text-[11px]"><span className="text-[var(--text-tertiary)]">Household (Residual):</span> <span className="font-bold">{formatPercent(getHouseholdShare(sovOwnership, region.measuredForeignOwnership?.sovBond ?? 0), { isDecimal: true, precision: 1 })}</span></div>
               </div>
             </div>
           </div>
@@ -323,7 +323,7 @@ export const BankDeepDive: React.FC<BankDeepDiveProps> = ({ regionId, state }) =
                         </div>
                         <div className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-2 mt-0.5">
                           <span>Tranche ID: {h.instrumentId}</span>
-                          {tranche && <span>Coupon: {formatPercent(tranche.couponRate)}</span>}
+                          {tranche && <span>Coupon: {formatPercent(tranche.couponRate, { isDecimal: true })}</span>}
                           {tranche && <span>Maturity Wk: {tranche.maturityWeek}</span>}
                         </div>
                       </div>

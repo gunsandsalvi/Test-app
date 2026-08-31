@@ -37,8 +37,8 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
   const generateRegionStatus = (r: typeof reg): string => {
     const parts: string[] = [];
-    if (r.cycleRegime === 'Recession' || r.cycleRegime === 'Slowdown') parts.push(`${r.cycleRegime} with unemployment at ${formatPercent(r.unemploymentRate, 1)}`);
-    else parts.push(`${r.cycleRegime}, GDP growing at ${formatPercent(r.gdpGrowth, 1)}`);
+    if (r.cycleRegime === 'Recession' || r.cycleRegime === 'Slowdown') parts.push(`${r.cycleRegime} with unemployment at ${formatPercent(r.unemploymentRate, { isDecimal: true, precision: 1 })}`);
+    else parts.push(`${r.cycleRegime}, GDP growing at ${formatPercent(r.gdpGrowth, { isDecimal: true, precision: 1 })}`);
     if (r.inflation > r.targetInflation * 1.3) parts.push('inflation running hot');
     if (r.bankingSector.creditConditionsIndex > 0.5) parts.push('credit conditions tight');
     return parts.join(' · ');

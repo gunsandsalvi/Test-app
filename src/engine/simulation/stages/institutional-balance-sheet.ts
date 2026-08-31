@@ -30,6 +30,7 @@
  *     relative-value framework depends on.
  */
 
+import { institutionProfile } from '../../../domain/institution-profiles';
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { RegionId, InstitutionalEntity } from '../../../types';
 import { publicComparableEvMultiple } from './pe-lifecycle';
@@ -65,7 +66,8 @@ export function availablePurchaseCapacityUSD(entity: InstitutionalEntity, unsett
   // HF1: what its prime broker will actually lend it this week, less what it has already drawn.
   // Negative when the line has been CUT below the draw — which makes the fund a net seller in
   // this week's auctions, at whatever they clear, which is what a margin call is.
-  const allowanceUSD = entity.entityType === 'HEDGE_FUND'
+  // §7.241: whether a kind levers, and through what, is a registry fact.
+  const allowanceUSD = institutionProfile(entity.entityType).leverage === 'PRIME_BROKERAGE'
     ? (entity.primeBrokerageAvailableUSD ?? 0)
     : 0;
   // A fund does not spend to the last dollar: it runs a CASH SLEEVE, and what it invests is the

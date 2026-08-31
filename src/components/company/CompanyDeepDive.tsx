@@ -260,11 +260,11 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                     </div>
                     <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
                       <span className="text-[var(--text-secondary)]">Capital Adequacy Ratio (Tier 1)</span>
-                      <span className="font-bold">{formatPercent(capRatio)}</span>
+                      <span className="font-bold">{formatPercent(capRatio, { isDecimal: true })}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1">
                       <span className="text-[var(--text-secondary)]">Net Interest Margin (NIM)</span>
-                      <span className="font-bold">{formatPercent(nimPct)}</span>
+                      <span className="font-bold">{formatPercent(nimPct, { isDecimal: true })}</span>
                     </div>
                   </div>
                   );
@@ -332,23 +332,23 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                           <div className="space-y-1 text-xs">
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Cash</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(cashPct, 1)}</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(t.cashPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(cashPct, { isDecimal: true, precision: 1 })}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.cashPct, { isDecimal: true, precision: 1 })}</span>
                             </div>
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Sovereign Bonds</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(sovPct, 1)}</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(t.govBondPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(sovPct, { isDecimal: true, precision: 1 })}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.govBondPct, { isDecimal: true, precision: 1 })}</span>
                             </div>
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Corporate Bonds</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(corpPct, 1)}</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(t.corpBondPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(corpPct, { isDecimal: true, precision: 1 })}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.corpBondPct, { isDecimal: true, precision: 1 })}</span>
                             </div>
                             <div className="grid grid-cols-3 text-center py-0.5">
                               <span className="text-left text-[var(--text-secondary)]">Equities</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(eqPct, 1)}</span>
-                              <span className="font-[var(--font-numeric)]">{formatPercent(t.equityPct, 1)}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(eqPct, { isDecimal: true, precision: 1 })}</span>
+                              <span className="font-[var(--font-numeric)]">{formatPercent(t.equityPct, { isDecimal: true, precision: 1 })}</span>
                             </div>
                           </div>
                         );
@@ -678,7 +678,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
             <div className="flex justify-between text-xs py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-secondary)]">Input Supply Constraint</span>
               <span className={(company.inputSupplyConstraintFactor ?? 1) < 1 ? 'text-[var(--signal-negative)] font-bold' : 'text-[var(--text-tertiary)]'}>
-                {(company.inputSupplyConstraintFactor ?? 1) < 1 ? `Constrained (${formatPercent(company.inputSupplyConstraintFactor ?? 1, 0)} capacity)` : 'Unconstrained'}
+                {(company.inputSupplyConstraintFactor ?? 1) < 1 ? `Constrained (${formatPercent(company.inputSupplyConstraintFactor ?? 1, { isDecimal: true, precision: 0 })} capacity)` : 'Unconstrained'}
               </span>
             </div>
 
@@ -725,7 +725,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                                    <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span>
                                    {isConcentrated && (
                                      <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--signal-negative-bg)] text-[var(--signal-negative)] border border-[var(--signal-negative)] font-bold">
-                                       CONCENTRATION RISK ({formatPercent(volShare, 0)})
+                                       CONCENTRATION RISK ({formatPercent(volShare, { isDecimal: true, precision: 0 })})
                                      </span>
                                    )}
                                  </div>
@@ -759,7 +759,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                                    <span className="text-[10px] font-normal text-[var(--text-tertiary)]">({(r.subUnitId || '').replace(/_/g, ' ')})</span>
                                    {isConcentrated && (
                                      <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--signal-negative-bg)] text-[var(--signal-negative)] border border-[var(--signal-negative)] font-bold">
-                                       CONCENTRATION RISK ({formatPercent(volShare, 0)})
+                                       CONCENTRATION RISK ({formatPercent(volShare, { isDecimal: true, precision: 0 })})
                                      </span>
                                    )}
                                  </div>
@@ -836,10 +836,10 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
                 const cb = reg.corpBondOwnership;
                 const foreignSum = reg.measuredForeignOwnership?.corpBond ?? 0;
                 const hhShare = Math.max(0, 1 - cb.bankShare - cb.institutionalShare - foreignSum);
-                const bankPct = formatPercent(cb.bankShare, 0);
-                const instPct = formatPercent(cb.institutionalShare, 0);
-                const hhPct = formatPercent(hhShare, 0);
-                const forPct = formatPercent(foreignSum, 0);
+                const bankPct = formatPercent(cb.bankShare, { isDecimal: true, precision: 0 });
+                const instPct = formatPercent(cb.institutionalShare, { isDecimal: true, precision: 0 });
+                const hhPct = formatPercent(hhShare, { isDecimal: true, precision: 0 });
+                const forPct = formatPercent(foreignSum, { isDecimal: true, precision: 0 });
 
                 const trancheIds = new Set((company.debtTranches || []).map(t => t.id));
                 const bankHoldings = (reg.bankingSector.itemizedHoldings || [])

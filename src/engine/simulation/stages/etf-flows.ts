@@ -24,6 +24,7 @@
  *      than the dealers can carry, which is the case worth being able to see.
  */
 
+import { institutionProfile } from '../../../domain/institution-profiles';
 import { creditUnbacked } from '../../ledger';
 import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
@@ -59,7 +60,8 @@ function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): nu
 function indexedShare(entity: InstitutionalEntity, nameCount: number): number {
   if (nameCount <= 0) return 0;
   // A fund that picks names does not buy the basket that averages them away.
-  if (entity.entityType === 'HEDGE_FUND') return 0;
+  // §7.241: the fact lives on the kind's registry row, not in a stage condition.
+  if (institutionProfile(entity.entityType).picksOwnNames) return 0;
   const aumBillions = Math.max(0, entity.totalAssetsUSD) / 1e9;
   const namesCovered = NAMES_COVERED_AT_ONE_BILLION_AUM * Math.pow(aumBillions, RESEARCH_COVERAGE_SCALING_EXPONENT);
   return Math.max(0, 1 - Math.min(1, namesCovered / nameCount));
@@ -98,7 +100,9 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
   // ---- 2. What every investor wants to hold in each fund next week. ----
   const investors = ctx.updatedInstitutionalEntities.filter(
-    (e) => e.entityType !== 'ETF' && e.entityType !== 'PRIVATE_EQUITY' && e.entityType !== 'MONEY_MARKET_FUND' && !e.isDefaulted
+    // §7.241: an INCLUSION fact from the registry — the old exclusion list silently opted a new
+    // kind IN as an ETF investor, whatever it was.
+    (e) => institutionProfile(e.entityType).investsInEtfs && !e.isDefaulted
   );
   /** fundId -> investorId -> desired dollars */
   const desiredByFund = new Map<string, Map<string, number>>();

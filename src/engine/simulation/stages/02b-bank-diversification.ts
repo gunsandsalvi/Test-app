@@ -378,6 +378,11 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         ? newSheets.reduce((s, { sheet }) => s + f(sheet) * (sheet.businessLoanBookUSD + sheet.consumerLoanBookUSD + sheet.sovereignBondHoldingsUSD + sheet.cashReservesUSD), 0) / totalAssets
         : (newSheets.reduce((s, { sheet }) => s + f(sheet), 0) / Math.max(1, newSheets.length));
 
+    // §7.241: `satisfies` over Required<BankingSector> makes this rebuild EXHAUSTIVE — the old
+    // literal silently dropped nine optional fields (every `?? 0` reader of the aggregate then
+    // saw zero), and every future optional field would silently not aggregate. Now a new
+    // BankingSector field fails to compile here until it is summed, averaged, or explicitly
+    // declared per-bank-only.
     reg.bankingSector = {
       businessLoanBookUSD: sumField((s) => s.businessLoanBookUSD),
       consumerLoanBookUSD: sumField((s) => s.consumerLoanBookUSD),
@@ -432,7 +437,18 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       householdLoans: [],
       wholesaleFundingUSD: sumField((s) => s.wholesaleFundingUSD ?? 0),
       corporateDepositsUSD: sumField((s) => s.corporateDepositsUSD ?? 0),
-    };
+      institutionalDepositsUSD: sumField((s) => s.institutionalDepositsUSD ?? 0),
+      smeDepositsUSD: sumField((s) => s.smeDepositsUSD ?? 0),
+      unmodeledDepositsUSD: sumField((s) => s.unmodeledDepositsUSD ?? 0),
+      sovereignAccruedCouponUSD: sumField((s) => s.sovereignAccruedCouponUSD ?? 0),
+      primeBrokerageLoansUSD: sumField((s) => s.primeBrokerageLoansUSD ?? 0),
+      householdDepositInterestWeeklyUSD: sumField((s) => s.householdDepositInterestWeeklyUSD ?? 0),
+      depositRateAnnual: Number(weightedAvg((s) => s.depositRateAnnual ?? 0).toFixed(6)),
+      // Per-bank-only books: a desk position and an FX book belong to the bank that took them; a
+      // regional copy would be a second ledger. Declared, not omitted, so the satisfies holds.
+      fxDealerBook: undefined,
+      dealerDeskInventory: undefined,
+    } satisfies { [K in keyof Required<BankingSector>]: BankingSector[K] };
 
     // HH: what the region's banks actually paid household depositors this week — measured, so
     // household income can read it instead of re-deriving it at `policyRate x 0.6`.

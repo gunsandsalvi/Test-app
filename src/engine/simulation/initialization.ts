@@ -76,6 +76,7 @@ import { getRegionProductivityPerCapitaUSD, remainingLifeExpectancyYears, RETIRE
 import { getInitialRegions, getInitialFxPairs, getInitialCommodities, calculateCompositeIndices, calibrateIntensityShare } from '../macroEngine';
 import { computeOccupationDemand, attributeItemizedHoldings, distributeRealTargetByWeight } from './stages/shared-helpers';
 import { unitMassTonnes } from '../../domain/goods-physical';
+import { defect } from '../../domain/defect';
 import { generateCarriers, seedFreightDemand, specMarginalRatesByLane } from '../bootstrap/carriers';
 import { runFreightClearing } from './stages/freight-clearing';
 import { getFxToUsd } from './stages/06-fx-and-trade';
@@ -119,7 +120,13 @@ function seedUnitMassTonnes(regions: Record<RegionId, Region>): Record<string, n
     const prices = regionIds
       .map((r) => regions[r].categoryDemand[subUnit.unitId]?.unitPriceUSD)
       .filter((p): p is number => typeof p === 'number' && p > 0);
-    if (prices.length === 0) return;
+    // §7.241: a silent skip here left the sub-unit WEIGHTLESS — every reader defaults a missing
+    // mass to zero, so its goods would ship with free freight forever (armed for DYN/PROD's
+    // first runtime product line). A registry sub-unit no region prices at seed is a seed
+    // defect, and it fails HERE, at the write site, per GUARD.
+    if (prices.length === 0) {
+      return defect(`no seeded price for sub-unit '${subUnit.unitId}' — its unit mass cannot derive`);
+    }
     const meanPriceUSD = prices.reduce((sum, p) => sum + p, 0) / prices.length;
     masses[subUnit.unitId] = unitMassTonnes(subUnit.unitId, meanPriceUSD);
   });

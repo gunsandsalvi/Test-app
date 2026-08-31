@@ -61,7 +61,7 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
             {formatCurrency(nav, { compact: true, precision: 2 })}
           </span>
           <span className={`text-sm font-[var(--font-numeric)] font-bold pb-1 ${returnPct > 0 ? 'text-[var(--signal-positive)]' : returnPct < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-            {formatPercent(returnPct, { precision: 2, showSign: true })}
+            {formatPercent(returnPct, { isDecimal: true, precision: 2, showSign: true })}
           </span>
         </div>
       </div>
@@ -127,7 +127,7 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
                         {formatCurrency(currentVal, { compact: true, precision: 1 })}
                       </div>
                       <div className={`text-[10px] font-bold ${pnl > 0 ? 'text-[var(--signal-positive)]' : pnl < 0 ? 'text-[var(--signal-negative)]' : 'text-[var(--text-tertiary)]'}`}>
-                        {formatCurrency(pnl, { compact: true, precision: 1, showSign: true })} ({formatPercent(pnlPct, { precision: 2, showSign: true })})
+                        {formatCurrency(pnl, { compact: true, precision: 1, showSign: true })} ({formatPercent(pnlPct, { isDecimal: true, precision: 2, showSign: true })})
                       </div>
                     </div>
                   </div>
@@ -164,7 +164,7 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
                 <div key={c.ticker} className="flex items-center justify-between p-2 border-b border-[var(--border-hairline)] last:border-0 text-[11px]">
                   <span className="font-bold text-[var(--text-primary)]">{c.ticker}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[var(--text-secondary)] font-mono">{formatPercent(line.categoryMarketShare, { precision: 1 })}</span>
+                    <span className="text-[var(--text-secondary)] font-mono">{formatPercent(line.categoryMarketShare, { isDecimal: true, precision: 1 })}</span>
                     <span className={`text-[9px] font-bold ${line.competitiveness > 0 ? 'text-[var(--signal-positive)]' : 'text-[var(--signal-negative)]'}`}>
                       {line.competitiveness > 0 ? '▲' : '▼'}
                     </span>
@@ -185,7 +185,7 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
               <div key={c.ticker} className="flex justify-between items-center text-[11px] border-b border-[var(--border-hairline)] last:border-0 pb-1 last:pb-0 font-mono">
                 <span className="font-bold text-[var(--text-primary)]">{c.ticker}</span>
                 <span className={(c.lastEarningsSurprisePct || 0) >= 0 ? 'text-[var(--signal-positive)] font-bold' : 'text-[var(--signal-negative)] font-bold'}>
-                  {formatPercent(c.lastEarningsSurprisePct, { precision: 2, showSign: true })}
+                  {formatPercent(c.lastEarningsSurprisePct, { isDecimal: true, precision: 2, showSign: true })}
                 </span>
               </div>
             ))}
@@ -199,7 +199,7 @@ export const MyBookScreen: React.FC<{ state: GameState, prevState?: GameState | 
                 <div key={c.ticker} className="flex justify-between items-center text-[11px] border-b border-[var(--border-hairline)] last:border-0 pb-1 last:pb-0 font-mono">
                   <span className="font-bold text-[var(--text-primary)]">{c.ticker}</span>
                   <span className={move >= 0 ? 'text-[var(--signal-positive)] font-bold' : 'text-[var(--signal-negative)] font-bold'}>
-                    {formatPercent(move, { precision: 1, showSign: true })}
+                    {formatPercent(move, { isDecimal: true, precision: 1, showSign: true })}
                   </span>
                 </div>
               );

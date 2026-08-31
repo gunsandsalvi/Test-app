@@ -236,6 +236,44 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     // (corporate/institutional/SME deposit lines: absorbed above by absorbBankBook)
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
+
+    // §7.241: the target's STANDING CONTRACTS come with the bank. Before this, the repo, swap,
+    // CDS and FX-forward books still named the absorbed ticker — the merged encumbrance scalar
+    // above described pledges no live contract carried, and every counterparty's hedge pointed at
+    // a dead desk. A contract survives a merger by NOVATION to the acquirer, so the books re-key.
+    const rekeyTicker = (t: string) => (t === target.ticker ? acquirer.ticker : t);
+    const reg10 = ctx.updatedRegions[target.region];
+    if (reg10?.repoBook) {
+      reg10.repoBook = reg10.repoBook.map((c) => ({
+        ...c,
+        borrowerTicker: rekeyTicker(c.borrowerTicker),
+        lender: 'ticker' in c.lender ? { ...c.lender, ticker: rekeyTicker(c.lender.ticker) } : c.lender,
+      }));
+    }
+    if (reg10?.swapBook) {
+      reg10.swapBook = reg10.swapBook.map((c) => ({
+        ...c,
+        payer: 'ticker' in c.payer ? { ...c.payer, ticker: rekeyTicker(c.payer.ticker) } : c.payer,
+        receiver: 'ticker' in c.receiver ? { ...c.receiver, ticker: rekeyTicker(c.receiver.ticker) } : c.receiver,
+      }));
+    }
+    if (reg10?.cdsBook) {
+      reg10.cdsBook = reg10.cdsBook.map((c) => ({
+        ...c,
+        buyer: 'ticker' in c.buyer ? { ...c.buyer, ticker: rekeyTicker(c.buyer.ticker) } : c.buyer,
+        seller: 'ticker' in c.seller ? { ...c.seller, ticker: rekeyTicker(c.seller.ticker) } : c.seller,
+      }));
+    }
+    ctx.updatedInstitutionalEntities.forEach((e) => {
+      if (!e.fxForwards?.length) return;
+      e.fxForwards = e.fxForwards.map((f) =>
+        f.counterpartyTicker === target.ticker ? { ...f, counterpartyTicker: acquirer.ticker } : f);
+    });
+    ctx.updatedCompanies.forEach((c) => {
+      if (!c.fxForwards?.length) return;
+      c.fxForwards = c.fxForwards.map((f) =>
+        f.counterpartyTicker === target.ticker ? { ...f, counterpartyTicker: acquirer.ticker } : f);
+    });
   }
 
   // OWN7: the target's PAPER moves with its debt. Holdings are keyed by the issuer's company
