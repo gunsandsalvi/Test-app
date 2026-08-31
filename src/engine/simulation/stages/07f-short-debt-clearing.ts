@@ -97,7 +97,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
     // ---- Bills ----
     const liveBillTranches = (reg.govDebtTranches || []).filter(
-      (t) => t.maturityWeek > ctx.nextWeek && sovBucketKey(t.tenorAtIssuanceYears).startsWith('b')
+      (t) => t.maturityWeek > ctx.nextWeek && isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears))
     );
     const outstandingByBucket = new Map<string, number>();
     const bucketKeyByTrancheId = new Map<string, string>();
@@ -136,7 +136,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       const billStockByRegion: Record<string, number> = {};
       (Object.keys(ctx.updatedRegions) as RegionId[]).forEach((r) => {
         billStockByRegion[r] = (ctx.updatedRegions[r]?.govDebtTranches || [])
-          .filter((t) => sovBucketKey(t.tenorAtIssuanceYears).startsWith('b'))
+          .filter((t) => isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears)))
           .reduce((a, t) => a + t.principalUSD, 0);
       });
       const regionEntities = ctx.updatedInstitutionalEntities.filter(
@@ -279,7 +279,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
 
       const priorDealerInventory = new Map<string, number>();
       (reg.bankingSector.sovBondDealerInventory || []).forEach((p) => {
-        if (p.tenorKey.startsWith('b')) priorDealerInventory.set(billInstrumentId(regionId, p.tenorKey), p.inventoryUSD);
+        if (isBillBucketKey(p.tenorKey)) priorDealerInventory.set(billInstrumentId(regionId, p.tenorKey), p.inventoryUSD);
       });
 
       // PUB2b: a maturing bill rolls back into bills, so the CB's book keeps its shape rather
@@ -512,7 +512,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
           const key = h.instrumentId.startsWith(`${regionId}-GOV-`)
             ? h.instrumentId.slice(`${regionId}-GOV-`.length)
             : bucketKeyByTrancheId.get(h.instrumentId);
-          return !(key && key.startsWith('b'));
+          return !(key && isBillBucketKey(key));
         });
         const billRows: ItemizedHolding[] = [];
         fills.forEach((usd, instrumentId) => {
@@ -558,7 +558,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       // G3a: the desks' own bill inventory, owned by the banks that took it; bills live in the
       // same regional array as bonds under their own keys, and the bond rows pass through.
       const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
-      const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !p.tenorKey.startsWith('b'));
+      const bondDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => !isBillBucketKey(p.tenorKey));
       const billDealerRows = activeBuckets.map((b) => ({
         tenorKey: b.key,
         inventoryUSD: deskViewById.get(billInstrumentId(regionId, b.key)) ?? 0,

@@ -36,6 +36,7 @@ import { WeeklyStepContext } from './context';
  *  the two parties that bank at the central bank (the government and the central bank itself). */
 export type { PartyRef } from '../../ledger/party';
 import { PartyRef, partyId, partyOf } from '../../ledger/party';
+import { PaymentCategory, categoryOfReason } from '../../ledger/payment-category';
 import { assertNever } from '../../../domain/defect';
 
 export interface PaymentInstruction {
@@ -70,16 +71,28 @@ export function newPaymentJournal(): PaymentJournal {
 
 const reasonIdByText = new Map<string, number>();
 const reasonById: string[] = [];
+// §7.276: classified ONCE, at intern time — the category rides beside the free text for the
+// life of the process, so the rollup and the harness's no-orphans assertion cost nothing per
+// payment.
+const reasonCategoryById: PaymentCategory[] = [];
 function internReason(reason: string): number {
   const existing = reasonIdByText.get(reason);
   if (existing !== undefined) return existing;
   const id = reasonById.length;
   reasonIdByText.set(reason, id);
   reasonById.push(reason);
+  reasonCategoryById.push(categoryOfReason(reason));
   return id;
 }
 /** The text behind an interned reason — the ledgers still key by it. */
 export const reasonText = (id: number): string => reasonById[id];
+/** The category beside the free text (§7.276). */
+export const reasonCategory = (id: number): PaymentCategory => reasonCategoryById[id];
+/** Every reason this run has written that no category rule matches. The harness asserts this
+ *  list is EMPTY — a new payment reason must land a rule in `payment-category.ts` first. */
+export function unclassifiedReasons(): string[] {
+  return reasonById.filter((_, i) => reasonCategoryById[i] === 'UNCLASSIFIED');
+}
 /** Append to the journal from a stage that holds only a slice of the context. Same encoding as
  *  `pay`, minus the running-net update, which those callers do not participate in. */
 export function journalPayment(j: PaymentJournal, instruction: PaymentInstruction): void {

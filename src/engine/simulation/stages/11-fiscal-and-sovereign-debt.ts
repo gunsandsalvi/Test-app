@@ -7,7 +7,7 @@
  * a quarterly calendar, then generates this week's breaking news.
  */
 
-import { govBucketKeyOf, govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
+import { govBucketKeyOf, govBillTrancheId, govBondTrancheId, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
@@ -417,7 +417,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // week (a bill program is a perpetual roll); maturing BONDS join the quarterly bond calendar
     // as before. New deficit splits by a real treasury rule below.
     const maturedBillPrincipalUSD = maturedTranches
-      .filter(t => sovBucketKey(t.tenorAtIssuanceYears).startsWith('b'))
+      .filter(t => isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears)))
       .reduce((s2, t) => s2 + t.principalUSD, 0);
     const maturedBondPrincipalUSD = maturedPrincipalUSD - maturedBillPrincipalUSD;
 
@@ -550,7 +550,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // market's answer comes back through 07f's cleared bill yields next week.
     const totalStockUSD = liveTranches.reduce((s2, t) => s2 + t.principalUSD, 0) || 1;
     const billStockUSD = liveTranches
-      .filter(t => sovBucketKey(t.tenorAtIssuanceYears).startsWith('b'))
+      .filter(t => isBillBucketKey(sovBucketKey(t.tenorAtIssuanceYears)))
       .reduce((s2, t) => s2 + t.principalUSD, 0);
     const billShareOfStock = billStockUSD / totalStockUSD;
     const costLean = Math.max(-0.05, Math.min(0.05, (reg.zeroRates.tenor2Y - reg.zeroRates.tenor3M) * 2));

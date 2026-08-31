@@ -43,7 +43,7 @@
  * stage 8, 11, and 12 (all of which read yieldCurveParams/zeroRates as already-real values).
  */
 
-import { govBucketId, govBucketKeyOf } from '../../../domain/sovereign-id';
+import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
@@ -605,7 +605,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // BOND buckets only — the bill rows (07f's book) pass through, the same partition the
     // banks' own holdings above obey.
     const deskViewById = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
-    const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => p.tenorKey.startsWith('b'));
+    const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => isBillBucketKey(p.tenorKey));
     const newDealerInventory: { tenorKey: string; inventoryUSD: number }[] = [];
     deskViewById.forEach((inventoryUSD, instrumentId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD });

@@ -56,6 +56,7 @@ import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
 import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/central-bank';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { sovBucketKey } from '../src/engine/simulation/stages/shared-helpers';
+import { unclassifiedReasons } from '../src/engine/simulation/stages/settlement';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
 import { productionLeadWeeksOf, seasonalFactor } from '../src/domain/industry-registry';
 import { SUBUNIT_PHYSICAL, deliveryModeOf } from '../src/domain/goods-physical';
@@ -1854,6 +1855,26 @@ const fpModule: HarnessModule = {
   },
 };
 
+/** §7.276: every payment reason must roll up to a category — an orphaned label is a violation
+ *  the week it is first written, so a new pay() reason lands a rule in payment-category.ts
+ *  before a run is green. */
+const reasonCategoryModule: HarnessModule = (() => {
+  const reported = new Set<string>();
+  return {
+    name: 'payment reason categories',
+    week(_prev, _state, week) {
+      unclassifiedReasons().forEach((reason) => {
+        if (reported.has(reason)) return;
+        reported.add(reason);
+        violations.push({
+          week,
+          message: `payment reason '${reason}' matches no category rule — register it in payment-category.ts`,
+        });
+      });
+    },
+  };
+})();
+
 /**
  * BOOKTRACE — the institutional-book exponential, decomposed (§6.1 UK-book row; §7.251).
  * `BOOKTRACE=1` prints, per region-week, the non-MMF/non-ETF institutional book's delta split
@@ -2047,7 +2068,7 @@ const spiralModule: HarnessModule = {
 };
 
 // ---- ADD NEW MODULES HERE, and nowhere else. ----
-const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpModule, bookTraceModule, spiralModule];
+const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpModule, reasonCategoryModule, bookTraceModule, spiralModule];
 
 // =============================================================================================
 // THE RUN

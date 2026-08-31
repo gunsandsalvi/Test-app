@@ -4079,3 +4079,19 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        route the early-regime flows first, then delete. Reverted; the clamp stays with it.
      - Verification: tsc clean, 71/71 tests, hygiene pass, lint 386 (ceiling), WEEKS=10
        SHOCKS=0 probe identical to baseline (2 violations, same two credit-ETF w3 singles).
+
+276. **THE REASON-CATEGORY ENUM BESIDE `pay()`'s FREE TEXT (Tier-2), plus the last of the
+     Tier-1 one-line flips.**
+     - `src/engine/ledger/payment-category.ts`: nine flow categories (goods, labor,
+       tax/transfer, insurance/pension, debt service, credit creation, securities, corporate
+       action, financial fees) and an ordered rule table over the reason text — fees before
+       the books they ride on, fund-share redemptions carved out of the debt-service regex.
+       Classified ONCE at intern time in settlement.ts (`reasonCategory(id)` rides beside
+       `reasonText(id)`); a reason no rule matches is UNCLASSIFIED and the harness reports it
+       as a violation the week it is first written — a new payment reason lands a rule before
+       a run is green. Measured: a 10-week run writes ZERO unclassified reasons.
+     - Tier-1 sweep verified: dealers' `default: 0.15` and carryCalculator both already
+       `assertNever` (§7.241); the GOV-id module exists and is the parser; WEALTH_TIERS has a
+       compile-time exhaustiveness guard; OCCUPATIONS = OCCUPATION_TYPES. The one live
+       remainder — eight case-sensitive `startsWith('b')` bill predicates in 07c/07f/11 —
+       flipped to `isBillBucketKey` (the module's own named predicate, §7.263's trap class).
