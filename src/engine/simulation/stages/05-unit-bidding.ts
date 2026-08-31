@@ -1986,10 +1986,26 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
   // §7.222 — each market draws from its OWN stream, not from wherever the shared one has reached.
   // This does NOT make the loop parallel: §7.222 measured that stage 05 stays order-dependent with
   // the scope in place, because the markets are coupled through each firm's single budget, spent
-  // market by market (see §6.1's declaration-order row). What the scope fixes is the separate
-  // defect it exposed — a market's bid noise was a function of its position in a source file's
-  // declaration list rather than of the market.
-  Object.values(INDUSTRY_SUBUNITS).flat().forEach(subUnit => {
+  // market by market. What the scope fixes is the separate defect it exposed — a market's bid
+  // noise was a function of its position in a source file's declaration list.
+  //
+  // §4.0 Tier 1 item 18 — THE OPENING ORDER IS ECONOMIC, NOT A FILE'S. The coupling is real (a
+  // firm has one wallet); what was arbitrary was that a source file's declaration order decided
+  // which market drew on it first (§7.222: reversing it moved week-1 GDP −0.12% and killed seven
+  // firms by week 2). Markets now open UPSTREAM FIRST — descending corporate (intermediate)
+  // buyer share, the same direction the week already runs (inputs are priced before the goods
+  // made from them; a downstream buyer bids knowing its input costs) — with the unit id as the
+  // stable, named tiebreak. Deterministic, derived from the registry's own economics, and
+  // invariant to how the source file happens to list its industries.
+  Object.values(INDUSTRY_SUBUNITS).flat()
+    .slice()
+    .sort((a, b) => {
+      const upA = 1 - (a.buyerMix.GOVERNMENT ?? 0) - (a.buyerMix.HOUSEHOLD ?? 0);
+      const upB = 1 - (b.buyerMix.GOVERNMENT ?? 0) - (b.buyerMix.HOUSEHOLD ?? 0);
+      if (upA !== upB) return upB - upA;
+      return a.unitId < b.unitId ? -1 : a.unitId > b.unitId ? 1 : 0;
+    })
+    .forEach(subUnit => {
     const savedStream = beginEntityScope(subUnit.unitId, ctx.nextWeek);
     const own = {} as Record<RegionId, SupplyContract[]>;
     MARKET_REGION_IDS.forEach(r => { own[r] = contractsByRegionBySubUnit[r].get(subUnit.unitId) ?? []; });
