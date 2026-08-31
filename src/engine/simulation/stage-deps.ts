@@ -22,6 +22,30 @@
  * COST WHEN OFF: one boolean test per stage. The proxy is built only under STAGE_TRACE=1.
  */
 
+/**
+ * §7.278 — THE DELIBERATE EDGES, ANNOTATED; THE REMAINDER RATCHETED AT ZERO.
+ *
+ * Every backward edge measured (84 over 11 fields at the 3-week probe) runs over one of these
+ * fields, and each field's backwardness is a designed pipeline structure, not a latent §7.226.
+ * The proxy cannot see WHICH value a read returns — only that a later stage also writes the
+ * field — so the annotation lives at the field level: the reason the field is SUPPOSED to be
+ * read before its last writer. A backward edge on any field NOT in this record is the ratchet
+ * firing: either annotate the new field here with its reason, or the ordering is a defect.
+ */
+export const DELIBERATE_PIPELINE_FIELDS: Record<string, string> = {
+  updatedCompanies: 'the running working copy, threaded stage to stage — a read is the pipeline state as of that slot, by construction',
+  updatedInstitutionalEntities: 'same working-copy pipeline as updatedCompanies',
+  updatedRegions: 'same working-copy pipeline; 01-macro-feedback deliberately reads LAST week (02-region-macro re-derives)',
+  updatedFxPairs: 'working copy; 06 quotes off the prior fix, fx-clearing sets the new one',
+  updatedMarketIndexes: 'working copy; 07b/07d/07e price off the prior index level, index-calculation re-marks after',
+  paymentJournal: 'append-only accumulator: stages append all week, settlement-close applies — appending IS the design (rule 17)',
+  holdingsStore: 'SCALE C1 epoch store: built, read through by the clearing stages, written back at holdings-writeback',
+  holdingsTable: 'register store, same build/consume/write-back epoch shape as holdingsStore',
+  primaryOfferingsWorking: 'the 07x books consume the offerings stage 08 replenished LAST week — a deliberate one-week primary pipeline',
+  lastSettlementReport: 'last week\'s report by name; readers want the prior close',
+  creditEventsThisWeek: 'events pushed by earlier stages, consumed at settlement — same-week queue, cleared at close',
+};
+
 export interface StageAccess {
   stage: string;
   reads: Set<string>;
@@ -86,6 +110,12 @@ export class StageDependencyTrace {
       });
     });
     return out;
+  }
+
+  /** §7.278: backward edges over fields with NO deliberate-pipeline annotation — the ratchet.
+   *  Empty today; a new entry means a new ordering hazard nobody has annotated. */
+  undeclaredEdges(): BackwardEdge[] {
+    return this.backwardEdges().filter((e) => !(e.field in DELIBERATE_PIPELINE_FIELDS));
   }
 
   /** One line per stage: what it touched. The manifest, derived. */

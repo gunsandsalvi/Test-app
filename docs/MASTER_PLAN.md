@@ -4111,3 +4111,15 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        a field ahead of its seam; a brand with unbranded producers is theater" — and the
        pay() seam's condition (step 1 touching every call site) is not live. Deferred with
        the seams, per the design.
+
+278. **STEP-5 EDGE ANNOTATION DONE: every backward edge is a named pipeline structure, and the
+     remainder ratchets at ZERO.** The measured surface (84 edges over 11 fields at the 3-week
+     probe; was 79 at §7.231) runs entirely over fields whose backwardness is designed: the
+     five working-copy arrays (a read is the pipeline state as of that stage's slot), the
+     append-only paymentJournal (rule 17's shape), the two epoch stores (SCALE C1), the
+     one-week primary pipeline (`primaryOfferingsWorking`), `lastSettlementReport` (prior
+     close by name), and the same-week credit-event queue. Annotated field-by-field in
+     `DELIBERATE_PIPELINE_FIELDS` (stage-deps.ts) — field level because the proxy cannot see
+     which VALUE a read returned, only that a later stage also writes. `undeclaredEdges()` +
+     a harness violation make any backward edge over an unannotated field fail a STAGE_TRACE=1
+     run: a new ordering hazard must either be annotated with its reason or fixed.

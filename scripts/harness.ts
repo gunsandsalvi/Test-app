@@ -2562,6 +2562,14 @@ function runHarness() {
   // side effects depended on being inside the settlement window. This is that list.
   if (lastStageTrace) {
     lastStageTrace.report().forEach((line) => console.log(line));
+    // §7.278: the ratchet — every measured backward edge runs over an annotated pipeline field;
+    // an edge over an unannotated field is a NEW ordering hazard and fails the run.
+    lastStageTrace.undeclaredEdges().forEach((e) => {
+      violations.push({
+        week: WEEKS,
+        message: `stage '${e.reader}' reads '${e.field}' which later stage '${e.writer}' writes — an unannotated backward edge (annotate in stage-deps.ts DELIBERATE_PIPELINE_FIELDS or fix the order)`,
+      });
+    });
   }
 
   // ---- per-stage profile (PROFILE=1) ----
