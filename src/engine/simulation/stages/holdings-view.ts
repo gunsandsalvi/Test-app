@@ -22,6 +22,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
+import { holdingClassOf, isIntraSectorClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
 
 export interface RegionalHoldingsView {
@@ -56,10 +57,15 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
       const v = h.quantityOrNotionalUSD ?? 0;
       // CP: an issuer's short paper is corporate credit like its bonds — one view of the
       // institutional sector's claim on companies, whatever book prices it.
-      if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'COMMERCIAL_PAPER') corp += v;
-      else if (h.instrumentType === 'GOV_BOND') sov += v;
-      else if (h.instrumentType === 'LEVERAGED_LOAN') loan += v;
-      else if (h.instrumentType === 'EQUITY') equity += v;
+      // §5-STRUCT step 4 — the class comes from the registry (domain/assets), which is also where
+      // the four disagreeing instrument taxonomies are reconciled. The chain this replaces had to
+      // be found and edited for every new instrument, and a missed one added silently to nothing.
+      const cls = holdingClassOf(h.instrumentType);
+      if (h.instrumentType === 'LEVERAGED_LOAN') loan += v;
+      else if (isIntraSectorClaim(h.instrumentType)) { /* see the registry: double-counts */ }
+      else if (cls === 'CREDIT') corp += v;
+      else if (cls === 'SOVEREIGN') sov += v;
+      else if (cls === 'EQUITY' && h.instrumentType === 'EQUITY') equity += v;
       // PE_FUND_INTEREST is an ownership claim on another entity in this same sector; counting it
       // in a sector aggregate would double-count the underlying portfolio companies.
     });

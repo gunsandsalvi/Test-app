@@ -49,6 +49,25 @@ if [ "$STRAY_COUNT" -gt "$MONEY_WRITE_BUDGET" ]; then
   exit 1
 fi
 
+# 4. §5-STRUCT step 4 — TYPE UNIONS ARE REGISTRIES, NOT SWITCHES. A literal comparison against a
+#    union member is a case that the compiler will not point you at when a member is added — and
+#    §7.229 counted AssetType at 75 sites across 17 files, PartyRef.kind at 69 across 19. Facts
+#    about a kind belong in its registry (domain/assets, engine/ledger/parties); genuinely
+#    per-kind BEHAVIOUR may still switch, which is why this is a ratchet and not a ban.
+ASSET_MEMBERS="'EQUITY'|'CORP_BOND'|'LEVERAGED_LOAN'|'SOV_BOND'|'GOV_BOND'|'COMMERCIAL_PAPER'|'PE_FUND_INTEREST'|'ETF_SHARE'"
+REGISTRY_OWNED='^src/domain/assets/|^src/engine/ledger/parties\.ts:'
+ASSET_SWITCH=$(grep -rnE "(===|!==|case )[[:space:]]*(${ASSET_MEMBERS})" src --include=*.ts 2>/dev/null \
+  | grep -vE "$REGISTRY_OWNED" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
+ASSET_SWITCH_COUNT=$(printf '%s' "$ASSET_SWITCH" | grep -c . || true)
+# THE RATCHET: may fall, never rise.
+ASSET_SWITCH_BUDGET=64
+if [ "$ASSET_SWITCH_COUNT" -gt "$ASSET_SWITCH_BUDGET" ]; then
+  echo "ERROR: $ASSET_SWITCH_COUNT literal comparisons against an instrument type (budget $ASSET_SWITCH_BUDGET)."
+  echo "$ASSET_SWITCH" | head -20
+  echo "Ask the registry (domain/assets) for the FACT; switch only on genuine per-kind behaviour."
+  exit 1
+fi
+
 # 4. §5-STRUCT — the test tree is PURE. Anything that runs a world is a harness module, not a test.
 if [ -d test ]; then
   IMPURE=$(grep -rlE "advanceWeeklyStep|createInitialGameState" test --include=*.ts 2>/dev/null || true)
