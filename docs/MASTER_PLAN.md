@@ -361,6 +361,67 @@ One line each; the record is in §7.
 
 One section per OPEN §4 item, in §4's order. **A closed project has no section here.**
 
+### STRUCT — Invariants by construction, not by discipline  *(§7.229; the next project)*
+
+Every open row in §6.1 is the same failure: an invariant maintained by everyone remembering, rather
+than by the code refusing. 43 authors each remembering both legs of a payment. A capacity rule that
+no object owns. A stage order that is correct only because nobody has moved a stage. The work is not
+to fix the rows; it is to make each class of defect unrepresentable, and let the rows close behind
+it. **7,736 lines of `domain/` against 24,595 of `stages/` is the number this project exists to
+invert.**
+
+**The enforcement mechanism already exists and is the reason this will stick:** `check-hygiene.sh`
+already fails the build on a stray file in `scripts/`. Every step below adds one rule to it. An
+architectural decision that is not enforced by the build is a comment.
+
+**Step 1 — THE LEDGER. Balances become unwritable outside it.**
+The defect is not that 43 sites write money; it is that they CAN. Money fields become `readonly` on
+every public type; the mutable representation lives private inside `engine/ledger/`; the only export
+is a double-entry `post(payer, payee, amountUSD, reason)`. A one-legged flow becomes a type error.
+Then **delete 02b's reconcile and the `Math.max(0, cashUSD)` overdraft clamp** — both exist only to
+absorb what the types should have refused, and both CREATE money (§7.229: 14.3B and 6.0B a week). An
+overdraft becomes a modelled event: a credit line drawn, or a payment that fails. **The reconcile's
+own gross is the burndown: it reaches zero when the last site is migrated.**
+Hygiene rule: no assignment to a money field outside `engine/ledger/`.
+
+**Step 2 — STAGES ORCHESTRATE, THEY DO NOT COMPUTE.**
+A stage reads state, calls domain objects, writes results. **No arithmetic and no numeric literals in
+`stages/`.** A stage that cannot be written in ~50 lines is the signal that a domain concept is
+missing, delivered at the moment of writing rather than forty weeks into a run.
+`08-company-fundamentals.ts` at 2,358 lines is not a large function; it is about fifteen absent
+objects — a P&L, a debt ladder, an inventory, a capex programme, a payroll — each of which is a class
+with its own week and its own unit test. §7.229's SME lock was twelve lines that belong on `SmePool`
+as a five-line method with an obvious test.
+Hygiene rule: no bare numeric literals in `stages/`; constants live in `domain/`.
+
+**Step 3 — ONE OBJECT PER OPEN DEFECT.**
+`Government` first: it has no primitive at all — twelve free functions over argument bags with the
+state scattered across `Region` — which is why the EUR outlay row has never closed. Then `Collateral`
+(the pledge row), `Fund` (the redemption row), `SmePool` (the capacity row). Each extraction closes
+its own defect AND removes the class it came from.
+
+**Step 4 — EVERY TYPE UNION BECOMES A REGISTRY.**
+The pattern is already in the repo and already right: `profiles/index.ts`, `Record<Kind, Module>`,
+"one line per kind". Generalise it to `AssetType` (75 comparison sites across 17 files),
+`PartyRef.kind` (69/19) and institutional `entityType` (64/21). Each member becomes a module that
+owns how it prices, settles and marks. For securities, replace the `details` bag of 26 optional
+fields with a **discriminated union carrying per-type payloads**, so the compiler's exhaustiveness
+check becomes the checklist and a new type will not build until it is handled.
+Hygiene rule: no literal comparison against those unions outside their registry.
+
+**Step 5 — DELETE THE SEED.** *(after 1–4, because it needs the objects)*
+Every §7.4 defect this file records is one bug: the opening world is built by a SECOND code path that
+disagrees with the engine. The WIP pipeline at 1.06 weeks of a 6-week lead, the CPI basket struck on
+the landed price and measured on the shelf price, the register at a third of its steady state, the
+sector split — all of it. There should be no seed. A bootstrap sets the exogenous primitives
+(population, geography, the registry) and then **runs the engine's own mechanisms to a fixed point**.
+One code path cannot disagree with itself, and the whole class stops existing.
+
+**HOW, WITHOUT A BIG-BANG REWRITE.** Strangler fig, one noun at a time, hygiene ratcheting behind
+each. Steps 1–4 are individually shippable and each is bit-exactness-testable against the harness —
+which is the property that makes this safe incrementally and unsafe as a rewrite. Do not start step 5
+until the objects exist.
+
 ### P1 — Periodicity and units  *(standing)*
 
 Not a phase, a standing sweep alongside whatever is in flight. **Engine:** walk every rate, growth
