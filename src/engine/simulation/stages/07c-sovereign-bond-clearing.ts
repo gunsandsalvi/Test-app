@@ -544,7 +544,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     // scalar total (sovereignBondHoldingsUSD stays the sum of buckets).
     regionBanks.forEach((bank) => {
       const newHoldings = result.newParticipantHoldings.get(bank.ticker) ?? new Map<string, number>();
+      // §7.235: a bank with no sheet has no securities book to move, and the `?.` reads below
+      // already assumed that — they just could not say it while `companyUpdates` was `any`. Now
+      // the spread at the write site would silently produce a PARTIAL sheet, which is how a
+      // balance-sheet line goes missing without anything failing.
       const existingSheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
+      if (!existingSheet) return;
       // A clearing stage may only rewrite the instruments it actually cleared (§7.34). This
       // auction prices the four BOND buckets; the bank's BILL buckets (b13/b26/b52, cleared in
       // 07f) pass through untouched. Rebuilding the whole book from this auction's fills
@@ -574,7 +579,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         ...existingSheet,
         sovereignBondHoldingsByTenor: newBuckets,
         sovereignBondHoldingsUSD: Math.round(newTotalUSD),
-        bankEquityUSD: existingSheet!.bankEquityUSD - feeUSD,
+        bankEquityUSD: existingSheet.bankEquityUSD - feeUSD,
       };
     });
 

@@ -17,13 +17,69 @@ import {
 } from '../../../types';
 import { isActiveCompany, isPubliclyListed, CreditRating } from '../../../domain/company';
 
+/**
+ * The hand-off record for one company, written by the stages that measure a flow and read by the
+ * stage that books it. Every field optional: a stage writes only what it measured.
+ */
+export interface CompanyWeekUpdate {
+  /** 02b, repo, short-debt, estates: the bank's sheet as re-derived this week. */
+  bankBalanceSheet?: import('../../../domain/banking').BankingSector;
+  /** HH5 — the labour market decides headcount and wages before the company's own week runs. */
+  employeeCount?: number;
+  previousEmployeeCount?: number;
+  offeredWageIndex?: number;
+  unfilledVacancyShare?: number;
+  /** IND — what stage 05's auction actually cleared for this firm, both sides. */
+  salesUSD?: number;
+  purchasesUSD?: number;
+  capexPurchasesUSD?: number;
+  /** The same two flows in UNITS, which the goods market needs and the P&L does not — the type
+   *  found these: a read-side survey of stage 08 missed them because only stage 05 uses them. */
+  salesUnits?: number;
+  purchasesUnits?: number;
+  /** IND11 — the backlog, two-sided: what this firm owes on contract and what it delivered. */
+  _contractOwedUnits?: number;
+  _contractDeliveredUnits?: number;
+  /** IND15 — how much of its input basket the firm actually got, which caps what it can make. */
+  inputSupplyConstraintFactor?: number;
+  /** IND12 — trade credit, both legs, booked and settled. */
+  tradeReceivableBookedUSD?: number;
+  tradeReceivableCollectedUSD?: number;
+  tradePayableBookedUSD?: number;
+  tradePayableSettledUSD?: number;
+  /** IND10/IND13 — the stocks stage 05 moved: warehouse, input lots, the production pipeline and
+   *  capital delivered but not yet commissioned. */
+  outputInventoryBySubUnit?: Record<string, { unitsHeld: number; valueUSD: number }>;
+  inputInventoryBySubUnit?: Record<string, import('../../../domain/company').InputLot[]>;
+  wipBySubUnit?: Record<string, { units: number; valueUSD: number }[]>;
+  capexUnderConstruction?: { valueUSD: number; entersServiceWeek: number }[];
+  /** WS7 — the treasury sweep's resulting holdings. */
+  treasuryHoldings?: import('../../../types').ItemizedHolding[];
+  /** The production target stage 05 set, carried so stage 08 books against the same number. The
+   *  underscore is the original author's marker that it is a hand-off and not a company field. */
+  _targetProductionUSD?: number;
+}
+
 export interface WeeklyStepContext {
   // Time bookkeeping
   nextWeek: number;
   currentWeekMod13: number;
 
   // Cross-stage accumulators
-  companyUpdates: Record<string, any>;
+  /**
+   * §7.235 — WHAT ONE STAGE HANDS THE NEXT ABOUT A COMPANY, TYPED.
+   *
+   * This was `Record<string, any>`, and it was the single largest hole `noImplicitAny` could not
+   * close: five of that flag's errors were element types erased by reading through it, and every
+   * `?.` on it returned `any`, so a typo in a field name was a silent `undefined` rather than a
+   * compile error. Stage 08 reads seventeen fields off it; nothing anywhere said which seventeen.
+   *
+   * It is deliberately NOT `Partial<Company>`. Most of these are not Company fields at all — they
+   * are the WEEK'S FLOWS (what this firm bought, sold, booked and settled) that stage 05 measures
+   * and stage 08 consumes, plus two the labour market writes ahead of the company's own week. A
+   * carrier for inter-stage hand-off is its own thing and now says so.
+   */
+  companyUpdates: Record<string, CompanyWeekUpdate>;
   /** PUB1b: corporate tax remitted this week, by region — collected into the TGA in stage 11. */
   taxCollectedByRegion: Record<string, number>;
   /** PUB1b: corporate tax ACCRUED this week — the smooth expectation behind the lumpy remittance. */

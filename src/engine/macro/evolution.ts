@@ -795,7 +795,7 @@ export function evolveRegionMacro(
   let newInflationDeviationStreak = region.inflationDeviationStreak || 0;
 
   // Policy Lag: Smooth movement toward Taylor Target each week (moves 15% of the way)
-  let targetPolicyRate = Math.max(-0.01, Math.min(0.20, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate)));
+  const targetPolicyRate = Math.max(-0.01, Math.min(0.20, region.policyRate + 0.15 * (clampedTaylorTarget - region.policyRate)));
 
   // Update inflation deviation streak
   const isAboveTarget = region.inflation > piStar + 0.01;
@@ -1011,11 +1011,11 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
   // The two boundaries that are POLICY — workforce entry and retirement age — are named; the two
   // inside the working span split it evenly, because nothing in the model distinguishes them.
   const workingSpan = RETIREMENT_AGE_YEARS - WORKFORCE_ENTRY_AGE_YEARS;
-  let ecShare = bandShare(0, WORKFORCE_ENTRY_AGE_YEARS + Math.round(workingSpan / 3));
-  let peShare = bandShare(WORKFORCE_ENTRY_AGE_YEARS + Math.round(workingSpan / 3),
+  const ecShare = bandShare(0, WORKFORCE_ENTRY_AGE_YEARS + Math.round(workingSpan / 3));
+  const peShare = bandShare(WORKFORCE_ENTRY_AGE_YEARS + Math.round(workingSpan / 3),
     WORKFORCE_ENTRY_AGE_YEARS + Math.round((2 * workingSpan) / 3));
-  let prShare = bandShare(WORKFORCE_ENTRY_AGE_YEARS + Math.round((2 * workingSpan) / 3), RETIREMENT_AGE_YEARS);
-  let retShare = bandShare(RETIREMENT_AGE_YEARS, MAX_AGE_YEARS);
+  const prShare = bandShare(WORKFORCE_ENTRY_AGE_YEARS + Math.round((2 * workingSpan) / 3), RETIREMENT_AGE_YEARS);
+  const retShare = bandShare(RETIREMENT_AGE_YEARS, MAX_AGE_YEARS);
 
   const totalLifeCycleShare = ecShare + peShare + prShare + retShare;
   updatedLifeCycle.EARLY_CAREER = { ...prevLifeCycle.EARLY_CAREER, shareOfPopulation: ecShare / totalLifeCycleShare };

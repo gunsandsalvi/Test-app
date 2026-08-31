@@ -762,7 +762,7 @@ function checkNavIdentity(state: GameState, week: number) {
 
 
 function checkMarkToMarketUnfreezesPortfolio(): Violation | null {
-  let seedState = createInitialGameState(SEED);
+  const seedState = createInitialGameState(SEED);
   const company = seedState.companies[0];
   const posData = {
     assetType: 'EQUITY' as any,
@@ -1582,7 +1582,7 @@ const indModule: HarnessModule = (() => {
       const occs = Object.keys(reg.occupationPools ?? {});
       // The combined within-occupation spread: a worker's wage is its firm's premium times its
       // own experience premium. Both are outcomes now; neither existed a session ago.
-      let allW: number[] = [];
+      const allW: number[] = [];
       occs.forEach(o => {
         const st: any[] = reg.occupationPools[o]?.tenureStrata ?? [];
         if (st.length === 0) return;
@@ -1819,7 +1819,7 @@ function runHarness() {
   let state = createInitialGameState(SEED);
   seededProbe = probeSteadyState(state);
   const initialRevenueByTicker = new Map(state.companies.map(c => [c.ticker, c.annualRevenue]));
-  let knownTickers = new Set(state.companies.map(c => c.ticker));
+  const knownTickers = new Set(state.companies.map(c => c.ticker));
   MODULES.forEach(m => { try { m.init?.(state); } catch (e) { violations.push({ week: 0, message: `[harness:${m.name}] init threw: ${e}` }); } });
 
   if (SHOCKS) {
@@ -1922,7 +1922,7 @@ function runHarness() {
       };
     }
 
-    let preState = state;
+    const preState = state;
     const t0 = Date.now();
     if (PROFILE || STAGE_TRACE) {
       const { state: next, timings, stageTrace } = advanceWeeklyStepProfiled(state, { profile: PROFILE });

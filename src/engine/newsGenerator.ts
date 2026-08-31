@@ -125,9 +125,8 @@ export function generateWeeklyNews(
       tradeShortcut,
     });
 
-    if (isHike) {
-    } else if (isCut) {
-    }
+    // §7.235: an `if (isHike) {} else if (isCut) {}` with two empty bodies stood here. It did
+    // nothing and said nothing about what it was meant to do; the linter is what found it.
   });
 
   // 2. Default News

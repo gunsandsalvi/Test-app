@@ -1256,7 +1256,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // of this trigger — the same object the credit market prices its hazard against
     // (computeAnnualDefaultProbability), so priced risk and realized risk are one model. It is
     // reached now only AFTER the committed line above has been drawn to whatever it will bear.
-    let isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < DEFAULT_COVERAGE_FLOOR));
+    const isDefaulted = !comp.mergerAcquired && (comp.isDefaulted || (newCash < 0 && newCoverage < DEFAULT_COVERAGE_FLOOR));
 
     let newRating = comp.creditRating;
 
@@ -1867,7 +1867,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // company whose equity the market has decided is worthless approaches zero — the endgame is
     // delisting and default, not a ten-cent bound that then feeds market cap, index levels and
     // the take-private arithmetic. Only the non-negativity remains, which is arithmetic.
-    let newStockPrice = isDefaulted ? 0.0 : Math.max(0, Number(comp.stockPrice.toFixed(2)));
+    const newStockPrice = isDefaulted ? 0.0 : Math.max(0, Number(comp.stockPrice.toFixed(2)));
     // IND7: the antitrust clock. It counts UP while this firm is dominant in some category it
     // sells into and resets when it is not, so the consequence attaches to a sustained position
     // rather than one good quarter.
@@ -2168,18 +2168,17 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // Wall Street Phase 1: real per-bank balance sheet computed this week in
       // 02b-bank-diversification.ts (which runs before this stage), carried forward otherwise.
     comp.bankBalanceSheet = companyUpdates[comp.ticker]?.bankBalanceSheet ?? comp.bankBalanceSheet;
+    // §7.235: seven `comp.x = comp.x` lines were removed here. They were pass-throughs in the
+    // object literal this block used to be — meaningful when building a NEW object, no-ops once
+    // §7.230 converted it to direct assignment on `comp` itself. The linter found them on its first
+    // run, which is the argument for having one: a mechanical refactor leaves mechanical residue,
+    // and nothing else in this repo was looking.
 
-    comp.bankRiskFactor = comp.bankRiskFactor;
 
-    comp.technicalReservesUSD = comp.technicalReservesUSD;
 
-    comp.aumUSD = comp.aumUSD;
 
-    comp.managementFeeRate = comp.managementFeeRate;
 
-    comp.insurancePremiumsWrittenUSD = comp.insurancePremiumsWrittenUSD;
 
-    comp.insuranceClaimsPaidUSD = comp.insuranceClaimsPaidUSD;
 
       // SETL2: `cash` is NOT written here any more. Every flow above was recorded as a payment
       // instruction and the settlement stage (which runs immediately after this one) applies the
@@ -2230,7 +2229,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     comp.lastManagementCommentary = lastManagementCommentary;
 
       // Already real and already-cleared (07d-leveraged-loan-clearing.ts) — passed through as-is.
-    comp.leveragedLoan = comp.leveragedLoan;
 
     comp.treasuryHoldings = newTreasuryHoldings;
     return comp;

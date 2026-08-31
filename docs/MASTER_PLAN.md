@@ -2521,3 +2521,37 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        element type at five of the `noImplicitAny` sites. No linter. Seven files over 1,000 lines
        and one function near 1,900. **The ratchets now RUN, which is the part that was missing: an
        architectural fitness function nobody executes is a comment with extra steps.**
+235. **THE THREE THINGS §7.234 LEFT OPEN, CLOSED — AND THE LINTER'S FIRST FIND WAS MY OWN.**
+     - **`companyUpdates` IS TYPED.** It was `Record<string, any>` — the largest hole `noImplicitAny`
+       could not close, the source of five of its errors, and the reason a typo in a field name was
+       a silent `undefined` rather than a compile error. Stage 08 reads seventeen fields off it and
+       **nothing anywhere said which seventeen.** Now `CompanyWeekUpdate` does.
+     - **AND THE TYPE FOUND FIVE FIELDS ON ITS FIRST COMPILE.** A read-side survey of stage 08 gave
+       seventeen; the compiler found `salesUnits`, `purchasesUnits`, `_contractOwedUnits`,
+       `_contractDeliveredUnits` and `inputSupplyConstraintFactor` — written by stage 05 and read
+       only there, so a survey of the consumer could never have seen them. **Twenty-two fields
+       crossing between stages with no declaration of any of them.** It is deliberately NOT
+       `Partial<Company>`: most are the WEEK'S FLOWS, not company state, and a carrier for
+       inter-stage hand-off is its own thing.
+     - **IT ALSO FOUND A LATENT PARTIAL SHEET.** `07c-sovereign-bond-clearing` spread a possibly
+       undefined `existingSheet` into a new `bankBalanceSheet`. Under `any` that compiled; under the
+       type it is a PARTIAL sheet — which is how a balance-sheet line goes missing with nothing
+       failing. Guarded.
+     - **ESLINT, AND IT IS NOT A STYLE PRESET.** The rules are the defect classes this project has
+       paid for, each traceable to a record: `no-explicit-any` (§7.235), `no-unnecessary-condition`
+       (§7.234's guard over a value that was always 0), `eqeqeq`/`no-fallthrough` (the 75-site
+       switch dispatch of §7.229). **Style rules are absent on purpose** — the codebase has a voice
+       and churning it would bury the real diffs.
+     - **ITS FIRST RUN CAUGHT MY OWN WORK.** Seven `comp.x = comp.x` lines in stage 08: pass-throughs
+       that were meaningful in the object literal §7.230 converted to direct assignment, and no-ops
+       afterwards. **A mechanical refactor leaves mechanical residue and nothing else in this repo
+       was looking.** It also found an `if (isHike) {} else if (isCut) {}` with two empty bodies,
+       which did nothing and said nothing about what it was for.
+     - **AND ONE RULE WAS DELIBERATELY DOWNGRADED.** `no-useless-assignment` fires 20 times, all
+       `let x = <initial>` overwritten before any read — a declare-then-assign style, not a defect.
+       **Churning twenty sites to satisfy a rule that found no bug is how a linter loses its
+       authority.** It warns; the count still shows.
+     - **THE GATE NOW.** `npm run lint` is `tsc --noEmit && eslint --max-warnings 437`: zero errors,
+       and the warning ceiling is today's count, so a new `any` fails the build while the existing
+       77 do not. Plus hygiene's three budgets and 23 tests, all on push and PR. **Every one is a
+       ratchet: each may fall and never rise.**

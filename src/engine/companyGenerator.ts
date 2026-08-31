@@ -388,7 +388,7 @@ export function generateInitialCompanies(
   regions.forEach((region) => {
     const regionPolicyRate = initialRegions[region]?.policyRate ?? 0.045;
     const regionProductivityPerCapita = getRegionProductivityPerCapitaUSD(region);
-    let templates: FirmSeedTemplate[] = generateFirmSeeds(region, existingSeedTickers, existingSeedNames);
+    const templates: FirmSeedTemplate[] = generateFirmSeeds(region, existingSeedTickers, existingSeedNames);
 
 
 
