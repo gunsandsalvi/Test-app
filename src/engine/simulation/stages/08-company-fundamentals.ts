@@ -42,6 +42,7 @@ import { planCapitalProgramme, commissionCapital } from '../../../domain/company
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
 import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain/company-week/debt-ladder';
 import { industrialIncome, profileIncome } from '../../../domain/company-week/income-statement';
+import { chargeCarryingCost, consumeLotsFifo, fulfillmentRatio } from '../../../domain/company-week/inventory';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -427,13 +428,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // space per tonne divided by its value density, plus its own spoilage. The company-level
     // `inventoryCarryingCostRate` it replaces was one flat 0.02 charging a fab and a dairy alike
     // (rule 3: one representation, and it belongs on the thing being held).
-    let carryingCostUSD = 0;
-    const newOutputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = {};
-    Object.entries(comp.outputInventoryBySubUnit || {}).forEach(([su, inv]) => {
-      const costThisSubUnit = inv.valueUSD * (annualCarryingCostRateOf(su) / 52);
-      carryingCostUSD += costThisSubUnit;
-      newOutputInventoryBySubUnit[su] = { unitsHeld: inv.unitsHeld, valueUSD: Math.max(0, inv.valueUSD - costThisSubUnit) };
-    });
+    // §5-STRUCT step 2 — the warehouse charge lives on the firm's stocks
+    // (domain/company-week/inventory.ts). It is REPORTED here and settled below, because the
+    // charge has a payee (IND16: the distribution sector) and the stock does not.
+    const carried = chargeCarryingCost(comp.outputInventoryBySubUnit || {}, annualCarryingCostRateOf);
+    const carryingCostUSD = carried.totalCostUSD;
+    const newOutputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = carried.stock;
     // 1$ is 1$ Phase 2: this week's real input inventory baseline is last week's held stock
     // plus whatever stage05 (which runs before this stage) already credited from real
     // purchases that cleared this week — consumption below draws down from that real total.
@@ -575,21 +575,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           // bought from three different real sellers at three different prices draws down the
           // earliest purchase first, the way physical inventory actually gets used, rather than
           // one blended average cost standing in for all of them.
-          const lots = (newInputInventoryBySubUnit[inputSubUnit] ?? []).slice().sort((a, b) => a.acquiredWeek - b.acquiredWeek);
-          const availableUnits = lots.reduce((s, lot) => s + lot.unitsHeld, 0);
-          const lineFulfillment = neededUnits > 0 ? Math.min(1, availableUnits / neededUnits) : 1;
-          physicalFulfillment = Math.min(physicalFulfillment, lineFulfillment);
-          let remainingToConsume = Math.min(availableUnits, neededUnits);
-          const remainingLots: InputLot[] = [];
-          for (const lot of lots) {
-            if (remainingToConsume <= 0.0001) { remainingLots.push(lot); continue; }
-            const consumedFromLot = Math.min(lot.unitsHeld, remainingToConsume);
-            remainingToConsume -= consumedFromLot;
-            realInputConsumptionCostUSD += consumedFromLot * lot.unitPriceUSD;
-            const unitsLeftInLot = lot.unitsHeld - consumedFromLot;
-            if (unitsLeftInLot > 0.0001) remainingLots.push({ ...lot, unitsHeld: unitsLeftInLot });
-          }
-          newInputInventoryBySubUnit[inputSubUnit] = remainingLots;
+          // §5-STRUCT step 2 — FIFO lives on the firm's stocks (domain/company-week/inventory.ts).
+          const drawn = consumeLotsFifo(newInputInventoryBySubUnit[inputSubUnit] ?? [], neededUnits);
+          physicalFulfillment = Math.min(physicalFulfillment,
+            fulfillmentRatio(drawn.availableUnits, neededUnits));
+          // Folded PER LOT, in consumption order: this total spans several sub-units and float
+          // addition is not associative (§7.237).
+          for (const lotCostUSD of drawn.costsUSD) realInputConsumptionCostUSD += lotCostUSD;
+          newInputInventoryBySubUnit[inputSubUnit] = drawn.remaining;
         });
       });
       const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
