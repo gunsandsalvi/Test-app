@@ -40,6 +40,7 @@ import { pay, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { planCapitalProgramme, commissionCapital } from '../../../domain/company-week/capital-programme';
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
+import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain/company-week/debt-ladder';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -1374,7 +1375,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
       // A floating tranche carries a margin rather than a coupon; there is nothing to refinance
       // INTO a lower fixed rate, so its saving is zero rather than NaN.
-      const rateSavingsIfRefinanced = (tranche.couponRate ?? currentFairRate) - currentFairRate;
       const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
       // The real test is not "is the coupon above the market" — it is whether the saving is worth
       // what the call costs. A treasurer discounts the coupon saving over the paper's remaining
@@ -1384,13 +1384,22 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // an option no lender writes. It is also what a make-whole exists to neutralise: for an IG
       // bond the premium IS the present value of the saving, so a purely rate-driven call never
       // clears this test and an IG issuer calls for a real reason instead.
+      // §5-STRUCT step 2 — the call test lives on the ladder (domain/company-week/debt-ladder.ts).
       const premiumPerDollar = callPricePerDollar(tranche, state.currentWeek, currentFairRate - comp.oasSpreadBps / 10000) - 1;
-      const discount = Math.max(1e-6, currentFairRate);
-      const savingPvPerDollar = rateSavingsIfRefinanced * ((1 - Math.pow(1 + discount, -remainingYears)) / discount);
-      if (savingPvPerDollar > premiumPerDollar && rateSavingsIfRefinanced > 0.01 && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
-        // Cash has to cover the premium too, so the callable size is smaller than the free version.
-        const budgetUSD = newCash - comp.annualRevenue * 0.15;
-        const calledAmountUSD = Math.min(tranche.principalUSD, budgetUSD / (1 + premiumPerDollar));
+      const economics = callEconomics({
+        couponRate: tranche.couponRate,
+        currentFairRate,
+        remainingYears,
+        premiumPerDollar,
+        materialSavingAnnual: 0.01,
+      });
+      if (economics.isAccretive && excessCashAvailable && newRating !== 'CCC' && newRating !== 'D') {
+        const calledAmountUSD = callableAmountUSD({
+          tranchePrincipalUSD: tranche.principalUSD,
+          cashUSD: newCash,
+          cashFloorUSD: comp.annualRevenue * 0.15,
+          premiumPerDollar,
+        });
         tranche.principalUSD -= calledAmountUSD;
         // The ladder change below reaches the holders through the register (settleCorporateAction-
         // OnHolders), which is what pays them; this line reports it on the cash walk only.
@@ -1398,7 +1407,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         recordPremium(tranche, calledAmountUSD * premiumPerDollar);
         // Calling a bond because it is expensive relative to the market is REFINANCING, not
         // deleveraging: the issuer replaces it at today's cheaper rate and keeps the money. The
-        // saving is the lower coupon, which is what `rateSavingsIfRefinanced` above measures.
+        // saving is the lower coupon, which is what `callEconomics` above measures.
         //
         // This used to retire the tranche with cash and stop there, which is a different
         // transaction entirely — it shrank the issuer's debt every time rates moved in its
@@ -1422,7 +1431,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       }
     });
     // Remove any tranche whose principalUSD reaches zero, then add the replacement issues.
-    companyTranches = companyTranches.filter(t => t.principalUSD > 0.01);
+    companyTranches = dropExhausted(companyTranches, 0.01);
     if (calledRefinanceTranches.length > 0) companyTranches = [...companyTranches, ...calledRefinanceTranches];
 
     // WS8: the year-early pre-refi and the at-maturity formula roll are both gone — a roll now
