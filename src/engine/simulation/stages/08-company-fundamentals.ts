@@ -415,6 +415,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const taxRate = reg.effectiveTaxRate;
 
     let updatedProductLines = comp.productLines || []; let newRevenue = 0;
+    // §7.246 — persisted for stage 05's floor decomposition; stays 0 on the profile path, whose
+    // firms offer no goods (IND-R2), so the floor's fallback basis serves them unchanged.
+    let measuredInputConsumptionWeeklyUSD = 0;
     let baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     let newEbitdaMargin = 0;
     let newEbitda = 0;
@@ -590,6 +593,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         });
       });
       const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
+      measuredInputConsumptionWeeklyUSD = realInputConsumptionCostUSD;
       newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + combinedFulfillment * 0.3);
 
       // Supply relationship shocks — read from the pre-loop snapshot (companies mutate in
@@ -2155,6 +2159,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     comp.baselineAnnualRevenue = newBaselineAnnualRevenue;
 
     comp.ebitda = Number(newEbitda.toFixed(1));
+
+    // §7.246 — the week's two measured cost lines, persisted for stage 05's floor decomposition.
+    comp.payrollWeeklyUSD = Number(weeklyPayrollUSD.toFixed(1));
+    comp.realInputConsumptionCostWeeklyUSD = Number(measuredInputConsumptionWeeklyUSD.toFixed(1));
 
     comp.ebit = Number(newEbit.toFixed(1));
 

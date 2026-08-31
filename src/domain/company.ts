@@ -273,6 +273,11 @@ export interface Company {
   employeeCount: number;
   previousEmployeeCount: number;
   baselineEmployeeCount: number;
+  /** §7.246 — the two measured cost lines of the most recent completed company week, persisted so
+   *  stage 05's offer floor can decompose `(annualRevenue − ebitda)` into wages + real inputs +
+   *  residual instead of dividing a TRAILING total by CURRENT staffed output. Both weekly (rule 9). */
+  payrollWeeklyUSD?: number;
+  realInputConsumptionCostWeeklyUSD?: number;
   ebitda: number;
   baselineEbitdaMargin?: number;
   ebit: number;
