@@ -47,7 +47,11 @@ import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
 import { sovereignCouponByBucket, weeklyInterestExpenseUSD, decomposeGovernmentSpending } from '../src/domain/government';
 import { governmentOf } from '../src/domain/government-entity';
 import { probeSteadyState, compareToSettled } from '../src/engine/simulation/burn-in';
-import { overPledgedByBucket } from '../src/domain/collateral';
+import { overPledgedByBucket, PLEDGE_ROUNDING_TOLERANCE_USD } from '../src/domain/collateral';
+// §7.246: the instrument reads the engine's own definitions instead of re-hardcoding them.
+import { mortgageSeverityAtLtv, vintageCurrentLtv } from '../src/domain/banking';
+import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
+import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
 import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/central-bank';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { sovBucketKey } from '../src/engine/simulation/stages/shared-helpers';
@@ -253,7 +257,9 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
       const region = companyRegionById.get(l.borrowerId);
       if (!region) return;
       const lb = held[region];
-      if (lb) lb.loan += Math.max(0, l.principalUSD);
+      // §7.246: unclamped — a negative principal is a defect this sum exists to EXPOSE (§7.46 L7:
+      // a measurement that clamps is a measurement that lies).
+      if (lb) lb.loan += l.principalUSD;
     });
   });
   regionIds.forEach((r) => {
@@ -268,7 +274,7 @@ function checkHoldingsLedgerConservation(state: GameState, week: number): Violat
     (reg.bankingSector.loanDealerInventory || []).forEach((p: any) => { held[r].loan += p.inventoryUSD; });
     (reg.bankingSector.sovBondDealerInventory || []).forEach((p: any) => { held[r].sov += p.inventoryUSD; });
     Object.values(reg.centralBankSheet?.sovereignHoldingsByTenor || {}).forEach((usd: any) => {
-      held[r].sov += Math.max(0, Number(usd) || 0);
+      held[r].sov += Number(usd) || 0; // §7.246: unclamped (§7.46 L7)
     });
   });
 
@@ -489,7 +495,9 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     // it never bid for — the forced-placement failure mode, in the other direction.
     const orderedUSD = cb.lastOrderPlacedUSD ?? 0;
     const filledUSD = cb.lastOpenMarketPurchasesUSD ?? 0;
-    if (filledUSD > 0 && orderedUSD > 0 && filledUSD > orderedUSD * 1.01 + 1e6) {
+    // §7.246: the `orderedUSD > 0` arm made this VACUOUS in exactly the failure it exists for —
+    // a fill against NO order is the purest forced placement, and the guard skipped it.
+    if (filledUSD > 0 && filledUSD > orderedUSD * 1.01 + 1e6) {
       violations.push({
         week,
         message: `${region} central bank filled ${(filledUSD / 1e9).toFixed(2)}B against an order of ${(orderedUSD / 1e9).toFixed(2)}B`,
@@ -533,8 +541,8 @@ function checkLaborMarketIdentity(state: GameState, week: number) {
     if (!reg?.occupationPools) return;
     const employerHeadcount = state.companies
       .filter((c) => c.region === region && isActiveCompany(c))
-      .reduce((a, c) => a + Math.max(0, c.employeeCount), 0)
-      + (reg.smePools || []).reduce((a, s) => a + Math.max(0, s.employment), 0)
+      .reduce((a, c) => a + c.employeeCount, 0) // §7.246: unclamped (§7.46 L7)
+      + (reg.smePools || []).reduce((a, s) => a + s.employment, 0)
       + reg.governmentEmployment;
     const poolEmployed = Object.values(reg.occupationPools).reduce((a: number, p: any) => a + (p.employed ?? 0), 0);
     // Tight band (0.2%): the pools are DERIVED from this exact sum by the end-of-week
@@ -750,7 +758,10 @@ function checkOwnershipConservation(state: GameState, week: number) {
 function checkNavIdentity(state: GameState, week: number) {
   const activePositions = state.portfolio.positions.filter(p => !p.isClosed);
   const totalUnrealizedPnL = activePositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
-  const expectedNav = Math.max(0, state.portfolio.cashUSD + totalUnrealizedPnL);
+  // §7.246: the engine's own NAV (13-news-and-turn-summary) is UNCLAMPED — cash plus unrealized
+  // P&L, negative included (negative is how the game ends). Clamping here checked a different
+  // definition than the one stored.
+  const expectedNav = state.portfolio.cashUSD + totalUnrealizedPnL;
   const diff = Math.abs(state.portfolio.navUSD - expectedNav);
   if (diff > 0.01) {
     violations.push({
@@ -889,55 +900,14 @@ function checkUndersubscribedSovereignAuctionRaisesYield(): Violation | null {
   return null;
 }
 
-// NEW: Trade Fee Conservation Check
-function checkTradeFeeConservation(state: GameState): Violation | null {
-  
-  // Take a snapshot of pre-trade balances
-  const preCash = state.portfolio.cashUSD;
-  const preBankEquity = state.regions['USA']?.bankingSector.bankEquityUSD || 0;
-
-  // Let's create a fake position
-  const posData = {
-    assetType: 'EQUITY' as any,
-    symbol: 'TEST',
-    name: 'Test Equity',
-    region: 'USA' as RegionId,
-    dealerId: 'alpha',
-    direction: 'LONG' as any,
-    quantity: 1000,
-    entryPrice: 100,
-    currentPrice: 100,
-    notional: 100000,
-    marginRequirement: 20000,
-    expectedWeeklyCarryUSD: 0
-  };
-
-  const executionDetails = {
-    fillPrice: 100.15,
-    counterpartyFeeUSD: 150,
-    sourcedFrom: 'Bank intermediated (sourced externally)',
-    spreadCostUSD: 150
-  };
-
-  const postState = executeTrade(state, posData, executionDetails);
-
-  const postCash = postState.portfolio.cashUSD;
-  const postBankEquity = postState.regions['USA']?.bankingSector.bankEquityUSD || 0;
-
-  const userDebit = preCash - postCash;
-  const bankCredit = postBankEquity - preBankEquity;
-
-  if (Math.abs(userDebit - executionDetails.spreadCostUSD) > 0.01) {
-    return { week: state.currentWeek, message: `Trade Fee mismatch: user debited ${userDebit} but spreadCostUSD was ${executionDetails.spreadCostUSD}` };
-  }
-  
-  const expectedBankCredit = executionDetails.spreadCostUSD + executionDetails.counterpartyFeeUSD;
-  if (Math.abs(bankCredit - expectedBankCredit) > 0.01) {
-    return { week: state.currentWeek, message: `Trade Fee mismatch: bank credited ${bankCredit} but expected ${expectedBankCredit}` };
-  }
-  
-  return null;
-}
+// §7.246 — the trade-fee "conservation" check is DELETED, per §7.234's precedent for a check
+// that asserts against a world that no longer exists. It executed a fake trade against
+// `dealerId: 'alpha'` (no such bank since G3b deleted the invented dealer system), read the
+// REGIONAL AGGREGATE bankEquityUSD that `executeTrade` never touches, and asserted an identity
+// that is itself non-conserving (bank credited spread + fee while the user is debited spread
+// alone). It fired as a pre-run violation on every run since G3. A player-trade fee check worth
+// having reads the named dealer bank's own book — a new check to design deliberately, not this
+// one revived.
 
 // =============================================================================================
 // MODULES — the one place to add a check or a measurement. Everything below runs off the SAME
@@ -1052,8 +1022,8 @@ const hhModule: HarnessModule = (() => {
         });
         if (vs.length === 0) { out.push(`  ${r}: no vintages`); return; }
         const book = vs.reduce((a, v) => a + v.principalUSD, 0);
-        const ltvOf = (v: any) => v.principalUSD / Math.max(1, v.originationCollateralUSD * (price / Math.max(1, v.originationHomePriceUSD)));
-        const sev = (l: number) => Math.max(0.05, 1 - Math.min(1, 0.75 / Math.max(0.05, l)));
+        const ltvOf = (v: any) => vintageCurrentLtv(v, price);
+        const sev = mortgageSeverityAtLtv;
         // E[f(LTV)] — principal-weighted over the real cross-section, which is what the engine
         // now charges. f(E[LTV]) — the single average the engine used to charge. The ratio is
         // the size of the Jensen gap that was being thrown away.
@@ -1561,8 +1531,8 @@ const indModule: HarnessModule = (() => {
       });
       if (vs2.length >= 4) {
         const price = Math.max(1, (s.regions.USA as any).housingMarket?.medianHomePriceUSD ?? 1);
-        const ltv = (v: any) => v.principalUSD / Math.max(1, v.originationCollateralUSD * (price / Math.max(1, v.originationHomePriceUSD)));
-        const sev = (l: number) => Math.max(0.05, 1 - Math.min(1, 0.75 / Math.max(0.05, l)));
+        const ltv = (v: any) => vintageCurrentLtv(v, price);
+        const sev = mortgageSeverityAtLtv;
         const sorted = vs2.slice().sort((a, b) => ltv(a) - ltv(b));
         const bk = sorted.reduce((a, v) => a + v.principalUSD, 0) || 1;
         const fineS = sorted.reduce((a, v) => a + (v.principalUSD / bk) * sev(ltv(v)), 0);
@@ -1656,7 +1626,7 @@ const indModule: HarnessModule = (() => {
         // TWO REPRESENTATIONS OF INVESTMENT? The seed sizes each capex industry from the demand
         // solve; the firms bid their OWN capex figure. If those disagree the sector was built to
         // supply one number and asked for another (rule 3).
-        const capexCats = ['heavy_equipment', 'industrial_automation', 'commercial_fleet', 'enterprise_software', 'commercial_construction'];
+        const capexCats = Object.keys(CAPEX_SUPPLIER_WEIGHTS); // §7.246: the registry's list, not a copy
         const seededUSD = capexCats.reduce((a, su) => a + (((s.regions[r] as any).categoryDemand?.[su]?.demandLevelUSD) ?? 0), 0);
         out.push(`      capex industries sized for ${B(seededUSD)}/yr of demand; firms bid ${B(capexA)}/yr = ${(seededUSD > 0 ? capexA / seededUSD : 0).toFixed(2)}x what was built`);
         capexCats.forEach(su => {
@@ -1824,8 +1794,6 @@ function runHarness() {
 
   if (SHOCKS) {
     // Pre-run mechanism tests (each builds its own world; violations land in the same pool).
-    const tradeFeeViolation = checkTradeFeeConservation(state);
-    if (tradeFeeViolation) violations.push(tradeFeeViolation);
     const frozenPortfolioViolation = checkMarkToMarketUnfreezesPortfolio();
     if (frozenPortfolioViolation) violations.push(frozenPortfolioViolation);
     const equityFlowViolation = checkSustainedEquityDemandMovesPriceBeyondEps();
@@ -2061,8 +2029,8 @@ function runHarness() {
     REGION_IDS.forEach(regionId => {
       const reg: any = (state as any).regions[regionId];
       if (typeof reg.repoRateAnnual !== 'number') return;
-      const floorAnnual = Math.max(0, reg.policyRate - 20 / 10000);
-      const ceilAnnual = reg.policyRate + 25 / 10000;
+      const floorAnnual = Math.max(0, reg.policyRate - ON_RRP_SPREAD_BPS / 10000);
+      const ceilAnnual = reg.policyRate + SRF_SPREAD_BPS / 10000;
       if (reg.repoRateAnnual < floorAnnual - 1e-6 || reg.repoRateAnnual > ceilAnnual + 1e-6) {
         violations.push({
           week: w,
@@ -2139,7 +2107,10 @@ function runHarness() {
       if (!c.isBankEntity || !c.bankBalanceSheet || c.isDefaulted || c.mergerAcquired) return;
       const bs = c.bankBalanceSheet;
       const sovUSD = Object.values((bs.sovereignBondHoldingsByTenor || {}) as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
-      if ((bs.repoEncumberedCollateralUSD ?? 0) > sovUSD + 1e6) {
+      // §7.246: the ONE pledge tolerance (domain/collateral.ts, $1) — this line sat at 1e6 one
+      // screen below the unified per-bucket check, the §7.230 split-tolerance shape surviving in
+      // the aggregate.
+      if ((bs.repoEncumberedCollateralUSD ?? 0) > sovUSD + PLEDGE_ROUNDING_TOLERANCE_USD) {
         violations.push({
           week: w,
           message: `Bank ${c.ticker} pledged ${(bs.repoEncumberedCollateralUSD / 1e9).toFixed(2)}B of collateral against ${(sovUSD / 1e9).toFixed(2)}B held`
