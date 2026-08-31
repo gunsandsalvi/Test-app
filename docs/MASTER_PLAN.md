@@ -4232,3 +4232,22 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - Verified: tsc clean, 71/71, hygiene pass at the lowered ratchet, lint 386, WEEKS=15
        probe identical (no firm reaches the 52-week sustained hold inside a probe window —
        the mechanism arms without relabeling the reference).
+
+284. **TIER-4 SWEEP CLOSED: four mechanisms built (§7.280–283); the last two items recorded
+     at their gates, with the manager/vehicle DESIGN now assigned.**
+     - **Manager/vehicle split — the design, so it stops being "Unassigned":** the fee leg
+       probe proved the conflation structurally — a HEDGE_FUND/PENSION_FUND pool cannot pay
+       its manager a management fee because comp.id === entity.id: payer and payee are one
+       object (the MMF and ETF, the two complete templates, both pay a DISTINCT manager —
+       money-market-fund.ts §7.241 leg, 'etf expense ratio to sponsor'). The split, ETF
+       template applied: (1) the VEHICLE keeps the InstitutionalEntity — assets, cash,
+       unit-holder liability (pension: beneficiaryLiability, already real; HF: an LP register,
+       new); (2) the MANAGER keeps the listed Company shell — staff, fee revenue, and a NEW
+       managesEntityIds link replacing the id-equality convention; (3) the fee becomes the
+       real payment vehicle→manager the MMF already shows. Step 2's link is the first commit
+       (pure structure, no flow change); step 3 is the flow; step 1's LP register is last and
+       is DYN-adjacent. Its own §1.7 commit chain, owner now: this design.
+     - **Logistics scale**: the row's own instruction is "re-measure before working this"
+       (IND16's channel margin adds to it), and the §7.271 reference already moved it 0.4 →
+       1.5–3.1B/wk. The re-measure is a 60-week read — excluded under the no-long-tests
+       constraint. Measurement-gated, unchanged owner.
