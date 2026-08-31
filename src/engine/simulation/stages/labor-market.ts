@@ -249,8 +249,35 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // Both sides of this ratio in the SAME dollars: this week's revenue deflated back to the
       // price level the baseline was struck at (see `outputPriceVsBaseline`).
       const realRevenueUSD = comp.annualRevenue / Math.max(0.05, outputPriceVsBaseline(comp, reg));
+      // §7.247 — THE LEVEL TARGET SEES THE DEMAND THE FIRM'S MARKETS LEFT UNSERVED.
+      //
+      // Realized revenue is what the firm's CURRENT staff produced, so a target built on it
+      // alone is self-referential: a firm that shed produced less, read its own smaller revenue
+      // as "need met", and could never see the demand it did not serve. Measured on §7.246's
+      // world: goods fill 0.45 — buyers received less than half of what they bid — while 75% of
+      // firms read negative real growth every week and the hiring branch never fired. §7.110
+      // built the symmetry and this is why it stayed nominal (§7.146: a mechanism that binds on
+      // nothing is a mechanism that is not there).
+      //
+      // The pull is the DEFINITIONAL ratio of what the firm's markets asked for to what they
+      // received (last week's books — the labour stage runs before this week's auctions), a
+      // measurement with no coefficient. It reaches Infinity honestly when a market received
+      // nothing; what bounds hiring is what always bounds it — affordability and the matching
+      // friction — not a cap on the signal.
+      let fillWeight = 0;
+      let fillSum = 0;
+      (comp.productLines ?? []).forEach((l) => {
+        const cd = reg.categoryDemand[l.subUnitId];
+        const demandedUnits = Number(cd?.totalUnitsDemandedThisWeek) || 0;
+        const suppliedUnits = Number(cd?.totalUnitsSuppliedThisWeek) || 0;
+        if (!(demandedUnits > 0)) return;
+        const lw = Math.max(0, l.revenueShare ?? 0);
+        fillWeight += lw;
+        fillSum += lw * Math.min(1, suppliedUnits / demandedUnits);
+      });
+      const demandPull = fillWeight > 0 ? (fillSum > 0 ? fillWeight / fillSum : Infinity) : 1;
       const outputNeedHeads = baselineRevPerHeadUSD > 0
-        ? realRevenueUSD / baselineRevPerHeadUSD
+        ? (realRevenueUSD * demandPull) / baselineRevPerHeadUSD
         : current;
       const earningsHeadroomUSD = comp.ebitda - capitalChargeUSD;
       const affordableHireHeads = (earningsHeadroomUSD > 0 && annualWagePerWorkerUSD > 0)
@@ -266,16 +293,21 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         // Shrinking: attrition does the work first (it is free), layoffs only for the rest.
         layoffs = Math.max(0, -desiredWeeklyChange * LAYOFF_SPEED_MULTIPLE - quits);
       }
+      // §7.247 — a firm whose own market left demand unserved, and whose earnings can carry more
+      // staff, does not shed on the growth signal: that signal reads a revenue its own staffing
+      // produced, and in a short market it orders the layoffs that keep the market short. The
+      // two rules that outrank the market being short come AFTER this: a firm that cannot pay
+      // (the affordability cut) and a firm out of cash shed regardless.
+      const understaffedHeads = Math.max(0, outputNeedHeads - current);
+      if (affordableHireHeads > 0 && understaffedHeads > 0) {
+        layoffs = 0;
+        vacancies = Math.max(vacancies,
+          Math.min(understaffedHeads, affordableHireHeads) * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits);
+      }
       // LAB: and it sheds toward what it can afford — the gap between its earnings and its cost
       // of capital, in workers, at the speed layoffs actually happen. This is the ordinary
       // response; the cash rule below is the acute one.
       if (affordableCutHeads > 0) layoffs = Math.max(layoffs, affordableCutHeads * LAYOFF_SPEED_MULTIPLE);
-      // ...and it staffs toward what it can afford, when it is short of what its output needs.
-      const understaffedHeads = Math.max(0, outputNeedHeads - current);
-      if (affordableHireHeads > 0 && understaffedHeads > 0) {
-        vacancies = Math.max(vacancies,
-          Math.min(understaffedHeads, affordableHireHeads) * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits);
-      }
       // A firm genuinely out of cash sheds staff regardless of the friction above.
       if (comp.cash < 0) layoffs = Math.max(layoffs, current * DISTRESS_LAYOFF_SPEED);
 
