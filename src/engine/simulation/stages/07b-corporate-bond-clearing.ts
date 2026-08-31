@@ -41,7 +41,7 @@
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
-import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, CREDIT_RECOVERY_RATE } from './shared-helpers';
+import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, creditRecoveryRate } from './shared-helpers';
 import {
   computeReservationSpreadBps,
   FULL_SIZE_SPREAD_RANGE_BPS,
@@ -263,6 +263,12 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // ~35 entities x ~350 names x 4 regions of identical answers per week. Hoisted once, same
     // expressions, same values (§7.32's optimization discipline; the profiler put this adapter
     // at 120 ms/week of self time).
+    // ONE OWNER (§6.1's duplicate row): the recovery this book prices is the region's own
+    // REALISED experience blended with the prior (`creditRecoveryRate`) — the same basis the
+    // loan book and the CDS leg already price on. Pricing a fixed 0.4 here while resolutions
+    // ran elsewhere was one market disagreeing with the world it clears in, and the CDS-cash
+    // basis partly measured that disagreement.
+    const regionRecoveryRate = creditRecoveryRate(reg);
     const companyTerms = regionCompanies.map((c) => {
       const annualPd = pdByCompanyId.get(c.id)!;
       const durationYears = creditDurationYears(c);
@@ -272,11 +278,11 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         subIG: !isInvestmentGrade(c.creditRating),
         liveFloatUSD: liveTradableFloatUSD(c),
         offeringUSD: offeringSizeUSD(c),
-        expectedLossBps: annualPd * (1 - CREDIT_RECOVERY_RATE) * 10000,
+        expectedLossBps: annualPd * (1 - regionRecoveryRate) * 10000,
         capitalChargeRate: spreadRiskCapitalChargeRate(c.creditRating, durationYears),
         distressedReservationBps: computeDistressedReservationSpreadBps({
           annualDefaultProbability: annualPd,
-          recoveryRate: CREDIT_RECOVERY_RATE,
+          recoveryRate: regionRecoveryRate,
           durationYears,
         }),
       };

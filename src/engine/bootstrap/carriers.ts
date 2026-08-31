@@ -26,6 +26,7 @@ import {
 } from '../../domain/carrier';
 import { carryRatesByRegion, computeSourcingIntent, LaneBooking, SOURCING_REGION_IDS } from '../simulation/stages/sourcing-intent';
 import { FxToUsd } from '../../domain/currency';
+import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
 import { crewAnnualWageUSD, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
 import { RATING_OAS_SPREADS } from '../pricing';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equity-valuation';
@@ -278,7 +279,7 @@ function buildCarrierCompany(
   const sharesOutstanding = Math.max(1, Math.round(grossPPEUSD / 1000));
   const bookEquityUSD = grossPPEUSD * (1 - 0.35) - debtBase + Math.max(0, ebitda) * 0.6;
   const stockPrice = Number(fairValuePerShare({
-    annualEarningsUSD: Math.round((ebit - annualInterest) * 0.78),
+    annualEarningsUSD: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
     sharesOutstanding,
     bookEquityUSD,
     netInvestmentRate: 0,
@@ -303,8 +304,8 @@ function buildCarrierCompany(
     ebitda,
     baselineEbitdaMargin: annualRevenue > 0 ? ebitda / annualRevenue : 0,
     ebit,
-    netIncome: Math.round((ebit - annualInterest) * 0.78),
-    eps: Number(((ebit - annualInterest) * 0.78 / sharesOutstanding).toFixed(2)),
+    netIncome: Math.round((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE)),
+    eps: Number(((ebit - annualInterest) * (1 - EFFECTIVE_TAX_RATE) / sharesOutstanding).toFixed(2)),
     sharesOutstanding, stockPrice, marketCap: stockPrice * sharesOutstanding,
     historicalPrices: [stockPrice], forwardPE: 0,
     cash: Math.round(Math.max(0, ebitda) * 0.6),

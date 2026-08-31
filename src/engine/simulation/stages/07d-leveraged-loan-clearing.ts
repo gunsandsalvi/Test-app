@@ -35,7 +35,7 @@ import {
   spreadRiskCapitalChargeRate,
   entityRequiredReturn,
 } from './asset-allocation';
-import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
+import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
 import { distributeRealTargetByWeight } from './shared-helpers';
 import { WeeklyStepContext } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
