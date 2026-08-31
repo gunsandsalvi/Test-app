@@ -107,6 +107,24 @@ const HOLDING_CLASS: Record<HoldingType, AssetClass> = {
 export const holdingClassOf = (type: string): AssetClass | undefined =>
   HOLDING_CLASS[type as HoldingType];
 
+/**
+ * THE OTHER THREE TAXONOMIES, DERIVED FROM THE SUPERSET (step 4's first migration slice).
+ * Each was an inline union spelled out where its struct lives — two with no name at all, so
+ * nothing could be counted against them and a new member joined one and silently missed the
+ * others. They are Exclude/Extract views of `HoldingType` now: one superset owns the members,
+ * the compiler connects all four, and a kind added to the superset must be placed in (or
+ * excluded from) each view deliberately.
+ */
+/** What the institutional register can hold. No SOV_BOND (the register's sovereign rows carry
+ *  GOV_BOND) and no BANK_FACILITY (a facility is a bank-book loan, never a register position). */
+export type ItemizedHoldingType = Exclude<HoldingType, 'SOV_BOND' | 'BANK_FACILITY'>;
+/** What an estate owes claims against: the corporate capital structure. A sovereign cannot file,
+ *  and claims on vehicles resolve at the vehicle, not in a corporate workout. */
+export type EstateClaimType =
+  Exclude<HoldingType, 'SOV_BOND' | 'GOV_BOND' | 'PE_FUND_INTEREST' | 'ETF_SHARE'>;
+/** What the primary market can bring to market (sovereign issuance has its own calendar). */
+export type PrimaryOfferingType = Extract<HoldingType, 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY'>;
+
 /** True for the ownership claims that must NOT be summed into a sector's holdings of others. */
 export const isIntraSectorClaim = (type: string): boolean => type === 'PE_FUND_INTEREST';
 

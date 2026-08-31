@@ -16,8 +16,9 @@
  */
 
 import { RegionId } from './geography';
+import { PrimaryOfferingType } from './assets';
 
-export type PrimaryOfferingInstrumentType = 'CORP_BOND' | 'LEVERAGED_LOAN' | 'EQUITY';
+export type PrimaryOfferingInstrumentType = PrimaryOfferingType;
 
 export type PrimaryOfferingPurpose =
   /** CFO issuing into cheap spreads (the RV supply lever, now with a real market step). */
