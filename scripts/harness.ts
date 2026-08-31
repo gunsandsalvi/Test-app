@@ -16,6 +16,7 @@
  * Violations print inline the week they happen (capped per week), and the end prints a grouped
  * summary. Exit code 1 on any violation.
  */
+import { createHash } from 'node:crypto';
 import { createInitialGameState } from '../src/engine/simulation/initialization';
 import { DEFAULT_SIMULATION_SEED, setRngState, getRngState } from '../src/engine/rng';
 
@@ -1764,8 +1765,64 @@ const indModule: HarnessModule = (() => {
   };
 })();
 
+/**
+ * §5-STRUCT step 2 — THE FINGERPRINT INSTRUMENT, rebuilt as the plan specifies (the original
+ * driver was session-scratch and is gone). `FP=1 WEEKS=3 npx tsx scripts/harness.ts` prints a
+ * deep canonical sha256 of the WHOLE GameState after each of weeks 1–3: every field, sorted
+ * object keys, arrays and Maps in their own order, TypedArrays as raw bytes, floats at full
+ * 8-byte precision — order sensitivity is the point, an extraction that reorders float
+ * arithmetic must fail it. Strike a FRESH baseline on the pre-extraction commit immediately
+ * before each extraction; never inherit hashes across a behaviour-changing commit.
+ */
+const FP = process.env.FP === '1';
+function canonicalFingerprint(state: GameState): string {
+  const h = createHash('sha256');
+  const onPath = new Set<object>();
+  const f64 = new Float64Array(1);
+  const f64b = new Uint8Array(f64.buffer);
+  const num = (n: number) => { f64[0] = n; h.update(f64b); };
+  const visit = (v: unknown): void => {
+    if (v === null) { h.update('n'); return; }
+    if (v === undefined) { h.update('u'); return; }
+    const t = typeof v;
+    if (t === 'number') { h.update('d'); num(v as number); return; }
+    if (t === 'string') { h.update('s'); h.update(v as string); h.update('\0'); return; }
+    if (t === 'boolean') { h.update(v ? 'T' : 'F'); return; }
+    if (t === 'bigint') { h.update('B'); h.update((v as bigint).toString()); return; }
+    if (t === 'function' || t === 'symbol') { h.update('x'); return; }
+    const o = v as object;
+    // Shared references (a DAG) hash where they appear; only a true cycle is refused, loudly.
+    if (onPath.has(o)) throw new Error('FP: cycle in GameState — the fingerprint cannot terminate');
+    onPath.add(o);
+    if (ArrayBuffer.isView(o)) {
+      h.update('t');
+      h.update(new Uint8Array((o as ArrayBufferView).buffer, (o as ArrayBufferView).byteOffset, (o as ArrayBufferView).byteLength));
+    } else if (Array.isArray(o)) {
+      h.update('a'); num(o.length); o.forEach(visit);
+    } else if (o instanceof Map) {
+      h.update('m'); num(o.size); o.forEach((val, k) => { visit(k); visit(val); });
+    } else if (o instanceof Set) {
+      h.update('e'); num(o.size); o.forEach(visit);
+    } else {
+      const keys = Object.keys(o).sort();
+      h.update('o'); num(keys.length);
+      keys.forEach((k) => { h.update(k); h.update('\0'); visit((o as Record<string, unknown>)[k]); });
+    }
+    onPath.delete(o);
+  };
+  visit(state);
+  return h.digest('hex');
+}
+const fpModule: HarnessModule = {
+  name: 'FP fingerprint',
+  week(_prev, state, w) {
+    if (!FP || w > 3) return;
+    console.log(`  [FP] w${w} ${canonicalFingerprint(state)}`);
+  },
+};
+
 // ---- ADD NEW MODULES HERE, and nowhere else. ----
-const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule];
+const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpModule];
 
 // =============================================================================================
 // THE RUN
