@@ -2306,7 +2306,7 @@ function runHarness() {
       if (cashUSD < -1e6) {
         violations.push({
           week: w,
-          message: `${e.ticker ?? e.id} is overdrawn by ${(-cashUSD / 1e9).toFixed(2)}B — a fund spending money it does not have`,
+          message: `${e.ticker ?? e.id} is overdrawn by ${(-cashUSD / 1e9).toFixed(2)}B — a fund spending money it does not have [id ${e.id} ${e.entityType} ${e.region}]`,
         });
       }
     });
