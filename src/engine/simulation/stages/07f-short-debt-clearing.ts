@@ -766,6 +766,19 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
             amountUSD: revolverUSD,
             reason: 'revolver drawn: commercial paper roll failed',
           });
+          // SETL2b, the leg this draw was missing: a BANK_CREDIT payment writes the borrower's
+          // deposit at settlement, and the matching LOAN lands on the lender only through a
+          // credit event — stage 08's draws record one (recordCredit), this one did not, so the
+          // house bank gained a deposit with no asset behind it and its identity broke by
+          // exactly this draw (measured: CLFP w14 +6.81M against a 6.815M roll-fail draw).
+          if (iss.comp.homeBankTicker) {
+            ctx.creditEventsThisWeek.push({
+              bankTicker: iss.comp.homeBankTicker, companyId: iss.comp.id,
+              trancheId: `${iss.comp.ticker}-REVOLVER-${ctx.nextWeek}`,
+              principalUSD: revolverUSD, marginBps: REVOLVER_MARGIN_BPS,
+              originationWeek: ctx.nextWeek, termWeeks: 52, retire: false,
+            });
+          }
           ctx.newsItems.push({
             id: `cp-fail-${iss.comp.ticker}-${ctx.nextWeek}`,
             week: ctx.nextWeek,
