@@ -16,6 +16,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { institutionProfile } from '../../../domain/institution-profiles';
+import { carriesRateDuration } from '../../../domain/assets';
 import {
   SwapContract, SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, swapPartyKey,
   swapWeeklyNetToReceiverUSD, repricingLossUSD, SwapParty,
@@ -178,7 +179,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       // claims, and the gap is what it will take synthetically when the cash market cannot
       // supply it. Sized by the book itself, never by a share anyone chose.
       const bondBookUSD = (entity.itemizedHoldings || [])
-        .filter((h) => h.instrumentType === 'GOV_BOND' || h.instrumentType === 'CORP_BOND')
+        .filter((h) => carriesRateDuration(h.instrumentType))
         .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
       const alreadyReceivingUSD = carriedReceiveUSDByParty.get(`INSTITUTION:${entity.id}`) ?? 0;
       const durationGapUSD = Math.max(0, entity.totalAssetsUSD - bondBookUSD - alreadyReceivingUSD);

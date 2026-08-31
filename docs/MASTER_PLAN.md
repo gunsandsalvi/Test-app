@@ -261,6 +261,12 @@ read §7.289 before comparing). Headlines: the u endpoint BENT (30.3/28.1/25.4/2
 boundary one declared line at −0.2B, CPI ×2.189. Compare nothing across trees without naming the
 relabels between.
 
+**STANDING DIRECTIVE (user, 2026-08-31):** finish the entire pipeline through S-final without
+stopping — STRUCT, the §4.0 queue, Tier-5, the gated decisions (seed rebases explicitly
+permitted, including SEED_BURN_IN, judged against the current reference per their gates), then
+the build table MNC → DYN → PROD → CRE → TAXR → SCALE Wave 2 → S-final. Stop BEFORE AU (the UI).
+Decide from the rules; push every commit to `claude/master-plan-file-pv33a9` AND `main`.
+
 ### 4.0 The fix order (post-§7.289)
 
 1. **UK bank NIM (16x, the top family)**: survivors marginal-to-negative (−0.012…0.0096 against

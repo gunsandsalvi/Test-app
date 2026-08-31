@@ -128,6 +128,25 @@ export type PrimaryOfferingType = Extract<HoldingType, 'CORP_BOND' | 'LEVERAGED_
 /** True for the ownership claims that must NOT be summed into a sector's holdings of others. */
 export const isIntraSectorClaim = (type: string): boolean => type === 'PE_FUND_INTEREST';
 
+/** Hedged under a fixed-income FX mandate (fx-hedging): the bond-book classes a real
+ *  liability-matcher's currency policy covers. CP is excluded — 13-week paper's FX exposure
+ *  dies with the paper. */
+const HOLDING_HEDGED_AS_FIXED_INCOME: Record<HoldingType, boolean> = {
+  EQUITY: false, ETF_SHARE: false, PE_FUND_INTEREST: false, COMMERCIAL_PAPER: false,
+  BANK_FACILITY: false, CORP_BOND: true, LEVERAGED_LOAN: true, GOV_BOND: true, SOV_BOND: true,
+};
+export const hedgedAsFixedIncome = (type: string): boolean =>
+  HOLDING_HEDGED_AS_FIXED_INCOME[type as HoldingType] ?? false;
+
+/** Carries fixed-RATE duration a swap can substitute for (07g's receiver gap): fixed-coupon
+ *  paper only — a leveraged loan floats and commercial paper is too short to count. */
+const HOLDING_CARRIES_RATE_DURATION: Record<HoldingType, boolean> = {
+  EQUITY: false, ETF_SHARE: false, PE_FUND_INTEREST: false, COMMERCIAL_PAPER: false,
+  BANK_FACILITY: false, LEVERAGED_LOAN: false, CORP_BOND: true, GOV_BOND: true, SOV_BOND: true,
+};
+export const carriesRateDuration = (type: string): boolean =>
+  HOLDING_CARRIES_RATE_DURATION[type as HoldingType] ?? false;
+
 /**
  * Claims on VEHICLES (fund shares, fund interests) rather than on issuers. The ownership views
  * measure who holds an ISSUER's paper; a claim on a fund is a layer above and summing it there

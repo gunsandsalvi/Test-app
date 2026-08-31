@@ -14,6 +14,7 @@
 
 import { RegionId } from '../../../types';
 import { institutionProfile } from '../../../domain/institution-profiles';
+import { hedgedAsFixedIncome } from '../../../domain/assets';
 import { WeeklyStepContext } from './context';
 import { pay, pendingSettlementUSD } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
@@ -40,8 +41,7 @@ function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
     const issuer = h.issuerRegion as RegionId;
     if (!issuer || issuer === entity.region) return;
     const ratio = h.instrumentType === 'EQUITY' ? equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy)
-      : (h.instrumentType === 'GOV_BOND' || h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN')
-        ? HEDGE_RATIO_FIXED_INCOME : 0;
+      : hedgedAsFixedIncome(h.instrumentType) ? HEDGE_RATIO_FIXED_INCOME : 0;
     if (ratio <= 0) return;
     out.set(issuer, (out.get(issuer) ?? 0) + (h.quantityOrNotionalUSD ?? 0) * ratio);
   });
