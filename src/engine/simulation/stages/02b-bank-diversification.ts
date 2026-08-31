@@ -331,12 +331,23 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     // number never noticed).
     {
       const poolTotals = new Map<string, number>();
+      const poolMarginWeighted = new Map<string, number>();
       newSheets.forEach(({ sheet }) => (sheet.businessLoans || []).forEach((l) => {
         if (l.borrowerKind !== 'SME_POOL') return;
         poolTotals.set(l.borrowerId, (poolTotals.get(l.borrowerId) ?? 0) + l.principalUSD);
+        poolMarginWeighted.set(l.borrowerId,
+          (poolMarginWeighted.get(l.borrowerId) ?? 0) + l.principalUSD * l.marginBps);
       }));
       (reg.smePools || []).forEach((seg) => {
-        seg.debtUSD = Math.round((poolTotals.get(smePoolId(regionId, seg.industry)) ?? 0));
+        const id = smePoolId(regionId, seg.industry);
+        const principalUSD = poolTotals.get(id) ?? 0;
+        seg.debtUSD = Math.round(principalUSD);
+        // §7.241: the blended margin of the pool's REAL loans, derived beside the principal —
+        // sme-pools reads it for debt service instead of an invented +300bp, closing the
+        // credit-transmission loop (a tightening now reaches measured pool distress).
+        seg.blendedMarginBps = principalUSD > 0
+          ? Number(((poolMarginWeighted.get(id) ?? 0) / principalUSD).toFixed(1))
+          : seg.blendedMarginBps;
       });
     }
 

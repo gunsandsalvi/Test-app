@@ -709,8 +709,13 @@ export function evolveRegionMacro(
     // wealth cross-section instead of being written down beside it.
     const arrivalRate = Math.max(0, tierStress)
       * delinquencyExposureOf(joinByTier.get(tier.tier)?.bufferMonths ?? 0);
+    // §7.241, THE 52x CLOCK BUG: this decay ran as `(1 − CURE_WEEKLY × 52)` PER WEEK — the
+    // ANNUALIZED cure fraction applied on the weekly clock — while the tier flows eleven lines
+    // up use the same constant weekly, correctly. A 7-year credit record cured in ~7 weeks, the
+    // delinquency stock collapsed to ~7× the weekly arrival rate, and `quoteHouseholdMarginBps`
+    // priced ALL consumer credit off a 52×-understated loss figure. One clock now.
     const newDelinquency = Math.max(0.001,
-      tier.delinquencyRatePct * (1 - CREDIT_FILE_CURE_WEEKLY * 52) + arrivalRate);
+      tier.delinquencyRatePct * (1 - CREDIT_FILE_CURE_WEEKLY) + arrivalRate);
 
     // DIST/CRD — THE TIER'S RATE IS QUOTED, NOT DRIFTED (rules 1 and 3).
     //

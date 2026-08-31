@@ -103,7 +103,12 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // against (bank-lending.ts reads it). Coverage is the pool's own measured earnings against
       // the debt service the banks' real loans imply. ----
       const annualEarningsUSD = pool.annualRevenueUSD * pool.marginPct;
-      const annualDebtServiceUSD = Math.max(1, pool.debtUSD * (reg.policyRate + 0.03));
+      // §7.241: the pool's cost of debt is its own loans' blended margin, derived by 02b from
+      // the banks' real quoted marginBps — not an invented +300bp. A credit tightening that
+      // widens quoted margins now reaches measured pool distress, which is the default rate the
+      // banks price against: the transmission loop is closed where it used to be open.
+      const poolDebtRateAnnual = reg.policyRate + (pool.blendedMarginBps ?? 300) / 10000;
+      const annualDebtServiceUSD = Math.max(1, pool.debtUSD * poolDebtRateAnnual);
       const cashCoverWeeks = weeklyWageBillUSD > 0 ? cashUSD / weeklyWageBillUSD : TARGET_CASH_WEEKS_OF_WAGES;
 
       // DIST — THE DEFAULT RATE IS AN INTEGRAL OVER THE POOL, NOT A FUNCTION OF ITS MEAN.
@@ -130,7 +135,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // are supposed to describe (rule 3).
       const recentre = strataMean > 0 ? meanLeverage / strataMean : 0;
       const coverageOf = (lev: number) => {
-        const debtService = lev * recentre * annualEarningsUSD * (reg.policyRate + 0.03);
+        const debtService = lev * recentre * annualEarningsUSD * poolDebtRateAnnual;
         return debtService > 0 ? annualEarningsUSD / debtService : Number.POSITIVE_INFINITY;
       };
       const coverageDistress = strata.reduce(
@@ -144,7 +149,7 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // service, so the strata that pay the most interest hold the least — which is why they are
       // the ones that fail. The pool's cash is allocated on exactly that residual, so it is a
       // distribution of the pool's own money and not a second stock (rule 3).
-      const residualOf = (lev: number) => Math.max(0, 1 - lev * recentre * (reg.policyRate + 0.03));
+      const residualOf = (lev: number) => Math.max(0, 1 - lev * recentre * poolDebtRateAnnual);
       const meanResidual = strata.reduce((a, st) => a + st.weight * residualOf(st.leverageMultiple), 0);
       const cashStressIntegral = meanResidual > 0
         ? strata.reduce((a, st) => {
@@ -189,8 +194,12 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
           const leastLevered = pool.strata.reduce((lo, st) => st.leverageMultiple < lo ? st.leverageMultiple : lo, Infinity);
           let reinjectedWeight = 0;
           const survivors = pool.strata.map((st) => {
-            // Each stratum loses weight in proportion to its share of the pool's total distress.
-            const exiting = st.weight * weeklyExitRate * (distressOf(st.leverageMultiple) / totalDistress) * pool.strata!.length;
+            // Each stratum loses weight in proportion to its share of the pool's total distress:
+            // exiting_i = rate × (wᵢdᵢ / Σwⱼdⱼ), which sums to exactly the published exit rate.
+            // §7.241: the old form multiplied by `strata.length`, so a pool cut into 10 strata
+            // shed firm-weight twice as fast as one cut into 5 at the SAME default rate — a
+            // RESOLUTION parameter setting an economic flow, rule 19's invariance test failed.
+            const exiting = weeklyExitRate * (st.weight * distressOf(st.leverageMultiple) / totalDistress);
             const leaving = Math.min(st.weight, Math.max(0, exiting));
             reinjectedWeight += leaving;
             return { weight: st.weight - leaving, leverageMultiple: st.leverageMultiple };

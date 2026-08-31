@@ -384,6 +384,12 @@ export interface SmePool {
   /** The DERIVED SUM of the SME_POOL loans the region's banks hold against this pool — one
    * representation (rule 3); bank-lending.ts and 02b own it. */
   debtUSD: number;
+  /** §7.241 — the principal-weighted margin (bps over policy) of those SAME loans, derived
+   * beside `debtUSD` by 02b from the banks' real quoted margins. The pool's debt service used to
+   * be priced at an invented `policyRate + 0.03` inline, so a credit tightening widened every
+   * quoted margin and moved measured pool distress by ZERO — the transmission loop was open
+   * exactly where its comment claimed it closed. One writer (02b), read by sme-pools. */
+  blendedMarginBps?: number;
   defaultRateAnnualPct: number;
   capexUSD: number;
   employment: number;
