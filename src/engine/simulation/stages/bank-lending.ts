@@ -52,7 +52,7 @@ import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
 import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
-import { bankTotalAssetsUSD } from '../../macro/banking';
+import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO } from '../../macro/banking';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
  * market's covenant ladder expresses (§5-RV's "lenders do not fund unlimited leverage"). */
@@ -951,6 +951,27 @@ export function runBankHouseholdLending(
  *
  * Idempotent: derived from the assets and equity actually present, so re-applying is safe.
  */
+/**
+ * G2 funding composition, the FLOW half: wholesale money is a ROLL, and a bank holding cash
+ * beyond its stressed-outflow cover simply does not renew it. §7.254 measured the gap this
+ * closes: the stock was written once at seed (`applyBankFundingSplit`, called only from the
+ * migrations) and never by any weekly flow — one bank carried exactly 170.62B for 32 straight
+ * weeks, priced at its own blown-out OAS, while 308B of cash sat beside it. Nothing in the
+ * identity forces the repayment; the roll does.
+ *
+ * Writes the liability down and returns the repayment; the CALLER settles the cash leg as a
+ * payment instruction (BANK_SECURITIES → the unmodeled wholesale lender), so the reserves move
+ * where money moves and the boundary meter sees the flow under its own reason.
+ */
+export function unrenewedWholesaleUSD(sheet: BankingSector): number {
+  const bufferUSD = stressedOutflowUSD(sheet) * LIQUIDITY_COVERAGE_RATIO;
+  const excessCashUSD = Math.max(0, sheet.cashReservesUSD - bufferUSD);
+  const repayUSD = Math.min(Math.max(0, sheet.wholesaleFundingUSD ?? 0), excessCashUSD);
+  if (repayUSD < 1e6) return 0;
+  sheet.wholesaleFundingUSD = (sheet.wholesaleFundingUSD ?? 0) - repayUSD;
+  return repayUSD;
+}
+
 export function applyBankFundingSplit(
   sheet: BankingSector,
   householdDepositsUSD: number,

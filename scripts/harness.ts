@@ -168,6 +168,11 @@ const BOUNDARY_FRONTIERS: Record<string, string> = {
   'freight on a lane no carrier serves': 'no carrier on the lane to pay',
   // Owner: G5 — the residual claimants an estate pays once the named ones are satisfied.
   'estate distribution': 'unnamed residual claimants in a workout',
+  // G2's funding composition, the flow half (§7.254): wholesale money is a roll, and a bank
+  // with cash beyond its stressed-outflow cover does not renew it. The lender is genuinely
+  // unmodeled today. Large while the seed stocks unwind, then near zero; a line that STAYS
+  // large means banks are re-accumulating cash faster than they shed priced funding. Owner: G2.
+  'wholesale funding repaid': 'the unmodeled wholesale lender, at the roll',
 };
 /** Below this, a week's line is rounding rather than a flow. */
 const BOUNDARY_DE_MINIMIS_USD = 1e6;

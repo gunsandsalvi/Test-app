@@ -33,7 +33,7 @@ import {
 import { runRegionalRepoSession } from './repo-clearing';
 import { maturingAt, repoInterestToMaturityUSD } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
-import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId } from './bank-lending';
+import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, unrenewedWholesaleUSD } from './bank-lending';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay } from './settlement';
 
@@ -376,6 +376,19 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
 
     newSheets.forEach(({ bank, sheet }) => {
+      // §7.254 — the roll: wholesale money a bank no longer needs is not renewed. The liability
+      // leaves the sheet here (bank-lending owns the write) and the cash leaves at settlement,
+      // to the unmodeled wholesale lender under its own boundary reason. After the repo session,
+      // so overnight lending was decided on the cash the bank actually had this morning.
+      const repaidUSD = unrenewedWholesaleUSD(sheet);
+      if (repaidUSD > 0) {
+        pay(ctx, {
+          payer: { kind: 'BANK_SECURITIES', ticker: bank.ticker },
+          payee: { kind: 'UNMODELED', region: regionId },
+          amountUSD: repaidUSD,
+          reason: 'wholesale funding repaid',
+        });
+      }
       updateBankSheet(ctx, bank.ticker, sheet);
     });
 
