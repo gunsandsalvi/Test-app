@@ -29,7 +29,6 @@
  */
 
 import { pay } from './settlement';
-import { creditUnbacked } from '../../ledger';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
@@ -103,13 +102,18 @@ export function divertHouseholdSavingsToMmf(
   const divertedUSD = weeklySavingsDepositInflowUSD * divertedShare;
   if (divertedUSD <= 0) return 0;
 
-  // §7.241: the cash side of this hand-off is deliberately NOT a payment instruction yet — the
-  // bank leg is carried by 02b's evolveBankingSector parameter (`regionDivertedUSD * share`) and
-  // the household deposit stock is rebuilt from the bank sheets, so a `pay()` here would move the
-  // bank line twice. Until the 02b hand-off is itself migrated, the credit runs through the
-  // COUNTED unbacked path so the reconcile's gross names it instead of absorbing it silently.
-  creditUnbacked(ctx, { kind: 'INSTITUTION', id: mmf.id }, divertedUSD,
-    'household savings into money fund (02b hand-off)');
+  // §7.248: a REAL payment now. The household's deposit and the pending bank leg move at
+  // settlement (T+1 to the banks, the same convention every post-bank-pass household flow
+  // rides), the fund's cash and its home bank's institutional line move at the apply — and
+  // `evolveBankingSector` no longer subtracts the diversion from the deposit flow itself,
+  // which was the direct-mutation half this instruction replaces. The parameter it still
+  // receives is the funding-pressure SIGNAL only.
+  pay(ctx, {
+    payer: { kind: 'HOUSEHOLD', region: regionId },
+    payee: { kind: 'INSTITUTION', id: mmf.id },
+    amountUSD: divertedUSD,
+    reason: 'household savings into money fund',
+  });
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.id !== mmf.id) return e;
     return {

@@ -306,10 +306,12 @@ export function evolveBankingSector(
   // SETL-B: the savings inflow is NO LONGER credited here. Households are paid real wages by
   // real employers and pay for real goods, and both move their deposits through settlement — so
   // adding a rate-times-estimate on top was the second of two independent quantities for one
-  // balance (rule 3). What remains here are the two flows settlement does not carry: the money
-  // fund's diversion and last week's ETF purchases. `weeklySavingsInflowUSD` survives only as the
-  // funding-pressure signal below, which is what it was always genuinely measuring.
-  const householdDepositFlowUSD = -householdMmfDiversionUSD - priorHouseholdEtfPurchasesUSD;
+  // balance (rule 3). §7.248: the money fund's diversion is a payment instruction now too
+  // (HOUSEHOLD → the fund), so its bank leg arrives through the pending-settlement parameter
+  // next week like every other post-bank-pass household flow — subtracting it here as well
+  // would move it twice. `householdMmfDiversionUSD` survives only as the funding-pressure
+  // signal below, which is what it was always genuinely measuring.
+  const householdDepositFlowUSD = -priorHouseholdEtfPurchasesUSD;
   depositsUSD += householdDepositFlowUSD;
   cashUSD += householdDepositFlowUSD;
 

@@ -103,21 +103,23 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
 
     // ---- 2. Index-fund shares bought this week settle onto the household register. ----
     const etfShares = [...(hs.etfShares ?? [])];
-    let boughtUSD = 0;
     ctx.updatedInstitutionalEntities.forEach((fund) => {
       if (fund.entityType !== 'ETF' || fund.region !== region) return;
       // DIST — SIGNED. A negative figure is a REDEMPTION: the household sold shares to raise cash
       // it could not find in its deposits (§7.166). Both directions settle here, on the same
       // arithmetic, because they are the same transaction with the sign flipped — and a
       // redemption that credited no deposits and retired no shares would be money from nowhere.
-      const spentUSD = ctx.householdEtfPurchasesUSD.get(fund.id) ?? 0;
+      const executed = ctx.householdEtfPurchasesUSD.get(fund.id);
+      const spentUSD = executed?.spentUSD ?? 0;
       if (spentUSD === 0) return;
       const idx = etfShares.findIndex((x) => x.fundId === fund.id);
       const heldShares = idx >= 0 ? etfShares[idx].shares : 0;
-      const navPerShare = fundNavPerShare(fund);
+      // §7.248: the price the transaction EXECUTED at (etf-flows), not a NAV re-derived from a
+      // book whose cash leg has not applied yet — one transaction, one price (rule 3).
+      const navPerShare = executed?.navPerShare ?? fundNavPerShare(fund);
+      if (!(navPerShare > 0)) return;
       // A household cannot sell more than it holds; the executed leg is trimmed, not the books.
       const shares = Math.max(-heldShares, spentUSD / navPerShare);
-      boughtUSD += shares * navPerShare;
       if (idx >= 0) etfShares[idx] = { ...etfShares[idx], shares: etfShares[idx].shares + shares };
       else etfShares.push({ fundId: fund.id, shares });
     });
@@ -160,11 +162,11 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     const mortgageUSD = hs.mortgageDebtUSD ?? 0;
     const homeEquityUSD = housingStockUSD - mortgageUSD;
 
-    // Cash left the household balance sheet to buy the fund shares. HH4d: the banks have not
-    // seen that money move yet — it settles against their deposit books next week (T+1), so
-    // the in-flight amount is recorded for the bank pass and the household view nets it now.
-    // A purchase takes cash out; a redemption puts it back. `boughtUSD` is signed.
-    const depositsUSD = Math.max(0, (hs.depositsUSD ?? 0) - boughtUSD);
+    // §7.248: the cash side of the fund-share purchase is a PAYMENT now (etf-flows pays it, the
+    // settlement close moves the deposit and the pending bank leg), so this view no longer
+    // debits it — doing both moved the same dollar twice, and the max(0,…) that guarded the
+    // debit died with it (§7.46 L7). Only the SHARE register settles here.
+    const depositsUSD = hs.depositsUSD ?? 0;
     const mmfSharesUSD = Math.max(0, hs.mmfSharesUSD ?? 0);
     const equityHoldingsUSD = realClaimsUSD + unmodeledFinancialAssetsUSD;
 
@@ -292,7 +294,8 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
       homeEquityUSD,
       depositsUSD,
       mmfSharesUSD,
-      pendingBankSettlementUSD: Math.round(((hs.pendingBankSettlementUSD ?? 0) - boughtUSD)),
+      // §7.248: settlement writes the pending bank leg when the etf-flows payment applies.
+      pendingBankSettlementUSD: Math.round((hs.pendingBankSettlementUSD ?? 0)),
       etfShares,
       etfHoldingsUSD,
       directEquityUSD,

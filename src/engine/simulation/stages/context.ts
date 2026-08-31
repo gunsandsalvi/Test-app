@@ -189,7 +189,11 @@ export interface WeeklyStepContext {
    * HH1 — index-fund shares households bought this week, by fund, handed from `etf-flows.ts` (the
    * flow) to `household-balance-sheet.ts` (the books).
    */
-  householdEtfPurchasesUSD: Map<string, number>;
+  /** §7.248: the executed household flow AND the NAV per share it transacted at — the register
+   *  settles shares at the SAME price the cash leg paid (one transaction, one price; the fund's
+   *  book is mid-flight when the register stage reads it, so re-deriving there divided by an
+   *  empty week-one book). */
+  householdEtfPurchasesUSD: Map<string, { spentUSD: number; navPerShare: number }>;
   /** ETF slice 1 — this week's published indexes (`stages/index-calculation.ts`). */
   updatedMarketIndexes: import('../../../domain/indexes').MarketIndex[];
   updatedCommodities: Commodity[];
@@ -337,7 +341,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     updatedInstitutionalEntities: [...state.institutionalEntities],
     pendingHolderSettlements: new Map<string, number>(),
     pendingHolderCashUSD: new Map<string, number>(),
-    householdEtfPurchasesUSD: new Map<string, number>(),
+    householdEtfPurchasesUSD: new Map<string, { spentUSD: number; navPerShare: number }>(),
     updatedMarketIndexes: [...(state.marketIndexes ?? [])],
     updatedCommodities: [...state.commodities],
     updatedCompositeIndices: { ...state.compositeIndices },

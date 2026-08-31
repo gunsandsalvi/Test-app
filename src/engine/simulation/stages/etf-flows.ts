@@ -25,7 +25,6 @@
  */
 
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { creditUnbacked } from '../../ledger';
 import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { bumpRegister } from './register-index';
@@ -256,7 +255,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // Allocating the whole regional capacity to every fund independently would let ten funds each
   // spend the same dollar of dealer equity.
   const netFlowByFund = new Map<string, number>();
-  const householdExecutedByFund = new Map<string, number>();
+  const householdExecutedByFund = new Map<string, { spentUSD: number; navPerShare: number }>();
   const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
   /** ETF2: redeemer id -> fund id -> the value of the basket the fund owes it this week. */
   const inKindRedemptionsByInvestor = new Map<string, Map<string, number>>();
@@ -413,15 +412,41 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     // The household leg, rationed at the same fill the institutions get — the AP cannot choose
     // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
     // money genuinely leaves the household balance sheet to buy the shares.
-    const householdExecutedUSD = householdUSD * fillRatio * householdCashFillRatio;
+    let householdExecutedUSD = householdUSD * fillRatio * householdCashFillRatio;
+    // §7.248: a household cannot redeem more than it holds — the register has always trimmed the
+    // share leg at the holding (household-balance-sheet); now that the CASH leg is a real
+    // payment, the same trim applies to it, or a household would be paid for shares it does not
+    // hold. One number for both legs.
+    if (householdExecutedUSD < 0) {
+      const held = ctx.updatedRegions[fund.region]?.householdState?.etfShares
+        ?.find((x) => x.fundId === fund.id);
+      const heldUSD = (held?.shares ?? 0) * navPerShare;
+      householdExecutedUSD = Math.max(-heldUSD, householdExecutedUSD);
+    }
     if (householdExecutedUSD !== 0) {
-      // §7.241: the household side of this flow settles in household-balance-sheet (share
-      // register and deposit debit, T+1 to the banks), so a pay() here would move the deposit
-      // twice. Until that hand-off is migrated, the fund's credit runs through the COUNTED
-      // unbacked path — visible on the ledger instead of absorbed by 02b's reconcile.
-      creditUnbacked(ctx, { kind: 'INSTITUTION', id: fund.id }, householdExecutedUSD,
-        'etf household flow (household-balance-sheet hand-off)');
-      householdExecutedByFund.set(fund.id, householdExecutedUSD);
+      // §7.248: a REAL payment now, signed by direction. A purchase pays the fund out of the
+      // household's deposits; a redemption pays the household out of the fund's cash. Settlement
+      // moves the household deposit and the pending bank leg (T+1 to the banks, the standing
+      // convention) and the fund's cash with its home bank's institutional line — so
+      // household-balance-sheet no longer debits the deposit view or the pending itself, which
+      // was the hand-off's other half. The SHARE register still settles there.
+      pay(ctx, householdExecutedUSD > 0
+        ? {
+          payer: { kind: 'HOUSEHOLD', region: fund.region },
+          payee: { kind: 'INSTITUTION', id: fund.id },
+          amountUSD: householdExecutedUSD,
+          reason: 'etf household flow',
+        }
+        : {
+          payer: { kind: 'INSTITUTION', id: fund.id },
+          payee: { kind: 'HOUSEHOLD', region: fund.region },
+          amountUSD: -householdExecutedUSD,
+          reason: 'etf household flow',
+        });
+      // §7.248: the register settles shares at the SAME price this cash leg paid — the fund's
+      // book is mid-flight when household-balance-sheet reads it (the payment applies at the
+      // close), so a re-derived NAV divided by an empty week-one book there.
+      householdExecutedByFund.set(fund.id, { spentUSD: householdExecutedUSD, navPerShare });
     }
     executedByInvestor.forEach((executedUSD, id) => {
       if (executedUSD < 0) {
