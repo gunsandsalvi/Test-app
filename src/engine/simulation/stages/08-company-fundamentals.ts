@@ -814,10 +814,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // IND3: the margin above already carries the full wage bill, so there is no deviation to
       // add here — `payrollAboveBaselineAnnualUSD` exists only for profiles that still state a
       // margin (the carrier charges its payroll in full instead; see profiles/).
-      // §5-STRUCT step 2 — same statement, industrial path. `taxesLosses: true` PRESERVES this
-      // path's existing behaviour, which rebates a pre-tax loss at the tax rate — a rebate no firm
-      // receives in cash, and a §6.1 defect the extraction names rather than silently fixes,
-      // because fixing it changes the world.
+      // §5-STRUCT step 2 — same statement, industrial path. The loss pair is CLOSED (decided
+      // 2026-08-31, §4.0 Tier 1 item 8): EBIT is unfloored, so an operating loss reaches
+      // coverage, the default trigger and the rating; and a loss is not rebated — one tax rule
+      // for every firm, the profile path's. Carry-forwards are TAXR's charter.
       const industrialPnl = industrialIncome({
         revenueUSD: newRevenue,
         ebitdaMargin: newEbitdaMargin,
@@ -825,8 +825,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         annualInterestUSD: annualInterest,
         taxRate,
         sharesOutstanding: comp.sharesOutstanding,
-        ebitFloorUSD: 1,
-        taxesLosses: true,
       });
       newEbitda = industrialPnl.ebitdaUSD;
       newEbit = industrialPnl.ebitUSD;

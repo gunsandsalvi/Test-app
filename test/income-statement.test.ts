@@ -1,43 +1,42 @@
 /**
- * Four lines of arithmetic every firm runs, written twice inline with the tax treatment differing
- * between the copies for no stated reason. A rule written twice is a rule that will diverge — and
- * these two already had.
+ * Four lines of arithmetic every firm runs. The two inline copies used to disagree on how a loss
+ * is taxed; §4.0 Tier 1 item 8 (decided 2026-08-31) closed the asymmetry: ONE rule for every
+ * firm — a loss is neither taxed nor rebated — and the industrial EBIT floor is gone with it.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { netIncomeUSD, industrialIncome, profileIncome } from '../src/domain/company-week/income-statement';
 
 test('a profit is taxed', () => {
-  assert.equal(netIncomeUSD(1000, 0, 0.25, false), 750);
+  assert.equal(netIncomeUSD(1000, 0, 0.25), 750);
 });
 
-test('THE ASYMMETRY: the profile path refuses to rebate a loss, the industrial path does not', () => {
-  // §6.1. An industrial firm with a pre-tax loss receives a rebate it never gets in cash, which
-  // flatters every distressed industrial company by the tax rate — and the distressed ones are
-  // exactly the firms §5-G5's default work is about. Preserved, not fixed: fixing it changes the
-  // world and that is the user's call. This test exists so it cannot drift further unnoticed.
-  assert.equal(netIncomeUSD(-100, 0, 0.25, false), -100, 'profile path: the loss is the loss');
-  assert.equal(netIncomeUSD(-100, 0, 0.25, true), -75, 'industrial path: a rebate at the tax rate');
+test('THE ASYMMETRY IS CLOSED: a loss is the loss, for every firm', () => {
+  // The industrial path used to hand a pre-tax loss a rebate at the tax rate — money no firm
+  // receives in cash — flattering every distressed industrial company. One rule now; this test
+  // pins it so a second path cannot reintroduce the flag.
+  assert.equal(netIncomeUSD(-100, 0, 0.25), -100, 'the loss is the loss');
 });
 
 test('the guard is on EBIT, not on pre-tax income', () => {
   // These differ for the over-levered but operationally sound firm — EBIT positive, pre-tax
   // negative — which is a large share of the distressed set. Guarding on pre-tax changed the
-  // world; the three-week fingerprint caught it.
-  assert.equal(netIncomeUSD(100, 500, 0.25, false), -300, 'EBIT > 0, so the rate applies');
-  assert.equal(netIncomeUSD(-100, 300, 0.25, false), -400, 'EBIT <= 0, so it does not');
+  // world; the three-week fingerprint caught it. Kept deliberately; the basis is TAXR's call.
+  assert.equal(netIncomeUSD(100, 500, 0.25), -300, 'EBIT > 0, so the rate applies');
+  assert.equal(netIncomeUSD(-100, 300, 0.25), -400, 'EBIT <= 0, so it does not');
 });
 
-test('the industrial statement floors EBIT where the caller says', () => {
+test('the industrial statement carries an operating loss at full size — no floor', () => {
   const s = industrialIncome({ revenueUSD: 1000, ebitdaMargin: 0.01, daShareOfRevenue: 0.05,
-    annualInterestUSD: 0, taxRate: 0, sharesOutstanding: 10, ebitFloorUSD: 1, taxesLosses: true });
+    annualInterestUSD: 0, taxRate: 0.25, sharesOutstanding: 10 });
   assert.equal(s.ebitdaUSD, 10);
-  assert.equal(s.ebitUSD, 1, 'EBITDA 10 less D&A 50 is floored at 1');
+  assert.equal(s.ebitUSD, -40, 'EBITDA 10 less D&A 50 is a real -40, not a floored 1');
+  assert.equal(s.netIncomeUSD, -40, 'and the loss is not rebated');
 });
 
 test('EPS is zero rather than Infinity for a company with no shares', () => {
   const s = industrialIncome({ revenueUSD: 1000, ebitdaMargin: 0.2, daShareOfRevenue: 0.05,
-    annualInterestUSD: 0, taxRate: 0, sharesOutstanding: 0, ebitFloorUSD: 1, taxesLosses: true });
+    annualInterestUSD: 0, taxRate: 0, sharesOutstanding: 0 });
   assert.equal(s.epsUSD, 0);
 });
 
