@@ -276,8 +276,17 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
         fillSum += lw * Math.min(1, suppliedUnits / demandedUnits);
       });
       const demandPull = fillWeight > 0 ? (fillSum > 0 ? fillWeight / fillSum : Infinity) : 1;
+      // …AND IS CAPPED BY THE HEADS PRODUCTION CAN USE. Stage 05 caps `staffedShare` at 1: a
+      // worker beyond the plant's full staffing adds ZERO output. An uncapped pull kept firms
+      // bidding for workers with no marginal product once the economy reached full staffing —
+      // wage bill and wage pressure with no output behind them — and the first 60-week run of
+      // this mechanism ended at nominal GDP 2.6e+37 (weeks 55–60; the 30-week probe sat at 3–6%
+      // unemployment and missed it). This is the SAME physical statement stage 05 makes, on the
+      // hiring side (rule 3): demand beyond full staffing is served by CAPEX building plant
+      // (§7.129's response reads the shortage), not by hiring.
+      const productiveHeadsCap = Math.max(1, comp.baselineEmployeeCount ?? current);
       const outputNeedHeads = baselineRevPerHeadUSD > 0
-        ? (realRevenueUSD * demandPull) / baselineRevPerHeadUSD
+        ? Math.min((realRevenueUSD * demandPull) / baselineRevPerHeadUSD, productiveHeadsCap)
         : current;
       const earningsHeadroomUSD = comp.ebitda - capitalChargeUSD;
       const affordableHireHeads = (earningsHeadroomUSD > 0 && annualWagePerWorkerUSD > 0)
