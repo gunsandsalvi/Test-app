@@ -1821,8 +1821,65 @@ const fpModule: HarnessModule = {
   },
 };
 
+/**
+ * BOOKTRACE — the institutional-book exponential, decomposed (§6.1 UK-book row; §7.251).
+ * `BOOKTRACE=1` prints, per region-week, the non-MMF/non-ETF institutional book's delta split
+ * into cash / repo / each instrument class, plus the CREDIT holdings-to-outstanding ratio the
+ * corpBondOwnership check divides. The question it answers: WHICH line compounds, from which
+ * week, and whether the mint is on the holdings side or the outstanding side of the ratio.
+ */
+const BOOKTRACE = process.env.BOOKTRACE === '1';
+const bookTraceModule: HarnessModule = {
+  name: 'institutional book decomposition',
+  week(prev, state, w) {
+    if (!BOOKTRACE) return;
+    REGION_IDS_SEED_ORDER.forEach((region) => {
+      const decompose = (s: GameState) => {
+        const parts = { cashUSD: 0, repoLentUSD: 0 } as Record<string, number>;
+        (s.institutionalEntities || []).forEach((e) => {
+          if (e.region !== region || e.isDefaulted
+            || e.entityType === 'MONEY_MARKET_FUND' || e.entityType === 'ETF') return;
+          parts.cashUSD += e.cashUSD ?? 0;
+          parts.repoLentUSD += e.repoLentUSD ?? 0;
+          e.itemizedHoldings.forEach((h) => {
+            parts[h.instrumentType] = (parts[h.instrumentType] ?? 0) + h.quantityOrNotionalUSD;
+          });
+        });
+        return parts;
+      };
+      const before = decompose(prev);
+      const after = decompose(state);
+      const total = (p: Record<string, number>) => Object.values(p).reduce((a, v) => a + v, 0);
+      const deltas = Object.keys({ ...before, ...after })
+        .map((k) => ({ k, d: (after[k] ?? 0) - (before[k] ?? 0) }))
+        .filter(({ d }) => Math.abs(d) > 1e8)
+        .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
+        .map(({ k, d }) => `${k} ${(d / 1e9).toFixed(2)}B`)
+        .join(' | ');
+      // The corpBondOwnership ratio's two sides, measured the same way the check measures them.
+      let creditHeldUSD = 0;
+      (state.institutionalEntities || []).forEach((e) => {
+        if (e.isDefaulted) return;
+        e.itemizedHoldings.forEach((h) => {
+          if (h.issuerRegion !== region) return;
+          if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN' || h.instrumentType === 'COMMERCIAL_PAPER') {
+            creditHeldUSD += h.quantityOrNotionalUSD ?? 0;
+          }
+        });
+      });
+      const creditOutstandingUSD = state.companies
+        .filter((c) => c.region === region && isActiveCompany(c))
+        .reduce((s2: number, c) => s2 + (c.debtTranches || []).reduce((x: number, t) => x + Math.max(0, t.principalUSD), 0), 0);
+      console.log(`  [book] w${w} ${region} ${(total(before) / 1e9).toFixed(1)}B -> ${(total(after) / 1e9).toFixed(1)}B`
+        + ` | credit held/outstanding ${(creditHeldUSD / 1e9).toFixed(1)}/${(creditOutstandingUSD / 1e9).toFixed(1)}`
+        + ` = ${(creditOutstandingUSD > 0 ? creditHeldUSD / creditOutstandingUSD : 0).toFixed(3)}`
+        + (deltas ? ` | ${deltas}` : ''));
+    });
+  },
+};
+
 // ---- ADD NEW MODULES HERE, and nowhere else. ----
-const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpModule];
+const MODULES: HarnessModule[] = [hhModule, pubModule, xbModule, indModule, fpModule, bookTraceModule];
 
 // =============================================================================================
 // THE RUN

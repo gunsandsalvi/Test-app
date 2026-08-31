@@ -9,6 +9,7 @@ import { runEstateResolutionStage } from './stages/estate-resolution';
 import { reconcileRepoPledges } from './stages/repo-clearing';
 import { createInitialContext } from './stages/context';
 import { StageDependencyTrace, stageTraceEnabled } from './stage-deps';
+import { BankIdentityTrace, bankIdentityTraceEnabled } from './bank-identity-trace';
 import { setRngState, getRngState } from '../rng';
 import { runMacroFeedbackStage } from './stages/01-macro-feedback';
 import { runRegionMacroStage } from './stages/02-region-macro';
@@ -105,6 +106,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // off this costs one boolean test per stage and `ctx` is `baseCtx` throughout.
   let ctx = baseCtx;
   const trace = stageTraceEnabled() ? new StageDependencyTrace() : undefined;
+  const idTrace = bankIdentityTraceEnabled() ? new BankIdentityTrace() : undefined;
+  idTrace?.begin(state, baseCtx);
   const timings: StageTiming[] = [];
   const profile = options?.profile === true;
   const run = <T>(stage: string, fn: () => T): T => {
@@ -117,6 +120,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
       return result;
     } finally {
       if (trace) { trace.end(); ctx = baseCtx; }
+      idTrace?.afterStage(stage, state, baseCtx);
     }
   };
 
@@ -261,6 +265,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   // walk positions rather than the fills that built them (stages/holdings-store.ts).
   run('register-consolidation', () => consolidateRegister(ctx));
   const nextState = run('13-news-and-turn-summary', () => runNewsAndTurnSummaryStage(state, ctx));
+  idTrace?.report(baseCtx.nextWeek);
 
   return { state: { ...nextState, rngState: getRngState(), estates: ctx.estates,
     commodityFuturesBook: ctx.commodityFuturesBook,
