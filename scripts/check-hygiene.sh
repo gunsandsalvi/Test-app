@@ -40,8 +40,12 @@ STRAY_COUNT=$(printf '%s' "$STRAY" | grep -c . || true)
 # unseen. This counts a money field given a COMPUTED value inside an object literal (a `:`
 # followed by an expression that does arithmetic or reads another field), excluding type
 # declarations (`: number`), plain copies (`cashUSD: cashUSD`, `cashUSD: 0`), and comments.
+# `sumField(` marks the 02b regional-aggregate DERIVED VIEW (a sum over the per-bank sheets,
+# §7.241's exhaustive rebuild) — a projection, not a balance write; the BankBook/View split
+# retires the exemption with the fused type.
 SPREAD_STRAY=$(grep -rnE "${MONEY_FIELDS}[[:space:]]*:[[:space:]]*[^,}]*(\+|-[^-]|\*|\?\?)" src --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE "$LEDGER_OWNED" \
+  | grep -v "sumField(" \
   | grep -vE "${MONEY_FIELDS}[[:space:]]*:[[:space:]]*(number|Number\(|Math\.(round|abs|max\(0))" \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 SPREAD_STRAY_COUNT=$(printf '%s' "$SPREAD_STRAY" | grep -c . || true)
@@ -58,7 +62,7 @@ if [ "$STRAY_COUNT" -gt "$MONEY_WRITE_BUDGET" ]; then
   echo "Route the movement through engine/ledger's post(). See §5-STRUCT step 1."
   exit 1
 fi
-MONEY_SPREAD_BUDGET=25
+MONEY_SPREAD_BUDGET=23
 if [ "$SPREAD_STRAY_COUNT" -gt "$MONEY_SPREAD_BUDGET" ]; then
   echo "ERROR: $SPREAD_STRAY_COUNT spread-form money writes outside engine/ledger (budget $MONEY_SPREAD_BUDGET)."
   echo "$SPREAD_STRAY"
