@@ -297,11 +297,11 @@ prerequisites are not done. **Do not reorder** — the sequence encodes prerequi
 from a row: a market cannot be honest before the demand side it prices against is, and a clamp
 cannot be deleted before the mechanism under it exists.
 
-**THE RUN TO JUDGE AGAINST IS THE NEXT ONE — §7.254's two bank fixes (the income measure and
-the wholesale roll) relabelled the world after §7.253's reference (278/44, the best yet;
-before it §7.251's 367/60, §7.250's 320/60, §7.247's 351/60, §7.246's 361/67, §7.244's
-628/94).** Each run is the record of its own tree; compare nothing across them without
-naming the relabel between.
+**THE RUN TO JUDGE AGAINST IS §7.256's: 204 violations / 18 FAMILIES on the Tier-1-pass
+tree** (counts 628 → 361 → 351 → 320 → 367 → 278 → 204; families 94 → 67 → 60 → 44 → 18;
+§7.256 also records the cost — the EUR fiscal-labour spiral is the top open diagnosis).
+Each run is the record of its own tree; compare nothing across them without naming the
+relabel between.
 
 **IN FLIGHT: STRUCT (§5-STRUCT; §7.229–242).** Cross-cutting, not a row below: invariants by
 construction. Steps 1/3/4/5 built, step 2 done for the company kernel, step 6 built and off; the
@@ -845,7 +845,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | Remeasured by §7.232: 32,278 rows at seed → 113,393 settled (×3.51). The seed-shape half of this row STANDS — it is one line of step 6's table. **The claimed algorithmic win is DEAD (§7.228): 0.0% duplicates (the weekly consolidation already handles them) and 3–5% dust, not 15% and 9% — the "~25% off every register walk" was true when written and is not now. Do not scope work against it.** Owner: the seed, via STRUCT step 6. |
 | **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | **RE-DIAGNOSED IN §7.224: nothing in the labour market is wrong.** It reads `nominalGrowth - inflation`, and the inflation was a goods-market defect at week 1. With that fixed, EUR's 66% is gone and all four regions sit near 33%, but JPN now reaches 75% by week 58 and 69 band violations remain. **FOLDED INTO THE UNEMPLOYMENT-RATCHET ROW ABOVE** — with the price level sane and the famine gone (§7.246) the labour market is no longer "printing whatever the price level hands it"; whatever it prints now is its own. One standing defect signature kept from §7.244: **the vacancy rate printed 2.0e9%** — an unguarded ratio at a limit, §7.210's exact shape, findable by measuring the week the v series first departs sanity. Owner: LAB, with the ratchet row. |
 | **THE WEEK-52+ SEAM, decomposed by §7.249's probe into three named parts** | (a) **The YoY base effect**: at w53 measured inflation halves (174→99→84) because the 52-week window rolls onto the week-1 price shock — an honest property of a YoY measure. Its labour amplifier is FIXED (§7.249: the growth signal deflates by the employer's OWN price over its OWN 12-week window; u holds 14.9% through w52 where it read 22%+) — but the base effect still reaches the world through the WAGE indexation (`COST_OF_LIVING_PASS_THROUGH × reg.inflation`) and whatever else consumes the YoY figure. (b) **The 10Y damper release**: the 10Y sat PINNED at 4.69 for 44 weeks while policy walked 3.8→11.55% — the damper row's defect in one line — then stepped to 5.88 at w52. (c) **The teleports — CLOSED at reference scale (§7.251)**: §7.249's fixes (own-price deflator, the physical hiring cap) hold through the seam in the 60-week reference — u glides 22.8→23.1 across w50–60, no teleport, no terminal week, and the 2.0e9% vacancy print is gone. What remains: (a) is confirmed live in §7.251 (inflation 135→70 annualized at w53, the window rolling onto the week-1 shock) and still reaches the world through wage indexation; (b) is WORSE than the old decomposition said — §7.251's 10Y never released at all (pinned 4.58–4.70 for the full 60 weeks, while EUR/UK/JPN print an 18% 10Y against a 4% 2Y at horizon). Next action: (b) — why the sovereign book's damper binds for the whole run, read WITH the damper row and §7.251's steep foreign curves. Owner: LAB closed its part; MKT/damper owns the rest. |
-| **THE UK INSTITUTIONAL BOOK EXPONENTIAL IS THE EQUITY MARK — §7.253 decomposed it** | BOOKTRACE on the reference: the weekly book delta w55–60 is **EQUITY +110B → +256B (ETF_SHARE following), every CREDIT line FLAT at 149B, ratio 0.92 at horizon** — the "book moving without cash" is UK equity PRICES compounding ~13%/week from ~w50, marked onto the books. This row is therefore the consequence row's "equity prices run away past ~week 80", arrived early and region-first: the well-posed question is who BUYS at +13%/week — the price mechanism (damper/float/demand), not any ledger. The corpBondOwnership >1 family (9x) is SEPARATE and small: institutional credit is 0.93 of outstanding, so the overshoot needs the banks' facility slice; the estate-window asymmetry (a defaulted issuer's tranches leave the `isActiveCompany` denominator while holders keep claims until the estate pays — holdings-view.ts:235) is instrumented (BOOKTRACE's dead-issuer split) and measured next probe. UK capex at 2.66x depreciation is the same price level in the capex categories. Next action: the equity price mechanism, worked WITH the damper row. Owner: MKT/damper (equity), OWN (the ratio drift). |
+| **THE UK INSTITUTIONAL BOOK EXPONENTIAL — CLOSED (§7.256: the book ends at 464B moving ±2B/week where the §7.253 world ended at 2,238B compounding 14%/week; the ratio families read 0)** — decomposition history: | BOOKTRACE on the reference: the weekly book delta w55–60 is **EQUITY +110B → +256B (ETF_SHARE following), every CREDIT line FLAT at 149B, ratio 0.92 at horizon** — the "book moving without cash" is UK equity PRICES compounding ~13%/week from ~w50, marked onto the books. This row is therefore the consequence row's "equity prices run away past ~week 80", arrived early and region-first: the well-posed question is who BUYS at +13%/week — the price mechanism (damper/float/demand), not any ledger. The corpBondOwnership >1 family (9x) is SEPARATE and small: institutional credit is 0.93 of outstanding, so the overshoot needs the banks' facility slice; the estate-window asymmetry (a defaulted issuer's tranches leave the `isActiveCompany` denominator while holders keep claims until the estate pays — holdings-view.ts:235) is instrumented (BOOKTRACE's dead-issuer split) and measured next probe. UK capex at 2.66x depreciation is the same price level in the capex categories. Next action: the equity price mechanism, worked WITH the damper row. Owner: MKT/damper (equity), OWN (the ratio drift). |
 | **REPO COLLATERAL IS OVER-PLEDGED** | The largest single family in §7.211 (XIVF 56x, THSY 54x): a bank pledging more of a tenor bucket than it holds, while `reconcileRepoPledges` is supposed to reconcile weekly. **§7.230 found the check itself split: the engine reconciled at $1, the harness checked at 1e6.** Both now read `domain/collateral.ts`'s single 1-dollar tolerance (§7.233's 281 was visibility, not degradation), and **§7.248 CLOSED THE FAMILY: 129 → 2** — the pledge follows maturing paper on the BOOK at the fiscal stage's redemption, the reconcile no longer chases one week behind. The 2 residual are tranche-keyed (t#), not bill buckets — read them next time the family is touched. Owner: WS6/REPO (residual only). |
 | **GOVERNMENT OUTLAYS EXCEED THE BUDGET** | **The check that watched this row was wrong (§7.230): it compared outlays against `governmentSpendingUSD × 1.5`, which is not the budget**, and fired seven times on the wrong quantity. It now reads `Government`'s own decomposition (contractual interest and payroll off the top, discretionary remainder scaled by the stance) and fires naming whether the overrun is contractual or discretionary. §7.245 killed the EUR runaway (49 → 0 at its run; the unappropriated capex bid). §7.247 (the run to judge against): **43 — UK 25, EUR 18 — RISING with full employment**, which is what an automatic stabiliser meeting a hot economy prints unless the stance rule adapts. Next action: read the UK 25 — a contractual overrun (interest paid on real dates) is the stance rule's problem, which is MAC's fiscal step function, not a ledger defect. Owner: MAC. |
 | **THE PRICE LEVEL DOES NOT SETTLE** | **PARTLY CLOSED BY §7.224, AND THE OLD DIAGNOSIS WAS WRONG.** This row blamed COH4's demand ladder. The ladder is not the cause: two unit errors were, both at week 1 — the seasonal factor inside the production shutdown test (whole categories shipping zero) and a CPI whose base and current prices were different price concepts. Both fixed; mid-run inflation 2,266% -> 145%, week-60 50.8%, and the hyperinflating revenue prints (6.6e+21) are gone. **LARGELY CLOSED BY §7.245–246:** the unappropriated bid, the staffing-dimension floor mismatch and the wrong-signed response factor were the ratchet's engines. §7.246's read: **CPI ×2.71 over 60 weeks with week-60 inflation FALLING (166 → 59 annualized), fill 0.453** — the first sane long price print in the model's history. Not yet a settle: ×2.71 is still high and the last ten weeks' trend is the thing to re-read after the unemployment row closes (labour shedding is now the biggest force on supply). **Still do not put the bid premium back and do not cap the bid.** Owner: the unemployment row, then re-measure. |
@@ -3590,3 +3590,37 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        `evolveBankingSector` re-derives wholesale as the weekly residual; EMWF's constant
        170.62B was the residual being genuinely constant. The roll (repay from excess cash)
        stands on its own economics and measured clean; the record's causal claim does not.
+
+256. **THE REFERENCE RUN ON THE TIER-1-PASS TREE: 204 violations in 18 FAMILIES — THE RUN TO
+     JUDGE AGAINST** (counts: 628 → 361 → 351 → 320 → 367 → 278 → 204; families: 94 → 67 → 60
+     → 44 → 18). 60 weeks, seed 2654435769, shocks on, BOOKTRACE on.
+     - **Families CLOSED at reference scale by the pass**: bank identity breaks (0), MMF NAV
+       departures (0, from 47), corpBondOwnership conservation (0), EUR/JPN sovereign mint (0),
+       JPN semiconductors AND EUR passenger_vehicles supplier shares (0, from 23–24 each),
+       **USA NIM (0, from 41)**, USA capital ratio (0), UK fiscal outlays (0), the fund
+       overdraft scatter (only JPNEQX's 34x survives, plus singles), the UK institutional
+       exponential (**the UK book ends at 464B moving ±2B/week — it ended the §7.253 world at
+       2,238B compounding 14%/week**; the dead-issuer slice reads 0.2B).
+     - **The 10Y RELEASED for the first time in the project's history**: 4.74 → 5.95 across the
+       run (it had sat pinned 4.58–4.70 through every prior world), damper 1,791 (watch DOWN
+       continues). The bill discount changed the sovereign book's economics — the damper row's
+       44-week-bind question finally has a moving instrument to study.
+     - **THE COST, recorded per §1.20: the EUR path re-based into a fiscal-labour spiral.**
+       EUR unemployment breaches its band 47x (57.1% at w60), EUR outlays exceed budget 43x,
+       the EUR TGA goes NEGATIVE twice (a new family: the government spent money it had not
+       financed), and EUR feeds 1.4B of the 2.7B bypass. USA CPI ×4.969 (from ×2.656) with
+       inflation still 148 annualized at w60 — the price level rode the EUR blowout. **The EUR
+       spiral is the next diagnosis, and it is ONE region's story: USA 28.2 / UK 10.9 / JPN
+       13.6 all cohere while EUR runs away.**
+     - **The new bands work**: UK capital ratio 35x + UK NIM 30x — the UK cohort was failing
+       unwatched for the model's whole life; now it is the second diagnosis (the §7.254
+       machinery — NIM_TRACE — points at it directly).
+     - **Still standing**: carriers 0 of 12 alive (the fuel fix removed the bleed-by-existence;
+       the deaths persist, so the cause is elsewhere — read the first carrier death week);
+       JPNEQX 34x (its digger differs from the classes the budget fixes closed); bypass gross
+       2.7B/week with the SME class at 3.4B (EUR-concentrated — item 1's remainder has a
+       sharper pointer); the two §7.253 repo residuals did not reappear (0 this run).
+     - Queue from here: (1) the EUR spiral (labour × fiscal × the outlay stance — MAC's row,
+       now urgent); (2) the UK bank cohort (NIM_TRACE on UK banks); (3) JPNEQX's digger;
+       (4) the carrier death cause; (5) the SME bypass slice; then §4.0 Tier 2 (the channel
+       migration endgame) and the build table.
