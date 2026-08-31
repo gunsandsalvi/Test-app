@@ -5,6 +5,7 @@ import { SegmentedBar } from '../charts/Charts';
 import { BankDeepDive } from '../bank/BankDeepDive';
 
 import { EconomyDashboard } from './EconomyDashboard';
+import { REGION_IDS } from '../../domain/geography';
 
 type WorldTab = 'overview' | 'economy' | 'growth' | 'labor' | 'supplychain' | 'fiscal' | 'banking' | 'private';
 
@@ -53,7 +54,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
       {/* Persistent Region Selector & Status Line */}
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          {(['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => (
+          {REGION_IDS.map(r => (
             <button
               key={r}
               onClick={() => setActiveRegion(r)}

@@ -1,4 +1,5 @@
 import { AssetType } from '../types';
+import { assertNever } from '../domain/defect';
 
 export interface CarryEstimate {
   weeklyCarryUSD: number;
@@ -215,6 +216,10 @@ export function calculateExpectedCarry(
       description = `FX Interest Rate Differential (${(baseRate * 100).toFixed(2)}% vs ${(quoteRate * 100).toFixed(2)}%)`;
       break;
     }
+    default:
+      // §7.241: without this, a new asset type fell off the switch with zero carry and an empty
+      // description. A new AssetType member now fails to COMPILE here.
+      assertNever(assetType, 'carry calculation');
   }
 
   const annualizedCarryUSD = weeklyCarryUSD * 52;

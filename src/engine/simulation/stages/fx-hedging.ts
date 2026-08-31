@@ -30,6 +30,7 @@ import {
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { fxWeeklySigma } from '../../../domain/fx-market';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
+import { REGION_IDS } from '../../../domain/geography';
 
 /** What this entity holds in each foreign region, split by how much of it its mandate hedges. */
 function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
@@ -85,7 +86,7 @@ function corporateExposureByRegion(
   invoices: TradeInvoice[], week: number
 ): Map<string, Map<RegionId, number>> {
   const currencyRegion = new Map<string, RegionId>();
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => currencyRegion.set(invoiceCurrencyOf(r), r));
+  REGION_IDS.forEach((r) => currencyRegion.set(invoiceCurrencyOf(r), r));
   const out = new Map<string, Map<RegionId, number>>();
   const add = (ticker: string, region: RegionId, usd: number) => {
     let byRegion = out.get(ticker);

@@ -15,7 +15,7 @@
  *     is promoted or relegated by its own performance rather than by a rank someone assigned.
  */
 
-import { RegionId } from './geography';
+import { RegionId, REGION_IDS } from './geography';
 
 export type IndexAssetClass = 'EQUITY' | 'CORP_BOND' | 'LEVERAGED_LOAN';
 
@@ -56,7 +56,7 @@ export const INDEX_REBALANCE_WEEKS = 13;
 /** The level every index starts at, so any two are comparable from inception. */
 export const INDEX_BASE_LEVEL = 100;
 
-const REGIONS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+const REGIONS = REGION_IDS;
 
 /**
  * Every index this world publishes: three equity tiers per region and globally, and the three

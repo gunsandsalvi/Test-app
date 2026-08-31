@@ -1,3 +1,4 @@
+import { REGION_IDS_SEED_ORDER } from '../domain/geography';
 import React, { useState } from 'react';
 import {
   Activity,
@@ -23,7 +24,7 @@ interface DiagnosticsModalProps {
 
 export const DiagnosticsModal: React.FC<DiagnosticsModalProps> = ({ state, onClose }) => {
   const [activeTab, setActiveTab] = useState<'MACRO' | 'MICRO' | 'CREDIT_RISK' | 'LOGS'>('MACRO');
-  const regions: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
+  const regions = REGION_IDS_SEED_ORDER;
   const formattedDate = formatSimulationDate(state.currentWeek);
 
   // S6: real engine numbers only. The deleted block here invented a parallel micro-model for

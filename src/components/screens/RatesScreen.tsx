@@ -3,6 +3,7 @@ import { GameState, RegionId, GovDebtTranche } from '../../types';
 import { calculateNelsonSiegelZeroRate } from '../../engine/nelsonSiegel';
 import { calculateParSwapRate, priceCorporateBond } from '../../engine/pricing';
 import { formatBondName, formatPercent } from '../../engine/formatters';
+import { REGION_IDS } from '../../domain/geography';
 
 export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => void }> = ({ state, onOpenTrade }) => {
   const [selectedRegion, setSelectedRegion] = useState<RegionId>('USA');
@@ -92,7 +93,7 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
     <div className="p-3 space-y-4 pb-20">
       {/* Region Selector */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-        {(['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => (
+        {REGION_IDS.map(r => (
           <button
             key={r}
             onClick={() => setSelectedRegion(r)}

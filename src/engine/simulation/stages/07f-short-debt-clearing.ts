@@ -29,6 +29,8 @@
  * interest arithmetic picks CP up off the ladder like any other tranche).
  */
 
+import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
+import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { computeAnnualDefaultProbability, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
@@ -84,7 +86,7 @@ const CP_MIN_GAP_SHARE_OF_REVENUE = 0.01;
 const billInstrumentId = (regionId: RegionId, key: string) => `${regionId}-GOV-${key}`;
 
 export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepContext): void {
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
     ctx.holdingsStore!.nextEpoch();
@@ -205,8 +207,8 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // auctioned this week and its rows must survive).
         ctx.holdingsStore!.scan(entity.id, 'GOV_BOND', (h) => {
           if (h.issuerRegion === regionId) {
-            const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
-            if (key.startsWith('b')) holdings.set(h.instrumentId, (holdings.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
+            const key = govBucketKeyOf(h.instrumentId, regionId);
+            if (key && isBillBucketKey(key)) holdings.set(h.instrumentId, (holdings.get(h.instrumentId) ?? 0) + h.quantityOrNotionalUSD);
           }
           return false;
         });
@@ -244,10 +246,11 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
       treasuryBidders.forEach((comp) => {
         const heldByBucket = new Map<string, number>();
         (comp.treasuryHoldings || []).forEach((h) => {
-          const key = h.instrumentId.startsWith(`${regionId}-GOV-`)
-            ? h.instrumentId.slice(`${regionId}-GOV-`.length)
-            : bucketKeyByTrancheId.get(h.instrumentId);
-          if (!key || !key.startsWith('b')) return;
+          // §7.241: the old prefix-slice also matched TRANCHE ids, yielding keys like 'B13-41'
+          // that failed the lowercase test — so bill tranches held here silently dropped out of
+          // the treasurer's sizing and the tranche fallback below was dead code.
+          const key = govBucketKeyOf(h.instrumentId, regionId) ?? bucketKeyByTrancheId.get(h.instrumentId);
+          if (!key || !isBillBucketKey(key)) return;
           heldByBucket.set(key, (heldByBucket.get(key) ?? 0) + (h.quantityOrNotionalUSD ?? 0));
         });
         const targetUSD = corporateTreasuryTargetUSD(comp.cash ?? 0, comp.annualRevenue ?? 0);

@@ -46,6 +46,7 @@ import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } from '../../equity-valuation';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { positionKey } from './securities-lending';
+import { REGION_IDS } from '../../../domain/geography';
 
 /** G3b: one quote per book, shared with the player's ticket (domain/dealer-desk.ts). */
 const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['equity'];
@@ -58,7 +59,7 @@ export const MAX_WEEKLY_PRICE_MOVE_PCT = 0.18;
 export const FULL_SIZE_PRICE_DISCOUNT = 0.30;
 
 export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext): void {
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
     ctx.holdingsStore!.nextEpoch();

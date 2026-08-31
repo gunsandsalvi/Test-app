@@ -27,6 +27,7 @@ import { isActiveCompany } from '../../../domain/company';
 import { computeAnnualDefaultProbability, creditRecoveryRate } from './shared-helpers';
 import { computeReservationSpreadBps, spreadRiskCapitalChargeRate, entityRequiredReturn, FULL_SIZE_SPREAD_RANGE_BPS } from './asset-allocation';
 import { bankRequiredReturnAnnual, BANK_WORKING_CAPITAL_RATIO } from './bank-lending';
+import { REGION_IDS } from '../../../domain/geography';
 
 const cdsInstrumentId = (regionId: RegionId, issuerId: string) => `${regionId}-CDS-${issuerId}`;
 
@@ -37,7 +38,7 @@ const partyRefOf = (p: CdsParty): PartyRef =>
   p.kind === 'BANK' ? { kind: 'BANK', ticker: p.ticker } : { kind: 'INSTITUTION', id: p.id };
 
 export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): void {
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
     const reg = ctx.updatedRegions[regionId];

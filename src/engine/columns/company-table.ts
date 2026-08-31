@@ -28,8 +28,9 @@
 import { Company } from '../../types';
 import { Table } from './table';
 import { TICKERS, COMPANY_IDS } from './intern';
+import { REGION_IDS } from '../../domain/geography';
 
-export const COMPANY_REGIONS = ['USA', 'EUR', 'UK', 'JPN'] as const;
+export const COMPANY_REGIONS = REGION_IDS;
 const REGION_CODE = new Map<string, number>(COMPANY_REGIONS.map((r, i) => [r, i]));
 
 /** The columns, in one place so the sync and the kernels cannot disagree about the set. */

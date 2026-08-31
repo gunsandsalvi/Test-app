@@ -30,6 +30,7 @@
  *     relative-value framework depends on.
  */
 
+import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { RegionId, InstitutionalEntity } from '../../../types';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
@@ -129,7 +130,8 @@ export function accrueInstitutionalIncome(ctx: WeeklyStepContext): void {
       if (h.instrumentType !== 'GOV_BOND') return;
       const issuerReg = ctx.updatedRegions[h.issuerRegion];
       if (!issuerReg) return;
-      const bucket = h.instrumentId.replace(`${h.issuerRegion}-GOV-`, '');
+      const bucket = govBucketKeyOf(h.instrumentId, h.issuerRegion);
+      if (!bucket) return;
       let cb = sovCouponByRegion.get(h.issuerRegion);
       if (!cb) { cb = sovereignCouponByBucket(issuerReg.govDebtTranches, sovBucketKey); sovCouponByRegion.set(h.issuerRegion, cb); }
       weeklyIncomeUSD += ((h.quantityOrNotionalUSD ?? 0) * (cb[bucket] ?? 0)) / 52;

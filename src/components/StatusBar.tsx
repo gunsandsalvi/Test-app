@@ -2,6 +2,7 @@ import React from 'react';
 import { GameState, RegionId } from '../types';
 import { Play, Pause, FastForward, MoreVertical } from 'lucide-react';
 import { formatCurrency } from '../engine/formatters';
+import { REGION_IDS_SEED_ORDER } from '../domain/geography';
 
 interface StatusBarProps {
   state: GameState;
@@ -23,7 +24,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   onOpenOverflow,
 }) => {
   const isMarginCall = state.portfolio.isMarginCall;
-  const regions = (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]);
+  const regions = REGION_IDS_SEED_ORDER;
 
   return (
     <div className="bg-slate-900 border-b border-slate-800 flex flex-col w-full z-10 shrink-0">

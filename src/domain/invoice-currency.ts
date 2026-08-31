@@ -63,7 +63,7 @@ export function exposureCost(
 export function chooseInvoiceRegion(args: {
   sellerRegion: RegionId;
   buyerRegion: RegionId;
-  candidates: RegionId[];
+  candidates: readonly RegionId[];
   illiquidity: Record<string, number>;
   quotedPairs: { base: RegionId; quote: RegionId }[];
   sellerIsShort: boolean;

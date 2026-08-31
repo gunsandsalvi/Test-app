@@ -28,11 +28,13 @@
  * verify condition rather than an assumption.
  */
 
+import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { computeSovereignBookAnnualYield, ON_RRP_SPREAD_BPS } from '../../macro/banking';
 import { CASH_SLEEVE_OVERNIGHT_SHARE } from './repo-clearing';
 import { WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
+import { REGION_IDS } from '../../../domain/geography';
 
 /** The fund's annual expense ratio — a structural primitive like the deposit beta; G6/BP make
  * fees competitive between funds. */
@@ -58,8 +60,8 @@ export function quoteMmfNetYieldAnnual(entity: InstitutionalEntity, reg: Region)
   let billUSD = 0;
   entity.itemizedHoldings.forEach((h) => {
     if (h.instrumentType !== 'GOV_BOND') return;
-    const key = h.instrumentId.replace(`${h.issuerRegion}-GOV-`, '');
-    if (!key.startsWith('b')) return;
+    const key = govBucketKeyOf(h.instrumentId, h.issuerRegion);
+    if (!key || !isBillBucketKey(key)) return;
     billByTenor[key] = (billByTenor[key] ?? 0) + h.quantityOrNotionalUSD;
     billUSD += h.quantityOrNotionalUSD;
   });
@@ -127,7 +129,7 @@ export interface CorporateSweepBook {
 /** Build the per-region redemption capacity before stage 08's company loop runs. */
 export function openCorporateSweepBooks(ctx: WeeklyStepContext): Map<RegionId, CorporateSweepBook> {
   const books = new Map<RegionId, CorporateSweepBook>();
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((regionId) => {
+  REGION_IDS.forEach((regionId) => {
     const mmf = findRegionMmf(ctx.updatedInstitutionalEntities, regionId);
     if (!mmf) return;
     books.set(regionId, { redeemableUSD: Math.max(0, mmf.cashUSD ?? 0), netInflowUSD: 0 });

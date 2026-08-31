@@ -21,7 +21,7 @@
 
 import { GameState, Region, RegionId } from '../../../types';
 import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { laneDistanceNm } from '../../../domain/geography';
+import { laneDistanceNm, REGION_IDS } from '../../../domain/geography';
 import { deliveryModeOf } from '../../../domain/goods-physical';
 import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
 import { WeeklyStepContext } from './context';
@@ -29,7 +29,7 @@ import { getFxToUsd } from './06-fx-and-trade';
 import { collectCarriers, marginalRatesForAllLanes } from './freight-clearing';
 import { convertLocal, FxToUsd } from '../../../domain/currency';
 
-export const SOURCING_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+export const SOURCING_REGION_IDS = REGION_IDS;
 
 /**
  * What a week of goods sitting in a pipeline costs its owner: the COST OF CAPITAL, because that

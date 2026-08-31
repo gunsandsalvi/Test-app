@@ -8,6 +8,7 @@
  */
 
 import { RegionId } from '../../types';
+import { defect } from '../../domain/defect';
 
 export type PartyRef =
   | { kind: 'COMPANY'; ticker: string }
@@ -51,10 +52,16 @@ export type PartyRef =
  *
  * Parties are stable for the life of the process (a ticker is a ticker), so the table is too.
  */
-const PARTY_KINDS: PartyRef['kind'][] = [
+const PARTY_KINDS = [
   'COMPANY', 'BANK', 'BANK_CREDIT', 'BANK_SECURITIES', 'CLEARING_HOUSE',
   'INSTITUTION', 'SEGMENT', 'HOUSEHOLD', 'GOVERNMENT', 'CENTRAL_BANK', 'UNMODELED',
-];
+] as const;
+// Compile-loud completeness (§7.241): a new PartyRef kind fails to build until this list names
+// it. Before this check, a missing kind was interned at index 0 — COMPANY — so its payments were
+// MIS-DELIVERED onto whatever company shared the name string, silently.
+type MissingPartyKind = Exclude<PartyRef['kind'], (typeof PARTY_KINDS)[number]>;
+const _partyKindsComplete: MissingPartyKind extends never ? true : never = true;
+void _partyKindsComplete;
 const KIND_INDEX = new Map<string, number>(PARTY_KINDS.map((k, i) => [k, i]));
 /** One name→id map per kind, so the kind never has to be concatenated into the lookup. */
 const idByKindName: Map<string, number>[] = PARTY_KINDS.map(() => new Map<string, number>());
@@ -71,7 +78,7 @@ const partyName = (p: PartyRef): string =>
 
 /** This party's dense integer id, assigned on first sight. */
 export function partyId(p: PartyRef): number {
-  const kindIdx = KIND_INDEX.get(p.kind) ?? 0;
+  const kindIdx = KIND_INDEX.get(p.kind) ?? defect(`unknown party kind '${p.kind}' — not in PARTY_KINDS`);
   const name = partyName(p);
   const table = idByKindName[kindIdx];
   const existing = table.get(name);

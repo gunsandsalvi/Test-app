@@ -38,6 +38,7 @@ import { publicComparableEvMultiple } from './pe-lifecycle';
 import { MAX_WEEKLY_PRICE_MOVE_PCT } from './07e-equity-clearing';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
 import { DESK_SPREAD_BPS_BY_BOOK } from '../../../domain/dealer-desk';
+import { REGION_IDS } from '../../../domain/geography';
 
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
@@ -164,7 +165,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // more than equities earn, households stop buying equities. That is the channel G1b is missing,
   // and it is the same shape WS7 already uses for the deposit-versus-money-fund split.
   const householdDemandByFund = new Map<string, number>();
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+  REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
     const hs = reg?.householdState;
     if (!hs) return;
@@ -225,7 +226,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
 
   // ---- 3. The authorised participants' capacity: real dealer balance sheet, per region. ----
   const apCapacityByRegion = new Map<RegionId, number>();
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => {
+  REGION_IDS.forEach((r) => {
     const banks = ctx.updatedCompanies.filter((c) => c.region === r && c.bankBalanceSheet);
     const equityUSD = banks.reduce((s, c) => s + (c.bankBalanceSheet?.bankEquityUSD ?? 0), 0);
     // ETF2: the desks' capital over the risk a basket consumes while they hold it — the equity
@@ -336,7 +337,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // Split each region's dealer capacity across the funds competing for it, by the size of the net
   // basket each one needs carried.
   const capacityByFund = new Map<string, number>();
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+  REGION_IDS.forEach((region) => {
     const regionFunds = funds.filter((f) => f.region === region);
     const demandUSD = regionFunds.reduce((a, f) => a + Math.abs(netFlowByFund.get(f.id) ?? 0), 0);
     const capacityUSD = apCapacityByRegion.get(region) ?? 0;

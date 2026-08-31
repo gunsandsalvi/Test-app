@@ -1,3 +1,4 @@
+import { govBondTrancheId } from '../../domain/sovereign-id';
 import { NelsonSiegelParams, calculateTenorZeroRates, calculateNelsonSiegelZeroRate } from '../nelsonSiegel';
 import { openingSovereignRating } from './evolution';
 import { priceCommodityFutures } from '../pricing';
@@ -27,7 +28,7 @@ import {
 import { deriveSubUnitUnitPrice, TARGET_FIRMS_PER_REGION } from '../bootstrap/category-demand';
 import { GENERATED_COMMODITIES, GENERATED_FX_PAIR_LEGS, getInitialFxRate, getCommodityBaseSpotPrice } from '../bootstrap/commodities-and-fx';
 import { getRegionYieldCurveParams, getRegionNeutralRate, getRegionInitialPolicyRate, getRegionProductivityGrowth, INFLATION_TARGET } from '../bootstrap/yield-curves';
-import { fxPairLabel } from '../../domain/geography';
+import { fxPairLabel, REGION_IDS_SEED_ORDER } from '../../domain/geography';
 
 export function createWealthDistribution(estimatedHouseholdIncomeUSD: number): Record<WealthTier, WealthTierData> {
   const inc = estimatedHouseholdIncomeUSD;
@@ -361,7 +362,7 @@ function buildRegion(regionId: RegionId): Region {
   }, 0);
   const totalGovDebtUSD = estimatedNominalGdpUSD * DEBT_TO_GDP_PCT;
   const govDebtTranches: GovDebtTranche[] = GOV_DEBT_TENOR_WEIGHTS.map(({ tenorYears, tenorWeeks, weight }) => ({
-    id: `${regionId}-GOV-${tenorYears}Y-INIT`,
+    id: govBondTrancheId(regionId, tenorYears, 'INIT'),
     principalUSD: Math.round((totalGovDebtUSD * weight)),
     couponRate: Number(calculateNelsonSiegelZeroRate(tenorYears, yieldCurveParams).toFixed(4)),
     originationWeek: -Math.round(tenorWeeks / 2),
@@ -717,7 +718,7 @@ function buildRegion(regionId: RegionId): Region {
  * once per company.
  */
 export function getInitialRegions(): Record<RegionId, Region> {
-  const regionIds: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
+  const regionIds = REGION_IDS_SEED_ORDER;
   const regions = {} as Record<RegionId, Region>;
   regionIds.forEach((regionId) => {
     regions[regionId] = buildRegion(regionId);

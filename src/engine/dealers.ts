@@ -16,6 +16,7 @@
  */
 
 import { AssetType, Company, Dealer } from '../types';
+import { assertNever } from '../domain/defect';
 import { dealerDeskCapacityUSD, dealerDeskGrossUSD, DESK_SPREAD_BPS_BY_BOOK } from '../domain/dealer-desk';
 
 export { DESK_SPREAD_BPS_BY_BOOK };
@@ -141,6 +142,8 @@ export function getUnifiedInitialMarginRate(assetType: AssetType): number {
     case 'OPTION':
       return 0.20; // Short option margin (Long options pay 100% premium upfront)
     default:
-      return 0.15;
+      // §7.241: the old `return 0.15` handed a new asset type an invented margin silently.
+      // A new AssetType member now fails to COMPILE here until a real margin is set.
+      return assertNever(assetType, 'unified initial margin rate');
   }
 }

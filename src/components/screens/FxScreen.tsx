@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GameState, FxPair, RegionId } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
+import { REGION_IDS } from '../../domain/geography';
 
 type FxTab = 'pairs' | 'carry' | 'flows';
 
@@ -156,7 +157,7 @@ export const FxScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => voi
         <div className="space-y-4">
           <div className="space-y-2">
             <h3 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Regional Trade Balances</h3>
-            {(['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(r => {
+            {REGION_IDS.map(r => {
               const reg = state.regions[r];
               if (!reg) return null;
               return (

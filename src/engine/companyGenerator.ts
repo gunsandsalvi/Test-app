@@ -1,4 +1,4 @@
-import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE } from '../types';
+import { Company, CreditRating, RegionId, Sector, DebtTranche, FundamentalSnapshot, ProductCategory, QuarterlyIncomeStatement, QuarterlyBalanceSheet, INDUSTRY_SUBUNITS, Industry, FinancialStatementProfile, COMMODITY_CATEGORY_LINKAGE, REGION_IDS_SEED_ORDER } from '../types';
 import { INDUSTRY_REGISTRY, subUnitsByProducingSector, ProducingSector, recipeIntensityOf, industryOfSubUnit } from '../domain/industry-registry';
 import { defect } from '../domain/defect';
 import { callProtectionForIssue } from '../domain/call-protection';
@@ -377,7 +377,7 @@ function generateDebtTranches(ticker: string, debtBase: number, initialRating: C
 export function generateInitialCompanies(
   initialRegions: Record<RegionId, import('../types').Region> = getInitialRegions()
 ): Company[] {
-  const regions: RegionId[] = ['USA', 'UK', 'JPN', 'EUR'];
+  const regions = REGION_IDS_SEED_ORDER;
   const companies: Company[] = [];
   // Shared across every region's seed generation so tickers/names are globally unique, not
   // just unique within one region — a per-region Set let e.g. USA and UK each independently

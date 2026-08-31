@@ -14,6 +14,32 @@ export const CURRENCY_BY_REGION: Record<RegionId, string> = {
 };
 
 /**
+ * Every region, derived from the one Record the compiler forces complete (§7.241): a new
+ * RegionId member errors on CURRENCY_BY_REGION until it is named there, and every consumer of
+ * this list then includes it automatically. Do not hand-write region arrays — 41 hand-kept
+ * copies were how a fifth region would have shipped as an economy with no firms and no banks.
+ */
+export const REGION_IDS = Object.keys(CURRENCY_BY_REGION) as readonly RegionId[];
+
+/**
+ * Compile-loud completeness for a hand-ordered region tuple: `AllRegionsNamed<typeof X>`
+ * resolves to `never` (a type error at the use site) until X names every RegionId. Use it for
+ * orders that are bit-load-bearing (seed RNG draw order, float-sum order) and therefore must
+ * NOT be rewritten onto REGION_IDS.
+ */
+export type AllRegionsNamed<T extends readonly RegionId[]> =
+  Exclude<RegionId, T[number]> extends never ? T : never;
+
+/**
+ * The seed/display iteration order. Distinct from REGION_IDS on purpose: generation-time RNG
+ * draw order is part of the world (§7.223), so reordering this relabels every seed. Complete by
+ * construction — a new RegionId fails to compile here until this order names it.
+ */
+export const REGION_IDS_SEED_ORDER = ['USA', 'UK', 'JPN', 'EUR'] as const;
+const _seedOrderComplete: AllRegionsNamed<typeof REGION_IDS_SEED_ORDER> = REGION_IDS_SEED_ORDER;
+void _seedOrderComplete;
+
+/**
  * Shipping distance in nautical miles over the routes freight actually takes. A physical fact,
  * which is the kind of primitive rule 4 allows — unlike a trade share, which is a result.
  *

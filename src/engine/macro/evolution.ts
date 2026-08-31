@@ -1,3 +1,4 @@
+import { REGION_IDS } from '../../domain/geography';
 import { isActiveCompany } from '../../domain/company';
 import { NelsonSiegelParams } from '../nelsonSiegel';
 import { RegionId, Region, FxPair, Commodity, HouseholdState, Industry, OccupationType, OccupationPool, Company, COMMODITY_CATEGORY_LINKAGE, WealthTier, HousingMarket } from '../../types';
@@ -1266,7 +1267,7 @@ export function computePrivateSegmentCommoditySupplyUSD(commodityId: string, reg
   // bolted onto one bucket (MANUFACTURING_LINKED_COMMODITIES, deleted). A pool's contribution
   // is its revenue times the linkage's own intensity share, so adding a linked sub-unit to the
   // registry brings its SME tier's supply with it.
-  return (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => {
+  return REGION_IDS.reduce((s, r) => {
     return s + (regions[r].smePools || []).reduce((s2, pool) => {
       const linkage = smePoolLinkedCommodities(pool.industry).find(l => l.commodityId === commodityId);
       if (!linkage) return s2;
@@ -1285,7 +1286,7 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
     s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
   const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
-  const totalCategoryDemandUSD = (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => s + (regions[r].categoryDemand[subUnitId]?.demandLevelUSD ?? 0), 0);
+  const totalCategoryDemandUSD = REGION_IDS.reduce((s, r) => s + (regions[r].categoryDemand[subUnitId]?.demandLevelUSD ?? 0), 0);
   return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;
 }
 
@@ -1308,7 +1309,7 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   // supply is that share of the sub-unit's real cleared supply and its demand is that share of
   // the sub-unit's demand — whoever makes the good brings the commodity to market, not only the
   // two firms carrying the tag. The elasticities below then move a ratio that means something.
-  const perRegion = (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).reduce((acc, r) => {
+  const perRegion = REGION_IDS.reduce((acc, r) => {
     const catDemand = linkage ? regions[r].categoryDemand[linkage.subUnitId] : undefined;
     if (!catDemand) return acc;
     acc.demandAnnualUSD += catDemand.demandLevelUSD ?? 0;

@@ -34,6 +34,7 @@ import { GameState, RegionId, Company, InstitutionalEntity } from '../../../type
 import { WeeklyStepContext } from './context';
 import { isActiveCompany } from '../../../domain/company';
 import { remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS } from '../../bootstrap/population';
+import { REGION_IDS } from '../../../domain/geography';
 
 /**
  * RULE 19 — `PENSION_CONTRIBUTION_RATE = 0.09` is GONE (COH2). Its own comment carried the exit
@@ -68,7 +69,7 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
   const addEntityCash = (id: string, usd: number) =>
     cashDeltaByEntityId.set(id, (cashDeltaByEntityId.get(id) ?? 0) + usd);
 
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+  REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
     const hs = reg?.householdState;
     if (!hs) return;

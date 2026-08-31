@@ -109,3 +109,16 @@ export const holdingClassOf = (type: string): AssetClass | undefined =>
 
 /** True for the ownership claims that must NOT be summed into a sector's holdings of others. */
 export const isIntraSectorClaim = (type: string): boolean => type === 'PE_FUND_INTEREST';
+
+/**
+ * Claims on VEHICLES (fund shares, fund interests) rather than on issuers. The ownership views
+ * measure who holds an ISSUER's paper; a claim on a fund is a layer above and summing it there
+ * double-counts the portfolio underneath (§7.241 — this fact lived as an if-chain's silence).
+ */
+const HOLDING_IS_VEHICLE_CLAIM: Record<HoldingType, boolean> = {
+  EQUITY: false, CORP_BOND: false, LEVERAGED_LOAN: false, GOV_BOND: false, SOV_BOND: false,
+  COMMERCIAL_PAPER: false, BANK_FACILITY: false,
+  PE_FUND_INTEREST: true, ETF_SHARE: true,
+};
+export const isVehicleClaim = (type: string): boolean =>
+  HOLDING_IS_VEHICLE_CLAIM[type as HoldingType] ?? false;

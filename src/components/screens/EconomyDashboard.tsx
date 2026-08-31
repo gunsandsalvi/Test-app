@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { GameState, RegionId, ProductCategory, INDUSTRY_SUBUNITS, Industry } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
+import { REGION_IDS } from '../../domain/geography';
 
 export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
   const [selectedRegion, setSelectedRegion] = useState<RegionId>('USA');
-  const regions: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regions = REGION_IDS;
   const reg = state.regions[selectedRegion];
 
   // Aggregates across companies in selected region

@@ -415,6 +415,19 @@ export interface SmePool {
 
 export type OccupationType = 'GENERAL' | 'SKILLED_TRADES' | 'TECHNICAL_ENGINEERING' | 'SPECIALIZED_PROFESSIONAL' | 'MANAGERIAL_FINANCIAL';
 
+/**
+ * The one iteration list (§7.241): three hand-kept copies of this array meant a new occupation
+ * could exist with a base wage and zero vacancies forever — present in every table, skipped by
+ * the matching loop. Complete by construction: a new OccupationType member fails to compile here
+ * until this list names it, and every consumer then includes it.
+ */
+export const OCCUPATION_TYPES = [
+  'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
+] as const;
+type MissingOccupation = Exclude<OccupationType, (typeof OCCUPATION_TYPES)[number]>;
+const _occupationsComplete: MissingOccupation extends never ? true : never = true;
+void _occupationsComplete;
+
 // Base annual wage by occupation is generated per-region from productivity — see
 // engine/bootstrap/labor-and-wages.ts's getBaseAnnualWageUSD(regionId).
 

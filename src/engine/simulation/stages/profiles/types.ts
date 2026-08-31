@@ -63,8 +63,10 @@ export interface ProfilePnl {
 export type ProfileModule = (input: ProfileInput) => ProfilePnl;
 
 /** The one place a kind is read. `sector === 'Banks'` is the historical alias for an unlabelled
- * bank and lives here rather than in a stage condition. */
-export function profileKeyOf(comp: Company): string {
+ * bank and lives here rather than in a stage condition. Returns the UNION, not string (§7.241):
+ * the old `'OPERATING'` return was a key outside the union that missed the registry by accident;
+ * an unlabelled firm IS a STANDARD_OPERATING one, and now the registry lookup type-checks. */
+export function profileKeyOf(comp: Company): import('../../../../domain/company').FinancialStatementProfile {
   if (comp.financialStatementProfile === 'BANK' || comp.sector === 'Banks') return 'BANK';
-  return comp.financialStatementProfile ?? 'OPERATING';
+  return comp.financialStatementProfile ?? 'STANDARD_OPERATING';
 }

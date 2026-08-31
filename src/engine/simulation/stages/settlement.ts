@@ -36,6 +36,7 @@ import { WeeklyStepContext } from './context';
  *  the two parties that bank at the central bank (the government and the central bank itself). */
 export type { PartyRef } from '../../ledger/party';
 import { PartyRef, partyId, partyOf } from '../../ledger/party';
+import { assertNever } from '../../../domain/defect';
 
 export interface PaymentInstruction {
   payer: PartyRef;
@@ -444,6 +445,10 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
         // payee's bank. Recorded because that is money entering the system, not moving within it.
         report.centralBankIssuanceUSD -= deltaUSD;
         return;
+      default:
+        // §7.241: without this, a new party kind's settled money fell through the switch and was
+        // deleted without even touching `unresolvedUSD`. A new kind now fails to COMPILE here.
+        return assertNever(party, `settlement apply for net delta ${deltaUSD}`);
     }
   });
 

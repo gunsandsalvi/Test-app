@@ -53,6 +53,7 @@ import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
+import { REGION_IDS } from '../../../domain/geography';
 
 const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
@@ -81,7 +82,7 @@ function loanCreditDurationYears(comp: Company): number {
 }
 
 export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepContext): void {
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
 
   // SCALE: same per-run memo and hoist as 07b — floatingDebtUSD walks the ladder per call and
   // nothing in this stage changes a ladder.

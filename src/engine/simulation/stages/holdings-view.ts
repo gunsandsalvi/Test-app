@@ -21,9 +21,11 @@
  * the real books, or it does not exist.
  */
 
+import { govBucketId } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, Company } from '../../../types';
-import { holdingClassOf, isIntraSectorClaim } from '../../../domain/assets';
+import { holdingClassOf, isIntraSectorClaim, isVehicleClaim } from '../../../domain/assets';
 import { isActiveCompany, isPubliclyListed } from '../../../domain/company';
+import { REGION_IDS } from '../../../domain/geography';
 
 export interface RegionalHoldingsView {
   /** Every real institutional entity's holdings in this region, flattened. */
@@ -80,7 +82,9 @@ export function aggregateRegionalHoldings(state: GameState, regionId: RegionId):
       if (v <= 0) return;
       bankSov += v;
       bankHoldings.push({
-        instrumentId: `${regionId}_GOV_${tenorKey}`,
+        // §7.241: this view minted a SECOND id format (`_GOV_`) for paper every book ids as
+        // `-GOV-` — the §7.240-recorded fork seed. One format now.
+        instrumentId: govBucketId(regionId, tenorKey),
         instrumentType: 'GOV_BOND',
         issuerRegion: regionId,
         quantityOrNotionalUSD: v,
@@ -146,7 +150,7 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
     });
   });
   const out = {} as Record<RegionId, Acc>;
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((r) => {
+  REGION_IDS.forEach((r) => {
     const hr = accFor(held, r);
     const fr = accFor(foreign, r);
     out[r] = {
@@ -217,10 +221,12 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
       const a = acc(h.issuerRegion);
       if (!a) return;
       const v = h.quantityOrNotionalUSD ?? 0;
-      if (h.instrumentType === 'EQUITY') a.equity.institutionalUSD += v;
-      else if (h.instrumentType === 'GOV_BOND') a.sovBond.institutionalUSD += v;
-      else if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN'
-        || h.instrumentType === 'COMMERCIAL_PAPER') a.corpBond.institutionalUSD += v;
+      // §7.241: dispatched through the registry instead of an if-chain — the chain's silence on
+      // fund shares was an undocumented fact, now `isVehicleClaim`; a new holding type gets its
+      // class in domain/assets, not here.
+      const cls = isVehicleClaim(h.instrumentType) ? undefined : holdingClassOf(h.instrumentType);
+      const sink = cls ? { EQUITY: a.equity, SOVEREIGN: a.sovBond, CREDIT: a.corpBond }[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined;
+      if (sink) sink.institutionalUSD += v;
     });
   });
 

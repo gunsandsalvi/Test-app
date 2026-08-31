@@ -42,8 +42,9 @@ import {
 import { centralBankFxReservesUSD } from '../../../domain/central-bank';
 import { fxDeskCapacityUSD, DEALER_QUOTE_WIDTH_BPS } from '../../../domain/dealer-derivatives';
 import { leverageHeadroomUSD } from '../../macro/banking';
+import { REGION_IDS } from '../../../domain/geography';
 
-const REGIONS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+const REGIONS = REGION_IDS;
 
 const pairKey = (base: RegionId, quote: RegionId) => `${base}/${quote}`;
 

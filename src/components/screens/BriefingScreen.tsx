@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { GameState, RegionId, OccupationType, ProductCategory } from '../../types';
 import { formatCurrency, formatPercent } from '../../engine/formatters';
+import { REGION_IDS } from '../../domain/geography';
+import { OCCUPATION_TYPES } from '../../domain/region-macro';
 
 type Destination = 'briefing' | 'world' | 'market' | 'book';
 
@@ -82,7 +84,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
 
     // Macro changes (need prevState)
     if (prevState) {
-      for (const regId of ['USA', 'EUR', 'UK', 'JPN'] as RegionId[]) {
+      for (const regId of REGION_IDS) {
         const reg = state.regions[regId];
         const prevReg = prevState.regions[regId];
 
@@ -111,7 +113,7 @@ export const BriefingScreen: React.FC<{ state: GameState, prevState?: GameState 
         }
 
         // Occupation Pool Tightness
-        for (const occId of ['GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL'] as OccupationType[]) {
+        for (const occId of OCCUPATION_TYPES) {
           const pool = reg.occupationPools[occId];
           const prevPool = prevReg.occupationPools[occId];
           if (pool.wageGrowthAnnual > 0.08 && prevPool.wageGrowthAnnual <= 0.08) {

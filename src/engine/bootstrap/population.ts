@@ -7,6 +7,7 @@
  */
 
 import { RegionId } from '../../types';
+import { REGION_IDS } from '../../domain/geography';
 
 /** Reference population for structural size-rank 1. A design primitive, not a census figure. */
 export const POPULATION_UNIT = 30_000_000;
@@ -62,7 +63,7 @@ export const MORTALITY_PER_RETIRED_SHARE = 0.030;
 
 /** Region productivity relative to the set's mean — the income term the transition reads. */
 function relativeProductivity(regionId: RegionId): number {
-  const all = (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).map(getRegionProductivityPerCapitaUSD);
+  const all = REGION_IDS.map(getRegionProductivityPerCapitaUSD);
   const mean = all.reduce((a, b) => a + b, 0) / all.length;
   return mean > 0 ? getRegionProductivityPerCapitaUSD(regionId) / mean : 1;
 }

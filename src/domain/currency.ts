@@ -60,7 +60,7 @@ export function convertLocal(amount: number, from: RegionId, to: RegionId, fxToU
  * the same rate. Re-reading a moving rate partway through a comparison is how two halves of one
  * decision end up priced against different worlds.
  */
-export function snapshotFxToUsd(regionIds: RegionId[], fxToUsd: FxToUsd): Record<string, number> {
+export function snapshotFxToUsd(regionIds: readonly RegionId[], fxToUsd: FxToUsd): Record<string, number> {
   const table: Record<string, number> = {};
   regionIds.forEach(r => { table[r] = requireRate(fxToUsd(r), r); });
   return table;

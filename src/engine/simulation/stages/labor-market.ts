@@ -55,11 +55,10 @@ import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
 import { RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../../bootstrap/population';
 import {
   RENT_SHARE_TO_LABOUR, RETURN_TO_EXPERIENCE_ANNUAL, TenureStratum, TENURE_COHORTS,
+  OCCUPATION_TYPES,
 } from '../../../domain/region-macro';
 
-const OCCUPATIONS: OccupationType[] = [
-  'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
-];
+const OCCUPATIONS = OCCUPATION_TYPES;
 
 /** An employer's occupation mix — a named firm's by sector, a segment pool's by segment type. */
 function occupationMixFor(sector: string): Partial<Record<OccupationType, number>> {

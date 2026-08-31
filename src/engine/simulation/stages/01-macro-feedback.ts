@@ -9,6 +9,7 @@
 import { GameState, RegionId } from '../../../types';
 import { CREDIT_RECOVERY_RATE } from './shared-helpers';
 import { WeeklyStepContext } from './context';
+import { REGION_IDS } from '../../../domain/geography';
 
 /** How long a default keeps feeding credit contagion before it is treated as absorbed. */
 const CONTAGION_WINDOW_WEEKS = 52;
@@ -20,13 +21,13 @@ export function runMacroFeedbackStage(state: GameState, ctx: WeeklyStepContext):
   // feed `evolveBankingSector`'s `businessLoanBookInputUSD`, a parameter declared and never read
   // since G2 made business lending the itemized stage's decision. It also counted bank
   // facilities, the double-count 07d exists to avoid.
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach(rid => {
+  REGION_IDS.forEach(rid => {
     const firms = prevActiveFirms.filter(f => f.region === rid);
     if (firms.length === 0) return;
     ctx.regionTrackedHealthSignal[rid] = firms.reduce((s, f) => s + (f.annualRevenue - f.baselineAnnualRevenue) / Math.max(1, f.baselineAnnualRevenue), 0) / firms.length;
   });
 
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach(rid => {
+  REGION_IDS.forEach(rid => {
     ctx.regionPublicCompanyEmployment[rid] = prevActiveFirms.filter(f => f.region === rid).reduce((s, f) => s + f.employeeCount, 0);
   });
 

@@ -13,6 +13,7 @@
  * same change.
  */
 
+import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { isActiveCompany } from '../../../domain/company';
@@ -67,8 +68,8 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
       let touched = false;
       const holdings = e.itemizedHoldings.map((h) => {
         if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
-        const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
-        const rate = rateByBucket.get(key);
+        const key = govBucketKeyOf(h.instrumentId, regionId);
+        const rate = key ? rateByBucket.get(key) : undefined;
         if (!rate) return h;
         touched = true;
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 + rate) };

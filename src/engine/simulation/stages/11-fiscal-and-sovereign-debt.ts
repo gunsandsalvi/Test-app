@@ -7,6 +7,7 @@
  * a quarterly calendar, then generates this week's breaking news.
  */
 
+import { govBucketKeyOf, govBillTrancheId, govBondTrancheId } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, GovDebtTranche } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
@@ -22,9 +23,10 @@ import { centralBankSovereignBookUSD, openMarketPolicy, cashPositionBillIssuance
 import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay } from './settlement';
+import { REGION_IDS } from '../../../domain/geography';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
   const { updatedRegions, updatedCompanies, nextWeek, currentWeekMod13 } = ctx;
 
   // S7: the sector holdings VIEW, derived from the real books. This replaces a weekly
@@ -265,8 +267,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           const rows = inv[book];
           if (!rows) return;
           newInv[book] = rows.map(r => {
-            const key = r.instrumentId.replace(`${regionId}-GOV-`, '');
-            const fraction = redeemedFractionByBucket.get(key) ?? 0;
+            const key = govBucketKeyOf(r.instrumentId, regionId);
+            const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
             if (fraction <= 0) return r;
             redeemedUSD += r.inventoryUSD * fraction;
             return { ...r, inventoryUSD: r.inventoryUSD * (1 - fraction) };
@@ -293,8 +295,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         if (!held || held.length === 0) return c;
         let redeemedUSD = 0;
         const newHeld = held.map(h => {
-          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
-          const fraction = redeemedFractionByBucket.get(key) ?? 0;
+          const key = govBucketKeyOf(h.instrumentId, regionId);
+          const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
           if (fraction <= 0) return h;
           redeemedUSD += h.quantityOrNotionalUSD * fraction;
           return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * (1 - fraction) };
@@ -336,8 +338,8 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         let redeemedCashUSD = 0;
         const newHoldings = entity.itemizedHoldings.map(h => {
           if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return h;
-          const key = h.instrumentId.replace(`${regionId}-GOV-`, '');
-          const fraction = redeemedFractionByBucket.get(key) ?? 0;
+          const key = govBucketKeyOf(h.instrumentId, regionId);
+          const fraction = (key ? redeemedFractionByBucket.get(key) : 0) ?? 0;
           if (fraction <= 0) return h;
           touched = true;
           redeemedCashUSD += h.quantityOrNotionalUSD * fraction;
@@ -466,7 +468,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           .filter(e => !e.isDefaulted)
           .reduce((a, e) => a + e.itemizedHoldings
             .filter(h => h.instrumentType === 'GOV_BOND' && h.issuerRegion === regionId)
-            .reduce((x, h) => x + ((h.quantityOrNotionalUSD ?? 0) * (cb[h.instrumentId.replace(`${regionId}-GOV-`, '')] ?? 0)) / 52, 0), 0);
+            .reduce((x, h) => x + ((h.quantityOrNotionalUSD ?? 0) * (cb[govBucketKeyOf(h.instrumentId, regionId) ?? ''] ?? 0)) / 52, 0), 0);
       reg.governmentInterestToUnmodeledHoldersUSD = Math.round(Math.max(0, interestWeeklyUSD - held));
     }
 
@@ -527,7 +529,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         const principal = weeklyBillIssuanceUSD * weight;
         if (principal < 100) return;
         newTranches.push({
-          id: `${regionId}-GOV-B${weeks}-${nextWeek}`,
+          id: govBillTrancheId(regionId, weeks, nextWeek),
           principalUSD: principal,
           couponRate: Number((tenorYears <= 0.3 ? reg.zeroRates.tenor3M : calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams)).toFixed(4)),
           originationWeek: nextWeek,
@@ -565,7 +567,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           const principal = quarterlyFundingNeedUSD * (tenorWeights[key] / weightSum);
           if (principal < 100) return;
           newTranches.push({
-            id: `${regionId}-GOV-${tenorYears}Y-${nextWeek}`,
+            id: govBondTrancheId(regionId, tenorYears, nextWeek),
             principalUSD: principal,
             couponRate: calculateNelsonSiegelZeroRate(tenorYears, reg.yieldCurveParams), // priced off the region's own real curve
             originationWeek: nextWeek,

@@ -35,6 +35,7 @@ import {
   householdDirectEquityUSD, householdEtfHoldingsUSD, householdPrivateBusinessEquityUSD,
 } from '../../macro/household-portfolio';
 import { publicComparableEvMultiple } from './pe-lifecycle';
+import { REGION_IDS } from '../../../domain/geography';
 
 /**
  * The institution types whose beneficiaries are households. Everything else in the sector either
@@ -95,7 +96,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
     return navUSD / shares;
   };
 
-  (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((region) => {
+  REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
     const hs = reg?.householdState;
     if (!hs) return;

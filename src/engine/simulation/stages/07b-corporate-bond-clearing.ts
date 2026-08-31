@@ -69,6 +69,7 @@ import { INDEX_DEFINITIONS } from '../../../domain/indexes';
 import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
+import { REGION_IDS } from '../../../domain/geography';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
@@ -124,7 +125,7 @@ function clamp(v: number, min: number, max: number): number {
  */
 
 export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
 
   // SCALE: fixedDebtUSD filters and reduces a company's whole ladder per call, and the stage
   // used to call it ~14k times a week (four full-universe region sweeps included). Nothing in

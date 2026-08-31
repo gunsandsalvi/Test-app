@@ -20,6 +20,7 @@
 import { InstitutionalEntity, ItemizedHolding } from '../../types';
 import { Table } from './table';
 import { INSTRUMENT_IDS, ENTITY_IDS } from './intern';
+import { REGION_IDS } from '../../domain/geography';
 
 /** The instrument types, in the order the by-type grouping uses. */
 export const HOLDING_TYPES: ItemizedHolding['instrumentType'][] = [
@@ -28,7 +29,7 @@ export const HOLDING_TYPES: ItemizedHolding['instrumentType'][] = [
 ];
 const TYPE_CODE = new Map<string, number>(HOLDING_TYPES.map((t, i) => [t, i]));
 
-export const HOLDING_REGIONS = ['USA', 'EUR', 'UK', 'JPN'] as const;
+export const HOLDING_REGIONS = REGION_IDS;
 const REGION_CODE = new Map<string, number>(HOLDING_REGIONS.map((r, i) => [r, i]));
 
 export class HoldingsTable {

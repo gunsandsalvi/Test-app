@@ -53,6 +53,7 @@ import { runFreightClearingStage } from './stages/freight-clearing';
 import { runPortfolioAndPositionsStage } from './stages/12-portfolio-and-positions';
 import { runNewsAndTurnSummaryStage } from './stages/13-news-and-turn-summary';
 import { distributeMoneyFundIncome } from './stages/money-market-fund';
+import { REGION_IDS } from '../../domain/geography';
 
 export { computeOccupationDemand } from './stages/shared-helpers';
 
@@ -184,7 +185,7 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('sme-pools', () => runSmePoolStage(ctx));
   run('hc-lifecycle', () => {
     settlePeLifecycleDeals(ctx, ctx.nextWeek);
-    (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((regionId) => {
+    REGION_IDS.forEach((regionId) => {
       const reg = ctx.updatedRegions[regionId];
       if (!reg) return;
       runPeLifecycleForRegion(regionId, reg, ctx, ctx.nextWeek);

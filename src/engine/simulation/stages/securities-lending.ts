@@ -29,6 +29,7 @@ import { fairValuePerShare, companyBookEquityUSD, companyNetInvestmentRate } fro
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { realizedAnnualVol } from '../../../domain/volatility';
 import { MAX_WEEKLY_PRICE_MOVE_PCT, FULL_SIZE_PRICE_DISCOUNT } from './07e-equity-clearing';
+import { REGION_IDS } from '../../../domain/geography';
 
 const sblInstrumentId = (regionId: RegionId, companyId: string) => `${regionId}-SBL-${companyId}`;
 export const positionKey = (entityId: string, companyId: string) => `${entityId}|${companyId}`;
@@ -38,7 +39,7 @@ const MAX_WEEKLY_FEE_MOVE_PCT = 0.25;
 
 export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepContext): void {
   void state;
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
   const store = ctx.holdingsStore!;
   if (!store) return;
 

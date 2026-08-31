@@ -37,18 +37,19 @@
  *     `governmentInterestToUnmodeledHoldersUSD` already says they are.
  */
 
+import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
 import { sovereignCouponByBucket, sovereignCouponDueShare } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
 import { isActiveCompany } from '../../../domain/company';
+import { REGION_IDS } from '../../../domain/geography';
 
 /** `<region>|<bucket>|<partyKey>` — the receivable one holder has against one bucket. */
 const accrualKey = (regionId: RegionId, bucket: string, party: PartyRef) =>
   `${regionId}|${bucket}|${partyKey(party)}`;
 
-const REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
 
 /**
  * Accrue this week's sovereign interest to every holder of record, then pay out the buckets whose
@@ -83,8 +84,9 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
       if (entity.isDefaulted) return;
       (entity.itemizedHoldings || []).forEach((h) => {
         if (h.instrumentType !== 'GOV_BOND' || h.issuerRegion !== regionId) return;
-        accrue(h.instrumentId.replace(`${regionId}-GOV-`, ''),
-          { kind: 'INSTITUTION', id: entity.id }, h.quantityOrNotionalUSD ?? 0);
+        const bucketKey = govBucketKeyOf(h.instrumentId, regionId);
+        if (!bucketKey) return;
+        accrue(bucketKey, { kind: 'INSTITUTION', id: entity.id }, h.quantityOrNotionalUSD ?? 0);
       });
     });
 

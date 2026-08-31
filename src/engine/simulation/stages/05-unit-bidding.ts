@@ -37,7 +37,7 @@ import { capacityMixShares } from '../../../domain/sme-pool';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
 import { convertLocal, localToUsd, fromTable, snapshotFxToUsd, FxToUsd } from '../../../domain/currency';
 import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
-import { laneDistanceNm } from '../../../domain/geography';
+import { laneDistanceNm, REGION_IDS } from '../../../domain/geography';
 import { SourcingSplit } from './sourcing-intent';
 import { chooseInvoiceRegion, invoiceCurrencyOf } from '../../../domain/invoice-currency';
 import { paymentTermWeeks } from '../../../domain/trade-invoice';
@@ -46,7 +46,7 @@ import { getFxToUsd } from './06-fx-and-trade';
 import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
 import { realizedAnnualVol } from '../../../domain/volatility';
 
-export const MARKET_REGION_IDS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+export const MARKET_REGION_IDS = REGION_IDS;
 
 // 1$ is 1$ Phase 3: a private-sector "company ID" for the auction — distinguishable from any
 // real ticker so the post-clearing crediting step can tell it apart from a real company sale.

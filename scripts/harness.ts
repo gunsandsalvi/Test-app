@@ -54,7 +54,7 @@ import { sovBucketKey } from '../src/engine/simulation/stages/shared-helpers';
 import { INDUSTRY_SUBUNITS } from '../src/domain/industry';
 import { productionLeadWeeksOf, seasonalFactor } from '../src/domain/industry-registry';
 import { SUBUNIT_PHYSICAL, deliveryModeOf } from '../src/domain/goods-physical';
-import { laneDistanceNm } from '../src/domain/geography';
+import { laneDistanceNm, REGION_IDS, REGION_IDS_SEED_ORDER } from '../src/domain/geography';
 import { laneKey, laneTransitWeeks } from '../src/domain/carrier';
 import { isCarrier } from '../src/engine/simulation/stages/freight-clearing';
 import { getFxToUsd } from '../src/engine/simulation/stages/06-fx-and-trade';
@@ -71,7 +71,7 @@ let damperWorstStreak = 0;
 let prevStateForBookCheck: GameState | null = null;
 
 // ---- shared helpers (used by checks, modules and the live line) ----
-const REGIONS: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+const REGIONS = REGION_IDS;
 const B = (x: number) => (x / 1e9).toFixed(1) + 'B';
 const pct = (x: number) => (x * 100).toFixed(2) + '%';
 const corr = (a: number[], b: number[]) => {
@@ -184,7 +184,7 @@ function checkBoundaryFlows(state: GameState, week: number): Violation[] {
 
 function checkHoldingsLedgerConservation(state: GameState, week: number): Violation[] {
   const out: Violation[] = [];
-  const regionIds = ['USA', 'EUR', 'UK', 'JPN'] as const;
+  const regionIds = REGION_IDS;
   type Book = { corp: number; loan: number; sov: number; cp: number };
   const held: Record<string, Book> = {};
   const outstanding: Record<string, Book> = {};
@@ -309,7 +309,7 @@ function checkInstitutionalBookConservation(prev: GameState, state: GameState, w
         0
       );
 
-  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+  REGION_IDS_SEED_ORDER.forEach((region) => {
     const before = bookOf(prev, region);
     const after = bookOf(state, region);
     if (!(before > 0)) return;
@@ -429,7 +429,7 @@ function checkGuards(state: GameState, week: number) {
   //    quiet pass. The repo market ran at ZERO volume in all four regions for ten weeks while
   //    the corridor assertion below passed VACUOUSLY: with no borrower the session returns the
   //    ON RRP floor as a literal, and a literal is trivially inside the corridor (§7.102).
-  (['USA', 'EUR', 'UK', 'JPN'] as const).forEach((regionId) => {
+  REGION_IDS.forEach((regionId) => {
     const reg: any = (state as any).regions[regionId];
     // Measured BY THE SESSION, not reconstructed from end-of-week sheets: a bank short of its
     // buffer at the close was not necessarily short when the session ran, and a bank short of
@@ -458,7 +458,7 @@ function checkGuards(state: GameState, week: number) {
 }
 
 function checkCentralBankIdentity(state: GameState, week: number) {
-  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+  REGION_IDS_SEED_ORDER.forEach((region) => {
     const cb = state.regions[region]?.centralBankSheet;
     if (!cb) return;
     const reserves = state.companies
@@ -528,7 +528,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
 }
 
 function checkLaborMarketIdentity(state: GameState, week: number) {
-  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+  REGION_IDS_SEED_ORDER.forEach((region) => {
     const reg = state.regions[region];
     if (!reg?.occupationPools) return;
     const employerHeadcount = state.companies
@@ -564,7 +564,7 @@ function checkLaborMarketIdentity(state: GameState, week: number) {
 }
 
 function checkHouseholdCohortIdentity(state: GameState, week: number) {
-  (['USA', 'UK', 'JPN', 'EUR'] as RegionId[]).forEach((region) => {
+  REGION_IDS_SEED_ORDER.forEach((region) => {
     const reg = state.regions[region];
     const hs = reg?.householdState;
     const cohorts = hs?.cohorts;
@@ -647,7 +647,7 @@ function checkHouseholdCohortIdentity(state: GameState, week: number) {
 function checkBeneficiaryClaimsHaveHolders(state: GameState, week: number) {
   const owedUSD = (state.institutionalEntities || [])
     .reduce((sum, e) => sum + ((e as any).beneficiaryLiabilityUSD ?? 0), 0);
-  const heldUSD = (['USA', 'UK', 'JPN', 'EUR'] as RegionId[])
+  const heldUSD = REGION_IDS_SEED_ORDER
     .reduce((sum, r) => sum + (state.regions[r]?.householdState?.institutionalClaimsUSD ?? 0), 0);
   if (owedUSD <= 0 && heldUSD <= 0) return;
   const gapUSD = Math.abs(owedUSD - heldUSD);
@@ -2037,7 +2037,7 @@ function runHarness() {
     // two books, so the treasury's payable can never be less than what its bank holders are
     // carrying against it. If this ever trips, the calendar has two writers again — find the
     // second one, never reconcile the difference.
-    (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).forEach((regionId) => {
+    REGION_IDS.forEach((regionId) => {
       const reg: any = (state.regions as any)?.[regionId];
       if (!reg) return;
       const bankHeldUSD = state.companies.reduce((a: number, c: any) => (
@@ -2058,7 +2058,7 @@ function runHarness() {
     // reservation is its own posted floor and the SRF sits in the book as an elastic seat at
     // the ceiling. A print outside the corridor means a schedule is wrong or the damper bound.
     // And pledged collateral can never exceed the pledger's holdings.
-    (['USA', 'EUR', 'UK', 'JPN'] as const).forEach(regionId => {
+    REGION_IDS.forEach(regionId => {
       const reg: any = (state as any).regions[regionId];
       if (typeof reg.repoRateAnnual !== 'number') return;
       const floorAnnual = Math.max(0, reg.policyRate - 20 / 10000);
@@ -2095,7 +2095,7 @@ function runHarness() {
     // borrower; what a lender lends equals the contracts naming it as lender; and no BUCKET is
     // pledged beyond what the pledger holds of that bucket (the blended-share version could hide
     // a thirty-year over-pledge behind a large two-year book).
-    (['USA', 'EUR', 'UK', 'JPN'] as const).forEach(regionId => {
+    REGION_IDS.forEach(regionId => {
       const reg: any = (state as any).regions[regionId];
       const book: any[] = reg.repoBook ?? [];
       if (book.length === 0) return;

@@ -20,6 +20,7 @@
  * money funds).
  */
 
+import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { GameState, RegionId, Company } from '../../../types';
 import { BankingSector, HouseholdLoanKind } from '../../../domain/banking';
 import { regionalDeskView } from '../../../domain/dealer-desk';
@@ -415,8 +416,8 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // result, and a desk's position is only ever written by the bank that took it.
       corpBondDealerInventory: deskView('corporate bond').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
       sovBondDealerInventory: [
-        ...deskView('sovereign bond').map(([instrumentId, inventoryUSD]) => ({ tenorKey: instrumentId.replace(`${regionId}-GOV-`, ''), inventoryUSD })),
-        ...deskView('bill').map(([instrumentId, inventoryUSD]) => ({ tenorKey: instrumentId.replace(`${regionId}-GOV-`, ''), inventoryUSD })),
+        ...deskView('sovereign bond').map(([instrumentId, inventoryUSD]) => ({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD })),
+        ...deskView('bill').map(([instrumentId, inventoryUSD]) => ({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD })),
       ],
       loanDealerInventory: deskView('leveraged loan').map(([companyId, inventoryUSD]) => ({ companyId, inventoryUSD })),
       // WS6: the region's overnight book is the sum of the named banks' real positions. The

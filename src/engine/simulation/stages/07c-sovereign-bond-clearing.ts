@@ -43,6 +43,7 @@
  * stage 8, 11, and 12 (all of which read yieldCurveParams/zeroRates as already-real values).
  */
 
+import { govBucketId, govBucketKeyOf } from '../../../domain/sovereign-id';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
@@ -60,6 +61,7 @@ import { centralBankParticipant, applyCentralBankFills, CENTRAL_BANK_PARTICIPANT
 import { computeSovereignRepoHaircuts, unencumberedBorrowingCapacityUSD } from './repo-clearing';
 import { encumberedFaceByBucket } from '../../../domain/repo';
 import { MIN_CASH_BUFFER_RATIO, leverageHeadroomUSD, sovereignBookCapacityUSD, liquidityDrivenSovereignFloorUSD } from '../../macro/banking';
+import { REGION_IDS } from '../../../domain/geography';
 
 type ZeroRateField = 'tenor2Y' | 'tenor5Y' | 'tenor10Y' | 'tenor30Y';
 const TENOR_BUCKETS: { key: string; years: number; zeroRateField: ZeroRateField }[] = [
@@ -164,7 +166,7 @@ function computeSovereignReservationYieldBps(
 }
 
 function bucketInstrumentId(regionId: RegionId, tenorKey: string): string {
-  return `${regionId}-GOV-${tenorKey}`;
+  return govBucketId(regionId, tenorKey);
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -190,7 +192,7 @@ function realYieldSignal(
 }
 
 export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepContext): void {
-  const regionIds: RegionId[] = ['USA', 'EUR', 'UK', 'JPN'];
+  const regionIds = REGION_IDS;
 
   regionIds.forEach((regionId) => {
     ctx.holdingsStore!.nextEpoch();
@@ -561,8 +563,8 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
         if (!ownBucketInstrumentIds.has(bucketInstrumentId(regionId, key))) newBuckets[key] = Number(v) || 0;
       });
       newHoldings.forEach((usd, instrumentId) => {
-        const key = instrumentId.replace(`${regionId}-GOV-`, '');
-        newBuckets[key] = usd;
+        const key = govBucketKeyOf(instrumentId, regionId);
+        if (key) newBuckets[key] = usd;
       });
       const prevClearedUSD = activeBuckets.reduce((s, b) => s + (existingSheet?.sovereignBondHoldingsByTenor?.[b.key] ?? 0), 0);
       const newClearedUSD = activeBuckets.reduce((s, b) => s + (newBuckets[b.key] ?? 0), 0);
@@ -606,7 +608,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
     const billDealerRows = (reg.bankingSector.sovBondDealerInventory || []).filter((p) => p.tenorKey.startsWith('b'));
     const newDealerInventory: { tenorKey: string; inventoryUSD: number }[] = [];
     deskViewById.forEach((inventoryUSD, instrumentId) => {
-      if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ tenorKey: instrumentId.replace(`${regionId}-GOV-`, ''), inventoryUSD });
+      if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ tenorKey: govBucketKeyOf(instrumentId, regionId) ?? instrumentId, inventoryUSD });
     });
     reg.bankingSector = { ...reg.bankingSector, sovBondDealerInventory: [...newDealerInventory, ...billDealerRows] };
 

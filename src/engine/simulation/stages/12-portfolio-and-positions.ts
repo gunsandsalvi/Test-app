@@ -9,6 +9,7 @@
 
 import { GameState, Position } from '../../../types';
 import { isActiveCompany } from '../../../domain/company';
+import { assertNever } from '../../../domain/defect';
 import { calculateBlackScholesGreeks } from '../../blackScholes';
 import { calculateExpectedCarry } from '../../carryCalculator';
 import { priceSovereignBond } from '../../nelsonSiegel';
@@ -515,6 +516,10 @@ export function runPortfolioAndPositionsStage(state: GameState, ctx: WeeklyStepC
         }
         break;
       }
+      default:
+        // §7.241: without this, a position in a new asset type was never re-marked — frozen at
+        // entry price with zero P&L forever. A new AssetType member now fails to COMPILE here.
+        assertNever(pos.assetType, 'position weekly mark (12-portfolio-and-positions)');
     }
 
     ctx.weeklyFinancingCostUSD += weeklyFinancing;

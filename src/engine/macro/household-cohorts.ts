@@ -16,15 +16,20 @@
 
 import {
   OccupationType, WealthTier, WealthTierData, OccupationPool, HouseholdCohort,
-  TenureStratum, RETURN_TO_EXPERIENCE_ANNUAL,
-} from '../../domain/region-macro';
+  TenureStratum, RETURN_TO_EXPERIENCE_ANNUAL, OCCUPATION_TYPES } from '../../domain/region-macro';
 import { PopulationNode, bandMeansOverDistribution } from '../../domain/household-credit';
 import {
   HOUSEHOLD_CAPITAL_INCOME_PER_WAGE_DOLLAR,
   HOUSEHOLD_EFFECTIVE_TAX_RATE, UNEMPLOYMENT_REPLACEMENT_RATE, CONSUMPTION_TAX_RATE, splitWageBill, EMPLOYER_PAYROLL_TAX_RATE,
 } from '../bootstrap/national-accounts';
 
-export const WEALTH_TIERS: WealthTier[] = ['BOTTOM_50', 'NEXT_40', 'TOP_9', 'TOP_1'];
+export const WEALTH_TIERS = ['BOTTOM_50', 'NEXT_40', 'TOP_9', 'TOP_1'] as const;
+// §7.241: complete by construction — a fifth WealthTier fails to compile here until this order
+// names it. It was the ONE silent site on an otherwise Record-driven axis: a tier with rows in
+// every table whose cohort cells were never built.
+type MissingWealthTier = Exclude<WealthTier, (typeof WEALTH_TIERS)[number]>;
+const _tiersComplete: MissingWealthTier extends never ? true : never = true;
+void _tiersComplete;
 
 /**
  * Each tier's own wage multiplier: the mean premium over its band of the occupation's earnings
@@ -43,9 +48,7 @@ function tierWageMultipliers(
   WEALTH_TIERS.forEach((t, i) => { out[t] = Math.max(0.0001, bands[i]?.mean ?? 1); });
   return out;
 }
-const OCCUPATIONS: OccupationType[] = [
-  'GENERAL', 'SKILLED_TRADES', 'TECHNICAL_ENGINEERING', 'SPECIALIZED_PROFESSIONAL', 'MANAGERIAL_FINANCIAL',
-];
+const OCCUPATIONS = OCCUPATION_TYPES;
 
 /**
  * Which occupations each wealth tier's earners work in — THE membership primitive, moved here
