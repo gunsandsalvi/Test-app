@@ -41,6 +41,7 @@ import { runShardedVoid } from '../../columns/kernel';
 import { planCapitalProgramme, commissionCapital } from '../../../domain/company-week/capital-programme';
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
 import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain/company-week/debt-ladder';
+import { industrialIncome, profileIncome } from '../../../domain/company-week/income-statement';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -476,11 +477,23 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         weeklyPayrollUSD, inputCostAnnualUSD: comp.annualRevenue * profileInputRate });
       newRevenue = pnl.newRevenue;
       const profileInputCostUSD = newRevenue * profileInputRate;
-      newEbitda = newRevenue + (pnl.otherIncomeAnnualUSD ?? 0)
-        - profileInputCostUSD - weeklyPayrollUSD * 52 - pnl.profileCostsAnnualUSD;
+      // §5-STRUCT step 2 — the statement lives on the firm (domain/company-week/income-statement.ts).
+      const profilePnl = profileIncome({
+        revenueUSD: newRevenue,
+        otherIncomeAnnualUSD: pnl.otherIncomeAnnualUSD ?? 0,
+        inputCostAnnualUSD: profileInputCostUSD,
+        payrollAnnualUSD: weeklyPayrollUSD * 52,
+        profileCostsAnnualUSD: pnl.profileCostsAnnualUSD,
+        grossPPEUSD: comp.grossPPEUSD ?? 0,
+        ppeDepreciationYears: 20,
+        annualInterestUSD: annualInterest,
+        taxRate,
+        sharesOutstanding: comp.sharesOutstanding,
+      });
+      newEbitda = profilePnl.ebitdaUSD;
       newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
-      newEbit = newEbitda - (comp.grossPPEUSD ?? 0) / 20;
-      newNetIncome = (newEbit - annualInterest) * (newEbit > 0 ? (1 - taxRate) : 1);
+      newEbit = profilePnl.ebitUSD;
+      newNetIncome = profilePnl.netIncomeUSD;
       newEps = perShare(newNetIncome);
     } else {
       // Consumer Revenue Beta
@@ -800,11 +813,23 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // IND3: the margin above already carries the full wage bill, so there is no deviation to
       // add here — `payrollAboveBaselineAnnualUSD` exists only for profiles that still state a
       // margin (the carrier charges its payroll in full instead; see profiles/).
-      newEbitda = newRevenue * newEbitdaMargin;
-      const da = newRevenue * 0.05;
-      newEbit = Math.max(1, newEbitda - da);
-
-      newNetIncome = (newEbit - annualInterest) * (1 - taxRate);
+      // §5-STRUCT step 2 — same statement, industrial path. `taxesLosses: true` PRESERVES this
+      // path's existing behaviour, which rebates a pre-tax loss at the tax rate — a rebate no firm
+      // receives in cash, and a §6.1 defect the extraction names rather than silently fixes,
+      // because fixing it changes the world.
+      const industrialPnl = industrialIncome({
+        revenueUSD: newRevenue,
+        ebitdaMargin: newEbitdaMargin,
+        daShareOfRevenue: 0.05,
+        annualInterestUSD: annualInterest,
+        taxRate,
+        sharesOutstanding: comp.sharesOutstanding,
+        ebitFloorUSD: 1,
+        taxesLosses: true,
+      });
+      newEbitda = industrialPnl.ebitdaUSD;
+      newEbit = industrialPnl.ebitUSD;
+      newNetIncome = industrialPnl.netIncomeUSD;
       newEps = perShare(newNetIncome);
 
       // Quarterly dollar impact of the same cost drivers that moved targetMargin above —
