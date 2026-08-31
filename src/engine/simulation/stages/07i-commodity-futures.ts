@@ -235,7 +235,7 @@ export function runCommodityFuturesStage(state: GameState, ctx: WeeklyStepContex
         dealerSpreadBps: 0,
         maxWeeklyStatMovePct: MAX_WEEKLY_FUTURES_MOVE_PCT,
       });
-      ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+      ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `commodity:${id}`));
       const clearedPrice = result.newStatById.get(id);
       if (clearedPrice === undefined || !(clearedPrice > 0)) return;
 

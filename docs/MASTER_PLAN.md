@@ -4342,3 +4342,40 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        (§7.232's table is not flat: wip xInfinity, u x3.76); the seed wholesale-claim
        re-anchor and COH's 0.42 stay behind it (§7.283/§7.286) — each is a seed change that
        must be judged against THIS reference, not folded into it blind.
+
+288. **THE THREE STANDING ISSUES §7.287 RANKED, fixed in one pass: the capex financing bound,
+     the 02b reconcile DELETED at a measured zero, and the damper decomposed by book.**
+     - **CAPEX (the u-ratchet's channel):** CAPEX_TRACE measured the §7.272 money bids — at
+       w25 EUR is a normal 0.73x of depreciation; the 317B/yr blowup (7.5x) develops later,
+       out of the growth-capex multiplier stack (q x competitiveness x shortage), which had
+       NO FINANCING TERM: every factor was a reason to WANT plant, none a means to PAY.
+       Growth capex now carries the same funding convention maintenance has had since §7.167:
+       capped at free cash flow after maintenance, levered half again (the identical 0.5
+       bridge share) for an investment-grade name. A firm that wants more raises real money
+       first — the financing decision, a different function. Unit-tested (72nd pure test);
+       60-week read pending below.
+     - **THE MONEY ROW (task #8, gate-blocked since §7.241): CLOSED — the meter reads 0.0B.**
+       RECON_TRACE attributed the early-regime gross (62.7B/wk at w9, ALL corporate class) to
+       a CONVENTION, not a flow: the truth-Σ clamped negatives (`max(0, cash)`) while
+       settlement maintains the line as the SIGNED sum — the divergence was exactly the
+       rolling overdraft float (~25B standing, regenerating weekly while the §7.265 facility
+       conversion drains it at 02b; measured: [recon-base], USA w10 −24.7B across 3 whales).
+       §7.264 kept the clamp on a measurement that predates the facility and §7.285's
+       one-mover discipline. Signed, corporate AND institutional divergence measure 0.0M per
+       bank per week — so the overwrite is DELETED: no invented reserves, no re-pinned lines;
+       deposits evolve by settlement alone and the meter stays as the watchdog (a nonzero
+       print is once again a stage off the instruction rail). The SME class asserts at REGION
+       level (pools' cash vs Σ lines — the per-bank split is settlement's own record; the old
+       per-bank re-spread only metered its own pro-rata convention, offsetting ±B). Defaulted
+       firms are IN the truth now (§7.286 made the estate account real money at its bank —
+       §7.264's exclusion had become the mismatch it once prevented). 15-week probe: meter
+       0.0B in all four regions, identities green, 72/72, baseline violations only.
+     - **THE DAMPER, decomposed:** every push site tags its ids `book:id`, and
+       [damper-by-book] prints the persistent binds — at 12 weeks: equity 771, stock loan
+       283, corporate bond 229, commercial paper 83, leveraged loan 77, cds 18, commodity 13,
+       fx 5, bill 2. HALF the number is the small-cap equity tail (§7.31's cohort — a
+       structural short-float class whose owner is SCALE), a quarter rides it (stock loan) or
+       is the HY saturation cohort (§7.21). The sovereign buckets — the family the damper row
+       was opened for — are 2 bills. The number is now a decomposition to burn down by named
+       class, not a scalar to watch.
+     - 60-week validation on this tree running; its reference read follows this record.

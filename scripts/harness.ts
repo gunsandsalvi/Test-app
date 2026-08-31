@@ -2562,6 +2562,18 @@ function runHarness() {
   }
 
   console.log(`\n[damper] instruments persistently bound (3+ consecutive weeks): ${damperPersistentBinds.size}; worst streak ${damperWorstStreak} weeks — §6.1's promoted defect; watch it DOWN`);
+  // §7.288 — the decomposition the number always needed: WHICH BOOK pins its instruments.
+  // Every push site tags its ids `book:id`, so this is a read, not a guess.
+  {
+    const byBook = new Map<string, number>();
+    damperPersistentBinds.forEach((id) => {
+      const book = id.includes(':') ? id.slice(0, id.indexOf(':')) : 'untagged';
+      byBook.set(book, (byBook.get(book) ?? 0) + 1);
+    });
+    const rows = [...byBook.entries()].sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${k} ${n}`).join(' | ');
+    console.log(`  [damper-by-book] persistent binds :: ${rows}`);
+  }
 
   // ---- verdict: grouped summary (violations already printed live, week by week) ----
   if (violations.length === 0) {

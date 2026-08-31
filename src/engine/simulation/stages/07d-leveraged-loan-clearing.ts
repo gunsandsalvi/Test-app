@@ -411,7 +411,7 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `leveraged loan:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} leveraged loan`);
     // G3c: quoted per deal — the desks' spread plus a week's spread move through the loan's own
     // duration, on the residual the desks cannot absorb.

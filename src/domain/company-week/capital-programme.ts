@@ -126,9 +126,20 @@ export function planCapitalProgramme(i: CapitalProgrammeInputs): CapitalProgramm
   // the firm's finances and none about whether it can fill the orders in front of it.
   const shortageCapexMultiple = 1 + i.categoryShortfall * i.capacityCatchupShareAnnual;
 
-  const targetGrowthCapex = i.newRevenueUSD * i.baselineGrowthCapexToRevenueRatio * (1 - rateDrag)
+  const desiredGrowthCapex = i.newRevenueUSD * i.baselineGrowthCapexToRevenueRatio * (1 - rateDrag)
     * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect)
     * growthCapexAllocationShare * shortageCapexMultiple;
+  // §7.288 — A FIRM CANNOT BID CAPEX IT CANNOT FUND. Every term above is a reason to WANT
+  // plant (q, competitiveness, the shortage in its own market); none was a means to PAY for
+  // it, so the multiplicative stack was unbounded — measured at the §7.287 reference: EUR
+  // firms bid 317B/yr of capex against 42B of depreciation (7.5x), draining the world's
+  // capital-goods supply at 2x prices while USA firms below replacement couldn't fill.
+  // Maintenance has had a funding capacity since §7.167; growth gets the SAME convention:
+  // free cash flow after maintenance, levered half again for an investment-grade name (the
+  // identical 0.5 bridge share upkeep uses). A firm that wants more than that raises real
+  // money first — the financing decision, which is a different function.
+  const growthFundingCapUSD = fcfBeforeGrowthCapex * (i.isInvestmentGrade ? 1.5 : 1.0);
+  const targetGrowthCapex = Math.min(desiredGrowthCapex, growthFundingCapUSD);
   const growthCapexUSD = Math.max(0, i.priorGrowthCapexUSD * 0.90 + targetGrowthCapex * 0.10);
 
   return {

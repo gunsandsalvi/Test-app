@@ -905,6 +905,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       avgCompetitiveness,
     });
 
+    // CAPEX_TRACE=1 — the §7.272/§7.287 money-bid decomposition: who bids what, with the
+    // multiplier terms, so the EUR 7.5x-of-depreciation overbid names its own driver.
+    if (process.env.CAPEX_TRACE === '1' && programme.capexUSD > 0.5e9) {
+      console.log(`  [capex] w${nextWeek} ${comp.region}:${comp.ticker} ${comp.sector} `
+        + `capex ${(programme.capexUSD / 1e9).toFixed(2)}B/yr (maint ${(programme.maintenanceCapexUSD / 1e9).toFixed(2)} growth ${(programme.growthCapexUSD / 1e9).toFixed(2)}) `
+        + `rev ${(newRevenue / 1e9).toFixed(2)}B ratio ${(comp.baselineGrowthCapexToRevenueRatio ?? -1).toFixed(4)} `
+        + `shortfall ${categoryShortfall.toFixed(3)} addrGrowth ${addressableGrowthAnnual.toFixed(3)} `
+        + `ppe ${(grossPPEForCapex / 1e9).toFixed(2)}B ebitda/wk ${(newEbitda / 52 / 1e6).toFixed(1)}M`);
+    }
+
     const newMaintenanceCapex = programme.maintenanceCapexUSD;
     const maintenanceShortfallThisWeek = programme.maintenanceShortfallThisWeekUSD;
     const newMaintenanceShortfallStreak = programme.maintenanceShortfallStreak;

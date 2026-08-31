@@ -378,7 +378,7 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `equity:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} equity`);
     // EQ_CONS_TRACE=1 — per-instrument share conservation across every cash-accounted
     // participant: Σ(new − prev) must be zero for a stock book with no primary; a nonzero sum

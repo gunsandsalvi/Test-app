@@ -444,7 +444,7 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
       // position stays with its holder rather than falling to a dealer nobody names.
       unsoldStaysWithHolder: true,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `corporate bond:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} corporate bond`);
     // WS8: settle this week's priced offerings — lead bank pays the unsold residual and takes
     // the fee; stage 08 posts the issuer's proceeds and creates the tranche at cleared terms.

@@ -356,7 +356,7 @@ export function runSecuritiesLendingStage(state: GameState, ctx: WeeklyStepConte
       dealerSpreadBps: 0,
       maxWeeklyStatMovePct: MAX_WEEKLY_FEE_MOVE_PCT,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `stock loan:${id}`));
 
     // ---- 4. STRIKE. At one cleared fee the lenders are fungible, so each borrower draws from
     // each of them in proportion to what that lender put up. A borrow the auction does not fill is

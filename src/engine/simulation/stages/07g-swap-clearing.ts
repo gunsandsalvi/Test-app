@@ -203,7 +203,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       dealerSpreadBps: 0,
       maxWeeklyStatMovePct: 0.25,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `swap:${id}`));
 
     // ---- Strike the week's contracts. At one cleared par rate the receivers are fungible, so
     // each payer's hedge draws from each receiver in proportion to what that receiver took. ----

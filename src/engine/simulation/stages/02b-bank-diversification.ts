@@ -183,8 +183,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
 
     const corporateDepositsByBank = new Map<string, number>();
-    ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
-      if (c.region !== regionId || c.isDefaulted || c.isBankEntity) return;
+    // §7.288: DEFAULTED firms are IN the truth now. §7.264 excluded them because the seize
+    // design froze their balances outside the banking system; §7.286 made the dead firm's
+    // account the ESTATE'S account — real money at its bank, moved by real instructions
+    // (asset sales in, distributions out) that settlement credits to this very line. Excluding
+    // it made every open estate a manufactured corporate-class mismatch, one per death.
+    ctx.updatedCompanies.forEach((c) => {
+      if (c.region !== regionId || c.isBankEntity || c.mergerAcquired) return;
       if (!c.homeBankTicker) return;
       // §7.264 MEASURED BOTH CONVENTIONS: clamped, the reconcile reads 0.7B/week; signed, it
       // reads 5.2B — because ~4.5B/week of corporate balances stand NEGATIVE, and a negative
@@ -194,8 +199,25 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // missing overdraft-facility mechanism the §6.1 money-conservation row already names:
       // until a negative balance is a real facility draw with a real lender, the overspent
       // cash is money nobody funded. Keep the clamp; build the facility (Tier 2).
-      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + Math.max(0, c.cash));
+      // §7.288 — SIGNED, at last. §7.264 measured the signed convention as worse and kept the
+      // clamp; that measurement predates the overdraft facility (§7.265) and the one-mover
+      // cash discipline (§7.285). The bank's line is maintained by settlement as the SIGNED
+      // sum of its customers' balances, so a clamped truth diverged from it by exactly the
+      // rolling overdraft float (measured: ~25B standing in USA, regenerating weekly while
+      // the facility conversion drains it at 02b). A negative balance is the bank's overdraft
+      // asset and the line nets it — the truth must net it too, or the reconcile "catches"
+      // a convention, not a flow.
+      corporateDepositsByBank.set(c.homeBankTicker, (corporateDepositsByBank.get(c.homeBankTicker) ?? 0) + c.cash);
     });
+    if (process.env.RECON_TRACE === '1') {
+      let negUSD = 0, negN = 0, unbankedUSD = 0, unbankedN = 0;
+      ctx.updatedCompanies.forEach((c) => {
+        if (c.region !== regionId || c.isBankEntity || c.mergerAcquired) return;
+        if (!c.homeBankTicker) { unbankedUSD += c.cash; unbankedN++; return; }
+        if (c.cash < 0) { negUSD += c.cash; negN++; }
+      });
+      console.log(`  [recon-base] w${ctx.nextWeek} ${regionId} negatives ${(negUSD / 1e6).toFixed(0)}M x${negN} | unbanked ${(unbankedUSD / 1e6).toFixed(0)}M x${unbankedN}`);
+    }
     // SEG1: the segment pools' balances, reconciled the same way — each pool's cash sits across
     // the region's banks pro-rata by market share (settlement spreads it identically; this
     // catches share drift and any balance moved outside instructions, with the reserve leg).
@@ -357,25 +379,36 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       const trueSmeUSD = regionBankShareTotal > 0
         ? Math.round((segmentCashUSD * ((bank.bankMarketShare ?? 0) / regionBankShareTotal)))
         : 0;
+      // §7.288: the SME class is NOT in the per-bank meter — settlement's per-bank record IS
+      // the allocation, and comparing it to a fresh pro-rata re-spread of the pool stock only
+      // measured the convention (offsetting ±B per bank, region sum ~0). The region-level SME
+      // assertion lives after this loop.
+      void trueSmeUSD;
       const reconcileUSD = (trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0))
-        + (trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0))
-        + (trueSmeUSD - (lentSheet.smeDepositsUSD ?? 0));
-      // CASH — THE MIGRATION METER, NOW REPORTED. This adjustment is money that moved on a
-      // holder's book without a payment instruction: a stage mutated a balance directly and this
-      // line invents the matching reserves so the identity cannot drift. It is therefore the
-      // exact size of what still bypasses the settlement layer, and the comment above has always
-      // said it goes to zero when every stage records instructions — but nothing ever printed it,
-      // so "the migration is nearly done" was an assertion rather than a measurement.
+        + (trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0));
+      // §7.288 — THE RECONCILE IS AN ASSERTION NOW, NOT A WRITER. The step-1 endgame the
+      // comment above always promised ("goes to zero when every stage records instructions"):
+      // with the truth SIGNED (the clamp was comparing a deposits-only convention against a
+      // line settlement maintains as the signed sum — the divergence WAS the overdraft float,
+      // ~60B/week early), the corporate and institutional classes measure 0.0M per bank, per
+      // week. The lines below therefore evolve by settlement alone — the one mover — and the
+      // meter stays as the watchdog: a nonzero print is once again a stage moving money off
+      // the instruction rail. The SME class still meters the pro-rata re-spread drift (~1B/wk
+      // region-wide) but no longer re-pins it: settlement's per-bank record IS the allocation.
       ctx.cashReconcileUSD[regionId] = (ctx.cashReconcileUSD[regionId] ?? 0) + Math.abs(reconcileUSD);
       ctx.cashReconcileByClassUSD.corporate += Math.abs(trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0));
       ctx.cashReconcileByClassUSD.institutional += Math.abs(trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0));
-      ctx.cashReconcileByClassUSD.sme += Math.abs(trueSmeUSD - (lentSheet.smeDepositsUSD ?? 0));
+      // RECON_TRACE=1 (§7.288) — the migration meter, attributed per bank and class, signed:
+      // which banks' lines diverge from the holders' truth, and in which direction.
+      if (process.env.RECON_TRACE === '1') {
+        const dc = trueCorporateUSD - (lentSheet.corporateDepositsUSD ?? 0);
+        const di = trueInstitutionalUSD - (lentSheet.institutionalDepositsUSD ?? 0);
+        if (Math.abs(dc) + Math.abs(di) > 50e6) {
+          console.log(`  [recon] w${ctx.nextWeek} ${bank.ticker} corp ${(dc / 1e6).toFixed(1)}M inst ${(di / 1e6).toFixed(1)}M`);
+        }
+      }
       const withDeposits: BankingSector = {
         ...lentSheet,
-        cashReservesUSD: lentSheet.cashReservesUSD + reconcileUSD,
-        corporateDepositsUSD: trueCorporateUSD,
-        institutionalDepositsUSD: trueInstitutionalUSD,
-        smeDepositsUSD: trueSmeUSD,
         loanLossProvisionRateAnnualPct: Number(
           (lentSheet.businessLoanBookUSD > 0 ? (lending.loanLossWeeklyUSD * 52) / lentSheet.businessLoanBookUSD : 0).toFixed(4)
         ),
@@ -445,6 +478,14 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       }
       updateBankSheet(ctx, bank.ticker, sheet);
     });
+
+    // §7.288: the SME assertion at the level it is real — the region's pools' cash against
+    // the region's SME deposit lines, allocation-free (the per-bank split is settlement's own
+    // record and needs no second derivation to check it against).
+    {
+      const smeLineUSD = newSheets.reduce((a, { sheet }) => a + (sheet.smeDepositsUSD ?? 0), 0);
+      ctx.cashReconcileByClassUSD.sme += Math.abs(segmentCashUSD - smeLineUSD);
+    }
 
     // The region-level bankingSector every other stage reads becomes the real sum of these
     // named banks, replacing (not supplementing) the single-formula aggregate stage 2 computed

@@ -74,3 +74,24 @@ test('the plant grows by what was COMMISSIONED, not what was ordered', () => {
   assert.equal(stillUnderConstruction.length, 1);
   assert.equal(stillUnderConstruction[0].valueUSD, 900);
 });
+
+test('§7.288: growth capex is bounded by what the firm can fund', () => {
+  // The desire can be unbounded (a deep shortage, a high q); the BID cannot exceed free cash
+  // flow after maintenance, levered half again for an investment-grade name. Measured at the
+  // §7.287 reference before this bound: EUR firms bid 7.5x their depreciation and drained the
+  // world's capital-goods supply at 2x prices.
+  const greedy = planCapitalProgramme(healthy({
+    categoryShortfall: 5, capacityCatchupShareAnnual: 1.0,
+    marketCapUSD: 50_000_000_000, priorGrowthCapexUSD: 0,
+  }));
+  const fcf = Math.max(0, (4_000_000 - 500_000) * 52 - greedy.maintenanceCapexUSD);
+  assert.ok(greedy.growthCapexUSD <= fcf * 1.5 * 0.10 + 1,
+    `growth ${greedy.growthCapexUSD} must be <= 10% step toward the 1.5x FCF cap ${fcf * 1.5}`);
+  // A sub-IG firm gets no leverage on the cap at all.
+  const subIg = planCapitalProgramme(healthy({
+    categoryShortfall: 5, capacityCatchupShareAnnual: 1.0, isInvestmentGrade: false,
+    marketCapUSD: 50_000_000_000, priorGrowthCapexUSD: 0,
+  }));
+  assert.ok(subIg.growthCapexUSD <= greedy.growthCapexUSD + 1,
+    'a sub-IG firm cannot outbid the same firm with IG access');
+});

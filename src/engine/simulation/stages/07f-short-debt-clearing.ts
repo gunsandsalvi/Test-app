@@ -343,7 +343,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,
       });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `bill:${id}`));
     if (!result.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} bill`);
 
       // §4.0 Tier 1 item 13 — THE DISCOUNT EXISTS AT ISSUE. A bill auction clears a YIELD, and
@@ -799,7 +799,7 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // position stays with its holder rather than falling to a dealer nobody names.
         unsoldStaysWithHolder: true,
       });
-      ctx.damperBoundInstrumentIds.push(...cpResult.damperBoundInstrumentIds);
+      ctx.damperBoundInstrumentIds.push(...cpResult.damperBoundInstrumentIds.map((id) => `commercial paper:${id}`));
       if (!cpResult.anyCeilingAboveHolding) ctx.deadCeilingBooks.push(`${regionId} commercial paper`);
 
       // ---- 4. APPLY. Holders' books from the fills; the issuer's new paper at the CLEARED rate

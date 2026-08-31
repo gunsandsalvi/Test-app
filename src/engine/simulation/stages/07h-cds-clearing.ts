@@ -214,7 +214,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
       dealerSpreadBps: 0,
       maxWeeklyStatMovePct: MAX_WEEKLY_CDS_MOVE_PCT,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `cds:${id}`));
 
     // ---- 5. Strike the week's contracts. At one cleared spread the sellers are fungible, so each
     // hedger's need draws from each seller in proportion to what that seller wrote. ----

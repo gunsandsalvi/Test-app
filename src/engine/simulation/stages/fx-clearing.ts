@@ -313,7 +313,7 @@ export function runFxClearingStage(state: GameState, ctx: WeeklyStepContext): vo
       dealerSpreadBps: 0,
       maxWeeklyStatMovePct: MAX_WEEKLY_FX_MOVE_PCT / 100,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `fx:${id}`));
 
     const clearedBookStat = result.newStatById.get(instrument.id);
     clearedRateByPair.set(key, clearedBookStat !== undefined && clearedBookStat > 0 ? fromBook(clearedBookStat) : currentRate);

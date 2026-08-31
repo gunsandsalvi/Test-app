@@ -437,7 +437,7 @@ export function runRegionalRepoSession(
       // damper-bound print would be caught as a violation, per §6's damper-diagnostic doctrine).
       maxWeeklyStatMovePct: 1000,
     });
-    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds);
+    ctx.damperBoundInstrumentIds.push(...result.damperBoundInstrumentIds.map((id) => `repo:${id}`));
     const clearedBps = result.newStatById.get(args.instrumentId) ?? args.currentBps;
     const lentByParty = new Map<string, number>();
     let totalLentUSD = 0;
