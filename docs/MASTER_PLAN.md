@@ -3930,3 +3930,15 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        draw's payment settles after the Σ is read each week), a timing artifact of the fix,
        not new bypass; it goes when the reconcile is deleted (Tier 2's endgame, one feeder
        closer).
+
+266. **THE FUND REFILL PATH — investable is SIGNED, so an overdrawn fund sells back to
+     solvency.** §7.262's remainder: nothing ever refilled an overdrawn fund, so one small
+     dip printed as a violation forever. `indexFundsForBook`'s investable counted
+     `max(0, cash)` — a negative-cash fund targeted its FULL basket and never sold. Signed
+     cash drops its targets by the shortfall and the next clearing sells it back — the
+     liquidation a real fund does. Verified 20 weeks: 2 violations in 2 families held (the
+     two credit-ETF w3 one-offs — the dip itself still prints once; the recovery is now
+     real); institutional bypass class 0.0B (the selling is fully instruction-borne);
+     OD_TRACE=1 confirmed the §7.265 conversion converges (no chronic re-overdrawers — no
+     ticker converts more than 2 of 6 mature weeks; JPN's one 2.3B draw is EKWC's real
+     maturity week, now funded instead of standing negative).
