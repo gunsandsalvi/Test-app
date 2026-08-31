@@ -33,6 +33,7 @@
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { RegionId, InstitutionalEntity } from '../../../types';
+import { mandatePctOf } from '../../../domain/institutions';
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
@@ -100,8 +101,7 @@ export function stagePurchaseBudgetUSD(
   const t = entity.assetAllocationTarget;
   const investedPcts = t.corpBondPct + t.govBondPct + t.loanPct;
   if (investedPcts <= 0) return 0;
-  const classPct =
-    assetClass === 'CORP_BOND' ? t.corpBondPct : assetClass === 'GOV_BOND' ? t.govBondPct : t.loanPct;
+  const classPct = mandatePctOf(t, assetClass);
   return availablePurchaseCapacityUSD(entity, unsettledUSD) * (classPct / investedPcts);
 }
 

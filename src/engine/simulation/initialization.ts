@@ -696,8 +696,16 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       });
       const sumBank = (f: (bs: import('../../types').BankingSector) => number) =>
         Math.round(regionBanksForSov.reduce((sum, b) => sum + f(b.bankBalanceSheet!), 0));
-      reg.bankingSector.sovereignBondHoldingsByTenor = aggByTenor;
-      reg.bankingSector.sovereignBondHoldingsUSD = sumBank(bs => bs.sovereignBondHoldingsUSD);
+      reg.bankingSector = {
+        ...reg.bankingSector,
+        sovereignBondHoldingsByTenor: aggByTenor,
+        sovereignBondHoldingsUSD: sumBank(bs => bs.sovereignBondHoldingsUSD),
+        depositsUSD: sumBank(bs => bs.depositsUSD),
+        cashReservesUSD: sumBank(bs => bs.cashReservesUSD),
+        bankEquityUSD: sumBank(bs => bs.bankEquityUSD),
+        businessLoanBookUSD: sumBank(bs => bs.businessLoanBookUSD),
+        consumerLoanBookUSD: sumBank(bs => bs.consumerLoanBookUSD),
+      };
       // OWN6/OWN7: whatever the central bank and the capital-constrained banks left is the
       // institutions'. Every bond now has a holder, which is what stops the float minting claims
       // and stops a redemption paying somebody who is not there.
@@ -705,11 +713,6 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         totalSovBucketedUSD
         - totalSovBucketedUSD * CENTRAL_BANK_SOVEREIGN_SHARE
         - reg.bankingSector.sovereignBondHoldingsUSD));
-      reg.bankingSector.depositsUSD = sumBank(bs => bs.depositsUSD);
-      reg.bankingSector.cashReservesUSD = sumBank(bs => bs.cashReservesUSD);
-      reg.bankingSector.bankEquityUSD = sumBank(bs => bs.bankEquityUSD);
-      reg.bankingSector.businessLoanBookUSD = sumBank(bs => bs.businessLoanBookUSD);
-      reg.bankingSector.consumerLoanBookUSD = sumBank(bs => bs.consumerLoanBookUSD);
     }
 
     // G2 slice 1: itemize the business book onto real borrowers, and recalibrate the SME
@@ -738,11 +741,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
           : 0;
         hs.capitalReceiptsAnnualUSD = Math.round(annualDsUSD);
       }
-      reg.bankingSector.businessLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0);
-      reg.bankingSector.consumerLoanBookUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.consumerLoanBookUSD, 0);
-      reg.bankingSector.bankEquityUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0);
-      reg.bankingSector.depositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
-      reg.bankingSector.wholesaleFundingUSD = regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
+      reg.bankingSector = {
+        ...reg.bankingSector,
+        businessLoanBookUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.businessLoanBookUSD, 0),
+        consumerLoanBookUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.consumerLoanBookUSD, 0),
+        bankEquityUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.bankEquityUSD, 0),
+        depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
+        wholesaleFundingUSD: regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
+      };
 
       // PUB2 (§7.4): close the central bank's balance sheet at birth, now that the banks whose
       // cash is its reserve liability exist. Currency is the residual; the weekly stage
@@ -807,9 +813,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         // lent this bank (§7.4 — the seed must open in the shape the weekly engine maintains).
         applyBankFundingSplit(b.bankBalanceSheet!, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanksForLending.length)));
       });
-      reg.bankingSector.corporateDepositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0);
-      reg.bankingSector.depositsUSD = regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
-      reg.bankingSector.wholesaleFundingUSD = regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
+      reg.bankingSector = {
+        ...reg.bankingSector,
+        corporateDepositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0),
+        depositsUSD: regionBanksForLending.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
+        wholesaleFundingUSD: regionBanksForLending.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
+      };
     }
 
     reg.institutionalSector.itemizedHoldings = [
@@ -1298,9 +1307,12 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       b.bankBalanceSheet!.cashReservesUSD += instUSD;
       applyBankFundingSplit(b.bankBalanceSheet!, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
-    reg.bankingSector.institutionalDepositsUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0);
-    reg.bankingSector.depositsUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
-    reg.bankingSector.wholesaleFundingUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
+    reg.bankingSector = {
+      ...reg.bankingSector,
+      institutionalDepositsUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0),
+      depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
+      wholesaleFundingUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
+    };
   });
 
   const commodities = getInitialCommodities();
@@ -1592,11 +1604,14 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       sheet.cashReservesUSD += corpUSD + instUSD;
       applyBankFundingSplit(sheet, Math.round((reg.householdState.depositsUSD ?? 0) * (b.bankMarketShare ?? 1 / regionBanks.length)));
     });
-    reg.bankingSector.corporateDepositsUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0);
-    reg.bankingSector.institutionalDepositsUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0);
-    reg.bankingSector.depositsUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0);
-    reg.bankingSector.wholesaleFundingUSD = regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0);
-    reg.bankingSector.cashReservesUSD = regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0);
+    reg.bankingSector = {
+      ...reg.bankingSector,
+      corporateDepositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.corporateDepositsUSD, 0),
+      institutionalDepositsUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.institutionalDepositsUSD ?? 0), 0),
+      depositsUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.depositsUSD, 0),
+      wholesaleFundingUSD: regionBanks.reduce((a, b) => a + (b.bankBalanceSheet!.wholesaleFundingUSD ?? 0), 0),
+      cashReservesUSD: regionBanks.reduce((a, b) => a + b.bankBalanceSheet!.cashReservesUSD, 0),
+    };
   });
 
   // S7: project the real seeded books onto the sector aggregates before the first week runs, so

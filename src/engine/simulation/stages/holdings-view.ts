@@ -167,7 +167,7 @@ export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId
     itemizedHoldings: ItemizedHolding[]; corpBondHoldingsUSD: number; sovBondHoldingsUSD: number;
     equityHoldingsUSD: number; cashUSD: number; sectorEquityUSD: number;
   };
-  bankingSector: { itemizedHoldings: ItemizedHolding[] };
+  bankingSector: import('../../../domain/banking').BankingSectorView;
 }): void {
   const view = aggregateRegionalHoldings(state, regionId);
   reg.institutionalSector.itemizedHoldings = view.institutionalHoldings;
@@ -178,7 +178,7 @@ export function refreshRegionalHoldingsView(state: GameState, regionId: RegionId
   // The sector's equity capital is the real book it actually carries — S11 marks each entity's
   // totalAssetsUSD weekly, so this is a live number rather than an accreting formula.
   reg.institutionalSector.sectorEquityUSD = Math.round(view.institutionalTotalAssetsUSD);
-  reg.bankingSector.itemizedHoldings = view.bankHoldings;
+  reg.bankingSector = { ...reg.bankingSector, itemizedHoldings: view.bankHoldings };
 }
 
 /**

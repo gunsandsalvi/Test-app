@@ -27,6 +27,7 @@
 import { institutionProfile } from '../../../domain/institution-profiles';
 import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
+import { mandatePctOf } from '../../../domain/institutions';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
@@ -44,11 +45,7 @@ import { REGION_IDS } from '../../../domain/geography';
 
 /** An entity's money for one asset class, from its own mandate weights. */
 function classAppetiteUSD(entity: InstitutionalEntity, def: IndexDefinition): number {
-  const t = entity.assetAllocationTarget;
-  const pct = def.assetClass === 'EQUITY' ? t.equityPct
-    : def.assetClass === 'CORP_BOND' ? t.corpBondPct
-    : t.loanPct;
-  return Math.max(0, entity.totalAssetsUSD) * pct;
+  return Math.max(0, entity.totalAssetsUSD) * mandatePctOf(entity.assetAllocationTarget, def.assetClass);
 }
 
 /**

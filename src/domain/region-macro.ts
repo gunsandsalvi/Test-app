@@ -9,7 +9,7 @@ import { CdsContract } from './credit-default-swap';
 import { SecurityLoan } from './securities-lending';
 import { Industry } from './industry';
 import { CentralBank } from './central-bank';
-import { BankingSector, AssetOwnershipShares } from './banking';
+import { BankingSectorView, AssetOwnershipShares } from './banking';
 import { InstitutionalSector } from './institutions';
 import { SupplyContract, CategoryDemandState, SupplyRelationship } from './market-microstructure';
 
@@ -667,7 +667,7 @@ export interface Region {
   cycleRegime: 'Expansion' | 'Slowdown' | 'Recession' | 'Recovery';
   inversionWeeksCount: number;
   recessionShockQueue: { week: number; shock: number }[];
-  bankingSector: BankingSector;
+  bankingSector: BankingSectorView;
   equityOwnership: AssetOwnershipShares;
   corpBondOwnership: AssetOwnershipShares;
   sovBondOwnership: AssetOwnershipShares;

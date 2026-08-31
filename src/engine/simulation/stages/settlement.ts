@@ -518,8 +518,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
       smeDepositsUSD: (bank.bankBalanceSheet.smeDepositsUSD ?? 0)
         + (report.smeDepositDeltaByBank.get(ticker) ?? 0),
     };
-    const agg = ctx.updatedRegions[bank.region]?.bankingSector;
-    if (agg) agg.cashReservesUSD += deltaUSD;
+    const aggRegion = ctx.updatedRegions[bank.region];
+    if (aggRegion) aggRegion.bankingSector = { ...aggRegion.bankingSector, cashReservesUSD: aggRegion.bankingSector.cashReservesUSD + deltaUSD };
   });
 
   // ---- 4b. SETL2b: a loan and the deposit it creates, in ONE statement. The borrower's balance
@@ -551,8 +551,8 @@ export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
     }
     const bookUSD = loans.reduce((a, l) => a + l.principalUSD, 0);
     bank.bankBalanceSheet = { ...sheet, businessLoans: loans, businessLoanBookUSD: bookUSD };
-    const agg = ctx.updatedRegions[bank.region]?.bankingSector;
-    if (agg) agg.businessLoanBookUSD += event.retire ? -event.principalUSD : event.principalUSD;
+    const aggRegion = ctx.updatedRegions[bank.region];
+    if (aggRegion) aggRegion.bankingSector = { ...aggRegion.bankingSector, businessLoanBookUSD: aggRegion.bankingSector.businessLoanBookUSD + (event.retire ? -event.principalUSD : event.principalUSD) };
   });
   ctx.creditEventsThisWeek = [];
 

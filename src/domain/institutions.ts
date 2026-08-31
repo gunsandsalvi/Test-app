@@ -66,6 +66,20 @@ export interface AssetAllocationTarget {
   loanPct: number;
 }
 
+/** §7.279 — the mandate percent for one investable class, as a LOOKUP rather than the two
+ *  divergent if-chains that used to pick it (etf-flows and institutional-balance-sheet each
+ *  had their own, and a new class would silently fall through to `loanPct` in one of them).
+ *  A new investable class fails to compile here until its mandate line is named. */
+export type InvestableClass = 'EQUITY' | 'CORP_BOND' | 'GOV_BOND' | 'LEVERAGED_LOAN';
+const MANDATE_FIELD: Record<InvestableClass, keyof AssetAllocationTarget> = {
+  EQUITY: 'equityPct',
+  CORP_BOND: 'corpBondPct',
+  GOV_BOND: 'govBondPct',
+  LEVERAGED_LOAN: 'loanPct',
+};
+export const mandatePctOf = (t: AssetAllocationTarget, cls: InvestableClass): number =>
+  t[MANDATE_FIELD[cls]];
+
 export interface InstitutionalEntity {
   financialStatementProfile?: FinancialStatementProfile;
   id: string;

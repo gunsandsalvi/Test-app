@@ -43,6 +43,21 @@ export interface AssetOwnershipShares {
   centralBankShare: number; // meaningful only for sovereign bonds — 0 elsewhere
 }
 
+/**
+ * §7.279 — THE VIEW HALF OF THE BankBook/View SPLIT (§5-STRUCT Tier 4, first slice).
+ *
+ * `BankingSector` serves two masters: the PER-BANK sheet (`company.bankBalanceSheet`, writable —
+ * the BankBook role) and the REGION AGGREGATE (`region.bankingSector`, rebuilt from the per-bank
+ * sheets by 02b's exhaustive sum). Writing a field INTO the aggregate is the 40/60-force-place
+ * class: the money appears in the regional view and on no bank's book, and the next rebuild
+ * silently erases it. This alias types the aggregate as read-only, so an in-place field write
+ * fails to COMPILE; replacing the whole object (the rebuild, the dealer-inventory refresh) stays
+ * legal, because a wholesale replacement is visible at review in a way a field poke is not.
+ * The full split — its own nominal type, dealer inventories moved onto per-bank books, the
+ * aggregate fully derived — is the standing Tier-4 slice this prepares.
+ */
+export type BankingSectorView = Readonly<BankingSector>;
+
 export interface BankingSector {
   businessLoanBookUSD: number;
   consumerLoanBookUSD: number;

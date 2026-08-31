@@ -4123,3 +4123,22 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      which VALUE a read returned, only that a later stage also writes. `undeclaredEdges()` +
      a harness violation make any backward edge over an unannotated field fail a STAGE_TRACE=1
      run: a new ordering hazard must either be annotated with its reason or fixed.
+
+279. **THE VIEW HALF OF THE BankBook/View SPLIT, plus the first registry-dispatch conversion.**
+     - `BankingSectorView = Readonly<BankingSector>` and `Region.bankingSector` is typed as the
+       VIEW: an in-place field write into the region aggregate — the 40/60-force-place class,
+       money appearing in the regional view and on no bank's book until the next rebuild erases
+       it — now fails to COMPILE. Whole-object replacement stays legal (the 02b rebuild, the
+       07x dealer-inventory refreshes, the settlement mirror updates — each visible at review
+       in a way a field poke is not). Every existing field-poke converted: initialization's
+       five seed-time aggregate refreshes and settlement's two mirror updates became spread
+       replacements; holdings-view's structural-param escape hatch retyped to the view. Zero
+       `.bankingSector.<field> =` writes remain in src. The FULL split (nominal BankBook type,
+       dealer inventories onto per-bank books, the aggregate fully derived) stays the Tier-4
+       slice this prepares.
+     - `mandatePctOf(target, class)` (domain/institutions.ts): the two DIVERGENT mandate-percent
+       if-chains (etf-flows fell through to `loanPct` for anything non-EQUITY/CORP_BOND;
+       institutional-balance-sheet had its own) became one Record lookup — a new investable
+       class fails to compile until its mandate line is named. ASSET_SWITCH ratchet 64 → 60.
+     - Verified: tsc clean, 71/71, hygiene pass, WEEKS=10 probe identical (2 baseline
+       violations).
