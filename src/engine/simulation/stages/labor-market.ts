@@ -331,7 +331,18 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       let layoffs = 0;
       if (desiredWeeklyChange >= 0) {
         // Growing: hire the increment PLUS replace the churn — real gross flows, not the net.
-        vacancies = desiredWeeklyChange * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits;
+        // §7.249 — BOUNDED BY THE HEADS THE PLANT CAN USE (§7.247's cap, the same physics as
+        // stage 05's staffedShare ≤ 1). This branch was UNBOUNDED: a wild revenue print ordered
+        // a spree no plant could employ — measured, one bank posted 2.9e14 vacancies in one
+        // week, tightness printed 266,345, the quit rate clipped to 100%/week and every worker
+        // in the region quit (§7.247's teleports, root-caused). The physical cap alone kills
+        // that — a hire beyond full staffing adds no output — and deliberately NOT the
+        // affordability gate here: gating ordinary growth hiring on STOCK headroom throttled
+        // recovery economy-wide when tried (u 14.9% → 27% by week 51), because a thin-margin
+        // firm hiring into real demand is not the failure this bound exists for. Affordability
+        // keeps gating the LEVEL path, as §7.110 designed.
+        const hireableHeads = Math.min(desiredWeeklyChange, Math.max(0, productiveHeadsCap - current));
+        vacancies = hireableHeads * HIRING_ADJUSTMENT_SPEED_MULTIPLE + quits;
       } else {
         // Shrinking: attrition does the work first (it is free), layoffs only for the rest.
         layoffs = Math.max(0, -desiredWeeklyChange * LAYOFF_SPEED_MULTIPLE - quits);
@@ -692,6 +703,15 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       upd.offeredWageIndex = Number(Math.max(0, upd.offeredWageIndex / (1 + catchup)).toFixed(5));
     });
 
+    // TEMPORARY §7.249 teleport probe — env-gated, removed after the measurement.
+    if (process.env.LAB_PROBE === regionId) {
+      const sum = (r: Record<OccupationType, number>) => OCCUPATIONS.reduce((a, o) => a + r[o], 0);
+      const top = postings.reduce((best, p) => (p.layoffs > (best?.layoffs ?? 0) ? p : best), postings[0]);
+      const topVac = postings.reduce((best, p) => (p.vacancies > (best?.vacancies ?? 0) ? p : best), postings[0]);
+      const firmVac = postings.reduce((a, p) => a + p.vacancies, 0);
+      const segVac = segmentPostings.reduce((a, p) => a + p.vacancies, 0);
+      console.log(`[LAB ${regionId}] vacPosted ${(sum(vacanciesByOcc) / 1e3).toFixed(0)}k (firm ${(firmVac / 1e3).toFixed(0)}k seg ${(segVac / 1e3).toFixed(0)}k) seps ${(sum(separationsByOcc) / 1e3).toFixed(0)}k hires ${(sum(hiresByOcc) / 1e3).toFixed(0)}k quitRate ${(quitRateWeekly * 100).toFixed(2)}%/wk tightness ${priorTightness.toFixed(3)} topVac ${topVac ? `${topVac.comp.ticker} ${(topVac.vacancies / 1e3).toFixed(0)}k` : 'none'} topLayoff ${top ? `${top.comp.ticker} ${(top.layoffs / 1e3).toFixed(0)}k of ${(top.comp.employeeCount / 1e3).toFixed(0)}k` : 'none'}`);
+    }
     // ---- 5. The pools and the rate are DERIVED from the employers' books — by the exported
     // reconciler below, which also runs at the end of the week so that a firm defaulting in
     // stage 08 (after this stage) releases its workers in the same week rather than leaving the
