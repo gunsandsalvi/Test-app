@@ -39,7 +39,7 @@ Standing user directives. Not suggestions.
    tactical decision from real characteristics, never the target mechanically.
 
 6. **Long tests are end-of-project only.** During development: `npx tsc --noEmit`,
-   `bash scripts/check-hygiene.sh`, and short scratchpad probes.
+   `bash scripts/check-hygiene.sh`, `npm test`, and short scratchpad probes.
 
 7. **One bounded, verified commit per slice.** Never one large unreviewable change.
 
@@ -149,8 +149,9 @@ Standing user directives. Not suggestions.
 
 | Command | Cost | When |
 |---|---|---|
-| `UNIVERSE_SCALE=0.12 … npx tsx scripts/harness.ts` | ~205 ms/wk | iteration: the conserving roster (§7.214). **Never a validation run** |
+| `UNIVERSE_SCALE=0.12 … npx tsx scripts/harness.ts` | ~205 ms/wk | iteration speed only. **Never a validation run, and never an economic reading: §7.228 measured the rule-19 invariance test FAILING on the current world** (revenue conserves, outcomes diverge) — re-test after §6.1's level row closes |
 | `npx tsc --noEmit`, `npm run build` | seconds | any time, always before a commit |
+| `npm run lint`, `npm test` | seconds | any time; both gate CI, both ratchets (§7.234-235) |
 | `bash scripts/check-hygiene.sh` | seconds | any time; fails if a second script appears |
 | `WEEKS=10 SHOCKS=0 npx tsx scripts/harness.ts` | ~40 s | structural probe: is the mechanism wired |
 | `npm run verify` (243 weeks incl. shock batteries) | ~5 min | **END OF PROJECT ONLY** (rule 12) |
@@ -174,7 +175,7 @@ cross-stage dependency is visible) and runs the stages in order. Groups, not a l
 | Macro & credit | 01-macro-feedback, 02-region-macro, 02b-bank-diversification, labor-market, prime-brokerage | Contagion signals; region evolution and the administered policy rate (**no curve**); per-bank flow ledgers, the GC repo session, the deposit-vs-MMF split; the labour market; the funds' broker lines |
 | Real economy | 03-category-demand, 04-input-output, trade-settlement, goods-arrival, sourcing-intent, freight-clearing, 05-unit-bidding, 06-fx-and-trade, 07-commodities | C+I+G plus the Leontief intermediate half; input clearing; invoices due; arrivals; sourcing and freight; **THE goods auction** (five books per sub-unit, per-lot settlement, contracts, capex bids, the distribution channel); FX conversion; commodity spot |
 | Financial books | 07b corp bonds, 07c sovereigns (**the curve's only owner**), 07d loans, 07f bills+CP, securities-lending, 07e equity, 07g swaps, 07h CDS, 07i commodity futures | Each a thin adapter over the clearing engine |
-| Settle & report | repo-collateral-reconcile, holdings-writeback, institutional-marking, 08-company-fundamentals, hc-lifecycle, settlement, sme-pools, 09-concentration-risk, 10-mergers, sovereign-calendar, 11-fiscal, etf-flows, fx-hedging, 12-portfolio, 13-news | Per-company week; the corporate lifecycle; **the settlement layer (two cycles: intraday and close)**; the SME pools' week; trade concentration; M&A; **the sovereign coupon calendar (§7.208 — one party-keyed ledger, the single writer of the receivable on both books)**; measured GDP and CPI, government issuance; ETF flows and the share book; FX hedging incl. corporates; marks and the turn summary |
+| Settle & report | repo-collateral-reconcile, holdings-writeback, institutional-marking, 08-company-fundamentals, hc-lifecycle, settlement, sme-pools, 09-concentration-risk, 10-mergers, sovereign-calendar, 11-fiscal, etf-flows, fx-hedging, 12-portfolio, 13-news | Per-company week (an order-invariant kernel — entity-scoped RNG, sharded with ordered combine, bit-identical at any shard count, §7.223; its rules live in `domain/company-week/`, §7.238); the corporate lifecycle; **the settlement layer (two cycles: intraday and close)**; the SME pools' week; trade concentration; M&A; **the sovereign coupon calendar (§7.208 — one party-keyed ledger, the single writer of the receivable on both books)**; measured GDP and CPI, government issuance; ETF flows and the share book; FX hedging incl. corporates; marks and the turn summary |
 
 **`stages/financial-clearing-engine.ts`** — the generic cap-free double auction. Each participant
 posts a real demand schedule; the solve is an exact piecewise-linear segment walk with **saturation
@@ -192,10 +193,18 @@ Other engine files: `initialization.ts` (must seed the shape the weekly engine p
 ### 2.2 Engine support (`src/engine/`)
 
 `companyGenerator.ts`, `pricing.ts` (closed-form pricers, display/derivation only), `nelsonSiegel.ts`,
-`blackScholes.ts`, `rng.ts` (**all engine draws; the seed and stream position live on GameState**),
+`blackScholes.ts`, `rng.ts` (**all engine draws; the seed and stream position live on GameState**;
+`beginEntityScope` keys a draw to its entity so a loop's iteration order stops mattering — §7.223),
 `newsGenerator.ts`, `formatters.ts`, `macro/` (initialization, evolution, banking, indices, weather),
 `bootstrap/` (population, labor-and-wages, firms, category-demand, commodities-and-fx, yield-curves,
 carriers — all generated from primitives).
+
+**`ledger/` — the money primitive (§7.230).** `post(payer, payee, amountUSD, reason)` is the one
+write path; `creditUnbacked()` the named, counted exception; `PartyRef` and its interning live here,
+not in a stage. `check-hygiene.sh` fails the build on a money-field write outside it.
+In `simulation/`: `stage-deps.ts` (`STAGE_TRACE=1` records every context read/write per stage —
+§7.231's 79 backward edges) and `burn-in.ts` (`SEED_BURN_IN=n`, off by default; the seed-vs-settled
+probe — §7.232).
 
 ### 2.3 Domain (`src/domain/`)
 
@@ -210,6 +219,12 @@ Trade and FX: `global-goods.ts`, `trade-invoice.ts`, `invoice-currency.ts`, `cro
 `fx-market.ts`, `fx-hedging.ts`, `currency.ts`, `carrier.ts`.
 Households and the state: `region-macro.ts`, `household-credit.ts`, `estate.ts`, `government.ts`,
 `central-bank.ts`, `geography.ts`, `game-state.ts`, `defect.ts` (GUARD's loud failures).
+The §5-STRUCT objects (§7.230, §7.238): `company-week/` (the company kernel's rules as pure,
+flat-input functions — capital programme, credit standing, debt ladder, income statement, inventory,
+distributions, payroll), `assets/` (the asset registry and the four-taxonomy reconciliation),
+`government-entity.ts` (the `Government` façade — the one budget decomposition), `collateral.ts`
+(the one pledge tolerance), `fund.ts` (distributions bounded by drawn capital and cash),
+`sme-pool.ts` (the capacity mix rule that broke §7.229's lock).
 
 ### 2.4 UI and the harness
 
@@ -227,6 +242,14 @@ largest category for sixty weeks and the harness reported it only as a downstrea
 So `test/` may hold PURE-FUNCTION tests over `domain/`: no engine run, no `advanceWeeklyStep`, no
 `createInitialGameState`. `check-hygiene.sh` enforces exactly that boundary. Anything that needs a
 world is a harness module, as before.
+
+**The gates (§7.234–235), every one a ratchet — each may fall and never rise:** `npm run lint` is
+`tsc --noEmit` under `strict: true` plus ESLint tuned to this repo's paid-for defect classes (style
+rules absent on purpose; the warning ceiling is today's count, so a new `any` fails the build);
+`npm test` runs the pure tests; `npm run hygiene` holds three budgets (money writes 2, asset-literal
+comparisons 64, the `test/` purity boundary). CI (`.github/workflows/verify.yml`) runs lint, hygiene
+and tests on push and PR — **the harness is deliberately NOT in CI**: it currently fails by design
+mid-project, and a check that is always red teaches people to ignore the build.
 
 ---
 
@@ -267,6 +290,13 @@ prerequisites are not done. **Do not reorder without asking** — the sequence e
 not visible from a row: a market cannot be honest before the demand side it prices against is, and
 a clamp cannot be deleted before the mechanism under it exists.
 
+**IN FLIGHT: STRUCT (§5-STRUCT; §7.229–238).** Cross-cutting, not a row below: invariants by
+construction. Steps 1/3/4/5 built, step 2 done for the company kernel, step 6 built and off; the
+remainder is listed per step in §5. **Three standing decisions queue behind it, all the user's or
+the next measurement's call:** (1) the tax asymmetry (§6.1 — which of the two loss-tax rules is
+right; fixing it re-bases the world); (2) the EUR regression (§6.1 supplier-shares row — top of the
+queue); (3) `SEED_BURN_IN` (off until §7.232's table flattens).
+
 ### What is left to BUILD
 
 | # | Tier | Project | State |
@@ -297,7 +327,11 @@ deferral — the harness could not start (§7.209), and a red harness is a broke
 debt. Everything below still needs its own read. Two of these records relabel the world: NAT's reseed
 changed every energy and metal price (§7.193), and HC3b removed an RNG draw per operating firm per
 week (§7.207), so **no same-seed comparison across those commits is valid and no number measured
-before 2026-08-30 is a baseline.**
+before 2026-08-30 is a baseline.** Two more relabels since: §7.223's entity-scoped RNG re-keyed
+every stage-08 and stage-05 draw, and §7.230's corrected checks changed what two whole violation
+families measure. **The valid comparison run is §7.233's post-STRUCT baseline: 1,130 violations /
+128 families, decomposed there — do not compare to 515 again.** The three-week kernel fingerprint
+baseline for any further stage-08 extraction is in §7.236–238's loop.
 
 Read in this order:
 1. **The capital-goods fill rate**, against §7.168's 8% and the per-category table. Everything in
@@ -369,151 +403,54 @@ One line each; the record is in §7.
 
 One section per OPEN §4 item, in §4's order. **A closed project has no section here.**
 
-### STRUCT — Invariants by construction, not by discipline  *(§7.229; the next project)*
+### STRUCT — Invariants by construction, not by discipline  *(§7.229–238; IN FLIGHT)*
 
-Every open row in §6.1 is the same failure: an invariant maintained by everyone remembering, rather
-than by the code refusing. 43 authors each remembering both legs of a payment. A capacity rule that
-no object owns. A stage order that is correct only because nobody has moved a stage. The work is not
-to fix the rows; it is to make each class of defect unrepresentable, and let the rows close behind
-it. **7,736 lines of `domain/` against 24,595 of `stages/` is the number this project exists to
-invert.**
+Every open row in §6.1 was the same failure: an invariant maintained by everyone remembering rather
+than by the code refusing (§7.229). The work is to make each class of defect unrepresentable and let
+the rows close behind it. The six steps are BUILT (§7.230–238); what stands here is the state per
+step and what must still happen before the section is deleted.
 
-**The enforcement mechanism already exists and is the reason this will stick:** `check-hygiene.sh`
-already fails the build on a stray file in `scripts/`. Every step below adds one rule to it. An
-architectural decision that is not enforced by the build is a comment.
+**State per step:**
+- **1 — THE LEDGER: built (§7.230), migration open.** `engine/ledger/` owns money: `post(payer,
+  payee, amountUSD, reason)` is the one write path, `creditUnbacked()` the named counted exception,
+  and hygiene fails the build on a money-field write outside it (budget 2, both survivors documented
+  non-balances). **NOT yet done: delete 02b's reconcile and the `Math.max(0, cashUSD)` overdraft
+  clamp** — both still absorb what the types should refuse (14.3B and 6.0B a week, §7.229). The
+  reconcile's gross is the burndown, **and its cause is still unexplained: §7.230 disproved the
+  "43 direct writes" story** — the bypass is likely balances carried through `companyUpdates` and
+  whole-object rebuilds. Find it before claiming a cause again.
+- **2 — STAGES ORCHESTRATE, THEY DO NOT COMPUTE: done for the company kernel (§7.236–238), standing
+  sweep elsewhere.** Seven pure objects in `domain/company-week/` (659 lines, 71 tests, all
+  bit-exact); the kernel is visibly a gatherer. Its effectful remainder (the ~210-line cash walk,
+  the reports, offering settlement) waits on the step-1 migration — it posts payments, so it becomes
+  a method taking the ledger, not a pure function. The other 700+-line stages remain. **The loop
+  that works: extract → compile → fingerprint against the three-week baseline → test → commit** —
+  three of seven extractions failed the fingerprint on arithmetic reordering alone (§7.238).
+  Hygiene rule (still deferred): no bare numeric literals in `stages/` — lands only when the count
+  is near zero, or it blocks every commit.
+- **3 — ONE OBJECT PER OPEN DEFECT: done (§7.230).** `Government`, `Collateral`, `Fund`, `SmePool`
+  exist and the harness reads them; the fiscal and pledge checks were measurably wrong before.
+- **4 — REGISTRIES: built additively (§7.230), migration open.** `domain/assets/` reconciles the
+  FOUR instrument taxonomies under one class map; `ASSET_REGISTRY`/`PARTY_REGISTRY` dispatch;
+  hygiene ratchets literal comparisons (budget 64). **NOT yet done: replace the four unions and the
+  26-field `details` bag with the discriminated union**, so exhaustiveness becomes the checklist.
+- **5 — STAGE DEPENDENCIES: measured, not declared (§7.231).** `stage-deps.ts` proxies the context
+  under `STAGE_TRACE=1`: **79 backward edges over 11 fields**, none previously written down. It does
+  not fail the build yet — a backward edge is not automatically a defect. Next: annotate the
+  deliberate edges, then ratchet the remainder.
+- **6 — THE SEED: mechanism built and OFF (§7.232).** `SEED_BURN_IN=n` runs the engine n weeks and
+  hands the result back as week 0; the seed-vs-settled table is the test (the seed opens with ZERO
+  WIP). It stays off because turning it on re-bases every number in §7 at once — **a decision to
+  take deliberately after the table flattens, not a default.**
 
-**Step 1 — THE LEDGER. Balances become unwritable outside it.**
-The defect is not that 43 sites write money; it is that they CAN. Money fields become `readonly` on
-every public type; the mutable representation lives private inside `engine/ledger/`; the only export
-is a double-entry `post(payer, payee, amountUSD, reason)`. A one-legged flow becomes a type error.
-Then **delete 02b's reconcile and the `Math.max(0, cashUSD)` overdraft clamp** — both exist only to
-absorb what the types should have refused, and both CREATE money (§7.229: 14.3B and 6.0B a week). An
-overdraft becomes a modelled event: a credit line drawn, or a payment that fails. **The reconcile's
-own gross is the burndown: it reaches zero when the last site is migrated.**
-Hygiene rule: no assignment to a money field outside `engine/ledger/`.
-
-**Step 2 — STAGES ORCHESTRATE, THEY DO NOT COMPUTE.**
-A stage reads state, calls domain objects, writes results. **No arithmetic and no numeric literals in
-`stages/`.** A stage that cannot be written in ~50 lines is the signal that a domain concept is
-missing, delivered at the moment of writing rather than forty weeks into a run.
-`08-company-fundamentals.ts` at 2,358 lines is not a large function; it is about fifteen absent
-objects — a P&L, a debt ladder, an inventory, a capex programme, a payroll — each of which is a class
-with its own week and its own unit test. §7.229's SME lock was twelve lines that belong on `SmePool`
-as a five-line method with an obvious test.
-Hygiene rule: no bare numeric literals in `stages/`; constants live in `domain/`.
-
-**Step 3 — ONE OBJECT PER OPEN DEFECT.**
-`Government` first: it has no primitive at all — twelve free functions over argument bags with the
-state scattered across `Region` — which is why the EUR outlay row has never closed. Then `Collateral`
-(the pledge row), `Fund` (the redemption row), `SmePool` (the capacity row). Each extraction closes
-its own defect AND removes the class it came from.
-
-**Step 4 — EVERY TYPE UNION BECOMES A REGISTRY.**
-The pattern is already in the repo and already right: `profiles/index.ts`, `Record<Kind, Module>`,
-"one line per kind". Generalise it to `AssetType` (75 comparison sites across 17 files),
-`PartyRef.kind` (69/19) and institutional `entityType` (64/21). Each member becomes a module that
-owns how it prices, settles and marks. For securities, replace the `details` bag of 26 optional
-fields with a **discriminated union carrying per-type payloads**, so the compiler's exhaustiveness
-check becomes the checklist and a new type will not build until it is handled.
-Hygiene rule: no literal comparison against those unions outside their registry.
-
-**Step 5 — DELETE THE SEED.** *(after 1–4, because it needs the objects)*
-Every §7.4 defect this file records is one bug: the opening world is built by a SECOND code path that
-disagrees with the engine. The WIP pipeline at 1.06 weeks of a 6-week lead, the CPI basket struck on
-the landed price and measured on the shelf price, the register at a third of its steady state, the
-sector split — all of it. There should be no seed. A bootstrap sets the exogenous primitives
-(population, geography, the registry) and then **runs the engine's own mechanisms to a fixed point**.
-One code path cannot disagree with itself, and the whole class stops existing.
-
-**HOW, WITHOUT A BIG-BANG REWRITE.** Strangler fig, one noun at a time, hygiene ratcheting behind
-each. Steps 1–4 are individually shippable and each is bit-exactness-testable against the harness —
-which is the property that makes this safe incrementally and unsafe as a rewrite. Do not start step 5
-until the objects exist.
-
-### STRUCT — Invariants by construction, not by discipline  *(§7.229; the next project)*
-
-Every open row in §6.1 is the same failure: an invariant maintained by everyone remembering, rather
-than by the code refusing. 43 authors each remembering both legs of a payment. A capacity rule that no
-object owns. A stage order that is correct only because nobody has moved a stage. The work is not to
-fix the rows; it is to make each class of defect unrepresentable and let the rows close behind it.
-**7,736 lines of `domain/` against 24,595 of `stages/` is the number this project exists to invert.**
-
-**The enforcement mechanism already exists and is why this will stick:** `check-hygiene.sh` already
-fails the build on a stray file in `scripts/`. Every step below adds one rule to it. An architectural
-decision that is not enforced by the build is a comment.
-
-**Step 1 — THE LEDGER. Balances become unwritable outside it.**
-The defect is not that 43 sites write money; it is that they CAN. Money fields become `readonly` on
-every public type, the mutable representation lives private inside `engine/ledger/`, and the only
-export is a double-entry `post(payer, payee, amountUSD, reason)`. A one-legged flow becomes a type
-error. Then **delete 02b's reconcile and the `Math.max(0, cashUSD)` overdraft clamp** — both exist
-only to absorb what the types should have refused, and both CREATE money (§7.229: 14.3B and 6.0B a
-week). An overdraft becomes a modelled event: a credit line drawn, or a payment that fails. **The
-reconcile's own gross is the burndown — it reaches zero when the last site is migrated.**
-Hygiene rule: no assignment to a money field outside `engine/ledger/`.
-
-**EXPECT THE HARNESS TO GET WORSE, AND DO NOT REVERT IT FOR THAT.** 20.3B a week is currently being
-absorbed silently. Stop absorbing it and it has to land somewhere visible. Violations will rise before
-they fall, and §1.20 applies with full force: the derivation is the point, the print is not.
-
-**Step 2 — STAGES ORCHESTRATE, THEY DO NOT COMPUTE.**  *(a standing sweep, not a task)*
-A stage reads state, calls domain objects, writes results: **no arithmetic and no numeric literals in
-`stages/`.** A stage that cannot be written in ~50 lines is the signal that a domain concept is
-missing, delivered while writing rather than forty weeks into a run. `08-company-fundamentals.ts` at
-2,358 lines is not a large function; it is about fifteen absent objects — a P&L, a debt ladder, an
-inventory, a capex programme, a payroll. §7.229's SME lock was twelve lines that belong on `SmePool`.
-**This is 24,595 lines and cannot be one piece of work.** It advances only as steps 1, 3 and 4 pull
-rules out; the hygiene rule below lands LAST, once the count is near zero, or it blocks every commit.
-Hygiene rule (deferred): no bare numeric literals in `stages/`.
-
-**Step 3 — ONE OBJECT PER OPEN DEFECT.**
-`Government` first: it has no primitive at all — twelve free functions over argument bags with the
-state scattered across `Region` — which is why the EUR outlay row has never closed. Then `Collateral`
-(the pledge row), `Fund` (the redemption row), `SmePool` (the capacity row). Each extraction closes its
-own defect AND removes the class it came from.
-
-**Step 4 — EVERY TYPE UNION BECOMES A REGISTRY.**
-The pattern is already in the repo and already right: `profiles/index.ts`, `Record<Kind, Module>`, "one
-line per kind". Generalise it to `AssetType` (75 comparison sites across 17 files), `PartyRef.kind`
-(69/19) and institutional `entityType` (64/21). Each member becomes a module owning how it prices,
-settles and marks. For securities, replace the `details` bag of 26 optional fields with a
-**discriminated union carrying per-type payloads**, so the compiler's exhaustiveness check becomes the
-checklist and a new type will not build until it is handled.
-Hygiene rule: no literal comparison against those unions outside their registry.
-
-**Step 5 — STAGE DEPENDENCIES ARE DECLARED, NOT REMEMBERED.**
-Fifty-two stages in a hand-ordered list whose correctness depends on the order, with nothing checking
-it. §7.226 is the proof: moving `repo-collateral-reconcile` to where the defect said it belonged cut
-the symptom and broke the bank identity, because its side effects relied on being inside the
-settlement window — and that cost a 60-week run to discover. Each stage declares `reads` and `writes`;
-the runner topologically sorts and **fails if a stage reads something written later**. Ordering becomes
-a derived fact instead of tribal knowledge in a comment.
-
-**Step 6 — DELETE THE SEED.**  *(last; it needs the objects)*
-Every §7.4 defect in this file is one bug: the opening world is built by a SECOND code path that
-disagrees with the engine. The WIP pipeline at 1.06 weeks of a 6-week lead, the CPI basket struck on
-the landed price and measured on the shelf, the register at a third of its steady state, the sector
-split — all of it. There should be no seed. A bootstrap sets the exogenous primitives (population,
-geography, the registry) and then **runs the engine's own mechanisms to a fixed point.** One code path
-cannot disagree with itself.
-
-**TESTING — THE COLLISION TO RESOLVE FIRST.** This design says each extracted object is unit-testable,
-and the repo has exactly one test (the harness) plus a §1 rule that `scripts/` may hold only
-`harness.ts` and `check-hygiene.sh`. Those cannot both stand. **Amend the rule to allow a `test/` tree
-of pure-function tests before step 1**, or "unit testable" is a slogan: the harness is an integration
-check and cannot tell you a five-line method is wrong. The rule's intent — one end-to-end script, no
-competing harnesses — is preserved by scoping `test/` to pure domain functions with no engine run.
+**EXPECT THE HARNESS TO GET WORSE AS STEP 1 FINISHES, AND DO NOT REVERT FOR THAT.** ~20B a week is
+still absorbed silently; stop absorbing it and it lands somewhere visible. §1.20 applies with full
+force — §7.233's decomposition of 515 → 1,130 is the worked example of reading such a rise honestly.
 
 **RESPECT THE COLUMNAR CONSTRAINT WHILE EXTRACTING.** §7.228 leaves the only remaining speed path as
-moving stage 05 and 08 state into `SharedArrayBuffer`s. That is a different project, but it touches the
-same layout: an object extracted now as a class holding object references has to be extracted again as
-one holding row indices. **So give every new object a flat, numeric, array-friendly field set and keep
-identity as an id rather than a reference.** Doing it in that shape costs nothing now and saves the
-second pass.
-
-**HOW, WITHOUT A BIG-BANG REWRITE.** Strangler fig, one noun at a time, hygiene ratcheting behind each.
-Steps 1, 3, 4 and 5 are individually shippable and each is bit-exactness-testable against the harness —
-the property that makes this safe incrementally and unsafe as a rewrite.
+moving stage 05 and 08 state into `SharedArrayBuffer`s. An object extracted as a class holding object
+references has to be extracted again as one holding row indices — **so every new object keeps a flat,
+numeric, array-friendly field set and identity as an id.** `domain/company-week/` complies.
 
 ### P1 — Periodicity and units  *(standing)*
 
@@ -751,18 +688,18 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 
 | Defect | State and next action |
 |---|---|
-| **THE ORDER OF A SOURCE-FILE DECLARATION SETS UNEMPLOYMENT** | §7.222 measured it: reverse the order `05-unit-bidding` walks `INDUSTRY_SUBUNITS` — a declaration order, nothing economic — and week 1 aggregate net income moves +3.8%, GDP −0.12%, **every one of 2,496 firms buys a different amount**, and by week 2 seven more firms are dead and unemployment prints 9.49% against 9.61%. Sub-unit markets open one after another and firms spend one budget across all of them, so whichever market opens first is served first. That coupling is REAL (a firm has one wallet); what is arbitrary is that the queue is a file's declaration order. **Rule 19: an arbitrary implementation detail is setting a macro outcome.** The well-posed question is what the opening order should BE — simultaneous clearing across a firm's budget, or an order derived from something economic. Do not paper over it by pre-allocating per-market budgets: that lets a firm overspend. Owner: IND/SCALE. |
-| **BEHAVIOUR LIVES IN THE STAGES, NOT IN THE OBJECTS** | §7.229 measured it: **7,736 lines of `domain/` against 24,595 of `simulation/stages/`**, in functions of 700–2,400 lines. Every open row below is a rule with no home — the fiscal rule (no `Government` object, only twelve free functions over argument bags), the repo pledge rule (no `Collateral` object), the fund's redemption rule (no `Fund` object), the SME pool's capacity rule (twelve inline lines that silently allocated ZERO to the household basket's largest category, for ever). **Do not work the rows one at a time — they are one cause.** The model to copy already exists: `profiles/index.ts`, a registry whose header reads "one line per kind". **Next action: move the rule each open defect names out of its stage and onto an object, defect by defect, starting with Government.** Owner: AU. |
-| **MONEY IS NOT CONSERVED, AND TWO OF ITS CREATION MECHANISMS ARE PLUGS** | §7.229: 02b's reconcile INVENTS reserves for any balance a stage moved without a payment instruction — **14.3B/week gross** (corporate 3.9B, institutional 9.9B, SME 4.3B) — and the overdraft clamp `Math.max(0, cashUSD)` destroys negative balances, creating the money that was overspent: **6.0B/week**. `unbackedBankCashUSD` runs **213.3B at week 13 → 585.4B at week 30, rising**. **43 direct writes to a money field** sit outside `initialization.ts` and `settlement.ts`, across 15 files. **Next action: enumerate all 43 and convert each to a payment instruction; the reconcile's own comment says it goes to zero when that is done, so the 14.3B IS the to-do list, measured.** Owner: CASH/SETL. |
-| **A SECURITY IS A DISPLAY STRUCT, NOT A PRIMITIVE** | §7.229: `TradeableInstrument` is an `assetType` string tag plus a `details` bag of **26 optional fields**, with nothing enforcing that a CDS carries a spread or a bond a coupon. Cost of a new security type, counted: **75 comparison sites across 17 files**. Other unions cost the same way — `PartyRef.kind` 69 sites/19 files, institutional `entityType` 64/21, `RegionId` 34/9. **A new profile also has no small-firm tier**: SME pools are keyed by INDUSTRY, so a new industry gets one automatically and a new profile silently gets large firms only. Owner: AU. |
+| **THE ORDER OF A SOURCE-FILE DECLARATION SETS UNEMPLOYMENT** | §7.222 measured it: reverse the order `05-unit-bidding` walks `INDUSTRY_SUBUNITS` — a declaration order, nothing economic — and week 1 aggregate net income moves +3.8%, GDP −0.12%, **every one of 2,496 firms buys a different amount**, and by week 2 seven more firms are dead and unemployment prints 9.49% against 9.61%. Sub-unit markets open one after another and firms spend one budget across all of them, so whichever market opens first is served first. That coupling is REAL (a firm has one wallet); what is arbitrary is that the queue is a file's declaration order. **Rule 19: an arbitrary implementation detail is setting a macro outcome.** The well-posed question is what the opening order should BE — simultaneous clearing across a firm's budget, or an order derived from something economic. Do not paper over it by pre-allocating per-market budgets: that lets a firm overspend. Stage 08's half of the order question is CLOSED — §7.223's entity-scoped RNG made the company loop order-invariant and sharded; this row is stage 05's alone. Owner: IND/SCALE. |
+| **BEHAVIOUR LIVES IN THE STAGES, NOT IN THE OBJECTS** | §7.229 measured it: **7,736 lines of `domain/` against 24,595 of `simulation/stages/`**. **PARTLY CLOSED BY §5-STRUCT:** the four rules the open defects named now have objects (`Government`, `Collateral`, `Fund`, `SmePool` — §7.230) and the company kernel's seven rule blocks are pure objects in `domain/company-week/` with 71 tests, all bit-exact (§7.238). What remains: the other 700+-line stages still compute inline, and the kernel's effectful remainder (cash walk, reports, offering settlement) waits on the ledger migration. **Next action: continue the §7.238 loop (extract → compile → fingerprint → test → commit), stage by stage.** Owner: STRUCT. |
+| **MONEY IS NOT CONSERVED, AND TWO OF ITS CREATION MECHANISMS ARE PLUGS** | §7.229: 02b's reconcile INVENTS reserves for any balance a stage moved without a payment instruction — **14.3B/week gross** (corporate 3.9B, institutional 9.9B, SME 4.3B) — and the overdraft clamp `Math.max(0, cashUSD)` destroys negative balances, creating the money that was overspent: **6.0B/week**. `unbackedBankCashUSD` runs **213.3B at week 13 → 585.4B at week 30, rising**. The ledger now exists and hygiene holds direct money writes at budget 2 (§7.230) — **and that killed the claimed cause: "43 direct writes" was a miscount (ten real strays, since migrated), so the 14.3B bypass is NOT direct field writes.** Most likely balances carried through `companyUpdates` and whole-object rebuilds. **Next action: find the bypass before claiming a cause again; then delete the reconcile and the clamp — the reconcile's own gross is the burndown.** Owner: STRUCT step 1 (CASH/SETL). |
+| **A SECURITY IS A DISPLAY STRUCT, NOT A PRIMITIVE** | §7.229: `TradeableInstrument` is an `assetType` string tag plus a `details` bag of **26 optional fields**, with nothing enforcing that a CDS carries a spread or a bond a coupon. **§7.230 built the registries additively**: `domain/assets/` reconciles the FOUR instrument taxonomies (two were anonymous; `SOV_BOND` vs `GOV_BOND` disagree) under one class map, `ASSET_REGISTRY`/`PARTY_REGISTRY` dispatch, and hygiene ratchets literal comparisons at budget 64. **What remains is the migration: replace the four unions and the `details` bag with the discriminated union**, so a new type will not build until it is handled. Also standing: **a new profile has no small-firm tier** — SME pools are keyed by INDUSTRY, so a new profile silently gets large firms only. Owner: STRUCT step 4. |
 | **AN INDUSTRIAL FIRM'S LOSS IS REBATED AT THE TAX RATE** | §7.237 found it while extracting the income statement: the profile path guards net income on `ebit > 0` and the industrial path does not, so an industrial firm with a pre-tax loss receives a tax REBATE it never gets in cash. **Every distressed industrial company in the model is flattered by the tax rate — and the distressed ones are exactly the firms §5-G5's default work is about.** The rule was written twice inline, once per path, which is how the two came to disagree. It is now one function with the difference named (`taxesLosses`) and pinned by a test, PRESERVED rather than fixed because fixing it changes the world and that is not a refactor's call. **Next action: decide which half is right — it is almost certainly the profile path's — and take the re-baseline deliberately.** Owner: IND/CRD. |
 | **THE SEED SUPPLIES ~14% LESS THAN ITS OWN DEMAND — UNIFORMLY** | **The SECTOR half of this row is closed by §7.227**: combined named+SME coverage went from 0.43/0.99/0.80/1.04 to 0.85/0.85/0.88/0.87, a 2.4x spread down to 1.04x. What is left is a LEVEL: every producing sector supplies about 86% of the demand the same seed generates, and 34 of the USA's 37 categories still open below their own demand. **This is now one number to find, not a distribution to chase.** The seed's VALUE totals reconcile (IO gross output 1033B against firm+SME revenue 980B, 94.9%), so the gap is in the UNIT mapping — `deriveSubUnitUnitPrice` divides FINAL demand by a per-capita/per-firm physical volume while capacity is revenue over the same price, and the recipe-input demand a category faces is built from firms' own intensities rather than from the IO coefficients. **Next action: reconcile units demanded against units suppliable for one category by hand, end to end.** Owner: the seed, with IND. |
-| **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | §7.213: 32,278 holding rows at seed → ~103,000 distinct positions by week 5, ~122,000 rows by week 15. **15% are duplicate `(holder, instrument)` rows and 9% are under $1,000.** §1's §7.4 rule is that the seed opens in the shape the weekly engine produces; this one does not, and every stage that walks the register pays for the gap. Consolidating duplicates and dust is ~25% off every register walk — the largest algorithmic item left. Owner: the seed, with SCALE. |
-| **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | **RE-DIAGNOSED IN §7.224: nothing in the labour market is wrong.** It reads `nominalGrowth - inflation`, and the inflation was a goods-market defect at week 1. With that fixed, EUR's 66% is gone and all four regions sit near 33%, but JPN now reaches 75% by week 58 and 69 band violations remain. **Do not touch the matching function or the quit rate until the capacity row below is closed** — the labour market will keep printing whatever the price level hands it. Owner: HH5/LAB, after IND. |
-| **SUPPLIER MARKET SHARES DO NOT SUM TO 100%** | **LARGELY CLOSED BY §7.224 — it was a symptom, not a defect.** Shares summed to 2-35% across dozens of categories in all four regions because the producers had been shed by the labour cascade; with the week-1 unit errors fixed it is **one** category (`JPN:heavy_equipment`, 10 weeks). Do not work this row directly — re-read it after the capacity row closes. |
-| **REPO COLLATERAL IS OVER-PLEDGED** | The largest single family in §7.211 (XIVF 56x, THSY 54x): a bank pledging more of a tenor bucket than it holds. `repoEncumberedCollateralUSD` is supposed to be reconciled against holdings every week by `reconcileRepoPledges`. Owner: WS6/REPO. |
-| **EUR GOVERNMENT OUTLAYS EXCEED ITS BUDGET** | New in §7.210's run, twice in twelve weeks (3.96B against 2.63B at week 11) and only in EUR. Interest and transfers are contractual and paid in full (PUB1e), so an outlay above budget means one of those grew past what the stance allows — most likely the interest bill, which CAL now pays on real dates. **Next action: print EUR's `decomposeGovernmentSpending` parts against `governmentOutlaysUSD` in the weeks it trips.** Owner: MAC. |
-| **THE PRICE LEVEL DOES NOT SETTLE** | **PARTLY CLOSED BY §7.224, AND THE OLD DIAGNOSIS WAS WRONG.** This row blamed COH4's demand ladder. The ladder is not the cause: two unit errors were, both at week 1 — the seasonal factor inside the production shutdown test (whole categories shipping zero) and a CPI whose base and current prices were different price concepts. Both fixed; mid-run inflation 2,266% -> 145%, week-60 50.8%, and the hyperinflating revenue prints (6.6e+21) are gone. **What remains is not oscillation, it is a ratchet**, and its cause is the row above: capacity dispersed against demand, short markets clearing at the reservation and long ones floored at cost. **Still do not put the bid premium back and do not cap the bid.** Owner: IND, via the capacity row. |
+| **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | Remeasured by §7.232: 32,278 rows at seed → 113,393 settled (×3.51). The seed-shape half of this row STANDS — it is one line of step 6's table. **The claimed algorithmic win is DEAD (§7.228): 0.0% duplicates (the weekly consolidation already handles them) and 3–5% dust, not 15% and 9% — the "~25% off every register walk" was true when written and is not now. Do not scope work against it.** Owner: the seed, via STRUCT step 6. |
+| **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | **RE-DIAGNOSED IN §7.224: nothing in the labour market is wrong.** It reads `nominalGrowth - inflation`, and the inflation was a goods-market defect at week 1. With that fixed, EUR's 66% is gone and all four regions sit near 33%, but JPN now reaches 75% by week 58 and 69 band violations remain. §7.233's run adds EUR back at **84.2%** — that is the SME capacity fix's regression (the supplier-shares row), not a labour defect. **Do not touch the matching function or the quit rate until the capacity row below is closed** — the labour market will keep printing whatever the price level hands it. Owner: HH5/LAB, after IND. |
+| **SUPPLIER MARKET SHARES DO NOT SUM TO 100% — REOPENED AS THE EUR REGRESSION** | Was largely closed by §7.224 (down to one category). **§7.233 reopened it: the SME capacity fix — the correct rule (§1.20: keep it) — destabilised EUR alone.** Seven EUR categories fail that were clean while `EUR:enterprise_software` improved 28 → 5, and **EUR unemployment ends at 84.2%** against 27–31% everywhere else. **Top of the queue. Next action: why EUR and not the other three — compare the four regions' pool trust blends and capacity mixes in the failing categories.** Owner: STRUCT aftermath, with SEG. |
+| **REPO COLLATERAL IS OVER-PLEDGED** | The largest single family in §7.211 (XIVF 56x, THSY 54x): a bank pledging more of a tenor bucket than it holds, while `reconcileRepoPledges` is supposed to reconcile weekly. **§7.230 found the check itself split: the engine reconciled at $1, the harness checked at 1e6.** Both now read `domain/collateral.ts`'s single 1-dollar tolerance, and the count went **97 → 281 (§7.233) — visibility, not degradation: every one was there before and could not be seen.** Judge future runs against 281. Owner: WS6/REPO. |
+| **GOVERNMENT OUTLAYS EXCEED THE BUDGET** | **The check that watched this row was wrong (§7.230): it compared outlays against `governmentSpendingUSD × 1.5`, which is not the budget**, and fired seven times on the wrong quantity. It now reads `Government`'s own decomposition (contractual interest and payroll off the top, discretionary remainder scaled by the stance) and fires **53 times (§7.233), naming whether the overrun is contractual or discretionary.** Next action: read those 53 — a contractual overrun (interest paid on real dates) is the stance rule's problem, which is MAC's fiscal step function, not a ledger defect. Owner: MAC. |
+| **THE PRICE LEVEL DOES NOT SETTLE** | **PARTLY CLOSED BY §7.224, AND THE OLD DIAGNOSIS WAS WRONG.** This row blamed COH4's demand ladder. The ladder is not the cause: two unit errors were, both at week 1 — the seasonal factor inside the production shutdown test (whole categories shipping zero) and a CPI whose base and current prices were different price concepts. Both fixed; mid-run inflation 2,266% -> 145%, week-60 50.8%, and the hyperinflating revenue prints (6.6e+21) are gone. §7.233's 60-week read on the post-STRUCT world: **CPI ×15.4, goods fill decaying to 0.176, active firms 2,496 → 1,825 — the goods market does not reach a steady state; it decays for sixty weeks.** **What remains is not oscillation, it is a ratchet**, and its cause is the row above: capacity dispersed against demand, short markets clearing at the reservation and long ones floored at cost. **Still do not put the bid premium back and do not cap the bid.** Owner: IND, via the capacity row. |
 | **THE CAPITAL-GOODS SECTOR CANNOT SUPPLY THE ECONOMY'S CAPEX** | Firms bid their real capex and the basket weights sum to 1, so the bids ARE the capex figure: **~163B/yr of bids against ~13B/yr of deliveries, an 8% fill** (§7.167), four of five categories short at 65–174% over base (§7.168). §7.178 made the demand LEVEL honest (gap 1.55x → 1.29x) and §7.199 closed the seed's investment fixed point. **Both are UNMEASURED and this is measurement item 1.** It is the accumulated cost behind the ~29% unemployment that has been blocking unrelated work (§7.179). |
 | **THE BOOKS PRINT THEIR DAMPERS** | The engine states its own failure condition: a name clamped for weeks means the posted schedules disagree with the printed level and **the print is the damper, not the market.** Last measured **947 persistently bound** (890 before the OWN7 sweep, peaking at 1042 before the desk-position fix). §7.197 records the rise as the honest shape of deleting the residual dealer: **the pressure was always there.** **Do not widen the damper.** The well-posed question is: who buys when the holders as a group want less than they hold? Owners: SCALE (the float half), and the measurement run. |
 | **A SHOCK TEST STOPPED MOVING ITS PRICE** | `checkSustainedEquityDemandMovesPriceBeyondEps` — sustained institutional equity demand against an identical control world — no longer moves the name's price. Same signature as the sovereign-auction shock test: demand so far below the enlarged float that both A/B worlds pin at the damper. Re-measure after G3e's float change. |
@@ -788,7 +725,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | `unmodeledFinancialAssetsUSD` | The scoreboard for what the model contains but does not attribute. It earns nothing, moves with nothing, and only shrinks. |
 | `governmentInterestToUnmodeledHoldersUSD` | The share of the coupon bill with no modelled recipient — foreign holders. The debit is real and the crowding-out it causes is real; the credit is missing. |
 | `unmodeledCapitalReceiptShareOfIncome` | The slice of the debt-service recycle whose return path to household income is unbuilt. Decays as each receipt channel becomes real. |
-| `unbackedBankCashUSD` | Reserves grow from deposits and lending faster than any central-bank purchase backs them. 97B (w13) → 2,183B (w120) at last measure; **the 60-week harness cannot see it.** |
+| `unbackedBankCashUSD` | Reserves grow from deposits and lending faster than any central-bank purchase backs them. 97B (w13) → 2,183B (w120) at the long measure; §7.229's 30-week read: 213.3B (w13) → 585.4B (w30), rising. Falls with the money row in §6.1 — `creditUnbacked()` now counts its own contributions by reason. |
 | The TGA over a quarter-scale horizon | It sawtooths on the remittance dates, which is the shape a treasury balance has. Watch the LEVEL, not the shape. |
 | Occupational mismatch | One occupation tight while two carry real unemployment against zero vacancies. Produced by sector composition moving faster than retraining. |
 | Sovereign price elasticity to a size-only bidder | A 34B difference in the CB's book moved the USA 2Y ~490bp. Consistent with the damper row: the books ARE thin. |
@@ -2633,3 +2570,23 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        ledger, which is a different shape of change and belongs with the §5-STRUCT step 1 migration
        rather than here. The reports block and the offering/refinancing settlement are likewise
        effectful. **The rules are out; what is left is the doing, and that is what a stage is for.**
+239. **THE PLAN CLEANED AGAINST §7.221–238 — what moved, and the claims that died.** §7 itself is
+     untouched: nothing renumbered, nothing rewritten.
+     - **§5's STRUCT section existed TWICE** — a five-step draft and the six-step final, side by
+       side, disagreeing on what step 5 was. The draft is deleted; the survivor now records state
+       per step (1/3/4/5 built, 2 done for the company kernel and standing elsewhere, 6 built and
+       off) and what must still happen before the section earns its deletion.
+     - **Two §6.1 claims corrected against their own later measurements.** The register row's
+       "~25% off every walk" died in §7.228 (0.0% duplicates, 3–5% dust); the money row's "43
+       direct writes" died in §7.230 (ten real strays, since migrated — the 14.3B bypass has NO
+       established cause and the row now says so). **A row that keeps a dead number keeps sending
+       people to work it.**
+     - **The supplier-shares row is reopened as the EUR regression** (§7.233, top of the queue);
+       the repo and fiscal rows now describe what the corrected checks measure (281 and 53) instead
+       of what the wrong ones did; the price-level and labour rows carry §7.233's 60-week numbers.
+     - **§4 now names the in-flight project and the three standing decisions in one place** (tax
+       asymmetry, EUR, `SEED_BURN_IN`), and the measurement-debt preamble names the only valid
+       comparison run: §7.233's 1,130 / 128. §1.10's iteration row carries §7.228's finding that
+       the roster is not scale-invariant on the current world.
+     - **§2 maps what §5-STRUCT built** (`engine/ledger/`, `domain/company-week/`, `domain/assets/`,
+       the four defect objects, `stage-deps.ts`, `burn-in.ts`) and §2.4 the lint/test/CI gates.
