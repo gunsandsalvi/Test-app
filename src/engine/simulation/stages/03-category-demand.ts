@@ -244,7 +244,21 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
         // the firms will really bid, which stage 05 sizes from each firm's own input intensity.
         // Same number, one representation (rule 3).
         const suCorpDemand = corpInputDemandByCategory[su.unitId] ?? 0;
-        allTargets[su.unitId] = suHhDemand + suGovDemand + suCorpDemand;
+        // §7.271 — INTERMEDIATE DEMAND HAS ONE AUTHOR, AND IT IS THE SOLVE. A corporate
+        // purchase of a non-capital good is an OPERATING input — intermediate demand — and
+        // CHAIN-E's `totalOutputFromFinalDemand` below derives exactly that from the
+        // registry's own BOM. Adding the firms' intensity-summed version here FIRST put the
+        // same intermediate in the vector twice (the intensities and the BOM are the same
+        // registry data), so every input-heavy category's demand level ran ~30–45% above what
+        // anyone would really bid. Measured at the §7.271 seed reconciliation (USA
+        // electricity, w1): plans bid 24.4M units/wk — each leg once — while the level said
+        // 18.6M against 12.8M of capacity sized off supplier revenue; with the double count
+        // out, level ≈ what the bids and the suppliers were both built from. The level is
+        // FINAL demand here (C+G; capex investment keeps its own branch above); the solve
+        // adds the intermediate once. `corporateDemandUSD` still carries the operating leg —
+        // stage 05's corporate bids are sized from it and from the firms' own intensities,
+        // never from the level.
+        allTargets[su.unitId] = suHhDemand + suGovDemand;
         corporateDemandByCategory[su.unitId] = suCorpDemand;
         householdDemandByCategory[su.unitId] = suHhDemand;
 

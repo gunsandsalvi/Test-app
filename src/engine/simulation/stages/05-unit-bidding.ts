@@ -1193,6 +1193,25 @@ function buildRegionDemandPlans(
     }
   }
 
+  // SEED_RECON=<subUnitId> — the §6.1 seed-undersupply row's hand reconciliation, printed from
+  // the plans themselves: every demand plan's buyer type and units, against the region's
+  // supply, for one category in week 1 — so the ~14% (in units, ~47%) gap names its side.
+  if (process.env.SEED_RECON === subUnitId && week <= 2) {
+    let corpUnits = 0; let hhUnits = 0; let govUnits = 0; let segUnits = 0;
+    plans.forEach((p) => {
+      if (p.isHouseholdAggregate) hhUnits += p.demandUnits;
+      else if (p.isGovernmentAggregate) govUnits += p.demandUnits;
+      else if (p.company) corpUnits += p.demandUnits;
+      else segUnits += p.demandUnits;
+    });
+    const cd = reg.categoryDemand[subUnitId];
+    console.log(`  [recon] w1 ${regionId}:${subUnitId} demand plans (units/wk):`
+      + ` corp ${(corpUnits / 1e6).toFixed(2)}M seg ${(segUnits / 1e6).toFixed(2)}M`
+      + ` hh ${(hhUnits / 1e6).toFixed(2)}M gov ${(govUnits / 1e6).toFixed(2)}M`
+      + ` total ${((corpUnits + segUnits + hhUnits + govUnits) / 1e6).toFixed(2)}M`
+      + ` | demandLevel ${(((cd?.demandLevelUSD ?? 0) / 52) / Math.max(1e-9, referencePriceUSD) / 1e6).toFixed(2)}M`
+      + ` @p${referencePriceUSD.toFixed(2)}`);
+  }
   return plans;
 }
 

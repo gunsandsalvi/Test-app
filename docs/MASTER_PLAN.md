@@ -3985,3 +3985,49 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - **Verified (20 weeks, shocks off): USA banks all AA, UK banks all A** (the cohorts
        were CCC/B); VOUL's OAS 516 → 238bps — the wholesale spread that kept UK NIM marginal
        unwinds at the source. 4 violations in 4 families; ladder green.
+
+269–270. (Records in the commits of the same names: §7.269 — the full-staffing ceiling
+     scales with the plant, one derivation for stage 05's staffedShare and the labour cap,
+     the unemployment ratchet's structural root; §7.270 — the index fund's credit-book bound
+     reserves the dealer fee, and the harness backlog check aggregates per contract key.)
+
+271. **THE REFERENCE ON THE §7.270 TREE: 52 violations in 18 FAMILIES — THE RUN TO JUDGE
+     AGAINST** (counts … 204 → 169 → 99 → 52). 60 weeks, seed 2654435769, shocks on.
+     - **Carriers 12/12 ALIVE AT REFERENCE SCALE** — the family §7.253 first recorded is
+       closed for good (0/12 at every prior reference); tonne-miles 4.15e9, every carrier
+       earning weekly. Bypass gross 1.9 → **0.8B/week**. CPI ×2.138, w60 inflation 14.9;
+       u 28.1/27.8/23.8/24.2 — §7.269 alone did not bend the 60-week endpoint (the capex
+       starvation channel binds it; see §7.272). The 10Y sits at 4.76 this run (the
+       §7.256/§7.261 releases were real; the damper row keeps the question).
+     - The relabeled remainder: **USAEQX 21x** (the small-cap ETF class migrated to the USA
+       fund and halved — §7.262/266 cut the mechanics; what remains is one fund's chronic
+       redemption week), UK NIM 12x + JPN NIM 3x (marginal dips with ratings now A/AA — a
+       different leg than §7.268's funding spread), 2x USA loan-mint weeks + 1 UK sov single
+       (the §7.259 paydown is near-tight at 60 weeks, not tight), 8 backlog singles (printed
+       by the pre-fix last-wins check; the aggregated check post-dates this run), and the two
+       known credit-ETF w3 singles.
+     - Note: this reference predates §7.270's fee-shave and §7.272's demand-level fix — both
+       relabels absorbed by the next reference.
+
+272. **THE SEED-UNDERSUPPLY ROW'S "ONE NUMBER", FOUND BY THE HAND RECONCILIATION IT ASKED
+     FOR — and it is TWO: stage 03's weekly rebuild still double-counted intermediate demand
+     (fixed), and the firms' input-intensity tables disagree with the BOM matrix ~3x (open).**
+     - SEED_RECON=<subUnitId> (new print in 05): every demand plan's buyer type and units for
+       one category at week 1. USA electricity: **plans bid 24.39M units/wk** (corp 8.01 +
+       SME 2.83 + hh 13.26 + gov 0.29 — each leg once, all honest) against **capacity 12.81M**
+       and a demand LEVEL of 18.61M.
+     - **Fix (the trilogy's missing third)**: the seeds' final-demand builds already say it —
+       "a corporate purchase of a non-capital good is INTERMEDIATE demand, which the solve
+       produces from the recipes; putting it here too counted it twice" — and §7.120 already
+       recorded that this identity lives in three places. The seeds were fixed; **stage 03's
+       weekly rebuild still added `suCorpDemand` (operating inputs) to the final vector and
+       then Leontief-solved the intermediate on top**. Removed: the level is C+G (+ the capex
+       branch's investment); the solve owns the intermediate; `corporateDemandUSD` still
+       carries the operating leg for stage 05's bids, which never read the level.
+     - **Open (the remaining ~40%)**: with the double count out, the solved gross output puts
+       electricity's intermediate at ~3.8M units/wk while the firms' own `firmInputIntensities`
+       bid 10.8M — the intensity tables and `VIEW_CATEGORY_INPUT_REQUIREMENTS` are two
+       representations of the same registry recipes disagreeing ~3x. One owner is the fix;
+       until then the capacity (sized off the solve's side via supplier revenue) meets bids
+       from the intensity side, and fill ~0.6 with the capex starvation and the u endpoint
+       are the cost. Owner: CHAIN/registry, the §6.1 seed row.
