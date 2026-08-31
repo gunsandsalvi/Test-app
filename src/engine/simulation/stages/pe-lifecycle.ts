@@ -20,6 +20,7 @@
  *     economy's totals never change because a firm was created.
  */
 
+import { creditUnbacked } from '../../ledger';
 import { Company, InstitutionalEntity, Region, RegionId, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { PrimaryOffering, mandateAllocator } from '../../../domain/primary-market';
@@ -555,7 +556,13 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
       // price is not destroyed on its way out of the institutional book.
       const sellerRegion = ctx.updatedRegions[comp.region];
       if (sellerRegion?.householdState) {
-        sellerRegion.householdState.depositsUSD += calledUSD;
+        // §5-STRUCT step 1: the deposit moves through the ledger. The fund's own side is debited
+        // by `callCapitalUSD` above, which draws it from the LPs, so this leg has a real payer and
+        // the movement is conserved — it is written here as an unbacked credit only because the
+        // payer is a set of LP entities rather than one party, which `post` cannot yet express.
+        // Closing it means teaching the ledger a many-to-one post; the reason string is the marker.
+        creditUnbacked(ctx, { kind: 'HOUSEHOLD', region: comp.region },
+          calledUSD, 'take-private proceeds to founding households');
         // HH4d: the banks post this deposit flow next week (T+1).
         sellerRegion.householdState.pendingBankSettlementUSD =
           (sellerRegion.householdState.pendingBankSettlementUSD ?? 0) + calledUSD;

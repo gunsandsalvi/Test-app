@@ -7,6 +7,7 @@
  * the sequence — see that file's header comment for why.)
  */
 
+import { absorbBankBook } from '../../ledger';
 import { GameState, DebtTranche } from '../../../types';
 import { getSimulationDate } from '../../formatters';
 import { isAntitrustBlocked, isActiveCompany } from '../../../domain/company';
@@ -160,9 +161,8 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   if (target.bankBalanceSheet && acquirer.bankBalanceSheet) {
     const tb = target.bankBalanceSheet;
     const ab = acquirer.bankBalanceSheet;
-    ab.depositsUSD += tb.depositsUSD;
-    ab.wholesaleFundingUSD = (ab.wholesaleFundingUSD ?? 0) + (tb.wholesaleFundingUSD ?? 0);
-    ab.cashReservesUSD += tb.cashReservesUSD;
+    // §5-STRUCT: the deposit and reserve lines move through the ledger, which owns them.
+    absorbBankBook(ab, tb);
     ab.bankEquityUSD += tb.bankEquityUSD;
     ab.businessLoanBookUSD += tb.businessLoanBookUSD;
     ab.businessLoans = [...(ab.businessLoans || []), ...(tb.businessLoans || [])];
@@ -193,7 +193,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     ab.repoLentUSD = (ab.repoLentUSD ?? 0) + (tb.repoLentUSD ?? 0);
     ab.repoBorrowedUSD = (ab.repoBorrowedUSD ?? 0) + (tb.repoBorrowedUSD ?? 0);
     ab.repoEncumberedCollateralUSD = (ab.repoEncumberedCollateralUSD ?? 0) + (tb.repoEncumberedCollateralUSD ?? 0);
-    ab.corporateDepositsUSD = (ab.corporateDepositsUSD ?? 0) + (tb.corporateDepositsUSD ?? 0);
+    // (corporate/institutional/SME deposit lines: absorbed above by absorbBankBook)
     acquirer.bankMarketShare = Number(((acquirer.bankMarketShare ?? 0) + (target.bankMarketShare ?? 0)).toFixed(4));
     target.bankBalanceSheet = undefined;
   }

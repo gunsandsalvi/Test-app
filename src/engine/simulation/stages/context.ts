@@ -67,6 +67,10 @@ export interface WeeklyStepContext {
   holdingsTable?: import('../../columns/holdings-table').HoldingsTable;
   /** SCALE: the week's payments as four parallel columns (stages/settlement.ts). */
   paymentJournal: import('./settlement').PaymentJournal;
+  /** §5-STRUCT step 1 — every money movement made without a counterparty, by reason. The migration's
+   *  burndown: it is printed, it is a to-do list, and it is meant to reach zero (see
+   *  engine/ledger/balance.ts). */
+  unbackedLedger: import('../../ledger/balance').UnbackedLedger;
   /** SETL6 — the running net of those instructions per party: what each has committed to pay or
    * is due to receive before the settlement pass runs. Read through
    * `pendingSettlementUSD` (stages/settlement.ts); maintained by `pay`. */
@@ -238,6 +242,7 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     currentWeekMod13: ((nextWeek - 1) % 13) + 1,
 
     companyUpdates: {},
+    unbackedLedger: { totalUSD: 0, byReason: {} },
     taxCollectedByRegion: {},
     taxAccruedByRegion: {},
     // The containment gate for the private tier (HC Wave 1): every existing stage consumes

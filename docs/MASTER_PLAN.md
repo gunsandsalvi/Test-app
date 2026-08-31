@@ -220,6 +220,14 @@ conservation, per-bank balance-sheet identity, the clearing-house and unresolved
 **declared boundary frontiers** (anything undeclared fails), NAV identity, damper binding, dead
 ceilings, bank capital and NIM bands, unemployment bands, and the shock batteries.
 
+**AND ONE TEST TREE, added for §5-STRUCT.** The one-harness rule stands and its intent is unchanged:
+no second thing that runs the simulation. But an integration check over a 60-week world cannot tell
+you a five-line method is wrong — §7.229's SME lock allocated zero capacity to the household basket's
+largest category for sixty weeks and the harness reported it only as a downstream inflation number.
+So `test/` may hold PURE-FUNCTION tests over `domain/`: no engine run, no `advanceWeeklyStep`, no
+`createInitialGameState`. `check-hygiene.sh` enforces exactly that boundary. Anything that needs a
+world is a harness module, as before.
+
 ---
 
 ## 3. Current state
