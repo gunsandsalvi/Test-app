@@ -39,6 +39,8 @@ import { GameState, RegionId, Position } from '../src/types';
 import { executeTrade } from "../src/engine/simulation/trade";
 import { isPubliclyListed, isActiveCompany } from '../src/domain/company';
 import { sovereignCouponByBucket, weeklyInterestExpenseUSD, decomposeGovernmentSpending } from '../src/domain/government';
+import { governmentOf } from '../src/domain/government-entity';
+import { overPledgedByBucket } from '../src/domain/collateral';
 import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/central-bank';
 import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../src/engine/bootstrap/national-accounts';
 import { sovBucketKey } from '../src/engine/simulation/stages/shared-helpers';
@@ -496,10 +498,19 @@ function checkCentralBankIdentity(state: GameState, week: number) {
     if (outlays !== undefined) {
       const spent = reg.governmentProcurementSpentUSD ?? 0;
       const unspent = reg.unspentProcurementBudgetUSD ?? 0;
-      if (spent > 0 && outlays > reg.governmentSpendingUSD * 1.5) {
+      // §5-STRUCT step 3 — ASK THE GOVERNMENT, and this is why the §6.1 row never closed. The
+      // check used to read `outlays > governmentSpendingUSD * 1.5`: a stated 50% tolerance against
+      // a number that is NOT the budget. The budget is the decomposition — contractual interest
+      // and payroll off the top, the discretionary remainder scaled by the fiscal stance — and it
+      // was computed inside a stage with no name anyone could read from here. Both sides now come
+      // off `Government`, so the check and the engine cannot disagree, and the message says which
+      // half overran because contractual lines never can.
+      const gov = governmentOf(region, reg);
+      const { overrunUSD, contractualUSD, discretionaryUSD } = gov.overrun();
+      if (spent > 0 && overrunUSD > 1e6) {
         violations.push({
           week,
-          message: `${region} government outlays ${(outlays / 1e9).toFixed(2)}B exceed its budget ${(reg.governmentSpendingUSD / 1e9).toFixed(2)}B by more than the stance allows`,
+          message: `${region} government outlays ${(outlays / 1e9).toFixed(2)}B exceed its budget ${((outlays - overrunUSD) / 1e9).toFixed(2)}B by ${(overrunUSD / 1e9).toFixed(2)}B — contractual ${(contractualUSD / 1e9).toFixed(2)}B, discretionary ${(discretionaryUSD / 1e9).toFixed(2)}B`,
         });
       }
       if (spent < 0 || unspent < 0) {
@@ -2118,9 +2129,17 @@ function runHarness() {
         if (Math.abs(derivedUSD - sheetUSD) > 5e6) {
           violations.push({ week: w, message: `Bank ${c.ticker} secured borrowing ${(sheetUSD / 1e9).toFixed(2)}B disagrees with its ${(derivedUSD / 1e9).toFixed(2)}B of repo contracts` });
         }
-        (pledgedBy.get(c.ticker) ?? new Map()).forEach((faceUSD: number, bucketKey: string) => {
+        // §5-STRUCT step 3 — the same definition the engine reconciles against
+        // (domain/collateral.ts). This check used a 1e6 tolerance against the reconcile's 1, so it
+        // could fail a bank the engine had just declared clean.
+        overPledgedByBucket({
+          pledgedByBucket: (pledgedBy.get(c.ticker) ?? new Map()) as Map<string, number>,
+          heldByBucket: new Map(Object.entries(bs.sovereignBondHoldingsByTenor ?? {})
+            .map(([k, v]) => [k, Number(v) || 0])),
+        }).forEach((excessUSD: number, bucketKey: string) => {
+          const faceUSD = (pledgedBy.get(c.ticker) as Map<string, number>).get(bucketKey) ?? 0;
           const heldUSD = Number(bs.sovereignBondHoldingsByTenor?.[bucketKey] ?? 0);
-          if (faceUSD > heldUSD + 1e6) {
+          if (excessUSD > 0) {
             violations.push({ week: w, message: `Bank ${c.ticker} pledged ${(faceUSD / 1e9).toFixed(2)}B of ${bucketKey} against ${(heldUSD / 1e9).toFixed(2)}B held of it` });
           }
         });

@@ -40,6 +40,7 @@
  */
 
 import { RegionId, Region, InstitutionalEntity } from '../../../types';
+import { overPledgedByBucket } from '../../../domain/collateral';
 import { BankingSector } from '../../../domain/banking';
 import {
   RepoContract, RepoPledge, RepoParty, repoPartyKey, repoInterestToMaturityUSD,
@@ -637,11 +638,15 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
       const company = ctx.updatedCompanies.find((c) => c.ticker === ticker && c.bankBalanceSheet);
       if (!company) return;
       const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
+      // §5-STRUCT step 3 — one definition of "over-pledged" (domain/collateral.ts). This used a
+      // 1-dollar tolerance and the harness used 1e6, so a bank could be a million dollars
+      // over-pledged, pass this reconcile, and fail the check in the same week — which is most of
+      // why §6.1's row survived two attempts at it (§7.226).
       const pledged = encumberedFaceByBucket(book, ticker);
-      const shortfallByBucket = new Map<string, number>();
-      pledged.forEach((faceUSD, bucketKey) => {
-        const heldUSD = Number(sheet.sovereignBondHoldingsByTenor?.[bucketKey] ?? 0);
-        if (faceUSD > heldUSD + 1) shortfallByBucket.set(bucketKey, faceUSD - heldUSD);
+      const shortfallByBucket = overPledgedByBucket({
+        pledgedByBucket: pledged,
+        heldByBucket: new Map(Object.entries(sheet.sovereignBondHoldingsByTenor ?? {})
+          .map(([k, v]) => [k, Number(v) || 0])),
       });
       if (shortfallByBucket.size === 0) return;
 

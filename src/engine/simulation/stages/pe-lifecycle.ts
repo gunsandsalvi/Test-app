@@ -21,6 +21,7 @@
  */
 
 import { creditUnbacked } from '../../ledger';
+import { distributable } from '../../../domain/fund';
 import { Company, InstitutionalEntity, Region, RegionId, DebtTranche, NewsItem } from '../../../types';
 import { WeeklyStepContext } from './context';
 import { PrimaryOffering, mandateAllocator } from '../../../domain/primary-market';
@@ -184,7 +185,10 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
   // constraint itself, and it is one side of an asymmetry rather than a new rule. What cannot be
   // wired stays undistributed, which leaves the commitment drawn — which is what an unpaid
   // distribution actually is.
-  const paidUSD = Math.min(amountUSD, totalDrawnUSD, Math.max(0, sponsor.cashUSD ?? 0));
+  // §5-STRUCT step 3 — the rule is on the fund (domain/fund.ts), where the CALL side has always
+  // had it: a fund moves what it has. §7.226 measured what its absence cost — PEF1 wired 0.495B
+  // out of a 0.000B account and carried -0.50B for forty weeks.
+  const { payableUSD: paidUSD } = distributable(amountUSD, totalDrawnUSD, sponsor.cashUSD ?? 0);
   if (!(paidUSD > 0)) return;
   const creditByLp = new Map<string, number>();
   sponsor.peFund.lpCommitments.forEach((c) => {

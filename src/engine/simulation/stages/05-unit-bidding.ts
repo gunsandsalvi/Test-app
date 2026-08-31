@@ -33,6 +33,7 @@ import { profileKeyOf } from './profiles';
 import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
+import { capacityMixShares } from '../../../domain/sme-pool';
 import { clearDoubleAuction, AuctionBid, AuctionOffer, AuctionFill } from './double-auction';
 import { convertLocal, localToUsd, fromTable, snapshotFxToUsd, FxToUsd } from '../../../domain/currency';
 import { laneKey, laneTransitWeeks } from '../../../domain/carrier';
@@ -887,14 +888,14 @@ function buildRegionSupplyPlans(
       const siblings = smePoolSubUnits(owningIndustry);
       const measured = pool.salesDerivedAnnualRevenueUSDBySubUnit ?? {};
       const measuredTotal = siblings.reduce((a, su) => a + Math.max(0, measured[su.unitId] ?? 0), 0);
-      let mixShare: number;
-      if (measuredTotal > 0) {
-        mixShare = Math.max(0, measured[subUnitId] ?? 0) / measuredTotal;
-      } else {
-        const demandOf = (id: string) => reg.categoryDemand[id]?.demandLevelUSD ?? 0;
-        const demandTotal = siblings.reduce((a, su) => a + demandOf(su.unitId), 0);
-        mixShare = demandTotal > 0 ? demandOf(subUnitId) / demandTotal : 1 / Math.max(1, siblings.length);
-      }
+      // §5-STRUCT step 3 — the rule lives on the pool (domain/sme-pool.ts), not here. What used to
+      // sit inline gave a sub-unit the pool had never sold into a share of exactly zero, for ever
+      // (§7.229): no offer produces no measurement produces no offer.
+      const mixShare = capacityMixShares(siblings.map((su) => ({
+        subUnitId: su.unitId,
+        demandLevelUSD: reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0,
+        measuredRevenueUSD: Math.max(0, measured[su.unitId] ?? 0),
+      }))).get(subUnitId) ?? 0;
       // Capacity is sized off the pool's GOODS revenue — what it actually sells in these books —
       // not its total, which includes services that never pass through an auction.
       const goodsRevenueUSD = measuredTotal > 0 ? measuredTotal : pool.annualRevenueUSD;
