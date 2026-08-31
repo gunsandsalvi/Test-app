@@ -177,6 +177,9 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         amountUSD: drawUSD,
         reason: 'overdraft converted to facility draw',
       });
+      if (process.env.OD_TRACE === '1' && drawUSD > 50e6) {
+        console.log(`  [od] w${ctx.nextWeek} ${regionId}:${c.ticker} overdraft ${(drawUSD / 1e6).toFixed(0)}M -> facility draw (bank ${c.homeBankTicker})`);
+      }
     });
 
     const corporateDepositsByBank = new Map<string, number>();

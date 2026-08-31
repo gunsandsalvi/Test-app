@@ -70,10 +70,16 @@ export function indexFundsForBook(
     const index = indexById.get(e.etf.indexId);
     if (!index || index.constituents.length === 0) return;
     // A fund invests everything it has: its basket plus the cash creations just handed it.
+    // §7.266: SIGNED — a fund whose cash stands negative has less to invest than it holds, so
+    // its targets drop by the shortfall and the next clearing SELLS it back to solvency. The
+    // old `max(0, cash)` left an overdrawn fund targeting its full basket forever: nothing
+    // ever sold, nothing ever refilled, and one small dip printed as a violation every week
+    // (the sticky overdraft singles of §7.262/§7.265). A fund short of money liquidates —
+    // that is the refill path a real fund has, and the one this one was missing.
     const holdingsUSD = holdingsUsdOf
       ? holdingsUsdOf(e)
       : e.itemizedHoldings.reduce((s, h) => s + (h.quantityOrNotionalUSD ?? 0), 0);
-    const investableUSD = holdingsUSD + Math.max(0, e.cashUSD ?? 0);
+    const investableUSD = holdingsUSD + (e.cashUSD ?? 0);
     if (investableUSD > 0) out.push({ fund: e, index, investableUSD });
   });
   return out;
