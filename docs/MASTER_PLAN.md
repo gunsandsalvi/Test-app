@@ -225,6 +225,11 @@ distributions, payroll), `assets/` (the asset registry and the four-taxonomy rec
 `government-entity.ts` (the `Government` façade — the one budget decomposition), `collateral.ts`
 (the one pledge tolerance), `fund.ts` (distributions bounded by drawn capital and cash),
 `sme-pool.ts` (the capacity mix rule that broke §7.229's lock).
+The §7.241–242 enforcement modules: `sovereign-id.ts` (the ONE GOV instrument-id format —
+builders and the bucket-vs-tranche parser that replaced 15 inline `replace()` sites),
+`institution-profiles.ts` (the entityType facts registry, "one line per kind" one level up),
+`units.ts` (zero-cost branded number families — `Money<region>`, `PerWeek`/`PerYear`,
+`Frac`/`Bps`, `Shares` — with named converters; apply seam by seam per §5-STRUCT Tier 4).
 
 ### 2.4 UI and the harness
 
@@ -243,13 +248,15 @@ So `test/` may hold PURE-FUNCTION tests over `domain/`: no engine run, no `advan
 `createInitialGameState`. `check-hygiene.sh` enforces exactly that boundary. Anything that needs a
 world is a harness module, as before.
 
-**The gates (§7.234–235), every one a ratchet — each may fall and never rise:** `npm run lint` is
-`tsc --noEmit` under `strict: true` plus ESLint tuned to this repo's paid-for defect classes (style
-rules absent on purpose; the warning ceiling is today's count, so a new `any` fails the build);
-`npm test` runs the pure tests; `npm run hygiene` holds three budgets (money writes 2, asset-literal
-comparisons 64, the `test/` purity boundary). CI (`.github/workflows/verify.yml`) runs lint, hygiene
-and tests on push and PR — **the harness is deliberately NOT in CI**: it currently fails by design
-mid-project, and a check that is always red teaches people to ignore the build.
+**The gates (§7.234–235, §7.242), every one a ratchet — each may fall and never rise:**
+`npm run lint` is `tsc --noEmit` under `strict: true` plus ESLint tuned to this repo's paid-for
+defect classes (style rules absent on purpose; the warning ceiling is today's count — 390 as of
+§7.242 — so a new `any` fails the build); `npm test` runs the pure tests; `npm run hygiene` holds
+FOUR budgets (assignment-form money writes 3, spread-form money writes 23 — the object-literal
+form the first regex could not see, §7.242 — asset-literal comparisons 64, the `test/` purity
+boundary), and both money greps cover `.tsx`. CI (`.github/workflows/verify.yml`) runs lint,
+hygiene and tests on push and PR — **the harness is deliberately NOT in CI**: it currently fails
+by design mid-project, and a check that is always red teaches people to ignore the build.
 
 ---
 
@@ -290,9 +297,15 @@ prerequisites are not done. **Do not reorder without asking** — the sequence e
 not visible from a row: a market cannot be honest before the demand side it prices against is, and
 a clamp cannot be deleted before the mechanism under it exists.
 
-**IN FLIGHT: STRUCT (§5-STRUCT; §7.229–238).** Cross-cutting, not a row below: invariants by
+**FIRST, BEFORE ANY OTHER WORK: STRIKE THE NEW BASELINE.** §7.242's fixes re-based the world and
+no valid numeric baseline exists — run the 60-week harness and log its decomposition as a §7
+record (the measurement-debt preamble below has the exact instruction). Nothing measured may be
+judged until it is logged.
+
+**IN FLIGHT: STRUCT (§5-STRUCT; §7.229–242).** Cross-cutting, not a row below: invariants by
 construction. Steps 1/3/4/5 built, step 2 done for the company kernel, step 6 built and off; the
-remainder is listed per step in §5. **Three standing decisions queue behind it, all the user's or
+enforcement backlog executed 2026-08-31 (§7.242) with its standing remainders annotated; the rest
+is listed per step in §5. **Three standing decisions queue behind it, all the user's or
 the next measurement's call:** (1) the tax asymmetry (§6.1 — which of the two loss-tax rules is
 right; fixing it re-bases the world); (2) the EUR regression (§6.1 supplier-shares row — top of the
 queue); (3) `SEED_BURN_IN` (off until §7.232's table flattens).
@@ -329,9 +342,16 @@ changed every energy and metal price (§7.193), and HC3b removed an RNG draw per
 week (§7.207), so **no same-seed comparison across those commits is valid and no number measured
 before 2026-08-30 is a baseline.** Two more relabels since: §7.223's entity-scoped RNG re-keyed
 every stage-08 and stage-05 draw, and §7.230's corrected checks changed what two whole violation
-families measure. **The valid comparison run is §7.233's post-STRUCT baseline: 1,130 violations /
-128 families, decomposed there — do not compare to 515 again.** The three-week kernel fingerprint
-baseline for any further stage-08 extraction is in §7.236–238's loop.
+families measure. §7.233's post-STRUCT run (1,130 violations / 128 families) was the valid
+comparison for a day; **§7.242 re-based the world again** (the cure clock, the SME margin loop,
+the strata exit rate, the deleted force-placement, delta variation margin, swap netting, and the
+payment-timing conversions — each alone a relabel), so **NO VALID NUMERIC BASELINE CURRENTLY
+EXISTS. THE FIRST ACTION FOR WHOEVER PICKS THIS UP: run the 60-week harness
+(`WEEKS=60 npx tsx scripts/harness.ts`), decompose the violation total by family the way §7.233
+did, and log it as the new baseline record in §7.** Until that run is logged, no violation count,
+price print or unemployment figure in this file may be compared against a live run. The kernel
+fingerprint discipline for further extractions is in §5-STRUCT step 2 — the old three-week hashes
+are void with the re-base, and a fresh baseline is struck per extraction, never inherited.
 
 Read in this order:
 1. **The capital-goods fill rate**, against §7.168's 8% and the per-category table. Everything in
@@ -411,21 +431,30 @@ the rows close behind it. The six steps are BUILT (§7.230–238); what stands h
 step and what must still happen before the section is deleted.
 
 **State per step:**
-- **1 — THE LEDGER: built (§7.230), migration open.** `engine/ledger/` owns money: `post(payer,
-  payee, amountUSD, reason)` is the one write path, `creditUnbacked()` the named counted exception,
-  and hygiene fails the build on a money-field write outside it (budget 2, both survivors documented
-  non-balances). **NOT yet done: delete 02b's reconcile and the `Math.max(0, cashUSD)` overdraft
-  clamp** — both still absorb what the types should refuse (14.3B and 6.0B a week, §7.229). The
-  reconcile's gross is the burndown, **and its cause is still unexplained: §7.230 disproved the
-  "43 direct writes" story** — the bypass is likely balances carried through `companyUpdates` and
-  whole-object rebuilds. Find it before claiming a cause again.
+- **1 — THE LEDGER: built (§7.230), the traced writers converted (§7.242), migration open.**
+  `engine/ledger/` owns money: `post(payer, payee, amountUSD, reason)` is the one write path,
+  `creditUnbacked()` the named counted exception, and hygiene fails the build on a money-field
+  write outside it in BOTH forms (assignment budget 3, spread-form budget 23 — §7.242; the
+  spread-form is the one the first regex could not see). `pay()` throws on NaN/negative. **NOT
+  yet done: delete 02b's reconcile and the `Math.max(0, cashUSD)` overdraft clamp** — the §6.1
+  money row carries the exact conversion state and the measurement-gated next action (the
+  reconcile's gross should now collapse toward the two counted hand-offs plus the whole-sheet
+  channel).
 - **2 — STAGES ORCHESTRATE, THEY DO NOT COMPUTE: done for the company kernel (§7.236–238), standing
   sweep elsewhere.** Seven pure objects in `domain/company-week/` (659 lines, 71 tests, all
   bit-exact); the kernel is visibly a gatherer. Its effectful remainder (the ~210-line cash walk,
   the reports, offering settlement) waits on the step-1 migration — it posts payments, so it becomes
   a method taking the ledger, not a pure function. The other 700+-line stages remain. **The loop
-  that works: extract → compile → fingerprint against the three-week baseline → test → commit** —
+  that works: extract → compile → fingerprint against a three-week baseline → test → commit** —
   three of seven extractions failed the fingerprint on arithmetic reordering alone (§7.238).
+  **THE FINGERPRINT INSTRUMENT, so the loop is reproducible by whoever picks this up** (the
+  original driver was session-scratch and is gone; §7.242's re-base voids its hashes anyway): a
+  deep canonical sha256 of the WHOLE GameState after each of weeks 1–3 — every field, sorted keys,
+  Maps/Sets/TypedArrays serialised, floats at full precision, iteration order preserved (order
+  sensitivity is the point: an extraction that reorders float arithmetic must fail it). Strike a
+  FRESH baseline on the pre-extraction commit immediately before each extraction, compare after,
+  never inherit hashes across any behaviour-changing commit. Build it as a harness module behind
+  an env flag (`FP=1`), which the one-harness rule expressly allows — never as a third script.
   Hygiene rule (still deferred): no bare numeric literals in `stages/` — lands only when the count
   is near zero, or it blocks every commit.
 - **3 — ONE OBJECT PER OPEN DEFECT: done (§7.230).** `Government`, `Collateral`, `Fund`, `SmePool`
