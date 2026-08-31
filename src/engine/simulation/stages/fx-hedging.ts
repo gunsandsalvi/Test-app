@@ -13,6 +13,7 @@
  */
 
 import { RegionId } from '../../../types';
+import { institutionProfile } from '../../../domain/institution-profiles';
 import { WeeklyStepContext } from './context';
 import { pay, pendingSettlementUSD } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
@@ -63,7 +64,7 @@ function hedgeableExposureByRegion(entity: any): Map<RegionId, number> {
 function entityHedgeToleranceBps(entity: any, annualFxSigma: number): number {
   const mandateShare = Math.max(
     equityHedgeRatioFor(entity.entityType, entity.hedgeFundStrategy),
-    entity.entityType === 'INSURER' || entity.entityType === 'PENSION_FUND' ? HEDGE_RATIO_FIXED_INCOME : 0
+    institutionProfile(entity.entityType).liabilityDriven ? HEDGE_RATIO_FIXED_INCOME : 0
   );
   return Math.max(0, annualFxSigma * 10000 * mandateShare);
 }

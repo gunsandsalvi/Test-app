@@ -16,6 +16,7 @@
 
 import { RegionId } from './geography';
 import { InstitutionalEntityType } from './institutions';
+import { institutionProfile } from './institution-profiles';
 
 /**
  * Share of a book its mandate keeps at home. Real and large: a pension fund's liabilities are in
@@ -88,5 +89,6 @@ export function mandateWeightForIssuer(
  * binding is not a constraint.**
  */
 export function mandateAllowsDuration(entityType: InstitutionalEntityType): boolean {
-  return entityType !== 'MONEY_MARKET_FUND' && entityType !== 'ETF';
+  // The fact is the kind registry's row (rule 3: one owner); this stays as the named question.
+  return institutionProfile(entityType).sovereignDurationMandate;
 }

@@ -15,6 +15,7 @@
  */
 
 import { GameState, RegionId, Company } from '../../../types';
+import { institutionProfile } from '../../../domain/institution-profiles';
 import {
   CdsContract, CdsParty, CDS_TENOR_WEEKS, cdsWeeklyPremiumUSD, cdsDefaultPayoutUSD,
   cdsPartyKey, protectionNeedUSD,
@@ -183,7 +184,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
     // capital at its own required return, never a share anyone assigned.
     const creditFunds = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === regionId && !e.isDefaulted
-        && (e.entityType === 'HEDGE_FUND' || e.entityType === 'ASSET_MANAGER')
+        && institutionProfile(e.entityType).sellsCdsProtection
     );
     creditFunds.forEach((entity) => {
       const requiredReturn = entityRequiredReturn(entity);

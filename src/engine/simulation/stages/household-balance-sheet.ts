@@ -27,6 +27,7 @@
  */
 
 import { GameState, RegionId, InstitutionalEntity } from '../../../types';
+import { institutionProfile } from '../../../domain/institution-profiles';
 import { WeeklyStepContext } from './context';
 import { ETF_INCEPTION_NAV_PER_SHARE } from '../../../domain/etf';
 import { AVERAGE_HOUSEHOLD_SIZE, WealthTier } from '../../../domain/region-macro';
@@ -37,13 +38,8 @@ import {
 import { publicComparableEvMultiple } from './pe-lifecycle';
 import { REGION_IDS } from '../../../domain/geography';
 
-/**
- * The institution types whose beneficiaries are households. Everything else in the sector either
- * has a named holder already or is somebody's equity rather than somebody's claim.
- */
-const BENEFICIARY_TYPES: InstitutionalEntity['entityType'][] = [
-  'INSURER', 'PENSION_FUND', 'ASSET_MANAGER', 'HEDGE_FUND',
-];
+// Whose beneficiaries are households is the kind registry's `beneficiariesAreHouseholds` row
+// (domain/institution-profiles.ts) — a new kind states it or fails to build.
 
 export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepContext): void {
   // ---- 0. HH: what households MEASURABLY earned this week. Household income is the sum of what
@@ -68,7 +64,7 @@ export function runHouseholdBalanceSheetStage(state: GameState, ctx: WeeklyStepC
 
   // ---- 1. Each institution records what it owes its beneficiaries. ----
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    if (!BENEFICIARY_TYPES.includes(entity.entityType)) {
+    if (!institutionProfile(entity.entityType).beneficiariesAreHouseholds) {
       return entity.beneficiaryLiabilityUSD === undefined ? entity : { ...entity, beneficiaryLiabilityUSD: undefined };
     }
     // COH2 — REVERSED. This was `totalAssets − equityCapital`: the obligation derived from the

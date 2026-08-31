@@ -47,6 +47,7 @@ import { govBucketId, govBucketKeyOf, isBillBucketKey } from '../../../domain/so
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity } from '../../../types';
 import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
+import { institutionProfile } from '../../../domain/institution-profiles';
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext, updateBankSheet } from './context';
@@ -82,20 +83,8 @@ const DEALER_SPREAD_BPS = DESK_SPREAD_BPS_BY_BOOK['sovereign bond'];
 /** This book's name, as the desks and the clearing house know it. */
 const BOOK = 'sovereign bond';
 const BANK_PREFERRED_TENOR_YEARS = 3; // a bank's HQLA book skews shorter/more liquid than a typical bond investor
-/**
- * Share of its policy government-bond allocation each holder keeps at ANY yield, because its
- * liabilities require the match. Insurers and pension funds are liability-driven and hold most of
- * their book through anything; an asset manager runs a benchmark it can deviate from but not
- * abandon; a hedge fund and a PE sponsor have no such obligation and can hold none.
- */
-function liabilityDrivenCoreShare(entityType: string): number {
-  switch (entityType) {
-    case 'INSURER': return 0.70;
-    case 'PENSION_FUND': return 0.75;
-    case 'ASSET_MANAGER': return 0.40;
-    default: return 0;
-  }
-}
+// The liability-driven core share is the kind registry's `sovereignCoreShare` row
+// (domain/institution-profiles.ts) — one owner per fact about a kind (rule 17).
 
 const INSTITUTIONAL_PREFERRED_TENOR_YEARS = 12; // insurers/pension funds match long-dated liabilities
 
@@ -421,7 +410,7 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
           maxNetPurchaseUSD: classBudgetUSD * bucketShareOfMarket,
           // Liability-driven core: an insurer's claim reserves and a pension fund's benefit
           // promises still exist when yields look poor, and something has to match them.
-          minHoldingUSD: entityTarget * bucketShareOfMarket * liabilityDrivenCoreShare(entity.entityType),
+          minHoldingUSD: entityTarget * bucketShareOfMarket * institutionProfile(entity.entityType).sovereignCoreShare,
         });
       });
 

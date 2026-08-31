@@ -15,6 +15,7 @@
  */
 
 import { GameState, RegionId } from '../../../types';
+import { institutionProfile } from '../../../domain/institution-profiles';
 import {
   SwapContract, SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, swapPartyKey,
   swapWeeklyNetToReceiverUSD, repricingLossUSD, SwapParty,
@@ -98,7 +99,7 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
     );
     const regionEntities = ctx.updatedInstitutionalEntities.filter(
       (e) => e.region === regionId && !e.isDefaulted
-        && (e.entityType === 'INSURER' || e.entityType === 'PENSION_FUND')
+        && institutionProfile(e.entityType).liabilityDriven
     );
 
     // ---- The PAY-FIXED side, sized by what each hedger's own sheet cannot absorb. ----

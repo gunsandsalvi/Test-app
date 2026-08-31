@@ -40,6 +40,7 @@
  */
 
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, Company } from '../../../types';
+import { institutionProfile } from '../../../domain/institution-profiles';
 import { isActiveCompany } from '../../../domain/company';
 import { computeExpectedLossSpreadBps, computeAnnualDefaultProbability, getRatingBucket, distributeRealTargetByWeight, creditRecoveryRate } from './shared-helpers';
 import {
@@ -106,10 +107,9 @@ function creditDurationYears(comp: Company): number {
   return Math.max(1.0, Math.min(8.0, weightedTenor * 0.75));
 }
 
-// Real insurers and pension funds carry long-dated liabilities and real asset-liability-matching
-// mandates that favor longer-duration paper; asset managers run closer to benchmark-neutral.
+// Credit-book duration preference is the kind registry's `preferredCreditDurationYears` row.
 function preferredDurationYears(entity: InstitutionalEntity): number {
-  return entity.entityType === 'ASSET_MANAGER' ? 4.0 : 6.0;
+  return institutionProfile(entity.entityType).preferredCreditDurationYears;
 }
 
 function clamp(v: number, min: number, max: number): number {

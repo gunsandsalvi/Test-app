@@ -37,6 +37,7 @@
  */
 
 import { CreditRating, InstitutionalEntityType, InstitutionalEntity } from '../../../types';
+import { institutionProfile } from '../../../domain/institution-profiles';
 
 /**
  * Spread-risk capital per notch, PER YEAR OF DURATION — the real structure every capital regime
@@ -215,25 +216,9 @@ export function isInvestmentGrade(rating: CreditRating): boolean {
  * very wide one.
  */
 export function subInvestmentGradeSizeFactor(entityType: InstitutionalEntityType): number {
-  switch (entityType) {
-    case 'INSURER':
-      return 0.08;
-    case 'PENSION_FUND':
-      return 0.10;
-    case 'ASSET_MANAGER':
-      // Above 1 on purpose: asset managers run DEDICATED high-yield and loan funds, and in real
-      // markets they are the majority holders of high yield (~55-70% via funds and ETFs) even
-      // though their share of the investment-grade market is far smaller. Per dollar of an asset
-      // manager's structural corporate share, its high-yield appetite is a multiple of its
-      // investment-grade appetite — that multiple IS the dedicated-fund complex. Without it,
-      // deleting the per-name renormalisation (§7.19 item 2) left the high-yield buyer base
-      // below the float and every HY name cleared at demand saturation instead of on two-sided
-      // schedules.
-      return 2.0;
-    default:
-      // Distressed funds are there for precisely this paper; not size-constrained by rating.
-      return 1.0;
-  }
+  // The per-kind sleeve is the kind registry's row (domain/institution-profiles.ts), where its
+  // sizing rationale — including the deliberately-above-1 asset-manager multiple — is stated.
+  return institutionProfile(entityType).subInvestmentGradeSizeFactor;
 }
 
 /**
