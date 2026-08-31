@@ -30,7 +30,7 @@ import { random } from '../../rng';
 import { companyFairValuePerShare } from '../../equity-valuation';
 import { REQUIRED_RETURN_ON_CAPITAL } from './asset-allocation';
 import { settleCorporateActionOnHolders, payHoldersCash } from './shared-helpers';
-import { pay } from './settlement';
+import { pay, pendingSettlementUSD } from './settlement';
 import { smePoolSubUnits } from '../../../domain/industry-registry';
 
 /**
@@ -141,27 +141,36 @@ function callCapitalUSD(ctx: WeeklyStepContext, sponsorId: string, requestedUSD:
   const sponsor = ctx.updatedInstitutionalEntities.find((e) => e.id === sponsorId);
   if (!sponsor?.peFund || !(requestedUSD > 0)) return 0;
   const lpById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
-  const capacity = sponsor.peFund.lpCommitments.map((c) => ({
-    commitment: c,
-    availableUSD: Math.min(
-      Math.max(0, c.committedUSD - c.drawnUSD),
-      Math.max(0, lpById.get(c.lpEntityId)?.cashUSD ?? 0)
-    ),
-  }));
+  const capacity = sponsor.peFund.lpCommitments.map((c) => {
+    const lp = lpById.get(c.lpEntityId);
+    // SETL6: an LP's real budget is its cash PLUS what it has already committed to pay or is due
+    // to receive at this week's settlement — the calls below are payments now, so without the
+    // pending term two calls in one week could draw the same dollar twice.
+    const lpBudgetUSD = lp
+      ? Math.max(0, (lp.cashUSD ?? 0) + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: c.lpEntityId }))
+      : 0;
+    return {
+      commitment: c,
+      availableUSD: Math.min(Math.max(0, c.committedUSD - c.drawnUSD), lpBudgetUSD),
+    };
+  });
   const totalAvailableUSD = capacity.reduce((a, x) => a + x.availableUSD, 0);
   const calledUSD = Math.min(requestedUSD, totalAvailableUSD);
   if (!(calledUSD > 0)) return 0;
 
-  const drawnByLp = new Map<string, number>();
   capacity.forEach((x) => {
     if (!(x.availableUSD > 0)) return;
     const shareUSD = calledUSD * (x.availableUSD / totalAvailableUSD);
     x.commitment.drawnUSD += shareUSD;
-    drawnByLp.set(x.commitment.lpEntityId, (drawnByLp.get(x.commitment.lpEntityId) ?? 0) + shareUSD);
-  });
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-    const paidUSD = drawnByLp.get(e.id);
-    return paidUSD ? { ...e, cashUSD: (e.cashUSD ?? 0) - paidUSD } : e;
+    // §7.241: the call is a PAYMENT — LP to fund — where it used to be a bare debit of the LP
+    // with no credit to anyone, so the buy side of every sponsor-to-sponsor deal paid twice and
+    // one purchase price was destroyed per deal. Both legs live in the journal now.
+    pay(ctx, {
+      payer: { kind: 'INSTITUTION', id: x.commitment.lpEntityId },
+      payee: { kind: 'INSTITUTION', id: sponsorId },
+      amountUSD: shareUSD,
+      reason: 'private fund capital call',
+    });
   });
   return calledUSD;
 }
@@ -188,19 +197,22 @@ function distributeToLps(ctx: WeeklyStepContext, sponsorId: string, amountUSD: n
   // §5-STRUCT step 3 — the rule is on the fund (domain/fund.ts), where the CALL side has always
   // had it: a fund moves what it has. §7.226 measured what its absence cost — PEF1 wired 0.495B
   // out of a 0.000B account and carried -0.50B for forty weeks.
-  const { payableUSD: paidUSD } = distributable(amountUSD, totalDrawnUSD, sponsor.cashUSD ?? 0);
+  // SETL6: the fund's payable budget includes what settlement already owes or is owed it.
+  const sponsorBudgetUSD = (sponsor.cashUSD ?? 0)
+    + pendingSettlementUSD(ctx, { kind: 'INSTITUTION', id: sponsorId });
+  const { payableUSD: paidUSD } = distributable(amountUSD, totalDrawnUSD, sponsorBudgetUSD);
   if (!(paidUSD > 0)) return;
-  const creditByLp = new Map<string, number>();
   sponsor.peFund.lpCommitments.forEach((c) => {
     if (!(c.drawnUSD > 0)) return;
     const shareUSD = paidUSD * (c.drawnUSD / totalDrawnUSD);
     c.drawnUSD = Math.max(0, c.drawnUSD - shareUSD);
-    creditByLp.set(c.lpEntityId, (creditByLp.get(c.lpEntityId) ?? 0) + shareUSD);
-  });
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-    const receivedUSD = creditByLp.get(e.id);
-    if (receivedUSD) return { ...e, cashUSD: (e.cashUSD ?? 0) + receivedUSD };
-    return e.id === sponsorId ? { ...e, cashUSD: (e.cashUSD ?? 0) - paidUSD } : e;
+    // §7.241: a distribution is a PAYMENT — fund to LP — not a pair of object rebuilds.
+    pay(ctx, {
+      payer: { kind: 'INSTITUTION', id: sponsorId },
+      payee: { kind: 'INSTITUTION', id: c.lpEntityId },
+      amountUSD: shareUSD,
+      reason: 'private fund distribution',
+    });
   });
 }
 
@@ -630,11 +642,14 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
 
     if (deal.kind === 'RECAP') {
       if (failed || settlement.proceedsUSD <= 0) return;
-      comp.cash -= settlement.proceedsUSD;
-      comp.lastCashLedger = [...(comp.lastCashLedger ?? []), { label: 'dividend recap to sponsor', amountUSD: -settlement.proceedsUSD }];
-      ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) =>
-        e.id === deal.sponsorId ? { ...e, cashUSD: (e.cashUSD ?? 0) + settlement.proceedsUSD } : e
-      );
+      // §7.241: the recap dividend is a PAYMENT — the company (whose bond issue primary
+      // settlement already paid it for) pays its sponsor — not a direct cash write on each side.
+      pay(ctx, {
+        payer: { kind: 'COMPANY', ticker: comp.ticker },
+        payee: { kind: 'INSTITUTION', id: deal.sponsorId },
+        amountUSD: settlement.proceedsUSD,
+        reason: 'dividend recap to sponsor',
+      });
       // A recap's proceeds belong to the investors, not the manager: they go straight back out.
       distributeToLps(ctx, deal.sponsorId, settlement.proceedsUSD);
       return;
@@ -653,8 +668,9 @@ export function settlePeLifecycleDeals(ctx: WeeklyStepContext, nextWeek: number)
     comp.sharesOutstanding = shares;
     comp.stockPrice = Number(settlement.clearedStat.toFixed(2));
     comp.marketCap = Math.round((shares * comp.stockPrice));
-    comp.cash += settlement.proceedsUSD;
-    comp.lastCashLedger = [...(comp.lastCashLedger ?? []), { label: 'IPO primary proceeds', amountUSD: settlement.proceedsUSD }];
+    // §7.241: the direct `comp.cash += proceeds` that stood here was a DOUBLE CREDIT — primary
+    // settlement already pays the issuer for the whole deal by instruction (the CCP for the
+    // book's take, the lead for the residual). One payment, one arrival.
     comp.ownership = { ...(comp.ownership ?? { founderPct: 0.05 }), peSponsorPct: 0.70 };
     ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
       if (e.id !== deal.sponsorId || !e.peFund) return e;
@@ -780,6 +796,10 @@ export function runFirmBirthsForRegion(
     if (!c.homeBankTicker) {
       c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, c.cash));
     }
+    // §7.241 root fix: issuerTickerById is built once at context creation, so a firm born
+    // mid-week was invisible to every coupon and corporate-action payment that week — the money
+    // then flowed payer-less into the unbacked ledger. Register the newborn where it is born.
+    ctx.issuerTickerById?.set(c.id, c.ticker);
   });
   return born;
 }

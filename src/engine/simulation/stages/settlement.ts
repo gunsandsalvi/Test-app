@@ -83,7 +83,7 @@ export const reasonText = (id: number): string => reasonById[id];
 /** Append to the journal from a stage that holds only a slice of the context. Same encoding as
  *  `pay`, minus the running-net update, which those callers do not participate in. */
 export function journalPayment(j: PaymentJournal, instruction: PaymentInstruction): void {
-  if (!(instruction.amountUSD > 0) || !isFinite(instruction.amountUSD)) return;
+  if (!guardPayableAmount(instruction)) return;
   j.payerId.push(partyId(instruction.payer));
   j.payeeId.push(partyId(instruction.payee));
   j.amountUSD.push(instruction.amountUSD);
@@ -100,8 +100,23 @@ export function journalPayment(j: PaymentJournal, instruction: PaymentInstructio
  * goods market really does have that many distinct counterparty relationships in a week, one per
  * lot, and that is a fact about the model rather than a defect in it.
  */
+/**
+ * §7.241: this guard used to silently drop NaN and negative amounts, which converted every
+ * upstream arithmetic defect in the codebase into quiet non-payment — the single worst silent
+ * absorber found by the enforcement audit. A zero (or float dust below $1e-9) is an honest
+ * no-op; anything else non-payable is a defect at the CALLER, named here so it fails where it
+ * happens instead of as a conservation residue weeks later.
+ */
+function guardPayableAmount(instruction: PaymentInstruction): boolean {
+  const amt = instruction.amountUSD;
+  if (amt > 1e-9 && isFinite(amt)) return true;
+  if (amt >= -1e-9 && amt <= 1e-9) return false; // exact zero or dust: an honest no-op
+  throw new Error(`ENGINE DEFECT: payment '${instruction.reason}' carries amountUSD=${amt} — `
+    + 'a NaN or negative amount is a sign/arithmetic error at the caller, not a payment');
+}
+
 export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): void {
-  if (!(instruction.amountUSD > 0) || !isFinite(instruction.amountUSD)) return;
+  if (!guardPayableAmount(instruction)) return;
   const payer = partyId(instruction.payer);
   const payee = partyId(instruction.payee);
   const j = ctx.paymentJournal;

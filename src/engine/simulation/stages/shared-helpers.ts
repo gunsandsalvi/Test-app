@@ -324,6 +324,8 @@ export function applyPendingCorporateActionSettlements(
      *  payments from the issuer rather than cash appearing on the holder's book. */
     paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
+    /** §7.241: a payer-less credit (unmapped issuer) is counted here instead of being silent. */
+    unbackedLedger?: import('../../ledger/balance').UnbackedLedger;
   }
 ): void {
   const pending = ctx.pendingHolderSettlements;
@@ -396,7 +398,15 @@ export function applyPendingCorporateActionSettlements(
                 reason: 'security payment to holder of record',
               });
             } else {
+              // §7.241: an unmapped issuer used to credit the holder with NO payer, silently —
+              // one measured feeder of 02b's reconcile plug. Still credited (deleting the
+              // holder's money would break the other leg), but COUNTED now, like creditUnbacked.
               cashUSD += shareUSD;
+              if (ctx.unbackedLedger) {
+                ctx.unbackedLedger.totalUSD += Math.abs(shareUSD);
+                ctx.unbackedLedger.byReason['security payment with unmapped issuer'] =
+                  (ctx.unbackedLedger.byReason['security payment with unmapped issuer'] ?? 0) + shareUSD;
+              }
             }
             touched = true;
           }
@@ -445,7 +455,14 @@ export function applyPendingCorporateActionSettlements(
               reason: 'placement paid by holder of record',
             });
         } else {
+          // §7.241: same counting as the coupon leg above — an unmapped issuer's redemption
+          // money reached the holder with no payer; it is now visible on the unbacked ledger.
           cashUSD += principalCashUSD;
+          if (ctx.unbackedLedger && principalCashUSD !== 0) {
+            ctx.unbackedLedger.totalUSD += Math.abs(principalCashUSD);
+            ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] =
+              (ctx.unbackedLedger.byReason['principal moved with unmapped issuer'] ?? 0) + principalCashUSD;
+          }
         }
         return { ...h, quantityOrNotionalUSD: h.quantityOrNotionalUSD * ratio };
       })
@@ -535,6 +552,8 @@ export function applyHolderInterestAccruals(
     holderAccruedInterestUSD: Map<string, Map<string, number>>;
     paymentJournal?: import('./settlement').PaymentJournal;
     issuerTickerById?: Map<string, string>;
+    /** §7.241: a payer-less credit (unmapped issuer) is counted here instead of being silent. */
+    unbackedLedger?: import('../../ledger/balance').UnbackedLedger;
   }
 ): void {
   const { pendingHolderAccrualUSD: accruals, pendingHolderAccrualPayout: payouts } = ctx;
@@ -620,18 +639,27 @@ export function applyHolderInterestAccruals(
     if (!byHolder) return;
     const issuerId = instrumentKey.slice(instrumentKey.indexOf(':') + 1);
     const ticker = ctx.issuerTickerById?.get(issuerId);
-    const payer = ticker
-      ? ({ kind: 'COMPANY', ticker } as import('./settlement').PartyRef) : undefined;
+    if (!ticker || !ctx.paymentJournal) {
+      // §7.241: the old path deleted every holder's accrued receivable even when the issuer
+      // lookup missed and nothing was paid — an obligation extinguished without payment, silently.
+      // The receivable now SURVIVES to the next payout date, and the miss is counted where the
+      // money reports already look.
+      if (ctx.unbackedLedger) {
+        const owedUSD = Array.from(byHolder.values()).reduce((a, v) => a + Math.max(0, v), 0);
+        ctx.unbackedLedger.byReason['coupon skipped: issuer unmapped'] =
+          (ctx.unbackedLedger.byReason['coupon skipped: issuer unmapped'] ?? 0) + owedUSD;
+      }
+      return;
+    }
+    const payer = { kind: 'COMPANY', ticker } as import('./settlement').PartyRef;
     byHolder.forEach((accruedUSD, holderId) => {
       if (!(accruedUSD > 0)) return;
-      if (payer && ctx.paymentJournal) {
-        journalPayment(ctx.paymentJournal, {
-          payer,
-          payee: { kind: 'INSTITUTION', id: holderId },
-          amountUSD: accruedUSD,
-          reason: 'coupon payment',
-        });
-      }
+      journalPayment(ctx.paymentJournal!, {
+        payer,
+        payee: { kind: 'INSTITUTION', id: holderId },
+        amountUSD: accruedUSD,
+        reason: 'coupon payment',
+      });
     });
     ctx.holderAccruedInterestUSD.delete(instrumentKey);
   });

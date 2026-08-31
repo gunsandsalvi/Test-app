@@ -26,26 +26,43 @@ fi
 #    first version of this rule counted `const cashUSD = ...` and reported three times the real
 #    number. `initialization.ts` builds the opening world and is allowed to; everything else routes
 #    through engine/ledger.
-MONEY_FIELDS='(cashUSD|cashReservesUSD|depositsUSD|corporateDepositsUSD|institutionalDepositsUSD|smeDepositsUSD|unmodeledDepositsUSD|wholesaleFundingUSD)'
+MONEY_FIELDS='(cashUSD|cashReservesUSD|depositsUSD|corporateDepositsUSD|institutionalDepositsUSD|smeDepositsUSD|unmodeledDepositsUSD|wholesaleFundingUSD|bankEquityUSD)'
 # Owners of a balance: the ledger, the two bootstraps that build the opening world, and (until the
 # migration finishes) settlement's own apply pass and bank-lending's funding composition.
 LEDGER_OWNED='^src/engine/ledger/|^src/engine/simulation/initialization\.ts:|^src/engine/macro/initialization\.ts:|^src/engine/simulation/stages/settlement\.ts:|^src/engine/simulation/stages/bank-lending\.ts:'
-STRAY=$(grep -rnE "(\.|\][[:space:]]*)${MONEY_FIELDS}[[:space:]]*(=[^=>]|\+=|-=)" src --include=*.ts 2>/dev/null \
+STRAY=$(grep -rnE "(\.|\][[:space:]]*)${MONEY_FIELDS}[[:space:]]*(=[^=>]|\+=|-=)" src --include=*.ts --include=*.tsx 2>/dev/null \
   | grep -vE "$LEDGER_OWNED" \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 STRAY_COUNT=$(printf '%s' "$STRAY" | grep -c . || true)
-# THE RATCHET: this may fall, never rise. Lower it as sites migrate; at 0, withdraw the allowances
-# above one at a time and the rule becomes absolute.
-# The two that remain are NOT balances and share a field name with one, which is its own defect:
+# §7.241 — THE FORM THE OLD REGEX COULD NOT SEE. The codebase's dominant balance write is the
+# object-literal/spread rebuild — `cashUSD: (e.cashUSD ?? 0) + x` — which has no `=` to match, so
+# "budget 2" governed almost none of the real writes and the etf-flows bypass ran for months
+# unseen. This counts a money field given a COMPUTED value inside an object literal (a `:`
+# followed by an expression that does arithmetic or reads another field), excluding type
+# declarations (`: number`), plain copies (`cashUSD: cashUSD`, `cashUSD: 0`), and comments.
+SPREAD_STRAY=$(grep -rnE "${MONEY_FIELDS}[[:space:]]*:[[:space:]]*[^,}]*(\+|-[^-]|\*|\?\?)" src --include=*.ts --include=*.tsx 2>/dev/null \
+  | grep -vE "$LEDGER_OWNED" \
+  | grep -vE "${MONEY_FIELDS}[[:space:]]*:[[:space:]]*(number|Number\(|Math\.(round|abs|max\(0))" \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
+SPREAD_STRAY_COUNT=$(printf '%s' "$SPREAD_STRAY" | grep -c . || true)
+# THE RATCHETS: each may fall, never rise. Lower them as sites migrate; at 0, withdraw the
+# allowances above one at a time and the rule becomes absolute.
+# The assignment-form survivors are NOT balances and share a field name with one (its own defect):
 #   estate-resolution  `estate.assets.cashUSD`      — an estate's asset SNAPSHOT; the money already moved
 #   holdings-view      `institutionalSector.cashUSD` — a derived sector AGGREGATE, a view not a holding
-# Closing them means giving each its own type so the name cannot collide. Until then they are named
-# here rather than allow-listed by file, so the budget still means what it says.
-MONEY_WRITE_BUDGET=2
+# plus the bankEquityUSD sites newly under guard (13 writer files, §7.241 — bookPnL() is their exit).
+MONEY_WRITE_BUDGET=3
 if [ "$STRAY_COUNT" -gt "$MONEY_WRITE_BUDGET" ]; then
   echo "ERROR: $STRAY_COUNT money-field writes outside engine/ledger (budget $MONEY_WRITE_BUDGET)."
   echo "$STRAY"
   echo "Route the movement through engine/ledger's post(). See §5-STRUCT step 1."
+  exit 1
+fi
+MONEY_SPREAD_BUDGET=25
+if [ "$SPREAD_STRAY_COUNT" -gt "$MONEY_SPREAD_BUDGET" ]; then
+  echo "ERROR: $SPREAD_STRAY_COUNT spread-form money writes outside engine/ledger (budget $MONEY_SPREAD_BUDGET)."
+  echo "$SPREAD_STRAY"
+  echo "A balance rebuilt in an object literal is still a write. Route it through pay()/post()."
   exit 1
 fi
 

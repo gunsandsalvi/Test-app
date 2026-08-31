@@ -32,6 +32,7 @@
 
 import { GameState, RegionId, Company, InstitutionalEntity } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { pay } from './settlement';
 import { isActiveCompany } from '../../../domain/company';
 import { remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS } from '../../bootstrap/population';
 import { REGION_IDS } from '../../../domain/geography';
@@ -63,11 +64,14 @@ import { REGION_IDS } from '../../../domain/geography';
 const corporateInsurableBaseUSD = (c: Company) => Math.max(0, c.grossPPEUSD ?? 0) + Math.max(0, c.annualRevenue);
 
 export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepContext): void {
-  const cashDeltaByEntityId = new Map<string, number>();
+  // §7.241: this stage moved every one of its flows by DIRECT balance mutation — `comp.cash`,
+  // entity `cashUSD`, household deposits — with zero payment instructions in the file, so no bank
+  // ever saw the deposits move and 02b's reconcile invented the reserves behind them. Every leg
+  // below is now a `pay()` instruction settled by the close pass, exactly like every other
+  // post-08 flow. The two liability-STOCK updates (beneficiaryLiabilityUSD and the two annual
+  // stat annotations) are not money movements and stay.
   const underwritingByEntityId = new Map<string, number>();
   const benefitsByEntityId = new Map<string, number>();
-  const addEntityCash = (id: string, usd: number) =>
-    cashDeltaByEntityId.set(id, (cashDeltaByEntityId.get(id) ?? 0) + usd);
 
   REGION_IDS.forEach((region) => {
     const reg = ctx.updatedRegions[region];
@@ -104,33 +108,61 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     const householdPremiumsUSD = weeklyPremiumsUSD - corporatePremiumsUSD;
     const claimRecoveryRate = weeklyPremiumsUSD > 0 ? weeklyClaimsUSD / weeklyPremiumsUSD : 0;
 
+    // ---- The insurers that carry the pool, pro-rata by their capital. ----
+    const insurerEntities = ctx.updatedInstitutionalEntities.filter(
+      (e) => e.region === region && e.entityType === 'INSURER' && !e.isDefaulted
+    );
+    const insurerCapitalUSD = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalUSD), 0) || 1;
+    const insurerShares = insurerEntities.map((e) => ({
+      id: e.id, share: Math.max(0, e.equityCapitalUSD) / insurerCapitalUSD,
+    }));
+    if (insurerShares.length === 0) return;
+
     // ---- Companies: a real operating expense, and the claims that come back against it. ----
     operating.forEach((comp) => {
       const share = corporateInsurableBaseUSD(comp) / Math.max(1, corporateBaseUSD);
       const premiumUSD = corporatePremiumsUSD * share;
       if (!(premiumUSD > 0)) return;
       const claimUSD = premiumUSD * claimRecoveryRate;
-      const netUSD = claimUSD - premiumUSD;
-      comp.cash = (comp.cash ?? 0) + netUSD;
-      comp.lastCashLedger = [
-        ...(comp.lastCashLedger ?? []),
-        { label: 'insurance premiums paid', amountUSD: -premiumUSD },
-        ...(claimUSD > 0 ? [{ label: 'insurance claims received', amountUSD: claimUSD }] : []),
-      ];
+      insurerShares.forEach(({ id, share: insurerShare }) => {
+        pay(ctx, {
+          payer: { kind: 'COMPANY', ticker: comp.ticker },
+          payee: { kind: 'INSTITUTION', id },
+          amountUSD: premiumUSD * insurerShare,
+          reason: 'insurance premium',
+        });
+        pay(ctx, {
+          payer: { kind: 'INSTITUTION', id },
+          payee: { kind: 'COMPANY', ticker: comp.ticker },
+          amountUSD: claimUSD * insurerShare,
+          reason: 'insurance claim',
+        });
+      });
     });
 
-    // ---- Insurers: the cash their underwriting actually produced. ----
-    const insurerEntities = ctx.updatedInstitutionalEntities.filter(
-      (e) => e.region === region && e.entityType === 'INSURER' && !e.isDefaulted
-    );
-    const insurerCapitalUSD = insurerEntities.reduce((a, e) => a + Math.max(0, e.equityCapitalUSD), 0) || 1;
+    // ---- Insurers: record what the float cost them (a stat, not a cash move — the cash
+    //      arrived through the premium/claim legs above). ----
     const underwritingResultUSD = weeklyPremiumsUSD - weeklyClaimsUSD;
-    insurerEntities.forEach((e) => {
-      const share = Math.max(0, e.equityCapitalUSD) / insurerCapitalUSD;
-      addEntityCash(e.id, underwritingResultUSD * share);
+    insurerShares.forEach(({ id, share }) => {
       // Recorded for `entityRequiredReturn`: what the float COST this insurer, which is what
       // decides how hard its assets have to work.
-      underwritingByEntityId.set(e.id, underwritingResultUSD * share * 52);
+      underwritingByEntityId.set(id, underwritingResultUSD * share * 52);
+    });
+
+    // ---- Households: their premium and claim legs, against the same insurers. ----
+    insurerShares.forEach(({ id, share }) => {
+      pay(ctx, {
+        payer: { kind: 'HOUSEHOLD', region },
+        payee: { kind: 'INSTITUTION', id },
+        amountUSD: householdPremiumsUSD * share,
+        reason: 'insurance premium',
+      });
+      pay(ctx, {
+        payer: { kind: 'INSTITUTION', id },
+        payee: { kind: 'HOUSEHOLD', region },
+        amountUSD: householdPremiumsUSD * claimRecoveryRate * share,
+        reason: 'insurance claim',
+      });
     });
 
     // ---- Pensions: contributions out of wages, benefits back to the people who earned them. ----
@@ -155,7 +187,18 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
     if (pensionEntities.length > 0 && entitlementsUSD > 0) {
       pensionEntities.forEach((e) => {
         const share = (e.beneficiaryLiabilityUSD ?? 0) / entitlementsUSD;
-        addEntityCash(e.id, (weeklyContributionsUSD - weeklyBenefitsUSD) * share);
+        pay(ctx, {
+          payer: { kind: 'HOUSEHOLD', region },
+          payee: { kind: 'INSTITUTION', id: e.id },
+          amountUSD: weeklyContributionsUSD * share,
+          reason: 'pension contribution',
+        });
+        pay(ctx, {
+          payer: { kind: 'INSTITUTION', id: e.id },
+          payee: { kind: 'HOUSEHOLD', region },
+          amountUSD: weeklyBenefitsUSD * share,
+          reason: 'pension benefit',
+        });
         // COH2 — THE ENTITLEMENT IS A STOCK ACCUMULATED FROM REAL FLOWS, not a plug.
         //
         // It used to be `totalAssets − equityCapital`, with equity fixed at 12% of assets at the
@@ -170,31 +213,19 @@ export function runInsuranceAndPensionsStage(state: GameState, ctx: WeeklyStepCo
       });
     }
 
-    // ---- Households: the other side of every leg above. ----
-    const householdNetUSD =
-      // The insurer's own operating spend used to arrive here as household income, as the other
-      // side of the expense ratio above. It leaves with it: an insurer's payroll now reaches
-      // households the way every other firm's does, through the wage bill the profile caller
-      // charges it — one representation of one insurer's staff cost (rule 3).
-      -householdPremiumsUSD + householdPremiumsUSD * claimRecoveryRate
-      - (pensionEntities.length > 0 ? weeklyContributionsUSD : 0)
-      + weeklyBenefitsUSD;
-    reg.householdState = {
-      ...hs,
-      depositsUSD: Math.max(0, (hs.depositsUSD ?? 0) + householdNetUSD),
-      // HH4d: the banks post this flow next week (T+1) — see pendingBankSettlementUSD's doc.
-      pendingBankSettlementUSD: Math.round(((hs.pendingBankSettlementUSD ?? 0) + householdNetUSD)),
-    };
+    // The household side of every leg above now travels through the same instructions — the
+    // insurer's payroll reaches households through the wage bill the profile caller charges it,
+    // and premiums, claims, contributions and benefits settle like every other payment. No
+    // direct write to `depositsUSD` or `pendingBankSettlementUSD` survives here: settlement's
+    // HOUSEHOLD case maintains both, which is the invariant the hand-kept version could break.
   });
 
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-    const deltaUSD = cashDeltaByEntityId.get(e.id);
     const underwritingUSD = underwritingByEntityId.get(e.id);
     const benefitsUSD = benefitsByEntityId.get(e.id);
-    if (deltaUSD === undefined && underwritingUSD === undefined && benefitsUSD === undefined) return e;
+    if (underwritingUSD === undefined && benefitsUSD === undefined) return e;
     return {
       ...e,
-      cashUSD: (e.cashUSD ?? 0) + (deltaUSD ?? 0),
       ...(underwritingUSD !== undefined ? { lastAnnualUnderwritingResultUSD: underwritingUSD } : {}),
       ...(benefitsUSD !== undefined ? { lastAnnualBenefitOutflowUSD: benefitsUSD } : {}),
     };

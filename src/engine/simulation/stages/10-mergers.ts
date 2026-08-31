@@ -8,6 +8,7 @@
  */
 
 import { absorbBankBook } from '../../ledger';
+import { pay } from './settlement';
 import { GameState, DebtTranche } from '../../../types';
 import { getSimulationDate } from '../../formatters';
 import { isAntitrustBlocked, isActiveCompany } from '../../../domain/company';
@@ -86,12 +87,51 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   const purchasePrice = target.marketCap * 1.15;
   const cashPaid = purchasePrice * 0.5;
   const stockPaid = purchasePrice * 0.5;
+  const targetMarketCapUSD = Math.max(1, target.marketCap);
 
-  // S5 leak #4 fixed: the target's real cash comes WITH the target — the acquirer pays the
-  // consideration out and receives the acquired balance sheet, cash included. Before this the
-  // target's cash simply vanished from the economy at every merger.
-  acquirer.cash = Math.max(10, acquirer.cash - cashPaid + target.cash);
-  target.cash = 0;
+  // §7.241: the consideration is PAYMENTS now. The old form debited the acquirer directly and
+  // the money arrived on NO book — target shareholders' register rows were neither re-keyed nor
+  // paid, and `Math.max(10, …)` silently recapitalised an over-payer. This stage runs after the
+  // corporate-action drains, so the tender pays holders of record directly by instruction
+  // (the §7.43 timing trap is why it must not go through `payHoldersCash`'s pending map here).
+  pay(ctx, {
+    payer: { kind: 'COMPANY', ticker: acquirer.ticker },
+    payee: { kind: 'COMPANY', ticker: target.ticker },
+    amountUSD: cashPaid,
+    reason: 'merger consideration (cash leg)',
+  });
+  // The target's own cash comes WITH the business (S5 leak #4) — as a payment, so the two home
+  // banks see the deposit move.
+  pay(ctx, {
+    payer: { kind: 'COMPANY', ticker: target.ticker },
+    payee: { kind: 'COMPANY', ticker: acquirer.ticker },
+    amountUSD: Math.max(0, target.cash),
+    reason: 'merger: acquired cash absorbed',
+  });
+  // The tender: the target pays its equity holders of record their cash half, pro rata to the
+  // stake each holds; the residual float (the household sector's) receives the remainder.
+  let institutionalTenderUSD = 0;
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    if (e.isDefaulted) return;
+    const heldUSD = (e.itemizedHoldings || [])
+      .filter((h) => h.instrumentId === target.id && h.instrumentType === 'EQUITY')
+      .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+    if (!(heldUSD > 0)) return;
+    const tenderUSD = cashPaid * Math.min(1, heldUSD / targetMarketCapUSD);
+    institutionalTenderUSD += tenderUSD;
+    pay(ctx, {
+      payer: { kind: 'COMPANY', ticker: target.ticker },
+      payee: { kind: 'INSTITUTION', id: e.id },
+      amountUSD: tenderUSD,
+      reason: 'merger tender: cash for target shares',
+    });
+  });
+  pay(ctx, {
+    payer: { kind: 'COMPANY', ticker: target.ticker },
+    payee: { kind: 'HOUSEHOLD', region: target.region },
+    amountUSD: Math.max(0, cashPaid - institutionalTenderUSD),
+    reason: 'merger tender: cash for target shares',
+  });
   const newShares = stockPaid / Math.max(1, acquirer.stockPrice);
   acquirer.sharesOutstanding = Number((acquirer.sharesOutstanding + newShares).toFixed(3));
   acquirer.annualRevenue = Number((acquirer.annualRevenue + target.annualRevenue * 0.85).toFixed(1));
@@ -203,13 +243,28 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // left the books — while the same principal, now on the acquirer's ladder, was re-cleared to
   // the same institutions the following week. One tranche, two holders' rows, and the
   // conservation check saw the corporate books mint claims on the merger week (measured: 161B
-  // held against 131B outstanding in USA leveraged loans). The equity rows are NOT re-keyed:
-  // the target's shareholders were paid in the tender above, they did not become the acquirer's.
+  // held against 131B outstanding in USA leveraged loans). §7.241: the equity rows ARE re-keyed
+  // now — each target shareholder was paid the cash half in the tender above and holds the stock
+  // half as real acquirer shares below, instead of keeping a claim on a dead company.
   const mergedIds = new Set([target.id]);
+  // §7.241: the STOCK half of the consideration becomes real acquirer shares on the holders'
+  // rows — the old code minted `newShares` onto `sharesOutstanding` with rows for NOBODY, while
+  // target equity rows stayed keyed to a dead company. Each target share row converts to the
+  // acquirer stock it was exchanged for (its stake's share of the stock leg).
+  const stockRatio = stockPaid / targetMarketCapUSD;
   ctx.updatedInstitutionalEntities.forEach((e) => {
     let touched = false;
     const rows = e.itemizedHoldings.map((h) => {
       if (!mergedIds.has(h.instrumentId)) return h;
+      if (h.instrumentType === 'EQUITY') {
+        touched = true;
+        const newValueUSD = (h.quantityOrNotionalUSD ?? 0) * stockRatio;
+        return {
+          ...h, instrumentId: acquirer.id, issuerRegion: acquirer.region,
+          quantityOrNotionalUSD: newValueUSD,
+          quantityShares: acquirer.stockPrice > 0 ? newValueUSD / acquirer.stockPrice : h.quantityShares,
+        };
+      }
       if (h.instrumentType !== 'CORP_BOND' && h.instrumentType !== 'LEVERAGED_LOAN') return h;
       touched = true;
       return { ...h, instrumentId: acquirer.id, issuerRegion: acquirer.region };

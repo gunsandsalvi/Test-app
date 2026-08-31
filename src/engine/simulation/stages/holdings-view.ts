@@ -140,10 +140,10 @@ export function measuredForeignOwnershipAllRegions(state: GameState): Record<Reg
     if (e.isDefaulted) return;
     e.itemizedHoldings.forEach((h) => {
       const v = h.quantityOrNotionalUSD ?? 0;
-      const key = h.instrumentType === 'EQUITY' ? 'equity'
-        : h.instrumentType === 'GOV_BOND' ? 'sovBond'
-        : (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN'
-          || h.instrumentType === 'COMMERCIAL_PAPER') ? 'corpBond' : null;
+      // §7.241: registry dispatch (see the ownership accumulator above) — vehicle claims are
+      // excluded and each class lands in its own accumulator, one mapping for a new type.
+      const cls = isVehicleClaim(h.instrumentType) ? undefined : holdingClassOf(h.instrumentType);
+      const key = cls ? ({ EQUITY: 'equity', SOVEREIGN: 'sovBond', CREDIT: 'corpBond' } as const)[cls as 'EQUITY' | 'SOVEREIGN' | 'CREDIT'] : undefined;
       if (!key) return;
       accFor(held, h.issuerRegion)[key] += v;
       if (e.region !== h.issuerRegion) accFor(foreign, h.issuerRegion)[key] += v;

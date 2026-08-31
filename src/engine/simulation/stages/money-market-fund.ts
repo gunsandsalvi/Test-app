@@ -28,6 +28,8 @@
  * verify condition rather than an assumption.
  */
 
+import { pay } from './settlement';
+import { creditUnbacked } from '../../ledger';
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { Company, InstitutionalEntity, Region, RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
@@ -101,11 +103,17 @@ export function divertHouseholdSavingsToMmf(
   const divertedUSD = weeklySavingsDepositInflowUSD * divertedShare;
   if (divertedUSD <= 0) return 0;
 
+  // §7.241: the cash side of this hand-off is deliberately NOT a payment instruction yet — the
+  // bank leg is carried by 02b's evolveBankingSector parameter (`regionDivertedUSD * share`) and
+  // the household deposit stock is rebuilt from the bank sheets, so a `pay()` here would move the
+  // bank line twice. Until the 02b hand-off is itself migrated, the credit runs through the
+  // COUNTED unbacked path so the reconcile's gross names it instead of absorbing it silently.
+  creditUnbacked(ctx, { kind: 'INSTITUTION', id: mmf.id }, divertedUSD,
+    'household savings into money fund (02b hand-off)');
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
     if (e.id !== mmf.id) return e;
     return {
       ...e,
-      cashUSD: (e.cashUSD ?? 0) + divertedUSD,
       mmfSharesOutstandingUSD: (e.mmfSharesOutstandingUSD ?? 0) + divertedUSD,
     };
   });
@@ -202,6 +210,7 @@ export function settleCorporateSweepBooks(books: Map<RegionId, CorporateSweepBoo
  */
 export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
   const feeByRegion = new Map<RegionId, number>();
+  const feePayerByRegion = new Map<RegionId, string>();
   // §7.126 — WHO THE NEW SHARES ARE ISSUED TO. This paid the yield by growing
   // `mmfSharesOutstandingUSD` and credited NO holder, so the fund's liability rose every week
   // while every holder's asset stood still: a one-sided flow (rule 14), measured at 2.5% of the
@@ -217,10 +226,12 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     const feeUSD = (bookUSD * MMF_FEE_ANNUAL) / 52;
     const paidToHoldersUSD = (bookUSD * (e.mmfNetYieldAnnual ?? 0)) / 52;
     feeByRegion.set(e.region, (feeByRegion.get(e.region) ?? 0) + feeUSD);
+    feePayerByRegion.set(e.region, e.id);
     issuedByRegion.set(e.region, (issuedByRegion.get(e.region) ?? 0) + paidToHoldersUSD);
+    // §7.241: the fee's cash leg is a payment now (fund → manager, below); only the SHARE
+    // register — not money — is written here.
     return {
       ...e,
-      cashUSD: (e.cashUSD ?? 0) - feeUSD,
       mmfSharesOutstandingUSD: Math.max(0, (e.mmfSharesOutstandingUSD ?? 0) + paidToHoldersUSD),
     };
   });
@@ -256,11 +267,19 @@ export function distributeMoneyFundIncome(ctx: WeeklyStepContext): void {
     cur.total += Math.max(0, e.totalAssetsUSD);
     managersByRegion.set(e.region, cur);
   });
-  ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((e) => {
-    if (e.entityType !== 'ASSET_MANAGER') return e;
+  ctx.updatedInstitutionalEntities.forEach((e) => {
+    if (e.entityType !== 'ASSET_MANAGER') return;
     const feeUSD = feeByRegion.get(e.region) ?? 0;
     const pool = managersByRegion.get(e.region)?.total ?? 0;
-    if (feeUSD <= 0 || pool <= 0) return e;
-    return { ...e, cashUSD: (e.cashUSD ?? 0) + feeUSD * (Math.max(0, e.totalAssetsUSD) / pool) };
+    const payerId = feePayerByRegion.get(e.region);
+    if (feeUSD <= 0 || pool <= 0 || !payerId) return;
+    // §7.241: the management fee moves as a PAYMENT (fund → manager), not as two object rebuilds
+    // no bank ever saw. Settlement carries both deposit legs.
+    pay(ctx, {
+      payer: { kind: 'INSTITUTION', id: payerId },
+      payee: { kind: 'INSTITUTION', id: e.id },
+      amountUSD: feeUSD * (Math.max(0, e.totalAssetsUSD) / pool),
+      reason: 'money fund management fee',
+    });
   });
 }

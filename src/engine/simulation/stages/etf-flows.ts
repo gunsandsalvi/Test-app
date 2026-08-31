@@ -24,6 +24,8 @@
  *      than the dealers can carry, which is the case worth being able to see.
  */
 
+import { creditUnbacked } from '../../ledger';
+import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
@@ -76,12 +78,21 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   if (funds.length === 0) return;
 
   // ---- 1. The sponsor's fee, out of the fund's assets. A real flow between two named books. ----
-  const feeBySponsor = new Map<string, number>();
   const navByFundId = new Map<string, number>();
   funds.forEach((fund) => {
     const navUSD = fundNavUSD(fund);
     const feeUSD = (navUSD * fund.etf!.expenseRatioAnnual) / 52;
-    if (feeUSD > 0) feeBySponsor.set(fund.etf!.sponsorEntityId, (feeBySponsor.get(fund.etf!.sponsorEntityId) ?? 0) + feeUSD);
+    // §7.241: ONE fee, ONE payment. The old form computed the fee twice from two different NAVs
+    // — the sponsor's credit off the pre-flow book here, the fund's debit off the post-flow book
+    // in the apply pass — so the two sides of one fee disagreed by the week's flow, silently.
+    if (feeUSD > 0) {
+      pay(ctx, {
+        payer: { kind: 'INSTITUTION', id: fund.id },
+        payee: { kind: 'INSTITUTION', id: fund.etf!.sponsorEntityId },
+        amountUSD: feeUSD,
+        reason: 'etf expense ratio to sponsor',
+      });
+    }
     navByFundId.set(fund.id, Math.max(0, navUSD - feeUSD));
   });
 
@@ -242,9 +253,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // spend the same dollar of dealer equity.
   const netFlowByFund = new Map<string, number>();
   const householdExecutedByFund = new Map<string, number>();
-  const cashDeltaByEntity = new Map<string, number>();
   const holdingsDeltaByInvestor = new Map<string, Map<string, number>>();
-  const addCash = (id: string, usd: number) => cashDeltaByEntity.set(id, (cashDeltaByEntity.get(id) ?? 0) + usd);
   /** ETF2: redeemer id -> fund id -> the value of the basket the fund owes it this week. */
   const inKindRedemptionsByInvestor = new Map<string, Map<string, number>>();
 
@@ -397,13 +406,17 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       if (Math.abs(executedUSD) >= 1) executedByInvestor.set(id, executedUSD);
     });
 
-    let fundCashDeltaUSD = 0;
     // The household leg, rationed at the same fill the institutions get — the AP cannot choose
     // whose basket to carry. Paid for out of the deposits stage 02 credited this week, so the
     // money genuinely leaves the household balance sheet to buy the shares.
     const householdExecutedUSD = householdUSD * fillRatio * householdCashFillRatio;
     if (householdExecutedUSD !== 0) {
-      fundCashDeltaUSD += householdExecutedUSD;
+      // §7.241: the household side of this flow settles in household-balance-sheet (share
+      // register and deposit debit, T+1 to the banks), so a pay() here would move the deposit
+      // twice. Until that hand-off is migrated, the fund's credit runs through the COUNTED
+      // unbacked path — visible on the ledger instead of absorbed by 02b's reconcile.
+      creditUnbacked(ctx, { kind: 'INSTITUTION', id: fund.id }, householdExecutedUSD,
+        'etf household flow (household-balance-sheet hand-off)');
       householdExecutedByFund.set(fund.id, householdExecutedUSD);
     }
     executedByInvestor.forEach((executedUSD, id) => {
@@ -415,15 +428,21 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + -executedUSD);
         inKindRedemptionsByInvestor.set(id, byFund);
       } else {
-        addCash(id, -executedUSD);
-        fundCashDeltaUSD += executedUSD;
+        // §7.241: a creation is a PAYMENT — this file used to contain no pay() call at all, so
+        // no instruction ever reached settlement, no bank saw the deposits move, and 02b's
+        // reconcile invented the reserves (the institutional 9.9B slice of the recorded plug).
+        pay(ctx, {
+          payer: { kind: 'INSTITUTION', id },
+          payee: { kind: 'INSTITUTION', id: fund.id },
+          amountUSD: executedUSD,
+          reason: 'etf shares created',
+        });
       }
       const shares = executedUSD / navPerShare;
       const byFund = holdingsDeltaByInvestor.get(id) ?? new Map<string, number>();
       byFund.set(fund.id, (byFund.get(fund.id) ?? 0) + shares);
       holdingsDeltaByInvestor.set(id, byFund);
     });
-    addCash(fund.id, fundCashDeltaUSD);
 
     // Shares are cancelled whether the redemption paid cash or a basket, so the register moves on
     // the whole executed flow — not just the part that moved money.
@@ -481,7 +500,14 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         // The cash slice of the basket travels with it: a pro-rata claim is on everything the
         // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure cash.
         const cashSliceUSD = Math.max(0, fund.cashUSD ?? 0) * share;
-        if (cashSliceUSD > 0) { addCash(investorId, cashSliceUSD); addCash(fundId, -cashSliceUSD); }
+        if (cashSliceUSD > 0) {
+          pay(ctx, {
+            payer: { kind: 'INSTITUTION', id: fundId },
+            payee: { kind: 'INSTITUTION', id: investorId },
+            amountUSD: cashSliceUSD,
+            reason: 'etf in-kind redemption: cash slice',
+          });
+        }
         // And the fund's own book shrinks by exactly what left it.
         fund.itemizedHoldings = (fund.itemizedHoldings || []).map((h) => ({
           ...h,
@@ -609,14 +635,8 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // weeks), which is the same class of error as any stale mark.
   const finalNavPerShareByFund = new Map<string, number>();
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
-    const feeUSD = feeBySponsor.get(entity.id) ?? 0;
-    const cashUSD = cashDeltaByEntity.get(entity.id) ?? 0;
     const shareDeltas = holdingsDeltaByInvestor.get(entity.id);
-    // A fund pays its own fee out of the same cash the investors put in.
-    const fundFeeUSD = entity.entityType === 'ETF' && entity.etf
-      ? (fundNavUSD(entity) * entity.etf.expenseRatioAnnual) / 52
-      : 0;
-    if (!feeUSD && !cashUSD && !shareDeltas && !fundFeeUSD) return entity;
+    if (!shareDeltas) return entity;
 
     let holdings = entity.itemizedHoldings;
     if (shareDeltas) {
@@ -643,11 +663,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       });
       holdings = next;
     }
-    return {
-      ...entity,
-      cashUSD: (entity.cashUSD ?? 0) + cashUSD + feeUSD - fundFeeUSD,
-      itemizedHoldings: holdings,
-    };
+    return { ...entity, itemizedHoldings: holdings };
   });
 
   // Every fund's final price per share, after this week's creations, fees and cash movements.
