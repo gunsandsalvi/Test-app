@@ -703,15 +703,6 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       upd.offeredWageIndex = Number(Math.max(0, upd.offeredWageIndex / (1 + catchup)).toFixed(5));
     });
 
-    // TEMPORARY §7.249 teleport probe — env-gated, removed after the measurement.
-    if (process.env.LAB_PROBE === regionId) {
-      const sum = (r: Record<OccupationType, number>) => OCCUPATIONS.reduce((a, o) => a + r[o], 0);
-      const top = postings.reduce((best, p) => (p.layoffs > (best?.layoffs ?? 0) ? p : best), postings[0]);
-      const topVac = postings.reduce((best, p) => (p.vacancies > (best?.vacancies ?? 0) ? p : best), postings[0]);
-      const firmVac = postings.reduce((a, p) => a + p.vacancies, 0);
-      const segVac = segmentPostings.reduce((a, p) => a + p.vacancies, 0);
-      console.log(`[LAB ${regionId}] vacPosted ${(sum(vacanciesByOcc) / 1e3).toFixed(0)}k (firm ${(firmVac / 1e3).toFixed(0)}k seg ${(segVac / 1e3).toFixed(0)}k) seps ${(sum(separationsByOcc) / 1e3).toFixed(0)}k hires ${(sum(hiresByOcc) / 1e3).toFixed(0)}k quitRate ${(quitRateWeekly * 100).toFixed(2)}%/wk tightness ${priorTightness.toFixed(3)} topVac ${topVac ? `${topVac.comp.ticker} ${(topVac.vacancies / 1e3).toFixed(0)}k` : 'none'} topLayoff ${top ? `${top.comp.ticker} ${(top.layoffs / 1e3).toFixed(0)}k of ${(top.comp.employeeCount / 1e3).toFixed(0)}k` : 'none'}`);
-    }
     // ---- 5. The pools and the rate are DERIVED from the employers' books — by the exported
     // reconciler below, which also runs at the end of the week so that a firm defaulting in
     // stage 08 (after this stage) releases its workers in the same week rather than leaving the
