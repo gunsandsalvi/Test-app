@@ -11,8 +11,8 @@ import assert from 'node:assert/strict';
 import { capacityMixShares, subUnitsLockedOut } from '../src/domain/sme-pool';
 
 const NEVER_SOLD_HERE = [
-  { subUnitId: 'household_essentials', demandLevelUSD: 36_870_000_000, measuredRevenueUSD: 0 },
-  { subUnitId: 'food_beverage', demandLevelUSD: 40_200_000_000, measuredRevenueUSD: 9_823_568_693 },
+  { subUnitId: 'household_essentials', demandLevelAnnualUSD: 36_870_000_000, measuredRevenueUSD: 0 },
+  { subUnitId: 'food_beverage', demandLevelAnnualUSD: 40_200_000_000, measuredRevenueUSD: 9_823_568_693 },
 ];
 
 test('a pool with demand in front of it is never locked out of a market', () => {
@@ -31,8 +31,8 @@ test('shares sum to one, which is what makes a silent zero visible', () => {
 test('a pool that has sold everywhere follows its own book, not the demand', () => {
   // Trust is the coverage: with every sub-unit measured, the measured mix wins outright.
   const soldEverywhere = [
-    { subUnitId: 'a', demandLevelUSD: 100, measuredRevenueUSD: 90 },
-    { subUnitId: 'b', demandLevelUSD: 100, measuredRevenueUSD: 10 },
+    { subUnitId: 'a', demandLevelAnnualUSD: 100, measuredRevenueUSD: 90 },
+    { subUnitId: 'b', demandLevelAnnualUSD: 100, measuredRevenueUSD: 10 },
   ];
   const shares = capacityMixShares(soldEverywhere);
   assert.ok(Math.abs((shares.get('a') ?? 0) - 0.9) < 1e-9);
@@ -40,8 +40,8 @@ test('a pool that has sold everywhere follows its own book, not the demand', () 
 
 test('a pool that has sold nowhere follows the demand entirely', () => {
   const soldNowhere = [
-    { subUnitId: 'a', demandLevelUSD: 300, measuredRevenueUSD: 0 },
-    { subUnitId: 'b', demandLevelUSD: 100, measuredRevenueUSD: 0 },
+    { subUnitId: 'a', demandLevelAnnualUSD: 300, measuredRevenueUSD: 0 },
+    { subUnitId: 'b', demandLevelAnnualUSD: 100, measuredRevenueUSD: 0 },
   ];
   const shares = capacityMixShares(soldNowhere);
   assert.ok(Math.abs((shares.get('a') ?? 0) - 0.75) < 1e-9);

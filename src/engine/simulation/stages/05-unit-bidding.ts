@@ -938,7 +938,7 @@ function buildRegionSupplyPlans(
       // (§7.229): no offer produces no measurement produces no offer.
       const mixShare = capacityMixShares(siblings.map((su) => ({
         subUnitId: su.unitId,
-        demandLevelUSD: reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0,
+        demandLevelAnnualUSD: reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0,
         measuredRevenueUSD: Math.max(0, measured[su.unitId] ?? 0),
       }))).get(subUnitId) ?? 0;
       // Capacity is sized off the pool's GOODS revenue — what it actually sells in these books —
@@ -1124,7 +1124,7 @@ function buildRegionDemandPlans(
     const shelfPrice = shelfPriceUSD(referencePriceUSD, subUnitId, reg.zeroRates?.tenor3M ?? reg.policyRate ?? 0);
     // THE BUDGET IS THE MEASURED HOUSEHOLD LEG, NOT A SLICE OF THE DEMAND LEVEL (rule 3).
     //
-    // `demandLevelUSD × hhShare` carved the household's money out of the category's TOTAL demand
+    // `demandLevelAnnualUSD × hhShare` carved the household's money out of the category's TOTAL demand
     // — a level that carries the corporate leg (firms' nominal revenues × input intensity) and
     // the Leontief intermediate half. In a category with persistent excess demand that closes a
     // loop with nothing real in it: the price rises → the buying industries' nominal revenues
@@ -1135,7 +1135,7 @@ function buildRegionDemandPlans(
     // 19.9B→1,836B with the household bidding it. Stage 03 owns the household's real money — the
     // cohorts' consumption budgets, allocated by tier — and this ladder is sized from that leg
     // alone, so a household cannot outbid its own income no matter what the firms beside it pay.
-    const hhAnnualBudgetUSD = demandState.householdDemandUSD ?? (demandState.demandLevelUSD * hhShare);
+    const hhAnnualBudgetUSD = demandState.householdDemandUSD ?? (demandState.demandLevelAnnualUSD * hhShare);
     let hhDemandUnits = (hhAnnualBudgetUSD / 52) / shelfPrice
       * seasonalFactor(subUnitId, week, 'demand');
 
@@ -1209,7 +1209,7 @@ function buildRegionDemandPlans(
       + ` corp ${(corpUnits / 1e6).toFixed(2)}M seg ${(segUnits / 1e6).toFixed(2)}M`
       + ` hh ${(hhUnits / 1e6).toFixed(2)}M gov ${(govUnits / 1e6).toFixed(2)}M`
       + ` total ${((corpUnits + segUnits + hhUnits + govUnits) / 1e6).toFixed(2)}M`
-      + ` | demandLevel ${(((cd?.demandLevelUSD ?? 0) / 52) / Math.max(1e-9, referencePriceUSD) / 1e6).toFixed(2)}M`
+      + ` | demandLevel ${(((cd?.demandLevelAnnualUSD ?? 0) / 52) / Math.max(1e-9, referencePriceUSD) / 1e6).toFixed(2)}M`
       + ` @p${referencePriceUSD.toFixed(2)}`);
   }
   return plans;

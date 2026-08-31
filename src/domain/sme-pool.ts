@@ -22,7 +22,7 @@
 /** One sub-unit's demand and what this pool has measurably sold into it. */
 export interface PoolSubUnitObservation {
   subUnitId: string;
-  demandLevelUSD: number;
+  demandLevelAnnualUSD: number;
   measuredRevenueUSD: number;
 }
 
@@ -34,7 +34,7 @@ export interface PoolSubUnitObservation {
  */
 export function capacityMixShares(observations: PoolSubUnitObservation[]): Map<string, number> {
   const out = new Map<string, number>();
-  const demandTotal = observations.reduce((a, o) => a + Math.max(0, o.demandLevelUSD), 0);
+  const demandTotal = observations.reduce((a, o) => a + Math.max(0, o.demandLevelAnnualUSD), 0);
   const measuredTotal = observations.reduce((a, o) => a + Math.max(0, o.measuredRevenueUSD), 0);
   if (observations.length === 0) return out;
   if (!(demandTotal > 0)) {
@@ -44,10 +44,10 @@ export function capacityMixShares(observations: PoolSubUnitObservation[]): Map<s
   }
   // How much of the industry's demand this pool's book actually speaks for.
   const coveredDemandUSD = observations.reduce(
-    (a, o) => a + (o.measuredRevenueUSD > 0 ? Math.max(0, o.demandLevelUSD) : 0), 0);
+    (a, o) => a + (o.measuredRevenueUSD > 0 ? Math.max(0, o.demandLevelAnnualUSD) : 0), 0);
   const trust = Math.min(1, coveredDemandUSD / demandTotal);
   observations.forEach((o) => {
-    const demandShare = Math.max(0, o.demandLevelUSD) / demandTotal;
+    const demandShare = Math.max(0, o.demandLevelAnnualUSD) / demandTotal;
     const measuredShare = measuredTotal > 0 ? Math.max(0, o.measuredRevenueUSD) / measuredTotal : 0;
     out.set(o.subUnitId, trust * measuredShare + (1 - trust) * demandShare);
   });
@@ -61,6 +61,6 @@ export function capacityMixShares(observations: PoolSubUnitObservation[]): Map<s
 export function subUnitsLockedOut(observations: PoolSubUnitObservation[]): string[] {
   const shares = capacityMixShares(observations);
   return observations
-    .filter((o) => o.demandLevelUSD > 0 && !((shares.get(o.subUnitId) ?? 0) > 0))
+    .filter((o) => o.demandLevelAnnualUSD > 0 && !((shares.get(o.subUnitId) ?? 0) > 0))
     .map((o) => o.subUnitId);
 }

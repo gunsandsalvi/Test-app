@@ -128,7 +128,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     }
 
     const govBudget = decomposeGovernmentSpending(
-      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
       GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
       reg.governmentPayrollWeeklyUSD ?? 0
     );
@@ -223,7 +223,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
           govBudgetByCategory[su.unitId] = suCapexGovDemand / 52;
           allTargets[su.unitId] = (capexDemandUSD > 0
             ? capexDemandUSD
-            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId])))
+            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelAnnualUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId])))
             + suCapexGovDemand;
           smoothingByCategory[su.unitId] = 0.08;
           return;
@@ -299,8 +299,8 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       }
       const smoothing = smoothingByCategory[cat] ?? 0.1;
       const existingEntry = reg.categoryDemand[cat as keyof typeof reg.categoryDemand];
-      const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelUSD > 0);
-      const prevLevel = hasPriorDemand ? existingEntry.demandLevelUSD : target;
+      const hasPriorDemand = Boolean(existingEntry && existingEntry.demandLevelAnnualUSD > 0);
+      const prevLevel = hasPriorDemand ? existingEntry.demandLevelAnnualUSD : target;
       const newLevel = hasPriorDemand ? prevLevel * (1 - smoothing) + target * smoothing : target;
       const isStartupTransition = (state.currentWeek <= 1) || prevLevel < newLevel * 0.2 || newLevel < prevLevel * 0.2;
       const rawGrowthAnnual = hasPriorDemand && prevLevel > 0 && !isStartupTransition ? ((newLevel / prevLevel) - 1) * 52 : 0;
@@ -317,7 +317,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       // most of all — was comparing two different units.
       reg.categoryDemand[cat] = {
         ...(existingEntry ?? {}),
-        demandLevelUSD: newLevel,
+        demandLevelAnnualUSD: newLevel,
         demandGrowthAnnual: growthAnnual,
         demandHistory: [...prevHistory.slice(-25), newLevel],
         crowdingIntensity,

@@ -532,7 +532,7 @@ function checkCentralBankIdentity(state: GameState, week: number) {
       const spent = reg.governmentProcurementSpentUSD ?? 0;
       const unspent = reg.unspentProcurementBudgetUSD ?? 0;
       // §5-STRUCT step 3 — ASK THE GOVERNMENT, and this is why the §6.1 row never closed. The
-      // check used to read `outlays > governmentSpendingUSD * 1.5`: a stated 50% tolerance against
+      // check used to read `outlays > governmentSpendingWeeklyUSD * 1.5`: a stated 50% tolerance against
       // a number that is NOT the budget. The budget is the decomposition — contractual interest
       // and payroll off the top, the discretionary remainder scaled by the fiscal stance — and it
       // was computed inside a stage with no name anyone could read from here. Both sides now come
@@ -1177,10 +1177,10 @@ const pubModule: HarnessModule = (() => {
     week(_prev, s) {
       const reg: any = s.regions.USA;
       const cb = reg.centralBankSheet;
-      const dec = decomposeGovernmentSpending(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      const dec = decomposeGovernmentSpending(reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
         GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore);
-      series.interestShare.push(dec.interestUSD / Math.max(1, reg.governmentSpendingUSD));
-      series.procShare.push(dec.procurementBudgetUSD / Math.max(1, reg.governmentSpendingUSD));
+      series.interestShare.push(dec.interestUSD / Math.max(1, reg.governmentSpendingWeeklyUSD));
+      series.procShare.push(dec.procurementBudgetUSD / Math.max(1, reg.governmentSpendingWeeklyUSD));
       series.procSpent.push(reg.governmentProcurementSpentUSD ?? 0);
       series.unspentProc.push(reg.unspentProcurementBudgetUSD ?? 0);
       series.stance.push(reg.fiscalStanceScore);
@@ -1270,7 +1270,7 @@ const pubModule: HarnessModule = (() => {
         for (let i = 0; i < horizon; i++) {
           x = advanceWeeklyStep(x);
           const reg: any = x.regions.USA;
-          const dec = decomposeGovernmentSpending(reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+          const dec = decomposeGovernmentSpending(reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
             GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore);
           o.interest.push(dec.interestUSD); o.transfers.push(dec.transfersUSD);
           o.proc.push(reg.governmentProcurementSpentUSD ?? 0);
@@ -1662,7 +1662,7 @@ const indModule: HarnessModule = (() => {
         // solve; the firms bid their OWN capex figure. If those disagree the sector was built to
         // supply one number and asked for another (rule 3).
         const capexCats = Object.keys(CAPEX_SUPPLIER_WEIGHTS); // §7.246: the registry's list, not a copy
-        const seededUSD = capexCats.reduce((a, su) => a + (((s.regions[r] as any).categoryDemand?.[su]?.demandLevelUSD) ?? 0), 0);
+        const seededUSD = capexCats.reduce((a, su) => a + (((s.regions[r] as any).categoryDemand?.[su]?.demandLevelAnnualUSD) ?? 0), 0);
         out.push(`      capex industries sized for ${B(seededUSD)}/yr of demand; firms bid ${B(capexA)}/yr = ${(seededUSD > 0 ? capexA / seededUSD : 0).toFixed(2)}x what was built`);
         capexCats.forEach(su => {
           const cd: any = (s.regions[r] as any).categoryDemand?.[su];
@@ -1975,7 +1975,7 @@ const spiralModule: HarnessModule = {
             + ` s${((cd?.totalUnitsSuppliedThisWeek ?? 0) / 1e6).toFixed(2)}M`
             + ` d${((cd?.totalUnitsDemandedThisWeek ?? 0) / 1e6).toFixed(2)}M`
             + ` p${(cd?.unitPriceUSD ?? 0).toFixed(0)}`
-            + ` dLvl${((cd?.demandLevelUSD ?? 0) / 1e9).toFixed(2)}B`);
+            + ` dLvl${((cd?.demandLevelAnnualUSD ?? 0) / 1e9).toFixed(2)}B`);
         });
       }
       REGION_IDS_SEED_ORDER.forEach((region) => {

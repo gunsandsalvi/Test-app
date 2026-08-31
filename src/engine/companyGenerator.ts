@@ -87,7 +87,7 @@ export function producingSectorNamedTierDemandUSD(
   if (!list || list.length === 0) return 0;
   let total = 0;
   for (const { su } of list) {
-    const demandUSD = Number(initialRegions[region]?.categoryDemand[su.unitId]?.demandLevelUSD) || 0;
+    const demandUSD = Number(initialRegions[region]?.categoryDemand[su.unitId]?.demandLevelAnnualUSD) || 0;
     if (!(demandUSD > 0)) continue;
     const industry = industryOfSubUnit(su.unitId);
     const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
@@ -818,7 +818,7 @@ export function generateInitialCompanies(
   // so far, and dealt AGAIN by `simulation/initialization.ts` once the authoritative demand
   // vector (real procurement, real firm capex) exists. See the function's own doc.
   dealProductLinesAndHeadcount(companies, (region, unitId) =>
-    Number(initialRegions[region]?.categoryDemand[unitId]?.demandLevelUSD) || 0);
+    Number(initialRegions[region]?.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0);
 
   return companies;
 }
@@ -859,7 +859,7 @@ export function generateInitialCompanies(
  */
 export function normalizeProducingSectorRevenue(
   companies: Company[],
-  demandLevelUSD: (subUnitId: string) => number,
+  demandLevelAnnualUSD: (subUnitId: string) => number,
   /** What the SME tier of a sub-unit's industry ACTUALLY carries in this region. */
   smeRevenueForSubUnitUSD: (subUnitId: string) => number
 ): void {
@@ -875,7 +875,7 @@ export function normalizeProducingSectorRevenue(
     // thing that has to be true.
     let total = 0;
     for (const { su } of list) {
-      const demandUSD = demandLevelUSD(su.unitId);
+      const demandUSD = demandLevelAnnualUSD(su.unitId);
       if (!(demandUSD > 0)) continue;
       total += Math.max(0, demandUSD - Math.max(0, smeRevenueForSubUnitUSD(su.unitId)));
     }
@@ -921,7 +921,7 @@ export function normalizeProducingSectorRevenue(
  * SUPPLY/CHAIN — DEAL THE PRODUCER BASE AGAINST THE DEMAND THE ECONOMY WILL ACTUALLY STATE.
  *
  * This pass decides which sub-units each firm produces, what share of each category it holds, and
- * — through value added — how many people it employs. It is weighted by `demandLevelUSD`, so the
+ * — through value added — how many people it employs. It is weighted by `demandLevelAnnualUSD`, so the
  * producer base converges on demand's own shape and a new sub-unit in the registry gets producers
  * with no generator edit (BP1b, rule 17).
  *
@@ -943,7 +943,7 @@ export function normalizeProducingSectorRevenue(
  */
 export function dealProductLinesAndHeadcount(
   companies: Company[],
-  demandLevelUSD: (region: RegionId, subUnitId: string) => number
+  demandLevelAnnualUSD: (region: RegionId, subUnitId: string) => number
 ): void {
   const categories: string[] = [];
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
@@ -976,7 +976,7 @@ export function dealProductLinesAndHeadcount(
       const sectorSubUnits = (subUnitsByProducingSector()[sector as ProducingSector] ?? [])
         .map(({ industry, su }) => ({
           industry, unitId: su.unitId,
-          weightUSD: Math.max(0, demandLevelUSD(_regionId as RegionId, su.unitId)),
+          weightUSD: Math.max(0, demandLevelAnnualUSD(_regionId as RegionId, su.unitId)),
         }))
         .filter(x => x.weightUSD > 0);
       const totalWeightUSD = sectorSubUnits.reduce((a, x) => a + x.weightUSD, 0);

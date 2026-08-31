@@ -100,7 +100,7 @@ export function buildCpiBasket(region: Region, week: number, baseIndexLevel: num
       // channel's cost out of the household's cost of living entirely.
       const price = shelfPriceFor(demand, su.unitId, region);
       if (!demand || !(price > 0)) return;
-      const spendUSD = demand.demandLevelUSD * su.buyerMix.HOUSEHOLD;
+      const spendUSD = demand.demandLevelAnnualUSD * su.buyerMix.HOUSEHOLD;
       if (!(spendUSD > 0)) return;
       householdSpendBySubUnit[su.unitId] = spendUSD;
       basePriceBySubUnit[su.unitId] = price;

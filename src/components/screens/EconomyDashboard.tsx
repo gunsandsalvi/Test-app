@@ -114,7 +114,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
           {categories.map(cat => {
             const subUnits = INDUSTRY_SUBUNITS[cat as Industry] || [];
             if (subUnits.length === 0) return null;
-            const demandLevelUSD = subUnits.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0), 0);
+            const demandLevelAnnualUSD = subUnits.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0), 0);
             const demandGrowthAnnual = subUnits.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.demandGrowthAnnual ?? 0), 0) / subUnits.length;
             const crowdingIntensity = subUnits.reduce((s, su) => s + (reg.categoryDemand[su.unitId]?.crowdingIntensity ?? 0), 0) / subUnits.length;
 
@@ -125,7 +125,7 @@ export const EconomyDashboard: React.FC<{ state: GameState }> = ({ state }) => {
                   <div className="text-[10px] text-[var(--text-tertiary)]">Growth: {formatPercent(demandGrowthAnnual, { isDecimal: true })}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-[var(--font-numeric)] font-bold">{formatCurrency(demandLevelUSD, { compact: true })}</div>
+                  <div className="font-[var(--font-numeric)] font-bold">{formatCurrency(demandLevelAnnualUSD, { compact: true })}</div>
                   <div className="text-[10px] text-[var(--text-tertiary)]">Crowding: {crowdingIntensity.toFixed(2)}</div>
                 </div>
               </div>

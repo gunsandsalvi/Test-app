@@ -527,7 +527,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // cannot buy what it planned has not spent the money, and the remainder is named rather
     // than assumed spent. ----
     const govBudget = decomposeGovernmentSpending(
-      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
       GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
       reg.governmentPayrollWeeklyUSD ?? 0
     );
@@ -566,7 +566,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // bill program issues more. Sized off REALIZED outlays, so it responds to what went out.
     const cashBridgeIssuanceUSD = cashPositionBillIssuanceUSD({
       treasuryAccountUSD: reg.centralBankSheet?.treasuryAccountUSD ?? 0,
-      weeklyOutlaysUSD: reg.governmentOutlaysUSD ?? reg.governmentSpendingUSD,
+      weeklyOutlaysUSD: reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD,
     });
     reg.cashBridgeBillIssuanceUSD = Math.round(cashBridgeIssuanceUSD);
 

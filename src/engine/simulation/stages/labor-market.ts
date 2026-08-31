@@ -389,7 +389,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const segLines = smePoolSubUnits(seg.industry).map((su) => ({
         subUnitId: su.unitId,
         revenueShare: (seg.salesDerivedAnnualRevenueUSDBySubUnit?.[su.unitId]
-          ?? reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0),
+          ?? reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0),
       }));
       const growthAnnual = desiredEmploymentGrowthAnnual(
         seg.revenueHistoryUSD, seg.annualRevenueUSD, inflationAnnual, segLines, reg

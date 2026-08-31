@@ -57,7 +57,7 @@ export interface SupplyContract {
 }
 
 export interface CategoryDemandState {
-  demandLevelUSD: number;
+  demandLevelAnnualUSD: number;
   demandGrowthAnnual: number;
   demandHistory: number[];
   crowdingIntensity: number;
@@ -98,7 +98,7 @@ export interface CategoryDemandState {
   priceHistory?: number[];
   /** The HOUSEHOLD leg of this category's demand this week, measured where it is owned: the
    *  cohorts' real consumption budgets (C), allocated by tier and buyer mix in stage 03. Stage
-   *  05 sizes the household's bid ladder from THIS, never from `demandLevelUSD × hhShare` — the
+   *  05 sizes the household's bid ladder from THIS, never from `demandLevelAnnualUSD × hhShare` — the
    *  demand level carries the corporate leg (nominal firm revenues) and the Leontief
    *  intermediate half, so a budget carved from it scales with other buyers' prices instead of
    *  with household income. That was a second representation of one budget (rule 3), and the
@@ -128,20 +128,20 @@ export interface CategoryDemandState {
  * other is exactly how the unitPriceUSD-drop bug family starts.
  */
 export function createSeedCategoryDemandState(
-  demandLevelUSD: number,
+  demandLevelAnnualUSD: number,
   demandGrowthAnnual: number,
   unitPriceUSD: number
 ): CategoryDemandState & { upstreamScarcityIndex: number; lastWeekInventoryLevelUSD: number; unitPriceUSD: number } {
   return {
-    demandLevelUSD,
+    demandLevelAnnualUSD,
     demandGrowthAnnual,
-    demandHistory: [demandLevelUSD],
+    demandHistory: [demandLevelAnnualUSD],
     crowdingIntensity: 0.1,
-    inventoryLevelUSD: demandLevelUSD * 0.10,
+    inventoryLevelUSD: demandLevelAnnualUSD * 0.10,
     inputCostPressure: 0,
     clearedInputPriceIndex: 1.0,
     upstreamScarcityIndex: 1.0,
-    lastWeekInventoryLevelUSD: demandLevelUSD * 0.10,
+    lastWeekInventoryLevelUSD: demandLevelAnnualUSD * 0.10,
     unitPriceUSD,
     // XB3a: both books open on the bootstrap price, so week 1 is the first week either of them
     // moves. Seeding the local book anywhere else would be a §7.4 cold start — a step change on
@@ -151,8 +151,8 @@ export function createSeedCategoryDemandState(
     // XB3a-3: the week's real quantities, which the sourcing intent reads to decide where to buy
     // and how much freight to book. Seeded at the bootstrap demand a week represents, so the
     // opening week forms an intent against the same observables every later week does (§7.4).
-    totalUnitsDemandedThisWeek: unitPriceUSD > 0 ? (demandLevelUSD / 52) / unitPriceUSD : 0,
-    totalUnitsSuppliedThisWeek: unitPriceUSD > 0 ? (demandLevelUSD / 52) / unitPriceUSD : 0,
+    totalUnitsDemandedThisWeek: unitPriceUSD > 0 ? (demandLevelAnnualUSD / 52) / unitPriceUSD : 0,
+    totalUnitsSuppliedThisWeek: unitPriceUSD > 0 ? (demandLevelAnnualUSD / 52) / unitPriceUSD : 0,
   };
 }
 

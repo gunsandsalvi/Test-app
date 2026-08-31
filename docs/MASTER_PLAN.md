@@ -4095,3 +4095,19 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        compile-time exhaustiveness guard; OCCUPATIONS = OCCUPATION_TYPES. The one live
        remainder — eight case-sensitive `startsWith('b')` bill predicates in 07c/07f/11 —
        flipped to `isBillBucketKey` (the module's own named predicate, §7.263's trap class).
+
+277. **P1 EXECUTED + THE RATCHET LOWERED; the brand pass stays deferred BY ITS OWN RULE.**
+     - Renamed: `governmentSpendingUSD` → `governmentSpendingWeeklyUSD` (weekly, read annual)
+       and `demandLevelUSD` → `demandLevelAnnualUSD` (annual, read weekly) — the two named P1
+       ambiguities, every site (src + harness + tests), tsc-verified.
+     - `clearedInputPriceIndex`'s P1 note is STALE: it already measures against the FIXED S8
+       baseline (`baseUnitPriceUSD`, stored once), so it is a level vs baseline as read.
+     - The `historicalInflation`/`historicalZeroCurves` one-week lag is documented ONCE at the
+       type declaration (region-macro.ts historical tracks) instead of at every read site.
+     - `formatPercent`'s required `isDecimal` verified already done (§7.241).
+     - MONEY_SPREAD_BUDGET ratcheted 23 → 16 (the bookPnL migration's yield); assign-form
+       stays 3.
+     - Branded number families: NOT applied. units.ts's own seam rule governs — "do not brand
+       a field ahead of its seam; a brand with unbranded producers is theater" — and the
+       pay() seam's condition (step 1 touching every call site) is not live. Deferred with
+       the seams, per the design.

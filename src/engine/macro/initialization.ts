@@ -180,7 +180,7 @@ export function createInitialCategoryDemand(
   const cd: Record<string, any> = {};
   Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
     subUnits.forEach(su => {
-      const demandLevelUSD = totalOutput[su.unitId] ?? finalDemand[su.unitId];
+      const demandLevelAnnualUSD = totalOutput[su.unitId] ?? finalDemand[su.unitId];
       // §7.127: the price is FINAL demand over final-buyer volume. The demand LEVEL is total
       // output; the PRICE is not, or intermediate demand becomes price instead of quantity.
       const unitPriceUSD = deriveSubUnitUnitPrice(
@@ -188,7 +188,7 @@ export function createInitialCategoryDemand(
         (totalOutput[su.unitId] ?? 0) - (finalDemand[su.unitId] ?? 0)
       );
 
-      cd[su.unitId] = createSeedCategoryDemandState(demandLevelUSD, gdpGrowth, unitPriceUSD);
+      cd[su.unitId] = createSeedCategoryDemandState(demandLevelAnnualUSD, gdpGrowth, unitPriceUSD);
     });
   });
   return cd;
@@ -399,7 +399,7 @@ function buildRegion(regionId: RegionId): Region {
     averageAnnualWageUSD: seedAvgAnnualWageUSD,
     fiscalStanceScore: 0,
   });
-  const governmentSpendingUSD = Math.round(seedObligations.totalUSD);
+  const governmentSpendingWeeklyUSD = Math.round(seedObligations.totalUSD);
   const estimatedHouseholdIncomeUSD = Math.round(computeHouseholdDisposableIncomeUSD({
     wageIncomeUSD: totalWageIncomeUSD,
     transfersWeeklyUSD: seedObligations.transfersUSD,
@@ -577,7 +577,7 @@ function buildRegion(regionId: RegionId): Region {
     investmentComponentUSD: 0,
     effectiveTaxRate: EFFECTIVE_TAX_RATE,
     governmentRevenueUSD,
-    governmentSpendingUSD,
+    governmentSpendingWeeklyUSD,
     governmentPayrollWeeklyUSD: Math.round(seedPayrollWeeklyUSD),
     governmentInterestWeeklyUSD: Math.round(seedInterestWeeklyUSD),
     employerPayrollTaxWeeklyUSD: Math.round((seedWageSplit.employerPayrollTaxUSD / 52)),
@@ -591,7 +591,7 @@ function buildRegion(regionId: RegionId): Region {
         acc[k] = (acc[k] ?? 0) + t.principalUSD * CENTRAL_BANK_SOVEREIGN_SHARE;
         return acc;
       }, {} as Record<string, number>),
-      treasuryAccountUSD: Math.round((governmentSpendingUSD * TGA_TARGET_WEEKS_OF_SPENDING)),
+      treasuryAccountUSD: Math.round((governmentSpendingWeeklyUSD * TGA_TARGET_WEEKS_OF_SPENDING)),
       // Closes the balance sheet at birth; the weekly stage re-derives it (§7.4).
       currencyInCirculationUSD: 0,
       unbackedBankCashUSD: 0,
@@ -680,7 +680,7 @@ function buildRegion(regionId: RegionId): Region {
   // Margin is the named tier's own sector margin less the SME discount — read from the SAME
   // `SECTOR_PROFILE` the company generator uses, so there is one margin primitive, not two.
   {
-    const demandOf = (unitId: string) => region.categoryDemand[unitId]?.demandLevelUSD ?? 0;
+    const demandOf = (unitId: string) => region.categoryDemand[unitId]?.demandLevelAnnualUSD ?? 0;
     const revenueByIndustry = new Map<Industry, number>();
     SME_POOL_INDUSTRIES.forEach((industry) => {
       const industryDemandUSD = smePoolSubUnits(industry).reduce((a, su) => a + demandOf(su.unitId), 0);

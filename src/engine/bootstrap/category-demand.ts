@@ -30,7 +30,7 @@ export const TARGET_FIRMS_PER_REGION = 200;
  * CHAIN-E/§7.127 — pass FINAL demand here, never total output.
  *
  * The volume below counts FINAL buyers only: people and firms as end users. Once CHAIN-E made
- * `demandLevelUSD` the total output X (final plus what other producers consume), feeding X to a
+ * `demandLevelAnnualUSD` the total output X (final plus what other producers consume), feeding X to a
  * final-buyer volume turned every dollar of intermediate demand into PRICE instead of quantity —
  * and the more intermediate-heavy the good, the worse. Measured: upstream extraction opened ~3x
  * too dear and the auction then cleared it to **0.02x** of that over twenty weeks, with refined

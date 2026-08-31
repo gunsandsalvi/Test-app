@@ -834,7 +834,7 @@ export interface Region {
   investmentComponentUSD: number;
   effectiveTaxRate: number;
   governmentRevenueUSD: number;
-  governmentSpendingUSD: number;
+  governmentSpendingWeeklyUSD: number;
   /** PUB1 — real weekly interest on the debt stack, paid to holders. Comes off the top of
    * spending, so procurement and transfers get the primary budget only. */
   /** Cash-basis coupon expense: BONDS only, since bills pay no coupon (PUB3d). */
@@ -940,7 +940,11 @@ export interface Region {
   dotPlot1Y: number;
   dotPlot2Y: number;
 
-  // Historical tracks
+  // Historical tracks.
+  // P1: every historical track (and historicalZeroCurves below) is appended by the macro
+  // evolution AFTER the measurement stages run, so a same-week reader sees history through
+  // LAST week — a one-week lag, consistent everywhere, documented here once rather than at
+  // each of the read sites.
   historicalPolicyRates: number[];
   historicalInflation: number[];
   historicalCoreInflation: number[];

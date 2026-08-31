@@ -164,7 +164,7 @@ export function seedRegionCategoryDemand(
     // §7.4: the seed uses the SAME procurement owner the weekly stage does, so week 0's
     // government demand and week 1's are the same shape.
     const G = decomposeGovernmentSpending(
-      reg.governmentSpendingUSD, reg.governmentInterestWeeklyUSD ?? 0,
+      reg.governmentSpendingWeeklyUSD, reg.governmentInterestWeeklyUSD ?? 0,
       GOV_PROCUREMENT_SHARE_OF_SPENDING, reg.fiscalStanceScore,
       reg.governmentPayrollWeeklyUSD ?? 0
     ).procurementBudgetUSD * 52;
@@ -228,9 +228,9 @@ export function seedRegionCategoryDemand(
 
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
-        const demandLevelUSD = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
+        const demandLevelAnnualUSD = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
         reg.categoryDemand[su.unitId] = createSeedCategoryDemandState(
-          demandLevelUSD,
+          demandLevelAnnualUSD,
           reg.gdpGrowth ?? 0.02,
           // §7.127: FINAL demand prices the good; total output is the quantity behind it. The
           // intermediate slice is passed so a PURE intermediate prices off its producer buyers.
@@ -264,7 +264,7 @@ export function seedRegionCategoryDemand(
     (reg.smePools ?? []).forEach((pool: { industry: string; annualRevenueUSD?: number }) => {
       const spec = (INDUSTRY_REGISTRY as any)[pool.industry];
       const subUnits: { unitId: string }[] = spec?.subUnits ?? [];
-      const demandOf = (id: string) => Number(reg.categoryDemand[id]?.demandLevelUSD) || 0;
+      const demandOf = (id: string) => Number(reg.categoryDemand[id]?.demandLevelAnnualUSD) || 0;
       const totalDemandUSD = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
       if (!(totalDemandUSD > 0)) return;
       const poolRevenueUSD = Number(pool.annualRevenueUSD) || 0;
@@ -275,12 +275,12 @@ export function seedRegionCategoryDemand(
     });
     normalizeProducingSectorRevenue(
       companies.filter(c => c.region === regionId),
-      (unitId) => Number(reg.categoryDemand[unitId]?.demandLevelUSD) || 0,
+      (unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0,
       (unitId) => smeRevenueBySubUnit.get(unitId) ?? 0
     );
     dealProductLinesAndHeadcount(
       companies.filter(c => c.region === regionId),
-      (_r, unitId) => Number(reg.categoryDemand[unitId]?.demandLevelUSD) || 0
+      (_r, unitId) => Number(reg.categoryDemand[unitId]?.demandLevelAnnualUSD) || 0
     );
 
     // PUB1e: the budget stage 05 bids in week 1, seeded here so it is never empty.
@@ -393,7 +393,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
         const segIdx = seeds.map((sd, i) => sd.industry === seg.industry ? i : -1).filter(i => i >= 0);
         const segFirms = segIdx.map(i => firms[i]);
         const subUnits = INDUSTRY_REGISTRY[seg.industry].subUnits;
-        const demandOf = (id: string) => reg.categoryDemand[id]?.demandLevelUSD ?? 0;
+        const demandOf = (id: string) => reg.categoryDemand[id]?.demandLevelAnnualUSD ?? 0;
         const demandTotal = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
         segFirms.forEach(f => {
           f.productLines = subUnits.map(su => ({
@@ -1144,7 +1144,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       averageAnnualWageUSD: realEmployedForWages > 0 ? realWageIncomeUSD / realEmployedForWages : 0,
       fiscalStanceScore: reg.fiscalStanceScore,
     });
-    reg.governmentSpendingUSD = Math.round(seedObligations.totalUSD);
+    reg.governmentSpendingWeeklyUSD = Math.round(seedObligations.totalUSD);
     reg.estimatedHouseholdIncomeUSD = Math.round(computeHouseholdDisposableIncomeUSD({
       wageIncomeUSD: realWageIncomeUSD,
       transfersWeeklyUSD: seedObligations.transfersUSD,

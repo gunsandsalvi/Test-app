@@ -65,7 +65,11 @@ if [ "$STRAY_COUNT" -gt "$MONEY_WRITE_BUDGET" ]; then
   echo "Route the movement through engine/ledger's post(). See §5-STRUCT step 1."
   exit 1
 fi
-MONEY_SPREAD_BUDGET=23
+# §7.275 ratcheted 23 → 16: the bookPnL migration took the stage-side bankEquityUSD spread
+# rebuilds out (dealer-desks, 07c, 07f, bill-accretion, sovereign-calendar, trade,
+# estate-resolution). The 16 left are the split/absorb stock transfers, 02b's gated reconcile,
+# and the evolution seams — each waiting on its named gate, none of them P&L.
+MONEY_SPREAD_BUDGET=16
 if [ "$SPREAD_STRAY_COUNT" -gt "$MONEY_SPREAD_BUDGET" ]; then
   echo "ERROR: $SPREAD_STRAY_COUNT spread-form money writes outside engine/ledger (budget $MONEY_SPREAD_BUDGET)."
   echo "$SPREAD_STRAY"

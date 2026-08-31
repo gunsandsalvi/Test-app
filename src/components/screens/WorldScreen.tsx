@@ -46,7 +46,7 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
 
   const c = reg.consumptionComponentUSD;
   const i = reg.investmentComponentUSD;
-  const g = reg.governmentSpendingUSD * 52;
+  const g = reg.governmentSpendingWeeklyUSD * 52;
   const nx = reg.exportsUSD - reg.importsUSD;
 
   return (
@@ -277,15 +277,15 @@ export const WorldScreen: React.FC<{ state: GameState, prevState?: GameState | n
             <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold">Sovereign Budget Operations (Annualized)</div>
               <div className="flex h-6 rounded overflow-hidden">
-                <div style={{ width: `${Math.min(100, ((reg.governmentRevenueUSD * 52) / Math.max(1, reg.governmentSpendingUSD * 52)) * 100)}%` }} className="bg-[var(--signal-positive)] flex items-center justify-center text-[9px] font-bold text-white">
+                <div style={{ width: `${Math.min(100, ((reg.governmentRevenueUSD * 52) / Math.max(1, reg.governmentSpendingWeeklyUSD * 52)) * 100)}%` }} className="bg-[var(--signal-positive)] flex items-center justify-center text-[9px] font-bold text-white">
                   Revenue ({formatCurrency(reg.governmentRevenueUSD * 52, { compact: true })})
                 </div>
-                <div style={{ width: `${Math.max(0, 100 - ((reg.governmentRevenueUSD * 52) / Math.max(1, reg.governmentSpendingUSD * 52)) * 100)}%` }} className="bg-[var(--signal-negative)] flex items-center justify-center text-[9px] font-bold text-white">
+                <div style={{ width: `${Math.max(0, 100 - ((reg.governmentRevenueUSD * 52) / Math.max(1, reg.governmentSpendingWeeklyUSD * 52)) * 100)}%` }} className="bg-[var(--signal-negative)] flex items-center justify-center text-[9px] font-bold text-white">
                   Deficit
                 </div>
               </div>
               <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] font-mono">
-                <span>Spending: {formatCurrency(reg.governmentSpendingUSD * 52, { compact: true })}/yr</span>
+                <span>Spending: {formatCurrency(reg.governmentSpendingWeeklyUSD * 52, { compact: true })}/yr</span>
                 <span>Debt/GDP Ratio: {formatPercent(reg.debtToGdpPctBottomUp, { isDecimal: true })}</span>
               </div>
             </div>

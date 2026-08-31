@@ -730,7 +730,7 @@ export function runFirmBirthsForRegion(
   const productMixBySubUnit: Record<string, number> = measuredTotalUSD > 0
     ? { ...measuredMix }
     : Object.fromEntries(smePoolSubUnits(seg.industry)
-      .map((su) => [su.unitId, reg.categoryDemand[su.unitId]?.demandLevelUSD ?? 0]));
+      .map((su) => [su.unitId, reg.categoryDemand[su.unitId]?.demandLevelAnnualUSD ?? 0]));
 
   const born = generate(regionId, [{
     industry: seg.industry,

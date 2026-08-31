@@ -27,7 +27,7 @@ import { GOV_PROCUREMENT_SHARE_OF_SPENDING } from '../engine/bootstrap/national-
  *  the rest of the region — the point of extracting it. */
 export interface GovernmentFields {
   governmentRevenueUSD: number;
-  governmentSpendingUSD: number;
+  governmentSpendingWeeklyUSD: number;
   governmentInterestWeeklyUSD?: number;
   governmentBillDiscountAccrualUSD?: number;
   governmentPayrollWeeklyUSD?: number;
@@ -80,7 +80,7 @@ export class Government {
    */
   week(): FiscalWeek {
     const parts = decomposeGovernmentSpending(
-      this.f.governmentSpendingUSD,
+      this.f.governmentSpendingWeeklyUSD,
       this.interestWeeklyUSD(),
       GOV_PROCUREMENT_SHARE_OF_SPENDING,
       this.f.fiscalStanceScore,

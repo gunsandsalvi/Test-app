@@ -1161,7 +1161,7 @@ Taylor Target: ${(taylorTarget * 100).toFixed(2)}% | Current Policy: ${(region.p
     investmentComponentUSD: region.investmentComponentUSD ?? 0,
     effectiveTaxRate: newEffectiveTaxRate,
     governmentRevenueUSD: newGovernmentRevenueUSD,
-    governmentSpendingUSD: newGovernmentSpendingUSD,
+    governmentSpendingWeeklyUSD: newGovernmentSpendingUSD,
     governmentPayrollWeeklyUSD: newGovernmentPayrollWeeklyUSD,
     governmentTransfersWeeklyUSD: govObligations.transfersUSD,
     governmentInterestWeeklyUSD: Math.round(govInterestWeeklyUSD),
@@ -1296,7 +1296,7 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
     s + localToUsd((c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, c.region, fxToUsd), 0);
   const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions, fxToUsd);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
-  const totalCategoryDemandUSD = REGION_IDS.reduce((s, r) => s + localToUsd(regions[r].categoryDemand[subUnitId]?.demandLevelUSD ?? 0, r, fxToUsd), 0);
+  const totalCategoryDemandUSD = REGION_IDS.reduce((s, r) => s + localToUsd(regions[r].categoryDemand[subUnitId]?.demandLevelAnnualUSD ?? 0, r, fxToUsd), 0);
   return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;
 }
 
@@ -1324,8 +1324,8 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   const perRegion = REGION_IDS.reduce((acc, r) => {
     const catDemand = linkage ? regions[r].categoryDemand[linkage.subUnitId] : undefined;
     if (!catDemand) return acc;
-    acc.demandAnnualUSD += localToUsd(catDemand.demandLevelUSD ?? 0, r, fxToUsd);
-    // Rule 9: `totalUnitsSuppliedThisWeek` is WEEKLY and `demandLevelUSD` is ANNUAL.
+    acc.demandAnnualUSD += localToUsd(catDemand.demandLevelAnnualUSD ?? 0, r, fxToUsd);
+    // Rule 9: `totalUnitsSuppliedThisWeek` is WEEKLY and `demandLevelAnnualUSD` is ANNUAL.
     acc.supplyWeeklyUSD += localToUsd((catDemand.totalUnitsSuppliedThisWeek ?? 0) * (catDemand.unitPriceUSD ?? 0), r, fxToUsd);
     return acc;
   }, { demandAnnualUSD: 0, supplyWeeklyUSD: 0 });

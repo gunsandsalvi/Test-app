@@ -1,5 +1,5 @@
 /**
- * §7.230: the fiscal check compared outlays against `governmentSpendingUSD * 1.5` — a stated 50%
+ * §7.230: the fiscal check compared outlays against `governmentSpendingWeeklyUSD * 1.5` — a stated 50%
  * tolerance against a number that is NOT the budget — so §6.1's EUR row could never have closed
  * whatever the engine did. The budget is the decomposition, and it now lives on one object.
  */
@@ -9,7 +9,7 @@ import { Government, GovernmentFields } from '../src/domain/government-entity';
 
 const fields = (over: Partial<GovernmentFields> = {}): GovernmentFields => ({
   governmentRevenueUSD: 2_000_000_000,
-  governmentSpendingUSD: 2_600_000_000,
+  governmentSpendingWeeklyUSD: 2_600_000_000,
   governmentPayrollWeeklyUSD: 400_000_000,
   governmentTransfersWeeklyUSD: undefined,
   governmentProcurementSpentUSD: 0,
@@ -34,7 +34,7 @@ test('an overrun is discretionary, never contractual', () => {
 
 test('the budget is the decomposition, not the spending line', () => {
   // The bug in one assertion: budgetUSD is what the parts sum to, and reading
-  // governmentSpendingUSD in its place is what made the old check measure nothing.
+  // governmentSpendingWeeklyUSD in its place is what made the old check measure nothing.
   const w = new Government('EUR', fields()).week();
   const parts = w.interestUSD + w.payrollUSD + w.procurementBudgetUSD + w.transfersUSD;
   assert.ok(Math.abs(w.budgetUSD - parts) < 1e-6);

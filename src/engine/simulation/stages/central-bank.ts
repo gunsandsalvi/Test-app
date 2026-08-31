@@ -50,7 +50,7 @@ export function runCentralBankStage(state: GameState, ctx: WeeklyStepContext): v
     // PUB1e: debited by what actually left — interest, transfers, and the procurement the goods
     // market really supplied — not by the spending BUDGET. Falls back to the budget only before
     // stage 11 has run once.
-    const outlaysUSD = reg.governmentOutlaysUSD ?? reg.governmentSpendingUSD;
+    const outlaysUSD = reg.governmentOutlaysUSD ?? reg.governmentSpendingWeeklyUSD;
     // SEG2g/CASH: the government legs that now settle as real payments (corporate and SME tax
     // remittances in, payroll and procurement out) have ALREADY moved the TGA this week, at
     // settlement, with their reserve legs. They are also inside `governmentRevenueUSD` and
