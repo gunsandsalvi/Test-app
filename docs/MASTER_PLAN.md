@@ -4251,3 +4251,10 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        (IND16's channel margin adds to it), and the §7.271 reference already moved it 0.4 →
        1.5–3.1B/wk. The re-measure is a 60-week read — excluded under the no-long-tests
        constraint. Measurement-gated, unchanged owner.
+
+     - 20-week combined probe of the whole session tree (§7.275–283 together): 6 violations /
+       4 families, ALL dust-scale (print 0.00B) and all pre-existing chronics at that horizon
+       — USAEQX 3x from w18 (the §7.271/§7.273 residual class), the two known credit-ETF w3
+       singles, and one w19 'equity dealer inventory' guard dust. HH_EQ_TRACE=1 (new, one
+       line in 07e) proves the direct-equity channel never fired in the window, and the
+       divestiture cannot before week 52 — neither new mechanism moved the profile.

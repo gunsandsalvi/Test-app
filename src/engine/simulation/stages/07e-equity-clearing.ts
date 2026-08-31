@@ -230,6 +230,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // takes the print; the book's damper still bounds the week's move). Only the slice for sale
     // joins the float — the rest stays as unsellable as it always was.
     const hhSaleNeedUSD = Math.max(0, reg.householdState?.pendingDirectEquitySaleUSD ?? 0);
+    if (process.env.HH_EQ_TRACE === '1' && hhSaleNeedUSD > 0) {
+      console.log(`  [hh-eq] ${regionId} forced direct-equity sale announced: ${(hhSaleNeedUSD / 1e6).toFixed(1)}M`);
+    }
     const householdParticipantId = `HOUSEHOLD-${regionId}`;
     let householdParticipant: ClearingParticipant | undefined;
     const householdPriorShares = new Map<string, number>();
