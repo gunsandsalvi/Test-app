@@ -297,10 +297,11 @@ prerequisites are not done. **Do not reorder without asking** — the sequence e
 not visible from a row: a market cannot be honest before the demand side it prices against is, and
 a clamp cannot be deleted before the mechanism under it exists.
 
-**THE RUN TO JUDGE AGAINST IS §7.253's: 278 violations / 44 families on the credit-event
-tree — the best 60-week world in the project's history** (628 → 361 → 351 → 320 → 367 → 278;
-§7.251's rise was the channel revival making invisible flows visible). Each run is the
-record of its own tree; compare nothing across them without naming the relabel between.
+**THE RUN TO JUDGE AGAINST IS THE NEXT ONE — §7.254's two bank fixes (the income measure and
+the wholesale roll) relabelled the world after §7.253's reference (278/44, the best yet;
+before it §7.251's 367/60, §7.250's 320/60, §7.247's 351/60, §7.246's 361/67, §7.244's
+628/94).** Each run is the record of its own tree; compare nothing across them without
+naming the relabel between.
 
 **IN FLIGHT: STRUCT (§5-STRUCT; §7.229–242).** Cross-cutting, not a row below: invariants by
 construction. Steps 1/3/4/5 built, step 2 done for the company kernel, step 6 built and off; the
@@ -805,7 +806,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | **LOGISTICS IS 0.4% OF GDP AGAINST A REAL 5–6%** | Every dollar reaches a named carrier, but the sector is an order of magnitude too small; domestic tonnage is the gap. **IND16's channel margin (§7.205) is the first thing that adds to it — re-measure before working this.** |
 | **THE FREIGHT MARKET IS DEAD, NOT RUNNING AWAY — §7.244 INVERTED THIS ROW** | The old finding (EUR>UK 6.28 → 292,929/tonne) is gone: on the valid baseline **every lane prints to 0.00 (−100%) and every carrier is dead — 0 alive of 12, fleet 10,270 assets, logistics 0.0% of GDP.** A rate of zero against a positive offer floor (§7.176 put the capital charge in it) means the clearing found no payable demand at any carrier's floor, or the carriers died first and the rate is the print of an empty book. **Next action: measure the week the first carrier dies and what killed it (fuel at full-fleet capacity regardless of utilisation — §7.240's live half of the dead/live pair — is the standing suspect).** Owner: XB/IND16 aftermath. |
 | **DOES THE TREASURY OPTIMISE ISSUANCE ON THE CURVE? — A DECISION, not a defect** | The model's treasury leans opportunistically in two places (the bill share and the tenor mix). **Needs a user answer; do not change it unilaterally.** |
-| **THE USA BANK COHORT — DIAGNOSED, NOT A BANK DEFECT** | The bank's arithmetic is right; its stress is the joint product of the corporate-cash boundary, the absence of hedging (now largely closed by DER) and policy driven high by the price level. **Do not tune the bank.** §7.251 re-measured it on real accretion income for the first time (the revival): **NIM in band to w15, decays to NEGATIVE from w23, bottoms −0.033 by w31** (41x), with the capital ratio following (14x) — a decay curve, not noise, and it starts long before the seam. **The identity family that rode beside it is CLOSED (§7.252)**: one missing credit event on the failed-CP-roll revolver — 9 breaking banks → zero at 16 weeks; it also relabelled the world (loan interest arrives a week earlier). Next action: decompose one bank's NIM week-by-week across w15–25 on the post-§7.252 reference — income legs vs funding legs, which side moves. Owner: G2/WS. |
+| **THE USA BANK COHORT — DIAGNOSED, NOT A BANK DEFECT** | The bank's arithmetic is right; its stress is the joint product of the corporate-cash boundary, the absence of hedging (now largely closed by DER) and policy driven high by the price level. **Do not tune the bank.** §7.251 re-measured it on real accretion income for the first time (the revival): **NIM in band to w15, decays to NEGATIVE from w23, bottoms −0.033 by w31** (41x), with the capital ratio following (14x) — a decay curve, not noise, and it starts long before the seam. **The identity family that rode beside it is CLOSED (§7.252)**: one missing credit event on the failed-CP-roll revolver — 9 breaking banks → zero at 16 weeks; it also relabelled the world (loan interest arrives a week earlier). **DECOMPOSED AND CLOSED (§7.254): the NIM family was a statistic ignoring settlement-paid interest plus a seed wholesale stock no flow ever moved** — income measure fixed, the wholesale roll built, USA NIM violations 41 → 0 at 32 weeks. Standing, named in §7.254: the sovereign book's return is all ACCRETION now and the NIM measure does not see it; EUR banks carry wholesale they cannot repay (cash below buffer) and only USA is banded. Re-measure on the §7.254 reference. Owner: G2/WS. |
 | **THE INSTRUMENT AND THE UI RE-DERIVE WHAT THE ENGINE EXPOSES** | §7.240's rot cluster. Harness: a trade-fee check that reads an aggregate the engine never writes with a `dealerId` matching no bank (dead since G3); NAV clamped before checking; a residual 1e6 pledge tolerance one screen below the unified $1; ten hardcoded region lists beside `REGIONS`; corridor bps, the mortgage severity curve and the capex list re-hardcoded instead of imported; clamps inside checked summations; a CB forced-placement guard vacuous exactly when the CB ordered nothing. UI: MyBook's P&L frozen (ignores stored `unrealizedPnL`); WorldScreen re-introducing the G transfer double-count the engine deleted; a year change labelled "1W Δ"; IRS/XCS tickets priced off formula/noise instead of the cleared `swapParRateByTenor`/`crossCurrencyBasisBps`; the Supply Chain tab dead on nonexistent keys. **Next action: harness fixes now (it is the instrument); UI fixes are AU's inventory — every one is "read the stored value".** Owner: the harness now, AU for the UI. |
 | **CONSEQUENCE ROWS — a number is not a work item (rule 18)** | The price level (G1b), the labour collapse (EMP), equity prices running away past ~week 80, and real growth prints escaping at horizon. **All four are evidence, and all four are void as scoped:** every one of them was measured before the IND, CHAIN, CAP, DIST, DEM and market-tier work, and none may be inherited. Re-measure, then decide whether a mechanism is missing. |
 
@@ -3432,3 +3433,35 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        buys at +13%/week and what the damper is doing while the 10Y sits pinned — same row);
        (3) the corpBondOwnership drift once the dead-issuer split has data; (4) MMF NAV; (5)
        the whole-sheet channel migration (money row endgame).
+
+254. **THE NIM DECAY DECOMPOSED: A STATISTIC THAT IGNORED REAL INCOME, AND A SEED LIABILITY NO
+     FLOW EVER MOVED. Both closed; USA NIM violations 41 → 0 at 32 weeks.** A `NIM_TRACE=1`
+     instrument prints each bank's income and funding legs with their stocks from inside
+     `evolveBankingSector`. The trail, on EMWF:
+     - **The income measure lied by the itemized book.** The trace printed `loans 0.0M` against
+       a 37B business book: facility and SME interest are paid as REAL payment instructions
+       (SETL4/SEG2d), correctly excluded from the evolution's cash credit — and wrongly excluded
+       from `weeklyInterestIncomeUSD`, the line the NIM statistic AND the payout's net income
+       read. So measured NIM inverted while settlement delivered the missing income into equity
+       weekly; dividends, gated on the same under-measured income, under-distributed; the cash
+       pile grew. A statistic that ignores income the ledger pays is a second derivation of the
+       income statement (rule 3). Fixed: `settlementPaidInterestWeeklyUSD` enters the income
+       measure, never the cash credit. Alone: EMWF w26 NIM −0.72% → +1.05%, violations ~15 → 8.
+     - **The wholesale stock had no flow.** `wholesaleFundingUSD` is derived by
+       `applyBankFundingSplit` — called only from the seed migrations. EMWF carried EXACTLY
+       170.62B for 32 straight weeks, priced at its own cleared OAS (which blew out to ~1,350bps
+       as the mis-measured NIM marked the bank down — a doom loop off a wrong statistic), while
+       308B of cash sat beside it. The identity never forces repayment; the ROLL does: a bank
+       holding cash beyond `stressedOutflowUSD × LCR` simply does not renew. Built as
+       `unrenewedWholesaleUSD` (bank-lending owns the write; 02b settles the cash leg to the
+       unmodeled wholesale lender under a new declared frontier, owner G2). EMWF: wholesale
+       170.6B → 39.7B by w20, NIM 3.0% → 5.9%.
+     - **Together**: 32 weeks SHOCKS=0 = **18 violations in 14 families** — zero NIM, zero
+       identity, zero capital-ratio; what remains at that horizon is fund overdrafts, JPN
+       semiconductors, one backlog line. Two relabels (the income measure feeds
+       creditConditionsIndex and payout; the roll moves reserves and M2 from w1).
+     - **Left standing, named**: sovereign income printed `coupons 0.0M` from ~w15 — the whole
+       sovereign book's return is bill ACCRETION now (§7.250), and the NIM measure does not see
+       it either; pass the prior week's accretion in when the family next surfaces. EUR banks
+       print negative NIM with wholesale they cannot repay (cash below buffer) — only USA is
+       banded today; watch when EUR gets its band.
