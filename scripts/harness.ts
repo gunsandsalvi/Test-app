@@ -1408,7 +1408,7 @@ const indModule: HarnessModule = (() => {
   // PAIR's total obligation, so the sums are what it must bound.
   const backlogByKey = (s: GameState) => {
     const out = new Map<string, { backlogUnits: number; quantityUnitsPerWeek: number }>();
-    REGIONS.forEach(r => ((s.regions[r] as any).activeContracts ?? []).forEach((c: any) => {
+    REGIONS.forEach(r => (s.regions[r]?.activeContracts ?? []).forEach((c) => {
       const k = contractKey(c);
       const agg = out.get(k) ?? { backlogUnits: 0, quantityUnitsPerWeek: 0 };
       agg.backlogUnits += Number(c.backlogUnits ?? 0) || 0;
