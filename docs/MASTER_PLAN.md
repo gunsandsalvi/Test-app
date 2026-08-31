@@ -3807,3 +3807,37 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        migration → delete the 02b reconcile + overdraft clamp); (3) the carrier live-market
        reconciliation; (4) USA u at the band edge (LAB row); (5) UK NIM marginal (VOUL
        wholesale watch).
+
+262. **THE SMALL-CAP ETF OVERDRAFT CLASS: the in-kind redemption's cash slice was promised
+     from an undebited balance — plus the index fund's cash bound was struck at the wrong
+     price.** Two defects; the chronic class is dead.
+     - **The identification**: 'JPNEQX'/'UKEQSX' resolve to JPN_EQ_SMALL_ETF/UK_EQ_SMALL_ETF —
+       the SMALL-CAP equity ETFs (the §7.31 damper-tail cohort), not the large-cap funds the
+       tickers suggest; the harness violation now names id/type/region. The institution-focus
+       journal trace (BANK_IDENTITY_TRACE_INSTITUTION) found the leg in one run: **'etf
+       in-kind redemption: cash slice' −389M/−543M/−613M accumulating in one week against
+       ~431M held**, overdrawing the fund at settlement-close w28 — exactly the reference's
+       onset week.
+     - **Defect 1 (etf-flows.ts)**: with several redeemers in one week, each redeemer's
+       `share` renormalizes against the fund's SHRINKING total, but the cash slice read
+       `fund.cashUSD` unshrunk every time — the payments settle at the close, so the field
+       never fell between redeemers. Two 40%-of-the-fund redeemers took 0.4 + 0.667 of the
+       SAME opening cash. The holdings legs shrank in place and were always right; only the
+       cash was double-promised. Fixed with a local remaining-cash balance, decremented as it
+       is promised — the same base the renormalized share divides.
+     - **Defect 2 (07e)**: the index fund's cash bound was posted in shares at the REFERENCE
+       price while the fund pays the CLEARED price — and an index fund is the one bidder that
+       never walks away from a rising print, so it could overspend by the weekly move cap
+       (18%) in every name at once. This was the residual: after defect 1's fix the funds
+       still dipped a sticky −0.02B (an overdrawn fund is never refilled, so one dip prints
+       forever). The bound now commits at refPrice × (1 + cap): the constraint holds at
+       settlement whatever clears.
+     - **Verified (32 weeks, shocks on, vs the same horizon pre-fix)**: the chronic weekly
+       overdrafts (0.13–0.19B every week from w27, on their way to 34x each at the §7.261
+       reference) are GONE; what remains is 6 scattered ~0.00–0.02B one-off singles across
+       the three small-cap funds plus the three known credit-ETF w3 singles. 10 violations in
+       7 families at 32 weeks. Ladder green throughout.
+     - **Remainder (watch, not chase)**: the ~0.02B one-off dips (likely the credit-ETF
+       in-kind slice edge or pending-settlement timing at the bound) and the fact that an
+       overdrawn fund has no refill path — a real design question (a fund short of cash
+       should sell, not freeze) parked for the ETF2 row.
