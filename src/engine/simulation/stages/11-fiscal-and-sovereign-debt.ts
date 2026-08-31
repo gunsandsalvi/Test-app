@@ -581,14 +581,12 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     const updatedBankingSector = { ...reg.bankingSector };
     const updatedInstitutionalSector = { ...reg.institutionalSector };
 
-    // Market-funded deficit routes to bond holdings (institutional + bank)
-    if (issuanceCalendarWeek) {
-      updatedBankingSector.sovereignBondHoldingsUSD += quarterlyFundingNeedUSD * 0.40;
-      updatedInstitutionalSector.sovBondHoldingsUSD += quarterlyFundingNeedUSD * 0.60;
-    } else {
-      updatedBankingSector.sovereignBondHoldingsUSD += marketFundedDeficitUSD * 0.40;
-      updatedInstitutionalSector.sovBondHoldingsUSD += marketFundedDeficitUSD * 0.60;
-    }
+    // §7.241/§7.240: the 40/60 FORCE-PLACEMENT that stood here is DELETED. It added every
+    // deficit to the two sector-aggregate views with no cash leg — directly against the PUB1d
+    // comment below it — building a parallel sovereign ledger that drifted from the per-bank
+    // tenor books (the institutional half was even overwritten by holdings-view the same week).
+    // The issuance calendar and 07c already place the paper for real.
+    void issuanceCalendarWeek; void marketFundedDeficitUSD;
 
     if (updatedBankingSector.centralBankReservesUSD < 0) throw new Error("Invariant Violation: centralBankReservesUSD cannot be negative");
     updatedBankingSector.centralBankReservesUSD = Math.round(updatedBankingSector.centralBankReservesUSD);

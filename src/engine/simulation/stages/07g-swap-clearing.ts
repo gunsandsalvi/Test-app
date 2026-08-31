@@ -16,7 +16,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import {
-  SwapContract, SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD,
+  SwapContract, SwapTenorKey, SWAP_TENORS, SWAP_TENOR_YEARS, SWAP_TENOR_ZERO_FIELD, swapPartyKey,
   swapWeeklyNetToReceiverUSD, repricingLossUSD, SwapParty,
 } from '../../../domain/swaps';
 import { WeeklyStepContext } from './context';
@@ -77,6 +77,20 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
     });
     const carried = priorBook.filter((c) => c.maturityWeek > ctx.nextWeek);
 
+    // §7.241: NET THE STANDING BOOK OUT OF THE SIZING. Without this, a bank re-hedged its ENTIRE
+    // uncovered repricing exposure every week while last week's 2-10y swaps still ran, and a
+    // receiver refilled its whole duration gap weekly — notional accumulated without bound
+    // (~52x/yr at steady state). 07h nets `alreadyHedgedUSD` and 07i nets standing positions;
+    // this book alone was missing the rule its two siblings already carry.
+    const carriedPayUSDByPartyTenor = new Map<string, number>();
+    const carriedReceiveUSDByParty = new Map<string, number>();
+    carried.forEach((c) => {
+      const pk = `${swapPartyKey(c.payer)}|${c.tenorKey}`;
+      carriedPayUSDByPartyTenor.set(pk, (carriedPayUSDByPartyTenor.get(pk) ?? 0) + c.notionalUSD);
+      const rk = swapPartyKey(c.receiver);
+      carriedReceiveUSDByParty.set(rk, (carriedReceiveUSDByParty.get(rk) ?? 0) + c.notionalUSD);
+    });
+
     const moveBps = twoSigmaYieldMoveBps(reg);
     const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     const regionCompanies = ctx.prevActiveFirms.filter(
@@ -105,7 +119,10 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
         const lossUSD = repricingLossUSD(bookUSD, SWAP_TENOR_YEARS[k], moveBps);
         if (lossUSD <= absorbableUSD) return;
         // Hedge the notional whose repricing loss is the excess — the rest it can carry.
-        const hedgeUSD = ((lossUSD - absorbableUSD) / Math.max(1e-9, lossUSD)) * bookUSD;
+        const wantedUSD = ((lossUSD - absorbableUSD) / Math.max(1e-9, lossUSD)) * bookUSD;
+        const alreadyPayingUSD = carriedPayUSDByPartyTenor.get(`BANK:${bank.ticker}|${k}`) ?? 0;
+        const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
+        if (!(hedgeUSD > 0)) return;
         payDemandByTenor.get(k)!.push({ party: { kind: 'BANK', ticker: bank.ticker }, usd: hedgeUSD });
       });
     });
@@ -123,7 +140,10 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       // What a two-sigma rise would add to the bill, against the headroom it has.
       const shockCostUSD = floatingUSD * (moveBps / 10000);
       if (shockCostUSD <= headroomUSD) return;
-      const hedgeUSD = Math.min(floatingUSD, ((shockCostUSD - headroomUSD) / Math.max(1e-9, shockCostUSD)) * floatingUSD);
+      const wantedUSD = Math.min(floatingUSD, ((shockCostUSD - headroomUSD) / Math.max(1e-9, shockCostUSD)) * floatingUSD);
+      const alreadyPayingUSD = carriedPayUSDByPartyTenor.get(`COMPANY:${comp.ticker}|s5`) ?? 0;
+      const hedgeUSD = Math.max(0, wantedUSD - alreadyPayingUSD);
+      if (!(hedgeUSD > 0)) return;
       // Floating corporate debt is short-dated relative to the curve; it hedges at the 5-year.
       payDemandByTenor.get('s5')!.push({ party: { kind: 'COMPANY', ticker: comp.ticker }, usd: hedgeUSD });
     });
@@ -159,7 +179,8 @@ export function runSwapClearingStage(state: GameState, ctx: WeeklyStepContext): 
       const bondBookUSD = (entity.itemizedHoldings || [])
         .filter((h) => h.instrumentType === 'GOV_BOND' || h.instrumentType === 'CORP_BOND')
         .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
-      const durationGapUSD = Math.max(0, entity.totalAssetsUSD - bondBookUSD);
+      const alreadyReceivingUSD = carriedReceiveUSDByParty.get(`INSTITUTION:${entity.id}`) ?? 0;
+      const durationGapUSD = Math.max(0, entity.totalAssetsUSD - bondBookUSD - alreadyReceivingUSD);
       if (durationGapUSD <= 0) return { id: entity.id, currentHoldingsByInstrumentId: new Map(), demandByInstrumentId };
       SWAP_TENORS.forEach((k) => {
         if (!(floatByTenor.get(k)! > 0)) return;

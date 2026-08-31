@@ -32,6 +32,10 @@ export interface FxForward {
   /** Home-per-foreign rate struck at inception, against which every later mark is measured. */
   contractedRate: number;
   maturityWeek: number;
+  /** §7.241 — the cumulative mark ALREADY SETTLED as variation margin. Each week pays the CHANGE
+   * in the mark, not the whole mark: without this a persistent 5% spot move paid ~5% of notional
+   * up to tenor times over the contract's life, weekly, into bank equity and holder cash. */
+  paidMarkUSD?: number;
 }
 
 /**

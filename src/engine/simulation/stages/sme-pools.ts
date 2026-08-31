@@ -108,7 +108,6 @@ export function runSmePoolStage(ctx: WeeklyStepContext): void {
       // widens quoted margins now reaches measured pool distress, which is the default rate the
       // banks price against: the transmission loop is closed where it used to be open.
       const poolDebtRateAnnual = reg.policyRate + (pool.blendedMarginBps ?? 300) / 10000;
-      const annualDebtServiceUSD = Math.max(1, pool.debtUSD * poolDebtRateAnnual);
       const cashCoverWeeks = weeklyWageBillUSD > 0 ? cashUSD / weeklyWageBillUSD : TARGET_CASH_WEEKS_OF_WAGES;
 
       // DIST — THE DEFAULT RATE IS AN INTEGRAL OVER THE POOL, NOT A FUNCTION OF ITS MEAN.

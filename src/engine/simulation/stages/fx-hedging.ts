@@ -335,14 +335,18 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     live.forEach((f) => {
       const rate = ctx.getFxToUsd(f.foreignRegion);
       const m = forwardMarkToMarketUSD(f, rate);
-      markUSD += m;
-      bankMarkByTicker.set(f.counterpartyTicker, (bankMarkByTicker.get(f.counterpartyTicker) ?? 0) - m);
+      // §7.241: pay the CHANGE in the mark since it was last settled, not the whole mark — the
+      // cumulative form paid a persistent move up to tenor× over the contract's life, weekly.
+      const dm = m - (f.paidMarkUSD ?? 0);
+      f.paidMarkUSD = m;
+      markUSD += dm;
+      bankMarkByTicker.set(f.counterpartyTicker, (bankMarkByTicker.get(f.counterpartyTicker) ?? 0) - dm);
       // CASH: variation margin is a real payment between two named parties, and it is P&L for
       // both of them — so it settles as income (`BANK`), with equity the other side on the desk.
-      if (Math.abs(m) > 0) {
-        pay(ctx, m > 0
-          ? { payer: { kind: 'BANK', ticker: f.counterpartyTicker }, payee: { kind: 'INSTITUTION', id: entity.id }, amountUSD: m, reason: 'fx forward variation margin' }
-          : { payer: { kind: 'INSTITUTION', id: entity.id }, payee: { kind: 'BANK', ticker: f.counterpartyTicker }, amountUSD: -m, reason: 'fx forward variation margin' });
+      if (Math.abs(dm) > 0) {
+        pay(ctx, dm > 0
+          ? { payer: { kind: 'BANK', ticker: f.counterpartyTicker }, payee: { kind: 'INSTITUTION', id: entity.id }, amountUSD: dm, reason: 'fx forward variation margin' }
+          : { payer: { kind: 'INSTITUTION', id: entity.id }, payee: { kind: 'BANK', ticker: f.counterpartyTicker }, amountUSD: -dm, reason: 'fx forward variation margin' });
       }
     });
 
@@ -420,12 +424,15 @@ export function runFxHedgingStage(state: any, ctx: WeeklyStepContext): void {
     let markUSD = 0;
     live.forEach((f) => {
       const m = forwardMarkToMarketUSD(f, ctx.getFxToUsd(f.foreignRegion));
-      markUSD += m;
-      bankMarkByTicker.set(f.counterpartyTicker, (bankMarkByTicker.get(f.counterpartyTicker) ?? 0) - m);
-      if (Math.abs(m) > 0) {
-        pay(ctx, m > 0
-          ? { payer: { kind: 'BANK', ticker: f.counterpartyTicker }, payee: { kind: 'COMPANY', ticker: c.ticker }, amountUSD: m, reason: 'fx forward variation margin' }
-          : { payer: { kind: 'COMPANY', ticker: c.ticker }, payee: { kind: 'BANK', ticker: f.counterpartyTicker }, amountUSD: -m, reason: 'fx forward variation margin' });
+      // §7.241: the change since last settled, as on the institutional side above.
+      const dm = m - (f.paidMarkUSD ?? 0);
+      f.paidMarkUSD = m;
+      markUSD += dm;
+      bankMarkByTicker.set(f.counterpartyTicker, (bankMarkByTicker.get(f.counterpartyTicker) ?? 0) - dm);
+      if (Math.abs(dm) > 0) {
+        pay(ctx, dm > 0
+          ? { payer: { kind: 'BANK', ticker: f.counterpartyTicker }, payee: { kind: 'COMPANY', ticker: c.ticker }, amountUSD: dm, reason: 'fx forward variation margin' }
+          : { payer: { kind: 'COMPANY', ticker: c.ticker }, payee: { kind: 'BANK', ticker: f.counterpartyTicker }, amountUSD: -dm, reason: 'fx forward variation margin' });
       }
     });
 
