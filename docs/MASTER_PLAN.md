@@ -297,10 +297,10 @@ prerequisites are not done. **Do not reorder without asking** — the sequence e
 not visible from a row: a market cannot be honest before the demand side it prices against is, and
 a clamp cannot be deleted before the mechanism under it exists.
 
-**THE RUN TO JUDGE AGAINST IS §7.251's: 367 violations / 60 families, on the revived-channel
-tree** (before it §7.250's 320/60 on the dead-channel tree, §7.247's 351/60, §7.246's 361/67,
-§7.244's 628/94). The count ROSE because the revival made invisible flows visible — §7.251
-names the families that appeared with it. Each run is the record of its own tree; compare
+**THE RUN TO JUDGE AGAINST IS THE NEXT ONE — §7.252's credit-event fix relabelled the world
+after §7.251's reference (367/60 on the revived-channel tree; before it §7.250's 320/60,
+§7.247's 351/60, §7.246's 361/67, §7.244's 628/94).** §7.251's count ROSE because the
+revival made invisible flows visible. Each run is the record of its own tree; compare
 nothing across them without naming the relabel between.
 
 **IN FLIGHT: STRUCT (§5-STRUCT; §7.229–242).** Cross-cutting, not a row below: invariants by
@@ -806,7 +806,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | **LOGISTICS IS 0.4% OF GDP AGAINST A REAL 5–6%** | Every dollar reaches a named carrier, but the sector is an order of magnitude too small; domestic tonnage is the gap. **IND16's channel margin (§7.205) is the first thing that adds to it — re-measure before working this.** |
 | **THE FREIGHT MARKET IS DEAD, NOT RUNNING AWAY — §7.244 INVERTED THIS ROW** | The old finding (EUR>UK 6.28 → 292,929/tonne) is gone: on the valid baseline **every lane prints to 0.00 (−100%) and every carrier is dead — 0 alive of 12, fleet 10,270 assets, logistics 0.0% of GDP.** A rate of zero against a positive offer floor (§7.176 put the capital charge in it) means the clearing found no payable demand at any carrier's floor, or the carriers died first and the rate is the print of an empty book. **Next action: measure the week the first carrier dies and what killed it (fuel at full-fleet capacity regardless of utilisation — §7.240's live half of the dead/live pair — is the standing suspect).** Owner: XB/IND16 aftermath. |
 | **DOES THE TREASURY OPTIMISE ISSUANCE ON THE CURVE? — A DECISION, not a defect** | The model's treasury leans opportunistically in two places (the bill share and the tenor mix). **Needs a user answer; do not change it unilaterally.** |
-| **THE USA BANK COHORT — DIAGNOSED, NOT A BANK DEFECT** | The bank's arithmetic is right; its stress is the joint product of the corporate-cash boundary, the absence of hedging (now largely closed by DER) and policy driven high by the price level. **Do not tune the bank.** §7.251 re-measured it on real accretion income for the first time (the revival): **NIM in band to w15, decays to NEGATIVE from w23, bottoms −0.033 by w31** (41x), with the capital ratio following (14x) — a decay curve, not noise, and it starts long before the seam. The same run drips M-scale identity breaks across 13 banks from w14 (~86 total). Next action: work the identity legs FIRST (a flow missing a leg poisons every margin read), then decompose one bank's NIM week-by-week across w15–25 — income legs vs funding legs, which side moves. Owner: G2/WS. |
+| **THE USA BANK COHORT — DIAGNOSED, NOT A BANK DEFECT** | The bank's arithmetic is right; its stress is the joint product of the corporate-cash boundary, the absence of hedging (now largely closed by DER) and policy driven high by the price level. **Do not tune the bank.** §7.251 re-measured it on real accretion income for the first time (the revival): **NIM in band to w15, decays to NEGATIVE from w23, bottoms −0.033 by w31** (41x), with the capital ratio following (14x) — a decay curve, not noise, and it starts long before the seam. **The identity family that rode beside it is CLOSED (§7.252)**: one missing credit event on the failed-CP-roll revolver — 9 breaking banks → zero at 16 weeks; it also relabelled the world (loan interest arrives a week earlier). Next action: decompose one bank's NIM week-by-week across w15–25 on the post-§7.252 reference — income legs vs funding legs, which side moves. Owner: G2/WS. |
 | **THE INSTRUMENT AND THE UI RE-DERIVE WHAT THE ENGINE EXPOSES** | §7.240's rot cluster. Harness: a trade-fee check that reads an aggregate the engine never writes with a `dealerId` matching no bank (dead since G3); NAV clamped before checking; a residual 1e6 pledge tolerance one screen below the unified $1; ten hardcoded region lists beside `REGIONS`; corridor bps, the mortgage severity curve and the capex list re-hardcoded instead of imported; clamps inside checked summations; a CB forced-placement guard vacuous exactly when the CB ordered nothing. UI: MyBook's P&L frozen (ignores stored `unrealizedPnL`); WorldScreen re-introducing the G transfer double-count the engine deleted; a year change labelled "1W Δ"; IRS/XCS tickets priced off formula/noise instead of the cleared `swapParRateByTenor`/`crossCurrencyBasisBps`; the Supply Chain tab dead on nonexistent keys. **Next action: harness fixes now (it is the instrument); UI fixes are AU's inventory — every one is "read the stored value".** Owner: the harness now, AU for the UI. |
 | **CONSEQUENCE ROWS — a number is not a work item (rule 18)** | The price level (G1b), the labour collapse (EMP), equity prices running away past ~week 80, and real growth prints escaping at horizon. **All four are evidence, and all four are void as scoped:** every one of them was measured before the IND, CHAIN, CAP, DIST, DEM and market-tier work, and none may be inherited. Re-measure, then decide whether a mechanism is missing. |
 
@@ -3368,3 +3368,34 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        bank's NIM across w15–25); the UK institutional exponential now has a pointer it lacked
        in the 320-run (corpBondOwnership >1: start at corporate bonds). Work them in that
        order — the exponential is compounding toward a blowup just past the horizon.
+
+252. **THE M-SCALE BANK IDENTITY FAMILY IS ONE MISSING CREDIT EVENT, AND IT IS CLOSED.** The
+     family §7.251 re-measured (~86 M-scale breaks across 13 banks from w14, present since at
+     least §7.247's tree) is a single defect in 07f: the **failed-CP-roll revolver** pushed the
+     tranche onto the borrower's ladder and paid through `BANK_CREDIT` — which writes the
+     borrower's DEPOSIT at settlement — but never recorded the credit event, so the lending
+     bank's loan asset only arrived a week later via 02b's facility reconciliation. Every draw
+     week, every drawing bank: one identity break of exactly the draw.
+     - **How it was found — measure at the departure, at stage grain.** A new read-only
+       instrument (`BANK_IDENTITY_TRACE=1`, `src/engine/simulation/bank-identity-trace.ts`)
+       evaluates the harness's own residual on the EVOLVING sheet after every stage; a focus
+       mode adds per-field deltas and the netted payment journal per bank. The trail: CLFP w14
+       residual **+6.81M against a 6.815M roll-fail draw**; w16 **+56.60M against 56.603M**;
+       settlement's loan-book delta equalled the OTHER two draw reasons' sum to three decimals
+       (13.473M = 11.705 + 1.768), excluding exactly the roll-fail draw. Two hypotheses died on
+       measurement first: the harness's `Math.abs` desk convention (signed and abs residuals
+       identical to the cent — no desk sits net short) and the `feeUSD = max(0,−X)` clamp in
+       `applyDealerDeskFills` (855 desk-weeks sampled, X never positive — the clamp is inert,
+       not a leak; it stays).
+     - **The fix**: 07f pushes `ctx.creditEventsThisWeek` mirroring stage 08's `recordCredit`,
+       so SETL2b's own rule holds — the loan and the deposit it creates land in ONE settlement
+       pass. Verified: WEEKS=16 SHOCKS=0 went from 9 breaking banks to **ZERO identity breaks**,
+       17 violations in 13 families remaining, none this one.
+     - **A relabel**: from w14 on, loan books and the interest they earn arrive a week earlier.
+       The reference run on this tree is in flight; judge against it, not §7.251's 367.
+     - **Why the breaks never accumulated** (the trap that hid this): 02b rebuilds each bank's
+       facility book from the borrowers' REAL ladders weekly, so the missing asset self-healed
+       one week late and every week's break opened from ~0 — a level-based reconciliation
+       converts a missing flow into a one-week blip, which is exactly why the harness saw a
+       drip and not a drift. The reconcile that PLUGS is also the reconcile that HIDES (§7.103's
+       family, on the loan book).
