@@ -1649,6 +1649,14 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (ladderTotalUSD > 50) {
         let toPrepayUSD = Math.min(ladderTotalUSD * 0.05, (newCash - 2.5 * comp.currentLiabilities) * 0.25);
         if (toPrepayUSD > 1000) {
+          // §4.0 Tier 1 item 12 — a FACILITY on the prepay list must reach its LENDER: the loan
+          // leaves the bank's book through the credit event and the money through a real
+          // BANK_CREDIT payment (repayment is reverse origination: the deposit and the loan die
+          // together). Register paper keeps its own path (settleCorporateActionOnHolders pays
+          // the holders); its cash line stays report-only. Before this, a prepaid facility left
+          // the ladder while the bank kept the loan and nobody received the cash.
+          const facilityRepaidByBank = new Map<string, number>();
+          let facilityRepaidUSD = 0;
           // Cheapest debt to be rid of first, and only paper that is actually worth retiring.
           updatedTranches = updatedTranches
             .slice()
@@ -1662,11 +1670,23 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
               const repaid = Math.min(t.principalUSD, toPrepayUSD / (1 + premiumPerDollar));
               toPrepayUSD -= repaid * (1 + premiumPerDollar);
               recordPremium(t, repaid * premiumPerDollar);
-              return { ...t, principalUSD: t.principalUSD - repaid };
+              const remainingUSD = t.principalUSD - repaid;
+              if (t.isBankFacility && t.facilityBankTicker && repaid > 0) {
+                recordCredit(t.id, Math.max(0, remainingUSD), t.floatingMarginBps ?? 350,
+                  Math.max(1, t.maturityWeek - nextWeek), remainingUSD <= 0.01);
+                facilityRepaidByBank.set(t.facilityBankTicker,
+                  (facilityRepaidByBank.get(t.facilityBankTicker) ?? 0) + repaid);
+                facilityRepaidUSD += repaid;
+              }
+              return { ...t, principalUSD: remainingUSD };
             })
             .filter(t => t.principalUSD > 0.01);
           const prepaidUSD = Math.min(ladderTotalUSD, ladderTotalUSD - updatedTranches.reduce((sum, t) => sum + t.principalUSD, 0));
-          post('surplus-cash debt prepayment', -prepaidUSD, undefined, false);
+          facilityRepaidByBank.forEach((repaidUSD, bankTicker) => {
+            post('facility prepaid: the loan and the deposit die together', -repaidUSD,
+              { kind: 'BANK_CREDIT', ticker: bankTicker });
+          });
+          post('surplus-cash debt prepayment', -(prepaidUSD - facilityRepaidUSD), undefined, false);
           debtRepaymentThisWeek += prepaidUSD;
         }
       }
