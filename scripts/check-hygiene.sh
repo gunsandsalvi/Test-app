@@ -58,7 +58,10 @@ SPREAD_STRAY_COUNT=$(printf '%s' "$SPREAD_STRAY" | grep -c . || true)
 #   estate-resolution  `estate.assets.cashUSD`      — an estate's asset SNAPSHOT; the money already moved
 #   holdings-view      `institutionalSector.cashUSD` — a derived sector AGGREGATE, a view not a holding
 # plus the bankEquityUSD sites newly under guard (13 writer files, §7.241 — bookPnL() is their exit).
-MONEY_WRITE_BUDGET=3
+# §7.290 ratcheted 3 -> 2: the two survivors are 10-mergers' equity absorb (a stock transfer,
+# §7.275's deliberate non-P&L) and holdings-view's derived sector AGGREGATE (a view sharing the
+# field name, §7.230). Both construction-time `.cash = 0` births are instruction-borne carves.
+MONEY_WRITE_BUDGET=2
 if [ "$STRAY_COUNT" -gt "$MONEY_WRITE_BUDGET" ]; then
   echo "ERROR: $STRAY_COUNT money-field writes outside engine/ledger (budget $MONEY_WRITE_BUDGET)."
   echo "$STRAY"

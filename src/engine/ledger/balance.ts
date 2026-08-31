@@ -25,6 +25,24 @@
 import { WeeklyStepContext } from '../simulation/stages/context';
 import { PartyRef } from './party';
 
+/**
+ * THE END-STATE NOUN, STATED AS A TYPE (§5-STRUCT Tier 2's target). Today a balance is a
+ * differently-named field on five types resolved by a kind-switch — `cash` on a Company,
+ * `cashUSD` on an entity, `cashReservesUSD` / four deposit lines on a bank sheet, `cashUSD` on a
+ * pool — which is the structural root under every money row §7.241 audited: the grep that cannot
+ * see `cash` by name, the spread rebuild, the payer an instruction cannot express. The migration's
+ * target is that those fields become VIEWS of rows shaped like this, owned by the ledger, keyed by
+ * party — at which point conservation stops being a property the watchdog measures and becomes the
+ * only thing the data structure can represent. Nothing constructs this yet ON PURPOSE: it lands
+ * with the columnar state (SCALE Wave 2), where an account is a row index, not an object.
+ */
+export interface Account {
+  readonly holder: PartyRef;
+  /** The named bank whose liability this balance is (null only for the central bank's own). */
+  readonly bankTicker: string | null;
+  balanceUSD: number;
+}
+
 /** What an unbacked credit was for, and how much of it there was — the boundary, made countable. */
 export interface UnbackedLedger {
   totalUSD: number;
