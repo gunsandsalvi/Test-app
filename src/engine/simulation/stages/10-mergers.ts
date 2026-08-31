@@ -11,7 +11,8 @@ import { absorbBankBook } from '../../ledger';
 import { pay } from './settlement';
 import { GameState, DebtTranche } from '../../../types';
 import { getSimulationDate } from '../../formatters';
-import { isAntitrustBlocked, isActiveCompany } from '../../../domain/company';
+import { isAntitrustBlocked, isActiveCompany, isPubliclyListed } from '../../../domain/company';
+import { isIssuerEquityRow } from '../../../domain/assets';
 import { checkForMerger } from '../merger';
 import { bumpRegister } from './register-index';
 import { WeeklyStepContext } from './context';
@@ -68,8 +69,129 @@ function consolidateTranches(tranches: DebtTranche[], nextWeek: number, idPrefix
   return result;
 }
 
+/**
+ * §7.283 — IND7's SECOND HALF: THE DIVESTITURE, with the register mint it was waiting on.
+ *
+ * The hold was measured (§7.138): a firm dominant in a category for a sustained year may not
+ * acquire. What follows a sustained hold in reality is a REMEDY — the authority makes the firm
+ * divest the dominant line — and that was recorded as unbuilt because a spin-off must MINT a
+ * new issuer's holder register, and `settleCorporateActionOnHolders` only scales an existing
+ * float; minting carelessly undoes OWN7 (a share with no holder, or a holder with no share).
+ *
+ * The mint that respects OWN7 is the real one: a spin-off distributes the new company's shares
+ * PRO RATA to the parent's holders of record. Every institutional holder of parent equity gets
+ * spin-co rows in proportion to its stake; the household residual gets its slice by the same
+ * subtraction that defines it (OWN4) — no claim exists without a holder, and no value is minted
+ * because the parent's own price steps down by exactly the carve-out.
+ *
+ * Conservation, leg by leg: revenue/staff/plant split by the line's revenue share (a split, not
+ * a copy); the opening cash is CARVED from the parent through settlement like a firm birth's;
+ * debt stays with the parent (the common real structure, and the one that moves no holder);
+ * equity value moves price-for-price (parent steps down by the carve-out, spin-co opens at it,
+ * and 07e reprices both from their own fundamentals next session).
+ */
+function runDivestitures(ctx: WeeklyStepContext): void {
+  const blocked = ctx.updatedCompanies.filter((c) =>
+    isActiveCompany(c) && !c.isBankEntity && !c.isInstitutionalEntity
+    && isPubliclyListed(c) && isAntitrustBlocked(c)
+    && (c.productLines?.length ?? 0) >= 2 && c.sharesOutstanding > 0 && c.stockPrice > 0);
+  blocked.forEach((parent) => {
+    const line = [...(parent.productLines ?? [])]
+      .sort((a, b) => (b.categoryMarketShare ?? 0) - (a.categoryMarketShare ?? 0))[0];
+    if (!line) return;
+    const share = Math.max(0.05, Math.min(0.9, line.revenueShare ?? 0));
+
+    const tickers = new Set(ctx.updatedCompanies.map((c) => c.ticker));
+    let ticker = `${parent.ticker}SP`;
+    for (let n = 2; tickers.has(ticker); n++) ticker = `${parent.ticker}SP${n}`;
+    const spinMcapUSD = Math.max(1, parent.marketCap * share);
+    // One spin-co share per parent share — the classic ratio, so a holder's fraction of the
+    // parent IS its fraction of the spin-co and the mint below is one multiplication.
+    const spinShares = parent.sharesOutstanding;
+    const spinPrice = spinMcapUSD / Math.max(1e-9, spinShares);
+    const employees = Math.max(1, Math.round(parent.employeeCount * share));
+
+    // structuredClone: a shallow spread would SHARE every nested array/object with the parent,
+    // and the first later mutation of either book would corrupt the other.
+    const spin: typeof parent = structuredClone(parent);
+    spin.id = `${parent.id}-SPIN-${ctx.nextWeek}`;
+    spin.ticker = ticker;
+    spin.name = `${parent.name} (${line.subUnitId} spin-off)`;
+    spin.productLines = [{ ...line, revenueShare: 1 }];
+    spin.annualRevenue = Number((parent.annualRevenue * share).toFixed(1));
+    spin.netIncome = Number((parent.netIncome * share).toFixed(1));
+    spin.ebitda = Number((parent.ebitda * share).toFixed(1));
+    spin.employeeCount = employees;
+    spin.sharesOutstanding = spinShares;
+    spin.stockPrice = Number(spinPrice.toFixed(4));
+    spin.marketCap = spinMcapUSD;
+    spin.cash = 0;
+    spin.totalDebt = 0;
+    spin.debtTranches = [];
+    spin.grossPPEUSD = (parent.grossPPEUSD ?? 0) * share;
+    spin.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * share;
+    if (spin.baselineNetPpeUSD !== undefined) spin.baselineNetPpeUSD = spin.baselineNetPpeUSD * share;
+    spin.antitrustWeeksAboveThreshold = 0;
+    spin.revenueHistory = [spin.annualRevenue];
+
+    // THE MINT: each holder of parent equity receives its pro-rata spin-co register rows,
+    // BEFORE the parent's price steps down (the stake fraction reads the pre-split register).
+    ctx.updatedInstitutionalEntities.forEach((e) => {
+      if (e.isDefaulted) return;
+      const heldShares = (e.itemizedHoldings || [])
+        .filter((h) => h.instrumentId === parent.id && isIssuerEquityRow(h))
+        .reduce((a, h) => a + (h.quantityShares
+          ?? (h.quantityOrNotionalUSD ?? 0) / Math.max(0.01, parent.stockPrice)), 0);
+      if (!(heldShares > 0)) return;
+      const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
+      e.itemizedHoldings = [...e.itemizedHoldings, {
+        instrumentId: spin.id,
+        instrumentType: 'EQUITY',
+        issuerRegion: spin.region,
+        quantityShares: fraction * spinShares,
+        quantityOrNotionalUSD: fraction * spinMcapUSD,
+      }];
+    });
+    bumpRegister(ctx);
+
+    // The parent keeps its shares; its price carries the value that left. The remaining lines
+    // re-normalise so revenue shares still sum to one.
+    parent.productLines = (parent.productLines ?? [])
+      .filter((l) => l !== line)
+      .map((l) => ({ ...l, revenueShare: Number((l.revenueShare / Math.max(1e-9, 1 - share)).toFixed(6)) }));
+    parent.annualRevenue = Number((parent.annualRevenue * (1 - share)).toFixed(1));
+    parent.netIncome = Number((parent.netIncome * (1 - share)).toFixed(1));
+    parent.ebitda = Number((parent.ebitda * (1 - share)).toFixed(1));
+    parent.employeeCount = Math.max(1, parent.employeeCount - employees);
+    parent.grossPPEUSD = (parent.grossPPEUSD ?? 0) * (1 - share);
+    parent.accumulatedDepreciationUSD = (parent.accumulatedDepreciationUSD ?? 0) * (1 - share);
+    if (parent.baselineNetPpeUSD !== undefined) parent.baselineNetPpeUSD = parent.baselineNetPpeUSD * (1 - share);
+    parent.stockPrice = Number((parent.stockPrice * (1 - share)).toFixed(4));
+    parent.marketCap = parent.stockPrice * parent.sharesOutstanding;
+    parent.antitrustWeeksAboveThreshold = 0;
+
+    // Opening cash is CARVED from the parent through settlement, like a firm birth's — the
+    // economy's total cash never moves.
+    const openingCashUSD = Math.max(0, parent.cash) * share;
+    if (openingCashUSD > 0) {
+      pay(ctx, {
+        payer: { kind: 'COMPANY', ticker: parent.ticker },
+        payee: { kind: 'COMPANY', ticker: spin.ticker },
+        amountUSD: openingCashUSD,
+        reason: 'divestiture: opening balance carved from parent',
+      });
+    }
+
+    ctx.updatedCompanies.push(spin);
+  });
+}
+
 export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void {
   if (ctx.nextWeek % 13 !== 0) return;
+
+  // §7.283: the authority's remedy runs on the same quarterly clock as its docket, whether or
+  // not a merger also fires this quarter.
+  runDivestitures(ctx);
 
   const merger = checkForMerger(ctx.updatedCompanies, ctx.nextWeek);
   if (!merger) return;
@@ -114,7 +236,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
     const heldUSD = (e.itemizedHoldings || [])
-      .filter((h) => h.instrumentId === target.id && h.instrumentType === 'EQUITY')
+      .filter((h) => h.instrumentId === target.id && isIssuerEquityRow(h))
       .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
     if (!(heldUSD > 0)) return;
     const tenderUSD = cashPaid * Math.min(1, heldUSD / targetMarketCapUSD);
@@ -294,7 +416,7 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
     let touched = false;
     const rows = e.itemizedHoldings.map((h) => {
       if (!mergedIds.has(h.instrumentId)) return h;
-      if (h.instrumentType === 'EQUITY') {
+      if (isIssuerEquityRow(h)) {
         touched = true;
         const newValueUSD = (h.quantityOrNotionalUSD ?? 0) * stockRatio;
         return {

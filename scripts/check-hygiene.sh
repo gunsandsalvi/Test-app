@@ -87,9 +87,9 @@ REGISTRY_OWNED='^src/domain/assets/|^src/engine/ledger/parties\.ts:'
 ASSET_SWITCH=$(grep -rnE "(===|!==|case )[[:space:]]*(${ASSET_MEMBERS})" src --include=*.ts 2>/dev/null \
   | grep -vE "$REGISTRY_OWNED" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
 ASSET_SWITCH_COUNT=$(printf '%s' "$ASSET_SWITCH" | grep -c . || true)
-# THE RATCHET: may fall, never rise. §7.279 lowered 64 → 60: the two divergent mandate-percent
-# if-chains became one `mandatePctOf` Record lookup (domain/institutions.ts).
-ASSET_SWITCH_BUDGET=60
+# THE RATCHET: may fall, never rise. §7.279 lowered 64 → 60 (mandatePctOf Record lookup);
+# §7.283 lowered 60 → 58 (isIssuerEquityRow registry predicate at the corporate-action sites).
+ASSET_SWITCH_BUDGET=58
 if [ "$ASSET_SWITCH_COUNT" -gt "$ASSET_SWITCH_BUDGET" ]; then
   echo "ERROR: $ASSET_SWITCH_COUNT literal comparisons against an instrument type (budget $ASSET_SWITCH_BUDGET)."
   echo "$ASSET_SWITCH" | head -20

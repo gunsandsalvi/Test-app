@@ -59,7 +59,7 @@ const RULES: ReadonlyArray<readonly [RegExp, PaymentCategory]> = [
   [/revolver|overdraft|loan origination|trade credit|prime brokerage|repo (drawdown|maturity|collateral)|maintenance funding draw|facility draw/, 'CREDIT_CREATION'],
 
   // -- Corporate actions and equity distributions --
-  [/dividend|buyback|merger|estate|firm birth|sponsor-to-sponsor|dividend recap|capital call|fund distribution/, 'CORPORATE_ACTION'],
+  [/dividend|buyback|merger|estate|firm birth|divestiture|sponsor-to-sponsor|dividend recap|capital call|fund distribution/, 'CORPORATE_ACTION'],
 
   // -- Securities: clearing legs, primary, funds, collateral, derivatives --
   [/clearing|primary|proceeds|placement|security payment|holder of record|etf |shares created|money fund|dealer inventory|stock loan|collateral|variation margin|initial margin|futures|CDS|cash slice|tender|ISSUE_CHEAP_DEBT|DELEVER_EXPENSIVE_DEBT|accretive call/, 'SECURITIES'],

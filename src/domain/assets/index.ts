@@ -122,3 +122,9 @@ const HOLDING_IS_VEHICLE_CLAIM: Record<HoldingType, boolean> = {
 };
 export const isVehicleClaim = (type: string): boolean =>
   HOLDING_IS_VEHICLE_CLAIM[type as HoldingType] ?? false;
+
+/** The register's issuer-equity rows — the identity question three corporate-action sites ask
+ *  (a holder's stake in one named issuer). Lives here so the fact is the registry's, not a
+ *  literal comparison repeated per site (§7.283). */
+export const isIssuerEquityRow = (h: { instrumentType?: string }): boolean =>
+  h.instrumentType === 'EQUITY';

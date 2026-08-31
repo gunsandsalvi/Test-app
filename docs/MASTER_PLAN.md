@@ -4201,3 +4201,34 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        first") is unmet; building the stress instrument before the funding market it operates
        on would be scaffolding with no load. Stays on §6.1 with its owner.
      - Verified: tsc clean, 71/71, WEEKS=10 probe identical (2 baseline violations).
+
+283. **IND7's SECOND HALF — THE DIVESTITURE, with the register mint it was waiting on
+     (Tier-4 mechanism #4); COH's last slice and IND-R4's two ratios recorded at their gates.**
+     - The mint that respects OWN7 is the real one: a spin-off distributes the new issuer's
+       shares PRO RATA to the parent's holders of record — every institutional holder of parent
+       equity receives spin-co register rows in proportion to its stake (one spin-co share per
+       parent share, so the fraction is one multiplication), and the household residual gets
+       its slice by the same subtraction that defines it (OWN4). No claim without a holder; no
+       value minted, because the parent's price steps down by exactly the carve-out.
+     - The remedy runs on stage 10's own quarterly clock: a firm blocked for the sustained
+       year (§7.138's measured hold) with ≥2 product lines divests its DOMINANT line into a
+       structuredClone'd spin-co — revenue/staff/plant split by the line's revenue share, debt
+       stays with the parent, opening cash CARVED through settlement
+       ('divestiture: opening balance carved from parent', CORPORATE_ACTION), remaining lines
+       re-normalised, both antitrust counters reset; 07e reprices both from fundamentals next
+       session. `isIssuerEquityRow` joins the registry (the identity question three
+       corporate-action sites asked as literals) — ASSET_SWITCH ratchet 60 → 58.
+     - COH's last slice NOT taken, with the reason: retiring `equity: 0.42` re-anchors the
+       SEED (pensions already derive from demography; the asset manager's anchor — household
+       fund holdings — is ZERO at week 0 by construction), i.e. a full re-base of every
+       number in §7, which the plan gates with SEED_BURN_IN (§7.232: "a decision to take
+       deliberately"). It also interlocks with the manager/vehicle split. Stays on §6.1.
+     - IND-R4 verified: the ProfilePnl inversion is DONE and the insurer expense ratio is
+       dead. The two REMAINING stated shapes are the insurer's claims loss ratio (0.70 ± 0.10
+       — needs a real loss-event mechanism; weather is the natural trigger) and
+       `CARD_OPERATING_COST_BPS` (needs the bank's own measured servicing cost). Neither has
+       a derivation today that would not just invent different coefficients (§7.172's caveat,
+       quantified there). Recorded, not closed.
+     - Verified: tsc clean, 71/71, hygiene pass at the lowered ratchet, lint 386, WEEKS=15
+       probe identical (no firm reaches the 52-week sustained hold inside a probe window —
+       the mechanism arms without relabeling the reference).
