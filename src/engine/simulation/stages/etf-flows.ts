@@ -507,11 +507,20 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     const entityById = new Map(ctx.updatedInstitutionalEntities.map((e) => [e.id, e]));
     const deliveredRowsByInvestor = new Map<string, ItemizedHolding[]>();
     const fundAssetsUSD = new Map<string, number>();
+    // §7.262 — the cash the slice loop has NOT yet promised. The payments below settle at the
+    // close, so `fund.cashUSD` never falls between redeemers — while `share` renormalizes
+    // against the SHRUNKEN total. Two 40%-of-the-fund redeemers therefore took 0.4 + 0.667 of
+    // the SAME opening cash (the holdings legs shrink in place and were right; only the cash
+    // slice double-promised), and the fund settled overdrawn by the excess — the steady
+    // 0.13–0.19B weekly overdraft on exactly the funds whose redemptions are chronic (the
+    // small-cap ETFs, 34x at reference). One local balance, decremented as it is promised.
+    const remainingCashByFund = new Map<string, number>();
     inKindOwedByFund.forEach((_owed, fundId) => {
       const fund = entityById.get(fundId);
       if (!fund) return;
       const holdingsUSD = (fund.itemizedHoldings || []).reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
       fundAssetsUSD.set(fundId, holdingsUSD + Math.max(0, fund.cashUSD ?? 0));
+      remainingCashByFund.set(fundId, Math.max(0, fund.cashUSD ?? 0));
     });
     inKindRedemptionsByInvestor.forEach((byFund, investorId) => {
       byFund.forEach((owedUSD, fundId) => {
@@ -533,8 +542,12 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
         });
         deliveredRowsByInvestor.set(investorId, rows);
         // The cash slice of the basket travels with it: a pro-rata claim is on everything the
-        // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure cash.
-        const cashSliceUSD = Math.max(0, fund.cashUSD ?? 0) * share;
+        // fund owns, and leaving the cash behind would hand the last redeemer a fund of pure
+        // cash. Sliced from the REMAINING balance (§7.262) — the same base the renormalized
+        // `share` divides — never from the live field the settlement has not yet debited.
+        const remainingCashUSD = remainingCashByFund.get(fundId) ?? 0;
+        const cashSliceUSD = remainingCashUSD * share;
+        remainingCashByFund.set(fundId, remainingCashUSD - cashSliceUSD);
         if (cashSliceUSD > 0) {
           pay(ctx, {
             payer: { kind: 'INSTITUTION', id: fundId },
