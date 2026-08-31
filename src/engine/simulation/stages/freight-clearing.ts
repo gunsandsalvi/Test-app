@@ -194,6 +194,10 @@ export function runFreightClearing(args: {
   const { offersByLane, marginalByLane, capacityByLane } = buildCarrierOffers(carriers, regions, unitMassTonnes, fxToUsd);
   result.marginalRatePerTonneLaneMoneyByLane = marginalByLane;
   result.laneCapacityTonnes = capacityByLane;
+  // FREIGHT_TRACE=1 — the same print for the SEED's clearing and every live week, because the
+  // §7.260 question is exactly their disagreement: the seed pays the fleet ~6x what the live
+  // week does on the same flows.
+  const FREIGHT_TRACE = process.env.FREIGHT_TRACE === '1';
 
   // Bookings grouped by lane, and within a lane by good — a lane's demand curve is the several
   // cargoes on it, each with its own reservation, which is what gives it a slope.
@@ -241,6 +245,13 @@ export function runFreightClearing(args: {
       const shares = new Map<string, number>();
       cleared.sales.forEach((fill, ticker) => shares.set(ticker, fill.quantity / cleared.clearedQuantity));
       result.carrierShareByLane.set(key, shares);
+    }
+    if (FREIGHT_TRACE) {
+      let laneRevenueUSD = 0;
+      cleared.sales.forEach((fill) => { laneRevenueUSD += fill.amount; });
+      console.log(`  [frt] ${key} booked ${(booked / 1e3).toFixed(0)}kt cap ${((capacityByLane[key] ?? 0) / 1e3).toFixed(0)}kt`
+        + ` rate ${cleared.clearedPrice.toFixed(2)} anchor ${anchor.toFixed(2)} fill ${(result.laneFillRatio[key] ?? 0).toFixed(2)}`
+        + ` rev ${(laneRevenueUSD / 1e6).toFixed(1)}M bids ${bids.length} maxBid ${Math.max(...bids.map((b) => b.maxPrice)).toFixed(2)}`);
     }
     cleared.sales.forEach((fill, ticker) => {
       result.carrierTonnesCarried.set(ticker, (result.carrierTonnesCarried.get(ticker) ?? 0) + fill.quantity);

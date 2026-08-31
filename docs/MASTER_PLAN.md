@@ -3942,3 +3942,27 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      OD_TRACE=1 confirmed the §7.265 conversion converges (no chronic re-overdrawers — no
      ticker converts more than 2 of 6 mature weeks; JPN's one 2.3B draw is EKWC's real
      maturity week, now funded instead of standing negative).
+
+267. **THE LIQUIDITY LADDER GETS ITS FIRST RUNG — a treasurer redeems its own money-fund
+     shares before borrowing a cent — AND THE CARRIER DEATHS WERE THIS: 12 of 12 alive at 20
+     weeks, the first full cohort in the model's history.**
+     - FREIGHT_TRACE=1 killed §7.260's premise in one run: the live freight market pays the
+       SAME ~105M/week world total as the seed's auction, lane for lane — the "6x gap" was
+       never the market. CARRIER_LEDGER=CCSV then named the killer in one line: **'treasury
+       sweep into money fund shares −118.8M' at w1** — the carrier swept its above-buffer
+       cash into MMF shares, week-one settlement drove the emptied account negative, and at
+       w2 the default trigger (which reads cash, never shares) declared it insolvent WHILE IT
+       HELD ITS OWN LIQUID MONEY. The sweep/redeem decision ran at the BOTTOM of the walk,
+       gated on `!isDefaulted`: the sweep dug the grave and the gate held the shovel. Six of
+       twelve carriers died exactly this way every run; the survivors' revenue was fine all
+       along (§7.260's ~6x was the frozen `annualRevenue` statistic of already-dead firms).
+     - **The fix (stage 08, for EVERY company)**: a redemption pass ahead of the revolver —
+       newCash < 0 with mmfSharesUSD > 0 redeems the shortfall through the same sweep book
+       ('money fund share redemption: liquidity shortfall'), THEN the committed line, and
+       default only when both are gone. The bottom-of-walk sweep still runs and cannot
+       double-redeem (cash is at/below buffer by then).
+     - **Verified (20 weeks, shocks off)**: carriers **12/12 alive** (0/12 at every prior
+       reference); logistics revenue 0.4B → **3.1B/week** (0.02% → 0.16% of world GDP; the
+       remaining gap to the real 5–6% is Tier 4's logistics-scale build, not a death). 3
+       violations in 3 families; ladder green. Bypass reads 4.5B (EUR 2.9B) — the relabel
+       moved the §7.265 in-flight wedges; watch at the next reference.

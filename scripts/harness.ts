@@ -1975,6 +1975,14 @@ const spiralModule: HarnessModule = {
         return `${c.ticker}${flag} cash${((c.cash ?? 0) / 1e6).toFixed(0)}M rev${((c.annualRevenue ?? 0) / 1e6).toFixed(0)}M ni${((c.netIncome ?? 0) / 1e6).toFixed(1)}M`;
       }).join(' | ');
       console.log(`  [car] w${w} alive ${alive.length}/${carriers.length} :: ${line}`);
+      const ledgerTicker = process.env.CARRIER_LEDGER;
+      if (ledgerTicker) {
+        const c = carriers.find((x) => x.ticker === ledgerTicker);
+        const rows = ((c as unknown as { lastCashLedger?: { label: string; amountUSD: number }[] })?.lastCashLedger ?? [])
+          .filter((r) => Math.abs(r.amountUSD) > 1e6)
+          .map((r) => `${r.label} ${(r.amountUSD / 1e6).toFixed(1)}M`);
+        console.log(`  [car-ledger] w${w} ${ledgerTicker} :: ${rows.join(' | ')}`);
+      }
     }
     // BANKCAP=1 — per-bank capital decomposition: whose equity drains, whose RWA grows, and
     // where each cohort's ratio sits against the [0.05, 0.35] band, weekly.

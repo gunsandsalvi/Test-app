@@ -1218,6 +1218,31 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // (`committedLineHeadroomUSD`), so it closes exactly when a lender really would stop lending —
     // and a firm whose earnings cannot carry another dollar of interest gets nothing, which is the
     // case the default trigger is FOR.
+    // §7.267 — A TREASURER REDEEMS ITS OWN MONEY-FUND SHARES BEFORE BORROWING A CENT, and long
+    // before anything defaults. The sweep/redeem decision ran at the BOTTOM of the walk, gated
+    // on `!isDefaulted` — so a firm that swept its surplus one week and hit a bad settlement
+    // the next was declared insolvent while holding its own liquid money: the default trigger
+    // read cash and never the shares (measured: half the carrier cohort dead at week 2 with
+    // 118.8M of swept shares each — the sweep dug the grave and the gate held the shovel).
+    // The redemption is the FIRST rung of the liquidity ladder: shares, then the committed
+    // line, and default only when both are gone. The full sweep decision at the bottom still
+    // runs — by then cash is at or below the buffer, so it cannot double-redeem.
+    if (!comp.mergerAcquired && newCash < 0 && (comp.mmfSharesUSD ?? 0) > 0) {
+      const book = mmfSweepBooks.get(comp.region);
+      if (book) {
+        const wantedUSD = Math.min(comp.mmfSharesUSD ?? 0, -newCash);
+        const paidUSD = Math.min(wantedUSD, book.redeemableUSD);
+        if (paidUSD > 1) {
+          book.netInflowUSD -= paidUSD;
+          book.redeemableUSD -= paidUSD;
+          comp.mmfSharesUSD = (comp.mmfSharesUSD ?? 0) - paidUSD;
+          const shortfallFund = findRegionMmf(ctx.updatedInstitutionalEntities, comp.region);
+          post('money fund share redemption: liquidity shortfall', paidUSD,
+            shortfallFund ? { kind: 'INSTITUTION', id: shortfallFund.id } : undefined);
+        }
+      }
+    }
+
     const drawnRevolverTranches: DebtTranche[] = [];
     if (!comp.isDefaulted && !comp.mergerAcquired && newCash < 0) {
       const revolverRateAnnual = reg.policyRate + REVOLVER_MARGIN_BPS / 10000;
