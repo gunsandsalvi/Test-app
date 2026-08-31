@@ -943,7 +943,7 @@ function buildRegionDemandPlans(
   week: number
 ): DemandPlan[] {
   const plans: DemandPlan[] = [];
-  const demandState = reg.categoryDemand[subUnitId] as any;
+  const demandState = reg.categoryDemand[subUnitId];
   const suppliers = index.suppliersBySubUnit.get(subUnitId) ?? [];
   const supplierSet = suppliers.length > 0 ? new Set(suppliers) : null;
 
@@ -1170,8 +1170,8 @@ function runSubUnitMarkets(
   // --- 1. Each book's anchor price, read before anything this week moves it.
   const anchorPrice = {} as Record<RegionId, number>;
   MARKET_REGION_IDS.forEach(regionId => {
-    const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId] as any;
-    const published = demandState?.unitPriceUSD;
+    const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId];
+    const published = demandState?.unitPriceUSD ?? 0;
     anchorPrice[regionId] = published > 0 ? published : 1;
   });
 
@@ -1192,10 +1192,11 @@ function runSubUnitMarkets(
   const supplyPlans: SupplyPlan[] = [];
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
-    const demandState = reg.categoryDemand[subUnitId] as any;
+    const demandState = reg.categoryDemand[subUnitId];
     if (!demandState) return;
-    if (!(demandState.smoothedUnitPriceUSD > 0)) demandState.smoothedUnitPriceUSD = anchorPrice[regionId];
-    demandState.smoothedUnitPriceUSD = demandState.smoothedUnitPriceUSD * 0.75 + anchorPrice[regionId] * 0.25;
+    const prevSmoothed = demandState.smoothedUnitPriceUSD ?? 0;
+    const smoothedBasis = prevSmoothed > 0 ? prevSmoothed : anchorPrice[regionId];
+    demandState.smoothedUnitPriceUSD = smoothedBasis * 0.75 + anchorPrice[regionId] * 0.25;
 
     supplyPlans.push(...buildRegionSupplyPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId], demandState.smoothedUnitPriceUSD,
@@ -1232,7 +1233,7 @@ function runSubUnitMarkets(
   const demandPlans: DemandPlan[] = [];
   MARKET_REGION_IDS.forEach(regionId => {
     const reg = ctx.updatedRegions[regionId];
-    const demandState = reg.categoryDemand[subUnitId] as any;
+    const demandState = reg.categoryDemand[subUnitId];
     if (!demandState) return;
     demandPlans.push(...buildRegionDemandPlans(
       subUnitId, reg, regionId, indexes[regionId], anchorPrice[regionId],
@@ -1733,7 +1734,7 @@ function runSubUnitMarkets(
     demandUnitsByRegion.set(p.regionId, (demandUnitsByRegion.get(p.regionId) ?? 0) + p.demandUnits);
   });
   MARKET_REGION_IDS.forEach(regionId => {
-    const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId] as any;
+    const demandState = ctx.updatedRegions[regionId].categoryDemand[subUnitId];
     if (!demandState) return;
     demandState.exWorksUnitPriceUSD = Number(results[regionId].clearedPriceUSD.toFixed(2));
     demandState.unitPriceUSD = Number(publishedPrice[regionId].toFixed(2));
@@ -1750,8 +1751,11 @@ function runSubUnitMarkets(
     const contractUnits = contracts.reduce((s, c) => s + c.quantityUnitsPerWeek, 0);
     demandState.totalUnitsSuppliedThisWeek = results[regionId].clearedUnits + contractUnits;
     demandState.totalUnitsDemandedThisWeek = (demandUnitsByRegion.get(regionId) ?? 0) + contractUnits;
-    if (!(demandState.baseUnitPriceUSD > 0)) demandState.baseUnitPriceUSD = demandState.unitPriceUSD;
-    demandState.clearedInputPriceIndex = Number((demandState.unitPriceUSD / demandState.baseUnitPriceUSD).toFixed(4));
+    const landedPrice = demandState.unitPriceUSD ?? 0;
+    const priorBase = demandState.baseUnitPriceUSD ?? 0;
+    const basePrice = priorBase > 0 ? priorBase : landedPrice;
+    demandState.baseUnitPriceUSD = basePrice;
+    demandState.clearedInputPriceIndex = Number((landedPrice / basePrice).toFixed(4));
   });
 
     return survivingContracts;
@@ -1906,7 +1910,7 @@ export function runUnitBiddingStage(state: GameState, ctx: WeeklyStepContext): v
     fxPairIlliquidity: state.fxPairIlliquidity ?? {},
     quotedPairs: state.fxPairs.map(p => ({ base: p.base, quote: p.quote })),
     sellerIsShort: (subUnitId: string, origin: RegionId) => {
-      const d = ctx.updatedRegions[origin]?.categoryDemand[subUnitId] as any;
+      const d = ctx.updatedRegions[origin]?.categoryDemand[subUnitId];
       return (Number(d?.totalUnitsDemandedThisWeek) || 0) > (Number(d?.totalUnitsSuppliedThisWeek) || 0);
     },
     buyerAnnualPdByTicker: new Map(),

@@ -520,7 +520,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // margin haircut.
       const wageCompression = 0;
       const avgCrowdingIntensity = (comp.productLines || []).reduce((s, l) => {
-        const catDemand = reg.categoryDemand[l.subUnitId as any];
+        const catDemand = reg.categoryDemand[l.subUnitId];
         return s + (catDemand?.crowdingIntensity ?? 0) * l.revenueShare;
       }, 0);
 
@@ -533,7 +533,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // toward zero from an abundant supply, not a shortage.
       const linesNeedingInputs = (comp.productLines || []).filter(l => CATEGORY_INPUT_REQUIREMENTS[l.subUnitId]);
       const relevantFulfillment = linesNeedingInputs.length > 0
-        ? linesNeedingInputs.reduce((min, l) => Math.min(min, (reg.categoryDemand[l.subUnitId as any] as any)?._fulfillmentRatio ?? 1), 1)
+        ? linesNeedingInputs.reduce((min, l) => Math.min(min, reg.categoryDemand[l.subUnitId]?._fulfillmentRatio ?? 1), 1)
         : 1;
 
       // 1$ is 1$ Phase 2: a real physical check on top of the regional market signal above —
@@ -573,7 +573,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
           const hasRealSupply = (suppliedSubUnitsByRegion.get(comp.region)?.has(inputSubUnit) ?? false)
             || industryOfSubUnit(inputSubUnit) !== undefined;
           if (!hasRealSupply) return;
-          const inputUnitPrice = (reg.categoryDemand[inputSubUnit as any] as any)?.unitPriceUSD ?? 1;
+          const inputUnitPrice = reg.categoryDemand[inputSubUnit]?.unitPriceUSD ?? 1;
           const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
           // 1$ is 1$ Phase 6: consume the OLDEST real lot first (FIFO) — a company holding units
           // bought from three different real sellers at three different prices draws down the
@@ -613,7 +613,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // line's own subUnitId entry by 04-input-output.ts's demanderEntry loop, never onto the
       // input category's own entry.
       const inputPriceDrag = linesNeedingInputs.length > 0
-        ? linesNeedingInputs.reduce((s, l) => s + ((reg.categoryDemand[l.subUnitId as any] as any)?.inputCostPressure ?? 0), 0) / linesNeedingInputs.length
+        ? linesNeedingInputs.reduce((s, l) => s + (reg.categoryDemand[l.subUnitId]?.inputCostPressure ?? 0), 0) / linesNeedingInputs.length
         : 0;
 
       baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
@@ -2126,10 +2126,10 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       // IND14 — the delivery record, smoothed slowly onto the firm. A week in which this
       // supplier owed nothing tells us nothing, so it leaves the record where it was.
     comp.deliveryReliability = Number((() => {
-        const owed = (update as any)?._contractOwedUnits ?? 0;
+        const owed = update?._contractOwedUnits ?? 0;
         const prior = comp.deliveryReliability ?? 1;
         if (!(owed > 0)) return prior;
-        const shipped = (update as any)?._contractDeliveredUnits ?? 0;
+        const shipped = update?._contractDeliveredUnits ?? 0;
         return prior * 0.9 + Math.max(0, Math.min(1, shipped / owed)) * 0.1;
       })().toFixed(4));
 

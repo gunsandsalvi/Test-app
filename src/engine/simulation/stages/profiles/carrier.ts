@@ -20,7 +20,7 @@ export const carrierProfile: (input: ProfileInput) => ProfilePnl = (input) => {
   newRevenue = Math.max(10, weeklyFreightUSD * 52);
   comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
 
-  const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, (state as any).unitMassTonnes ?? {});
+  const fuelUsdPerTonne = fuelPriceUsdPerTonne(reg, state.unitMassTonnes ?? {});
   let weeklyFuelTonnes = 0;
   (comp.carrierFleet?.assets ?? []).forEach((asset: any) => {
     const distanceNm = laneDistanceNm(asset.laneFrom, asset.laneTo);

@@ -138,7 +138,7 @@ export function computeSourcingIntent(args: {
     const supplyRemaining: Record<string, number> = {};
 
     SOURCING_REGION_IDS.forEach(buyer => {
-      const buyerState = regions[buyer].categoryDemand[subUnitId] as any;
+      const buyerState = regions[buyer].categoryDemand[subUnitId];
       if (!buyerState) return;
       const needUnits = Number(buyerState.totalUnitsDemandedThisWeek);
       if (!(needUnits > 0)) return;
@@ -146,7 +146,7 @@ export function computeSourcingIntent(args: {
 
       SOURCING_REGION_IDS.forEach(origin => {
         if (!originIsPossible(subUnitId, origin, buyer)) return;
-        const originState = regions[origin].categoryDemand[subUnitId] as any;
+        const originState = regions[origin].categoryDemand[subUnitId];
         if (!originState) return;
         const exWorks = Number(originState.unitPriceUSD);
         if (!(exWorks > 0)) return;
@@ -201,7 +201,7 @@ export function computeSourcingIntent(args: {
         break;
       }
       if (!isFinite(alternativeLanded)) {
-        const ownPrice = Number((regions[pair.buyer].categoryDemand[subUnitId] as any)?.unitPriceUSD);
+        const ownPrice = Number(regions[pair.buyer].categoryDemand[subUnitId]?.unitPriceUSD);
         alternativeLanded = ownPrice > 0 ? ownPrice : pair.landed;
       }
 

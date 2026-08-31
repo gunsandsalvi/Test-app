@@ -117,7 +117,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
 
     const rawGdpUSD = consumptionComponentUSD + investmentComponentUSD + governmentComponentUSD + netExportsComponentUSD;
     const instantaneousNominalGdpUSD = Math.max(1e11, isFinite(rawGdpUSD) ? rawGdpUSD : 1e12);
-    const gdpLevelLastWeek = (reg as any).lastWeekNominalGdpUSD > 0 ? (reg as any).lastWeekNominalGdpUSD : instantaneousNominalGdpUSD;
+    const gdpLevelLastWeek = reg.lastWeekNominalGdpUSD > 0 ? reg.lastWeekNominalGdpUSD : instantaneousNominalGdpUSD;
     // Real GDP is inherently a flow measured over a full quarter, not an instantaneous
     // snapshot — smoothing the level itself (not just the growth-rate metrics derived from it)
     // is what makes it behave that way. Without this, a single week's noise in any bottom-up
@@ -133,7 +133,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
       // the raw number is too noisy to publish, the smoothing two lines below is the honest tool.
       ? Math.max(-0.04, Math.min(0.04, (newDerivedNominalGdpUSD / gdpLevelLastWeek - 1) - (reg.inflation / 52)))
       : 0;
-    const prevSmoothedWeeklyRate = (reg as any).smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
+    const prevSmoothedWeeklyRate = reg.smoothedWeeklyGrowthRate ?? rawWeeklyRealGrowthRate;
     // Kept for the fiscal output-gap signal in macro/evolution.ts, which wants a rough weekly
     // growth impulse — not used for the headline growth rate below any more (see next block).
     const smoothedWeeklyRate = prevSmoothedWeeklyRate * 0.85 + rawWeeklyRealGrowthRate * 0.15;
@@ -147,7 +147,7 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
     // A real year-over-year comparison: the window holds 53 levels so that index 0 is the level
     // exactly 52 weeks before the newest one. It used to keep 52 and compare against index 0,
     // which is 51 weeks back — a year-over-year reading taken a week short of a year.
-    const gdpHistory = (reg as any).nominalGdpHistory ?? [];
+    const gdpHistory = reg.nominalGdpHistory ?? [];
     const updatedGdpHistory = [...gdpHistory.slice(-52), newDerivedNominalGdpUSD];
     const yearAgoGdpLevel = updatedGdpHistory.length >= 53 ? updatedGdpHistory[0] : null;
     // The bootstrap seeds a full trailing year (macro/initialization.ts), so the fallback below

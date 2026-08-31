@@ -84,7 +84,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
     bidQuantitiesByRegionAndInputCat[regionId] = {};
     Object.entries(demandersByInputCat).forEach(([inputCat, demanders]) => {
       bidQuantitiesByRegionAndInputCat[regionId][inputCat] = demanders.map(d => {
-        const demanderDemandLevel = reg.categoryDemand[d.demanderSubUnit as any]?.demandLevelUSD ?? 0;
+        const demanderDemandLevel = reg.categoryDemand[d.demanderSubUnit]?.demandLevelUSD ?? 0;
         return { demanderSubUnit: d.demanderSubUnit, bidQuantity: demanderDemandLevel * d.intensity / 52 };
       });
     });
@@ -110,7 +110,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
     const perDemanderSubUnit: Record<string, { minFulfillment: number; sumCostPressure: number }> = {};
 
     Object.entries(demandersByInputCat).forEach(([inputCat, demanders]) => {
-      const supplier = reg.categoryDemand[inputCat as any] as any;
+      const supplier = reg.categoryDemand[inputCat];
       if (!supplier) return;
 
       const lastWeekInventory = supplier.lastWeekInventoryLevelUSD ?? supplier.inventoryLevelUSD ?? 0;
@@ -150,7 +150,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
     });
 
     Object.entries(perDemanderSubUnit).forEach(([demanderSubUnit, result]) => {
-      const demanderEntry = reg.categoryDemand[demanderSubUnit as any] as any;
+      const demanderEntry = reg.categoryDemand[demanderSubUnit];
       if (demanderEntry) {
         demanderEntry.inputCostPressure = Number(result.sumCostPressure.toFixed(4));
         demanderEntry._fulfillmentRatio = Number(result.minFulfillment.toFixed(4));
@@ -159,7 +159,7 @@ export function runInputOutputStage(state: GameState, ctx: WeeklyStepContext): v
 
     // after the loop, snapshot this week's inventory as next week's lag anchor:
     Object.keys(reg.categoryDemand).forEach(cat => {
-      const entry = reg.categoryDemand[cat as any] as any;
+      const entry = reg.categoryDemand[cat];
       entry.lastWeekInventoryLevelUSD = entry.inventoryLevelUSD ?? 0;
     });
   });

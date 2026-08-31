@@ -1285,7 +1285,7 @@ export function calibrateIntensityShare(commodityId: string, allCompanies: Compa
     s + (c.annualRevenue * (c.ebitda / Math.max(1, c.annualRevenue) > 0 ? 1 : 0.7)) / 52, 0);
   const privateWeeklySupplyUSD = computePrivateSegmentCommoditySupplyUSD(commodityId, regions);
   const weeklySupplyUSD = publicWeeklySupplyUSD + privateWeeklySupplyUSD;
-  const totalCategoryDemandUSD = (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => s + ((regions[r].categoryDemand as any)[subUnitId]?.demandLevelUSD ?? 0), 0);
+  const totalCategoryDemandUSD = (['USA','EUR','UK','JPN'] as RegionId[]).reduce((s, r) => s + (regions[r].categoryDemand[subUnitId]?.demandLevelUSD ?? 0), 0);
   return totalCategoryDemandUSD > 0 ? (weeklySupplyUSD * 52) / totalCategoryDemandUSD : 0.01;
 }
 
@@ -1309,7 +1309,7 @@ function computeCommodityClearingRatio(commodityId: string, allCompanies: Compan
   // the sub-unit's demand — whoever makes the good brings the commodity to market, not only the
   // two firms carrying the tag. The elasticities below then move a ratio that means something.
   const perRegion = (['USA', 'EUR', 'UK', 'JPN'] as RegionId[]).reduce((acc, r) => {
-    const catDemand = linkage ? (regions[r].categoryDemand as any)[linkage.subUnitId] : undefined;
+    const catDemand = linkage ? regions[r].categoryDemand[linkage.subUnitId] : undefined;
     if (!catDemand) return acc;
     acc.demandAnnualUSD += catDemand.demandLevelUSD ?? 0;
     // Rule 9: `totalUnitsSuppliedThisWeek` is WEEKLY and `demandLevelUSD` is ANNUAL.

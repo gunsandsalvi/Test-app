@@ -277,7 +277,7 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       // from week 1 onward and every price in the economy silently rebased to a ~$1 scale, one
       // week into every run. Anything comparing a price across that boundary — a price index
       // most of all — was comparing two different units.
-      (reg.categoryDemand as any)[cat] = {
+      reg.categoryDemand[cat] = {
         ...(existingEntry ?? {}),
         demandLevelUSD: newLevel,
         demandGrowthAnnual: growthAnnual,

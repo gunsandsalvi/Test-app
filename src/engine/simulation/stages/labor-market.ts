@@ -105,9 +105,9 @@ function outputPriceVsBaseline(comp: Company, reg: Region): number {
   let weight = 0;
   let weighted = 0;
   (comp.productLines ?? []).forEach((line) => {
-    const cd = reg.categoryDemand[line.subUnitId as any] as any;
-    const base = cd?.baseUnitPriceUSD;
-    const now = cd?.unitPriceUSD;
+    const cd = reg.categoryDemand[line.subUnitId];
+    const base = cd?.baseUnitPriceUSD ?? 0;
+    const now = cd?.unitPriceUSD ?? 0;
     if (!(base > 0) || !(now > 0)) return;
     const w = Math.max(0, line.revenueShare ?? 0);
     weight += w;

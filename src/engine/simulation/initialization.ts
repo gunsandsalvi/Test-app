@@ -117,7 +117,7 @@ function seedUnitMassTonnes(regions: Record<RegionId, Region>): Record<string, n
   const masses: Record<string, number> = {};
   Object.values(INDUSTRY_SUBUNITS).flat().forEach((subUnit) => {
     const prices = regionIds
-      .map((r) => (regions[r].categoryDemand[subUnit.unitId] as any)?.unitPriceUSD)
+      .map((r) => regions[r].categoryDemand[subUnit.unitId]?.unitPriceUSD)
       .filter((p): p is number => typeof p === 'number' && p > 0);
     if (prices.length === 0) return;
     const meanPriceUSD = prices.reduce((sum, p) => sum + p, 0) / prices.length;
@@ -222,7 +222,7 @@ export function seedRegionCategoryDemand(
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
         const demandLevelUSD = totalOutputBySubUnit[su.unitId] ?? finalDemandBySubUnit[su.unitId];
-        (reg.categoryDemand as any)[su.unitId] = createSeedCategoryDemandState(
+        reg.categoryDemand[su.unitId] = createSeedCategoryDemandState(
           demandLevelUSD,
           reg.gdpGrowth ?? 0.02,
           // §7.127: FINAL demand prices the good; total output is the quantity behind it.
@@ -253,7 +253,7 @@ export function seedRegionCategoryDemand(
     (reg.smePools ?? []).forEach((pool: { industry: string; annualRevenueUSD?: number }) => {
       const spec = (INDUSTRY_REGISTRY as any)[pool.industry];
       const subUnits: { unitId: string }[] = spec?.subUnits ?? [];
-      const demandOf = (id: string) => Number((reg.categoryDemand as any)?.[id]?.demandLevelUSD) || 0;
+      const demandOf = (id: string) => Number(reg.categoryDemand[id]?.demandLevelUSD) || 0;
       const totalDemandUSD = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
       if (!(totalDemandUSD > 0)) return;
       const poolRevenueUSD = Number(pool.annualRevenueUSD) || 0;
@@ -264,12 +264,12 @@ export function seedRegionCategoryDemand(
     });
     normalizeProducingSectorRevenue(
       companies.filter(c => c.region === regionId),
-      (unitId) => Number((reg.categoryDemand as any)?.[unitId]?.demandLevelUSD) || 0,
+      (unitId) => Number(reg.categoryDemand[unitId]?.demandLevelUSD) || 0,
       (unitId) => smeRevenueBySubUnit.get(unitId) ?? 0
     );
     dealProductLinesAndHeadcount(
       companies.filter(c => c.region === regionId),
-      (_r, unitId) => Number((reg.categoryDemand as any)?.[unitId]?.demandLevelUSD) || 0
+      (_r, unitId) => Number(reg.categoryDemand[unitId]?.demandLevelUSD) || 0
     );
 
     // PUB1e: the budget stage 05 bids in week 1, seeded here so it is never empty.
@@ -1190,7 +1190,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
     (Object.keys(regions) as RegionId[]).forEach(r => { regions[r].exportsUSD = 0; regions[r].importsUSD = 0; });
     bookings.forEach(b => {
       if (b.from === b.to) return;
-      const exWorks = Number((regions[b.from].categoryDemand[b.subUnitId] as any)?.unitPriceUSD) || 0;
+      const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceUSD) || 0;
       const valueUSD = localToUsd(b.units * exWorks, b.from, seedFxToUsd) * 52;
       regions[b.from].exportsUSD += valueUSD;
       regions[b.to].importsUSD += valueUSD;
@@ -1221,7 +1221,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       if (transit <= 0) return;
       const pool = buyersByRegion[b.to];
       if (!pool || pool.length === 0) return;
-      const exWorks = Number((regions[b.from].categoryDemand[b.subUnitId] as any)?.unitPriceUSD) || 0;
+      const exWorks = Number(regions[b.from].categoryDemand[b.subUnitId]?.unitPriceUSD) || 0;
       const perUnit = convertLocal(exWorks, b.from, b.to, seedFxToUsd);
       // One week's worth arriving in each of the next `transit` weeks: what a lane in steady
       // state is carrying.

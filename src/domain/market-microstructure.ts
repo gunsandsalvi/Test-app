@@ -98,6 +98,10 @@ export interface CategoryDemandState {
   // potential buyer company, weighted by revenue share, instead of a hand-picked per-category
   // intensity constant that only covered a handful of categories.
   corporateDemandUSD?: number;
+  /** IND16: what the producer received at the factory gate this week — the first of the three
+   *  price levels (ex-works → landed `unitPriceUSD` → `shelfUnitPriceUSD`). Written by stage 05;
+   *  currently recorded only (no reader) — surfaced from behind an `as any` by §7.241's Tier 0. */
+  exWorksUnitPriceUSD?: number;
   _fulfillmentRatio?: number; // transient, read by AA3 same week, not persisted
   totalUnitsSuppliedThisWeek?: number;
   totalUnitsDemandedThisWeek?: number;
@@ -136,7 +140,7 @@ export function createSeedCategoryDemandState(
     // opening week forms an intent against the same observables every later week does (§7.4).
     totalUnitsDemandedThisWeek: unitPriceUSD > 0 ? (demandLevelUSD / 52) / unitPriceUSD : 0,
     totalUnitsSuppliedThisWeek: unitPriceUSD > 0 ? (demandLevelUSD / 52) / unitPriceUSD : 0,
-  } as any;
+  };
 }
 
 // BP1a: derived from the industry registry (recipeInputs per producing industry).

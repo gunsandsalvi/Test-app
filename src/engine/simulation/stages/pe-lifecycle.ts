@@ -689,7 +689,7 @@ export function runFirmBirthsForRegion(
   const namedBySegment = new Map<string, number>();
   ctx.updatedCompanies.forEach((c) => {
     if (c.region !== regionId || c.listingStatus !== 'PRIVATE' || !isActiveCompany(c)) return;
-    const seg = (c as any).smePoolIndustry as string | undefined;
+    const seg = c.smePoolIndustry;
     if (seg) namedBySegment.set(seg, (namedBySegment.get(seg) ?? 0) + c.annualRevenue);
   });
   const candidate = segs
@@ -776,7 +776,7 @@ export function runFirmBirthsForRegion(
   });
 
   born.forEach((c) => {
-    (c as any).bornWeek = nextWeek;
+    c.bornWeek = nextWeek;
     if (!c.homeBankTicker) {
       c.homeBankTicker = banksForRelationship.pick(c.id, Math.max(0, c.cash));
     }

@@ -87,7 +87,7 @@ export function producingSectorNamedTierDemandUSD(
   if (!list || list.length === 0) return 0;
   let total = 0;
   for (const { su } of list) {
-    const demandUSD = Number((initialRegions[region]?.categoryDemand as any)?.[su.unitId]?.demandLevelUSD) || 0;
+    const demandUSD = Number(initialRegions[region]?.categoryDemand[su.unitId]?.demandLevelUSD) || 0;
     if (!(demandUSD > 0)) continue;
     const industry = industryOfSubUnit(su.unitId);
     const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
@@ -816,7 +816,7 @@ export function generateInitialCompanies(
   // so far, and dealt AGAIN by `simulation/initialization.ts` once the authoritative demand
   // vector (real procurement, real firm capex) exists. See the function's own doc.
   dealProductLinesAndHeadcount(companies, (region, unitId) =>
-    Number((initialRegions[region]?.categoryDemand as any)?.[unitId]?.demandLevelUSD) || 0);
+    Number(initialRegions[region]?.categoryDemand[unitId]?.demandLevelUSD) || 0);
 
   return companies;
 }
