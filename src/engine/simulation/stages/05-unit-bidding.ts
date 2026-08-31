@@ -45,6 +45,8 @@ import { computeAnnualDefaultProbability } from './shared-helpers';
 import { getFxToUsd } from './06-fx-and-trade';
 import { GOVERNMENT_BID_PRICE_TOLERANCE } from '../../../domain/government';
 import { realizedAnnualVol } from '../../../domain/volatility';
+import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
+import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
 
 export const MARKET_REGION_IDS = REGION_IDS;
 
@@ -694,15 +696,23 @@ function buildRegionSupplyPlans(
     // stops; it does not keep running at three tenths forever. Zero is a real production
     // decision, and it was the one this throttle could not express.
     const productionThrottle = Math.min(1.0, Math.max(0, 1.0 - (inventoryToCapacityRatio - 1.0) * 0.7));
-    const priceSignal = (supplierExpectedUnitPriceUSD / referencePriceUSD) - 1.0;
-    // CAP — THE [0.5, 2.0] BAND IS GONE (rule 2). It bounded how far a firm would run its plant
-    // against the price it expects, which is a DECISION, and the band was standing in for the
-    // decision's own limits: a firm cannot run above its plant (the capacity term), cannot staff
-    // beyond its headcount (IND15), and will not produce below unit cost at all (the
-    // cost-covering rule below, which is CAP's own mechanism and now fires). Three real bounds,
-    // so the stated one has nothing left to protect. Negative response is still not a thing —
-    // a plant cannot run backwards.
-    const productionResponseFactor = Math.max(0, 1.0 + priceSignal * 1.5);
+    // §7.246 — THE PRICE-RESPONSE FACTOR IS DELETED, and it was §7.28's defect one level up.
+    //
+    // `1 + 1.5 × (smoothedPrice/anchorPrice − 1)` read the LAG RATIO of one price series as a
+    // level signal. At rest the two copies agree and the factor is exactly 1, so it decided
+    // nothing in equilibrium — but when the price MOVED it acted with the wrong sign in both
+    // directions: a spike put the slow copy far below the fast one and cut the plant toward
+    // zero (measured: EUR housing supply ÷24 in one week, INTO 8x excess demand — §7.245's
+    // service spiral was largely this), while a crash ran the plant ABOVE capacity, which the
+    // comment that stood here claimed the capacity term prevented (it multiplied capacity, so
+    // it did not). §7.28 fixed the same wrong-signed supply response in the units; this was the
+    // remaining copy in the utilisation, with a stated ×1.5 no mechanism owns (rule 19).
+    //
+    // What legitimately decides how hard the plant runs is already here: capacity (the plant),
+    // staffing (IND15), the warehouse throttle, and the cost-covering rule below (CAP's own
+    // produce/idle decision, taken against the SMOOTHED expected price so one week's print
+    // does not flip it). Utilisation between those bounds is 1: a plant whose price covers its
+    // cost runs.
 
     // Production is capacity x utilisation, in UNITS. The previous version sized production in
     // dollars (annualRevenue/52) and divided by the CURRENT price, so a doubling of price halved
@@ -735,7 +745,41 @@ function buildRegionSupplyPlans(
       line.unitsPerNetPpeDollar! * netPPEForCapacityUSD * (line.revenueShare ?? 1.0));
     const baseMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
     const costRate = Math.max(0, 1 - baseMargin);
-    const weeklyOperatingCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52) * (line.revenueShare ?? 1.0);
+    // §7.246 — THE FLOOR'S WAGE COMPONENT IS THE WAGE BILL AT CURRENT STAFFING, NOT A TRAILING
+    // TOTAL OVER CURRENT OUTPUT.
+    //
+    // `(annualRevenue − ebitda)/52` is the firm's measured weekly cost — real input lots, the
+    // real wage bill, and the opening-books residual (§7.121) — but it TRAILS (the revenue is
+    // annualized and the ebitda a week old) while the denominator below is CURRENT staffed
+    // output. When the labour market sheds a firm's staff, its staffed units fall the same week
+    // and the trailing wage bill inside this numerator does not, so unit cost jumps by
+    // 1/staffedShare, the shutdown fires, and supply dies exactly when the price is rising:
+    // measured as §7.245's service spiral (EUR housing floors 39–65 → 904–1,679 in two weeks,
+    // offers → 0, price ×48 in six). The §7.132 ratchet, in the staffing dimension.
+    //
+    // So the basis is decomposed on stage 08's own persisted measurements: the wage component is
+    // recomputed at CURRENT headcount and CURRENT wage indexes (same weeklyWageBillUSD owner as
+    // the payroll it replaces — one representation), the input component is the real lots the
+    // firm consumed, and the residual (rent-like other opex) is what remains of the trailing
+    // total. A firm that sheds staff now sheds the wage half of its floor the same week its
+    // output falls; the residual concentrating over fewer units is real operating leverage, not
+    // a defect. NOT §7.133's failed form: nothing here is per-head overhead — the residual is a
+    // dollar level, and only the genuinely staff-shaped cost follows the staff.
+    const trailingWeeklyCostUSD = Math.max(0, (comp.annualRevenue - comp.ebitda) / 52);
+    let firmWeeklyCostUSD = trailingWeeklyCostUSD;
+    if (comp.payrollWeeklyUSD !== undefined && comp.realInputConsumptionCostWeeklyUSD !== undefined) {
+      const currentPayrollWeeklyUSD = weeklyWageBillUSD(
+        comp.employeeCount,
+        SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
+        getBaseAnnualWageUSD(regionId),
+        reg.occupationPools,
+        comp.offeredWageIndex ?? 1.0
+      );
+      const residualWeeklyUSD = Math.max(0,
+        trailingWeeklyCostUSD - comp.payrollWeeklyUSD - comp.realInputConsumptionCostWeeklyUSD);
+      firmWeeklyCostUSD = currentPayrollWeeklyUSD + comp.realInputConsumptionCostWeeklyUSD + residualWeeklyUSD;
+    }
+    const weeklyOperatingCostUSD = firmWeeklyCostUSD * (line.revenueShare ?? 1.0);
 
     // CAP — A FIRM THAT CANNOT COVER UNIT COST STOPS PRODUCING.
     //
@@ -788,7 +832,7 @@ function buildRegionSupplyPlans(
     // on the plant's NORMAL-season volume, which is the basis its costs were struck on; the
     // calendar then says how much of that ripens this week. No clamp, no floor: the comparison
     // simply gets its units right.
-    const normalSeasonUnits = line.weeklyCapacityUnits! * productionResponseFactor * productionThrottle;
+    const normalSeasonUnits = line.weeklyCapacityUnits! * productionThrottle;
     const staffedNormalSeasonUnits = Math.min(normalSeasonUnits, normalSeasonUnits * staffedShare);
     const prospectiveUnitCostUSD = staffedNormalSeasonUnits > 0.0001
       ? weeklyOperatingCostUSD / staffedNormalSeasonUnits
