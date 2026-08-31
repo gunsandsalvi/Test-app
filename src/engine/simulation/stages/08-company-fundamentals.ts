@@ -2041,118 +2041,196 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     }
 
     // SCALE: same in-place assignment as the private path above — see that comment.
-    return Object.assign(comp, {
-      revenueVolatility: Number(calculatedRevVol.toFixed(4)),
-      segmentFinancials: calculatedSegmentFinancials,
-      forwardPE: newForwardPE,
-      baselineRecoveryRate: newBaselineRecoveryRate,
-      baselineDividendYield: newBaselineDividendYield,
-      previousEmployeeCount: comp.employeeCount,
-      accruedTaxLiabilityUSD: Math.round(accruedTaxUSD),
+    // SCALE: WRITTEN, NOT ASSIGNED. This was `Object.assign(comp, { ...72 fields })`, which
+    // allocates a fresh 72-property object for every company every week and throws it away the
+    // instant its contents have been copied one field at a time into `comp`. The copy is the same
+    // work either way; the object is pure waste. `Object.assign` writes own enumerable properties
+    // in source order, so writing them in that same order here is the identical mutation.
+    comp.revenueVolatility = Number(calculatedRevVol.toFixed(4));
+
+    comp.segmentFinancials = calculatedSegmentFinancials;
+
+    comp.forwardPE = newForwardPE;
+
+    comp.baselineRecoveryRate = newBaselineRecoveryRate;
+
+    comp.baselineDividendYield = newBaselineDividendYield;
+
+    comp.previousEmployeeCount = comp.employeeCount;
+
+    comp.accruedTaxLiabilityUSD = Math.round(accruedTaxUSD);
+
       // HH6: the wage this firm offers and the hiring difficulty behind it are the labor
       // market stage's decisions — carried through explicitly, like employeeCount above,
       // because this stage rebuilds the company from a fixed field list and anything not
       // named here is silently dropped (which is exactly what happened first time).
-      offeredWageIndex: companyUpdates[comp.ticker]?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0,
-      unfilledVacancyShare: companyUpdates[comp.ticker]?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0,
-      previousCapex: comp.capex,
-      maintenanceCapex: Number(newMaintenanceCapex.toFixed(1)),
-      growthCapex: Number(newGrowthCapex.toFixed(1)),
-      grossPPEUSD: Number(newGrossPPEUSD.toFixed(1)),
+    comp.offeredWageIndex = companyUpdates[comp.ticker]?.offeredWageIndex ?? comp.offeredWageIndex ?? 1.0;
+
+    comp.unfilledVacancyShare = companyUpdates[comp.ticker]?.unfilledVacancyShare ?? comp.unfilledVacancyShare ?? 0;
+
+    comp.previousCapex = comp.capex;
+
+    comp.maintenanceCapex = Number(newMaintenanceCapex.toFixed(1));
+
+    comp.growthCapex = Number(newGrowthCapex.toFixed(1));
+
+    comp.grossPPEUSD = Number(newGrossPPEUSD.toFixed(1));
+
       // IND1: read by stage 05's capacity growth — real net investment is what arrived.
       // IND13 — the plant grew by what entered service. Both lines are named on the rebuild
       // because a fixed field list drops what it does not name (§7.41), and a dropped
       // construction queue is capital that arrives and then never exists.
-      capexCommissionedLastWeekUSD: Number(capexCommissionedThisWeekUSD.toFixed(1)),
-      assetsUnderConstruction: stillUnderConstruction,
-      accumulatedDepreciationUSD: Number(newAccumulatedDepreciationUSD.toFixed(1)),
-      rndExpense: Number(newRndExpense.toFixed(1)),
-      maintenanceShortfallStreak: newMaintenanceShortfallStreak,
-      executionQuality: Number(newExecutionQuality.toFixed(3)),
-      occupationMixDrift: newOccupationMixDrift,
-      inputSupplyConstraintFactor: Number(newInputSupplyConstraintFactor.toFixed(4)),
-      _targetProductionUSD: (companyUpdates[comp.ticker]?._targetProductionUSD ?? targetProductionUSD),
-      lastWeekSalesUSD: update?.salesUSD ?? 0,
-      lastWeekPurchasesUSD: update?.purchasesUSD ?? 0,
+    comp.capexCommissionedLastWeekUSD = Number(capexCommissionedThisWeekUSD.toFixed(1));
+
+    comp.assetsUnderConstruction = stillUnderConstruction;
+
+    comp.accumulatedDepreciationUSD = Number(newAccumulatedDepreciationUSD.toFixed(1));
+
+    comp.rndExpense = Number(newRndExpense.toFixed(1));
+
+    comp.maintenanceShortfallStreak = newMaintenanceShortfallStreak;
+
+    comp.executionQuality = Number(newExecutionQuality.toFixed(3));
+
+    comp.occupationMixDrift = newOccupationMixDrift;
+
+    comp.inputSupplyConstraintFactor = Number(newInputSupplyConstraintFactor.toFixed(4));
+
+    comp._targetProductionUSD = (companyUpdates[comp.ticker]?._targetProductionUSD ?? targetProductionUSD);
+
+    comp.lastWeekSalesUSD = update?.salesUSD ?? 0;
+
+    comp.lastWeekPurchasesUSD = update?.purchasesUSD ?? 0;
+
       // Start from this company's carrying-cost-decayed baseline (every sub-unit it held
       // inventory for), then overlay whatever stage 05 settled fresh this week for the
       // sub-units it actually processed (it runs first and has the complete, real
       // production/sales picture for those lines).
-      outputInventoryBySubUnit: { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) },
+    comp.outputInventoryBySubUnit = { ...newOutputInventoryBySubUnit, ...(update?.outputInventoryBySubUnit || {}) };
+
       // Already reflects this week's real purchases (credited by stage05) minus this week's
       // real consumption (drawn down above) — no further overlay needed, unlike output
       // inventory, since this stage (not stage05) is the one authoritative writer of the
       // post-consumption balance.
-      inputInventoryBySubUnit: newInputInventoryBySubUnit,
+    comp.inputInventoryBySubUnit = newInputInventoryBySubUnit;
+
       // IND10 — the production pipeline stage 05 advanced. Named here because a rebuild from a
       // fixed field list silently drops whatever it does not name (§7.41), and a dropped
       // pipeline is a firm whose half-built output vanishes every week.
-      wipBySubUnit: update?.wipBySubUnit ?? comp.wipBySubUnit,
-      recentFulfillmentEMA: Number(newRecentFulfillmentEMA.toFixed(4)),
+    comp.wipBySubUnit = update?.wipBySubUnit ?? comp.wipBySubUnit;
+
+    comp.recentFulfillmentEMA = Number(newRecentFulfillmentEMA.toFixed(4));
+
       // IND14 — the delivery record, smoothed slowly onto the firm. A week in which this
       // supplier owed nothing tells us nothing, so it leaves the record where it was.
-      deliveryReliability: Number((() => {
+    comp.deliveryReliability = Number((() => {
         const owed = (update as any)?._contractOwedUnits ?? 0;
         const prior = comp.deliveryReliability ?? 1;
         if (!(owed > 0)) return prior;
         const shipped = (update as any)?._contractDeliveredUnits ?? 0;
         return prior * 0.9 + Math.max(0, Math.min(1, shipped / owed)) * 0.1;
-      })().toFixed(4)),
-      recurringRevenueBaseUSD: newRecurringBaseUSD === undefined
-        ? undefined : Math.round(newRecurringBaseUSD),
-      employeeCount: isDefaulted ? 0 : newEmployeeCount,
-      recoveryRate: Number(effectiveRecoveryRate.toFixed(3)),
-      debtTranches: updatedTranches,
-      productLines: updatedProductLines,
-      totalDebt: updatedTranches.reduce((s, t) => s + t.principalUSD, 0),
-      dividendYield: Number(newDividendYield.toFixed(4)),
-      capex: Number(newCapex.toFixed(1)),
-      annualRevenue: Number(newRevenue.toFixed(1)),
-      baselineAnnualRevenue: newBaselineAnnualRevenue,
-      ebitda: Number(newEbitda.toFixed(1)),
-      ebit: Number(newEbit.toFixed(1)),
-      netIncome: Number(newNetIncome.toFixed(1)),
-      eps: newEps,
-      sharesOutstanding: Number(updatedSharesOutstanding.toFixed(3)),
+      })().toFixed(4));
+
+    comp.recurringRevenueBaseUSD = newRecurringBaseUSD === undefined
+        ? undefined : Math.round(newRecurringBaseUSD);
+
+    comp.employeeCount = isDefaulted ? 0 : newEmployeeCount;
+
+    comp.recoveryRate = Number(effectiveRecoveryRate.toFixed(3));
+
+    comp.debtTranches = updatedTranches;
+
+    comp.productLines = updatedProductLines;
+
+    comp.totalDebt = updatedTranches.reduce((s, t) => s + t.principalUSD, 0);
+
+    comp.dividendYield = Number(newDividendYield.toFixed(4));
+
+    comp.capex = Number(newCapex.toFixed(1));
+
+    comp.annualRevenue = Number(newRevenue.toFixed(1));
+
+    comp.baselineAnnualRevenue = newBaselineAnnualRevenue;
+
+    comp.ebitda = Number(newEbitda.toFixed(1));
+
+    comp.ebit = Number(newEbit.toFixed(1));
+
+    comp.netIncome = Number(newNetIncome.toFixed(1));
+
+    comp.eps = newEps;
+
+    comp.sharesOutstanding = Number(updatedSharesOutstanding.toFixed(3));
+
       // Wall Street Phase 1: real per-bank balance sheet computed this week in
       // 02b-bank-diversification.ts (which runs before this stage), carried forward otherwise.
-      bankBalanceSheet: companyUpdates[comp.ticker]?.bankBalanceSheet ?? comp.bankBalanceSheet,
-      bankRiskFactor: comp.bankRiskFactor,
-      technicalReservesUSD: comp.technicalReservesUSD,
-      aumUSD: comp.aumUSD,
-      managementFeeRate: comp.managementFeeRate,
-      insurancePremiumsWrittenUSD: comp.insurancePremiumsWrittenUSD,
-      insuranceClaimsPaidUSD: comp.insuranceClaimsPaidUSD,
+    comp.bankBalanceSheet = companyUpdates[comp.ticker]?.bankBalanceSheet ?? comp.bankBalanceSheet;
+
+    comp.bankRiskFactor = comp.bankRiskFactor;
+
+    comp.technicalReservesUSD = comp.technicalReservesUSD;
+
+    comp.aumUSD = comp.aumUSD;
+
+    comp.managementFeeRate = comp.managementFeeRate;
+
+    comp.insurancePremiumsWrittenUSD = comp.insurancePremiumsWrittenUSD;
+
+    comp.insuranceClaimsPaidUSD = comp.insuranceClaimsPaidUSD;
+
       // SETL2: `cash` is NOT written here any more. Every flow above was recorded as a payment
       // instruction and the settlement stage (which runs immediately after this one) applies the
       // net to this company's balance AND to its bank's deposits and reserves. One mover.
       // `newCash` above stays the stage's own running view, which is what settlement will produce.
-      mmfSharesUSD: newMmfSharesUSD,
-      lastOpportunisticOfferingWeek: newLastOpportunisticOfferingWeek,
-      lastCashLedger: cashLedger,
-      leverage: newLeverage,
-      interestCoverage: newCoverage,
-      creditRating: newRating,
-      ratingHistory: [...comp.ratingHistory.slice(-15), newRating],
-      historicalFundamentals: histFundamentals,
-      isDefaulted,
-      stockPrice: newStockPrice,
-      beta: newBeta,
-      antitrustWeeksAboveThreshold: newAntitrustWeeks,
-      historicalPrices: hist,
-      marketCap: newMarketCap,
-      oasSpreadBps: newOasBps,
-      cdsSpreadBps: newCdsSpreadBps,
-      seniorBondYield: newSeniorBondYield,
-      reportedThisWeek: isReportingThisWeek,
-      lastEarningsReportWeek: isReportingThisWeek ? nextWeek : comp.lastEarningsReportWeek,
-      dealerConsensus: updatedConsensus,
-      lastEarningsSurprisePct,
-      lastManagementCommentary,
+    comp.mmfSharesUSD = newMmfSharesUSD;
+
+    comp.lastOpportunisticOfferingWeek = newLastOpportunisticOfferingWeek;
+
+    comp.lastCashLedger = cashLedger;
+
+    comp.leverage = newLeverage;
+
+    comp.interestCoverage = newCoverage;
+
+    comp.creditRating = newRating;
+
+    comp.ratingHistory = [...comp.ratingHistory.slice(-15), newRating];
+
+    comp.historicalFundamentals = histFundamentals;
+
+    comp.isDefaulted = isDefaulted;
+
+    comp.stockPrice = newStockPrice;
+
+    comp.beta = newBeta;
+
+    comp.antitrustWeeksAboveThreshold = newAntitrustWeeks;
+
+    comp.historicalPrices = hist;
+
+    comp.marketCap = newMarketCap;
+
+    comp.oasSpreadBps = newOasBps;
+
+    comp.cdsSpreadBps = newCdsSpreadBps;
+
+    comp.seniorBondYield = newSeniorBondYield;
+
+    comp.reportedThisWeek = isReportingThisWeek;
+
+    comp.lastEarningsReportWeek = isReportingThisWeek ? nextWeek : comp.lastEarningsReportWeek;
+
+    comp.dealerConsensus = updatedConsensus;
+
+    comp.lastEarningsSurprisePct = lastEarningsSurprisePct;
+
+    comp.lastManagementCommentary = lastManagementCommentary;
+
       // Already real and already-cleared (07d-leveraged-loan-clearing.ts) — passed through as-is.
-      leveragedLoan: comp.leveragedLoan,
-      treasuryHoldings: newTreasuryHoldings,
-    });
+    comp.leveragedLoan = comp.leveragedLoan;
+
+    comp.treasuryHoldings = newTreasuryHoldings;
+    return comp;
   };
 
   // SCALE wave 2 — THE COMPANY WEEK AS A SHARDED KERNEL (columns/kernel.ts).

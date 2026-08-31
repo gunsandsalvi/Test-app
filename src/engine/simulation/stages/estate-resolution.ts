@@ -52,6 +52,11 @@ interface EstateIndex {
   bankByTicker: Map<string, Company>;
   companyById: Map<string, Company>;
   receivableTermWeeksByTicker: Map<string, number>;
+  /** SCALE: the invoice book's mean term, GROUPED IN ONE PASS. `meanReceivableTermWeeks` memoised
+   *  per ticker but each miss scanned the whole book, so the cost was
+   *  O(distinct issuers x invoices) — and both grow with the world. Measured: estate-resolution
+   *  ran 4.90x for a 2x universe, the worst super-linear stage in the engine. One pass. */
+  invoiceTermByTicker: Map<string, { totalWeeks: number; count: number }> | undefined;
   ppeWeeksByRegion: Map<string, number>;
   /** `entityId -> instrumentId -> the rows of that entity's book holding it`. Built once for the
    *  holders that actually have a claim, which is what turns a per-claim SCAN of a whole book
@@ -73,6 +78,7 @@ function buildEstateIndex(ctx: WeeklyStepContext): EstateIndex {
   return {
     entityById, bankByTicker, companyById,
     receivableTermWeeksByTicker: new Map(), ppeWeeksByRegion: new Map(),
+    invoiceTermByTicker: undefined,
     rowsByEntityInstrument: new Map(), touchedEntityIds: new Set(),
   };
 }
@@ -330,9 +336,18 @@ function meanReceivableTermWeeks(
   // book does not change inside this stage, so the memo is the same number by construction.
   const memo = index.receivableTermWeeksByTicker.get(ticker);
   if (memo !== undefined) return memo;
-  const invoices = (ctx.tradeInvoicesBooked ?? []).filter((iv) => iv.sellerTicker === ticker);
-  const out = invoices.length === 0 ? 8
-    : invoices.reduce((a, iv) => a + Math.max(1, iv.weekDue - iv.weekBooked), 0) / invoices.length;
+  if (index.invoiceTermByTicker === undefined) {
+    const byTicker = new Map<string, { totalWeeks: number; count: number }>();
+    for (const iv of (ctx.tradeInvoicesBooked ?? [])) {
+      const bucket = byTicker.get(iv.sellerTicker);
+      const weeks = Math.max(1, iv.weekDue - iv.weekBooked);
+      if (bucket) { bucket.totalWeeks += weeks; bucket.count++; }
+      else byTicker.set(iv.sellerTicker, { totalWeeks: weeks, count: 1 });
+    }
+    index.invoiceTermByTicker = byTicker;
+  }
+  const bucket = index.invoiceTermByTicker.get(ticker);
+  const out = bucket && bucket.count > 0 ? bucket.totalWeeks / bucket.count : 8;
   index.receivableTermWeeksByTicker.set(ticker, out);
   return out;
 }
