@@ -171,6 +171,8 @@ export function advanceWeeklyStepProfiled(state: GameState, options?: WeeklyStep
   run('holdings-writeback', () => finalizeHoldingsStore(ctx));
   run('institutional-marking', () => markInstitutionalBooks(ctx));
   run('08-company-fundamentals', () => runCompanyFundamentalsStage(state, ctx));
+  // §7.250 — stage 08 has consumed the bank-sheet channel; any later write to it throws.
+  ctx.bankSheetChannelClosed = true;
   // HC Wave 2: the corporate lifecycle. Settles the deals whose financing priced in this
   // week's clearing books, then decides next week's — so a deal is always announced, priced,
   // and settled through the real markets rather than executed on announcement.

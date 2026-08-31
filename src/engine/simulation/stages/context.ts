@@ -80,6 +80,11 @@ export interface WeeklyStepContext {
    * carrier for inter-stage hand-off is its own thing and now says so.
    */
   companyUpdates: Record<string, CompanyWeekUpdate>;
+  /** §7.250 — set by core.ts the moment stage 08 has consumed the bank-sheet channel. Four
+   *  post-08 stages wrote it for nothing (only stage 08 applies it; the context dies with the
+   *  week) — bills never accreted, write-offs never landed, silently, both legs together. A
+   *  write after consumption throws now; a post-08 stage writes the LIVE sheet. */
+  bankSheetChannelClosed?: boolean;
   /** PUB1b: corporate tax remitted this week, by region — collected into the TGA in stage 11. */
   taxCollectedByRegion: Record<string, number>;
   /** PUB1b: corporate tax ACCRUED this week — the smooth expectation behind the lumpy remittance. */
@@ -402,4 +407,25 @@ export function createInitialContext(state: GameState): WeeklyStepContext {
     attributionVolTheta: 0,
     updatedPositions: [],
   };
+}
+
+/**
+ * §7.250 — THE ONE WRITE PATH INTO THE PRE-08 BANK-SHEET CHANNEL. Before stage 08 it is the
+ * hand-off every clearing stage chains through; after stage 08 has consumed it, a write here is
+ * a write to NOWHERE and throws instead of failing silently. (The doctrine, completed from
+ * §7.103: before 08 the channel is the ONLY sheet write that survives; after 08 it is the only
+ * one that cannot.)
+ */
+export function updateBankSheet(
+  ctx: WeeklyStepContext,
+  ticker: string,
+  sheet: import('../../../domain/banking').BankingSector
+): void {
+  if (ctx.bankSheetChannelClosed) {
+    throw new Error(
+      `ENGINE DEFECT: bank-sheet channel write for ${ticker} after stage 08 consumed it — write the live sheet (§7.250)`
+    );
+  }
+  if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
+  ctx.companyUpdates[ticker].bankBalanceSheet = sheet;
 }

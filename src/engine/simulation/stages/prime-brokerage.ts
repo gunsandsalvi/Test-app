@@ -13,7 +13,7 @@
 
 import { GameState, RegionId } from '../../../types';
 import { PrimeBrokerageLine, maxDrawnUSD, drawnByFund, lentByBroker } from '../../../domain/prime-brokerage';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay } from './settlement';
 import { leverageHeadroomUSD } from '../../macro/banking';
 import { bankRequiredReturnAnnual, quoteLoanMarginBps } from './bank-lending';
@@ -166,11 +166,10 @@ export function runPrimeBrokerageStage(state: GameState, ctx: WeeklyStepContext)
       const company = ctx.updatedCompanies.find((c) => c.ticker === ticker && c.bankBalanceSheet);
       if (!company) return;
       const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
-      if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
-      ctx.companyUpdates[ticker].bankBalanceSheet = {
+      updateBankSheet(ctx, ticker, {
         ...sheet,
         primeBrokerageLoansUSD: Math.round(lentByBroker(nextBook, ticker)),
-      };
+      });
     });
   });
 }

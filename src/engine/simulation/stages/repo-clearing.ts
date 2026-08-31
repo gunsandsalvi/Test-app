@@ -46,7 +46,7 @@ import {
   RepoContract, RepoPledge, RepoParty, repoPartyKey, repoInterestToMaturityUSD,
   repoBorrowedUSD, repoLentUSD, srfBorrowedUSD, encumberedFaceByBucket,
 } from '../../../domain/repo';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay, PartyRef, pendingSettlementUSD } from './settlement';
 import {
   clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand,
@@ -680,15 +680,14 @@ export function reconcileRepoPledges(ctx: WeeklyStepContext): void {
         });
       });
       if (repaidUSD <= 0) return;
-      if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
-      ctx.companyUpdates[ticker].bankBalanceSheet = {
+      updateBankSheet(ctx, ticker, {
         ...sheet,
         repoBorrowedUSD: Math.round((repoBorrowedUSD(book, ticker) - srfBorrowedUSD(book, ticker))),
         srfBorrowingUSD: Math.round(srfBorrowedUSD(book, ticker)),
         repoEncumberedCollateralUSD: Number(
           Array.from(encumberedFaceByBucket(book, ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
         ),
-      };
+      });
     });
     reg.repoBook = book.filter((c) => c.principalUSD > 1);
   });

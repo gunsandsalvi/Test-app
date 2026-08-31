@@ -32,7 +32,7 @@
 import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, updateBankSheet } from './context';
 import { computeAnnualDefaultProbability, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '../../../domain/company';
@@ -395,13 +395,12 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         // each other rather than each moving alone.
         const cashDeltaUSD = result.netCashDeltaByParticipantId.get(`BANK-${bank.ticker}`) ?? -faceDeltaUSD;
         const feeUSD = Math.max(0, -(cashDeltaUSD + faceDeltaUSD));
-        if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
-        ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
+        updateBankSheet(ctx, bank.ticker, {
           ...existingSheet,
           sovereignBondHoldingsByTenor: byTenor,
           sovereignBondHoldingsUSD: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
           bankEquityUSD: existingSheet.bankEquityUSD - feeUSD,
-        };
+        });
       });
 
       // Apply institutional books with the engine's cash leg.
@@ -609,14 +608,13 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const bank = cpBanks.find((b) => b.ticker === ticker);
         if (!bank) return;
         const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
-        if (!ctx.companyUpdates[ticker]) ctx.companyUpdates[ticker] = {};
-        ctx.companyUpdates[ticker].bankBalanceSheet = {
+        updateBankSheet(ctx, ticker, {
           ...sheet,
           dealerDeskInventory: {
             ...(sheet.dealerDeskInventory ?? {}),
             [CP_BOOK]: rows.filter((r) => Math.abs(r.inventoryUSD) > 1),
           },
-        };
+        });
       });
 
       // ---- 2. THE BOOK. One instrument per issuer, the surviving stock plus what it brings.

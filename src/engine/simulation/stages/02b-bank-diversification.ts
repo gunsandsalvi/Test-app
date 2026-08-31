@@ -34,7 +34,7 @@ import { runRegionalRepoSession } from './repo-clearing';
 import { maturingAt, repoInterestToMaturityUSD } from '../../../domain/repo';
 import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './money-market-fund';
 import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId } from './bank-lending';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay } from './settlement';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
@@ -370,8 +370,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
     });
 
     newSheets.forEach(({ bank, sheet }) => {
-      if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
-      ctx.companyUpdates[bank.ticker].bankBalanceSheet = sheet;
+      updateBankSheet(ctx, bank.ticker, sheet);
     });
 
     // The region-level bankingSector every other stage reads becomes the real sum of these

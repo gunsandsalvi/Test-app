@@ -49,7 +49,7 @@ import { SOV_BILL_MAX_TENOR_YEARS } from './shared-helpers';
 import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, updateBankSheet } from './context';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
@@ -577,12 +577,12 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // The securities and the P&L; the reserves leg settles below (SETL6), so that the bank
       // that sold and the bank that bought move against each other rather than each moving
       // alone.
-      ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
+      updateBankSheet(ctx, bank.ticker, {
         ...existingSheet,
         sovereignBondHoldingsByTenor: newBuckets,
         sovereignBondHoldingsUSD: Math.round(newTotalUSD),
         bankEquityUSD: existingSheet.bankEquityUSD - feeUSD,
-      };
+      });
     });
 
     // Apply: the central bank's fills. No cash is debited — it paid with reserves it created,

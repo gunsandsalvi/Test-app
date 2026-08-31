@@ -16,7 +16,7 @@ import { LeadBankCandidate } from '../../../domain/primary-market';
 import { leverageHeadroomUSD, MIN_CASH_BUFFER_RATIO, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
 import { BankLoan } from '../../../domain/banking';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, updateBankSheet } from './context';
 import { pendingSettlementUSD } from './settlement';
 import { PartyRef } from './settlement';
 
@@ -196,12 +196,11 @@ export function applyDealerDeskFills(args: {
     const inventory: DealerDeskInventory = { ...(sheet.dealerDeskInventory ?? {}) };
     if (positions.length > 0) inventory[book] = positions;
     else delete inventory[book];
-    if (!ctx.companyUpdates[bank.ticker]) ctx.companyUpdates[bank.ticker] = {};
-    ctx.companyUpdates[bank.ticker].bankBalanceSheet = {
+    updateBankSheet(ctx, bank.ticker, {
       ...sheet,
       dealerDeskInventory: inventory,
       bankEquityUSD: sheet.bankEquityUSD - feeUSD + markToMarketUSD,
-    };
+    });
     inventories.push(inventory);
   });
   return regionalDeskView(inventories, book);

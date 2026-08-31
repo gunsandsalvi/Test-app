@@ -20,7 +20,7 @@
 import { Company, RegionId } from '../../../types';
 import { PrimaryOffering, UNDERWRITING_FEE_BPS } from '../../../domain/primary-market';
 import { DealerDeskInventory } from '../../../domain/dealer-desk';
-import { WeeklyStepContext } from './context';
+import { WeeklyStepContext, updateBankSheet } from './context';
 import { ClearingResult } from './financial-clearing-engine';
 import { pay } from './settlement';
 
@@ -115,8 +115,7 @@ export function settlePricedOfferings(
       if (at >= 0) rows[at] = { instrumentId: issuerId, inventoryUSD: rows[at].inventoryUSD + residualUSD };
       else rows.push({ instrumentId: issuerId, inventoryUSD: residualUSD });
       inventory[deskBook] = rows;
-      if (!ctx.companyUpdates[lead.ticker]) ctx.companyUpdates[lead.ticker] = {};
-      ctx.companyUpdates[lead.ticker].bankBalanceSheet = { ...existingSheet, dealerDeskInventory: inventory };
+      updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
     }
 
     ctx.primarySettlements.set(offering.id, {
