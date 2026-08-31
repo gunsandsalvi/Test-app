@@ -124,6 +124,22 @@ export function runEstateResolutionStage(state: GameState, ctx: WeeklyStepContex
     if (comp.isBankEntity || comp.isInstitutionalEntity) return;
     const estate = openEstate(comp, ctx);
     if (!estate) return;
+    // §7.264 — THE FILING SEIZES THE CASH, BY INSTRUCTION. The estate recorded the debtor's
+    // cash as an asset while the debtor's own balance sat frozen on its object and on its
+    // bank's deposit line FOREVER, and the distributions minted their money at the boundary —
+    // three legs of one event, none connected. The debtor now PAYS its cash into the boundary
+    // at filing (the same boundary the distributions draw from — the two legs meet there, like
+    // §7.259's principal pair), its bank line follows through settlement, and the 02b
+    // reconcile's `isDefaulted` exclusion stops manufacturing a corporate-class mismatch on
+    // every death.
+    if (comp.cash > 1) {
+      pay(ctx, {
+        payer: { kind: 'COMPANY', ticker: comp.ticker },
+        payee: { kind: 'UNMODELED', region: comp.region as RegionId },
+        amountUSD: comp.cash,
+        reason: 'estate: cash seized at filing',
+      });
+    }
     estates.push(estate);
     byCompanyId.set(comp.id, estate);
   });

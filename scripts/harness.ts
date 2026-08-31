@@ -168,6 +168,9 @@ const BOUNDARY_FRONTIERS: Record<string, string> = {
   'freight on a lane no carrier serves': 'no carrier on the lane to pay',
   // Owner: G5 — the residual claimants an estate pays once the named ones are satisfied.
   'estate distribution': 'unnamed residual claimants in a workout',
+  // §7.264: the debtor's cash arrives at the boundary at filing; the distributions above draw
+  // on it — the two legs of one workout meeting at the boundary, like §7.259's principal pair.
+  'estate: cash seized at filing': "the estate's funding, parked at the boundary until distributed",
   // G2's funding composition, the flow half (§7.254): wholesale money is a roll, and a bank
   // with cash beyond its stressed-outflow cover does not renew it. The lender is genuinely
   // unmodeled today. Large while the seed stocks unwind, then near zero; a line that STAYS
