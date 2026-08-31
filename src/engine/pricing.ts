@@ -1,6 +1,7 @@
 import { NelsonSiegelParams, calculateDiscountFactor, calculateNelsonSiegelZeroRate } from './nelsonSiegel';
 import { CreditRating, Sector } from '../types';
 import { INFLATION_TARGET } from './bootstrap/yield-curves';
+import { EQUITY_RISK_PREMIUM } from './equity-valuation';
 
 /**
  * OAS credit spread by rating: a geometric progression anchored on the CCC/default-boundary
@@ -29,7 +30,10 @@ export const RATING_OAS_SPREADS = buildRatingOasSpreads();
  * (inflation target + a structural equity risk premium) — an output of the model, not an
  * independently chosen multiple.
  */
-const EQUITY_RISK_PREMIUM = 0.045;
+// ONE OWNER (§4.0 Tier 1 item 5): the structural equity risk premium lives in
+// equity-valuation.ts — this file held a second copy at 0.045 against the owner's 0.035,
+// so the seed's sector multiples were struck on a different premium than the market that
+// would price the same names live.
 const SECTOR_DISCOUNT_RATE = INFLATION_TARGET + EQUITY_RISK_PREMIUM;
 const SECTOR_GROWTH_AND_VOL: Record<Sector, { growthRate: number; vol: number }> = {
   Tech: { growthRate: 0.12, vol: 0.28 },

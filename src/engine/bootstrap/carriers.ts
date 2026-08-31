@@ -27,6 +27,7 @@ import {
 import { carryRatesByRegion, computeSourcingIntent, LaneBooking, SOURCING_REGION_IDS } from '../simulation/stages/sourcing-intent';
 import { FxToUsd } from '../../domain/currency';
 import { EFFECTIVE_TAX_RATE } from '../macro/initialization';
+import { determineCreditRating } from '../simulation/credit';
 import { crewAnnualWageUSD, fuelPriceUsdPerTonne, runFreightClearing } from '../simulation/stages/freight-clearing';
 import { RATING_OAS_SPREADS } from '../pricing';
 import { fairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../equity-valuation';
@@ -262,8 +263,10 @@ function buildCarrierCompany(
   const annualInterest = debtBase * (policyRate + 0.02);
   const coverage = annualInterest > 0 ? ebit / annualInterest : 99;
   const leverage = ebitda > 0 ? debtBase / ebitda : 99;
-  const rating: CreditRating = coverage < 1.5 || leverage > 6 ? 'B'
-    : leverage > 4 ? 'BB' : leverage > 2.5 ? 'BBB' : 'A';
+  // ONE OWNER (§4.0 Tier 1 item 5): the rating ladder lives in simulation/credit.ts — this
+  // file carried its own three-cutoff copy, so a carrier opened rated on different arithmetic
+  // than the market re-rates it with a week later.
+  const rating: CreditRating = determineCreditRating(leverage, coverage, { ebitdaUSD: ebitda });
 
   const fleet: CarrierFleet = {
     assets,
