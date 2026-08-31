@@ -50,7 +50,7 @@ import { governmentOf } from '../src/domain/government-entity';
 import { probeSteadyState, compareToSettled } from '../src/engine/simulation/burn-in';
 import { overPledgedByBucket, PLEDGE_ROUNDING_TOLERANCE_USD } from '../src/domain/collateral';
 // §7.246: the instrument reads the engine's own definitions instead of re-hardcoding them.
-import { mortgageSeverityAtLtv, vintageCurrentLtv } from '../src/domain/banking';
+import { mortgageSeverityAtLtv, vintageCurrentLtv, householdBookRwaUSD } from '../src/domain/banking';
 import { SRF_SPREAD_BPS, ON_RRP_SPREAD_BPS } from '../src/engine/macro/banking';
 import { CAPEX_SUPPLIER_WEIGHTS } from '../src/domain/market-microstructure';
 import { centralBankAssetsUSD, centralBankFxReservesUSD } from '../src/domain/central-bank';
@@ -173,6 +173,14 @@ const BOUNDARY_FRONTIERS: Record<string, string> = {
   // unmodeled today. Large while the seed stocks unwind, then near zero; a line that STAYS
   // large means banks are re-accumulating cash faster than they shed priced funding. Owner: G2.
   'wholesale funding repaid': 'the unmodeled wholesale lender, at the roll',
+  // §7.259: the HOLDER half of a credit retirement. Stage 08 posts the borrower's retired
+  // principal INTO the boundary ('maturing tranche principal repaid', on the company cash walk);
+  // the credit books pay it OUT to the holders pro rata as their positions reconcile down to the
+  // real outstanding (holder-paydown.ts). The two legs are one flow meeting itself across a
+  // week; a line that grows without its stage-08 twin means positions are shrinking that no
+  // borrower repaid. Owner: the credit books (07b/07d).
+  'loan principal paydown to holders': "the borrowers' retired principal, parked at the boundary by stage 08",
+  'bond principal paydown to holders': "the borrowers' retired principal, parked at the boundary by stage 08",
 };
 /** Below this, a week's line is rounding rather than a flow. */
 const BOUNDARY_DE_MINIMIS_USD = 1e6;
@@ -1952,6 +1960,27 @@ const spiralModule: HarnessModule = {
           .map((m) => `${m.id} x${m.ratio.toFixed(2)} p${m.p.toFixed(0)} idx${m.idx.toFixed(1)} s/d${m.short.toFixed(2)} inv${(m.inv / 1e9).toFixed(1)}B`)
           .join(' | ');
         console.log(`  [px] w${w} ${region} ${line}`);
+      });
+    }
+    // BANKCAP=1 — per-bank capital decomposition: whose equity drains, whose RWA grows, and
+    // where each cohort's ratio sits against the [0.05, 0.35] band, weekly.
+    if (process.env.BANKCAP === '1') {
+      REGION_IDS_SEED_ORDER.forEach((region) => {
+        state.companies
+          .filter((c) => c.region === region && c.isBankEntity && isActiveCompany(c) && c.bankBalanceSheet)
+          .forEach((c) => {
+            const bs = c.bankBalanceSheet!;
+            const rwa = bs.businessLoanBookUSD * 1.0 + householdBookRwaUSD(bs.householdLoans);
+            const deskUSD = Object.values(bs.dealerDeskInventory ?? {})
+              .reduce((a, rows) => a + rows.reduce((b, r) => b + Math.abs(r.inventoryUSD), 0), 0);
+            console.log(`  [cap] w${w} ${region}:${c.ticker}`
+              + ` eq ${(bs.bankEquityUSD / 1e9).toFixed(2)}B rwa ${(rwa / 1e9).toFixed(2)}B`
+              + ` ratio ${(rwa > 0 ? bs.bankEquityUSD / rwa : 0).toFixed(4)}`
+              + ` | biz ${(bs.businessLoanBookUSD / 1e9).toFixed(2)}B hh ${(bs.consumerLoanBookUSD / 1e9).toFixed(2)}B`
+              + ` cash ${(bs.cashReservesUSD / 1e9).toFixed(2)}B whol ${(bs.wholesaleFundingUSD / 1e9).toFixed(2)}B`
+              + ` desk ${(deskUSD / 1e9).toFixed(2)}B`
+              + ` oas ${(c.oasSpreadBps ?? 0).toFixed(0)}bps rating ${c.creditRating}`);
+          });
       });
     }
     if (!SPIRAL) return;

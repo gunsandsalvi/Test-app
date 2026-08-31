@@ -70,6 +70,7 @@ import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { REGION_IDS } from '../../../domain/geography';
+import { reconcileHolderPrincipal } from './holder-paydown';
 
 // Within that slow-moving budget, how fast a participant rotates toward its currently most
 // attractive names — tactical name selection is real and moves faster than the overall budget.
@@ -230,6 +231,18 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
         return true;
       });
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
+    });
+
+    // §7.259 — settle the borrowers' retired principal ON THE HOLDERS before this book clears
+    // (see holder-paydown.ts; same defect and same fix as the loan book in 07d).
+    const regionBanksEarly = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    reconcileHolderPrincipal({
+      ctx, regionId,
+      outstandingByIssuerId: new Map(regionCompanies.map((c) => [c.id, fixedDebtOf(c)])),
+      holdingsByEntity: currentHoldingByCompanyByEntity,
+      banks: regionBanksEarly,
+      deskBook: BOOK,
+      reason: 'bond principal paydown to holders',
     });
     // OWN7, first half: the float is what this book's holders hold, and the INSTITUTIONS' half of
     // it is known here. It is set before the desks are built rather than after, because a desk is
@@ -435,19 +448,9 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // through the deal's own duration can cost on the residual the desks cannot absorb.
     const bookCapacityUSD = totalDeskCapacityUSD(ctx, regionBanks, BOOK);
     const durationById = new Map(regionCompanies.map((c) => [c.id, creditDurationYears(c)]));
-    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
-      (o, clearedStat) => underwritingFeeBps({
-        bookSpreadBps: DEALER_SPREAD_BPS,
-        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
-          statKind: 'YIELD_LIKE', currentStat: clearedStat,
-          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
-          minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
-          durationYears: durationById.get(o.issuerId) ?? 0,
-        }),
-        dealSizeUSD: o.sizeUSD,
-        deskCapacityUSD: bookCapacityUSD,
-      }),
-      BOOK);
+    // §7.259: the settlement call moved BELOW applyDealerDeskFills — called here it landed the
+    // lead's residual on its desk between the clearing and the rebuild-from-fills, which
+    // deleted it with no cash leg and charged it to equity as a phantom fee (see 07d).
 
     // Apply: real cleared OAS, mutated in place so stage 8 (which runs next) reads it as this
     // week's already-real value rather than recomputing one. Also extend each company's rolling
@@ -478,6 +481,21 @@ export function runCorporateBondClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: each desk's inventory, onto the bank that carried it. The regional array is now
     // the DERIVED sum of the named desks — nothing decides off it (G3a).
     const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
+    // §7.259: AFTER the fills application, so the lead's residual survives to next week's
+    // clearing as a real prior position.
+    settlePricedOfferings(regionId, 'CORP_BOND', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
+      (o, clearedStat) => underwritingFeeBps({
+        bookSpreadBps: DEALER_SPREAD_BPS,
+        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
+          statKind: 'YIELD_LIKE', currentStat: clearedStat,
+          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
+          minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
+          durationYears: durationById.get(o.issuerId) ?? 0,
+        }),
+        dealSizeUSD: o.sizeUSD,
+        deskCapacityUSD: bookCapacityUSD,
+      }),
+      BOOK);
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
     deskViewByCompany.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });

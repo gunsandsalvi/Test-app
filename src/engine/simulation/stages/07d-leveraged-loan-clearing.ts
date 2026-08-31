@@ -54,6 +54,7 @@ import { indexFundDemand, indexFundsForBook } from './etf-demand';
 import { mandateWeightForIssuer } from '../../../domain/cross-border';
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { REGION_IDS } from '../../../domain/geography';
+import { reconcileHolderPrincipal } from './holder-paydown';
 
 const MAX_WEEKLY_SPREAD_MOVE_PCT = 0.25;
 const STRATEGIC_TARGET_DRIFT_RATE = 0.05;
@@ -220,6 +221,20 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
       });
       currentHoldingByCompanyByEntity.set(entity.id, currentHoldingByCompany);
     });
+
+    // §7.259 — settle the borrowers' retired principal ON THE HOLDERS before this book clears:
+    // scale every position to the issuer's real outstanding and pay the difference in cash
+    // (see holder-paydown.ts). Without this, every maturity/prepayment left the books holding
+    // claims on principal already repaid, and the loan ledger minted 2–3% within weeks.
+    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
+    reconcileHolderPrincipal({
+      ctx, regionId,
+      outstandingByIssuerId: new Map(regionCompanies.map((c) => [c.id, floatingDebtOf(c)])),
+      holdingsByEntity: currentHoldingByCompanyByEntity,
+      banks: regionBanks,
+      deskBook: BOOK,
+      reason: 'loan principal paydown to holders',
+    });
     // OWN7, first half: the float is what this book's holders hold, and the INSTITUTIONS' half of
     // it is known here. It is set before the desks are built rather than after, because a desk is
     // sized against the LIVE float — leaving `tradableFloatUSD` at the whole outstanding until
@@ -370,7 +385,6 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     });
 
     // G3a: the named banks' loan-trading desks, sized by their own headroom.
-    const regionBanks = ctx.prevActiveFirms.filter((c) => c.region === regionId && c.isBankEntity && c.bankBalanceSheet);
     const deskParticipants = buildDealerDeskParticipants({
       ctx, banks: regionBanks, book: BOOK, instruments, spreadBps: DEALER_SPREAD_BPS,
     });
@@ -400,19 +414,14 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // duration, on the residual the desks cannot absorb.
     const bookCapacityUSD = totalDeskCapacityUSD(ctx, regionBanks, BOOK);
     const durationById = new Map(regionCompanies.map((c) => [c.id, loanCreditDurationYears(c)]));
-    settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
-      (o, clearedStat) => underwritingFeeBps({
-        bookSpreadBps: DEALER_SPREAD_BPS,
-        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
-          statKind: 'YIELD_LIKE', currentStat: clearedStat,
-          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
-          minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
-          durationYears: durationById.get(o.issuerId) ?? 0,
-        }),
-        dealSizeUSD: o.sizeUSD,
-        deskCapacityUSD: bookCapacityUSD,
-      }),
-      BOOK);
+    // §7.259: the settlement (which lands the lead's unsold residual on its desk inventory)
+    // moved BELOW applyDealerDeskFills. Called here — between the clearing and the fills
+    // application — the residual arrived on the sheet only for the rebuild-from-fills to delete
+    // it the same instant: no cash leg (the kernel never saw the position), and the fee formula
+    // then charged the whole residual to the lead's EQUITY as a phantom spread. The lead paid
+    // for the paper twice — reserves via the residual payment, equity via the fee — and held
+    // nothing. Measured: 1.6–3.1B/week per lead bank, every region, the whole life of the
+    // desks; it is what drained the UK cohort to CCC (§7.259).
 
     // Apply: real cleared discount margin + derived price-to-par, mutated in place so stage 8
     // reads it as an already-real value. Also extend the rolling history for momentum.
@@ -447,6 +456,22 @@ export function runLeveragedLoanClearingStage(state: GameState, ctx: WeeklyStepC
     // Apply: real dealer inventory.
     // G3a: owned by the desks that took it; the regional array is the derived sum.
     const deskViewByCompany = applyDealerDeskFills({ ctx, banks: regionBanks, book: BOOK, instruments, result });
+    // §7.259: AFTER the fills application, so the residual written onto the lead's desk
+    // survives to next week's clearing — where the build hands it to the kernel as a real prior
+    // position that can be genuinely sold.
+    settlePricedOfferings(regionId, 'LEVERAGED_LOAN', offeringsByIssuerId, result, ctx, (o) => o.sizeUSD,
+      (o, clearedStat) => underwritingFeeBps({
+        bookSpreadBps: DEALER_SPREAD_BPS,
+        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
+          statKind: 'YIELD_LIKE', currentStat: clearedStat,
+          maxWeeklyStatMovePct: MAX_WEEKLY_SPREAD_MOVE_PCT,
+          minWeeklyStatMoveBps: YIELD_LIKE_MIN_WEEKLY_MOVE_BPS,
+          durationYears: durationById.get(o.issuerId) ?? 0,
+        }),
+        dealSizeUSD: o.sizeUSD,
+        deskCapacityUSD: bookCapacityUSD,
+      }),
+      BOOK);
     const newDealerInventory: { companyId: string; inventoryUSD: number }[] = [];
     deskViewByCompany.forEach((inventoryUSD, companyId) => {
       if (Math.abs(inventoryUSD) > 1) newDealerInventory.push({ companyId, inventoryUSD });

@@ -329,17 +329,9 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
     // G3c: quoted per deal. Equity moves in price already, so the risk on the residual is the
     // book's own one-week move — which is why an equity mandate is the dearest of the three.
     const bookCapacityUSD = totalDeskCapacityUSD(ctx, regionBanks, BOOK);
-    settlePricedOfferings(regionId, 'EQUITY', offeringsByIssuerId, result, ctx,
-      (o, clearedStat) => o.sizeUSD * clearedStat,
-      (o, clearedStat) => underwritingFeeBps({
-        bookSpreadBps: DEALER_SPREAD_BPS,
-        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
-          statKind: 'PRICE_LIKE', currentStat: clearedStat, maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
-        }),
-        dealSizeUSD: o.sizeUSD * clearedStat,
-        deskCapacityUSD: bookCapacityUSD,
-      }),
-      BOOK);
+    // §7.259: the settlement call moved BELOW applyDealerDeskFills — called here it landed the
+    // lead's residual on its desk between the clearing and the rebuild-from-fills, which
+    // deleted it with no cash leg and charged it to equity as a phantom fee (see 07d).
 
     // Apply the cleared price. Stage 08 runs after this and reads it as already-real, exactly as
     // it reads the cleared OAS — it no longer computes a price of its own.
@@ -431,6 +423,19 @@ export function runEquityClearingStage(state: GameState, ctx: WeeklyStepContext)
       unitPriceOf: (companyId) => companyById.get(companyId)?.stockPrice ?? 0,
       cashDeltaOf: (deskId) => deskCashUSD.get(deskId) ?? 0,
     });
+    // §7.259: AFTER the fills application, so the lead's residual survives to next week's
+    // clearing as a real prior position.
+    settlePricedOfferings(regionId, 'EQUITY', offeringsByIssuerId, result, ctx,
+      (o, clearedStat) => o.sizeUSD * clearedStat,
+      (o, clearedStat) => underwritingFeeBps({
+        bookSpreadBps: DEALER_SPREAD_BPS,
+        oneWeekPriceRiskBps: oneWeekPriceRiskBps({
+          statKind: 'PRICE_LIKE', currentStat: clearedStat, maxWeeklyStatMovePct: MAX_WEEKLY_PRICE_MOVE_PCT,
+        }),
+        dealSizeUSD: o.sizeUSD * clearedStat,
+        deskCapacityUSD: bookCapacityUSD,
+      }),
+      BOOK);
 
     // SETL6. This book clears in SHARES, so the engine's own money legs are share-denominated
     // and unusable here; the deltas above are the money ones. The dealer is the counterparty to

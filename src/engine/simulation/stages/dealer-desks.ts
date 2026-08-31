@@ -196,6 +196,28 @@ export function applyDealerDeskFills(args: {
     const inventory: DealerDeskInventory = { ...(sheet.dealerDeskInventory ?? {}) };
     if (positions.length > 0) inventory[book] = positions;
     else delete inventory[book];
+    // DESK_TRACE=1 instrument: the desk's whole leg for one book in one line — the fee formula
+    // charges equity with any cash that left without inventory arriving, so a books-vs-cash
+    // disagreement in the clearing engine lands HERE as a phantom fee. Print it where it books.
+    if (process.env.DESK_TRACE === '1' && (feeUSD > 50e6 || Math.abs(markToMarketUSD) > 50e6)) {
+      const fillsStr = Array.from(fills.entries())
+        .filter(([id, units]) => Math.abs(units * unitPrice(id)) > 10e6)
+        .map(([id, units]) => `${id.slice(0, 12)} u${(units / 1e6).toFixed(1)}M@${unitPrice(id).toFixed(3)}`)
+        .slice(0, 6).join(' ');
+      console.log(`  [desk] w${ctx.nextWeek} ${bank.ticker} ${book}: prevMarked ${(prevMarkedUSD / 1e6).toFixed(1)}M`
+        + ` new ${(newUSD / 1e6).toFixed(1)}M cash ${(cashDeltaUSD / 1e6).toFixed(1)}M`
+        + ` fee ${(feeUSD / 1e6).toFixed(1)}M mtm ${(markToMarketUSD / 1e6).toFixed(1)}M :: ${fillsStr}`);
+      // The wiped-name decomposition: each cleared prior position, whether the fills map came
+      // back with the name, and the name's float in this clearing — the three facts that decide
+      // whether its removal had a cash leg.
+      const floatById = new Map(args.instruments.map((i2) => [i2.id, i2.tradableFloatUSD]));
+      prior.forEach((p, instrumentId) => {
+        if (!clearedIds.has(instrumentId) || Math.abs(p.inventoryUSD) < 25e6) return;
+        console.log(`    [desk-prior] ${bank.ticker} ${instrumentId} held ${(p.inventoryUSD / 1e6).toFixed(1)}M`
+          + ` -> fill ${fills.has(instrumentId) ? (((fills.get(instrumentId) ?? 0) * unitPrice(instrumentId)) / 1e6).toFixed(1) + 'M' : 'NONE'}`
+          + ` float ${((floatById.get(instrumentId) ?? 0) / 1e6).toFixed(1)}M`);
+      });
+    }
     updateBankSheet(ctx, bank.ticker, {
       ...sheet,
       dealerDeskInventory: inventory,

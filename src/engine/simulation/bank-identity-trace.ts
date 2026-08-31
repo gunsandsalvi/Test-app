@@ -134,7 +134,12 @@ export class BankIdentityTrace {
         residualDelta += d * FIELD_SIGNS[k];
         parts.push(`${k} ${d >= 0 ? '+' : ''}${(d / 1e6).toFixed(3)}M`);
       });
-      if (parts.length > 0 && Math.abs(residualDelta) > 1e4) {
+      // Print on ANY material field change, not only when the residual moved: a balanced
+      // write (equity and an asset marked down together — an MTM loss, a write-off with its
+      // book) leaves dR at zero and was exactly the shape this gate hid (a bank lost 2.67B of
+      // equity in one week and no stage printed). The residual stays in the line as the
+      // balance check; the FIELDS are what a focus trace is for.
+      if (parts.length > 0) {
         console.log(`  [id-field] w${ctx.nextWeek} ${this.focusTicker} ${stage} dR ${(residualDelta / 1e6).toFixed(3)}M :: ${parts.join(' | ')}`);
       }
     }

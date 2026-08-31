@@ -299,9 +299,11 @@ cannot be deleted before the mechanism under it exists.
 
 **THE RUN TO JUDGE AGAINST IS §7.256's: 204 violations / 18 FAMILIES on the Tier-1-pass
 tree** (counts 628 → 361 → 351 → 320 → 367 → 278 → 204; families 94 → 67 → 60 → 44 → 18;
-§7.256 recorded the cost — the EUR fiscal-labour spiral — and §7.257 root-fixed it: the
-household budget was a slice of the demand level, not its income; a fresh reference on the
-fixed tree is due).
+§7.256 recorded the cost — the EUR fiscal-labour spiral — and §7.257 root-fixed it (the
+household budget was a slice of the demand level, not its income). §7.258 is the reference on
+that tree (169/18); §7.259 then killed the UK bank cohort's killer (the underwriting pipeline
+destroying the lead's residual + the missing holder principal leg) — a fresh reference on the
+§7.259 tree is due and will supersede §7.258.)
 Each run is the record of its own tree; compare nothing across them without naming the
 relabel between.
 
@@ -3678,3 +3680,82 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        week-over-week per region), PX_FOCUS=<category> (per-region supplier
        count/capacity/staffing/units/demand-level for one category) — the one-region-runaway
        differential kit, in the harness for the next one.
+
+258. **THE REFERENCE ON THE §7.257 TREE: 169 violations in 18 FAMILIES — THE RUN TO JUDGE
+     AGAINST** (counts 628 → 361 → 351 → 320 → 367 → 278 → 204 → 169). 60 weeks, seed
+     2654435769, shocks on.
+     - **The EUR spiral is dead at reference scale**: the EUR unemployment band (47x), the EUR
+       outlays-over-budget leg (43x total with UK), the negative-TGA family and the four
+       revenue-explosion singles are ALL GONE. **All four regions cohere at horizon for the
+       first time: u 26.9 / 27.0 / 21.8 / 23.0 (USA/EUR/UK/JPN)** — §7.256's world ended USA
+       28.2 / EUR 57.1. **CPI ×2.269 with week-60 inflation 20 annualized, still falling**
+       (was ×4.969 with 148) — the best long price print in the model's history. GDP 1.13T.
+       Bypass gross 2.7B → 2.1B/week (the EUR slice fell 1.4B → 0.2B — the spiral was feeding
+       it; what remains is USA 1.0B + UK 0.6B).
+     - **The relabel's redistribution**: the equity-fund overdraft class TRIPLED — UKEQSX,
+       JPNEQX and EUREQX each overdraw 34x (same 34 count as §7.256's lone JPNEQX; the class
+       is systematic, week-tied, and now has three specimens for the digger). Eight
+       contract-backlog singles (backlog growing faster than the weekly obligation) surfaced
+       as the goods market re-based — fill ratio settles 0.604 (was 0.696): the sane price
+       level bought MORE unmet unit demand, not less. One under-subscribed-auction
+       non-response single. UK bank cohort is now THE top family (NIM 42x + capital 12x).
+     - **The 10Y re-pinned (4.76 all run, damper worst streak 60 weeks, 775 bound at w60)**:
+       §7.256's release did not survive the relabel — the damper row's (b) question stands
+       unchanged and owns it.
+     - Still standing: carriers 0 of 12 alive; unbackedBankCashUSD 1,428.8B at w60 (rising —
+       the Tier-2 whole-sheet migration's meter); active firms 2,162 of 2,496.
+     - Queue: (1) UK bank cohort (§7.259's diagnosis in flight); (2) the equity-fund
+       overdraft class (three specimens); (3) carrier deaths; (4) the backlog family;
+       then §4.0 Tier 2.
+
+259. **THE UK BANK COHORT'S KILLER WAS THE UNDERWRITING PIPELINE DESTROYING THE LEAD'S
+     RESIDUAL — every region, every week, since the desks were born — and under it, a credit
+     retirement had no holder leg.** Three defects, one dig; all fixed and verified.
+     - **The dig**: BANKCAP=1 (new per-bank print: equity/RWA/ratio/desk/oas/rating weekly)
+       showed all 16 banks seed at a healthy 0.112 ratio and EVERY cohort drains equity in
+       weeks 1–5; USA/JPN stabilize, the UK's smaller banks (2–4B equity) get crushed — THSY
+       −2.67B in ONE week, equity negative, all four UK ratings CCC by w9, OAS 200→700bps, and
+       VOUL/THSY (42B/26B wholesale they lack the cash to repay) then paid policy+1,500–2,200bps
+       on it: the §7.256 NIM/capital families. The identity trace HID the writer — its focus
+       print gated on `|dR| > 1e4`, and a balanced write (equity and an asset down together)
+       nets to zero residual; gate removed (bank-identity-trace.ts), and the writer named
+       itself: **07d wrote THSY equity −2,737.7M in one stage** while its desk moved +150.6M.
+       DESK_TRACE=1 (new: per-desk prevMarked/new/cash/fee/mtm + per-prior-position fill/float)
+       then produced the clean specimen: **VQFA w4 — prevMarked 1,611.6M, new 0.0M, cash 0.0M,
+       fee 1,611.6M**: the desk's whole loan book wiped, no cash, no fills.
+     - **Defect 1 — the residual double-destruction (07b/07d/07e)**: `settlePricedOfferings`
+       ran between the clearing and `applyDealerDeskFills`. The lead bank PAID CASH for its
+       firm-commitment residual and booked the position — and the rebuild-from-fills deleted it
+       the same instant (the kernel never saw it), with the fee formula charging the whole
+       residual to EQUITY as a phantom spread. The lead paid twice — reserves and equity — and
+       held nothing: measured 1.6–3.1B/week PER LEAD BANK (USA PGNX 3.1B in one week), every
+       region, the whole life of the desks. **Fix: the settlement call moved BELOW
+       applyDealerDeskFills in all three books** — the residual survives to next week's
+       clearing as a real prior position that can be genuinely sold.
+     - **Defect 2 — the residual row dropped `units`**: the merge in primary-settlement.ts
+       rebuilt the row from two fields (killing the units on any topped-up position), and a new
+       equity-book residual stored dollars a units-aware reader would take for SHARES (40x
+       phantom at a $40 price). Fixed: the row carries units, derived at the cleared price for
+       equity, identical to dollars for credit.
+     - **Defect 3 — a credit retirement had no holder leg (unmasked by defect 1's fix)**: stage
+       08 retires tranches and posts the principal INTO the boundary; the weekly clearing only
+       ever REDISTRIBUTES holder totals, so the books held claims on principal already repaid —
+       the loan ledger minted 2–3% over outstanding within weeks (UK 17x + USA 13x once the
+       desk wipes stopped bleeding holdings by accident). **Fix: `holder-paydown.ts` —
+       reconcileHolderPrincipal scales every holder position (institutions AND desks) down to
+       the issuer's real outstanding pro rata and PAYS the scaled-away principal from the same
+       UNMODELED boundary the borrower repaid into**; wired into 07b and 07d before floats are
+       built; the two boundary reasons are declared frontiers in the harness, paired by
+       construction with stage 08's 'maturing tranche principal repaid'. Known remainder:
+       claims on issuers that left the book entirely (fully repaid or estate-less exits) are
+       not yet swept — they sit outside the region-company scan.
+     - **Verified (20 weeks, shocks off)**: UK capital (12x) and UK NIM (3x at 20wk; 42x+12x at
+       the §7.258 reference) are GONE; the loan-mint successor family is GONE; **all 16 banks
+       end w20 healthy — ratios 0.107–0.218, equity GROWING (THSY 2.26→3.66B where it died at
+       −0.76B), ratings A/AA/B** (VOUL still carries its seed wholesale at a wide spread —
+       watch, not defect). Remaining: the three known 0.02B fund-overdraft singles. tsc, 71
+       tests, hygiene, lint 386 all clean. NOTE for the §7.258 comparison: the reference
+       predates these fixes — the fresh reference after this pass is the run to judge against.
+     - **Hypothesis parked for the overdraft digger**: the equity-fund 0.1–0.2B/week
+       overdrafts (w27+ at reference) may be this same missing principal income — re-measure
+       on the fixed tree before digging.

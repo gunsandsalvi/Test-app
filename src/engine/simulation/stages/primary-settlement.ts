@@ -112,8 +112,28 @@ export function settlePricedOfferings(
       const inventory: DealerDeskInventory = { ...(existingSheet.dealerDeskInventory ?? {}) };
       const rows = [...(inventory[deskBook] ?? [])];
       const at = rows.findIndex((r) => r.instrumentId === issuerId);
-      if (at >= 0) rows[at] = { instrumentId: issuerId, inventoryUSD: rows[at].inventoryUSD + residualUSD };
-      else rows.push({ instrumentId: issuerId, inventoryUSD: residualUSD });
+      // §7.259: the position carries its UNITS. An equity book clears in shares, so a residual
+      // stored as dollars alone was read back as a share count by every units-aware consumer
+      // (desk build, fee mark) — inventoryUSD-as-units at a $40 price is a 40x phantom
+      // position. Credit clears in dollars, where units and money are the same number. The
+      // merge also used to DROP the existing row's units field entirely (object rebuilt from
+      // two fields), which corrupted any position it topped up.
+      const residualUnits = instrumentType === 'EQUITY'
+        ? residualUSD / Math.max(1e-9, outcome.clearedStat)
+        : residualUSD;
+      if (at >= 0) {
+        const prevUnits = rows[at].units
+          ?? (instrumentType === 'EQUITY'
+            ? rows[at].inventoryUSD / Math.max(1e-9, outcome.clearedStat)
+            : rows[at].inventoryUSD);
+        rows[at] = {
+          instrumentId: issuerId,
+          inventoryUSD: rows[at].inventoryUSD + residualUSD,
+          units: prevUnits + residualUnits,
+        };
+      } else {
+        rows.push({ instrumentId: issuerId, inventoryUSD: residualUSD, units: residualUnits });
+      }
       inventory[deskBook] = rows;
       updateBankSheet(ctx, lead.ticker, { ...existingSheet, dealerDeskInventory: inventory });
     }
