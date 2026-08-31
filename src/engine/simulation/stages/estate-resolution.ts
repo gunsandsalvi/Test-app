@@ -24,6 +24,7 @@ import { getOutputInventoryUSD } from '../../../domain/company';
 import { bumpRegister } from './register-index';
 import { BankingSector } from '../../../domain/banking';
 import { BankLoan } from '../../../domain/banking';
+import { bookPnL } from '../../ledger/bank-book';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
@@ -302,10 +303,10 @@ function reduceHolding(
     // by construction, whatever the rows hold.
     const extinguishedUSD = amountUSD - leftUSD;
     company.bankBalanceSheet = {
-      ...sheet,
+      ...bookPnL(sheet, isLoss ? -extinguishedUSD : leftUSD,
+        isLoss ? 'estate loan write-off' : 'estate recovery income', ticker),
       businessLoans: loans,
       businessLoanBookUSD: Math.round(bookUSD),
-      bankEquityUSD: sheet.bankEquityUSD + (isLoss ? -extinguishedUSD : leftUSD),
     };
   }
 }

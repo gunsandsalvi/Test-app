@@ -40,6 +40,7 @@
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { bookPnL } from '../../ledger/bank-book';
 import { PartyRef, pay, partyKey, partyFromKey } from './settlement';
 import { sovereignCouponByBucket, sovereignCouponDueShare } from '../../../domain/government';
 import { sovBucketKey } from './shared-helpers';
@@ -150,8 +151,7 @@ export function runSovereignCalendarStage(ctx: WeeklyStepContext): void {
     accrued.forEach((usd, k) => { if (k.endsWith(key)) heldUSD += usd; });
     if (earnedUSD === 0 && heldUSD === (c.bankBalanceSheet.sovereignAccruedCouponUSD ?? 0)) return;
     c.bankBalanceSheet = {
-      ...c.bankBalanceSheet,
-      bankEquityUSD: c.bankBalanceSheet.bankEquityUSD + earnedUSD,
+      ...bookPnL(c.bankBalanceSheet, earnedUSD, 'sovereign coupon accrual', c.ticker),
       sovereignAccruedCouponUSD: heldUSD,
     };
   });

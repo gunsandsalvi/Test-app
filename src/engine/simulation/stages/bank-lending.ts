@@ -50,6 +50,7 @@ import {
 import { CreditTierBook, AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
+import { bookPnL } from '../../ledger/bank-book';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
 import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
 import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO } from '../../macro/banking';
@@ -345,10 +346,9 @@ export function runBankWeeklyLending(
   const businessLoanBookUSD = Math.round(loans.reduce((a, l) => a + l.principalUSD, 0));
   return {
     sheet: {
-      ...sheet,
+      ...bookPnL(sheet, -loanLossWeeklyUSD, 'business loan losses'),
       businessLoans: loans,
       businessLoanBookUSD,
-      bankEquityUSD: sheet.bankEquityUSD - loanLossWeeklyUSD,
       // SEG2e: loans still create deposits, but the pool's new money now lands on ITS OWN line
       // through settlement — the caller pays BANK_CREDIT → SEGMENT with the per-segment map
       // below, so the deposit appears on `smeDepositsUSD` (and the pool's cash) with no reserve
@@ -914,7 +914,7 @@ export function runBankHouseholdLending(
   const consumerLoanBookUSD = Math.round(pools.reduce((a, pl) => a + pl.principalUSD, 0));
   return {
     sheet: {
-      ...sheet,
+      ...bookPnL(sheet, -lossWeeklyUSD, 'household loan losses'),
       householdLoans: pools,
       consumerLoanBookUSD,
       // Interest is NOT posted here: it accrues on the PRIOR book and evolveBankingSector
@@ -923,7 +923,6 @@ export function runBankHouseholdLending(
       // (boundary in, like the savings inflow); card/term origination leaves at once to
       // merchants.
       cashReservesUSD: sheet.cashReservesUSD + principalWeeklyUSD - consumerCreditOriginationUSD,
-      bankEquityUSD: sheet.bankEquityUSD - lossWeeklyUSD,
       // The buyer's new debt is the seller's new deposit, net of the seller's own loan the
       // sale proceeds retire — deposits grow with NET mortgage credit, not gross churn.
       depositsUSD: sheet.depositsUSD + mortgageOriginationUSD - mortgageDischargeUSD,

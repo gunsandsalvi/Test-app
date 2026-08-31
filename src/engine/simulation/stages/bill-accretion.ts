@@ -16,6 +16,7 @@
 import { govBucketKeyOf } from '../../../domain/sovereign-id';
 import { RegionId } from '../../../types';
 import { WeeklyStepContext } from './context';
+import { bookPnL } from '../../ledger/bank-book';
 import { isActiveCompany } from '../../../domain/company';
 import { SOV_BILL_BUCKETS } from './shared-helpers';
 
@@ -62,10 +63,9 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
       return {
         ...c,
         bankBalanceSheet: {
-          ...existing,
+          ...bookPnL(existing, gainUSD, 'bill accretion', c.ticker),
           sovereignBondHoldingsByTenor: byTenor,
           sovereignBondHoldingsUSD: Math.round((Object.values(byTenor) as any[]).reduce((a: number, v: any) => a + (Number(v) || 0), 0)),
-          bankEquityUSD: existing.bankEquityUSD + gainUSD,
           // §7.254: recorded so next week's NIM income measure counts the return this book
           // actually earned; the equity leg above is the booking, this line is the reading.
           lastBillAccretionWeeklyUSD: Math.round(gainUSD),

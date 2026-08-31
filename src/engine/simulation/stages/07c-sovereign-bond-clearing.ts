@@ -50,6 +50,7 @@ import { mandateWeightForIssuer, mandateAllowsDuration } from '../../../domain/c
 import { hedgedReservationAdjustmentBps } from '../../../domain/fx-hedging';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { WeeklyStepContext, updateBankSheet } from './context';
+import { bookPnL } from '../../ledger/bank-book';
 import { stagePurchaseBudgetUSD } from './institutional-balance-sheet';
 import { pendingSettlementUSD } from './settlement';
 import { settleClearedBook, feeDesksForRegion, primaryTakes } from './book-settlement';
@@ -578,10 +579,9 @@ export function runSovereignBondClearingStage(state: GameState, ctx: WeeklyStepC
       // that sold and the bank that bought move against each other rather than each moving
       // alone.
       updateBankSheet(ctx, bank.ticker, {
-        ...existingSheet,
+        ...bookPnL(existingSheet, -feeUSD, 'sovereign book fee', bank.ticker),
         sovereignBondHoldingsByTenor: newBuckets,
         sovereignBondHoldingsUSD: Math.round(newTotalUSD),
-        bankEquityUSD: existingSheet.bankEquityUSD - feeUSD,
       });
     });
 

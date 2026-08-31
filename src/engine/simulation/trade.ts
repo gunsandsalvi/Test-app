@@ -2,6 +2,7 @@ import { GameState, Position } from '../../types';
 import { random } from '../rng';
 import { DESK_BOOK_BY_ASSET_TYPE } from '../dealers';
 import { regionalDeskView } from '../../domain/dealer-desk';
+import { bookPnL } from '../ledger/bank-book';
 import { FX_PFE_ADD_ON_RATE } from '../../domain/dealer-derivatives';
 
 export function executeTrade(
@@ -72,10 +73,9 @@ export function executeTrade(
       updatedCompanies[bankIndex] = {
         ...bank,
         bankBalanceSheet: {
-          ...sheet,
+          ...bookPnL(sheet, incomeUSD, 'player trade fee/spread', bank.ticker),
           dealerDeskInventory: inventory,
           cashReservesUSD: sheet.cashReservesUSD - inventoryDeltaUSD + incomeUSD,
-          bankEquityUSD: sheet.bankEquityUSD + incomeUSD,
         },
       };
 

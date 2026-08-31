@@ -17,6 +17,7 @@ import { leverageHeadroomUSD, MIN_CASH_BUFFER_RATIO, BASEL_MIN_LEVERAGE_RATIO } 
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
 import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext, updateBankSheet } from './context';
+import { bookPnL } from '../../ledger/bank-book';
 import { pendingSettlementUSD } from './settlement';
 import { PartyRef } from './settlement';
 
@@ -219,9 +220,9 @@ export function applyDealerDeskFills(args: {
       });
     }
     updateBankSheet(ctx, bank.ticker, {
-      ...sheet,
+      ...bookPnL(bookPnL(sheet, -feeUSD, `desk fee: ${book}`, bank.ticker),
+        markToMarketUSD, `desk mark-to-market: ${book}`, bank.ticker),
       dealerDeskInventory: inventory,
-      bankEquityUSD: sheet.bankEquityUSD - feeUSD + markToMarketUSD,
     });
     inventories.push(inventory);
   });

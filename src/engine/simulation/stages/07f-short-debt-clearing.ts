@@ -33,6 +33,7 @@ import { govBucketKeyOf, isBillBucketKey } from '../../../domain/sovereign-id';
 import { REGION_IDS } from '../../../domain/geography';
 import { GameState, RegionId, ItemizedHolding, InstitutionalEntity, DebtTranche, NewsItem, Company } from '../../../types';
 import { WeeklyStepContext, updateBankSheet } from './context';
+import { bookPnL } from '../../ledger/bank-book';
 import { computeAnnualDefaultProbability, creditRecoveryRate, SOV_BILL_BUCKETS, sovBucketKey, WORKING_CAPITAL_SHARE_OF_REVENUE } from './shared-helpers';
 import { fitNelsonSiegelParams, calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { isActiveCompany, isPubliclyListed, corporateTreasuryTargetUSD } from '../../../domain/company';
@@ -474,10 +475,9 @@ export function runShortDebtClearingStage(state: GameState, ctx: WeeklyStepConte
         const cashDeltaUSD = result.netCashDeltaByParticipantId.get(`BANK-${bank.ticker}`) ?? -faceDeltaUSD;
         const feeUSD = Math.max(0, -(cashDeltaUSD + faceDeltaUSD));
         updateBankSheet(ctx, bank.ticker, {
-          ...existingSheet,
+          ...bookPnL(existingSheet, -feeUSD, 'bill book fee', bank.ticker),
           sovereignBondHoldingsByTenor: byTenor,
           sovereignBondHoldingsUSD: Math.round(Object.values(byTenor).reduce((s, v) => s + v, 0)),
-          bankEquityUSD: existingSheet.bankEquityUSD - feeUSD,
         });
       });
 

@@ -4036,3 +4036,46 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        and the goods-fill statistic (0.68) is want-fill, not budget-fill. Not a defect to
        "fix" by itself; the capex-starvation channel must be measured on MONEY bids before
        any further supply-side conclusion. Owner: the §6.1 seed row, with this reading.
+
+273. **THE FUND KEEPS ITS OWN FEE AS A CASH SLEEVE — the USAEQX 21x chronic single was a
+     fully-invested fund orbiting dust-negative forever.** A fund that pays its sponsor and
+     its trading spreads out of a zero cash line refills by selling, nets proceeds-minus-fee,
+     and lands just below zero again (measured: USAEQX overdrawn by <5M for 21 straight weeks
+     at the §7.271 reference — the largest single family left). Fix in `etf-demand.ts`:
+     `investableUSD = (holdings + cash) × (1 − expenseRatioAnnual)` — a year of the fund's
+     OWN expense ratio held back as cash, its own measured obligation, no new constant, and
+     what real index funds hold cash for. Composes with §7.266's signed-cash refill.
+
+274. **THE THREE OPTIONAL LEDGER FIELDS ARE REQUIRED NOW (Tier-1 #3).** `estates`,
+     `holderAccruedInterestUSD`, `sovereignAccruedInterestUSD` were optional on `GameState`
+     with `?? []` / `?? new Map()` defaults in `context.ts` — the resetting-default trap: a
+     load path that drops the field silently resets every estate and every accrual to zero
+     and no identity breaks (both legs vanish together, §7.103's shape at the type level).
+     Now required: seeded explicitly in `initialization.ts`, defaults deleted in
+     `context.ts`, tsc enforces every future constructor. Tier-1 #4 (profiles registry as
+     `Record<FinancialStatementProfile, ProfileModule | null>` with `REIT: null` explicit)
+     verified already done — closed by inspection, no change.
+
+275. **ONE API FOR A BANK'S P&L WRITE — `bookPnL` (src/engine/ledger/bank-book.ts), Tier-2
+     ledger enforcement; and the 02b reconcile-deletion GATE MEASUREMENT.**
+     - Eight stage sites wrote `bankEquityUSD` with their own spread rebuilds; none could be
+       enumerated by reason and a NaN poisoned the sheet silently. All converted:
+       dealer-desks (desk fee + mark-to-market), 07c (sovereign book fee), 07f (bill book
+       fee), bill-accretion, sovereign-calendar (coupon accrual), trade.ts (player fee/
+       spread), estate-resolution (write-off / recovery income), bank-lending ×2 (business
+       and household loan losses). `bookPnL` throws on non-finite (a NaN P&L is a defect at
+       the caller, same doctrine as journalPayment's guard) and PNL_TRACE=1 prints every
+       write >10M by reason — the instrument the §7.259 dig had to rebuild by hand.
+     - NOT converted, by design: stock transfers and appliers are not P&L — 10-mergers
+       (equity absorb), settlement.ts:498 (applying the report's deltas), 07h-cds
+       (carry-through), bank-lending seed-time ratio preservation, and
+       `evolveBankingSector` itself (already a single named-flow ledger with one final
+       write — the pattern bookPnL exists to impose, natively).
+     - **The 02b reconcile deletion is GATE-BLOCKED, measured.** With the overwrite removed
+       the meter — now measuring the accumulating stock instead of the weekly re-pinned
+       flow — reads **61.4B by w10 ≈ 6B/week still moving outside instructions in the early
+       regime** (identity stayed green only because the reconcile had been eating it).
+       The plan's own gate ("goes to zero when every stage records instructions") is unmet:
+       route the early-regime flows first, then delete. Reverted; the clamp stays with it.
+     - Verification: tsc clean, 71/71 tests, hygiene pass, lint 386 (ceiling), WEEKS=10
+       SHOCKS=0 probe identical to baseline (2 violations, same two credit-ETF w3 singles).
