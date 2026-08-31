@@ -279,6 +279,13 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // inputs to other products too (heavy equipment into repair, enterprise software into several),
     // so they take the intermediate half like everything else.
     const totalOutputTargets = totalOutputFromFinalDemand(allTargets);
+    if (process.env.SEED_RECON && state.currentWeek <= 1) {
+      const cat = process.env.SEED_RECON;
+      console.log(`  [recon03] ${regionId}:${cat} final ${(((allTargets[cat] ?? 0)) / 1e9).toFixed(2)}B/yr`
+        + ` solvedGross ${(((totalOutputTargets[cat] ?? 0)) / 1e9).toFixed(2)}B/yr`
+        + ` intermediate ${((((totalOutputTargets[cat] ?? 0) - (allTargets[cat] ?? 0))) / 1e9).toFixed(2)}B/yr`
+        + ` corpIntensityLeg ${(((corpInputDemandByCategory[cat] ?? 0)) / 1e9).toFixed(2)}B/yr`);
+    }
     Object.keys(allTargets).forEach((cat) => { allTargets[cat] = totalOutputTargets[cat] ?? allTargets[cat]!; });
 
     Object.keys(allTargets).forEach((cat) => {

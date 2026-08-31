@@ -4024,10 +4024,15 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        then Leontief-solved the intermediate on top**. Removed: the level is C+G (+ the capex
        branch's investment); the solve owns the intermediate; `corporateDemandUSD` still
        carries the operating leg for stage 05's bids, which never read the level.
-     - **Open (the remaining ~40%)**: with the double count out, the solved gross output puts
-       electricity's intermediate at ~3.8M units/wk while the firms' own `firmInputIntensities`
-       bid 10.8M — the intensity tables and `VIEW_CATEGORY_INPUT_REQUIREMENTS` are two
-       representations of the same registry recipes disagreeing ~3x. One owner is the fix;
-       until then the capacity (sized off the solve's side via supplier revenue) meets bids
-       from the intensity side, and fill ~0.6 with the capex starvation and the u endpoint
-       are the cost. Owner: CHAIN/registry, the §6.1 seed row.
+     - **Open — CORRECTED same session by measuring instead of subtracting**: [recon03] (the
+       solve's own decomposition) reads USA electricity — final 10.84B/yr, solved gross
+       49.12B, intermediate 38.28B, firms' intensity leg 22.47B (+ SME ≈ 27.6B bid). The
+       intensity-vs-BOM "3x" claim was an estimation error: the sides agree within ~1.4x
+       (firms bid less than the solve's intermediate because Σ firm revenue < solved gross
+       output — the §5-STRUCT step-6 sizing gap, already a row). **The units gap is mostly
+       the HOUSEHOLD WANT-VS-BUDGET WEDGE**: the ladder posts physical satiation quantities
+       (13.26M units/wk ≈ 33.8B/yr at seed prices, against a ~7B household budget share) and
+       money bounds only the rungs' PRICES — so `totalUnitsDemandedThisWeek` measures want,
+       and the goods-fill statistic (0.68) is want-fill, not budget-fill. Not a defect to
+       "fix" by itself; the capex-starvation channel must be measured on MONEY bids before
+       any further supply-side conclusion. Owner: the §6.1 seed row, with this reading.
