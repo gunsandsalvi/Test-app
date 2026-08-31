@@ -21,6 +21,8 @@ import {
 } from '../../../domain/estate';
 import { getOutputInventoryUSD } from '../../../domain/company';
 import { bumpRegister } from './register-index';
+import { BankingSector } from '../../../domain/banking';
+import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
 import { EQUITY_RISK_PREMIUM } from '../../equity-valuation';
@@ -257,7 +259,9 @@ function reduceHolding(
     const ticker = claim.holder.ticker;
     const company = index.bankByTicker.get(ticker);
     if (!company) return;
-    const sheet = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
+    // The annotation is here because `ctx.companyUpdates` is `Record<string, any>` (see
+    // stages/context.ts) — the remaining hole noImplicitAny cannot close on its own.
+    const sheet: BankingSector = ctx.companyUpdates[ticker]?.bankBalanceSheet ?? company.bankBalanceSheet!;
     let leftUSD = amountUSD;
     const loans = (sheet.businessLoans || []).map((l) => {
       if (l.borrowerId !== companyId || leftUSD <= 0) return l;
@@ -303,7 +307,7 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   // The banks' own facilities: secured, and they rank with the first-lien loans.
   ctx.updatedCompanies.forEach((bank) => {
     const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet;
-    (sheet?.businessLoans || []).forEach((l) => {
+    (sheet?.businessLoans || []).forEach((l: BankLoan) => {
       if (l.borrowerId !== comp.id) return;
       addClaim({ holder: { kind: 'BANK', ticker: bank.ticker }, instrumentType: 'BANK_FACILITY', seniority: CLAIM_SENIORITY.SECURED, principalUSD: l.principalUSD, recoveredUSD: 0 });
     });

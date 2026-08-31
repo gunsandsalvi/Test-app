@@ -48,7 +48,10 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
       const firmsInCat = firmsByRegionCat.get(regionId)?.get(cat) ?? [];
       if (firmsInCat.length === 0) { categorySupplyGrowth[cat] = 0; return; }
       categorySupplyGrowth[cat] = firmsInCat.reduce((s, f) => {
-        const line = f.productLines.find(l => l.subUnitId === cat)!;
+        // A firm with no product lines cannot be a supplier of this category; skipping is the
+        // same outcome the `!` produced by accident, said on purpose.
+        const line = (f.productLines ?? []).find(l => l.subUnitId === cat);
+        if (!line) return s;
         return s + (f.growthCapex / Math.max(1, f.annualRevenue)) * line.revenueShare;
       }, 0) / firmsInCat.length;
     });

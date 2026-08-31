@@ -68,7 +68,9 @@ export function sovereignDebtToGdpRatio(region: Region): number {
 export function sovereignDeficitPctGdp(region: Region): number {
   const gdpUSD = region.derivedNominalGdpUSD || region.estimatedNominalGdpUSD || 0;
   if (!(gdpUSD > 0)) return 0;
-  return ((region.governmentOutlaysUSD - region.governmentRevenueUSD) * 52) / gdpUSD;
+  // A region whose fiscal stage has not run this week has no outlay figure yet; its deficit is
+  // its revenue shortfall against nothing, not NaN.
+  return (((region.governmentOutlaysUSD ?? 0) - region.governmentRevenueUSD) * 52) / gdpUSD;
 }
 
 export function getBlendedWageGrowth(mix: Partial<Record<OccupationType, number>>, pools: Record<OccupationType, OccupationPool>): number {

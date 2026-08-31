@@ -47,6 +47,7 @@ import {
   QUIT_ELASTICITY_TO_RELATIVE_WAGE, QUIT_ELASTICITY_TO_EXECUTION, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
 import { isActiveCompany } from '../../../domain/company';
+import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY } from '../../../domain/industry-registry';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
@@ -541,7 +542,7 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       ctx.companyUpdates[comp.ticker].offeredWageIndex = Number(nextIndex.toFixed(5));
       ctx.companyUpdates[comp.ticker].unfilledVacancyShare = Number(unfilledShare.toFixed(4));
     });
-    segmentPostings.forEach(({ seg, vacancies, layoffs, quits }) => {
+    segmentPostings.forEach(({ seg, vacancies, layoffs, quits }: { seg: SmePool; vacancies: number; layoffs: number; quits: number }) => {
       const mix = (occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any)) as Partial<Record<OccupationType, number>>;
       const hired = filledFor(vacancies, mix);
       seg.employment = Math.max(0, Math.round(seg.employment + hired - layoffs - quits));
@@ -649,8 +650,8 @@ export function reconcileEmploymentView(
     const mix = occupationMixFor(comp.sector);
     OCCUPATIONS.forEach((occ) => { employedByOcc[occ] += Math.max(0, comp.employeeCount) * (mix[occ] ?? 0); });
   });
-  (reg.smePools || []).forEach((seg: any) => {
-    const mix = (occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector as any)) as Partial<Record<OccupationType, number>>;
+  (reg.smePools || []).forEach((seg: SmePool) => {
+    const mix = occupationMixFor(INDUSTRY_REGISTRY[seg.industry].sector) as Partial<Record<OccupationType, number>>;
     OCCUPATIONS.forEach((occ) => {
       employedByOcc[occ] += Math.max(0, seg.employment) * (mix[occ] ?? 0);
     });

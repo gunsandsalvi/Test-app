@@ -8,7 +8,11 @@ type CommodityTab = 'spot' | 'curve' | 'supplychain';
 export const CommoditiesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => void }> = ({ state, onOpenTrade }) => {
   const [tab, setTab] = useState<CommodityTab>('spot');
 
-  const rawList = Array.isArray(state.commodities) ? state.commodities : Object.values(state.commodities || {});
+  // strictNullChecks: `Object.values` of a possibly-empty record widens to unknown[], which then
+  // poisons the mapped shape. The list is commodities either way.
+  const rawList: Commodity[] = Array.isArray(state.commodities)
+    ? state.commodities
+    : (Object.values(state.commodities || {}) as Commodity[]);
 
   const commodities = rawList.map((c: Commodity) => {
     const spot = c.spotPrice ?? 100;

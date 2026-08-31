@@ -99,7 +99,7 @@ export const CompanyDeepDive: React.FC<{ company: Company; state: GameState; onO
             <TapToChart label="EBITDA Margin" value={formatPercent(company.ebitda / Math.max(1, company.annualRevenue), { isDecimal: true })} history={(company.historicalFundamentals || []).map(f => (f.ebitda ?? 0) / Math.max(1, f.annualRevenue ?? 1))} />
             <div className="pt-2 border-t border-[var(--border-hairline)]">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase font-bold mb-1">Last Earnings</div>
-              <div className={`text-xs font-bold ${company.lastEarningsSurprisePct >= 0 ? 'text-[var(--signal-positive)]' : 'text-[var(--signal-negative)]'}`}>
+              <div className={`text-xs font-bold ${(company.lastEarningsSurprisePct ?? 0) >= 0 ? 'text-[var(--signal-positive)]' : 'text-[var(--signal-negative)]'}`}>
                 {formatPercent(company.lastEarningsSurprisePct, { isDecimal: true, showSign: true })} surprise
               </div>
               <div className="text-[11px] text-[var(--text-secondary)] italic mt-1">"{company.lastManagementCommentary}"</div>

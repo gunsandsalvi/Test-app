@@ -2485,3 +2485,39 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        thirty-seven violations that were always there. The one genuine regression is regional, is
        traceable to a known-correct fix, and is now the top of the queue. **Do not compare 1,130 to
        515 again — compare to this run.**
+234. **THE THREE GATES A CODE REVIEW WOULD HAVE FAILED THIS ON — CLOSED, AND WHAT `strict` FOUND.**
+     Asked whether this structure would pass an Anthropic code review: no, and the reasons were not
+     the ones §5-STRUCT addressed. `"strict": false` across 50,306 lines, zero unit tests, no CI, no
+     linter. The structural work sat on no type safety, no tests and no automation.
+     - **`strict: true`, AND IT COST 41 ERRORS, NOT THOUSANDS.** Measured flag by flag before
+       touching anything: five flags cost **zero**, `strictFunctionTypes` 1, `strictNullChecks` 8,
+       `noImplicitAny` 31. All fixed at the root — `?? 0` where a field is genuinely optional, real
+       annotations where a type was lost — not with `!` or `as any`, which would have been buying
+       the flag and refusing the benefit. **Expecting a wall and finding a fence is worth recording:
+       the reason to have measured rather than assumed.**
+     - **AND THE FLAG IMMEDIATELY FOUND TWO DEAD THINGS IN THE HARNESS.** A loop over
+       `['USA', 'EUR', 'ASIA']` — **'ASIA' is not a RegionId and never has been** — so a third of
+       every iteration read `undefined` and the policy-rate check inside it covered two regions of
+       four while appearing to cover three. And the "sovereign debt absorption mismatch" check
+       computed its expectation from `region.nominalGdpUSD` and `region.governmentDeficitPct`,
+       **neither of which exists on `Region`**: the expectation was always 0, its own guard was
+       `if (accExpected > 0)`, and **it had therefore never fired once in the life of the file.**
+       **DELETED rather than repaired.** Its expectation was two magic constants over two
+       nonexistent fields; reviving it would have been writing a new model and calling it a fix.
+       The real deficit now has an owner (`Government.deficitWeeklyUSD`), so a sovereign-absorption
+       check is a new check to design deliberately.
+     - **23 UNIT TESTS, over the five objects §5-STRUCT extracted.** `node --test` with `tsx` — no new
+       dependency, which matters offline. Each test is the assertion that would have caught its
+       defect on the day it was written: the SME lock is four assertions; PEF1's 0.495B out of a
+       0.000B account is one; the two pledge tolerances are one; the fiscal check reading
+       `governmentSpendingUSD × 1.5` instead of the budget is one. **The SME lock ran for sixty
+       simulated weeks and surfaced only as an inflation number. It is four assertions.**
+     - **CI: `.github/workflows/verify.yml` on push and PR — types, hygiene, tests.** The harness is
+       deliberately NOT in it: it takes minutes and currently fails (§7.233), and **a check that is
+       always red teaches people to ignore the build.** It stays a deliberate local run until its
+       count means something. What gates a push is what is fast and unambiguous.
+     - **WHAT IS STILL OPEN, honestly.** 77 `as any` remain — `strict` does not forbid them, and the
+       big one is `companyUpdates: Record<string, any>` on the context, which is what erased the
+       element type at five of the `noImplicitAny` sites. No linter. Seven files over 1,000 lines
+       and one function near 1,900. **The ratchets now RUN, which is the part that was missing: an
+       architectural fitness function nobody executes is a comment with extra steps.**

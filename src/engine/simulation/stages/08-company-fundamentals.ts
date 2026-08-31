@@ -1410,7 +1410,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (tranche.rateType !== 'FIXED' || tranche.isCommercialPaper) return;
       const remainingYears = Math.max(0.5, (tranche.maturityWeek - state.currentWeek) / 52);
       const currentFairRate = calculateNelsonSiegelZeroRate(remainingYears, reg.yieldCurveParams) + comp.oasSpreadBps / 10000;
-      const rateSavingsIfRefinanced = tranche.couponRate - currentFairRate;
+      // A floating tranche carries a margin rather than a coupon; there is nothing to refinance
+      // INTO a lower fixed rate, so its saving is zero rather than NaN.
+      const rateSavingsIfRefinanced = (tranche.couponRate ?? currentFairRate) - currentFairRate;
       const excessCashAvailable = newCash > comp.annualRevenue * 0.15;
       // The real test is not "is the coupon above the market" — it is whether the saving is worth
       // what the call costs. A treasurer discounts the coupon saving over the paper's remaining
@@ -1934,7 +1936,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
 
     const quarterIdx = Math.floor((nextWeek - 1) / 13) + 4;
     const prevSnapshot = comp.historicalFundamentals ? comp.historicalFundamentals[comp.historicalFundamentals.length - 1] : undefined;
-    const currentTreasuryHoldingsUSD = (newTreasuryHoldings || []).reduce((s, h) => s + h.quantityOrNotionalUSD, 0);
+    const currentTreasuryHoldingsUSD = (newTreasuryHoldings || [])
+      .reduce((s: number, h: { quantityOrNotionalUSD: number }) => s + h.quantityOrNotionalUSD, 0);
     // Real current-portion-of-debt: tranches actually maturing within a year, from this
     // company's own updated ladder — not a flat 15% guess.
     // Settle this week's corporate actions against the real holders of this issuer's paper. A

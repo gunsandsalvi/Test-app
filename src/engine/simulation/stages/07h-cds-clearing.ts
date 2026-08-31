@@ -19,6 +19,7 @@ import {
   CdsContract, CdsParty, CDS_TENOR_WEEKS, cdsWeeklyPremiumUSD, cdsDefaultPayoutUSD,
   cdsPartyKey, protectionNeedUSD,
 } from '../../../domain/credit-default-swap';
+import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext } from './context';
 import { pay, PartyRef } from './settlement';
 import { clearFinancialAsset, ClearingInstrument, ClearingParticipant, ParticipantDemand } from './financial-clearing-engine';
@@ -89,7 +90,7 @@ export function runCdsClearingStage(state: GameState, ctx: WeeklyStepContext): v
     regionBanks.forEach((bank) => {
       const sheet = ctx.companyUpdates[bank.ticker]?.bankBalanceSheet ?? bank.bankBalanceSheet!;
       const exposureByIssuer = new Map<string, number>();
-      (sheet.businessLoans || []).forEach((l) => {
+      (sheet.businessLoans || []).forEach((l: BankLoan) => {
         if (l.borrowerKind !== 'COMPANY_FACILITY') return;
         exposureByIssuer.set(l.borrowerId, (exposureByIssuer.get(l.borrowerId) ?? 0) + Math.max(0, l.principalUSD));
       });

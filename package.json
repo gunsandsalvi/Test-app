@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "hygiene": "bash scripts/check-hygiene.sh",
+    "test": "node --import tsx --test test/*.test.ts",
     "verify": "bash scripts/check-hygiene.sh && esbuild scripts/harness.ts --bundle --platform=node --format=esm --target=node22 --outfile=node_modules/.cache/harness.mjs --log-level=warning && NODE_OPTIONS=--max-semi-space-size=64 node node_modules/.cache/harness.mjs",
     "profile": "bash scripts/check-hygiene.sh && esbuild scripts/harness.ts --bundle --platform=node --format=esm --target=node22 --outfile=node_modules/.cache/harness.mjs --log-level=warning && PROFILE=1 NODE_OPTIONS=--max-semi-space-size=64 node node_modules/.cache/harness.mjs"
   },

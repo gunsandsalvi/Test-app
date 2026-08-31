@@ -260,7 +260,8 @@ export const InteractiveChartModal: React.FC<InteractiveChartModalProps> = ({ da
               const numLabels = Math.min(5, displayData.length);
               if (numLabels <= 1) return null;
               
-              const labels = [];
+              // strictNullChecks: a bare [] infers as never[], so every push was an error.
+              const labels: React.ReactNode[] = [];
               for (let i = 0; i < numLabels; i++) {
                 const fraction = i / (numLabels - 1);
                 const x = paddingX + fraction * (svgWidth - paddingX * 2);

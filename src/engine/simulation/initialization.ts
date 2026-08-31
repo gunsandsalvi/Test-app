@@ -977,7 +977,7 @@ function buildSeededGameState(seed: number = DEFAULT_SIMULATION_SEED): GameState
       if (!isManager && !isInsurer) return;
       const entity = institutionalEntities.find(e => e.id === comp.id);
       if (!entity) return;
-      if (isManager && !(comp.managementFeeRate > 0)) return;
+      if (isManager && !((comp.managementFeeRate ?? 0) > 0)) return;
       // A manager's revenue is a fee on the book it runs; an insurer's is the premium its own
       // capital lets it write. Both read the entity, because both ARE the entity.
       if (isManager) comp.aumUSD = entity.totalAssetsUSD;

@@ -70,7 +70,9 @@ export const RatesScreen: React.FC<{ state: GameState, onOpenTrade: (i: any) => 
 
   const handleChartClick = (tenor: number) => {
     // Find closest Gov Bond
-    let closestBond = null;
+    // strictNullChecks: `null` alone infers as type `null`, so the assignment below was an error
+    // and every read of `.obj` after it was a read on `never`.
+    let closestBond: (typeof govBonds)[number] | null = null;
     let minDiff = Infinity;
     for (const b of govBonds) {
        const diff = Math.abs(b.tenor - tenor);

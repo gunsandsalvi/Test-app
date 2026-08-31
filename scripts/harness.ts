@@ -1941,44 +1941,24 @@ function runHarness() {
     }
     const stepMs = Date.now() - t0;
 
-    // Track Sovereign Debt Issuance
-    ['USA', 'EUR', 'ASIA'].forEach(rId => {
-       const preBankSov = preState.regions[rId]?.bankingSector.sovereignBondHoldingsUSD || 0;
-       const preInstSov = preState.regions[rId]?.institutionalSector.sovBondHoldingsUSD || 0;
-       
-       const postBankSov = state.regions[rId]?.bankingSector.sovereignBondHoldingsUSD || 0;
-       const postInstSov = state.regions[rId]?.institutionalSector.sovBondHoldingsUSD || 0;
-       
-       const actualGrowth = (postBankSov - preBankSov) + (postInstSov - preInstSov);
-       
-       const gdp = preState.regions[rId]?.nominalGdpUSD || 0;
-       const deficitPct = preState.regions[rId]?.governmentDeficitPct || 0;
-       const weeklyDeficit = (gdp * deficitPct) / 52;
-       
-       const centralBankHoldings = preState.regions[rId]?.centralBankReservesUSD || 0;
-       const targetCBMoney = gdp * 0.15;
-       const qe = Math.max(0, targetCBMoney - centralBankHoldings) * 0.01;
-       const monetizedAmount = Math.min(weeklyDeficit, qe);
-       
-       const marketFundedAmount = Math.max(0, weeklyDeficit - monetizedAmount);
-       
-       // Accumulate
-       if (!(global as any).sovAccumulator) (global as any).sovAccumulator = {};
-       if (!(global as any).sovAccumulator[rId]) (global as any).sovAccumulator[rId] = { growth: 0, expected: 0 };
-       
-       (global as any).sovAccumulator[rId].growth += actualGrowth;
-       (global as any).sovAccumulator[rId].expected += marketFundedAmount;
-       
-       if (w % 13 === 0) {
-          const accGrowth = (global as any).sovAccumulator[rId].growth;
-          const accExpected = (global as any).sovAccumulator[rId].expected;
-          if (accExpected > 0 && Math.abs(accGrowth - accExpected) / accExpected > 0.05) {
-             violations.push({ week: w, message: `Sovereign debt absorption mismatch in ${rId} over 13 weeks: expected=${accExpected.toFixed(2)} actualGrowth=${accGrowth.toFixed(2)}` });
-          }
-          (global as any).sovAccumulator[rId].growth = 0;
-          (global as any).sovAccumulator[rId].expected = 0;
-       }
-
+    // §7.234 — WHAT `noImplicitAny` FOUND HERE, AND WHY A CHECK WAS DELETED RATHER THAN FIXED.
+    //
+    // This loop ran over `['USA', 'EUR', 'ASIA']`. **'ASIA' is not a RegionId and never has been** —
+    // the regions are USA/EUR/UK/JPN — so a third of every iteration read `undefined`, and the two
+    // checks below covered two regions of four while appearing to cover three.
+    //
+    // The first check, "sovereign debt absorption mismatch", is GONE. It computed an expected
+    // issuance from `region.nominalGdpUSD` and `region.governmentDeficitPct`, **neither of which
+    // exists on `Region`**, so `weeklyDeficit` was always 0, `accExpected` was always 0, and its
+    // own guard `if (accExpected > 0)` meant **it had never fired once in the life of this file.**
+    // It was not a failing check; it was not a check. Its expectation was also two magic constants
+    // (a 15% central-bank money target, a 1% adjustment speed) over fields that do not exist, so
+    // there was nothing to revive — reviving it would have been writing a new model and calling it
+    // a repair. The real deficit now has an owner (`Government.deficitWeeklyUSD`, §5-STRUCT step 3);
+    // a sovereign-absorption check built on it would be a new check, deliberately designed.
+    //
+    // The second check is real, and now runs over all four regions.
+    (REGIONS as readonly RegionId[]).forEach(rId => {
        // advanceWeeklyStep gates meetings on nextWeek (= w + 1, since state.currentWeek === w
        // going into this call), not on the harness's own loop index w.
        if ((w + 1) % 13 !== 0 && w > 1) {

@@ -15,6 +15,7 @@ import {
 import { LeadBankCandidate } from '../../../domain/primary-market';
 import { leverageHeadroomUSD, MIN_CASH_BUFFER_RATIO, BASEL_MIN_LEVERAGE_RATIO } from '../../macro/banking';
 import { ClearingInstrument, ClearingParticipant, ClearingResult, ParticipantDemand } from './financial-clearing-engine';
+import { BankLoan } from '../../../domain/banking';
 import { WeeklyStepContext } from './context';
 import { pendingSettlementUSD } from './settlement';
 import { PartyRef } from './settlement';
@@ -244,7 +245,7 @@ export function leadBankAllocator(ctx: WeeklyStepContext, banks: Company[], book
       book,
     }));
     const byBorrower = new Map<string, number>();
-    (sheet.businessLoans || []).forEach((l) => {
+    (sheet.businessLoans || []).forEach((l: BankLoan) => {
       if (l.status !== 'PERFORMING') return;
       byBorrower.set(l.borrowerId, (byBorrower.get(l.borrowerId) ?? 0) + l.principalUSD);
     });
