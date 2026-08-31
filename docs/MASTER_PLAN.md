@@ -297,13 +297,12 @@ prerequisites are not done. **Do not reorder** — the sequence encodes prerequi
 from a row: a market cannot be honest before the demand side it prices against is, and a clamp
 cannot be deleted before the mechanism under it exists.
 
-**THE RUN TO JUDGE AGAINST IS §7.261's: 99 violations / 13 FAMILIES on the §7.259 tree**
-(counts 628 → 361 → 351 → 320 → 367 → 278 → 204 → 169 → 99; families 94 → 67 → 60 → 44 → 18
-→ 13. The chain: §7.256 recorded the EUR fiscal-labour spiral, §7.257 root-fixed it (the
-household budget was a slice of the demand level, not its income), §7.258 referenced that tree
-(169/18), §7.259 killed the UK bank cohort's killer (the underwriting pipeline destroying the
-lead's residual + the missing holder principal leg), and §7.261 referenced THAT tree: CPI
-×2.144, the 10Y released at 5.93, all four regions cohering at horizon.)
+**THE RUN TO JUDGE AGAINST IS §7.287's: 13 violations / 5 FAMILIES on the §7.286 tree**
+(counts 628 → 361 → 351 → 320 → 367 → 278 → 204 → 169 → 99 → 52 → 13; families 94 → 67 → 60
+→ 44 → 18 → 13 → 18 → 5. The chain through §7.261 is recorded there; §7.271 referenced the
+§7.270 tree at 52/18; §7.273–286 — the ETF sleeve, the Tier-2 enforcement wave, the four
+Tier-4 mechanisms, and the zero-boundary burndown — produced §7.287's tree: 13/5, the
+UNMODELED boundary silent for all 60 weeks, every per-bank identity green.)
 Each run is the record of its own tree; compare nothing across them without naming the
 relabel between.
 
@@ -4311,3 +4310,35 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        now FAILS the week it appears.
      - Verified: tsc clean, 71/71, hygiene pass, lint 386, WEEKS=12 and WEEKS=20 probes both
        at the two-violation baseline; per-bank identities all green.
+
+287. **THE REBASE: 13 violations / 5 FAMILIES — THE RUN TO JUDGE AGAINST** (counts … 99 → 52
+     → 13; families … 18 → 5). 60 weeks, seed 2654435769, shocks on, on the §7.286 tree.
+     User directive 2026-08-31: "Do the full rebase, now" — the §4.0 order's one run at the
+     end, striking the post-sweep baseline. Every §7.273–286 change is inside it; no same-seed
+     comparison to any earlier run is valid without naming the relabels between.
+     - **THE FIVE FAMILIES, all previously named:** (1) USA unemployment out of band 9x —
+       crosses the 30% band at w52 and ends 33.6% (§6.1's ratchet row; the capex-starvation
+       channel §7.272 named is the binding constraint, and it is the CLEAR top priority this
+       reference sets). (2) One w2 shock-battery single (under-subscribed USA auction did not
+       lift the 10Y next week — the damper family's A/B check). (3–4) the two credit-ETF w3
+       dust singles (USAIGX/USALLX, 0.01B). (5) JPN bank NIM one marginal dip (0.0068 at w44).
+       NOTHING ELSE: no identity break, no mint family, no overdraft class, no boundary
+       crossing, no NAV departure, no backlog single.
+     - **THE BOUNDARY IS SILENT FOR ALL 60 WEEKS** — no by-reason line ever exceeds $1M,
+       including the one declared wholesale-unwind frontier. §7.286's zero-boundaries state
+       holds at full horizon under shocks.
+     - The world it prints: CPI ×2.024 (was ×2.138), w60 GDP 1.09T, 10Y 4.77, u endpoint
+       33.6/28.9/26.3/26.3 (was 28.1/27.8/23.8/24.2 — USA worse: the accrual-pair close means
+       a declining firm no longer collects phantom boundary cash, so attrition and shedding
+       are REAL now; active firms 2,496 → 2,220, ×0.889, where every prior reference held
+       2,496 — §539's expected honest direction, §1.20 applies). Goods fill 0.596. Carriers
+       12/12 alive, tonne-miles 3.71e9; logistics 1.0B/wk = 0.05% of world GDP (the scale row
+       re-measured, as it asked — still an order short; owner unchanged). Damper bound 1,640
+       (60-week worst streak; watch it DOWN). 02b reconcile gross 2.2B/wk (USA 1.6) — the
+       money row's meter on this tree; the §7.275 gate measurement stands.
+     - **What this reference sets as the fix order's head:** the unemployment ratchet's capex
+       channel (the only family above dust), then the money row's 2.2B, then the damper.
+     - NOT taken with this rebase, each on its own recorded gate: SEED_BURN_IN stays OFF
+       (§7.232's table is not flat: wip xInfinity, u x3.76); the seed wholesale-claim
+       re-anchor and COH's 0.42 stay behind it (§7.283/§7.286) — each is a seed change that
+       must be judged against THIS reference, not folded into it blind.
