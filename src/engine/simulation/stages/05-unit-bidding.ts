@@ -30,7 +30,7 @@ import { channelMarginRate, shelfPriceUSD, DISTRIBUTION_SUBUNIT_ID } from '../..
 import { subUnitSpecOf } from '../../../domain/industry-registry';
 import { industryOfSubUnit, smePoolSubUnits, smePoolRecipeInputs, firmInputIntensities } from '../../../domain/industry-registry';
 import { profileKeyOf } from './profiles';
-import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot } from '../../../domain/company';
+import { isActiveCompany, getOutputInventoryUnits, getOutputInventoryUSD, InputLot, fullStaffingCapHeads } from '../../../domain/company';
 import { WeeklyStepContext } from './context';
 import { random, beginEntityScope, endEntityScope } from '../../rng';
 import { capacityMixShares } from '../../../domain/sme-pool';
@@ -800,12 +800,13 @@ function buildRegionSupplyPlans(
     // output, which is also what turns a hiring shortage into an inflationary force rather than a
     // statistic.
     //
-    // The staffing ratio is the firm's OWN headcount against the headcount its baseline output
-    // needed — both measured, no new field — so a firm that has shed staff cannot ship what it
-    // used to and one that hired can.
-    const staffedShare = (comp.baselineEmployeeCount ?? 0) > 0
-      ? Math.max(0, (comp.employeeCount ?? 0) / comp.baselineEmployeeCount!)
-      : 1;
+    // The staffing ratio is the firm's OWN headcount against the headcount THIS plant needs at
+    // full staffing — §7.269's one derivation (domain/company.ts), the same ceiling the labour
+    // market hires against (rule 3). Frozen at the seed headcount, a firm that built plant read
+    // "fully staffed" at its old headcount and doubled output nobody worked for; scaled with
+    // net PP&E, more plant needs more people to run it — which is what makes hiring the way a
+    // grown firm's output actually grows.
+    const staffedShare = Math.max(0, (comp.employeeCount ?? 0) / fullStaffingCapHeads(comp));
     // IND18 — what the plant can make THIS WEEK. A harvest is not a decision: the crop ripens
     // once a year and no price makes it ripen twice. Averages to 1 over the year, so this moves
     // output around the calendar and never adds any.

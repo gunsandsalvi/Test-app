@@ -46,7 +46,7 @@ import {
   MARKET_WAGE_CATCHUP_SPEED_WEEKLY,
   QUIT_ELASTICITY_TO_RELATIVE_WAGE, QUIT_ELASTICITY_TO_EXECUTION, GOVERNMENT_OCCUPATION_MIX } from '../../../domain/region-macro';
 import { BASELINE_OCCUPATION_LABOR_FORCE_SHARE } from '../../bootstrap/labor-and-wages';
-import { isActiveCompany } from '../../../domain/company';
+import { isActiveCompany, fullStaffingCapHeads } from '../../../domain/company';
 import { SmePool } from '../../../domain/region-macro';
 import { WeeklyStepContext } from './context';
 import { INDUSTRY_REGISTRY, smePoolSubUnits } from '../../../domain/industry-registry';
@@ -318,7 +318,10 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       // unemployment and missed it). This is the SAME physical statement stage 05 makes, on the
       // hiring side (rule 3): demand beyond full staffing is served by CAPEX building plant
       // (§7.129's response reads the shortage), not by hiring.
-      const productiveHeadsCap = Math.max(1, comp.baselineEmployeeCount ?? current);
+      // §7.269 — the ceiling is the PLANT's, not the seed's (domain/company.ts). A firm whose
+      // delivered capex grew its PP&E can staff the bigger plant; frozen at the seed headcount,
+      // no profitable firm could ever absorb a released worker and unemployment only ratcheted.
+      const productiveHeadsCap = Math.max(1, fullStaffingCapHeads(comp));
       const outputNeedHeads = baselineRevPerHeadUSD > 0
         ? Math.min((realRevenueUSD * demandPull) / baselineRevPerHeadUSD, productiveHeadsCap)
         : current;
@@ -491,6 +494,14 @@ export function runLaborMarketStage(state: GameState, ctx: WeeklyStepContext): v
       const hires = Math.max(0, Math.min(matches, openVacancies, seekers));
 
       hiresByOcc[occ] = hires;
+      // LABOR_TRACE=1 — the two sides of the flow, per (region, occupation): which one drives
+      // a monotone unemployment climb is the whole question.
+      if (process.env.LABOR_TRACE === '1' && (separations > 1e4 || hires > 1e4)) {
+        console.log(`  [lab] w${ctx.nextWeek} ${regionId}:${occ} emp ${(employedBefore / 1e6).toFixed(2)}M`
+          + ` sep ${(separations / 1e3).toFixed(0)}k hires ${(hires / 1e3).toFixed(0)}k`
+          + ` vac ${(openVacancies / 1e3).toFixed(0)}k seekers ${(seekers / 1e3).toFixed(0)}k`
+          + ` matches ${(matches / 1e3).toFixed(0)}k`);
+      }
 
       // ---- DIST 1(b): THE EXPERIENCE CROSS-SECTION MOVES ON THE REAL FLOWS. ----
       //

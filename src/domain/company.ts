@@ -273,6 +273,11 @@ export interface Company {
   employeeCount: number;
   previousEmployeeCount: number;
   baselineEmployeeCount: number;
+  /** §7.269 — the net PP&E the baseline headcount was struck against, fixed the first time the
+   *  staffing ceiling is read (the `unitsPerNetPpeDollar` pattern). The full-staffing ceiling is
+   *  `baselineEmployeeCount × netPPE/baselineNetPPE`: a firm that BUILDS plant can hire past its
+   *  seed headcount, and one that lets it depreciate cannot staff a plant it no longer has. */
+  baselineNetPpeUSD?: number;
   /** §7.246 — the two measured cost lines of the most recent completed company week, persisted so
    *  stage 05's offer floor can decompose `(annualRevenue − ebitda)` into wages + real inputs +
    *  residual instead of dividing a TRAILING total by CURRENT staffed output. Both weekly (rule 9). */
@@ -561,6 +566,29 @@ export function isPubliclyListed(c: Pick<Company, 'listingStatus' | 'ticker'>): 
 }
 
 export function isActiveCompany(c: Company): boolean { return !c.isDefaulted && !c.mergerAcquired; }
+
+/**
+ * §7.269 — THE FULL-STAFFING CEILING SCALES WITH THE PLANT, and this is its ONE derivation
+ * (rule 3: stage 05's `staffedShare` denominator and the labour market's hiring cap are the
+ * same physical statement — what headcount runs this plant at full).
+ *
+ * It was `baselineEmployeeCount`, FROZEN AT THE SEED, in both places: a firm that built plant
+ * could never hire past its seed headcount, so §7.110's hiring symmetry was structurally
+ * impossible — every profitable firm sat AT its cap while the below-the-line firms shed, the
+ * released workers had nowhere to go, and unemployment ratcheted ~0.5pp/week in every region
+ * for the model's whole life (u 9% → 27–30% by w60 at every reference; the USA band-cap
+ * grazes were the ceiling of this). The ratio is the plant the baseline headcount was struck
+ * against — recorded at first read, the `unitsPerNetPpeDollar` pattern — so IND1's delivered
+ * capex raises the ceiling and depreciation lowers it, symmetrically.
+ */
+export function fullStaffingCapHeads(c: Company): number {
+  const baselineHeads = c.baselineEmployeeCount ?? 0;
+  if (!(baselineHeads > 0)) return Math.max(1, c.employeeCount ?? 1);
+  const netPpeUSD = (c.grossPPEUSD ?? 0) - (c.accumulatedDepreciationUSD ?? 0);
+  if (!(netPpeUSD > 0)) return baselineHeads;
+  if (!(c.baselineNetPpeUSD !== undefined && c.baselineNetPpeUSD > 0)) c.baselineNetPpeUSD = netPpeUSD;
+  return Math.max(1, baselineHeads * (netPpeUSD / c.baselineNetPpeUSD));
+}
 
 /**
  * CASH — the corporate treasury's own sleeve, and why it is a bid rather than a bookkeeping line.
