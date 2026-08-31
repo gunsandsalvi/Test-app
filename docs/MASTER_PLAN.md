@@ -598,7 +598,7 @@ rather than work. **Rows closed since the last cleanup are not duplicated here �
 | Defect | State and next action |
 |---|---|
 | **THE ORDER OF A SOURCE-FILE DECLARATION SETS UNEMPLOYMENT** | §7.222 measured it: reverse the order `05-unit-bidding` walks `INDUSTRY_SUBUNITS` — a declaration order, nothing economic — and week 1 aggregate net income moves +3.8%, GDP −0.12%, **every one of 2,496 firms buys a different amount**, and by week 2 seven more firms are dead and unemployment prints 9.49% against 9.61%. Sub-unit markets open one after another and firms spend one budget across all of them, so whichever market opens first is served first. That coupling is REAL (a firm has one wallet); what is arbitrary is that the queue is a file's declaration order. **Rule 19: an arbitrary implementation detail is setting a macro outcome.** The well-posed question is what the opening order should BE — simultaneous clearing across a firm's budget, or an order derived from something economic. Do not paper over it by pre-allocating per-market budgets: that lets a firm overspend. Owner: IND/SCALE. |
-| **THE SEED'S SUPPLY AND ITS DEMAND ARE TWO STATEMENTS ABOUT ONE ECONOMY, AND THEY DISAGREE BY SECTOR** | §7.224 measured it: **36 of the USA's 37 categories open with capacity below the demand the same seed generates** — 23% for `network_infrastructure`, 25% `consumer_devices`, 47% `household_chemicals`, against 300% for `upstream_extraction`. **The error is banded by sector, exactly**: every Tech sub-unit 0.50, every Industrials sub-unit 0.77, every Consumer sub-unit 1.23, Energy 1.31–1.49. So `companyGenerator`'s greedy line-dealing is right WITHIN a sector and the sector's total revenue is wrong — the roster's sector split and the IO demand solve never meet. The VALUE totals reconcile (IO gross output 1033B against firm+SME revenue 980B, 94.9%), which is why this never showed up as a missing-output defect. **Why it is the top row: the dispersion is a one-way ratchet on the price level** — a short market clears at the household's reservation (up to 3.3x) and a long one can only fall to the seller's unit cost — and that price level is what the labour market differences into layoffs. **Next action: find where a sector's total revenue is set and derive it from the demand its own sub-units carry** (§7.4: the seed opens in the shape the engine produces). `SECTOR_FIRM_COUNT` is a flat 10 per sector and `deriveInitialRevenueUSD` sizes a firm off its PRIMARY category alone, while the firm then spreads revenue over three lines — start there. Owner: the seed, with IND. |
+| **THE SEED SUPPLIES ~14% LESS THAN ITS OWN DEMAND — UNIFORMLY** | **The SECTOR half of this row is closed by §7.227**: combined named+SME coverage went from 0.43/0.99/0.80/1.04 to 0.85/0.85/0.88/0.87, a 2.4x spread down to 1.04x. What is left is a LEVEL: every producing sector supplies about 86% of the demand the same seed generates, and 34 of the USA's 37 categories still open below their own demand. **This is now one number to find, not a distribution to chase.** The seed's VALUE totals reconcile (IO gross output 1033B against firm+SME revenue 980B, 94.9%), so the gap is in the UNIT mapping — `deriveSubUnitUnitPrice` divides FINAL demand by a per-capita/per-firm physical volume while capacity is revenue over the same price, and the recipe-input demand a category faces is built from firms' own intensities rather than from the IO coefficients. **Next action: reconcile units demanded against units suppliable for one category by hand, end to end.** Owner: the seed, with IND. |
 | **THE REGISTER OPENS AT A QUARTER OF ITS OWN STEADY STATE** | §7.213: 32,278 holding rows at seed → ~103,000 distinct positions by week 5, ~122,000 rows by week 15. **15% are duplicate `(holder, instrument)` rows and 9% are under $1,000.** §1's §7.4 rule is that the seed opens in the shape the weekly engine produces; this one does not, and every stage that walks the register pays for the gap. Consolidating duplicates and dust is ~25% off every register walk — the largest algorithmic item left. Owner: the seed, with SCALE. |
 | **THE LABOUR MARKET FAILS OVER A LONG HORIZON** | **RE-DIAGNOSED IN §7.224: nothing in the labour market is wrong.** It reads `nominalGrowth - inflation`, and the inflation was a goods-market defect at week 1. With that fixed, EUR's 66% is gone and all four regions sit near 33%, but JPN now reaches 75% by week 58 and 69 band violations remain. **Do not touch the matching function or the quit rate until the capacity row below is closed** — the labour market will keep printing whatever the price level hands it. Owner: HH5/LAB, after IND. |
 | **SUPPLIER MARKET SHARES DO NOT SUM TO 100%** | **LARGELY CLOSED BY §7.224 — it was a symptom, not a defect.** Shares summed to 2-35% across dozens of categories in all four regions because the producers had been shed by the labour cascade; with the week-1 unit errors fixed it is **one** category (`JPN:heavy_equipment`, 10 weeks). Do not work this row directly — re-read it after the capacity row closes. |
@@ -2071,3 +2071,34 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        $1-NAV share liability, and the unemployment band. **Every one of them is downstream of
        §6.1's top row** — the seed's sector supply/demand mismatch — and should be re-read after it
        closes rather than worked directly.
+227. **THE SECTOR SPLIT IS FIXED, THE LEVEL IS NOT, AND §1.20 DECIDES THE REST.**
+     §7.225 located the defect and rejected two fixes. This is the third, and it holds.
+     - **WHAT IT IS:** one normalisation, in `initialization.ts` immediately before the
+       authoritative product-line deal, moving revenue BETWEEN producing sectors so each sector's
+       named tier is proportional to the demand for what it makes LESS what its SME pools actually
+       carry. The producing total is conserved exactly — the seed's TOTAL already reconciles to the
+       input-output solve to within 5%, so the level was never the thing this could fix.
+     - **THE MEASURED RESULT, and it is the point:** combined (named + SME) coverage per sector goes
+       from **0.43 / 0.99 / 0.80 / 1.04** — a 2.4x spread, with Tech at less than half the supply its
+       own demand needs — to **0.85 / 0.85 / 0.88 / 0.87**, a spread of 1.04x. The dispersion is
+       gone. What is left is a uniform ~14% under-supply, which is the LEVEL defect and a different
+       row.
+     - **AND THE HARNESS GOT SLIGHTLY WORSE: 515 → 535 violations, 61 → 75 families.** USA
+       unemployment improves 37.2% → 30.4%, EUR worsens 24.9% → 35.2%, UK 21.5% → 28.1%. **The
+       change is KEPT under §1.20.** The old print was better because the dispersion happened to
+       leave Consumer over-supplied, and Consumer is where the household basket's weight is: the
+       economy was buying its cost-of-living index cheaply out of a surplus it should not have had,
+       while Tech starved. That is a defect flattering a measurement, not a working economy.
+     - **TWO WRONG TARGETS ON THE WAY, both measured, both instructive.** (a) Normalising to demand
+       LEVELS rather than shares lifted the roster 42%, put labour demand past the labour force and
+       printed **0.0% unemployment at week one**. (b) Normalising against the registry's STATED
+       `smeShareOfActivity` rather than the pools' REAL revenue gave a perfectly flat named-tier
+       split (1.06 across all four sectors) and left combined coverage uneven at 0.96/0.99/0.85/0.82
+       — a flat split of one tier over an uneven residual. **The stated share is what the pools were
+       sized FROM, not what they ended up holding.** Read the real number.
+     - **AND ONE MORE WRONG PLACE:** normalising at generation time, against the demand vector that
+       exists while firms are being built, left the spread at 0.66–1.01. That vector is not the one
+       the goods market clears against. It runs where the authoritative vector is.
+     - **WHAT IS NOW THE TOP OF §6.1:** the LEVEL. Supply is uniformly ~14% short of the demand the
+       same seed generates. That is one number to find, not a distribution to chase, and the
+       dispersion is no longer in the way of finding it.

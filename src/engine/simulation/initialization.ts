@@ -69,7 +69,7 @@ import { mandateAllocator } from '../../domain/primary-market';
 import { RegionId, Region, Portfolio, OccupationType, Company, COMMODITY_CATEGORY_LINKAGE, BASE_COMMODITY_CATEGORY_LINKAGE, InstitutionalEntity, InstitutionalEntityType, HedgeFundStrategy, AssetAllocationTarget, ItemizedHolding, INDUSTRY_SUBUNITS } from '../../types';
 import { dealersFromBanks } from '../dealers';
 import { GameState } from '../../types';
-import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount } from '../companyGenerator';
+import { generateInitialCompanies, generatePrivateCompanies, dealProductLinesAndHeadcount, normalizeProducingSectorRevenue } from '../companyGenerator';
 import { generatePrivateFirmSeeds } from '../bootstrap/private-firms';
 import { INDUSTRY_REGISTRY, smePoolEmployment, totalOutputFromFinalDemand } from '../../domain/industry-registry';
 import { getRegionProductivityPerCapitaUSD, remainingLifeExpectancyYears, RETIREMENT_AGE_YEARS, WORKFORCE_ENTRY_AGE_YEARS } from '../bootstrap/population';
@@ -241,6 +241,30 @@ export function seedRegionCategoryDemand(
     // It closes in ONE pass, because the coupling is one-directional: a firm's revenue, PP&E and
     // therefore its capex are all set before any line is dealt, so `I` does not move when the
     // lines move. The deal draws no RNG, so nothing is relabelled (rule 10).
+    // §7.227 — and BEFORE the deal, because the deal spreads each firm's revenue across the
+    // sub-units its sector makes: get the sector totals right first, or the deal distributes the
+    // wrong pot correctly.
+    // The SME pools' real revenue, spread over the sub-units of the industry each pool covers in
+    // proportion to those sub-units' own demand — the same mix rule stage 05 uses when a pool
+    // decides where to put its capacity.
+    const smeRevenueBySubUnit = new Map<string, number>();
+    (reg.smePools ?? []).forEach((pool: { industry: string; annualRevenueUSD?: number }) => {
+      const spec = (INDUSTRY_REGISTRY as any)[pool.industry];
+      const subUnits: { unitId: string }[] = spec?.subUnits ?? [];
+      const demandOf = (id: string) => Number((reg.categoryDemand as any)?.[id]?.demandLevelUSD) || 0;
+      const totalDemandUSD = subUnits.reduce((a, su) => a + demandOf(su.unitId), 0);
+      if (!(totalDemandUSD > 0)) return;
+      const poolRevenueUSD = Number(pool.annualRevenueUSD) || 0;
+      subUnits.forEach((su) => {
+        smeRevenueBySubUnit.set(su.unitId,
+          (smeRevenueBySubUnit.get(su.unitId) ?? 0) + poolRevenueUSD * (demandOf(su.unitId) / totalDemandUSD));
+      });
+    });
+    normalizeProducingSectorRevenue(
+      companies.filter(c => c.region === regionId),
+      (unitId) => Number((reg.categoryDemand as any)?.[unitId]?.demandLevelUSD) || 0,
+      (unitId) => smeRevenueBySubUnit.get(unitId) ?? 0
+    );
     dealProductLinesAndHeadcount(
       companies.filter(c => c.region === regionId),
       (_r, unitId) => Number((reg.categoryDemand as any)?.[unitId]?.demandLevelUSD) || 0

@@ -71,6 +71,31 @@ export function getCategoryDemandSeedUSD(
  * under-claim it (rule 13 — a share is an outcome of the one structural primitive, not a fourth
  * stated number).
  */
+/**
+ * §7.227 — WHAT A SECTOR'S NAMED FIRMS MUST BE BIG ENOUGH TO SUPPLY.
+ *
+ * The demand for every sub-unit this sector produces, net of the share the registry says its SME
+ * tier carries — read from the SAME demand vector the product lines are dealt against, so supply
+ * and demand are one statement about the economy rather than two (§1.3, §7.4).
+ */
+export function producingSectorNamedTierDemandUSD(
+  sector: string,
+  region: RegionId,
+  initialRegions: Record<RegionId, import('../types').Region>
+): number {
+  const list = (subUnitsByProducingSector() as Record<string, { su: { unitId: string } }[]>)[sector];
+  if (!list || list.length === 0) return 0;
+  let total = 0;
+  for (const { su } of list) {
+    const demandUSD = Number((initialRegions[region]?.categoryDemand as any)?.[su.unitId]?.demandLevelUSD) || 0;
+    if (!(demandUSD > 0)) continue;
+    const industry = industryOfSubUnit(su.unitId);
+    const smeShare = industry ? (INDUSTRY_REGISTRY[industry]?.smeShareOfActivity ?? 0) : 0;
+    total += demandUSD * Math.max(0, 1 - smeShare);
+  }
+  return total;
+}
+
 export function deriveInitialRevenueUSD(
   category: ProductCategory,
   regionCategoryDemandSeedUSD: number,
@@ -783,6 +808,7 @@ export function generateInitialCompanies(
         });
       }
     }
+
   });
 
   
@@ -795,6 +821,99 @@ export function generateInitialCompanies(
   return companies;
 }
 
+
+
+/**
+ * §7.227 — A SECTOR IS AS BIG AS WHAT IT HAS TO SUPPLY.
+ *
+ * Every firm's revenue is sized off ONE hand-named industry per sector, through
+ * `getCategoryDemandSeedUSD` — a switch of stated shares of household income that nothing else in
+ * the model reads. So Tech's firms divide the SOFTWARE slice and are blind to semiconductors and
+ * telecoms, which are most of what Tech actually makes. MEASURED at the seed (§7.224/§7.225):
+ * Tech's named firms held 41% of the revenue their own demand implies and Consumer's held 145%,
+ * while Energy (1.06) and Industrials (0.97) came out right only because their hand-named industry
+ * is nearly their whole sector. Downstream that opened 36 of the USA's 37 categories below the
+ * capacity their own demand needs, and the DISPERSION is a one-way ratchet on the price level: a
+ * short market clears at the household's reservation while a long one can only fall to the
+ * seller's unit cost.
+ *
+ * THE SPLIT IS WHAT IS WRONG, NOT THE SIZE. The seed's TOTAL reconciles to the input-output solve
+ * to within 5% (gross output 1033B against firm+SME revenue 980B); it is the sector SHARES that
+ * disagree. So this moves revenue BETWEEN sectors and conserves the producing total exactly, the
+ * same discipline the thinning lift follows. Normalising to demand LEVELS instead was tried and
+ * lifted the roster 42%, which put the region's labour demand past its labour force and printed
+ * 0.0% unemployment at week one.
+ *
+ * IT RUNS HERE, against the AUTHORITATIVE demand vector, and not at generation time — the vector
+ * that exists while firms are being built is not the one the goods market will clear against, and
+ * normalising to it left the spread at 0.66-1.01 instead of closing it. Two earlier attempts are
+ * recorded in §7.225 and §7.227; both failed on which vector they read.
+ *
+ * It carries the ratio through everything struck off revenue. Headcount is not in the list because
+ * `dealProductLinesAndHeadcount`, which runs immediately after, re-derives it from revenue over
+ * productivity — conserve the revenue and the jobs follow. Banks and the institutional roles are
+ * excluded: a bank's revenue is its own balance sheet's net interest margin and an insurer's or a
+ * manager's comes from its profile, so neither has a producing cohort to belong to.
+ */
+export function normalizeProducingSectorRevenue(
+  companies: Company[],
+  demandLevelUSD: (subUnitId: string) => number,
+  /** What the SME tier of a sub-unit's industry ACTUALLY carries in this region. */
+  smeRevenueForSubUnitUSD: (subUnitId: string) => number
+): void {
+  const producingSectors = Object.keys(subUnitsByProducingSector()) as ProducingSector[];
+  const namedTierDemandUSD = (sector: string): number => {
+    const list = (subUnitsByProducingSector() as Record<string, { su: { unitId: string } }[]>)[sector];
+    if (!list) return 0;
+    // What the NAMED tier is left to supply: this sector's demand less what its SME pools
+    // actually carry. The registry's `smeShareOfActivity` is what the pools were SIZED from, not
+    // what they ended up holding, and normalising against the stated share left combined coverage
+    // at 0.96/0.99/0.85/0.82 — a flat split of the named tier over an uneven residual. Read the
+    // pools' real revenue and the two tiers together land proportional to demand, which is the
+    // thing that has to be true.
+    let total = 0;
+    for (const { su } of list) {
+      const demandUSD = demandLevelUSD(su.unitId);
+      if (!(demandUSD > 0)) continue;
+      total += Math.max(0, demandUSD - Math.max(0, smeRevenueForSubUnitUSD(su.unitId)));
+    }
+    return total;
+  };
+
+  const cohortBySector = new Map<string, Company[]>();
+  const demandBySector = new Map<string, number>();
+  let producingRevenueUSD = 0;
+  let producingDemandUSD = 0;
+  producingSectors.forEach((sector) => {
+    const cohort = companies.filter(
+      (c) => c.sector === sector && !c.isBankEntity && !(c as { institutionalRole?: string }).institutionalRole);
+    if (cohort.length === 0) return;
+    const demandUSD = namedTierDemandUSD(sector);
+    if (!(demandUSD > 0)) return;
+    cohortBySector.set(sector, cohort);
+    demandBySector.set(sector, demandUSD);
+    producingRevenueUSD += cohort.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+    producingDemandUSD += demandUSD;
+  });
+  if (!(producingRevenueUSD > 0) || !(producingDemandUSD > 0)) return;
+
+  cohortBySector.forEach((cohort, sector) => {
+    const targetUSD = producingRevenueUSD * ((demandBySector.get(sector) ?? 0) / producingDemandUSD);
+    const actualUSD = cohort.reduce((a, c) => a + (c.annualRevenue || 0), 0);
+    if (!(actualUSD > 0)) return;
+    const lift = targetUSD / actualUSD;
+    if (!(lift > 0) || !isFinite(lift) || Math.abs(lift - 1) < 1e-9) return;
+    cohort.forEach((c) => {
+      c.annualRevenue *= lift;
+      c.baselineAnnualRevenue *= lift;
+      c.totalDebt *= lift;
+      c.cash *= lift;
+      c.marketCap *= lift;
+      c.grossPPEUSD = (c.grossPPEUSD ?? 0) * lift;
+      c.accumulatedDepreciationUSD = (c.accumulatedDepreciationUSD ?? 0) * lift;
+    });
+  });
+}
 
 /**
  * SUPPLY/CHAIN — DEAL THE PRODUCER BASE AGAINST THE DEMAND THE ECONOMY WILL ACTUALLY STATE.
