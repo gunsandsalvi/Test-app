@@ -230,18 +230,28 @@ export function measuredOwnershipAllRegions(state: GameState): Record<RegionId, 
     });
   });
 
+  // §4.0 Tier 1 item 11 — THE ESTATE WINDOW. A defaulted issuer leaves the active roster the
+  // week it fails, but its creditors' claims stand until the estate extinguishes them — often
+  // weeks later. Dropping its tranches from the outstanding denominator while the holders'
+  // paper stayed in the numerator pushed corpBondOwnership mechanically above 1 in every
+  // default wave (§7.253 measured accounted 1.02→1.07 in the UK's). Debt on a company with an
+  // OPEN estate is still outstanding; its equity is not (dead equity is worthless).
+  const openEstateCompanyIds = new Set(
+    (state.estates ?? []).filter((e) => e.closedWeek === undefined).map((e) => e.companyId));
   const companyRegionById = new Map<string, RegionId>();
   state.companies.forEach((c) => {
-    if (!isActiveCompany(c)) return;
+    if (!isActiveCompany(c) && !openEstateCompanyIds.has(c.id)) return;
     companyRegionById.set(c.id, c.region);
     const a = acc(c.region);
     if (!a) return;
-    if (isPubliclyListed(c)) a.equity.outstandingUSD += Math.max(0, c.marketCap ?? 0);
+    if (isActiveCompany(c)) {
+      if (isPubliclyListed(c)) a.equity.outstandingUSD += Math.max(0, c.marketCap ?? 0);
+    }
     a.corpBond.outstandingUSD += (c.debtTranches || [])
       .reduce((s, t) => s + Math.max(0, t.principalUSD), 0);
 
     const sheet = c.bankBalanceSheet;
-    if (!sheet) return;
+    if (!sheet || !isActiveCompany(c)) return;
     Object.values(sheet.sovereignBondHoldingsByTenor || {}).forEach((usd) => {
       // A bank holds its OWN sovereign as its liquidity buffer (07c's domestic mandate).
       a.sovBond.bankUSD += Math.max(0, Number(usd) || 0);
