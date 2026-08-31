@@ -3907,3 +3907,26 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        (money nobody funded until a negative balance is a real facility draw with a real
        lender). Reverted the convention change; the facility build is the Tier-2 item, now
        with its price tag.
+
+265. **THE OVERDRAFT CONVERSION BUILT — a settled negative balance becomes a facility draw,
+     and the 20-week probe prints 2 violations in 2 families, the best in the model's
+     history.**
+     - The mechanism (02b, before the deposit reconcile): a non-bank company whose SETTLED
+       cash stands below zero has already spent its bank's money — stage 08's revolver fires
+       on the walk's forward view, but the books that run after it (late clearings, ETF
+       flows, FX, the close) could settle a company negative with no lender. The bank's
+       de-facto credit is now de-jure, in the SEG2e one-statement shape: a revolver-style
+       facility tranche on the borrower (52 weeks, REVOLVER_MARGIN_BPS, facilityBankTicker =
+       home bank), the credit event booking the loan on the bank at settlement, and the
+       BANK_CREDIT payment writing the deposit back to zero — a loan creates a deposit. The
+       borrower's own machinery services and prepays it like any facility. No headroom test:
+       an overdraft is credit already extended; pricing it is the bank's only remaining
+       choice.
+     - **Verified (20 weeks, shocks off): 2 violations in 2 families** (the two credit-ETF
+       w3 singles; the USAEQX small-cap singles went too), no bank-band or growth families,
+       ladder green. The ~4.5B/week of formerly unfunded negative balances (§7.264's
+       measurement) now cycles through a named lender at revolver pricing. The reconcile
+       meter reads 1.1B vs 0.7B — the +0.4B is the conversion's own in-flight wedge (the
+       draw's payment settles after the Σ is read each week), a timing artifact of the fix,
+       not new bypass; it goes when the reconcile is deleted (Tier 2's endgame, one feeder
+       closer).

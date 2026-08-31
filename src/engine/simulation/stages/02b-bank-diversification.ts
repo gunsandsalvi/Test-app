@@ -36,6 +36,7 @@ import { divertHouseholdSavingsToMmf, refreshMmfQuotes, findRegionMmf } from './
 import { runBankWeeklyLending, runBankHouseholdLending, currentMortgageRateAnnual, smePoolId, unrenewedWholesaleUSD } from './bank-lending';
 import { WeeklyStepContext, updateBankSheet } from './context';
 import { pay } from './settlement';
+import { REVOLVER_MARGIN_BPS } from './07f-short-debt-clearing';
 
 function scaleBankingSector(bs: BankingSector, share: number): BankingSector {
   const scaledBuckets: Record<string, number> = {};
@@ -138,6 +139,46 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       // its own line so the meter measures what it claims to.
       ctx.cashOverdraftUSD += Math.max(0, -(e.cashUSD ?? 0));
     });
+    // §7.265 — THE OVERDRAFT CONVERSION: a company whose SETTLED balance stands negative has
+    // already spent its bank's money, so the bank's de-facto credit becomes a de-jure facility
+    // draw at revolver pricing. Stage 08's own revolver fires on the walk's forward view, but
+    // the books that run AFTER it (the late clearings, ETF flows, FX, the close) can settle a
+    // company negative with no lender until this pass — measured as ~4.5B/week of standing
+    // negative balances (§7.264), money nobody funded. One statement, the SEG2e shape: the
+    // tranche goes on the borrower, the credit event books the loan on the bank, and the
+    // BANK_CREDIT payment writes the deposit back to zero — a loan creates a deposit. The
+    // borrower's own machinery services and prepays it like any facility. No headroom test:
+    // an overdraft is credit ALREADY extended, and pricing it is the bank's only choice left.
+    ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
+      if (c.region !== regionId || c.isDefaulted || c.isBankEntity || c.mergerAcquired) return;
+      if (!c.homeBankTicker || !(c.cash < -1)) return;
+      const drawUSD = -c.cash;
+      const tranche = {
+        id: `${c.id}-REVOLVER-OD-${ctx.nextWeek}`,
+        principalUSD: drawUSD,
+        rateType: 'FLOATING' as const,
+        floatingMarginBps: REVOLVER_MARGIN_BPS,
+        originationWeek: ctx.nextWeek,
+        maturityWeek: ctx.nextWeek + 52,
+        seniority: 'SENIOR' as const,
+        isBankFacility: true,
+        facilityBankTicker: c.homeBankTicker,
+      };
+      c.debtTranches = [...(c.debtTranches || []), tranche];
+      c.totalDebt = (c.totalDebt ?? 0) + drawUSD;
+      ctx.creditEventsThisWeek.push({
+        bankTicker: c.homeBankTicker, companyId: c.id, trancheId: tranche.id,
+        principalUSD: drawUSD, marginBps: REVOLVER_MARGIN_BPS,
+        originationWeek: ctx.nextWeek, termWeeks: 52, retire: false,
+      });
+      pay(ctx, {
+        payer: { kind: 'BANK_CREDIT', ticker: c.homeBankTicker },
+        payee: { kind: 'COMPANY', ticker: c.ticker },
+        amountUSD: drawUSD,
+        reason: 'overdraft converted to facility draw',
+      });
+    });
+
     const corporateDepositsByBank = new Map<string, number>();
     ctx.prevActiveFirms.concat(ctx.prevActivePrivateFirms).forEach((c) => {
       if (c.region !== regionId || c.isDefaulted || c.isBankEntity) return;
