@@ -1962,6 +1962,17 @@ const spiralModule: HarnessModule = {
         console.log(`  [px] w${w} ${region} ${line}`);
       });
     }
+    // CARRIER=1 — the carrier cohort weekly: who is alive, what each earns and holds, so the
+    // first death week and the drain that caused it are readable off one run.
+    if (process.env.CARRIER === '1') {
+      const carriers = state.companies.filter((c) => c.financialStatementProfile === 'CARRIER');
+      const alive = carriers.filter((c) => isActiveCompany(c));
+      const line = carriers.slice(0, 12).map((c) => {
+        const flag = isActiveCompany(c) ? '' : '✝';
+        return `${c.ticker}${flag} cash${((c.cash ?? 0) / 1e6).toFixed(0)}M rev${((c.annualRevenue ?? 0) / 1e6).toFixed(0)}M ni${((c.netIncome ?? 0) / 1e6).toFixed(1)}M`;
+      }).join(' | ');
+      console.log(`  [car] w${w} alive ${alive.length}/${carriers.length} :: ${line}`);
+    }
     // BANKCAP=1 — per-bank capital decomposition: whose equity drains, whose RWA grows, and
     // where each cohort's ratio sits against the [0.05, 0.35] band, weekly.
     if (process.env.BANKCAP === '1') {

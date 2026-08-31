@@ -196,6 +196,7 @@ export function generateCarriers(
   return staffed.map((c, idx) => buildCarrierCompany(
     c.region, c.assets, idx, regions, unitMassTonnes,
     clearing.carrierRevenueUSD.get(`SEED_CARRIER_${idx}`) ?? 0,
+    clearing.carrierTonnesCarried.get(`SEED_CARRIER_${idx}`) ?? 0,
     existingTickers, existingNames
   ));
 }
@@ -218,6 +219,7 @@ function buildCarrierCompany(
   regions: Record<RegionId, Region>,
   unitMassTonnes: Record<string, number>,
   clearedWeeklyRevenueUSD: number,
+  clearedWeeklyTonnesCarried: number,
   existingTickers: Set<string>,
   existingNames: Set<string>
 ): Company {
@@ -228,7 +230,8 @@ function buildCarrierCompany(
   const wage = crewAnnualWageUSD(regions[region], region);
 
   const annualRevenue = clearedWeeklyRevenueUSD * 52;
-  let annualFuelCost = 0;
+  let fullSailAnnualFuelCost = 0;
+  let fleetWeeklyTonnes = 0;
   let grossPPEUSD = 0;
   let crewCount = 0;
   assets.forEach(asset => {
@@ -237,12 +240,29 @@ function buildCarrierCompany(
     const spec = FREIGHT_ASSET_SPEC[asset.mode];
     grossPPEUSD += spec.capitalCostUSD;
     crewCount += asset.crewCount;
-    // Voyages a week, and what each burns.
+    fleetWeeklyTonnes += weeklyTonnes;
+    // Voyages a week AT FULL SAIL, and what each burns — scaled to real utilization below.
     const voyagesPerWeek = asset.capacityTonnes > 0 ? weeklyTonnes / asset.capacityTonnes : 0;
     const weeklyFuelTonnes = voyagesPerWeek * asset.fuelTonnesPerNm * distanceNm;
-    annualFuelCost += weeklyFuelTonnes * fuelUsdPerTonne * 52;
+    fullSailAnnualFuelCost += weeklyFuelTonnes * fuelUsdPerTonne * 52;
   });
+  // §7.259/item 14 — FUEL BURNS AT THE UTILIZATION THE SEED AUCTION ACTUALLY CLEARED, not at
+  // full sail. The weekly model already burns by real tonne-miles moved (carrier.ts profile);
+  // the seed costed the fleet as if every hull sailed full while its revenue was the cleared
+  // (partial) fill — so any carrier the round-robin dealt slack lanes seeded LOSSMAKING by a
+  // unit error, opened with `max(0, ebitda)×0.6 = 0` cash, and was dead by week 2. Measured:
+  // six of twelve carriers died exactly there, every run, before any market event.
+  const seedUtilization = fleetWeeklyTonnes > 0
+    ? Math.min(1, clearedWeeklyTonnesCarried / fleetWeeklyTonnes)
+    : 0;
+  const annualFuelCost = fullSailAnnualFuelCost * seedUtilization;
   const annualCrewCost = crewCount * wage;
+  if (process.env.CARRIER_SEED === '1') {
+    console.log(`  [car-seed] ${region} ${ticker} hulls ${assets.length} rev ${(annualRevenue / 1e6).toFixed(1)}M`
+      + ` fuel ${((fullSailAnnualFuelCost * seedUtilization) / 1e6).toFixed(1)}M crew ${(annualCrewCost / 1e6).toFixed(1)}M`
+      + ` (crewCount ${crewCount} wage ${(wage / 1e3).toFixed(0)}k) util ${seedUtilization.toFixed(2)}`
+      + ` lanes ${[...new Set(assets.map((a) => `${a.laneFrom}>${a.laneTo}`))].join(',')}`);
+  }
   const employeeCount = Math.max(1, crewCount);
 
   const ebitda = annualRevenue - annualFuelCost - annualCrewCost;

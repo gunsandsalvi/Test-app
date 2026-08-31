@@ -3759,3 +3759,26 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
      - **Hypothesis parked for the overdraft digger**: the equity-fund 0.1–0.2B/week
        overdrafts (w27+ at reference) may be this same missing principal income — re-measure
        on the fixed tree before digging.
+
+260. **THE CARRIER DEATHS, DECOMPOSED TO ONE NAMED QUESTION: the live freight market pays the
+     fleet ~6x less than the seed's own auction on the same trade flows.**
+     - CARRIER=1 (new weekly probe: alive count + per-carrier cash/revenue/income): six of
+       twelve carriers die at WEEK 2, every run — they open with negative cash and deep losses
+       before any market event. CARRIER_SEED=1 (new seed print) with the fix below shows every
+       carrier is seeded comfortably PROFITABLE (e.g. EUR CCSV: rev 440M vs fuel 126M + crew
+       58M, utilization 0.91) — yet the same carrier's LIVE week-1 revenue re-derives at ~70M
+       annualized and its income at −47M. The gap is not carrier economics: **the live-week
+       lane bookings/settlement pay the fleet a fraction of what the seed's auction cleared on
+       the same flows** (the §7.256 diagnostic already said it at world scale: logistics
+       revenue 0.4B/week = 0.02% of world GDP against a real 5–6%), while the goods still move
+       — partly on the 'freight on a lane no carrier serves' boundary. Survivors then run at
+       cash ≈ 0 with ±500M/week income swings until one bad stretch kills them (0/12 by w60).
+     - **Fixed in passing (kept)**: the SEED burned fuel at full sail while revenue was the
+       cleared partial fill — item 14's bleed-by-existence, surviving in the bootstrap.
+       `buildCarrierCompany` now scales seed fuel by the seed auction's own cleared utilization
+       (0.87–1.00 measured). Necessary, not sufficient: the deaths are the live market's.
+     - **Next action (the carrier row's one question)**: reconcile the sourcing intent's weekly
+       lane bookings + the carrier payment path (05's carrierShareByLane accrual) against the
+       tonnage that actually moves — where do the other ~98% of the world's freight dollars
+       go, and why does week 1 pay a carrier ~6x less than the seed cleared for the identical
+       fleet and flows. Owner: the freight book (XB3a-2), with the sourcing intent.
