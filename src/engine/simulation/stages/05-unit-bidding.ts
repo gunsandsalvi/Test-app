@@ -1049,11 +1049,12 @@ function buildRegionDemandPlans(
   }
 
   // Government Aggregate Bid — PUB1e: the treasury's OWN weekly budget for this category, set by
-  // stage 03 from the real primary budget net of debt service. It used to be re-derived here as
-  // a share of the smoothed demand level, which is a different number from the one stage 03
-  // allocated and from the one the treasury's account was debited by.
-  const govBudgetWeeklyUSD = reg.governmentProcurementBudgetByCategory?.[subUnitId]
-    ?? (demandState.demandLevelUSD * govShare) / 52;
+  // stage 03 from the real primary budget net of debt service. §7.245: the fallback that
+  // re-derived it here as a share of the smoothed demand level is DELETED — it was the PUB1e
+  // deletion surviving as a `??` arm (§7.241), it went live for every capex category stage 03
+  // dropped from the map, and a bid sized off the demand level has no appropriation behind it.
+  // No published budget, no bid: a government cannot spend what nothing appropriated.
+  const govBudgetWeeklyUSD = reg.governmentProcurementBudgetByCategory?.[subUnitId] ?? 0;
   if (govShare > 0 && govBudgetWeeklyUSD > 0) {
     const govDemandUnits = govBudgetWeeklyUSD / referencePriceUSD;
     if (govDemandUnits > 0.001) {

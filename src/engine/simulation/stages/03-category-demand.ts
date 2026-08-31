@@ -162,9 +162,14 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
     // the same capex dollars.
     Object.values(INDUSTRY_SUBUNITS).forEach(subUnits => {
       subUnits.forEach(su => {
+        // The government buys capital goods too (commercial_construction carries its single
+        // largest weight, 0.45), and the SEED normalizes G over EVERY sub-unit's GOVERNMENT
+        // weight. Skipping the capex five here gave the other 32 categories 100% of G while
+        // stage 05's fallback bid unappropriated money for these — §1.3's two representations,
+        // and the unbounded one won (§7.245).
+        totalGovWeight += su.buyerMix.GOVERNMENT;
         if (CAPEX_SUPPLIER_WEIGHTS[su.unitId] !== undefined) return;
         hhWeightByTier[categoryPriceTier(su.unitId)] += su.buyerMix.HOUSEHOLD;
-        totalGovWeight += su.buyerMix.GOVERNMENT;
         totalCorpWeight += su.buyerMix.CORPORATE;
       });
     });
@@ -206,9 +211,19 @@ export function runCategoryDemandStage(state: GameState, ctx: WeeklyStepContext)
             c.region === regionId && isActiveCompany(c)
               ? a + ((c.maintenanceCapex ?? 0) + (c.growthCapex ?? 0)) * CAPEX_SUPPLIER_WEIGHTS[su.unitId]
               : a), 0);
-          allTargets[su.unitId] = capexDemandUSD > 0
+          // §7.245 — THE GOVERNMENT'S CAPEX-CATEGORY DEMAND IS APPROPRIATED, LIKE EVERYWHERE
+          // ELSE. This branch used to `return` before the govBudgetByCategory write, so the five
+          // capex categories vanished from the budget map every week and stage 05's fallback
+          // sized the government's bid off the demand LEVEL — the firms' own exploding capex,
+          // with no appropriation behind it. The seed publishes a budget for all 37 (§7.4); now
+          // the weekly rebuild does too, and the level carries the government's slice so the
+          // supplying industries are sized for a buyer that really bids.
+          const suCapexGovDemand = totalGovWeight > 0 ? (su.buyerMix.GOVERNMENT / totalGovWeight) * G : 0;
+          govBudgetByCategory[su.unitId] = suCapexGovDemand / 52;
+          allTargets[su.unitId] = (capexDemandUSD > 0
             ? capexDemandUSD
-            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId]));
+            : (reg.categoryDemand[su.unitId as keyof typeof reg.categoryDemand]?.demandLevelUSD ?? (I * CAPEX_SUPPLIER_WEIGHTS[su.unitId])))
+            + suCapexGovDemand;
           smoothingByCategory[su.unitId] = 0.08;
           return;
         }
