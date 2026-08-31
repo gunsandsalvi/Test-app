@@ -1856,14 +1856,24 @@ const bookTraceModule: HarnessModule = {
         .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
         .map(({ k, d }) => `${k} ${(d / 1e9).toFixed(2)}B`)
         .join(' | ');
-      // The corpBondOwnership ratio's two sides, measured the same way the check measures them.
+      // The corpBondOwnership ratio's two sides, measured the same way the check measures them —
+      // plus the held paper SPLIT BY ISSUER ALIVENESS: the outstanding denominator skips
+      // defaulted issuers (holdings-view.ts isActiveCompany filter) while holders keep their
+      // claims until the estate extinguishes them, so the estate-window slice is exactly how far
+      // the ratio can sit above what active issuers owe without any claim being minted.
       let creditHeldUSD = 0;
+      let heldOnDeadIssuerUSD = 0;
+      const issuerAliveById = new Map<string, boolean>();
+      state.companies.forEach((c) => { if (c.region === region) issuerAliveById.set(c.id, isActiveCompany(c)); });
       (state.institutionalEntities || []).forEach((e) => {
         if (e.isDefaulted) return;
         e.itemizedHoldings.forEach((h) => {
           if (h.issuerRegion !== region) return;
           if (h.instrumentType === 'CORP_BOND' || h.instrumentType === 'LEVERAGED_LOAN' || h.instrumentType === 'COMMERCIAL_PAPER') {
-            creditHeldUSD += h.quantityOrNotionalUSD ?? 0;
+            const usd = h.quantityOrNotionalUSD ?? 0;
+            creditHeldUSD += usd;
+            // instrumentId IS the issuer's company.id for the credit classes (domain/banking.ts).
+            if (issuerAliveById.get(h.instrumentId) === false) heldOnDeadIssuerUSD += usd;
           }
         });
       });
@@ -1873,6 +1883,7 @@ const bookTraceModule: HarnessModule = {
       console.log(`  [book] w${w} ${region} ${(total(before) / 1e9).toFixed(1)}B -> ${(total(after) / 1e9).toFixed(1)}B`
         + ` | credit held/outstanding ${(creditHeldUSD / 1e9).toFixed(1)}/${(creditOutstandingUSD / 1e9).toFixed(1)}`
         + ` = ${(creditOutstandingUSD > 0 ? creditHeldUSD / creditOutstandingUSD : 0).toFixed(3)}`
+        + ` (on dead issuers ${(heldOnDeadIssuerUSD / 1e9).toFixed(1)}B)`
         + (deltas ? ` | ${deltas}` : ''));
     });
   },
