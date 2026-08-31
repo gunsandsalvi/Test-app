@@ -252,7 +252,13 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         bank.oasSpreadBps > 0 ? bank.oasSpreadBps : WHOLESALE_FUNDING_SPREAD_BPS,
         // COH4: the households' own measured split, so the funding-pressure denominator and the
         // inflow it is measured against are the SAME number (§7.5's duplicated-constant shape).
-        depositShare
+        depositShare,
+        // §7.254: the interest borrowers pay as REAL payments (facility + SME, via settlement).
+        // The evolution must not credit the cash — settlement does — but the income measure and
+        // the payout's net-income line must count it, or the bank reads poorer than its ledger.
+        priorFacilityInterestWeeklyUSD + priorSmeInterestWeeklyUSD,
+        // NIM_TRACE instrument label; inert unless the env flag is set.
+        `${regionId}:${bank.ticker}`
       );
 
       // G2: the itemized book's own week — facility reconciliation, real interest accrual

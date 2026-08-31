@@ -260,7 +260,18 @@ export function evolveBankingSector(
   /** COH4: the share of the region's household saving that arrives as a DEPOSIT rather than
    * leaving as a pension contribution — measured by the cohorts' own motive split, not stated.
    * Defaults to the seed share, which is all the first pass has (§7.4). */
-  savingsToDepositsShareValue: number = HOUSEHOLD_SAVINGS_TO_DEPOSITS_SEED_SHARE
+  savingsToDepositsShareValue: number = HOUSEHOLD_SAVINGS_TO_DEPOSITS_SEED_SHARE,
+  /** SETL4/SEG2d — interest the borrowers PAY AS REAL PAYMENTS (facility and SME-pool interest,
+   * through settlement), excluded from `itemizedLoanInterestWeeklyUSD` above so this evolution
+   * does not credit the cash twice. It is still this week's interest INCOME, and leaving it out
+   * of the income measure made the NIM statistic and the payout's net-income line read a bank
+   * poorer than its own ledger: measured (§7.254), the USA cohort's NIM printed −1.3% while
+   * settlement delivered the missing income into equity every week, dividends under-distributed
+   * against the mis-measured income, and the cash sat on the sheet funded by priced wholesale. */
+  settlementPaidInterestWeeklyUSD: number = 0,
+  /** NIM_TRACE=1 instrument only: a `${region}:${ticker}` label; when set and the env flag is
+   * on, the NIM's income and funding legs print for this evolution. Never read by the ledger. */
+  traceLabel?: string
 ): BankingSector {
   // ---- The ledger. Every mutation below is a named flow posting to both of its sides. ----
   let cashUSD = prevBanking.cashReservesUSD;
@@ -392,7 +403,8 @@ export function evolveBankingSector(
   // stage 11), not a carry-at-market-yield the issuer never funded. `sovereignBookAnnualYield`
   // is still the curve read used elsewhere; it no longer credits income here.
   const weeklyInterestIncomeUSD = (Math.max(0, cashUSD) * policyRate) / 52
-    + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD + sovereignCouponWeeklyUSD;
+    + itemizedLoanInterestWeeklyUSD + householdLoanInterestWeeklyUSD + sovereignCouponWeeklyUSD
+    + settlementPaidInterestWeeklyUSD;
   // CAL: the income statement is smooth and the CASH is lumpy — a coupon is earned every week and
   // paid on the bucket's date, and rule 9 says those are different numbers with different periods.
   // So the coupon stays in the income line above (it is genuinely this week's earnings, and the
@@ -400,7 +412,8 @@ export function evolveBankingSector(
   // `sovereign-calendar.ts` posts BOTH of its legs — the receivable and the equity it earns — off
   // the ledger the treasury pays from, which is the only way the holder's claim and the issuer's
   // payable stay the same number. Everything else here is money that genuinely arrived this week.
-  const cashInterestIncomeUSD = weeklyInterestIncomeUSD - sovereignCouponWeeklyUSD;
+  // ...and the settlement-paid slice, whose cash the settlement pass itself delivers.
+  const cashInterestIncomeUSD = weeklyInterestIncomeUSD - sovereignCouponWeeklyUSD - settlementPaidInterestWeeklyUSD;
   cashUSD += cashInterestIncomeUSD;
   equityUSD += cashInterestIncomeUSD;
   const weeklyDepositInterestUSD = (depositsUSD * depositRate) / 52;
@@ -448,6 +461,18 @@ export function evolveBankingSector(
   const netInterestMarginPct = totalAssetsUSD > 0
     ? ((weeklyInterestIncomeUSD - weeklyDepositInterestUSD - wholesaleInterestUSD - corporateDepositInterestUSD) * 52) / totalAssetsUSD
     : 0.025;
+  if (traceLabel && process.env.NIM_TRACE === '1') {
+    console.log(`  [nim] ${traceLabel} NIM ${(netInterestMarginPct * 100).toFixed(2)}%`
+      + ` | income/wk: reserves ${((Math.max(0, prevBanking.cashReservesUSD) * policyRate) / 52 / 1e6).toFixed(1)}M`
+      + ` loans ${(itemizedLoanInterestWeeklyUSD / 1e6).toFixed(1)}M hh ${(householdLoanInterestWeeklyUSD / 1e6).toFixed(1)}M`
+      + ` coupons ${(sovereignCouponWeeklyUSD / 1e6).toFixed(1)}M settled ${(settlementPaidInterestWeeklyUSD / 1e6).toFixed(1)}M`
+      + ` | cost/wk: deposits ${(weeklyDepositInterestUSD / 1e6).toFixed(1)}M@${(depositRate * 100).toFixed(2)}%`
+      + ` wholesale ${(wholesaleInterestUSD / 1e6).toFixed(1)}M corpDep ${(corporateDepositInterestUSD / 1e6).toFixed(1)}M`
+      + ` | stocks: cash ${(prevBanking.cashReservesUSD / 1e9).toFixed(2)}B bizLoans ${(businessLoanUSD / 1e9).toFixed(2)}B`
+      + ` hhLoans ${(consumerLoanUSD / 1e9).toFixed(2)}B hhDep ${(depositsUSD / 1e9).toFixed(2)}B`
+      + ` corpDep ${(corporateDepositsUSD / 1e9).toFixed(2)}B wholesale ${(wholesaleUSD / 1e9).toFixed(2)}B`
+      + ` | policy ${(policyRate * 100).toFixed(2)}%`);
+  }
   const newBankCapitalRatio = riskWeightedAssetsUSD > 0 ? equityUSD / riskWeightedAssetsUSD : 0.13;
   const capitalGap = 0.12 - newBankCapitalRatio;
   const newCreditConditionsIndex = (capitalGap * 8 + (0.025 - netInterestMarginPct) * 10 + spilloverAdjustment);
