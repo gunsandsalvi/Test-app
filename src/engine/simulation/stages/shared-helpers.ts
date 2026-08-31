@@ -122,7 +122,9 @@ export function computeExpectedLossSpreadBps(comp: Company, reg?: { realisedReco
  * The 0.4 survives as the prior: what a lender must assume before this world has resolved enough
  * defaults to have an opinion of its own.
  */
-export const CREDIT_RECOVERY_RATE = 0.4;
+// The workout prior lives in domain/bank-pricing.ts (one owner); re-exported for its readers.
+export { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
+import { CREDIT_RECOVERY_RATE } from '../../../domain/bank-pricing';
 
 /** How many resolutions it takes before a region's own experience displaces the prior. */
 export const RECOVERY_PRIOR_WEIGHT = 8;

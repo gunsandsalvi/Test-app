@@ -45,24 +45,28 @@ import {
   MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_OPERATING_COST_BPS, CARD_POOL_PAYMENT_RATE_WEEKLY, CARD_MIN_PRINCIPAL_RATE_WEEKLY,
   CARD_OPERATING_COST_BPS,
   CONSUMER_TERM_OPERATING_COST_BPS, HOUSING_TURNOVER_SEED_RATE_ANNUAL, housingTurnoverAnnual, MORTGAGE_LTV_AT_ORIGINATION,
-  FORECLOSURE_COST_SHARE, MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER, MORTGAGE_MIN_LOSS_SEVERITY,
+  MORTGAGE_DEFAULT_FREQUENCY_MULTIPLIER,
 } from '../../../domain/banking';
-import { CreditTierBook, AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
+import { AVERAGE_HOUSEHOLD_SIZE } from '../../../domain/region-macro';
 import { SmePool } from '../../../domain/region-macro';
-import { WeeklyStepContext } from './context';
 import { bookPnL } from '../../ledger/bank-book';
 import { remainingLifeExpectancyYears, medianAdultAgeYears } from '../../bootstrap/population';
-import { computeAnnualDefaultProbability, CREDIT_RECOVERY_RATE, creditRecoveryRate } from './shared-helpers';
+import { creditRecoveryRate } from './shared-helpers';
 import { bankTotalAssetsUSD, stressedOutflowUSD, LIQUIDITY_COVERAGE_RATIO } from '../../macro/banking';
 
 /** Covenant-style ceiling on SME pool leverage — the same real lending constraint the bond
  * market's covenant ladder expresses (§5-RV's "lenders do not fund unlimited leverage"). */
 export const SME_SERVICEABLE_LEVERAGE = 3.0;
-/** The capital ratio a bank's treasury actually RUNS at — the buffer above the 8% floor that
- * real supervision demands and real banks keep. Origination prices against consuming it;
- * breaching the floor itself is where the bank declines outright. */
-export const BANK_WORKING_CAPITAL_RATIO = 0.11;
-const BANK_MIN_CAPITAL_RATIO = 0.08;
+// The pricing rules and their capital constants live in domain/bank-pricing.ts (§5-STRUCT
+// step 2), where their tests are; re-exported here so no call site moved.
+export {
+  BANK_WORKING_CAPITAL_RATIO, BANK_TARGET_ROE,
+  quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate,
+} from '../../../domain/bank-pricing';
+import {
+  BANK_WORKING_CAPITAL_RATIO, BANK_TARGET_ROE, BANK_MIN_CAPITAL_RATIO,
+  quoteLoanMarginBps, quoteHouseholdMarginBps, consumerAnnualLossRate,
+} from '../../../domain/bank-pricing';
 /**
  * Return the bank needs on the equity a loan consumes — and therefore, through
  * `quoteLoanMarginBps`, the price of every loan it writes.
@@ -74,8 +78,6 @@ const BANK_MIN_CAPITAL_RATIO = 0.08;
  * quote made where no particular bank is lending (the household aggregate's average rate) and
  * for a bank with no beta yet.
  */
-export const BANK_TARGET_ROE = 0.12;
-
 /**
  * THIS bank's cost of equity: the risk-free rate its own region prints, plus its own measured
  * beta against the equity risk premium. The price of every loan it writes rides on it.
@@ -87,22 +89,6 @@ export function bankRequiredReturnAnnual(bank: { beta?: number }, reg: Region): 
  * credit is free — the pace of a real investment pipeline (MS/BP make segment investment
  * demand fully real; this is its flow rate, not its price test). */
 const SME_WEEKLY_DEMAND_TAKEUP = 0.01;
-
-/** One margin quote for any borrower: expected loss + capital cost, in bps over policy. */
-export function quoteLoanMarginBps(params: {
-  annualDefaultProbability: number;
-  /** Risk weight of the exposure (1.0 business). */
-  riskWeight: number;
-  /** G3c: the quoting bank's own cost of equity. Omitted only where no one bank is quoting. */
-  requiredReturnAnnual?: number;
-  /** G5: what this region's workouts have actually recovered. Omitted falls back to the prior. */
-  recoveryRate?: number;
-}): number {
-  const expectedLossBps = params.annualDefaultProbability * (1 - (params.recoveryRate ?? CREDIT_RECOVERY_RATE)) * 10000;
-  const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO
-    * (params.requiredReturnAnnual ?? BANK_TARGET_ROE) * 10000;
-  return Math.max(25, Math.round(expectedLossBps + capitalCostBps));
-}
 
 export const smePoolId = (regionId: RegionId, industry: string) => `${regionId}_SEG_${industry}`;
 
@@ -377,37 +363,6 @@ export function runBankWeeklyLending(
  * The unsecured book's annual loss rate from the tier mix and the real unemployment print —
  * moved here from evolveBankingSector so the loss lands on the itemized pool that bears it.
  */
-export function consumerAnnualLossRate(
-  unemploymentRate: number,
-  creditTierBooks: CreditTierBook[] | undefined
-): number {
-  const base = Math.max(0.005, Math.min(0.12, Math.max(0, unemploymentRate - 0.03) * 1.2));
-  if (!creditTierBooks || creditTierBooks.length === 0) {
-    return Math.min(0.09, Math.max(0, unemploymentRate - 0.045) * 1.4);
-  }
-  const share = (tier: string, fallback: number) =>
-    creditTierBooks.find((t) => t.tier === tier)?.shareOfHouseholds ?? fallback;
-  const weightedMultiplier =
-    share('SUPER_PRIME', 0.25) * 0.2 + share('PRIME', 0.50) * 1.0 +
-    share('NEAR_PRIME', 0.15) * 3.0 + share('SUBPRIME', 0.10) * 10.0;
-  return base * weightedMultiplier;
-}
-
-/** One margin quote for unsecured household credit: measured loss + capital + operating cost. */
-export function quoteHouseholdMarginBps(params: {
-  annualLossRate: number;
-  riskWeight: number;
-  operatingCostBps: number;
-  /** G3c: the quoting bank's own cost of equity. Omitted only where no one bank is quoting. */
-  requiredReturnAnnual?: number;
-}): number {
-  // The measured loss rate is already frequency x severity, so it IS the expected-loss term.
-  const expectedLossBps = params.annualLossRate * 10000;
-  const capitalCostBps = params.riskWeight * BANK_WORKING_CAPITAL_RATIO
-    * (params.requiredReturnAnnual ?? BANK_TARGET_ROE) * 10000;
-  return Math.max(50, Math.round(expectedLossBps + capitalCostBps + params.operatingCostBps));
-}
-
 /**
  * HSG — the going mortgage rate: the KEENEST quote in the region, because a borrower shops.
  *
