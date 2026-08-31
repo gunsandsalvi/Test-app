@@ -611,8 +611,17 @@ export const MATCHING_EFFICIENCY = BASELINE_QUIT_RATE_WEEKLY
  */
 export function restingVacancies(employed: number, seekers: number): number {
   if (!(employed > 0) || !(seekers > 0)) return 0;
-  const hires = employed * BASELINE_QUIT_RATE_WEEKLY;
-  return Math.pow(hires / (MATCHING_EFFICIENCY * Math.sqrt(seekers)), 2);
+  // §4.0 Tier 1 item 15 — THE INVERSION SATURATES AT THE SEEKERS THAT EXIST. Replacement hiring
+  // can never exceed the seeker pool, so the rest point is inverted from min(separations,
+  // seekers): uncapped, a tight occupation (seekers → 1, the seed's floor) demanded a vacancy
+  // stock that grows as 1/seekers — measured, the seed planted 4.07M GENERAL vacancies in a
+  // 5.6M labor force, and the §7.244 world printed a 2.0e9% vacancy rate from the same shape.
+  // Also one owner for the elasticity: this used to hardcode √· beside MATCHING_ELASTICITY.
+  const hires = Math.min(employed * BASELINE_QUIT_RATE_WEEKLY, seekers);
+  return Math.pow(
+    hires / (MATCHING_EFFICIENCY * Math.pow(seekers, 1 - MATCHING_ELASTICITY)),
+    1 / MATCHING_ELASTICITY
+  );
 }
 /**
  * How much of the desired weekly headcount change a firm actually acts on. Hiring runs ahead of

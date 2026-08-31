@@ -253,10 +253,12 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
         // COH4: the households' own measured split, so the funding-pressure denominator and the
         // inflow it is measured against are the SAME number (§7.5's duplicated-constant shape).
         depositShare,
-        // §7.254: the interest borrowers pay as REAL payments (facility + SME, via settlement).
-        // The evolution must not credit the cash — settlement does — but the income measure and
-        // the payout's net-income line must count it, or the bank reads poorer than its ledger.
-        priorFacilityInterestWeeklyUSD + priorSmeInterestWeeklyUSD,
+        // §7.254: income the evolution must MEASURE but never credit to cash — the interest
+        // borrowers pay as real payments (facility + SME, via settlement) and the bill
+        // accretion the sovereign book earned last week (non-cash, already in equity). Leaving
+        // these out made the NIM statistic and the payout read a bank poorer than its ledger.
+        priorFacilityInterestWeeklyUSD + priorSmeInterestWeeklyUSD
+          + (prevSheet.lastBillAccretionWeeklyUSD ?? 0),
         // NIM_TRACE instrument label; inert unless the env flag is set.
         `${regionId}:${bank.ticker}`
       );
@@ -472,6 +474,7 @@ export function runBankDiversificationStage(state: GameState, ctx: WeeklyStepCon
       sovereignAccruedCouponUSD: sumField((s) => s.sovereignAccruedCouponUSD ?? 0),
       primeBrokerageLoansUSD: sumField((s) => s.primeBrokerageLoansUSD ?? 0),
       householdDepositInterestWeeklyUSD: sumField((s) => s.householdDepositInterestWeeklyUSD ?? 0),
+      lastBillAccretionWeeklyUSD: sumField((s) => s.lastBillAccretionWeeklyUSD ?? 0),
       depositRateAnnual: Number(weightedAvg((s) => s.depositRateAnnual ?? 0).toFixed(6)),
       // Per-bank-only books: a desk position and an FX book belong to the bank that took them; a
       // regional copy would be a second ledger. Declared, not omitted, so the satisfies holds.

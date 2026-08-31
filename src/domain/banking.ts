@@ -170,6 +170,10 @@ export interface BankingSector {
    * level until a bank-liability project makes issuance real.
    */
   wholesaleFundingUSD: number;
+  /** PUB3d/§7.254 — last week's bill accretion on this bank's sovereign book, recorded by the
+   *  accretion stage so the NIM income measure can count the return the book actually earned
+   *  (non-cash: it is already in equity; never credit cash from it). */
+  lastBillAccretionWeeklyUSD?: number;
 }
 
 /**

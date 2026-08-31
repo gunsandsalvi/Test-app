@@ -58,7 +58,7 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
         byTenor[key] = heldUSD + accretedUSD;
         gainUSD += accretedUSD;
       });
-      if (gainUSD === 0) return c;
+      if (gainUSD === 0 && !(existing.lastBillAccretionWeeklyUSD ?? 0)) return c;
       return {
         ...c,
         bankBalanceSheet: {
@@ -66,6 +66,9 @@ export function runBillAccretionStage(state: any, ctx: WeeklyStepContext): void 
           sovereignBondHoldingsByTenor: byTenor,
           sovereignBondHoldingsUSD: Math.round((Object.values(byTenor) as any[]).reduce((a: number, v: any) => a + (Number(v) || 0), 0)),
           bankEquityUSD: existing.bankEquityUSD + gainUSD,
+          // §7.254: recorded so next week's NIM income measure counts the return this book
+          // actually earned; the equity leg above is the booking, this line is the reading.
+          lastBillAccretionWeeklyUSD: Math.round(gainUSD),
         },
       };
     });

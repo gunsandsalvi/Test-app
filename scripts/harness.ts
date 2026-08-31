@@ -2267,20 +2267,23 @@ function runHarness() {
       damperBindStreak = next;
     }
 
-    // 6. Bank capital ratio & NIM bands for USA
-    const usaBank = state.regions.USA.bankingSector;
-    if (usaBank.bankCapitalRatio < 0.05 || usaBank.bankCapitalRatio > 0.35) {
-      violations.push({
-        week: w,
-        message: `USA Bank capital ratio out of band [0.05, 0.35]: ${usaBank.bankCapitalRatio.toFixed(4)}`
-      });
-    }
-    if (usaBank.netInterestMarginPct < 0.01 || usaBank.netInterestMarginPct > 0.08) {
-      violations.push({
-        week: w,
-        message: `USA Bank NIM out of band [0.01, 0.08]: ${usaBank.netInterestMarginPct.toFixed(4)}`
-      });
-    }
+    // 6. Bank capital ratio & NIM bands — every region (§4.0 Tier 1 item 17: only the USA was
+    // banded, so EUR banks printed negative margins for the model's whole life unwatched).
+    REGION_IDS_SEED_ORDER.forEach((rid) => {
+      const bank = state.regions[rid].bankingSector;
+      if (bank.bankCapitalRatio < 0.05 || bank.bankCapitalRatio > 0.35) {
+        violations.push({
+          week: w,
+          message: `${rid} Bank capital ratio out of band [0.05, 0.35]: ${bank.bankCapitalRatio.toFixed(4)}`
+        });
+      }
+      if (bank.netInterestMarginPct < 0.01 || bank.netInterestMarginPct > 0.08) {
+        violations.push({
+          week: w,
+          message: `${rid} Bank NIM out of band [0.01, 0.08]: ${bank.netInterestMarginPct.toFixed(4)}`
+        });
+      }
+    });
 
     // 7. EPS accuracy on a company that enters the world LISTED.
     // Scoped to listed names because EPS is a per-SHARE quantity and a private firm has no

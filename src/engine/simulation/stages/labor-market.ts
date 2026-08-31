@@ -782,6 +782,16 @@ export function reconcileEmploymentView(
     Math.max(0, (totalLaborForce - totalEmployed) / totalLaborForce).toFixed(4)
   );
   reg.laborMarketTightness = Number((totalSeekers > 0 ? totalVacancies / totalSeekers : 1.0).toFixed(4));
+  // GUARD (§4.0 Tier 1 item 15): the §7.244 world printed a vacancy rate of 2.0e9% — an
+  // unguarded ratio at a limit (§7.210's shape). More open vacancies than the entire labor
+  // force is not a tight market, it is a branch upstream emitting garbage; fail on the week it
+  // happens, naming the inputs, instead of publishing it into every consumer.
+  if (!(totalLaborForce > 0) || !isFinite(totalVacancies) || totalVacancies > totalLaborForce) {
+    const byOcc = OCCUPATIONS.map((occ) => `${occ} ${Math.round(
+      carriedVacanciesByOcc ? carriedVacanciesByOcc[occ] : (pools[occ]?.vacancies ?? 0))}`).join(', ');
+    throw new Error(
+      `ENGINE DEFECT: vacancy reading departed sanity — vacancies ${Math.round(totalVacancies)} against labor force ${Math.round(totalLaborForce)} (by occupation: ${byOcc})`);
+  }
   reg.vacancyRate = Number((totalVacancies / totalLaborForce).toFixed(4));
 }
 
