@@ -38,6 +38,7 @@ import { PROFILE_REGISTRY, profileKeyOf } from './profiles';
 import { measureBeta, regionIndexOf } from '../../macro/indices';
 import { pay, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
+import { planCapitalProgramme, commissionCapital } from '../../../domain/company-week/capital-programme';
 import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
@@ -822,53 +823,72 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       };
     }
 
-    // CAP — MAINTENANCE CAPEX IS DEPRECIATION. That is what maintenance capex IS: the spend that
-    // keeps the capital stock whole as it wears out.
-    //
-    // It used to be `newRevenue x (comp.maintenanceCapex / comp.annualRevenue)` — **the target
-    // derived from its own current value**, an EMA of itself with no anchor to the thing it is
-    // for. Whatever it was seeded at is what it stayed. IND13's construction stock measured the
-    // consequence (§6.1, §7.151): capital ARRIVING at ~0.5% of the capital stock a year against a
-    // straight-line depreciation of ~8%, so the plant was being consumed several times faster
-    // than it was replaced, invisibly, because a shrinking net PP&E also shrinks the capital
-    // charge the labour rule sheds against.
-    //
-    // The anchor is the firm's OWN books: its gross plant over its OWN sector's useful life,
-    // which is the same arithmetic the depreciation line below already runs. No new number.
+    // §5-STRUCT step 2 — THE CAPITAL PROGRAMME LIVES ON THE FIRM, NOT HERE.
+    // 158 lines moved to `domain/company-week/capital-programme.ts`: maintenance anchored to
+    // depreciation, what can be funded, what is deferred, the growth envelope, and the plant's
+    // roll-forward. It is a pure function now, so "does a firm short of cash defer maintenance?"
+    // is a test rather than a sixty-week run. This stage's job is to gather the inputs and book
+    // the results — which is all a stage should ever do.
     const usefulLifeYearsForCapex = SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12;
     const grossPPEForCapex = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
-    const targetMaintenanceCapex = grossPPEForCapex / usefulLifeYearsForCapex;
-    const weeklyDesiredMaintenanceCapex = targetMaintenanceCapex / 52;
+    const addressableGrowthAnnual = (comp.productLines || []).reduce((acc, l) => {
+      const catDemand = reg.categoryDemand[l.subUnitId];
+      return acc + Math.max(0, catDemand?.demandGrowthAnnual ?? 0) * l.revenueShare;
+    }, 0);
+    const categoryShortfall = (comp.productLines || []).reduce((acc, l) => {
+      const cd = reg.categoryDemand[l.subUnitId] as { totalUnitsSuppliedThisWeek?: number; totalUnitsDemandedThisWeek?: number } | undefined;
+      const supplied = cd?.totalUnitsSuppliedThisWeek ?? 0;
+      const demanded = cd?.totalUnitsDemandedThisWeek ?? 0;
+      if (!(supplied > 0) || !(demanded > 0)) return acc;
+      return acc + Math.max(0, demanded / supplied - 1) * (l.revenueShare ?? 1);
+    }, 0);
+    const avgCompetitiveness = (comp.productLines || []).reduce((acc, l) => acc + l.competitiveness, 0)
+      / Math.max(1, (comp.productLines || []).length);
 
-    // 2. What the company can actually fund this week — operating cash + a small cash draw + limited new borrowing (IG only), never unlimited
-    const weeklyOperatingCashFlow = newEbitda / 52 - weeklyInterest;
-    // Was a second inline copy of the same rating list the allocator owns (rule 3) — and it
-    // shadowed the imported helper, which is how the shadowing surfaced.
-    const maintenanceBorrowingCapacity = isInvestmentGrade(comp.creditRating) ? weeklyDesiredMaintenanceCapex * 0.5 : 0; // a distressed company cannot borrow its way out of deferred upkeep
-    const availableFundingForMaintenance = Math.max(0, weeklyOperatingCashFlow) + Math.max(0, comp.cash) * 0.05 + maintenanceBorrowingCapacity;
+    const programme = planCapitalProgramme({
+      grossPPEUSD: grossPPEForCapex,
+      accumulatedDepreciationUSD: comp.accumulatedDepreciationUSD ?? (grossPPEForCapex * 0.45),
+      usefulLifeYears: usefulLifeYearsForCapex,
+      weeklyEbitdaUSD: newEbitda / 52,
+      weeklyInterestUSD: weeklyInterest,
+      cashUSD: comp.cash,
+      currentLiabilitiesUSD: comp.currentLiabilities,
+      annualRevenueUSD: comp.annualRevenue,
+      newRevenueUSD: newRevenue,
+      priorMaintenanceCapexUSD: comp.maintenanceCapex ?? (comp.capex * 0.6),
+      priorGrowthCapexUSD: comp.growthCapex ?? (comp.capex * 0.4),
+      priorMaintenanceShortfallStreak: comp.maintenanceShortfallStreak ?? 0,
+      baselineGrowthCapexToRevenueRatio: comp.baselineGrowthCapexToRevenueRatio
+        ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue)),
+      isInvestmentGrade: isInvestmentGrade(comp.creditRating),
+      addressableGrowthAnnual,
+      categoryShortfall,
+      capacityCatchupShareAnnual: CAPACITY_CATCHUP_SHARE_ANNUAL,
+      effectiveDebtRate,
+      marketCapUSD: comp.marketCap,
+      totalDebtUSD: comp.totalDebt,
+      avgCompetitiveness,
+    });
 
-    // 3. Fund what's affordable, defer the rest
-    const weeklyFundedMaintenance = Math.min(weeklyDesiredMaintenanceCapex, availableFundingForMaintenance);
-    const fundedMaintenanceCapex = weeklyFundedMaintenance * 52;
-    const maintenanceShortfallThisWeek = Math.max(0, targetMaintenanceCapex - fundedMaintenanceCapex);
-    const weeklyDebtFundedPortion = Math.max(0, Math.min(weeklyFundedMaintenance, maintenanceBorrowingCapacity) - Math.max(0, weeklyOperatingCashFlow));
-    const newMaintenanceCapex = Math.max(0, (comp.maintenanceCapex ?? (comp.capex * 0.6)) * 0.95 + fundedMaintenanceCapex * 0.05);
+    const newMaintenanceCapex = programme.maintenanceCapexUSD;
+    const maintenanceShortfallThisWeek = programme.maintenanceShortfallThisWeekUSD;
+    const newMaintenanceShortfallStreak = programme.maintenanceShortfallStreak;
+    const weeklyDebtFundedPortion = programme.debtFundedMaintenanceUSD;
 
-    // 4. Debt-funded maintenance becomes a real new floating tranche — genuinely raises leverage and next week's interest, not a free lunch
+    // The bridge is a REAL tranche on a real bank's book, so the programme reports the amount and
+    // this stage issues it — one writer per fact (§1.3).
     let maintenanceFundingTranches: DebtTranche[] = [];
     if (weeklyDebtFundedPortion > 1000) {
-      const currentBaseSpreadBps = comp.oasSpreadBps;
-      const newTrancheMaturityWeek = nextWeek + STANDARD_CORP_TENOR_YEARS * 52;
       maintenanceFundingTranches = [{
         id: `${comp.ticker}-MAINT-${nextWeek}`,
         principalUSD: weeklyDebtFundedPortion,
         rateType: 'FLOATING',
-        floatingMarginBps: Math.round(currentBaseSpreadBps * 1.1), // priced wide — bridge/revolver-style, not term financing
+        floatingMarginBps: Math.round(comp.oasSpreadBps * 1.1), // priced wide — bridge, not term
         originationWeek: nextWeek,
-        maturityWeek: newTrancheMaturityWeek,
+        maturityWeek: nextWeek + STANDARD_CORP_TENOR_YEARS * 52,
         seniority: 'SENIOR',
-        // G2: a bridge is BANK debt — it lives on the house bank's itemized book and its
-        // interest is paid to that bank, not to the loan market (the §6 double-count).
+        // G2: a bridge is BANK debt — it lives on the house bank's itemized book and its interest
+        // is paid to that bank, not to the loan market (the §6 double-count).
         isBankFacility: true,
         facilityBankTicker: comp.homeBankTicker,
       }];
@@ -876,65 +896,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         maintenanceFundingTranches[0].floatingMarginBps ?? 0, STANDARD_CORP_TENOR_YEARS * 52, false);
     }
 
-    // 5. Deferred maintenance compounds into real operational decay
-    const newMaintenanceShortfallStreak = maintenanceShortfallThisWeek > 0
-      ? (comp.maintenanceShortfallStreak ?? 0) + 1
-      : Math.max(0, (comp.maintenanceShortfallStreak ?? 0) - 2); // recovers twice as fast as it accumulates
-
-    // Growth — fully discretionary, now disciplined by addressable opportunity:
-    // Genuine reinvestment opportunity — bounded by how fast this company's actual addressable categories are growing, not by ambition
-    const avgCategoryOpportunity = (comp.productLines || []).reduce((s, l) => {
-      const catDemand = reg.categoryDemand[l.subUnitId];
-      return s + Math.max(0, catDemand?.demandGrowthAnnual ?? 0) * l.revenueShare;
-    }, 0);
-    const productiveReinvestmentEnvelope = newRevenue * Math.max(0.01, avgCategoryOpportunity) * 1.5; // generous multiple of addressable growth, not arbitrary
-
-    const fcfBeforeGrowthCapex = Math.max(0, weeklyOperatingCashFlow * 52 - newMaintenanceCapex);
-    const excessCashGeneration = Math.max(0, fcfBeforeGrowthCapex - productiveReinvestmentEnvelope);
-    const payoutPressure = fcfBeforeGrowthCapex > 0 ? Math.min(1, excessCashGeneration / fcfBeforeGrowthCapex) : 0;
-
-    const growthCapexToRevenueRatio = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
-    const rateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
-    const cashHealthFactor = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
-    const safeMarketCap = Math.max(0, isFinite(comp.marketCap) ? comp.marketCap : 0);
-    const safeTotalDebt = Math.max(0, isFinite(comp.totalDebt) ? comp.totalDebt : 0);
-    const safeRev = Math.max(1, isFinite(comp.annualRevenue) ? comp.annualRevenue : 1);
-    const tobinsQ = Math.max(0.1, Math.min(10.0, safeMarketCap / Math.max(1, safeTotalDebt + safeRev * 1.5)));
-    const qCapexEffect = ((tobinsQ - 1) * 0.2);
-    const avgCompetitiveness = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
-    const competitivenessCapexEffect = (avgCompetitiveness * 0.15);
-    // CAP — THE 0.4 FLOOR IS GONE, and its own comment had already convicted it: "a floor
-    // justified as realistic is the shape rule 2 exists to catch." A firm under real payout
-    // pressure DOES cut growth investment to zero, and the maintenance half is separately funded
-    // and separately anchored to depreciation (§7.167), so nothing here needs protecting from a
-    // firm choosing not to expand. Investment cannot be negative; that is all that is left.
-    const growthCapexAllocationShare = Math.max(0, 1 - payoutPressure * 0.75);
-
-    // CAP — A FIRM EXPANDS WHEN THE MARKET IT SELLS INTO CANNOT BE MET.
-    //
-    // Every term above is about the firm's FINANCES — cost of debt, cash, Tobin's Q, payout
-    // pressure — and none is about whether it can fill the orders in front of it. So a firm that
-    // stocked out every week invested exactly like one sitting on a full warehouse, and a market
-    // in permanent shortage had no mechanism that could ever supply it. That is why §7.127's
-    // supply famine persists after both of its other links were fixed: upstream extraction ran
-    // demand at 1.6x supply with zero inventory from week 8 and its producers' capex never
-    // noticed.
-    //
-    // The signal is the measured shortfall in the firm's OWN categories — demand the auction
-    // could not fill — not a regime label. A firm short by a third wants a third more plant and
-    // closes some share of that gap a year. What it can actually fund is already bounded by the
-    // cash and rate terms above, so nothing here needs a cap (rule 2).
-    const categoryShortfall = (comp.productLines || []).reduce((acc, l) => {
-      const cd = reg.categoryDemand[l.subUnitId] as any;
-      const supplied = cd?.totalUnitsSuppliedThisWeek ?? 0;
-      const demanded = cd?.totalUnitsDemandedThisWeek ?? 0;
-      if (!(supplied > 0) || !(demanded > 0)) return acc;
-      return acc + Math.max(0, demanded / supplied - 1) * (l.revenueShare ?? 1);
-    }, 0);
-    const shortageCapexMultiple = 1 + categoryShortfall * CAPACITY_CATCHUP_SHARE_ANNUAL;
-
-    const targetGrowthCapex = newRevenue * growthCapexToRevenueRatio * (1 - rateDrag) * cashHealthFactor * (1 + qCapexEffect + competitivenessCapexEffect) * growthCapexAllocationShare * shortageCapexMultiple;
-    let newGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + targetGrowthCapex * 0.10);
+    let newGrowthCapex = programme.growthCapexUSD;
     let newRndExpense = comp.rndExpense ?? 0;
     if ((comp.productLines || []).some(l => l.industry === 'TechHardwareSemis' || l.industry === 'SoftwareDigitalServices')) {
       newRndExpense = newGrowthCapex * 0.4;
@@ -971,12 +933,8 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       ...(comp.assetsUnderConstruction ?? []),
       ...(companyUpdates[comp.ticker]?.capexUnderConstruction ?? []),
     ];
-    let capexCommissionedThisWeekUSD = 0;
-    const stillUnderConstruction: { valueUSD: number; entersServiceWeek: number }[] = [];
-    underConstruction.forEach((lot) => {
-      if (lot.entersServiceWeek <= nextWeek) capexCommissionedThisWeekUSD += lot.valueUSD;
-      else stillUnderConstruction.push(lot);
-    });
+    const { commissionedUSD: capexCommissionedThisWeekUSD, stillUnderConstruction } =
+      commissionCapital(underConstruction, nextWeek);
     const newGrossPPEUSD = priorGrossPPE + capexCommissionedThisWeekUSD;
     const newAccumulatedDepreciationUSD = Math.min(newGrossPPEUSD, priorAccumulatedDepreciation + weeklyDepreciation);
 
@@ -1171,7 +1129,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     let newTotalDebt = comp.totalDebt;
 
     const newBaselineDividendYield = Number((comp.baselineDividendYield * 0.998 + comp.dividendYield * 0.002).toFixed(4));
-    const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + payoutPressure * 2.5);
+    const targetDivYield = newBaselineDividendYield * (newCash < 0 ? 0.4 : (newCash > 2 * comp.currentLiabilities ? 1.2 : 1.0)) * (1 + programme.payoutPressure * 2.5);
     const newDividendYield = Math.max(0, comp.dividendYield * 0.9 + targetDivYield * 0.1);
 
     // HH5: headcount is the LABOR MARKET's, not this stage's. The drift multiplier that used
