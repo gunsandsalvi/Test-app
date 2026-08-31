@@ -3144,3 +3144,12 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        sticky — the WAGE its staff are actually paid, not intensity × its own revenue — and
        §7.133 also records the failed way to do that (per-head overhead on a collapsing
        headcount). That is IND/COH mechanism work, not a patch.
+     - **THE FISCAL FIX AT 60 WEEKS (same run shape as §7.244; the fix relabels the world, so
+       compare families, not totals): the fiscal family collapses 58 → 5 (EUR 49 → 0), and the
+       TERMINAL EXPLOSION IS GONE** — week-60 nominal GDP 1.77T against §7.244's 36.49T, CPI
+       level 335 against 5,091, goods fill settling at 0.205 against 0.012, bypass gross 11.7B
+       against 39.8B with EUR's slice 4.4B against 37.0B. The unappropriated bid was not only
+       EUR's fiscal runaway; it was feeding the whole world's terminal event. **708 violations
+       in 112 families remain — the service-cost ratchet's own families (EUR housing rental 26x,
+       unemployment bands late-run, repo/NIM/overdraft standings) — which is the §7.132
+       mechanism work this record hands over.**
