@@ -8,6 +8,14 @@ import {
   UNEMPLOYMENT_REPLACEMENT_RATE,
 } from '../bootstrap/national-accounts';
 import { evolveBankingSector, computeSovereignBookAnnualYield } from './banking';
+import { governmentOf } from '../../domain/government-entity';
+
+/** §7.280 — the budget's own red line on the fiscal stance: a treasury whose weekly coupon bill
+ *  crosses this share of weekly revenue consolidates whatever the cycle says, and the stimulus a
+ *  healthier one can deliver scales down as its interest bill approaches it. Anchored on the real
+ *  history: the 1990s Canadian and Italian consolidations were forced at ~30–35% of revenue going
+ *  to interest, and 25% is where the pressure that forced them became unarguable. */
+const INTEREST_SHARE_OF_REVENUE_RED_LINE = 0.25;
 import {
   CREDIT_FILE_CURE_WEEKLY, CONSUMER_CREDIT_RISK_WEIGHT, CARD_OPERATING_COST_BPS,
   MORTGAGE_SEED_SPREAD_OVER_10Y_BPS, MORTGAGE_TERM_WEEKS, MORTGAGE_DSTI_LIMIT, MORTGAGE_LTV_AT_ORIGINATION,
@@ -162,17 +170,33 @@ export function evolveRegionMacro(
     ],
   };
 
-  // RULE 13, OPEN: the fiscal stance is a step function on a regime LABEL — +0.15 in a labelled
-  // recession above 7% unemployment, -0.10 in a labelled expansion 3pp above target, else decay
-  // by 0.95. Five invented numbers deciding fiscal policy, and none of them is the government's
-  // own budget position, which is what actually constrains a real stimulus. Owner: MAC.
+  // §7.280 (MAC) — THE STANCE READS THE GOVERNMENT'S OWN BUDGET. The old step function moved on
+  // a regime LABEL alone (+0.15 in a labelled recession, -0.10 in a hot expansion), and none of
+  // its inputs was the budget position that actually constrains a real stimulus (rule 13, the
+  // §6.1 outlays row's root: an automatic stabiliser meeting a hot economy just keeps stepping).
+  // The cyclical triggers stay — they are the stabiliser half and they are real — but the SIZE
+  // of a step is now bounded by fiscal space read off the `Government` object's own ledger:
+  // the interest bill's share of revenue. A treasury whose coupons eat a quarter of its revenue
+  // has historically lost discretionary control of its budget (the 1990s Canada/Italy
+  // consolidations began at 30–35%); above the red line the stance CONSOLIDATES whatever the
+  // cycle says, because the constraint binds before the ballot does.
   let newFiscalStanceScore = region.fiscalStanceScore;
   const piStar = region.targetInflation;
 
   // Evaluate once per quarter, same cadence as monetary policy meetings
   if (week % 13 === 0) {
-    if (region.cycleRegime === 'Recession' && region.unemploymentRate > 0.07) {
-      newFiscalStanceScore = Math.min(1, region.fiscalStanceScore + 0.15); // stimulus package
+    const gov = governmentOf(region.id, region);
+    const revenueUSD = Math.max(1, region.governmentRevenueUSD);
+    const interestShare = gov.interestWeeklyUSD() / revenueUSD;
+    // 0 at the red line, 1 with a clean sheet: how much package this treasury can actually fund.
+    const fiscalSpace = Math.max(0, Math.min(1, 1 - interestShare / INTEREST_SHARE_OF_REVENUE_RED_LINE));
+    if (interestShare >= INTEREST_SHARE_OF_REVENUE_RED_LINE) {
+      // Forced consolidation: the budget, not the cycle, is the binding constraint.
+      newFiscalStanceScore = Math.max(-1, region.fiscalStanceScore - 0.10);
+    } else if (region.cycleRegime === 'Recession' && region.unemploymentRate > 0.07) {
+      // The stimulus a government DELIVERS is the one it can fund: full 0.15 with a clean
+      // sheet, shrinking to nothing as the interest bill closes on the red line.
+      newFiscalStanceScore = Math.min(1, region.fiscalStanceScore + 0.15 * fiscalSpace);
     } else if (region.cycleRegime === 'Expansion' && region.inflation > piStar + 0.03) {
       newFiscalStanceScore = Math.max(-1, region.fiscalStanceScore - 0.10); // austerity/consolidation
     } else {

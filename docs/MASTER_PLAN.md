@@ -4142,3 +4142,21 @@ it, the lesson. Compressed 2026-08-30 under rule 11; no finding, number or lesso
        class fails to compile until its mandate line is named. ASSET_SWITCH ratchet 64 → 60.
      - Verified: tsc clean, 71/71, hygiene pass, WEEKS=10 probe identical (2 baseline
        violations).
+
+280. **MAC's FISCAL-STANCE STEP FUNCTION: the stance reads the government's OWN budget
+     (Tier-4 mechanism #1).** The quarterly step moved on a regime label alone — none of its
+     five numbers was the budget position that constrains a real stimulus (rule 13; the §6.1
+     outlays row's stance half). Now, each quarter, the rule reads the `Government` object's
+     own ledger: interest share of revenue = `interestWeeklyUSD() / governmentRevenueUSD`.
+     - Above `INTEREST_SHARE_OF_REVENUE_RED_LINE = 0.25` the stance CONSOLIDATES whatever the
+       cycle says — the budget binds before the ballot (anchored on the 1990s Canada/Italy
+       consolidations, forced at ~30–35% of revenue going to interest).
+     - Below it, a recession package scales by fiscal space (`1 − share/redline`): a clean
+       sheet delivers the full 0.15 step, a stretched one proportionally less, at the line
+       nothing. The cyclical triggers themselves are unchanged — they are the stabiliser half
+       and they are real.
+     - The named remainder in §4 ("needs a government that reads its own budget") is exactly
+       what `governmentOf` provided since §7.230; this closes the MAC remainder.
+     - Verified: tsc clean, 71/71, WEEKS=15 SHOCKS=0 probe (spans the w13 quarter step)
+       identical to baseline — no region is near the red line in the early regime, so the
+       mechanism arms without relabeling the reference.
