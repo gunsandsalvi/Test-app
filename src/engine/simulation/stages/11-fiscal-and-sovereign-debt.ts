@@ -24,6 +24,7 @@ import { WeeklyStepContext } from './context';
 import { refreshRegionalHoldingsView, measuredForeignOwnershipAllRegions, measuredOwnershipAllRegions, ownershipSharesFromRegister } from './holdings-view';
 import { pay } from './settlement';
 import { REGION_IDS } from '../../../domain/geography';
+import { encumberedFaceByBucket, repoBorrowedUSD, srfBorrowedUSD } from '../../../domain/repo';
 
 export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStepContext): void {
   const regionIds = REGION_IDS;
@@ -211,6 +212,48 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
         if (preUSD > 0) redeemedFractionByBucket.set(key, Math.min(1, maturedUSD / preUSD));
       });
 
+      // §7.247 — THE PLEDGE FOLLOWS THE PAPER ON THE BOOK ITSELF, AT THE MATURITY SITE.
+      //
+      // The comment below has stated the right rule since PUB2b, and what it updated was the
+      // SCALAR (`repoEncumberedCollateralUSD × survivingShare`) while the repoBook's per-bucket
+      // pledges survived — §1.3's two representations, with the reconcile and the check both
+      // reading the BOOK. The stage-order reconcile then trimmed each week's pledge to LAST
+      // week's holding, so a bill-pledging bank printed over-pledged by exactly one week's
+      // maturities, forever (measured: WMQC b13 pledged 1.577B against 1.510B held, the two
+      // stepping down in lockstep one week apart — §7.226's family, root-caused). Each pledge
+      // in a redeemed bucket now shrinks by the bucket's redeemed fraction and the loan it
+      // secures is called pro rata — unwound out of the redemption proceeds the borrower is
+      // paid this same pass, settling at the close like the redemption itself.
+      const collateralCalledByBorrower = new Map<string, number>();
+      if (redeemedFractionByBucket.size > 0) {
+        (reg.repoBook ?? []).forEach((ct) => {
+          if (ct.principalUSD <= 0 || ct.collateral.length === 0) return;
+          let releasedFaceUSD = 0;
+          let pledgedFaceUSD = 0;
+          ct.collateral = ct.collateral.map((p) => {
+            pledgedFaceUSD += p.faceUSD;
+            const fraction = redeemedFractionByBucket.get(p.bucketKey) ?? 0;
+            if (fraction <= 0) return p;
+            const takeUSD = p.faceUSD * fraction;
+            releasedFaceUSD += takeUSD;
+            return { ...p, faceUSD: p.faceUSD - takeUSD };
+          }).filter((p) => p.faceUSD > 1);
+          if (releasedFaceUSD <= 0 || pledgedFaceUSD <= 0) return;
+          const callUSD = Math.min(ct.principalUSD, ct.principalUSD * (releasedFaceUSD / pledgedFaceUSD));
+          ct.principalUSD -= callUSD;
+          collateralCalledByBorrower.set(ct.borrowerTicker,
+            (collateralCalledByBorrower.get(ct.borrowerTicker) ?? 0) + callUSD);
+          pay(ctx, {
+            payer: { kind: 'BANK_SECURITIES', ticker: ct.borrowerTicker },
+            payee: ct.lender.kind === 'BANK' ? { kind: 'BANK_SECURITIES', ticker: ct.lender.ticker }
+              : ct.lender.kind === 'INSTITUTION' ? { kind: 'INSTITUTION', id: ct.lender.id }
+                : { kind: 'CENTRAL_BANK', region: regionId },
+            amountUSD: callUSD,
+            reason: 'repo collateral call',
+          });
+        });
+      }
+
       ctx.updatedCompanies = ctx.updatedCompanies.map(c => {
         if (c.region !== regionId || !c.isBankEntity || !c.bankBalanceSheet) return c;
         const byTenor = c.bankBalanceSheet.sovereignBondHoldingsByTenor || {};
@@ -221,32 +264,34 @@ export function runFiscalAndSovereignDebtStage(state: GameState, ctx: WeeklyStep
           redeemedUSD += heldUSD * fraction;
           newByTenor[key] = heldUSD * (1 - fraction);
         });
-        if (redeemedUSD <= 0) return c;
+        const calledUSD = collateralCalledByBorrower.get(c.ticker) ?? 0;
+        if (redeemedUSD <= 0 && calledUSD <= 0) return c;
         // CASH: the treasury REPAYS this holder. It used to be reserves appearing on the bank's
         // book while the TGA was debited in another stage — two direct mutations that paired,
         // which is not the same as being recorded.
-        redemptionPaidUSD += redeemedUSD;
-        pay(ctx, {
-          payer: { kind: 'GOVERNMENT', region: regionId },
-          payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
-          amountUSD: redeemedUSD,
-          reason: 'sovereign redemption',
-        });
+        if (redeemedUSD > 0) {
+          redemptionPaidUSD += redeemedUSD;
+          pay(ctx, {
+            payer: { kind: 'GOVERNMENT', region: regionId },
+            payee: { kind: 'BANK_SECURITIES', ticker: c.ticker },
+            amountUSD: redeemedUSD,
+            reason: 'sovereign redemption',
+          });
+        }
         // Collateral that matured is collateral that no longer exists, so the repo it secured
-        // must release it — in reality the position is unwound or substituted out of the
-        // redemption proceeds. Without this the pledge outlived the bond and every bank in a
-        // region ended up pledging more than it held (measured at week 51, once PUB2b's central
-        // bank started competing for the same paper and books ran closer to their encumbrance).
-        const preBookUSD = Object.values(byTenor).reduce((sum, v) => sum + (Number(v) || 0), 0);
-        const survivingShare = preBookUSD > 0 ? Math.max(0, 1 - redeemedUSD / preBookUSD) : 1;
+        // released it above — on the book, where the reconcile and the check read. The scalars
+        // are recomputed FROM the book (rule 3: one owner), not scaled beside it.
+        const book = reg.repoBook ?? [];
         return {
           ...c,
           bankBalanceSheet: {
             ...c.bankBalanceSheet,
             sovereignBondHoldingsByTenor: newByTenor,
             sovereignBondHoldingsUSD: Math.round(Object.values(newByTenor).reduce((sum, v) => sum + v, 0)),
+            repoBorrowedUSD: Math.round(repoBorrowedUSD(book, c.ticker) - srfBorrowedUSD(book, c.ticker)),
+            srfBorrowingUSD: Math.round(srfBorrowedUSD(book, c.ticker)),
             repoEncumberedCollateralUSD: Number(
-              ((c.bankBalanceSheet.repoEncumberedCollateralUSD ?? 0) * survivingShare).toFixed(0)
+              Array.from(encumberedFaceByBucket(book, c.ticker).values()).reduce((a, b) => a + b, 0).toFixed(0)
             ),
           },
         };
