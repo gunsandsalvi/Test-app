@@ -59,14 +59,42 @@ export interface PaymentInstruction {
  * structurally identical to every later one, because the id IS the identity.
  */
 export interface PaymentJournal {
-  payerId: number[];
-  payeeId: number[];
-  amountUSD: number[];
-  reasonId: number[];
+  /** Rows written; the arrays are capacity, `n` is the truth. */
+  n: number;
+  payerId: Int32Array;
+  payeeId: Int32Array;
+  amountUSD: Float64Array;
+  reasonId: Int32Array;
 }
 
 export function newPaymentJournal(): PaymentJournal {
-  return { payerId: [], payeeId: [], amountUSD: [], reasonId: [] };
+  const cap = 1 << 12;
+  return {
+    n: 0,
+    payerId: new Int32Array(cap),
+    payeeId: new Int32Array(cap),
+    amountUSD: new Float64Array(cap),
+    reasonId: new Int32Array(cap),
+  };
+}
+
+/** SCALE (§7.305 step 2) — one journal row, typed-array columns with doubling growth: the
+ *  ~200k-and-growing number[] pushes a week were the settlement file's own measured mass. */
+export function journalPush(j: PaymentJournal, payerId: number, payeeId: number, amountUSD: number, reasonId: number): void {
+  if (j.n >= j.payerId.length) {
+    const cap = j.payerId.length * 2;
+    const gi = (old: Int32Array) => { const a = new Int32Array(cap); a.set(old); return a; };
+    const gf = (old: Float64Array) => { const a = new Float64Array(cap); a.set(old); return a; };
+    j.payerId = gi(j.payerId);
+    j.payeeId = gi(j.payeeId);
+    j.amountUSD = gf(j.amountUSD);
+    j.reasonId = gi(j.reasonId);
+  }
+  j.payerId[j.n] = payerId;
+  j.payeeId[j.n] = payeeId;
+  j.amountUSD[j.n] = amountUSD;
+  j.reasonId[j.n] = reasonId;
+  j.n++;
 }
 
 const reasonIdByText = new Map<string, number>();
@@ -97,10 +125,8 @@ export function unclassifiedReasons(): string[] {
  *  `pay`, minus the running-net update, which those callers do not participate in. */
 export function journalPayment(j: PaymentJournal, instruction: PaymentInstruction): void {
   if (!guardPayableAmount(instruction)) return;
-  j.payerId.push(partyId(instruction.payer));
-  j.payeeId.push(partyId(instruction.payee));
-  j.amountUSD.push(instruction.amountUSD);
-  j.reasonId.push(internReason(instruction.reason));
+  journalPush(j, partyId(instruction.payer), partyId(instruction.payee),
+    instruction.amountUSD, internReason(instruction.reason));
 }
 
 
@@ -132,11 +158,7 @@ export function pay(ctx: WeeklyStepContext, instruction: PaymentInstruction): vo
   if (!guardPayableAmount(instruction)) return;
   const payer = partyId(instruction.payer);
   const payee = partyId(instruction.payee);
-  const j = ctx.paymentJournal;
-  j.payerId.push(payer);
-  j.payeeId.push(payee);
-  j.amountUSD.push(instruction.amountUSD);
-  j.reasonId.push(internReason(instruction.reason));
+  journalPush(ctx.paymentJournal, payer, payee, instruction.amountUSD, internReason(instruction.reason));
   addPending(ctx, payer, -instruction.amountUSD);
   addPending(ctx, payee, instruction.amountUSD);
 }
@@ -155,11 +177,7 @@ export function payByIds(
     throw new Error(`ENGINE DEFECT: payByIds reason#${reasonId} carries amountUSD=${amountUSD} — `
       + 'a NaN or negative amount is a sign/arithmetic error at the caller, not a payment');
   }
-  const j = ctx.paymentJournal;
-  j.payerId.push(payerId);
-  j.payeeId.push(payeeId);
-  j.amountUSD.push(amountUSD);
-  j.reasonId.push(reasonId);
+  journalPush(ctx.paymentJournal, payerId, payeeId, amountUSD, reasonId);
   addPending(ctx, payerId, -amountUSD);
   addPending(ctx, payeeId, amountUSD);
 }
@@ -305,7 +323,7 @@ export function mergeSettlementReports(a: SettlementReport, b: SettlementReport)
 export function runSettlementStage(ctx: WeeklyStepContext): SettlementReport {
   const priorReport = ctx.lastSettlementReport;
   const journal = ctx.paymentJournal;
-  const nInstructions = journal.amountUSD.length;
+  const nInstructions = journal.n;
   const report: SettlementReport = {
     instructions: nInstructions,
     grossUSD: 0,

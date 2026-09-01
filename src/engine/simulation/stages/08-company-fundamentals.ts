@@ -17,7 +17,7 @@ import { openCorporateSweepBooks, settleCorporateSweepBooks } from './money-mark
 import { PrimaryOffering, chooseLeadBank } from '../../../domain/primary-market';
 import { leadBankAllocator } from './dealer-desks';
 import { WeeklyStepContext } from './context';
-import { PaymentJournal, newPaymentJournal } from './settlement';
+import { PaymentJournal, newPaymentJournal, journalPush } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { getRngState, setRngState } from '../../rng';
@@ -297,11 +297,9 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       ctx.taxCollectedByRegion[r] = (ctx.taxCollectedByRegion[r] ?? 0) + mine.taxCollected[r];
     }
     const j = ctx.paymentJournal;
-    for (let k = 0; k < mine.journal.amountUSD.length; k++) {
-      j.payerId.push(mine.journal.payerId[k]);
-      j.payeeId.push(mine.journal.payeeId[k]);
-      j.amountUSD.push(mine.journal.amountUSD[k]);
-      j.reasonId.push(mine.journal.reasonId[k]);
+    for (let k = 0; k < mine.journal.n; k++) {
+      journalPush(j, mine.journal.payerId[k], mine.journal.payeeId[k],
+        mine.journal.amountUSD[k], mine.journal.reasonId[k]);
     }
   };
 
