@@ -25,7 +25,8 @@
  */
 
 import { institutionProfile } from '../../../domain/institution-profiles';
-import { syncBookRows } from '../../../engine2/holdings';
+import { syncBookRows, bookHeadOf } from '../../../engine2/holdings';
+import { internString } from '../../../engine2/world';
 import { pay } from './settlement';
 import { GameState, InstitutionalEntity, RegionId } from '../../../types';
 import { mandatePctOf } from '../../../domain/institutions';
@@ -523,7 +524,9 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
     inKindOwedByFund.forEach((_owed, fundId) => {
       const fund = entityById.get(fundId);
       if (!fund) return;
-      const holdingsUSD = (fund.itemizedHoldings || []).reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+      // §7.307 holdings flip: row walk on the mirror.
+      let holdingsUSD = 0;
+      { const H = ctx.v2.holdings; for (let r = bookHeadOf(ctx.v2, fundId); r >= 0; r = H.next[r]) holdingsUSD += H.qtyUSD[r]; }
       fundAssetsUSD.set(fundId, holdingsUSD + Math.max(0, fund.cashUSD ?? 0));
       remainingCashByFund.set(fundId, Math.max(0, fund.cashUSD ?? 0));
     });
@@ -603,15 +606,22 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   // its holding of THAT fund by reducing over the entity's entire book — 27 funds x 75 entities x
   // ~1,600 rows is 3.2M row visits a week to read a few thousand positions. One pass, indexed by
   // fund, gives every fund its own holders directly.
+  // §7.307 holdings flip: row walk — a non-ETF row costs one int compare.
   const etfSharesByFundByInvestor = new Map<string, Map<string, number>>();
-  ctx.updatedInstitutionalEntities.forEach((e) => {
-    (e.itemizedHoldings || []).forEach((h) => {
-      if (h.instrumentType !== 'ETF_SHARE') return;
-      let byInvestor = etfSharesByFundByInvestor.get(h.instrumentId);
-      if (!byInvestor) { byInvestor = new Map(); etfSharesByFundByInvestor.set(h.instrumentId, byInvestor); }
-      byInvestor.set(e.id, (byInvestor.get(e.id) ?? 0) + (h.quantityShares ?? 0));
+  {
+    const H = ctx.v2.holdings;
+    const etfShareRef = internString(ctx.v2, 'ETF_SHARE');
+    ctx.updatedInstitutionalEntities.forEach((e) => {
+      for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
+        if (H.typeRef[r] !== etfShareRef) continue;
+        const fundId = ctx.v2.internedStrings[H.instrRef[r]];
+        let byInvestor = etfSharesByFundByInvestor.get(fundId);
+        if (!byInvestor) { byInvestor = new Map(); etfSharesByFundByInvestor.set(fundId, byInvestor); }
+        const sh = H.shares[r];
+        byInvestor.set(e.id, (byInvestor.get(e.id) ?? 0) + (Number.isNaN(sh) ? 0 : sh));
+      }
     });
-  });
+  }
 
   funds.forEach((fund) => {
     const plan = flowPlanByFund.get(fund.id);
@@ -718,6 +728,7 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
       });
       holdings = next;
     }
+    syncBookRows(ctx.v2, entity.id, holdings);
     return { ...entity, itemizedHoldings: holdings };
   });
 
@@ -736,15 +747,14 @@ export function runEtfFlowsStage(state: GameState, ctx: WeeklyStepContext): void
   });
   ctx.updatedInstitutionalEntities = ctx.updatedInstitutionalEntities.map((entity) => {
     if (!entity.itemizedHoldings.some((h) => h.instrumentType === 'ETF_SHARE')) return entity;
-    return {
-      ...entity,
-      itemizedHoldings: entity.itemizedHoldings.map((h) => {
-        if (h.instrumentType !== 'ETF_SHARE') return h;
-        const navPerShare = finalNavPerShareByFund.get(h.instrumentId);
-        if (navPerShare === undefined) return h;
-        return { ...h, quantityOrNotionalUSD: (h.quantityShares ?? 0) * navPerShare };
-      }),
-    };
+    const remarked = entity.itemizedHoldings.map((h) => {
+      if (h.instrumentType !== 'ETF_SHARE') return h;
+      const navPerShare = finalNavPerShareByFund.get(h.instrumentId);
+      if (navPerShare === undefined) return h;
+      return { ...h, quantityOrNotionalUSD: (h.quantityShares ?? 0) * navPerShare };
+    });
+    syncBookRows(ctx.v2, entity.id, remarked);
+    return { ...entity, itemizedHoldings: remarked };
   });
 
   // The household creation leg is handed to `household-balance-sheet.ts`, which owns the

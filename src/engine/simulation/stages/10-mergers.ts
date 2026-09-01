@@ -8,8 +8,8 @@
  */
 
 import { absorbBankBook } from '../../ledger';
-import { syncBookRows } from '../../../engine2/holdings';
-import { ensureV2 } from '../../../engine2/world';
+import { syncBookRows, bookHeadOf } from '../../../engine2/holdings';
+import { ensureV2, internString } from '../../../engine2/world';
 import { syncLadderRows, materializeLadder } from '../../../engine2/tranches';
 import { pay } from './settlement';
 import { GameState, DebtTranche } from '../../../types';
@@ -139,12 +139,18 @@ function runDivestitures(ctx: WeeklyStepContext): void {
 
     // THE MINT: each holder of parent equity receives its pro-rata spin-co register rows,
     // BEFORE the parent's price steps down (the stake fraction reads the pre-split register).
+    // §7.307 holdings flip: row walk for the stake read (the push and sync below stay on objects).
+    const Hs = ctx.v2.holdings;
+    const parentRef = internString(ctx.v2, parent.id);
+    const equityRefS = internString(ctx.v2, 'EQUITY');
     ctx.updatedInstitutionalEntities.forEach((e) => {
       if (e.isDefaulted) return;
-      const heldShares = (e.itemizedHoldings || [])
-        .filter((h) => h.instrumentId === parent.id && isIssuerEquityRow(h))
-        .reduce((a, h) => a + (h.quantityShares
-          ?? (h.quantityOrNotionalUSD ?? 0) / Math.max(0.01, parent.stockPrice)), 0);
+      let heldShares = 0;
+      for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = Hs.next[r]) {
+        if (Hs.instrRef[r] !== parentRef || Hs.typeRef[r] !== equityRefS) continue;
+        const sh = Hs.shares[r];
+        heldShares += Number.isNaN(sh) ? Hs.qtyUSD[r] / Math.max(0.01, parent.stockPrice) : sh;
+      }
       if (!(heldShares > 0)) return;
       const fraction = Math.min(1, heldShares / parent.sharesOutstanding);
       e.itemizedHoldings = [...e.itemizedHoldings, {
@@ -239,11 +245,16 @@ export function runMergersStage(state: GameState, ctx: WeeklyStepContext): void 
   // The tender: the target pays its equity holders of record their cash half, pro rata to the
   // stake each holds; the residual float (the household sector's) receives the remainder.
   let institutionalTenderUSD = 0;
+  // §7.307 holdings flip: row walk for the tender stake read.
+  const Ht = ctx.v2.holdings;
+  const targetRef = internString(ctx.v2, target.id);
+  const equityRefT = internString(ctx.v2, 'EQUITY');
   ctx.updatedInstitutionalEntities.forEach((e) => {
     if (e.isDefaulted) return;
-    const heldUSD = (e.itemizedHoldings || [])
-      .filter((h) => h.instrumentId === target.id && isIssuerEquityRow(h))
-      .reduce((a, h) => a + (h.quantityOrNotionalUSD ?? 0), 0);
+    let heldUSD = 0;
+    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = Ht.next[r]) {
+      if (Ht.instrRef[r] === targetRef && Ht.typeRef[r] === equityRefT) heldUSD += Ht.qtyUSD[r];
+    }
     if (!(heldUSD > 0)) return;
     const tenderUSD = cashPaid * Math.min(1, heldUSD / targetMarketCapUSD);
     institutionalTenderUSD += tenderUSD;

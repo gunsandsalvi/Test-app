@@ -15,7 +15,8 @@
  */
 
 import { assertNever } from '../../../domain/defect';
-import { syncBookRows } from '../../../engine2/holdings';
+import { syncBookRows, bookHeadOf } from '../../../engine2/holdings';
+import { internString } from '../../../engine2/world';
 import { GameState, RegionId, Company, InstitutionalEntity, ItemizedHolding } from '../../../types';
 import {
   Estate, EstateClaim, CLAIM_SENIORITY, estateAssetsUSD, claimsAtSeniority, outstandingUSD,
@@ -401,40 +402,44 @@ function openEstate(comp: Company, ctx: WeeklyStepContext): Estate | undefined {
   const addClaim = (c: EstateClaim) => { if (c.principalUSD > 1) claims.push(c); };
 
   // Bondholders and loan holders, from the books that actually hold the paper.
+  // §7.307 holdings flip: row walk — a row on another issuer costs one int compare.
+  const H = ctx.v2.holdings;
+  const compRef = internString(ctx.v2, comp.id);
   ctx.updatedInstitutionalEntities.forEach((e) => {
-    (e.itemizedHoldings || []).forEach((h) => {
-      if (h.instrumentId !== comp.id) return;
-      const usd = h.quantityOrNotionalUSD ?? 0;
+    for (let r = bookHeadOf(ctx.v2, e.id); r >= 0; r = H.next[r]) {
+      if (H.instrRef[r] !== compRef) continue;
+      const usd = H.qtyUSD[r];
+      const instrumentType = ctx.v2.internedStrings[H.typeRef[r]] as ItemizedHolding['instrumentType'];
       // §7.241: exhaustive on purpose. The old else-if chain gave a NEW instrument type NO estate
       // claim — the holder kept the defaulted paper at its last mark forever, the exact absence
       // G5 was built to abolish. Every member now states its estate treatment; a new one fails
       // to COMPILE until it does.
-      switch (h.instrumentType) {
+      switch (instrumentType) {
         case 'LEVERAGED_LOAN':
           addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'LEVERAGED_LOAN', seniority: CLAIM_SENIORITY.SECURED, principalUSD: usd, recoveredUSD: 0 });
-          return;
+          break;
         case 'CORP_BOND':
           addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'CORP_BOND', seniority: CLAIM_SENIORITY.UNSECURED, principalUSD: usd, recoveredUSD: 0 });
-          return;
+          break;
         case 'COMMERCIAL_PAPER':
           // CP: senior unsecured, ranking with the bonds. Its holders are money funds, which is
           // exactly why a CP default is a systemic event and a bond default usually is not.
           addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'COMMERCIAL_PAPER', seniority: CLAIM_SENIORITY.UNSECURED, principalUSD: usd, recoveredUSD: 0 });
-          return;
+          break;
         case 'EQUITY':
           addClaim({ holder: { kind: 'INSTITUTION', id: e.id }, instrumentType: 'EQUITY', seniority: CLAIM_SENIORITY.EQUITY, principalUSD: usd, recoveredUSD: 0 });
-          return;
+          break;
         case 'GOV_BOND':
         case 'PE_FUND_INTEREST':
         case 'ETF_SHARE':
           // Not claims on THIS estate: a sovereign is not the company, and fund interests
           // resolve through their own vehicles. (Their ids cannot equal comp.id today; stated
           // here so the decision is visible rather than a fall-through.)
-          return;
+          break;
         default:
-          return assertNever(h.instrumentType, 'estate claim for a defaulted issuer');
+          assertNever(instrumentType, 'estate claim for a defaulted issuer');
       }
-    });
+    }
   });
   // The banks' own facilities: secured, and they rank with the first-lien loans.
   ctx.updatedCompanies.forEach((bank) => {
