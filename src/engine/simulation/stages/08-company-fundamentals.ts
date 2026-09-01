@@ -11,21 +11,15 @@
 import {
   GameState, Company, DebtTranche, NewsItem, SegmentFinancial, RegionId,
 } from '../../../types';
-import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, tranchePaymentDue, managedEntityIdsOf, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/company';
+import { isActiveCompany, isPubliclyListed, getOutputInventoryUSD, InputLot, ANTITRUST_SHARE_THRESHOLD, peakCategoryShare, managedEntityIdsOf, TREASURY_OPERATING_BUFFER_SHARE_OF_REVENUE } from '../../../domain/company';
 import { callProtectionForIssue, callPricePerDollar } from '../../../domain/call-protection';
 import { isInvestmentGrade } from './asset-allocation';
-import { INDUSTRY_SUBUNITS } from '../../../domain/industry';
-import { SECTOR_OCCUPATION_MIX } from '../../../domain/region-macro';
-import { CATEGORY_INPUT_REQUIREMENTS } from '../../../domain/market-microstructure';
-import { recurringRevenueShare, SUBSCRIPTION_WEEKLY_CHURN } from '../../../domain/industry-registry';
-import { RECEIPTS_MEASUREMENT_WEIGHT } from '../../../domain/company';
 import { industryOfSubUnit, firmInputIntensities, financingProfileOf } from '../../../domain/industry-registry';
 import { calculateNelsonSiegelZeroRate } from '../../nelsonSiegel';
 import { SECTOR_BENCHMARKS } from '../../pricing';
 import { formatCurrency, formatQuarterFilingDate, formatSimulationDate } from '../../formatters';
-import { getBlendedWageGrowth } from '../../macro/evolution';
 import { determineCreditRating } from '../credit';
-import { SECTOR_WAGE_SENSITIVITY, SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
+import { SECTOR_PPE_USEFUL_LIFE_YEARS, SECTOR_PPE_INTENSITY } from '../constants';
 import { FIXED_SHARE_BY_RATING, buildQuarterlyFundamentalSnapshot, CogsCostDrivers } from '../../companyGenerator';
 import { getRatingBucket, settleCorporateActionOnHolders, applyPendingCorporateActionSettlements, applyHolderInterestAccruals, payHoldersCash, DEFAULT_COVERAGE_FLOOR, creditRecoveryRate, accrueHoldersInterest, payHoldersAccruedInterest } from './shared-helpers';
 import { openCorporateSweepBooks, corporateSweepDecision, settleCorporateSweepBooks, findRegionMmf } from './money-market-fund';
@@ -39,18 +33,16 @@ import { measureBeta, regionIndexOf } from '../../macro/indices';
 import { pay, payByIds, internReason, PartyRef, PaymentJournal, newPaymentJournal } from './settlement';
 import { runShardedVoid } from '../../columns/kernel';
 import { partyId } from '../../ledger/party';
-import { planCapitalProgramme, commissionCapital, capacityRetirement } from '../../../domain/company-week/capital-programme';
+import { planCapitalProgramme, capacityRetirement } from '../../../domain/company-week/capital-programme';
 import { learningUpdate, seedCumulativeUnits } from '../../../domain/company-week/learning';
 import { creditMetrics, revolverDrawUSD, isInDefault, maturityWallShare } from '../../../domain/company-week/credit-standing';
 import { callEconomics, callableAmountUSD, dropExhausted } from '../../../domain/company-week/debt-ladder';
-import { industrialIncome, profileIncome } from '../../../domain/company-week/income-statement';
-import { chargeCarryingCost, consumeLotsFifo, fulfillmentRatio } from '../../../domain/company-week/inventory';
+import { profileIncome } from '../../../domain/company-week/income-statement';
 import { dividendDecision } from '../../../domain/company-week/distributions';
-import { payrollWeek } from '../../../domain/company-week/payroll';
-import { weeklyWageBillUSD, getBaseAnnualWageUSD } from '../../bootstrap/labor-and-wages';
 import { annualCarryingCostRateOf } from '../../../domain/industry-registry';
 import { companyFairValuePerShare, REPRESENTATIVE_HOLDER_REQUIRED_RETURN } from '../../equity-valuation';
-import { random, beginEntityScope, endEntityScope } from '../../rng';
+import { random, getRngState, setRngState } from '../../rng';
+import { runStage08FrontPass, DUE_BOND, DUE_CP, DUE_LOAN } from '../../../engine2/stage08-front';
 
 const STANDARD_CORP_TENOR_YEARS = 5;
 
@@ -63,17 +55,6 @@ function lotArrayValueUSD(lots: InputLot[]): number {
   for (const lot of lots) v += lot.unitsHeld * lot.unitPriceUSD;
   return v;
 }
-
-/**
- * LAB — the wage pools at their reference level. A firm's BASELINE payroll is its baseline
- * headcount at the wage table's own level, with no market premium and no firm premium: the wage
- * bill already sitting inside its baseline margin. Only the deviation from it is a new cost.
- */
-const BASELINE_WAGE_POOLS = {
-  GENERAL: { wageIndex: 1 }, SKILLED_TRADES: { wageIndex: 1 },
-  TECHNICAL_ENGINEERING: { wageIndex: 1 }, SPECIALIZED_PROFESSIONAL: { wageIndex: 1 },
-  MANAGERIAL_FINANCIAL: { wageIndex: 1 },
-} as Record<import('../../../types').OccupationType, { wageIndex: number }>;
 
 /**
  * IND4 — a firm's payout discipline is its INDUSTRY's, from the registry. This was one number,
@@ -258,6 +239,16 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     pendingOfferingIssuerIds.add(o.issuerId);
   };
 
+  // ENGINE V2 — the kernel's FRONT HALF (through the income statement) runs here as a pass over
+  // all rows before the object kernel below touches any firm; legal because the loop is
+  // order-invariant (the note below) and firms interact only through the frozen snapshots this
+  // pass receives. The pass makes each firm's one front-half draw in the firm's own entity
+  // scope and captures the stream position; the loop below resumes from it.
+  const F = runStage08FrontPass(state.companies, {
+    nextWeek, companyUpdates, updatedRegions,
+    supplyRelsByCustomer, supplierShockStats, suppliedSubUnitsByRegion,
+  });
+
   // SCALE/§7.222 — ONE COMPANY'S WEEK, AND IT DEPENDS ON NOTHING ABOUT WHERE IT SITS.
   // The loop below is order-invariant: reversing it leaves every aggregate identical to
   // seventeen significant digits, with the only residual difference two ULP of float-summation
@@ -270,7 +261,7 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
   // If you add a draw, a contended resource, or a read of another company's live book to this
   // kernel, you break that property. The test is one line: run the loop backwards and hash the
   // world.
-  const companyWeekKernel = (comp: Company): Company => {
+  const companyWeekKernel = (comp: Company, row: number): Company => {
     /**
      * Earnings PER SHARE, for a company that has shares. A private firm's register is empty until
      * it lists (HC7's `postIssueSharesOutstanding` creates it), so there is nothing to divide by
@@ -287,39 +278,11 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const reg = updatedRegions[comp.region];
     // SCALE §7.303 — ONE hash lookup for the firm's week updates (was ~12 string-keyed hits).
     const weekUpdate = companyUpdates[comp.ticker];
-    // IND-R1 / IND-R6: EVERY firm's payroll, computed here — before BOTH forks, because a firm
-    // with staff owes them whatever kind of firm it is. It used to live inside the OPERATING
-    // branch, so a bank's headcount was hired and fired by the labor market, counted in
-    // unemployment, and cost nothing and paid nobody: headcount with no wage leg (rule 14).
-    // IND-R1 moved it above the PROFILE dispatch and fixed that for banks; it was still below
-    // the LISTING branch, so 1,712 private firms employing 8.20M people paid no wages either —
-    // 67% of the USA's named wage bill never reaching a household (§7.115).
-    //
-    // What this is: the firm's real headcount, in the occupations its sector employs, at the wage
-    // those occupations clear at, times the wage this firm itself offers (`offeredWageIndex`,
-    // which moves with its own hiring success). One payroll, one owner, one representation —
-    // which is also what retires the carrier profile's separate `crewCount x wage` line.
-    const weeklyPayrollUSD = weeklyWageBillUSD(
-      comp.employeeCount,
-      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-      getBaseAnnualWageUSD(comp.region),
-      reg.occupationPools,
-      comp.offeredWageIndex ?? 1.0
-    );
-    const baselineWeeklyPayrollUSD = weeklyWageBillUSD(
-      comp.baselineEmployeeCount ?? comp.employeeCount,
-      SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 },
-      getBaseAnnualWageUSD(comp.region),
-      BASELINE_WAGE_POOLS,
-      1.0
-    );
-    // Only the DEVIATION from baseline payroll adjusts a stated margin, because a stated margin
-    // already contains a baseline wage bill; charging the whole payroll again would count it
-    // twice. A profile with no stated margin (the carrier) charges the payroll in full instead —
-    // that is the cost-shape choice a profile exists to make.
-    // §5-STRUCT step 2 — the deviation rule lives on the firm (domain/company-week/payroll.ts).
-    const payroll = payrollWeek({ weeklyUSD: weeklyPayrollUSD, baselineWeeklyUSD: baselineWeeklyPayrollUSD });
-    const payrollAboveBaselineAnnualUSD = payroll.aboveBaselineAnnualUSD;
+    // ENGINE V2 — THE FRONT HALF OF THIS KERNEL LIVES IN src/engine2/stage08-front.ts NOW:
+    // payroll (IND-R1/IND-R6), the ladder interest walk, the tax attributes, carrying cost,
+    // FIFO consumption, the product-line evolution, revenue recognition and the industrial
+    // P&L, run for every firm before this loop started. `F` carries the outputs by row.
+    const weeklyPayrollUSD = F.weeklyPayrollUSD[row];
 
     // IND-R6 — THE LISTING BRANCH IS GONE. There is one operating model and every firm runs it.
     //
@@ -353,54 +316,23 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     };
 
 
-    // Interest Expense (computed early so Banks can skip or use it if they had standard debt, but they mostly rely on BankingSector)
-    // SCALE §7.303 — ONE PASS OVER THE LADDER. This block was eight filter().reduce() chains and
-    // three .some() walks over the same tranches, each allocating an intermediate array and
-    // re-deriving the same per-tranche rate and payment-due answer up to four times. One walk
-    // computes every aggregate; each sum accumulates in the SAME array order the filtered
-    // reduces did (a filtered subset preserves array order), so every float is identical.
-    let annualInterest = 0;
-    let facilityInterestWeeklyUSD = 0;
-    let marketBondAccrualUSD = 0;
-    let commercialPaperAccrualUSD = 0;
-    let marketLoanAccrualUSD = 0;
-    let bondCouponDue = false;
-    let cpCouponDue = false;
-    let loanCouponDue = false;
-    let marketFixedInterestWeeklyUSD = 0;
-    let marketFloatingInterestWeeklyUSD = 0;
-    for (const t of comp.debtTranches) {
-      if (t.maturityWeek === nextWeek) continue;
-      const annualUSD = t.rateType === 'FIXED'
-        ? t.principalUSD * (t.couponRate ?? 0.05)
-        : t.principalUSD * (reg.policyRate + (t.floatingMarginBps ?? 200) / 10000);
-      annualInterest += annualUSD;
-      const { due, weeksCovered } = tranchePaymentDue(t, nextWeek);
-      const dueUSD = due ? (annualUSD * weeksCovered) / 52 : 0;
-      if (t.isBankFacility) {
-        facilityInterestWeeklyUSD += dueUSD;
-        continue;
-      }
-      if (t.isCommercialPaper) {
-        commercialPaperAccrualUSD += annualUSD / 52;
-        if (due) cpCouponDue = true;
-      } else if (t.rateType === 'FIXED') {
-        marketBondAccrualUSD += annualUSD / 52;
-        if (due) bondCouponDue = true;
-      } else {
-        marketLoanAccrualUSD += annualUSD / 52;
-        if (due) loanCouponDue = true;
-      }
-      if (t.rateType === 'FIXED') marketFixedInterestWeeklyUSD += dueUSD;
-      else marketFloatingInterestWeeklyUSD += dueUSD;
-    }
+    // SCALE §7.303 — ONE PASS OVER THE LADDER, now made in the front pass (same walk, same
+    // array order, same floats).
+    const annualInterest = F.annualInterest[row];
+    const facilityInterestWeeklyUSD = F.facilityInterestWeeklyUSD[row];
+    const marketBondAccrualUSD = F.marketBondAccrualUSD[row];
+    const commercialPaperAccrualUSD = F.commercialPaperAccrualUSD[row];
+    const marketLoanAccrualUSD = F.marketLoanAccrualUSD[row];
+    const bondCouponDue = (F.couponDue[row] & DUE_BOND) !== 0;
+    const cpCouponDue = (F.couponDue[row] & DUE_CP) !== 0;
+    const loanCouponDue = (F.couponDue[row] & DUE_LOAN) !== 0;
     const weeklyInterest = annualInterest / 52;
     // SETL4: interest goes to whoever actually lent — a bank FACILITY to the house bank, market
     // paper to the REGISTER (which knows who holds it); CAL — interest ACCRUES weekly and cash
     // moves on the instrument's own dates (a bond's half-year on its coupon date, a floater's
     // quarter on its reset, CP nothing until maturity); CP has its own book and holders (07b's
     // float excludes it). All computed in the single ladder pass above.
-    const effectiveDebtRate = annualInterest / Math.max(1, comp.totalDebt);
+    const effectiveDebtRate = F.effectiveDebtRate[row];
     // TAXR — THE CORPORATE RATE HAS AN OWNER NOW, AND IT IS THE ONE POLICY SETS.
     //
     // This was a bare `0.21` literal, and the model had THREE tax rates with no owner between
@@ -415,49 +347,30 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // and the WACC already use, so the four of them stop being four opinions.
     const taxRate = reg.effectiveTaxRate;
 
-    // §5-TAXR — THE FIRM'S TAX ATTRIBUTES, gathered on the week's opening stocks. The
-    // commissioning read (IND13) happens here, ONCE, because the tax basis grows by the same
-    // event the book capitalises in the roll-forward below: plant ENTERING SERVICE, never plant
-    // budgeted — the PP&E roll-forward reuses these values instead of reading the queue twice.
-    // The tax basis seeds at book net PP&E on first touch (§7.4: no opening deferral — the
-    // deferred liability is a thing the world ACCUMULATES from here, not a guessed history).
-    const underConstruction = [
-      ...(comp.assetsUnderConstruction ?? []),
-      ...(weekUpdate?.capexUnderConstruction ?? []),
-    ];
-    const { commissionedUSD: capexCommissionedThisWeekUSD, stillUnderConstruction } =
-      commissionCapital(underConstruction, nextWeek);
-    const openingGrossPpeUSD = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
-    const openingNetPpeUSD = Math.max(0,
-      openingGrossPpeUSD - (comp.accumulatedDepreciationUSD ?? openingGrossPpeUSD * 0.45));
-    const taxAttrs = {
-      taxBasisPpeUSD: comp.taxBasisPpeUSD ?? openingNetPpeUSD,
-      usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12,
-      capexDeliveredAnnualUSD: capexCommissionedThisWeekUSD * 52,
-      carryforwardUSD: comp.taxLossCarryforwardUSD ?? 0,
-      bookNetPpeUSD: openingNetPpeUSD,
-    };
+    // §5-TAXR — the tax attributes were gathered on the week's opening stocks by the front
+    // pass (the commissioning read happens there, ONCE); the PP&E roll-forward below reuses
+    // the commissioned figure instead of reading the queue twice.
+    const capexCommissionedThisWeekUSD = F.capexCommissionedUSD[row];
+    const stillUnderConstruction = F.stillUnderConstruction[row];
     /** The statement's own tax line, year-rate — the weekly cash accrual below remits exactly
      *  this (rule 14: the P&L and the payment are one number). */
-    let taxPaidAnnualRateUSD: number;
+    let taxPaidAnnualRateUSD = F.taxPaidAnnualRateUSD[row];
 
-    let updatedProductLines = comp.productLines || []; let newRevenue = 0;
+    const updatedProductLines = F.updatedProductLines[row];
+    let newRevenue = F.newRevenue[row];
     // §7.246 — persisted for stage 05's floor decomposition; stays 0 on the profile path, whose
     // firms offer no goods (IND-R2), so the floor's fallback basis serves them unchanged.
-    let measuredInputConsumptionWeeklyUSD = 0;
-    let baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
-    let newEbitdaMargin = 0;
-    let newEbitda = 0;
-    let newEbit = 0;
-    let newNetIncome = 0;
-    let newEps = 0;
-    let newInputSupplyConstraintFactor = comp.inputSupplyConstraintFactor ?? 1.0;
-    let newRecentFulfillmentEMA = comp.recentFulfillmentEMA ?? 1.0;
+    const measuredInputConsumptionWeeklyUSD = F.measuredInputConsumptionWeeklyUSD[row];
+    let newEbitda = F.newEbitda[row];
+    let newEbit = F.newEbit[row];
+    let newNetIncome = F.newNetIncome[row];
+    let newEps = F.newEps[row];
+    const newInputSupplyConstraintFactor = F.newInputSupplyConstraintFactor[row];
+    const newRecentFulfillmentEMA = F.newRecentFulfillmentEMA[row];
     /** IND2 — the contracted base a subscription seller carries into next week. */
-    let newRecurringBaseUSD = comp.recurringRevenueBaseUSD;
-    let targetProductionUSD = 0;
-    let productionCostUSD = 0;
-    let costDriversUSD: CogsCostDrivers | undefined;
+    const newRecurringBaseUSD = F.newRecurringBaseUSD[row];
+    const targetProductionUSD = F.targetProductionUSD[row];
+    const costDriversUSD: CogsCostDrivers | undefined = F.costDrivers[row];
     // IND1: what it costs to hold a good is a property of THE GOOD, not of the firm — warehouse
     // space per tonne divided by its value density, plus its own spoilage. The company-level
     // `inventoryCarryingCostRate` it replaces was one flat 0.02 charging a fab and a dairy alike
@@ -465,36 +378,31 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     // §5-STRUCT step 2 — the warehouse charge lives on the firm's stocks
     // (domain/company-week/inventory.ts). It is REPORTED here and settled below, because the
     // charge has a payee (IND16: the distribution sector) and the stock does not.
-    const carried = chargeCarryingCost(comp.outputInventoryBySubUnit || {}, annualCarryingCostRateOf);
-    const carryingCostUSD = carried.totalCostUSD;
-    const newOutputInventoryBySubUnit: Record<string, { unitsHeld: number; valueUSD: number }> = carried.stock;
-    // 1$ is 1$ Phase 2: this week's real input inventory baseline is last week's held stock
-    // plus whatever stage05 (which runs before this stage) already credited from real
-    // purchases that cleared this week — consumption below draws down from that real total.
-    const newInputInventoryBySubUnit: Record<string, InputLot[]> = {};
-    Object.entries(comp.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
-      // Aliased, not copied: nothing below mutates a lot array in place — the drawdown sorts a
-      // .slice() and REPLACES the entry — and next week's writers (stage 05, goods-arrival)
-      // copy-on-first-touch before appending. The defensive copy here duplicated every lot in
-      // the world every week (~55k and growing under XB3a's foreign lots), all of it garbage.
-      newInputInventoryBySubUnit[su] = lots;
-    });
-    Object.entries(weekUpdate?.inputInventoryBySubUnit || {}).forEach(([su, lots]) => {
-      newInputInventoryBySubUnit[su] = lots as InputLot[];
-    });
+    const carryingCostUSD = F.carryingCostUSD[row];
+    const newOutputInventoryBySubUnit = F.outputInv[row];
+    const newInputInventoryBySubUnit = F.inputInv[row];
 
     let accruedTaxUSD = comp.accruedTaxLiabilityUSD ?? 0;
-    const executionNoise = (random() - 0.5) * 0.3;
-    const newExecutionQuality = ((comp.executionQuality ?? 1.0) * 0.92 + 1.0 * 0.08 + executionNoise * 0.08);
-
+    const newExecutionQuality = F.newExecutionQuality[row];
 
     // BP1c (rule 17): a stage does not switch on a kind — it keys the kind once and calls the
-    // profile. The four financial statement paths live in stages/profiles/; the OPERATING path
-    // below stays inline until IND2/IND3 decompose it into revenue-mechanism and cost-shape
-    // profiles of their own.
-    const profileKey = profileKeyOf(comp);
-    const profileModule = PROFILE_REGISTRY[profileKey];
-    if (profileModule) {
+    // profile. The four financial statement paths live in stages/profiles/. The OPERATING path
+    // is the front pass's now; only the profile dispatch still runs here, until profiles/ ports.
+    if (F.isProfile[row] === 1) {
+      const profileKey = profileKeyOf(comp);
+      const profileModule = PROFILE_REGISTRY[profileKey]!;
+      // §5-TAXR — the same opening-stock attributes the front pass derives; a profile firm's
+      // tax fields are untouched by the pass, so this rebuild reads the same values.
+      const openingGrossPpeUSD = comp.grossPPEUSD ?? (comp.annualRevenue * (SECTOR_PPE_INTENSITY[comp.sector] ?? 0.5));
+      const openingNetPpeUSD = Math.max(0,
+        openingGrossPpeUSD - (comp.accumulatedDepreciationUSD ?? openingGrossPpeUSD * 0.45));
+      const taxAttrs = {
+        taxBasisPpeUSD: comp.taxBasisPpeUSD ?? openingNetPpeUSD,
+        usefulLifeYears: SECTOR_PPE_USEFUL_LIFE_YEARS[comp.sector] ?? 12,
+        capexDeliveredAnnualUSD: capexCommissionedThisWeekUSD * 52,
+        carryforwardUSD: comp.taxLossCarryforwardUSD ?? 0,
+        bookNetPpeUSD: openingNetPpeUSD,
+      };
       // §7.122 step 3 — EBITDA IS COMPUTED HERE, FOR EVERY KIND OF FIRM, and a profile has no
       // say in it. A profile returns how it EARNS and the costs no other kind of firm has; the
       // costs every firm has — its people and what it consumes — are charged in one place.
@@ -526,7 +434,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
         tax: taxAttrs,
       });
       newEbitda = profilePnl.ebitdaUSD;
-      newEbitdaMargin = newRevenue > 0 ? newEbitda / newRevenue : 0;
       newEbit = profilePnl.ebitUSD;
       newNetIncome = profilePnl.netIncomeUSD;
       newEps = perShare(newNetIncome);
@@ -535,357 +442,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       comp.taxLossCarryforwardUSD = profilePnl.taxLossCarryforwardUSD;
       comp.taxBasisPpeUSD = profilePnl.taxBasisPpeUSD;
       comp.deferredTaxLiabilityUSD = profilePnl.deferredTaxLiabilityUSD;
-    } else {
-      // Consumer Revenue Beta
-      const creditTighteningPenalty = Math.max(0, reg.bankingSector.creditConditionsIndex) * 0.015;
-
-      // HC3b: `noise` and `pricingPowerBeta` were inputs to the revenue formula and went with it.
-      // A random draw is gone from every operating firm's week, which SHIFTS THE RNG STREAM — a
-      // declared world relabel (rule 10), recorded in the plan. `baseRev` stays: the capex
-      // decision below is genuinely sized against the firm's baseline scale.
-      const baseRev = comp.baselineAnnualRevenue || comp.annualRevenue;
-      // Operating margins update (Wage-Push compression, capacity decay, and competitive crowding)
-      const capacityDecayPenalty = Math.min(0.08, (comp.maintenanceShortfallStreak ?? 0) * 0.003); // up to 8% margin erosion after ~27 consecutive underfunded weeks
-      const wageSensitivity = SECTOR_WAGE_SENSITIVITY[comp.sector] ?? 1.0;
-      const compOccMix = SECTOR_OCCUPATION_MIX[comp.sector] ?? { GENERAL: 1.0 };
-      const compWageGrowth = getBlendedWageGrowth(compOccMix, reg.occupationPools);
-      // LAB: the wage no longer compresses the margin here. It is a real payroll line against
-      // EBITDA below, so docking the margin for wage growth as well would charge it twice.
-      // `wageSensitivity` survives as the sector's own labor intensity, which is what decides
-      // how much a wage move actually costs a firm — expressed through its headcount, not a
-      // margin haircut.
-      const wageCompression = 0;
-      const avgCrowdingIntensity = (comp.productLines || []).reduce((s, l) => {
-        const catDemand = reg.categoryDemand[l.subUnitId];
-        return s + (catDemand?.crowdingIntensity ?? 0) * l.revenueShare;
-      }, 0);
-
-      // A line's own _fulfillmentRatio (set on its OWN subUnitId entry by
-      // 04-input-output.ts's demanderEntry loop) is "how much of THIS line's real input demand
-      // got fulfilled" — not the input category's own _fulfillmentRatio (quantityFulfilled /
-      // totalAvailableSupply on the supplier side), which reads LOW exactly when there's a
-      // supply glut and demand is trivially met, the opposite of a real constraint. Reading the
-      // supplier-side field here meant every company touching an input category collapsed
-      // toward zero from an abundant supply, not a shortage.
-      const linesNeedingInputs = (comp.productLines || []).filter(l => CATEGORY_INPUT_REQUIREMENTS[l.subUnitId]);
-      const relevantFulfillment = linesNeedingInputs.length > 0
-        ? linesNeedingInputs.reduce((min, l) => Math.min(min, reg.categoryDemand[l.subUnitId]?._fulfillmentRatio ?? 1), 1)
-        : 1;
-
-      // 1$ is 1$ Phase 2: a real physical check on top of the regional market signal above —
-      // draw down this company's actual held input inventory (real units bought at a real
-      // price, credited by 05-unit-bidding.ts) by what its lines genuinely need this week
-      // (estimated from last week's revenue, since this week's isn't final yet). Two real-world
-      // wrinkles this has to account for, both confirmed by direct instrumentation:
-      // 1. Even when a region's aggregate bid/offer auction clears in full, an individual
-      //    company can still be filled 0% that one week purely from where its bid landed in
-      //    the matching order — a real but noisy outcome. Folding it into the SAME smoothed
-      //    0.7/0.3 EMA as relevantFulfillment (rather than a separate hard multiply on top)
-      //    means one unlucky week nudges the factor down, it doesn't hard-crash it — the same
-      //    smoothing principle already used for prices/production elsewhere in this pipeline.
-      // 2. An input category can have zero real *public-company* suppliers anywhere in the
-      //    region (confirmed: specialty_metals) — Phase 3 now gives such categories a real
-      //    private-segment seller (PRIVATE_SEGMENT_SUPPLY_CATEGORIES in 05-unit-bidding.ts), so
-      //    hasRealSupply below checks for that too; only a category with truly no real seller of
-      //    any kind is excluded from the fulfillment computation, since enforcing a physical
-      //    constraint nothing in the model can ever satisfy would be penalizing a company for a
-      //    modeling gap, not a real economic condition.
-      let physicalFulfillment = 1.0;
-      // 1$ is 1$ Phase 6: the real dollar cost of whatever was actually consumed from real lots
-      // this week — feeds the quarterly COGS breakdown's inputPriceCostUSD driver below, in
-      // place of the old inputPriceDrag*revenue statistical proxy, so "raw materials cost" in
-      // the financials reconciles to what this company genuinely paid its real suppliers for the
-      // inputs it actually used, not an invented intensity ratio.
-      let realInputConsumptionCostUSD = 0;
-      linesNeedingInputs.forEach(l => {
-        const reqs = CATEGORY_INPUT_REQUIREMENTS[l.subUnitId];
-        if (!reqs) return;
-        const lineProductionUSD = (comp.annualRevenue / 52) * (l.revenueShare ?? 1.0);
-        Object.entries(reqs).forEach(([inputSubUnit, intensity]) => {
-          const neededUSD = lineProductionUSD * (intensity ?? 0);
-          if (neededUSD <= 0) return;
-          // A private-segment offer (05-unit-bidding.ts's PRIVATE_SEGMENT_SUPPLY_CATEGORIES) is
-          // just as real a supply source as a public company's product line.
-          const hasRealSupply = (suppliedSubUnitsByRegion.get(comp.region)?.has(inputSubUnit) ?? false)
-            || industryOfSubUnit(inputSubUnit) !== undefined;
-          if (!hasRealSupply) return;
-          const inputUnitPrice = reg.categoryDemand[inputSubUnit]?.unitPriceUSD ?? 1;
-          const neededUnits = neededUSD / Math.max(0.01, inputUnitPrice);
-          // 1$ is 1$ Phase 6: consume the OLDEST real lot first (FIFO) — a company holding units
-          // bought from three different real sellers at three different prices draws down the
-          // earliest purchase first, the way physical inventory actually gets used, rather than
-          // one blended average cost standing in for all of them.
-          // §5-STRUCT step 2 — FIFO lives on the firm's stocks (domain/company-week/inventory.ts).
-          const drawn = consumeLotsFifo(newInputInventoryBySubUnit[inputSubUnit] ?? [], neededUnits);
-          physicalFulfillment = Math.min(physicalFulfillment,
-            fulfillmentRatio(drawn.availableUnits, neededUnits));
-          // Folded PER LOT, in consumption order: this total spans several sub-units and float
-          // addition is not associative (§7.237).
-          for (const lotCostUSD of drawn.costsUSD) realInputConsumptionCostUSD += lotCostUSD;
-          newInputInventoryBySubUnit[inputSubUnit] = drawn.remaining;
-        });
-      });
-      const combinedFulfillment = Math.min(relevantFulfillment, physicalFulfillment);
-      measuredInputConsumptionWeeklyUSD = realInputConsumptionCostUSD;
-      newInputSupplyConstraintFactor = ((comp.inputSupplyConstraintFactor ?? 1.0) * 0.7 + combinedFulfillment * 0.3);
-
-      // Supply relationship shocks — read from the pre-loop snapshot (companies mutate in
-      // place now, and this is the loop's one cross-company read; the snapshot carries the
-      // pre-update figures every reader used to see).
-      const rels = supplyRelsByCustomer.get(comp.id) ?? [];
-      rels.forEach((rel) => {
-        const stats = supplierShockStats.get(rel.supplierCompanyId);
-        if (!stats) return;
-        // The relationship's own category — a supplier's OTHER lines being backed up isn't this
-        // customer's problem, only a glut in the specific good it actually buys from them.
-        const supplierInvUSD = stats.invUSDByCategory.get(rel.category)!;
-        if (supplierInvUSD > stats.annualRevenue * 0.15) {
-          const distress = (supplierInvUSD / (stats.annualRevenue * 0.15)) - 1;
-          newInputSupplyConstraintFactor *= (1 - Math.min(0.2, distress * rel.relationshipStrength * 0.1));
-        }
-      });
-
-
-      // Same correction as relevantFulfillment above — inputCostPressure is written onto each
-      // line's own subUnitId entry by 04-input-output.ts's demanderEntry loop, never onto the
-      // input category's own entry.
-      const inputPriceDrag = linesNeedingInputs.length > 0
-        ? linesNeedingInputs.reduce((s, l) => s + (reg.categoryDemand[l.subUnitId]?.inputCostPressure ?? 0), 0) / linesNeedingInputs.length
-        : 0;
-
-      baseEbitdaMargin = comp.ebitda / Math.max(1, comp.annualRevenue);
-      const baselineMargin = comp.baselineEbitdaMargin ?? (comp.ebitda / Math.max(1, comp.annualRevenue));
-
-      // IND3 + CAP0 — THE MARGIN IS AN OUTCOME OF REAL COSTS, AND THE CLAMP IS GONE.
-      //
-      // What this replaces: a stated `baselineEbitdaMargin` walked 96/4 toward a target nudged by
-      // four coefficient terms, then held inside [2%, 65%] — so no firm could report a loss at
-      // the EBITDA line (rule 2, and the clamp CAP0 exists to remove), and the REAL dollar cost
-      // of the lots the firm actually consumed reached only the display COGS breakdown while an
-      // INDEX (`inputPriceDrag * 0.03`) stood in for it in the P&L. Two representations of one
-      // cost, the measured one unused beside the formula (rule 3, §7.117's closing finding).
-      //
-      // Now: EBITDA is revenue less what the firm actually spent — the real input lots it drew
-      // down at the prices it paid, its real wage bill at its real headcount, and everything else
-      // it spends. That last term is the only one not directly observed, so it is DERIVED from
-      // the firm's own opening books rather than stated: whatever share of revenue is left after
-      // the baseline margin, baseline inputs and baseline payroll. §7.4's discipline — seed by
-      // the engine's own code — which also means opening EBITDA is unchanged at week 0 and every
-      // later move is a real cost moving.
-      //
-      // Payroll now enters IN FULL, not as a deviation from baseline: a deviation was only ever
-      // needed because the margin it adjusted already contained a wage bill. Nothing here
-      // contains anything.
-      const baselineInputRate = Object.values(firmInputIntensities(comp.productLines, profileKey))
-        .reduce((a, b) => a + b, 0);
-      const baselinePayrollRate = (baselineWeeklyPayrollUSD * 52) / Math.max(1, comp.baselineAnnualRevenue || comp.annualRevenue);
-      const otherOpexRate = 1 - baselineMargin - baselineInputRate - baselinePayrollRate;
-
-      // §7.133 — TRIED AND REVERTED: overhead as a per-head dollar cost instead of
-      // `otherOpexRate x revenue`. The hypothesis was that a revenue-proportional overhead keeps
-      // the price ratchet alive (§7.132). It does, but this is not the fix: headcount is itself
-      // collapsing in the runs where the ratchet bites, so overhead collapsed with it, the floor
-      // fell anyway, deflation went −18.8% → −28.2% at week 10 and the harness went red. Tying a
-      // cost to a falling quantity is no better than tying it to a falling price.
-      const inputCostAnnualUSD = realInputConsumptionCostUSD * 52;
-      const payrollAnnualUSD = weeklyPayrollUSD * 52;
-      const otherOpexAnnualUSD = otherOpexRate * comp.annualRevenue;
-      newEbitdaMargin = 1 - (inputCostAnnualUSD + payrollAnnualUSD + otherOpexAnnualUSD) / Math.max(1, comp.annualRevenue);
-
-      const growthCapexToRev = comp.baselineGrowthCapexToRevenueRatio ?? ((comp.growthCapex ?? (comp.capex * 0.4)) / Math.max(1, comp.annualRevenue));
-      const estRateDrag = Math.max(0, effectiveDebtRate - 0.04) * 2.0;
-      const estCashHealth = comp.cash < 0 ? 0.05 : (comp.cash < comp.currentLiabilities * 0.25 ? 0.4 : 1.0);
-      const estTobinsQ = Math.max(0.1, Math.min(10.0, comp.marketCap / Math.max(1, comp.totalDebt + comp.annualRevenue * 1.5)));
-      const estQCapexEffect = ((estTobinsQ - 1) * 0.2);
-      const estAvgComp = (comp.productLines || []).reduce((s, l) => s + l.competitiveness, 0) / Math.max(1, (comp.productLines || []).length);
-      const estCompEffect = (estAvgComp * 0.15);
-      const estTargetGrowthCapex = baseRev * growthCapexToRev * (1 - estRateDrag) * estCashHealth * (1 + estQCapexEffect + estCompEffect);
-      const estNewGrowthCapex = Math.max(0, (comp.growthCapex ?? (comp.capex * 0.4)) * 0.90 + estTargetGrowthCapex * 0.10);
-
-      const growthInvestmentSignal = (((estNewGrowthCapex - (comp.growthCapex ?? (comp.capex * 0.4))) / Math.max(1, (comp.growthCapex ?? (comp.capex * 0.4)))) * newExecutionQuality);
-
-      updatedProductLines = (comp.productLines || []).map((line) => {
-        const catDemand = reg.categoryDemand[line.subUnitId];
-        if (!catDemand) {
-          throw new Error(`subUnitId ${line.subUnitId} does not exist in reg.categoryDemand for region ${reg.id}. Available: ${Object.keys(reg.categoryDemand).join(', ')}`);
-        }
-        const isHouseholdFacing = (INDUSTRY_SUBUNITS[line.industry]?.find(su => su.unitId === line.subUnitId)?.buyerMix.HOUSEHOLD ?? 0) > 0.5;
-        const baseDemandGrowth = catDemand.demandGrowthAnnual ?? reg.gdpGrowth;
-        const categoryGrowth = (isFinite(baseDemandGrowth) ? baseDemandGrowth : reg.gdpGrowth) - (isHouseholdFacing ? creditTighteningPenalty : 0);
-        const marginEdge = (newEbitdaMargin - baseEbitdaMargin) * 2;
-        const dominanceDrag = line.categoryMarketShare > 0.30 ? (line.categoryMarketShare - 0.30) * 0.5 : 0;
-        const targetCompetitiveness = 2.0 * Math.tanh((marginEdge * 16 + growthInvestmentSignal * 0.5) / 2.0);
-        const newCompetitiveness = Number((line.competitiveness * 0.98 + targetCompetitiveness * 0.02).toFixed(3));
-        const shareGainRate = (newCompetitiveness * 0.035 - dominanceDrag);
-        const newCategoryMarketShare = Math.max(0, line.categoryMarketShare * (1 + shareGainRate / 52)); // 0 floor only — a market share literally cannot go negative, this is a math guard not a behavioral clamp
-
-        // HC3b: the line's competitiveness and market share still evolve — they are what decides
-        // how much it WINS in the auction — but they no longer add up to a growth rate that is
-        // then applied to revenue. Revenue is what the auction settled; see below.
-        const shouldSnapshot = nextWeek % 13 === 0;
-        return {
-          ...line,
-          previousCategoryMarketShare: line.categoryMarketShare,
-          categoryMarketShare13WeeksAgo: shouldSnapshot ? line.categoryMarketShare : (line.categoryMarketShare13WeeksAgo ?? line.categoryMarketShare),
-          competitiveness: newCompetitiveness,
-          categoryMarketShare: newCategoryMarketShare,
-        };
-      });
-
-      // HC3b: the commodity-price growth adjustment that stood here is gone with the formula it
-      // fed. A producer's revenue rises with its commodity's price because it SELLS units at that
-      // price, and the auction already charges it — adding a tanh of the price ratio on top was
-      // the same fact a second time (rule 3).
-
-      // XB3a deleted the export revenue boost that used to sit here. A firm's foreign sales are
-      // not a growth adjustment applied to a formula — they are its real fills in stage 05's
-      // world book, already settled into salesUSD and cash by the time this stage runs. Adding a
-      // second export term on top counted the same sale twice, from two mechanisms (rule 3).
-
-      const industrialLine = (comp.productLines || []).find(l => l.subUnitId === 'heavy_equipment' || l.subUnitId === 'industrial_automation' || l.subUnitId === 'industrial_chemicals');
-      let unsoldThisWeekUSD = 0;
-
-      // 1$ is 1$ Phase 1: stage 05 already ran this week's real per-unit auction for every one
-      // of this company's product lines (it runs before this stage) — production, sales, and
-      // inventory (per sub-unit) are already fully reconciled there against real named buyers.
-      // Read that real, company-wide aggregate directly instead of only doing so for the
-      // industrial-goods special case: every company's revenue now feels the same real
-      // shortfall/surplus signal from the actual bid/offer market, not just three sub-units.
-      // (Previously the statistical revenue formula above was the sole authority for every
-      // non-industrial company, with stage05's real settled sales having no effect on revenue
-      // at all.) Recomputing an independent production estimate from a raw, unsmoothed price
-      // signal — rather than reading stage05's own smoothed-price-based figure — is what
-      // previously duplicated this model with a second, inconsistent one and caused a collapse;
-      // reading stage05's own figures directly keeps one authoritative production number.
-      const update = weekUpdate;
-      const salesUSD = update?.salesUSD ?? 0;
-      // The production plan is stage 05's own, made against this firm's real capacity; the
-      // fallback is last week's run-rate, not a revenue this stage has not computed yet.
-      targetProductionUSD = update?._targetProductionUSD ?? comp.annualRevenue / 52;
-      productionCostUSD = targetProductionUSD * (1 - newEbitdaMargin);
-      unsoldThisWeekUSD = Math.max(0, targetProductionUSD - salesUSD);
-      newRecentFulfillmentEMA = (comp.recentFulfillmentEMA ?? 1.0) * 0.85 + (salesUSD > 0 ? 1.0 : 0.0) * 0.15;
-      if (industrialLine && industrialLine.revenueShare > 0) {
-        const lineSubUnitId = industrialLine.subUnitId;
-        newOutputInventoryBySubUnit[lineSubUnitId] = update?.outputInventoryBySubUnit?.[lineSubUnitId]
-          ?? newOutputInventoryBySubUnit[lineSubUnitId]
-          ?? { unitsHeld: 0, valueUSD: 0 };
-      }
-
-      // IND2 — REVENUE RECOGNITION IS A PROPERTY OF WHAT IS SOLD.
-      //
-      // A unit sale is recognised on delivery, so production that did not sell is not revenue:
-      // that is the line below and it was every good in the model, whatever it was.
-      //
-      // A SUBSCRIPTION is not a unit. The sale bought a contract, so it keeps paying until it
-      // churns, and a week the seller could not ship does not cost it the contract. The
-      // contracted share of the firm is therefore carried as a real base: it survives on its own
-      // and is topped up by what this week actually cleared. **This is the whole difference
-      // between a software company and a steel mill, and the model could not express it** — the
-      // verify criterion is that a subscription business's revenue survives a quarter with no
-      // new sales while a unit seller's does not.
-      // HC3b — REVENUE IS WHAT WAS SOLD. THE FORMULA IS GONE.
-      //
-      // What stood above this was a statistical revenue path: last week's revenue grown by a
-      // lagged category-demand rate plus a random draw plus inflation times a sector pricing
-      // beta, the weekly rate clamped to +/-5%, smoothed 90/10 into the previous print, and then
-      // corrected DOWNWARD by half of whatever production had not sold. So a firm's revenue was a
-      // number about its CATEGORY with a real-sales correction bolted onto it — two
-      // representations of one quantity (rule 3), and a quantity that is an outcome stated as a
-      // formula (rule 13).
-      //
-      // It was also revenue with no payer, and the model already said so out loud:
-      // `non-auction operating receipts`, the largest declared line on the UNMODELED boundary, is
-      // exactly `newRevenue / 52 - what actually settled`. Every dollar of the gap was income from
-      // customers this model could not name (rule 14), and the frontier existed because the
-      // formula kept producing it.
-      //
-      // A sale is a buyer and a seller. Stage 05 ran this week's auction for every one of this
-      // firm's product lines against real named buyers before this stage ran, and what it sold is
-      // `salesUSD`. That is the revenue — annualised, and entering at the same measurement weight
-      // a pool's receipts do, for the same reason: one week of clearing is not a year of trade.
-      //
-      // Production that did not sell is not revenue BY CONSTRUCTION now, so the unsold correction
-      // goes with the formula it was correcting. And the 50% haircut a defaulted firm's revenue
-      // took goes too: a defaulted firm's revenue falls when its customers stop buying from it,
-      // and if nothing in the auction makes them, that is a finding for the estate work rather
-      // than a multiplier to keep here.
-      //
-      // A SUBSCRIPTION is still not a unit. The sale bought a contract, so it keeps paying until
-      // it churns, and a week the seller could not ship does not cost it the contract. That half
-      // is carried as a real base below — it is a recognition rule about what was sold, not a
-      // formula standing in for a market, which is why it survives the change intact.
-      const recurringShare = recurringRevenueShare(comp.productLines || []);
-      const unitShare = 1 - recurringShare;
-      const priorRecurringUSD = recurringShare > 0
-        ? (comp.recurringRevenueBaseUSD ?? comp.annualRevenue * recurringShare)
-        : 0;
-      // The unit book: what last week's unit revenue was, moved toward what this week actually
-      // sold.
-      const priorUnitAnnualUSD = Math.max(0, comp.annualRevenue - priorRecurringUSD);
-      const unitRevenueUSD = priorUnitAnnualUSD * (1 - RECEIPTS_MEASUREMENT_WEIGHT)
-        + (salesUSD * unitShare * 52) * RECEIPTS_MEASUREMENT_WEIGHT;
-      if (recurringShare > 0) {
-        // The base decays at its own churn and is renewed by the contracted share of what
-        // cleared. Seeded from the firm's own opening revenue the first time it is read.
-        newRecurringBaseUSD = priorRecurringUSD * (1 - SUBSCRIPTION_WEEKLY_CHURN)
-          + salesUSD * recurringShare * 52 * SUBSCRIPTION_WEEKLY_CHURN;
-      }
-      // The firm's revenue is its contracted base plus what its unit lines sold.
-      newRevenue = Math.max(10, (recurringShare > 0 ? newRecurringBaseUSD ?? 0 : 0) + unitRevenueUSD);
-      comp.revenueHistory = [...(comp.revenueHistory || [newRevenue]).slice(-12), newRevenue];
-
-      // LAB: PAYROLL IS A REAL COST. `newEbitdaMargin` carries the firm's non-labor cost
-      // structure — input prices, competition, capacity — and the wage bill is now its own line
-      // on top, measured from the firm's real headcount at the wage it really offers. Only the
-      // DEVIATION from its baseline payroll adjusts EBITDA, because the baseline margin already
-      // contains a baseline wage bill; charging the whole payroll again would count it twice.
-      //
-      // This is what makes a wage a price rather than a charge. Before it, the going rate could
-      // move and no firm's earnings noticed, so labor demand had nothing to respond to and the
-      // entire adjustment fell on cash exhaustion (measured: a 30-50% unemployment cascade).
-      // IND3: the margin above already carries the full wage bill, so there is no deviation to
-      // add here — `payrollAboveBaselineAnnualUSD` exists only for profiles that still state a
-      // margin (the carrier charges its payroll in full instead; see profiles/).
-      // §5-STRUCT step 2 — same statement, industrial path. The loss pair is CLOSED (decided
-      // 2026-08-31, §4.0 Tier 1 item 8): EBIT is unfloored, so an operating loss reaches
-      // coverage, the default trigger and the rating; and a loss is not rebated — one tax rule
-      // for every firm, the profile path's. Carry-forwards are TAXR's charter.
-      const industrialPnl = industrialIncome({
-        revenueUSD: newRevenue,
-        ebitdaMargin: newEbitdaMargin,
-        daShareOfRevenue: 0.05,
-        annualInterestUSD: annualInterest,
-        taxRate,
-        sharesOutstanding: comp.sharesOutstanding,
-        tax: taxAttrs,
-      });
-      newEbitda = industrialPnl.ebitdaUSD;
-      newEbit = industrialPnl.ebitUSD;
-      newNetIncome = industrialPnl.netIncomeUSD;
-      newEps = perShare(newNetIncome);
-      // §5-TAXR — the statement rolled the attributes one week; the firm carries them.
-      taxPaidAnnualRateUSD = industrialPnl.taxPaidAnnualUSD;
-      comp.taxLossCarryforwardUSD = industrialPnl.taxLossCarryforwardUSD;
-      comp.taxBasisPpeUSD = industrialPnl.taxBasisPpeUSD;
-      comp.deferredTaxLiabilityUSD = industrialPnl.deferredTaxLiabilityUSD;
-
-      // Quarterly dollar impact of the same cost drivers that moved targetMargin above —
-      // this is what backs the COGS breakdown shown in the deep financials drill-down, so it
-      // reconciles to the actual weekly margin mechanics rather than an invented split.
-      const revQ = newRevenue / 4;
-      costDriversUSD = {
-        wagePressureUSD: wageCompression * revQ,
-        // 1$ is 1$ Phase 6: real dollars actually paid for real lots actually consumed this
-        // week (realInputConsumptionCostUSD, above), expressed as a share of this week's real
-        // production and scaled to the same quarterly-dollar convention as the other drivers —
-        // not inputPriceDrag's statistical intensity guess. A company with no real recipe
-        // input requirement (or no real supplier for one) correctly gets 0 here, falling to
-        // baseCostUSD's residual bucket instead of an invented nonzero cost.
-        inputPriceCostUSD: (realInputConsumptionCostUSD / Math.max(1, targetProductionUSD)) * revQ,
-        capacityDecayCostUSD: capacityDecayPenalty * revQ,
-        crowdingCostUSD: avgCrowdingIntensity * 0.08 * revQ,
-      };
     }
 
     // §5-STRUCT step 2 — THE CAPITAL PROGRAMME LIVES ON THE FIRM, NOT HERE.
@@ -1268,7 +824,6 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
       if (bondCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'CORP_BOND');
       if (loanCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'LEVERAGED_LOAN');
       if (cpCouponDue) payHoldersAccruedInterest(ctx, comp.id, 'COMMERCIAL_PAPER');
-      void marketFixedInterestWeeklyUSD; void marketFloatingInterestWeeklyUSD;
       // PUB1b: tax ACCRUES weekly and is REMITTED quarterly, as real firms pay it. The money
       // now arrives somewhere — the treasury's account — instead of leaving the model.
       // §5-TAXR — the accrual IS the statement's tax line (rule 14: the P&L and the payment are
@@ -2586,9 +2141,12 @@ export function runCompanyFundamentalsStage(state: GameState, ctx: WeeklyStepCon
     const held = openShard();
     for (let i = range.lo; i < range.hi; i++) {
       const comp = companyRows[i];
-      const savedStream = beginEntityScope(comp.id, nextWeek);
-      updatedCompanies[i] = companyWeekKernel(comp);
-      endEntityScope(savedStream);
+      // ENGINE V2 — resume this firm's entity-scoped stream where the front pass left it
+      // (after the front half's one draw), so the kernel's remaining draws are unchanged.
+      const savedStream = getRngState();
+      setRngState(F.rngAfter[i]);
+      updatedCompanies[i] = companyWeekKernel(comp, i);
+      setRngState(savedStream);
     }
     closeShard(held);
   });
